@@ -18,7 +18,7 @@ namespace NActors {
         static ISchedulerCookie* Make3Way();
     };
 
-    class TSchedulerCookieHolder : TNonCopyable { 
+    class TSchedulerCookieHolder : TNonCopyable {
         ISchedulerCookie* Cookie;
 
     public:
@@ -40,7 +40,7 @@ namespace NActors {
             return (Cookie == x.Cookie);
         }
 
-        ISchedulerCookie* Get() const { 
+        ISchedulerCookie* Get() const {
             return Cookie;
         }
 

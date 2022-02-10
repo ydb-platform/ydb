@@ -1,8 +1,8 @@
 #include "all.h"
-#include "kill_action.h" 
+#include "kill_action.h"
 #include "log_shuttle.h"
 #include "preprocessor.h"
-#include "sleep_action.h" 
+#include "sleep_action.h"
 #include "stderr_writer.h"
 #include "google/protobuf/repeated_field.h"
 
@@ -74,17 +74,17 @@ namespace NLWTrace {
             return &traceVariables[name];
         }
         return &((*it).second);
-    } 
- 
+    }
+
     typedef enum {
         OT_LITERAL = 0,
         OT_PARAMETER = 1,
         OT_VARIABLE = 2
     } EOperandType;
- 
+
     template <class T, EOperandType>
     class TOperand;
- 
+
     template <class T>
     class TOperand<T, OT_LITERAL> {
     private:
@@ -135,7 +135,7 @@ namespace NLWTrace {
         void Inc() {
             AtomicIncrement(*Variable);
         }
- 
+
         void Dec() {
             AtomicDecrement(*Variable);
         }
@@ -166,7 +166,7 @@ namespace NLWTrace {
         void Set(const TCheck& value) {
             AtomicSet(*Variable, value.Value);
         }
- 
+
         void Add(const TCheck& value) {
             AtomicAdd(*Variable, value.Value);
         }
@@ -178,7 +178,7 @@ namespace NLWTrace {
         void Inc() {
             AtomicIncrement(*Variable);
         }
- 
+
         void Dec() {
             AtomicDecrement(*Variable);
         }
@@ -225,23 +225,23 @@ namespace NLWTrace {
         virtual ~IOperandGetter() {
         }
     };
- 
+
     template <class T, EOperandType TParam>
     class TOperandGetter: public IOperandGetter<T> {
     private:
         TOperand<T, TParam> Op;
- 
+
     public:
         TOperandGetter(const TOperand<T, TParam>& op)
             : Op(op)
         {
         }
- 
+
         const T Get(const TParams& params) override {
             return Op.Get(params);
         }
     };
- 
+
     template <class T>
     class TReceiver: public TOperand<T, OT_VARIABLE> {
     public:
@@ -250,7 +250,7 @@ namespace NLWTrace {
         {
         }
     };
- 
+
     template <class TP, class TPredicate>
     static bool CmpFunc(TP a, TP b) {
         return TPredicate()(a, b);
@@ -306,26 +306,26 @@ namespace NLWTrace {
     private:
         TFunc Func;
         TReceiver<TP> Receiver;
- 
+
         bool DoExecute(TOrbit&, const TParams&) override {
             Func(Receiver);
             return true;
         }
- 
+
     public:
         TUnaryInplaceStatementExecutor(TReceiver<TP>& receiver)
             : Receiver(receiver)
         {
         }
     };
- 
+
     template <class TP, class TFunc, EOperandType TParam>
     class TBinaryInplaceStatementExecutor: public IExecutor {
     private:
         TFunc Func;
         TReceiver<TP> Receiver;
         TOperand<TP, TParam> Param;
- 
+
         bool DoExecute(TOrbit&, const TParams& params) override {
             Func(Receiver, Param.Get(params));
             return true;
@@ -338,14 +338,14 @@ namespace NLWTrace {
         {
         }
     };
- 
+
     template <class TP, class TFunc, EOperandType TFirstParam>
     class TBinaryStatementExecutor: public IExecutor {
     private:
         TFunc Func;
         TReceiver<TP> Receiver;
         TOperand<TP, TFirstParam> FirstParam;
- 
+
         bool DoExecute(TOrbit&, const TParams& params) override {
             Receiver.Set(Func(Receiver.Get(params), FirstParam.Get(params)));
             return true;
@@ -464,9 +464,9 @@ namespace NLWTrace {
         EOperandType Type;
         size_t ParamIdx;
     } TArgumentDescription;
- 
+
     using TArgumentList = TVector<TArgumentDescription>;
- 
+
     template <class T>
     void ParseArguments(const T& op, const TSignature& signature, const TString& exceptionPrefix, size_t expectedArgumentCount, TArgumentList& arguments) {
         arguments.clear();
@@ -483,10 +483,10 @@ namespace NLWTrace {
                 operand.Type = OT_PARAMETER;
                 operand.ParamIdx = signature.FindParamIndex(arg.GetParam());
                 if (operand.ParamIdx == size_t(-1)) {
-                    ythrow yexception() << exceptionPrefix 
+                    ythrow yexception() << exceptionPrefix
                                         << " argument #" << argumentIdx << " param '" << arg.GetParam()
                                         << "' doesn't exist";
-                } 
+                }
                 if (firstParamIdx == size_t(-1)) {
                     firstParamIdx = operand.ParamIdx;
                 } else {
@@ -499,14 +499,14 @@ namespace NLWTrace {
                 ythrow yexception() << exceptionPrefix
                                     << " argument #" << argumentIdx
                                     << " is empty";
-            } 
+            }
             arguments.push_back(operand);
         }
         if (arguments.size() != expectedArgumentCount) {
-            ythrow yexception() << exceptionPrefix 
+            ythrow yexception() << exceptionPrefix
                                 << " incorrect number of arguments (" << arguments.size()
                                 << " present, " << expectedArgumentCount << " expected)";
-        } 
+        }
     }
 
     template <class TArg1, class TArg2>
@@ -569,7 +569,7 @@ namespace NLWTrace {
         TOperand<t, lt> lhs(traceVariables, var0, val0, arg0.ParamIdx); \
         FOREACH_RIGHT_TYPE(FOREACH_OPERAND_TYPE_RT, n, t, v, fn, lt)    \
     }
- 
+
 #define FOREACH_PARAMTYPE_MACRO(n, t, v, fn)                                                                                  \
     if ((arg0.ParamIdx == size_t(-1) || strcmp(tName0, n) == 0) && (arg1.ParamIdx == size_t(-1) || strcmp(tName1, n) == 0)) { \
         FOREACH_LEFT_TYPE(FOREACH_OPERAND_TYPE_LT, n, t, v, fn);                                                              \
@@ -680,10 +680,10 @@ namespace NLWTrace {
                                             << " SleepAction missing parameter 'NanoSeconds'";
                     }
                 } else {
-                    ythrow yexception() << "probe '" << probe->Event.Name << "block #" << bi + 1 << " action #" << i + 1 
+                    ythrow yexception() << "probe '" << probe->Event.Name << "block #" << bi + 1 << " action #" << i + 1
                                         << " contains destructive SleepAction, but destructive actions are disabled."
                                         << " Please, consider using --unsafe-lwtrace command line parameter.";
-                } 
+                }
             } else if (action.HasStatementAction()) {
                 const TStatementAction& statement = action.GetStatementAction();
                 TString exceptionPrefix;
@@ -696,24 +696,24 @@ namespace NLWTrace {
                     expectedArgumentCount = 1;
                 }
                 ParseArguments<TStatementAction>(statement, probe->Event.Signature, exceptionPrefix, expectedArgumentCount, arguments);
- 
+
                 TArgumentDescription arg0 = (expectedArgumentCount <= 0) ? TArgumentDescription() : arguments.at(0);
                 TArgumentDescription arg1 = (expectedArgumentCount <= 1) ? TArgumentDescription() : arguments.at(1);
                 TArgumentDescription arg2 = (expectedArgumentCount <= 2) ? TArgumentDescription() : arguments.at(2);
- 
+
                 TString var0 = (expectedArgumentCount <= 0) ? "" : statement.GetArgument(0).GetVariable();
                 TString var1 = (expectedArgumentCount <= 1) ? "" : statement.GetArgument(1).GetVariable();
                 TString var2 = (expectedArgumentCount <= 2) ? "" : statement.GetArgument(2).GetVariable();
- 
+
                 TString val0 = (expectedArgumentCount <= 0) ? "" : statement.GetArgument(0).GetValue();
                 TString val1 = (expectedArgumentCount <= 1) ? "" : statement.GetArgument(1).GetValue();
                 TString val2 = (expectedArgumentCount <= 2) ? "" : statement.GetArgument(2).GetValue();
- 
+
                 const char* tName1 = (expectedArgumentCount <= 1 || arg1.ParamIdx == size_t(-1))
                     ? nullptr : probe->Event.Signature.ParamTypes[arg1.ParamIdx];
                 const char* tName2 = (expectedArgumentCount <= 2 || arg2.ParamIdx == size_t(-1))
                     ? nullptr : probe->Event.Signature.ParamTypes[arg2.ParamIdx];
- 
+
                 if (arg0.Type == OT_VARIABLE) {
                     switch (statement.GetType()) {
 #define PARSE_UNARY_INPLACE_STATEMENT_MACRO(n, t, v, fn)                   \
@@ -723,7 +723,7 @@ namespace NLWTrace {
         actExec.Reset(new TExec(receiver));                                \
         break;                                                             \
     }
- 
+
 #define PARSE_BINARY_INPLACE_STATEMENT_MACRO2(n, t, v, fn, ft)                     \
     if (arg1.Type == ft) {                                                         \
         typedef TBinaryInplaceStatementExecutor<t, fn<TReceiver<t>, t>, ft> TExec; \
@@ -814,11 +814,11 @@ namespace NLWTrace {
                 }
 #undef CREATE_OPERAND_GETTER_N
 #undef TERNARY_ON_TYPE
-#undef IMPLEMENT_TERNARY_STATEMENT 
-#undef PARSE_TERNARY_STATEMENT_MACRO 
-#undef PARSE_BINARY_STATEMENT_MACRO 
-#undef PARSE_BINARY_INPLACE_STATEMENT_MACRO 
-#undef PARSE_UNARY_INPLACE_STATEMENT_MACRO 
+#undef IMPLEMENT_TERNARY_STATEMENT
+#undef PARSE_TERNARY_STATEMENT_MACRO
+#undef PARSE_BINARY_STATEMENT_MACRO
+#undef PARSE_BINARY_INPLACE_STATEMENT_MACRO
+#undef PARSE_UNARY_INPLACE_STATEMENT_MACRO
             } else {
                 ythrow yexception() << "block #" << bi + 1 << " action #" << i + 1
                                     << " has not supported action '" << action.ShortDebugString() << "'";
@@ -835,7 +835,7 @@ namespace NLWTrace {
         if (!probe->Attach(exec.Get())) {
             ythrow yexception() << "block #" << bi + 1
                                 << " cannot be attached to probe '" << probe->Event.Name << "': no free slots";
-        } 
+        }
         Probes.push_back(std::make_pair(probe, exec.Release()));
 #else
         Y_UNUSED(bi);

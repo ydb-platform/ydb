@@ -87,8 +87,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
         const TActorId YardID;
         const TActorId SkeletonID;
-        const NPDisk::TOwner Owner; 
-        const NPDisk::TOwnerRound OwnerRound; 
+        const NPDisk::TOwner Owner;
+        const NPDisk::TOwnerRound OwnerRound;
         ui64 CurSentLsn = 0;
         TQueueType Queue;
         NMonitoring::TDynamicCounters::TCounterPtr LsmLogBytesWritten;
@@ -125,7 +125,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             }
         }
 
-        void Handle(NPDisk::TEvLog::TPtr &ev, const TActorContext &ctx) { 
+        void Handle(NPDisk::TEvLog::TPtr &ev, const TActorContext &ctx) {
             ui64 lsnSegmentStart = ev->Get()->LsnSegmentStart;
             ui64 lsn = ev->Get()->Lsn;
             LWTRACK(VDiskRecoveryLogWriterVPutIsRecieved, ev->Get()->Orbit, Owner, lsn);
@@ -186,7 +186,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         void Handle(TEvBlobStorage::TEvVCompact::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             ui64 lsn = CurSentLsn + 1;
-            ctx.Send(SkeletonID, new NPDisk::TEvCutLog(Owner, OwnerRound, lsn, 0, 0, 0, 0)); 
+            ctx.Send(SkeletonID, new NPDisk::TEvCutLog(Owner, OwnerRound, lsn, 0, 0, 0, 0));
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
@@ -207,13 +207,13 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         }
 
         TRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID,
-                           NPDisk::TOwner owner, NPDisk::TOwnerRound ownerRound, ui64 startLsn, 
+                           NPDisk::TOwner owner, NPDisk::TOwnerRound ownerRound, ui64 startLsn,
                            TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
             : TActorBootstrapped<TRecoveryLogWriter>()
             , YardID(yardID)
             , SkeletonID(skeletonID)
             , Owner(owner)
-            , OwnerRound(ownerRound) 
+            , OwnerRound(ownerRound)
             , CurSentLsn(startLsn)
             , Queue()
             , LsmLogBytesWritten(counters->GetSubgroup("subsystem", "lsmhull")->GetCounter("LsmLogBytesWritten"))
@@ -222,9 +222,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
     };
 
     IActor* CreateRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID, NPDisk::TOwner owner,
-                                    NPDisk::TOwnerRound ownerRound, 
+                                    NPDisk::TOwnerRound ownerRound,
                                     ui64 startLsn, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-        return new TRecoveryLogWriter(yardID, skeletonID, owner, ownerRound, startLsn, counters); 
+        return new TRecoveryLogWriter(yardID, skeletonID, owner, ownerRound, startLsn, counters);
     }
 
 } // NKikimr

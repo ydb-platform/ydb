@@ -1,22 +1,22 @@
-#pragma once 
-#include "defs.h" 
- 
-#include <util/generic/map.h> 
+#pragma once
+#include "defs.h"
+
+#include <util/generic/map.h>
 #include "interval_set.h"
- 
-namespace NKikimr { 
- 
-class TFragmentedBuffer { 
+
+namespace NKikimr {
+
+class TFragmentedBuffer {
     TMap<i32, TString> BufferForOffset;
     void Insert(i32 begin, const char* source, i32 bytesToCopy);
- 
-public: 
-    TFragmentedBuffer(); 
- 
-    bool IsMonolith() const; 
-    TString GetMonolith(); 
-    void SetMonolith(TString &data); 
- 
+
+public:
+    TFragmentedBuffer();
+
+    bool IsMonolith() const;
+    TString GetMonolith();
+    void SetMonolith(TString &data);
+
     void Write(i32 begin, const char* buffer, i32 size);
     void Read(i32 begin, char* buffer, i32 size) const;
     TString Print() const;
@@ -35,7 +35,7 @@ public:
         }
         return res;
     }
-}; 
- 
-} // NKikimr 
- 
+};
+
+} // NKikimr
+

@@ -33,14 +33,14 @@ namespace NKikimr {
                 info->PickSubgroup(id.Hash(), &varray, &services);
 
                 TDataPartSet parts;
-                info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), data, parts); 
+                info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), data, parts);
 
                 TVector<TString> diskvec(vdisks.size());
 
                 for (ui32 i = 0; i < info->Type.TotalPartCount(); ++i) {
                     for (ui32 k = 0; k < vdisks.size(); ++k) {
                         if (varray[i] == vdisks[k]) {
-                            diskvec[k] = parts.Parts[i].OwnedString; 
+                            diskvec[k] = parts.Parts[i].OwnedString;
                             break;
                         }
                     }

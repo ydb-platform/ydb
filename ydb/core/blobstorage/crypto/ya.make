@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(g:kikimr)
 
-IF (NOT OS_WINDOWS AND NOT ARCH_ARM64) 
+IF (NOT OS_WINDOWS AND NOT ARCH_ARM64)
     SRCS(
         chacha.cpp
         crypto.cpp

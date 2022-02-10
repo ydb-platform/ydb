@@ -983,7 +983,7 @@ void TTablet::HandleWriteZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
     default:
         {
             BLOG_ERROR("HandleWriteZeroEntry, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status));
-            ReassignYellowChannels(std::move(msg->YellowMoveChannels)); 
+            ReassignYellowChannels(std::move(msg->YellowMoveChannels));
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason); // TODO: detect 'need channel reconfiguration' case
         }
     }
@@ -1217,8 +1217,8 @@ void TTablet::CheckEntry(TGraph::TIndex::iterator it) {
                     StateStorageInfo.KnownGeneration,
                     step,
                     entry->ConfirmedOnSend,
-                    std::move(entry->YellowMoveChannels), 
-                    std::move(entry->YellowStopChannels), 
+                    std::move(entry->YellowMoveChannels),
+                    std::move(entry->YellowStopChannels),
                     std::move(entry->GroupWrittenBytes),
                     std::move(entry->GroupWrittenOps)),
                 0, entry->SourceCookie);
@@ -1301,8 +1301,8 @@ void TTablet::GcLogChannel(ui32 step) {
                     tabletid, gen, ++GcCounter, 0,
                     true,
                     gen, step,
-                    nullptr, nullptr, TInstant::Max(), 
-                    false 
+                    nullptr, nullptr, TInstant::Max(),
+                    false
                 )
             );
         }
@@ -1313,8 +1313,8 @@ void TTablet::GcLogChannel(ui32 step) {
                 tabletid, gen, ++GcCounter, 0,
                 true,
                 gen, step,
-                nullptr, nullptr, TInstant::Max(), 
-                false 
+                nullptr, nullptr, TInstant::Max(),
+                false
                 )
             );
     }
@@ -1536,8 +1536,8 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
 
             TLogEntry *entry = indexIt->second;
             entry->BlobStorageConfirmed = true;
-            entry->YellowMoveChannels = std::move(msg->YellowMoveChannels); 
-            entry->YellowStopChannels = std::move(msg->YellowStopChannels); 
+            entry->YellowMoveChannels = std::move(msg->YellowMoveChannels);
+            entry->YellowStopChannels = std::move(msg->YellowStopChannels);
             entry->GroupWrittenBytes = std::move(msg->GroupWrittenBytes);
             entry->GroupWrittenOps = std::move(msg->GroupWrittenOps);
 
@@ -1578,8 +1578,8 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
         break;
     }
 
-    if (msg->YellowMoveChannels) { 
-        ReassignYellowChannels(std::move(msg->YellowMoveChannels)); 
+    if (msg->YellowMoveChannels) {
+        ReassignYellowChannels(std::move(msg->YellowMoveChannels));
     }
 
     // Non-zero cookie causes us to fail on the next step
@@ -1696,29 +1696,29 @@ bool TTablet::StopTablet(
     return true;
 }
 
-void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) { 
-    if (yellowMoveChannels.empty() || !Info->HiveId) { 
+void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
+    if (yellowMoveChannels.empty() || !Info->HiveId) {
         return;
     }
 
-    auto yellowMoveChannelsString = [&]() -> TString { 
+    auto yellowMoveChannelsString = [&]() -> TString {
         TStringBuilder out;
-        for (size_t i = 0; i < yellowMoveChannels.size(); ++i) { 
+        for (size_t i = 0; i < yellowMoveChannels.size(); ++i) {
             if (i) {
                 out << ", ";
             }
-            out << yellowMoveChannels[i]; 
+            out << yellowMoveChannels[i];
         }
         return std::move(out);
     };
 
     BLOG_I(
         " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
-        << ", YellowMoveChannels: " << yellowMoveChannelsString()); 
+        << ", YellowMoveChannels: " << yellowMoveChannelsString());
 
     Send(MakePipePeNodeCacheID(false),
         new TEvPipeCache::TEvForward(
-            new TEvHive::TEvReassignTabletSpace(Info->TabletID, std::move(yellowMoveChannels)), 
+            new TEvHive::TEvReassignTabletSpace(Info->TabletID, std::move(yellowMoveChannels)),
             Info->HiveId,
             /* subscribe */ false));
 }

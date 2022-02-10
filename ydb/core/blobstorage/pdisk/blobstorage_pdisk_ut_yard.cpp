@@ -321,7 +321,7 @@ YARD_UNIT_TEST(TestHttpInfoFileDoesntExist) {
 YARD_UNIT_TEST(TestBootingState) {
     TTestContext tc(false, true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
-    Run<TTestBootingState>(&tc, 1, MIN_CHUNK_SIZE, false, TString(), 5); 
+    Run<TTestBootingState>(&tc, 1, MIN_CHUNK_SIZE, false, TString(), 5);
 }
 
 YARD_UNIT_TEST(TestWhiteboard) {
@@ -419,13 +419,13 @@ YARD_UNIT_TEST(TestSysLogOverwrite) {
     EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 2048ull << 20, false, tc.SectorMap);
 
-    Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false); 
+    Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false);
 
     ui32 dataSize = chunkSize*3;
     NPDisk::TAlignedData dataBefore(dataSize);
     ReadPdiskFile(&tc, dataSize, dataBefore);
 
-    Run<TTestInit<false, 1>>(&tc, 1, chunkSize, false); 
+    Run<TTestInit<false, 1>>(&tc, 1, chunkSize, false);
     NPDisk::TAlignedData dataAfter1(dataSize);
     ReadPdiskFile(&tc, dataSize, dataAfter1);
 
@@ -436,7 +436,7 @@ YARD_UNIT_TEST(TestSysLogOverwrite) {
 
     OutputSectorMap(dataBefore, dataAfter1, dataSize);
 
-    Run<TTestInit<false, 1>>(&tc, 1, chunkSize, false); 
+    Run<TTestInit<false, 1>>(&tc, 1, chunkSize, false);
     NPDisk::TAlignedData dataAfter2(dataSize);
     ReadPdiskFile(&tc, dataSize, dataAfter2);
     OutputSectorMap(dataAfter1, dataAfter2, dataSize);
@@ -446,10 +446,10 @@ YARD_UNIT_TEST(TestSysLogOverwrite) {
     OutputSectorMap(dataBefore, dataAfter2, dataSize);
     OutputSectorMap(dataAfter1, dataAfter2, dataSize);
 
-    Run<TTestInit<false, 1>>(&tc, 1, chunkSize, false); 
+    Run<TTestInit<false, 1>>(&tc, 1, chunkSize, false);
 }
 
-/* 
+/*
 YARD_UNIT_TEST(TestDamagedLogContinuityPersistence) {
     TTestContext tc(false, true);
     ui32 chunkSize = 8 << 20;
@@ -469,7 +469,7 @@ YARD_UNIT_TEST(TestDamagedLogContinuityPersistence) {
     Run<TTestLogDamageSector3Append1>(&tc, 1, chunkSize, false, true);
     Run<TTestLogRead2Sectors>(&tc, 1, chunkSize, false, true);
 }
-*/ 
+*/
 
 YARD_UNIT_TEST(TestDamagedFirstRecordToKeep) {
     TTestContext tc(false, true);
@@ -484,7 +484,7 @@ YARD_UNIT_TEST(TestDamagedFirstRecordToKeep) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap); 
+    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
 
     ui32 dataSize = info.SystemChunkCount * info.RawChunkSizeBytes;
@@ -629,7 +629,7 @@ YARD_UNIT_TEST(TestRedZoneSurvivability) {
     Run<TTestRedZoneSurvivability>(&tc, 1, chunkSize);
 }
 
-/* 
+/*
 YARD_UNIT_TEST(TestNonceJumpRewriteMin) {
     TTestContext tc(false, true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
@@ -663,9 +663,9 @@ YARD_UNIT_TEST(TestNonceJumpRewriteMin) {
     ASSERT_YTHROW(Abs(distance) <= 8,
             "Log length changed while it wasnt expected to. lastDifferenceA# " << lastDifferenceA
             << " lastDifferenceB# " << lastDifferenceB);
-}*/ 
+}*/
 
-/* 
+/*
 YARD_UNIT_TEST(TestNonceJumpRewrite) {
     TTestContext tc(false, true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
@@ -703,7 +703,7 @@ YARD_UNIT_TEST(TestNonceJumpRewrite) {
     Run<TTestLogWrite<2000, 125>>(&tc, 1, chunkSize, false, true);
     Run<TTestLog3Read<2000, 2000, 2000>>(&tc, 1, chunkSize, false, true);
 }
-*/ 
+*/
 
 YARD_UNIT_TEST(TestSlay) {
     TTestContext tc(false, true);
@@ -830,7 +830,7 @@ YARD_UNIT_TEST(TestFormatInfo) {
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
 
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap); 
+    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     UNIT_ASSERT_VALUES_EQUAL(info.TextMessage, "Info");
 }
@@ -855,7 +855,7 @@ YARD_UNIT_TEST(TestRestartAtNonceJump) {
     TTestContext tc(false, true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     // Write a full chunk of logs (assume it's chunk# SystemChunkCount)
-    Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false); 
+    Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false);
     // Read format info to get raw chunk size
     TString dataPath;
     if (tc.TempDir) {
@@ -864,7 +864,7 @@ YARD_UNIT_TEST(TestRestartAtNonceJump) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap); 
+    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     // Destroy data in chunks starting at# SystemChunkCount + 1
     ui32 dataSize = 8 * chunkSize;
@@ -875,16 +875,16 @@ YARD_UNIT_TEST(TestRestartAtNonceJump) {
         - 3; // to get into the situation where we have filled the chunks but did not write the next chunk reference
     DestroySectors(&tc, dataAfter, dataSize, firstSector, 1);
     // Write another full chunk of logs (assume it's chunk# SystemChunkCount + 1)
-    Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false); 
+    Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false);
     // Check that last log Lsn is somewhere out of the first log chunk
-    Run<TTestLastLsn>(&tc, 1, chunkSize, false); 
+    Run<TTestLastLsn>(&tc, 1, chunkSize, false);
 }
 
 YARD_UNIT_TEST(TestRestartAtChunkEnd) {
     TTestContext tc(false, true);
     ui32 chunkSize = MIN_CHUNK_SIZE;
     // Write a full chunk of logs (assume it's chunk# SystemChunkCount)
-    Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false); 
+    Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false);
     // Read format info to get raw chunk size
     TString dataPath;
     if (tc.TempDir) {
@@ -893,7 +893,7 @@ YARD_UNIT_TEST(TestRestartAtChunkEnd) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap); 
+    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     // Destroy data in chunks starting at# SystemChunkCount + 1
     ui32 dataSize = 8 * chunkSize;
@@ -903,9 +903,9 @@ YARD_UNIT_TEST(TestRestartAtChunkEnd) {
     ui64 firstSector = (info.SystemChunkCount + 1) * info.RawChunkSizeBytes / info.SectorSizeBytes;
     DestroySectors(&tc, dataAfter, dataSize, firstSector, 1);
     // Write another full chunk of logs (assume it's chunk# SystemChunkCount + 1)
-    Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false); 
+    Run<TTestContinueWriteLogChunk>(&tc, 1, chunkSize, false);
     // Check that last log Lsn is somewhere out of the first log chunk
-    Run<TTestLastLsn>(&tc, 1, chunkSize, false); 
+    Run<TTestLastLsn>(&tc, 1, chunkSize, false);
 }
 
 YARD_UNIT_TEST(TestEnormousDisk) {
@@ -917,8 +917,8 @@ YARD_UNIT_TEST(TestEnormousDisk) {
     EntropyPool().Read(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, diskSize, false, tc.SectorMap);
 
-    Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false); 
-    Run<TTestCommitChunks<(31998)>>(&tc, 1, chunkSize, false); 
+    Run<TTestInit<true, 1>>(&tc, 1, chunkSize, false);
+    Run<TTestCommitChunks<(31998)>>(&tc, 1, chunkSize, false);
     Run<TTestLogWrite<512000000, 16>>(&tc, 1, chunkSize);
     Run<TTestLogWrite<512000000, 17>>(&tc, 1, chunkSize);
     Run<TTestLogWrite<128000000, 18>>(&tc, 1, chunkSize);

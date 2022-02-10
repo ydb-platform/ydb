@@ -68,5 +68,5 @@
 
 // This feature flag enables PDisk to use t1ha hash in sector footer checksums
 #ifndef KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING
-#define KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING true 
+#define KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING true
 #endif

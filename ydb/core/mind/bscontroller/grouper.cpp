@@ -149,7 +149,7 @@ struct TGrouper {
         // If there is no such key in the map, generate all intersections.
         if (!isEqualKeyPresent) {
             TVector<TFailDomain::TLevelIds> newIds;
-            newIds.reserve(Maps.size()); 
+            newIds.reserve(Maps.size());
             for (TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it = Maps.begin(); it != Maps.end(); ++it) {
                 newIds.push_back(candidate->InfixFailDomain.Intersect(it->first));
             }
@@ -290,7 +290,7 @@ bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, 
     // traverse through all rings and create groups for these rings
     TVector<const TCandidate*> candptr;
     TVector<TCandidate> ringCandidates;
-    bestGroup.reserve(bestGroup.size() + keys.size()); 
+    bestGroup.reserve(bestGroup.size() + keys.size());
     for (const TString& key : keys) {
         // get candidates for this ring
         auto range = perRingMap.equal_range(key);
@@ -334,7 +334,7 @@ bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, 
 
     // calculate overall badness of all fail domains and delete the worst ones
     TVector<ui32> badness;
-    badness.reserve(bestGroup.size()); 
+    badness.reserve(bestGroup.size());
     for (const auto& ring : bestGroup) {
         ui32 sum = 0;
         for (const auto& failDomain : ring) {

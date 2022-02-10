@@ -9,7 +9,7 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_helpers.h"
- 
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tabletid.h>

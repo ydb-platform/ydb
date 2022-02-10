@@ -181,19 +181,19 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kKeyValueLoadStart: { 
-                const auto& cmd = record.GetKeyValueLoadStart(); 
-                const ui64 tag = GetOrGenerateTag(cmd); 
-                if (LoadActors.count(tag) != 0) { 
-                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag); 
-                } 
+            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kKeyValueLoadStart: {
+                const auto& cmd = record.GetKeyValueLoadStart();
+                const ui64 tag = GetOrGenerateTag(cmd);
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag); 
-                LoadActors.emplace(tag, ctx.Register(CreateKeyValueWriterTestLoad( 
-                                cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag))); 
-                break; 
-            } 
- 
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, ctx.Register(CreateKeyValueWriterTestLoad(
+                                cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                break;
+            }
+
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kKqpLoadStart: {
                 const auto& cmd = record.GetKqpLoadStart();
                 const ui64 tag = GetOrGenerateTag(cmd);

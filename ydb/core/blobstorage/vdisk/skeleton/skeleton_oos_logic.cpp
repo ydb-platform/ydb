@@ -140,7 +140,7 @@ namespace NKikimr {
         switch (color) {
             case TSpaceColor::GREEN:
             case TSpaceColor::CYAN:
-            case TSpaceColor::LIGHT_YELLOW: 
+            case TSpaceColor::LIGHT_YELLOW:
             case TSpaceColor::YELLOW:
             case TSpaceColor::LIGHT_ORANGE:
                 return stat.Allow();
@@ -174,7 +174,7 @@ namespace NKikimr {
         switch (color) {
             case TSpaceColor::GREEN:
             case TSpaceColor::CYAN:
-            case TSpaceColor::LIGHT_YELLOW: 
+            case TSpaceColor::LIGHT_YELLOW:
             case TSpaceColor::YELLOW:
             case TSpaceColor::LIGHT_ORANGE:
                 return stat.Allow();
@@ -217,7 +217,7 @@ namespace NKikimr {
         switch (color) {
             case TSpaceColor::GREEN:
             case TSpaceColor::CYAN:
-            case TSpaceColor::LIGHT_YELLOW: 
+            case TSpaceColor::LIGHT_YELLOW:
             case TSpaceColor::YELLOW:
             case TSpaceColor::LIGHT_ORANGE:
                 return stat.Allow();

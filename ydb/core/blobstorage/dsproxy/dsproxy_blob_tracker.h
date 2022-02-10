@@ -72,7 +72,7 @@ namespace NKikimr {
                 case NKikimrProto::NODATA:
                     break;
 
-                case NKikimrProto::NOT_YET: 
+                case NKikimrProto::NOT_YET:
                 case NKikimrProto::ERROR:
                 case NKikimrProto::VDISK_ERROR_STATE:
                     FaultyDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&info->GetTopology(), nodeId);

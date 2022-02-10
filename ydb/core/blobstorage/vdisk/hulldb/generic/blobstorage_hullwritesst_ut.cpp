@@ -66,10 +66,10 @@ namespace NKikimr {
                 }
             };
 
-            TTest(ui32 chunksToUse, ui8 owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize) 
+            TTest(ui32 chunksToUse, ui8 owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize)
                 : ChunksToUse(chunksToUse)
                 , Owner(owner)
-                , OwnerRound(ownerRound) 
+                , OwnerRound(ownerRound)
                 , ChunkSize(chunkSize)
                 , AppendBlockSize(appendBlockSize)
                 , WriteBlockSize(writeBlockSize)
@@ -101,7 +101,7 @@ namespace NKikimr {
         private:
             const ui32 ChunksToUse;
             const ui8 Owner;
-            const ui64 OwnerRound; 
+            const ui64 OwnerRound;
             const ui32 ChunkSize;
             const ui32 AppendBlockSize;
             const ui32 WriteBlockSize;
@@ -114,7 +114,7 @@ namespace NKikimr {
             void Apply(std::unique_ptr<NPDisk::TEvChunkWrite> &msg) {
                 ui32 chunkIdx = msg->ChunkIdx;
                 UNIT_ASSERT(msg->ChunkIdx != 0);
-                NPDisk::TEvChunkWrite::TPartsPtr partsPtr = msg->PartsPtr; 
+                NPDisk::TEvChunkWrite::TPartsPtr partsPtr = msg->PartsPtr;
                 const ui32 begin = msg->Offset;
                 const ui32 end = begin + partsPtr->ByteSize();
                 UNIT_ASSERT(!WriteSpan[msg->ChunkIdx].count(begin));
@@ -267,12 +267,12 @@ namespace NKikimr {
         Y_UNIT_TEST(LogoBlobOneSstOneIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
             TString data("Hello, world!");
-            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(10000, data);
 
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 200000 Size: 440096} "
@@ -315,12 +315,12 @@ namespace NKikimr {
         Y_UNIT_TEST(LogoBlobOneSstMultiIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
             TString data("X");
-            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(50000, data);
 
             TString res("{SST {Addr: {ChunkIdx: 3 Offset: 0 Size: 502972} "
@@ -333,12 +333,12 @@ namespace NKikimr {
         Y_UNIT_TEST(LogoBlobMultiSstOneIndex) {
             ui32 chunksToUse = 2;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
             TString data("Hello, world!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(50000, data);
             TString res("{SST {Addr: {ChunkIdx: 2 Offset: 125776 Size: 922776} "
                             "IndexParts: 1 {UsedChunks: 1 2}} step: 20970} "
@@ -354,12 +354,12 @@ namespace NKikimr {
         Y_UNIT_TEST(LogoBlobMultiSstMultiIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
             TString data("X");
-            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(1000000, data);
             TString res("{SST {Addr: {ChunkIdx: 4 Offset: 0 Size: 1048572} "
                             "IndexParts: 4 {UsedChunks: 1 2 3 4}} step: 80657} "
@@ -398,11 +398,11 @@ namespace NKikimr {
         Y_UNIT_TEST(LogoBlobOneSstOneIndexPartOutbound) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(10000);
 
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 680096} "
@@ -415,11 +415,11 @@ namespace NKikimr {
         Y_UNIT_TEST(LogoBlobOneSstMultiIndexPartOutbound) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(50000);
 
             TString res("{SST {Addr: {ChunkIdx: 4 Offset: 0 Size: 254412} "
@@ -433,11 +433,11 @@ namespace NKikimr {
         Y_UNIT_TEST(LogoBlobMultiSstOneIndexPartOutbound) {
             ui32 chunksToUse = 1;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(20000);
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 1048520} "
                             "IndexParts: 1 OutboundItems: 30836 {UsedChunks: 1}} step: 15418} "
@@ -455,11 +455,11 @@ namespace NKikimr {
         Y_UNIT_TEST(BlockOneSstOneIndex) {
             ui32 chunksToUse = 2;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(5000);
 
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 60096} "
@@ -472,11 +472,11 @@ namespace NKikimr {
         Y_UNIT_TEST(BlockOneSstMultiIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(150000);
 
             TString res("{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 751536} "
@@ -489,11 +489,11 @@ namespace NKikimr {
         Y_UNIT_TEST(BlockMultiSstOneIndex) {
             ui32 chunksToUse = 1;
             ui8 owner = 1;
-            ui64 ownerRound = 1; 
+            ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(150000);
 
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 1048572} "

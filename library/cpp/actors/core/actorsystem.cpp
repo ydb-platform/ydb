@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "actorsystem.h"
-#include "callstack.h" 
+#include "callstack.h"
 #include "cpu_manager.h"
 #include "mailbox.h"
 #include "events.h"
@@ -64,10 +64,10 @@ namespace NActors {
         if (Y_UNLIKELY(!ev))
             return false;
 
-#ifdef USE_ACTOR_CALLSTACK 
+#ifdef USE_ACTOR_CALLSTACK
         ev->Callstack.TraceIfEmpty();
-#endif 
- 
+#endif
+
         TActorId recipient = ev->GetRecipientRewrite();
         const ui32 recpNodeId = recipient.NodeId();
 

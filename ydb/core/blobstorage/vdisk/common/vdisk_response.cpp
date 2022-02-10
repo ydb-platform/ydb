@@ -3,9 +3,9 @@
 #include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <util/system/datetime.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, const IActor& actor,
         ui64 cookie) {
     ui32 channel = TInterconnectChannels::IC_BLOBSTORAGE;
@@ -31,7 +31,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
         }
 
         WILSON_HANDLE_EVENT(TEvVPutResult, EvVPutResultSent)
-        WILSON_HANDLE_EVENT(TEvVMultiPutResult, EvVMultiPutResultSent) 
+        WILSON_HANDLE_EVENT(TEvVMultiPutResult, EvVMultiPutResultSent)
         WILSON_HANDLE_EVENT(TEvVGetResult, EvVGetResultSent)
 
 #undef WILSON_HANDLE_EVENT
@@ -46,4 +46,4 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
     }
 }
 
-}//NKikimr 
+}//NKikimr

@@ -61,7 +61,7 @@ protected:
         TGeneratedDataSet dataSet(generator);
 
         TSyncRunner::TReturnValue ret;
-        TPDiskPutStatusHandler hndl = PDiskPutStatusHandlerYellowMoveZone; 
+        TPDiskPutStatusHandler hndl = PDiskPutStatusHandlerYellowMoveZone;
         ret = SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSet, hndl));
         UNIT_ASSERT_VALUES_EQUAL(ret.Id, 0);
         UNIT_ASSERT_VALUES_EQUAL(ret.Status, 0x28733642);

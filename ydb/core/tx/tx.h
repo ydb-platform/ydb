@@ -155,11 +155,11 @@ struct TEvSubDomain {
 TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata, ui64 tabletId);
 
 }
- 
-template<> 
+
+template<>
 inline void Out<NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus>(IOutputStream& o,
-        NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus x) { 
-    o << (ui32)x; 
-} 
+        NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus x) {
+    o << (ui32)x;
+}
 
 

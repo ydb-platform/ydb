@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "actorid.h"
-#include "callstack.h" 
+#include "callstack.h"
 #include "event_load.h"
 
 #include <library/cpp/actors/wilson/wilson_trace.h>
@@ -117,9 +117,9 @@ namespace NActors {
         static const size_t ChannelBits = 12;
         static const size_t ChannelShift = (sizeof(ui32) << 3) - ChannelBits;
 
-#ifdef USE_ACTOR_CALLSTACK 
+#ifdef USE_ACTOR_CALLSTACK
         TCallstack Callstack;
-#endif 
+#endif
         ui16 GetChannel() const noexcept {
             return Flags >> ChannelShift;
         }
@@ -133,7 +133,7 @@ namespace NActors {
             Y_VERIFY(flags < (1 << ChannelShift));
             return (flags | (channel << ChannelShift));
         }
- 
+
     private:
         THolder<IEventBase> Event;
         TIntrusivePtr<TEventSerializedData> Buffer;
@@ -165,7 +165,7 @@ namespace NActors {
         TActorId GetForwardOnNondeliveryRecipient() const {
             return OnNondeliveryHolder.Get() ? OnNondeliveryHolder->Recipient : TActorId();
         }
- 
+
         IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0,
                      const TActorId* forwardOnNondelivery = nullptr, NWilson::TTraceId traceId = {})
             : Type(ev->Type())

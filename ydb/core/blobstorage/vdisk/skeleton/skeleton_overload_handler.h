@@ -42,8 +42,8 @@ namespace NKikimr {
             TEvBlobStorage::TEvVPatchStart::TPtr ev)>;
     using TVPutHandler = std::function<void(const TActorContext &ctx,
             TEvBlobStorage::TEvVPut::TPtr ev)>;
-    using TVMultiPutHandler = std::function<void(const TActorContext &ctx, 
-            TEvBlobStorage::TEvVMultiPut::TPtr ev)>; 
+    using TVMultiPutHandler = std::function<void(const TActorContext &ctx,
+            TEvBlobStorage::TEvVMultiPut::TPtr ev)>;
     using TLocalSyncDataHandler = std::function<void(const TActorContext &ctx, TEvLocalSyncData::TPtr ev)>;
     using TAnubisOsirisPutHandler = std::function<void(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr ev)>;
 
@@ -66,7 +66,7 @@ namespace NKikimr {
                 TVMovedPatchHandler &&vMovedPatch,
                 TVPatchStartHandler &&vPatchStart,
                 TVPutHandler &&vput,
-                TVMultiPutHandler &&vMultiPut, 
+                TVMultiPutHandler &&vMultiPut,
                 TLocalSyncDataHandler &&loc,
                 TAnubisOsirisPutHandler &&aoput);
         ~TOverloadHandler();
@@ -81,7 +81,7 @@ namespace NKikimr {
         bool PostponeEvent(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
         bool PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
         bool PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
-        bool PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton); 
+        bool PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
         bool PostponeEvent(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
         bool PostponeEvent(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
 

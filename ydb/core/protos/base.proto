@@ -19,8 +19,8 @@ enum EReplyStatus {
     SCHEDULED = 14;
     OUT_OF_SPACE = 15;
     VDISK_ERROR_STATE = 16;
-    INVALID_OWNER = 17; 
-    INVALID_ROUND = 18; 
+    INVALID_OWNER = 17;
+    INVALID_ROUND = 18;
     RESTART = 19;
     NOT_YET = 20;
     NO_GROUP = 21;

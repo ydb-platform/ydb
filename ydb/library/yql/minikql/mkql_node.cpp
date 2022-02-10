@@ -4,9 +4,9 @@
 #include "mkql_node_visitor.h"
 #include "mkql_node_printer.h"
 
-#include <util/stream/str.h> 
+#include <util/stream/str.h>
 #include <util/string/join.h>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 

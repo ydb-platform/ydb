@@ -132,7 +132,7 @@ namespace NKikimr {
 
         void GenerateCommit(const TActorContext &ctx) {
             // commit
-            NPDisk::TCommitRecord commitRec; 
+            NPDisk::TCommitRecord commitRec;
             commitRec.IsStartingPoint = true;
             TString data = State.Serialize();
             size_t dataSize = data.size();
@@ -160,7 +160,7 @@ namespace NKikimr {
             }
         }
 
-        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) { 
+        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
             CHECK_PDISK_RESPONSE(SyncerCtx->VCtx, ev, ctx);
             Y_VERIFY_DEBUG(!InFly.empty());
 
@@ -198,7 +198,7 @@ namespace NKikimr {
             ctx.Schedule(AdvanceEntryPointTimeout, new TEvents::TEvWakeup());
         }
 
-        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) { 
+        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
             ui64 freeUpToLsn = ev->Get()->FreeUpToLsn;
             if (InFly.empty() && (CurEntryPointLsn < freeUpToLsn)) {
                 SelfCommit(ctx);

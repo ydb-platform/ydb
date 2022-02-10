@@ -7,7 +7,7 @@ namespace NActors {
 
 NActors::IActor* CreateSelfPingActor(
     TDuration sendInterval,
-    const NMonitoring::TDynamicCounters::TCounterPtr& counter, 
-    const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter); 
+    const NMonitoring::TDynamicCounters::TCounterPtr& counter,
+    const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter);
 
 } // NActors

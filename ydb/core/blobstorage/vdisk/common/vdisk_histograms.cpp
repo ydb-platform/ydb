@@ -11,7 +11,7 @@ namespace NKikimr {
                     std::make_pair(&VGetAsyncLatencyHistogram,     "GetAsync"    ),
                     std::make_pair(&VGetFastLatencyHistogram,      "GetFast"     ),
                     std::make_pair(&VGetDiscoverLatencyHistogram,  "GetDiscover" ),
-                    std::make_pair(&VGetLowLatencyHistogram,       "GetLow" ), 
+                    std::make_pair(&VGetLowLatencyHistogram,       "GetLow" ),
                     std::make_pair(&VPutTabletLogLatencyHistogram, "PutTabletLog"),
                     std::make_pair(&VPutUserDataLatencyHistogram,  "PutUserData" ),
                     std::make_pair(&VPutAsyncBlobLatencyHistogram, "PutAsyncBlob")
@@ -28,8 +28,8 @@ namespace NKikimr {
                     return VGetFastLatencyHistogram;
                 case NKikimrBlobStorage::Discover:
                     return VGetDiscoverLatencyHistogram;
-                case NKikimrBlobStorage::LowRead: 
-                    return VGetLowLatencyHistogram; 
+                case NKikimrBlobStorage::LowRead:
+                    return VGetLowLatencyHistogram;
             }
         }
 

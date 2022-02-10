@@ -335,7 +335,7 @@ namespace NKikimr {
                 }
             }
 
-            void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) { 
+            void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
                 // FIXME: optimize, batch reads; use Db->RecommendedReadSize
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
 

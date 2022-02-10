@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "defaults.h"
 
 extern "C" { // sanitizers API
@@ -69,18 +69,18 @@ namespace NSan {
         return true;
 #else
         return false;
-#endif 
+#endif
     }
- 
+
     // Determines if msan present
     inline constexpr static bool MSanIsOn() noexcept {
 #if defined(_msan_enabled_)
         return true;
 #else
         return false;
-#endif 
+#endif
     }
- 
+
     // Make memory region fully initialized (without changing its contents).
     inline static void Unpoison(const volatile void* a, size_t size) noexcept {
 #if defined(_msan_enabled_)
@@ -90,18 +90,18 @@ namespace NSan {
         Y_UNUSED(size);
 #endif
     }
- 
+
     // Make memory region fully uninitialized (without changing its contents).
     // This is a legacy interface that does not update origin information. Use __msan_allocated_memory() instead.
     inline static void Poison(const volatile void* a, size_t size) noexcept {
 #if defined(_msan_enabled_)
         __msan_poison(a, size);
-#else 
+#else
         Y_UNUSED(a);
         Y_UNUSED(size);
-#endif 
+#endif
     }
- 
+
     // Checks that memory range is fully initialized, and reports an error if it is not.
     inline static void CheckMemIsInitialized(const volatile void* a, size_t size) noexcept {
 #if defined(_msan_enabled_)

@@ -1,15 +1,15 @@
 UNITTEST_FOR(ydb/core/mind)
 
-OWNER( 
-    ddoarn 
-    fomichev 
-    g:kikimr 
-) 
+OWNER(
+    ddoarn
+    fomichev
+    g:kikimr
+)
 
 FORK_SUBTESTS()
- 
+
 SIZE(MEDIUM)
- 
+
 TIMEOUT(600)
 
 PEERDIR(

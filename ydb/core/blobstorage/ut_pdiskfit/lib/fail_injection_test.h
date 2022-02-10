@@ -103,7 +103,7 @@ struct TPDiskFailureInjectionTest {
     ui32 NumFailsInIteration = 1000; // 0 = unlimited
     TTempDir TempDir;
     TString PDiskFilePath;
-    ui64 DiskSize = 16ULL << 30; // 10 GB 
+    ui64 DiskSize = 16ULL << 30; // 10 GB
     ui32 ChunkSize = 16 << 20; // 16 MB
     ui32 SectorSize = 4 << 10; // 4 KB
     ui64 PDiskGuid;
@@ -148,7 +148,7 @@ struct TPDiskFailureInjectionTest {
         NLWTrace::TQuery query;
         auto& block = *query.AddBlocks();
         auto& desc = *block.MutableProbeDesc();
-        desc.SetName("PDiskFailInjection"); 
+        desc.SetName("PDiskFailInjection");
         desc.SetProvider("FAIL_INJECTION_PROVIDER");
         auto& action = *block.AddAction();
         auto& custom = *action.MutableCustomAction();

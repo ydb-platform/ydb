@@ -1,102 +1,102 @@
-#include "keyvalue_intermediate.h" 
+#include "keyvalue_intermediate.h"
 #include <ydb/core/base/appdata.h>
- 
-namespace NKikimr { 
-namespace NKeyValue { 
- 
- 
-TIntermediate::TRead::TRead() 
-    : Offset(0) 
-    , Size(0) 
-    , ValueSize(0) 
-    , CreationUnixTime(0) 
+
+namespace NKikimr {
+namespace NKeyValue {
+
+
+TIntermediate::TRead::TRead()
+    : Offset(0)
+    , Size(0)
+    , ValueSize(0)
+    , CreationUnixTime(0)
     , StorageChannel(NKikimrClient::TKeyValueRequest::MAIN)
-    , Status(NKikimrProto::UNKNOWN) 
-{} 
- 
+    , Status(NKikimrProto::UNKNOWN)
+{}
+
 TIntermediate::TRead::TRead(const TString &key, ui32 valueSize, ui64 creationUnixTime,
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel)
-    : Key(key) 
-    , Offset(0) 
-    , Size(valueSize) 
-    , ValueSize(valueSize) 
-    , CreationUnixTime(creationUnixTime) 
-    , StorageChannel(storageChannel) 
-    , Status(NKikimrProto::UNKNOWN) 
-{} 
- 
-NKikimrProto::EReplyStatus TIntermediate::TRead::ItemsStatus() const { 
-    for (const TReadItem& item : ReadItems) { 
-        if (item.Status != NKikimrProto::OK) { 
-            return NKikimrProto::ERROR; 
-        } 
-    } 
-    return NKikimrProto::OK; 
-} 
- 
-NKikimrProto::EReplyStatus TIntermediate::TRead::CumulativeStatus() const { 
-    NKikimrProto::EReplyStatus itemsStatus = ItemsStatus(); 
-    if (itemsStatus == NKikimrProto::OK) { 
-        if (Status == NKikimrProto::UNKNOWN) { 
-            return NKikimrProto::OK; 
-        } else { 
-            return Status; 
-        } 
-    } else { 
-        if (Status == NKikimrProto::OVERRUN || Status == NKikimrProto::OK || Status == NKikimrProto::UNKNOWN) { 
-            return itemsStatus; 
-        } else { 
-            return Status; 
-        } 
-    } 
-} 
- 
+    : Key(key)
+    , Offset(0)
+    , Size(valueSize)
+    , ValueSize(valueSize)
+    , CreationUnixTime(creationUnixTime)
+    , StorageChannel(storageChannel)
+    , Status(NKikimrProto::UNKNOWN)
+{}
+
+NKikimrProto::EReplyStatus TIntermediate::TRead::ItemsStatus() const {
+    for (const TReadItem& item : ReadItems) {
+        if (item.Status != NKikimrProto::OK) {
+            return NKikimrProto::ERROR;
+        }
+    }
+    return NKikimrProto::OK;
+}
+
+NKikimrProto::EReplyStatus TIntermediate::TRead::CumulativeStatus() const {
+    NKikimrProto::EReplyStatus itemsStatus = ItemsStatus();
+    if (itemsStatus == NKikimrProto::OK) {
+        if (Status == NKikimrProto::UNKNOWN) {
+            return NKikimrProto::OK;
+        } else {
+            return Status;
+        }
+    } else {
+        if (Status == NKikimrProto::OVERRUN || Status == NKikimrProto::OK || Status == NKikimrProto::UNKNOWN) {
+            return itemsStatus;
+        } else {
+            return Status;
+        }
+    }
+}
+
 TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep,
-        TRequestType::EType requestType) 
-    : Cookie(0) 
-    , Generation(0) 
-    , Deadline(TInstant::Max()) 
-    , HasCookie(false) 
-    , HasGeneration(false) 
-    , HasIncrementGeneration(false) 
-    , RespondTo(respondTo) 
-    , KeyValueActorId(keyValueActorId) 
-    , TotalSize(0) 
-    , TotalSizeLimit(25ull << 20) 
-    , TotalReadsScheduled(0) 
-    , TotalReadsLimit(5) 
-    , SequentialReadLimit(100) 
-    , IsTruncated(false) 
-    , CreatedAtGeneration(channelGeneration) 
-    , CreatedAtStep(channelStep) 
-    , IsReplied(false) 
-{ 
-    Stat.IntermediateCreatedAt = TAppData::TimeProvider->Now(); 
-    Stat.RequestType = requestType; 
-} 
- 
-void TIntermediate::UpdateStat() { 
+        TRequestType::EType requestType)
+    : Cookie(0)
+    , Generation(0)
+    , Deadline(TInstant::Max())
+    , HasCookie(false)
+    , HasGeneration(false)
+    , HasIncrementGeneration(false)
+    , RespondTo(respondTo)
+    , KeyValueActorId(keyValueActorId)
+    , TotalSize(0)
+    , TotalSizeLimit(25ull << 20)
+    , TotalReadsScheduled(0)
+    , TotalReadsLimit(5)
+    , SequentialReadLimit(100)
+    , IsTruncated(false)
+    , CreatedAtGeneration(channelGeneration)
+    , CreatedAtStep(channelStep)
+    , IsReplied(false)
+{
+    Stat.IntermediateCreatedAt = TAppData::TimeProvider->Now();
+    Stat.RequestType = requestType;
+}
+
+void TIntermediate::UpdateStat() {
     auto checkRead = [&] (const auto &read) {
-        if (read.Status == NKikimrProto::NODATA) { 
-            Stat.ReadNodata++; 
-        } else if (read.Status == NKikimrProto::OK) { 
-            Stat.Reads++; 
-            Stat.ReadBytes += read.Value.size(); 
-        } 
+        if (read.Status == NKikimrProto::NODATA) {
+            Stat.ReadNodata++;
+        } else if (read.Status == NKikimrProto::OK) {
+            Stat.Reads++;
+            Stat.ReadBytes += read.Value.size();
+        }
     };
     auto checkRangeRead = [&] (const auto &range) {
-        if (range.IncludeData) { 
-            for (const auto &read: range.Reads) { 
-                if (read.Status == NKikimrProto::NODATA) { 
-                    Stat.RangeReadItemsNodata++; 
-                } else if (read.Status == NKikimrProto::OK) { 
-                    Stat.RangeReadItems++; 
-                    Stat.RangeReadBytes += read.Value.size(); 
-                } 
-            } 
-        } else { 
+        if (range.IncludeData) {
+            for (const auto &read: range.Reads) {
+                if (read.Status == NKikimrProto::NODATA) {
+                    Stat.RangeReadItemsNodata++;
+                } else if (read.Status == NKikimrProto::OK) {
+                    Stat.RangeReadItems++;
+                    Stat.RangeReadBytes += read.Value.size();
+                }
+            }
+        } else {
         Stat.IndexRangeRead++;
-        } 
+        }
     };
 
     if (ReadCommand) {
@@ -110,7 +110,7 @@ void TIntermediate::UpdateStat() {
             }
         };
         std::visit(checkReadCommand, *ReadCommand);
-    } 
+    }
 
     for (const auto &read: Reads) {
         checkRead(read);
@@ -118,12 +118,12 @@ void TIntermediate::UpdateStat() {
     for (const auto &range: RangeReads) {
         checkRangeRead(range);
     }
-    for (const auto &write: Writes) { 
-        if (write.Status == NKikimrProto::OK) { 
+    for (const auto &write: Writes) {
+        if (write.Status == NKikimrProto::OK) {
             Stat.WriteBytes += write.Data.size();
-        } 
-    } 
- 
+        }
+    }
+
     for (const auto &cmd : Commands) {
         if (!std::holds_alternative<TIntermediate::TWrite>(cmd)) {
             continue;
@@ -135,11 +135,11 @@ void TIntermediate::UpdateStat() {
     }
 
     Stat.Writes = WriteCount;
-    Stat.GetStatuses = GetStatuses.size(); 
+    Stat.GetStatuses = GetStatuses.size();
     Stat.Renames = RenameCount;
     Stat.CopyRanges = CopyRangeCount;
     Stat.Concats = ConcatCount;
-} 
- 
-} // NKeyValue 
-} // NKikimr 
+}
+
+} // NKeyValue
+} // NKikimr

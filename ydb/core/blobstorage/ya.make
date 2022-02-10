@@ -48,7 +48,7 @@ RECURSE(
     nodewarden
     other
     pdisk
-    storagepoolmon 
+    storagepoolmon
     testload
     vdisk
 )

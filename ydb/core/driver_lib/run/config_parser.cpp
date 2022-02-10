@@ -55,7 +55,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("ic-file", "interconnect config file").OptionalArgument("PATH");
     opts.AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH").Required();
     opts.AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
-    opts.AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
     opts.AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH");
     opts.AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
     opts.AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
@@ -70,7 +70,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
     opts.AddLongOption("auth-file", "authorization config file").OptionalArgument("PATH");
     opts.AddLongOption("auth-token-file", "authorization token config file").OptionalArgument("PATH");
-    opts.AddLongOption("key-file", "encryption key config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("key-file", "encryption key config file").OptionalArgument("PATH");
     opts.AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
     opts.AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
     opts.AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
@@ -117,10 +117,10 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         Y_VERIFY(ParsePBFromFile(res.Get("vdisk-file"), Config.AppConfig.MutableVDiskConfig()));
     }
 
-    if (res.Has("drivemodel-file")) { 
-        Y_VERIFY(ParsePBFromFile(res.Get("drivemodel-file"), Config.AppConfig.MutableDriveModelConfig())); 
-    } 
- 
+    if (res.Has("drivemodel-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("drivemodel-file"), Config.AppConfig.MutableDriveModelConfig()));
+    }
+
     if (res.Has("kqp-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("kqp-file"), Config.AppConfig.MutableKQPConfig()));
     }
@@ -183,14 +183,14 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
     if (res.Has("auth-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("auth-file"), Config.AppConfig.MutableAuthConfig()));
     }
- 
+
     if (res.Has("auth-token-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("auth-token-file"), Config.AppConfig.MutableAuthConfig()));
     }
 
-    if (res.Has("key-file")) { 
-        Y_VERIFY(ParsePBFromFile(res.Get("key-file"), Config.AppConfig.MutableKeyConfig())); 
-    } 
+    if (res.Has("key-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("key-file"), Config.AppConfig.MutableKeyConfig()));
+    }
 
     if (res.Has("pdisk-key-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("pdisk-key-file"), Config.AppConfig.MutablePDiskKeyConfig()));

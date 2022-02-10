@@ -159,7 +159,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 54645, 15, partId).Hash());
             UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 56650, 15, partId).Hash());
             UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 0, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 58435455, 16, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 58435455, 16, partId).Hash());
         }
 
         Y_UNIT_TEST(SimpleTestWithDifferentTabletId) {

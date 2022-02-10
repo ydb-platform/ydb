@@ -122,45 +122,45 @@ public:
         return sendResponse(NKikimrProto::OK, TString());
     }
 
-    void Handle(TEvBlobStorage::TEvVMultiPut::TPtr& ev, const TActorContext& ctx) { 
-        auto& record = ev->Get()->Record; 
-        Y_VERIFY(VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId, 
-                "record.VDiskId# %s VDiskId# %s", 
-                VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data()); 
- 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut# %s", ev->Get()->ToString().data()); 
- 
-        ui64 cookie = record.GetCookie(); 
+    void Handle(TEvBlobStorage::TEvVMultiPut::TPtr& ev, const TActorContext& ctx) {
+        auto& record = ev->Get()->Record;
+        Y_VERIFY(VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId,
+                "record.VDiskId# %s VDiskId# %s",
+                VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
+
+        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut# %s", ev->Get()->ToString().data());
+
+        ui64 cookie = record.GetCookie();
         auto response = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK,
-                VDiskIDFromVDiskID(record.GetVDiskID()), record.HasCookie() ? &cookie : nullptr, 
-                TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(), 
+                VDiskIDFromVDiskID(record.GetVDiskID()), record.HasCookie() ? &cookie : nullptr,
+                TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(),
                 &record, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, TString());
-        if (ErrorMode) { 
+        if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut %s -> %s", ev->Get()->ToString().data(), 
-                    response->ToString().data()); 
+            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut %s -> %s", ev->Get()->ToString().data(),
+                    response->ToString().data());
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
-            return; 
-        } 
- 
-        for (ui64 i = 0; i < ev->Get()->Record.ItemsSize(); ++i) { 
-            auto &item = ev->Get()->Record.GetItems(i); 
-            TLogoBlobID id{LogoBlobIDFromLogoBlobID(item.GetBlobID())}; 
-            // check for blocks 
-            if (!record.GetIgnoreBlock() && IsBlocked(id)) { 
+            return;
+        }
+
+        for (ui64 i = 0; i < ev->Get()->Record.ItemsSize(); ++i) {
+            auto &item = ev->Get()->Record.GetItems(i);
+            TLogoBlobID id{LogoBlobIDFromLogoBlobID(item.GetBlobID())};
+            // check for blocks
+            if (!record.GetIgnoreBlock() && IsBlocked(id)) {
                 response->AddVPutResult(NKikimrProto::BLOCKED, "blocked", id, &i);
-                continue; 
-            } 
- 
+                continue;
+            }
+
             // put the blob in place
             PutBlob(id, item.HasBuffer() ? std::make_optional(item.GetBuffer()) : std::nullopt, *ev->Get(), i);
- 
-            // report success 
+
+            // report success
             response->AddVPutResult(NKikimrProto::OK, TString(), id, &i);
-        } 
+        }
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
-    } 
- 
+    }
+
     void Handle(TEvBlobStorage::TEvVGet::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         Y_VERIFY(VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId);
@@ -461,7 +461,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
             HFunc(TEvBlobStorage::TEvVPut, Handle);
-            HFunc(TEvBlobStorage::TEvVMultiPut, Handle); 
+            HFunc(TEvBlobStorage::TEvVMultiPut, Handle);
             HFunc(TEvBlobStorage::TEvVGet, Handle);
             HFunc(TEvBlobStorage::TEvVBlock, Handle);
             HFunc(TEvBlobStorage::TEvVGetBlock, Handle);

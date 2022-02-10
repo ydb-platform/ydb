@@ -34,7 +34,7 @@ private:
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
             PipeClient = TActorId();
-            return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx, 
+            return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx,
                 Sprintf("Tablet pipe client connected with status# %s for tablet %" PRIu64 " Marker# MBT3",
                     NKikimrProto::EReplyStatus_Name(msg->Status).data(), msg->TabletId)), ctx);
         }
@@ -43,12 +43,12 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
         PipeClient = TActorId();
-        SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx, "Tablet pipe client destroyed Marker# MBT2")); 
-        return Die(ctx); 
+        SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx, "Tablet pipe client destroyed Marker# MBT2"));
+        return Die(ctx);
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        return SendReplyAndDie(CreateErrorReply(MSTATUS_TIMEOUT, ctx, "Tablet request timed out Marker# MBT4"), ctx); 
+        return SendReplyAndDie(CreateErrorReply(MSTATUS_TIMEOUT, ctx, "Tablet request timed out Marker# MBT4"), ctx);
     }
 protected:
     void Die(const TActorContext &ctx) override {
@@ -59,11 +59,11 @@ protected:
         TActorBootstrapped<TDerived>::Die(ctx);
     }
 
-    virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx, 
+    virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx,
             const TString& text = TString()) {
-        LOG_ERROR_S(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest TabletId# " << TabletId 
-            << " status# " << status << " text# \"" << text << "\"" << Endl); 
-        return new TBusResponseStatus(status, text); 
+        LOG_ERROR_S(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest TabletId# " << TabletId
+            << " status# " << status << " text# \"" << text << "\"" << Endl);
+        return new TBusResponseStatus(status, text);
     }
 
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {
@@ -96,7 +96,7 @@ public:
         }
 
         std::pair<ui64, TAutoPtr<IEventBase>> reqPair = static_cast<TDerived *>(this)->MakeReqPair(ctx);
-        TabletId = reqPair.first; 
+        TabletId = reqPair.first;
 
         if (reqPair.first) {
             PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, reqPair.first, clientConfig));
@@ -104,8 +104,8 @@ public:
 
             this->Become(&TDerived::StateFunc, ctx, Timeout, new TEvents::TEvWakeup());
         } else {
-            return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx, 
-                "Unable to obtain TabletId Marker# MBT1"), ctx); 
+            return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx,
+                "Unable to obtain TabletId Marker# MBT1"), ctx);
         }
     }
 

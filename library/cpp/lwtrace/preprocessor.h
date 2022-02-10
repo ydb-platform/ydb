@@ -34,7 +34,7 @@
 // 2. FOREACH_PARAMTYPE(FOREACH_PARAMTYPE_MACRO, your_p1_value, your_p1_value)
 //    FOREACH_PARAMTYPE(FOREACH_PARAMTYPE_MACRO, your_p1_another_value, your_p1_another_value)
 // 3. #undef FOREACH_PARAMTYPE_MACRO
-// Type order matters! 
+// Type order matters!
 #define FOREACH_PARAMTYPE(MACRO, ...)                         \
     MACRO("i64", i64, I64, ##__VA_ARGS__)                     \
     MACRO("ui64", ui64, Ui64, ##__VA_ARGS__)                  \
@@ -49,13 +49,13 @@
     MACRO(NULL, TNil, Nil, ##__VA_ARGS__) \
     /**/
 
-// Used for math statements 
+// Used for math statements
 #define FOR_MATH_PARAMTYPE(MACRO, ...)                     \
     MACRO("i64", i64, I64, ##__VA_ARGS__)                  \
     MACRO("ui64", ui64, Ui64, ##__VA_ARGS__)               \
     MACRO("check", NLWTrace::TCheck, Check, ##__VA_ARGS__) \
-    /**/ 
- 
+    /**/
+
 // Use for code generation to handle parameter lists
 // NOTE: this is the only place to change if more parameters needed
 #define FOREACH_PARAMNUM(MACRO, ...) \
@@ -78,22 +78,22 @@
     MACRO(16, ##__VA_ARGS__)         \
     /**/
 
-#define FOREACH_LEFT_TYPE(MACRO, ...) \ 
+#define FOREACH_LEFT_TYPE(MACRO, ...) \
     MACRO(__VA_ARGS__, OT_VARIABLE)   \
     MACRO(__VA_ARGS__, OT_LITERAL)    \
     MACRO(__VA_ARGS__, OT_PARAMETER)  \
-    /**/ 
- 
-#define FOREACH_RIGHT_TYPE(MACRO, ...) \ 
+    /**/
+
+#define FOREACH_RIGHT_TYPE(MACRO, ...) \
     MACRO(__VA_ARGS__, OT_VARIABLE)    \
     MACRO(__VA_ARGS__, OT_LITERAL)     \
     MACRO(__VA_ARGS__, OT_PARAMETER)   \
-    /**/ 
- 
-#define FOREACH_DESTINATION_TYPE(MACRO, ...) \ 
+    /**/
+
+#define FOREACH_DESTINATION_TYPE(MACRO, ...) \
     MACRO(__VA_ARGS__, OT_VARIABLE)          \
-    /**/ 
- 
+    /**/
+
 // Auxilary macros
 #define LWTRACE_EXPAND(x) x
 #define LWTRACE_EAT(...)

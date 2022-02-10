@@ -1,6 +1,6 @@
-namespace NKikimr { 
-namespace NPDisk { 
- 
-} // NPDisk 
-} // NKikimr 
- 
+namespace NKikimr {
+namespace NPDisk {
+
+} // NPDisk
+} // NKikimr
+

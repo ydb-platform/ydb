@@ -118,8 +118,8 @@ struct TEvBusProxy {
         }
     };
 
-    typedef TEvMsgBusRequest<EvRequest> TEvRequest; 
-    typedef TEvMsgBusRequest<EvNavigate> TEvNavigate; 
+    typedef TEvMsgBusRequest<EvRequest> TEvRequest;
+    typedef TEvMsgBusRequest<EvNavigate> TEvNavigate;
     typedef TEvMsgBusRequest<EvFlatTxRequest> TEvFlatTxRequest;
     typedef TEvMsgBusRequest<EvFlatDescribeRequest> TEvFlatDescribeRequest;
     typedef TEvMsgBusRequest<EvPersQueue> TEvPersQueue;

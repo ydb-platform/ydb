@@ -1,15 +1,15 @@
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
- 
-namespace NKikimr { 
-namespace NPDisk { 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+
+namespace NKikimr {
+namespace NPDisk {
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TAtomicBlockCounter
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool TAtomicBlockCounter::IsBlocked() const noexcept {
     return GetBlocked(AtomicGet(Data));
 }
- 
+
 void TAtomicBlockCounter::Block(ui64 flag, TResult& res) noexcept {
     while (true) {
         ui64 prevData = AtomicGet(Data);
@@ -23,11 +23,11 @@ void TAtomicBlockCounter::Block(ui64 flag, TResult& res) noexcept {
             return;
         }
     }
-} 
- 
+}
+
 void TAtomicBlockCounter::Unblock(ui64 flag, TResult& res) noexcept {
     while (true) {
-        ui64 prevData = AtomicGet(Data); 
+        ui64 prevData = AtomicGet(Data);
         if (!(prevData & flag)) {
             FillResult(prevData, prevData, res);
             return; // Already unblocked
@@ -35,15 +35,15 @@ void TAtomicBlockCounter::Unblock(ui64 flag, TResult& res) noexcept {
         ui64 data = NextSeqno(prevData & ~flag);
         if (AtomicCas(&Data, data, prevData)) {
             FillResult(prevData, data, res);
-            return; 
-        } 
-    } 
-} 
- 
+            return;
+        }
+    }
+}
+
 ui64 TAtomicBlockCounter::Add(ui64 value) noexcept {
     Y_VERIFY_S(value > 0, "zero value# " << value);
     while (true) {
-        ui64 prevData = AtomicGet(Data); 
+        ui64 prevData = AtomicGet(Data);
         if (GetBlocked(prevData)) {
             return 0; // Add is forbidden iff blocked
         }
@@ -71,26 +71,26 @@ ui64 TAtomicBlockCounter::ThresholdAdd(ui64 value, ui64 threshold, TAtomicBlockC
         ui64 prevData = AtomicGet(Data);
         if (GetBlocked(prevData)) { // Add is forbidden iff blocked
             FillResult(prevData, prevData, res);
-            return 0; 
-        } 
+            return 0;
+        }
         ui64 data = NextSeqno(ThresholdBlock(CheckedAddCounter(prevData, value), threshold));
         if (AtomicCas(&Data, data, prevData)) {
             FillResult(prevData, data, res);
             return GetCounter(data);
         }
-    } 
-} 
- 
+    }
+}
+
 ui64 TAtomicBlockCounter::ThresholdSub(ui64 value, ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept {
     Y_VERIFY_S(value > 0, "zero value# " << value);
     while (true) {
-        ui64 prevData = AtomicGet(Data); 
+        ui64 prevData = AtomicGet(Data);
         ui64 data = NextSeqno(ThresholdBlock(CheckedSubCounter(prevData, value), threshold));
         if (AtomicCas(&Data, data, prevData)) {
             FillResult(prevData, data, res);
             return GetCounter(data);
         }
-    } 
+    }
 }
 
 ui64 TAtomicBlockCounter::ThresholdUpdate(ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept {
@@ -140,17 +140,17 @@ ui16 TAtomicBlockCounter::GetSeqno(ui64 data) noexcept {
 }
 
 ui64 TAtomicBlockCounter::GetCounter(ui64 data) noexcept {
-    return data & CounterMask; 
-} 
- 
+    return data & CounterMask;
+}
+
 ui64 TAtomicBlockCounter::ThresholdBlock(ui64 data, ui64 threshold) noexcept {
     if (GetCounter(data) > threshold) {
         return data | BlockAFlag;
     } else {
         return data & ~BlockAFlag;
     }
-} 
- 
+}
+
 ui64 TAtomicBlockCounter::NextSeqno(ui64 data) noexcept {
     if (GetSeqno(data) == Max<ui16>()) { // Overflow case
         return data & ~SeqnoMask;
@@ -159,5 +159,5 @@ ui64 TAtomicBlockCounter::NextSeqno(ui64 data) noexcept {
     }
 }
 
-} // NPDisk 
-} // NKikimr 
+} // NPDisk
+} // NKikimr

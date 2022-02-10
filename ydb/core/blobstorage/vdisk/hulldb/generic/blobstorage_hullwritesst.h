@@ -38,12 +38,12 @@ namespace NKikimr {
 
     class TBufferedChunkWriter : public TThrRefBase {
     public:
-        TBufferedChunkWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize, 
+        TBufferedChunkWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                              ui32 appendBlockSize, ui32 writeBlockSize, ui32 chunkIdx,
                              TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue)
             : Consumer(std::move(consumer))
             , Owner(owner)
-            , OwnerRound(ownerRound) 
+            , OwnerRound(ownerRound)
             , Priority(priority)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
@@ -122,7 +122,7 @@ namespace NKikimr {
                 ui32 offsetInChunk = Offset - Buffer.Size();
                 Y_VERIFY(offsetInChunk % AppendBlockSize == 0);
                 Y_VERIFY(ChunkIdx);
-                NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(Buffer))); 
+                NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(Buffer)));
                 auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts, nullptr, true, Priority);
                 MsgQueue.push(std::move(ev));
                 HasBuffer = false;
@@ -132,7 +132,7 @@ namespace NKikimr {
     private:
         TMemoryConsumer Consumer;
         const ui8 Owner;
-        const ui64 OwnerRound; 
+        const ui64 OwnerRound;
         const ui8 Priority;
         const ui32 ChunkSize;
         const ui32 AppendBlockSize;
@@ -153,12 +153,12 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     class TLevelSegment<TKey, TMemRec>::TBaseWriter {
     public:
-        TBaseWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize, 
+        TBaseWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
                     TDeque<TChunkIdx>& rchunks)
             : Consumer(std::move(consumer))
             , Owner(owner)
-            , OwnerRound(ownerRound) 
+            , OwnerRound(ownerRound)
             , Priority(priority)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
@@ -248,7 +248,7 @@ namespace NKikimr {
     protected:
         TMemoryConsumer Consumer;
         const ui8 Owner;
-        const ui64 OwnerRound; 
+        const ui64 OwnerRound;
         const ui8 Priority;
         const ui32 ChunkSize;
         const ui32 AppendBlockSize;
@@ -312,12 +312,12 @@ namespace NKikimr {
         using TBase::UsedChunks;
 
     public:
-        TDataWriter(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize, 
+        TDataWriter(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
                     TDeque<TChunkIdx>& rchunks)
             : TBase(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, true)),
                     owner,
-                    ownerRound, 
+                    ownerRound,
                     EWriterDataTypeToPriority(type),
                     chunkSize,
                     appendBlockSize,
@@ -413,12 +413,12 @@ namespace NKikimr {
         static_assert(sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder), "expect sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder)");
 
     public:
-        TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize, 
+        TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                       ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
                       TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, TDeque<TChunkIdx>& rchunks)
             : Consumer(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, false)))
             , Owner(owner)
-            , OwnerRound(ownerRound) 
+            , OwnerRound(ownerRound)
             , Priority(EWriterDataTypeToPriority(type))
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
@@ -607,7 +607,7 @@ namespace NKikimr {
     private:
         TMemoryConsumer Consumer;
         const ui8 Owner;
-        const ui64 OwnerRound; 
+        const ui64 OwnerRound;
         const ui8 Priority;
         const ui32 ChunkSize;
         const ui32 AppendBlockSize;
@@ -821,12 +821,12 @@ namespace NKikimr {
         typedef typename ::NKikimr::TLevelSegment<TKey, TMemRec>::TIndexBuilder TIndexBuilder;
 
     public:
-        TWriter(TVDiskContextPtr vctx, EWriterDataType type, ui32 chunksToUse, ui8 owner, ui64 ownerRound, 
-                ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl, 
+        TWriter(TVDiskContextPtr vctx, EWriterDataType type, ui32 chunksToUse, ui8 owner, ui64 ownerRound,
+                ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
                 TDeque<TChunkIdx>& rchunks, TRopeArena& arena)
-            : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks) 
-            , IndexBuilder(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, sstId, 
-                    createdByRepl, MsgQueue, rchunks) 
+            : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks)
+            , IndexBuilder(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, sstId,
+                    createdByRepl, MsgQueue, rchunks)
             , ChunksToUse(chunksToUse)
             , ChunkSize(chunkSize)
             , Arena(arena)

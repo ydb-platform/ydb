@@ -1,5 +1,5 @@
 #include "blobstorage_hullhugedefs.h"
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
 
@@ -34,7 +34,7 @@ namespace NKikimr {
             if (data.size() != sizeof(ui32) + sizeof(ui64)) // refPointLsn(ui64) (for backward compatibility, can be removed)
                 return false;
             const char *cur = data.data();
-            ChunkId = ReadUnaligned<ui32>(cur); 
+            ChunkId = ReadUnaligned<ui32>(cur);
 
             return true;
         }
@@ -68,7 +68,7 @@ namespace NKikimr {
                 return false;
 
             cur += sizeof(ui64); // skip refPointLsn (for backward compatibility, can be removed)
-            ui32 size = ReadUnaligned<ui32>(cur); 
+            ui32 size = ReadUnaligned<ui32>(cur);
             cur += sizeof(ui32);
 
             if (size_t(end - cur) != sizeof(ui32) * size)
@@ -76,7 +76,7 @@ namespace NKikimr {
 
             ChunkIds.reserve(size);
             for (ui32 i = 0; i < size; i++) {
-                ChunkIds.push_back(ReadUnaligned<ui32>(cur)); 
+                ChunkIds.push_back(ReadUnaligned<ui32>(cur));
                 cur += sizeof(ui32);
             }
             return true;
@@ -140,7 +140,7 @@ namespace NKikimr {
             // LogoBlobID
             if (size_t(end - cur) < sizeof(ui16))
                 return false;
-            ui16 lbSerializedSize = ReadUnaligned<ui16>(cur); 
+            ui16 lbSerializedSize = ReadUnaligned<ui16>(cur);
             cur += sizeof(ui16);
             if (size_t(end - cur) < lbSerializedSize)
                 return false;
@@ -154,7 +154,7 @@ namespace NKikimr {
             // Ingress
             if (size_t(end - cur) < sizeof(ui64))
                 return false;
-            ui64 ingressData = ReadUnaligned<ui64>(cur); 
+            ui64 ingressData = ReadUnaligned<ui64>(cur);
             cur += sizeof(ui64);
             Ingress = TIngress(ingressData);
 

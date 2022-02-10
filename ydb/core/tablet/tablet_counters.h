@@ -54,14 +54,14 @@ public:
     {}
 
     //
-    TTabletSimpleCounter& Set(ui64 value) { 
-        Value = value; 
+    TTabletSimpleCounter& Set(ui64 value) {
+        Value = value;
         return *this;
     }
 
-    TTabletSimpleCounter& Add(ui64 delta) { 
-        Value += delta; 
-        return *this; 
+    TTabletSimpleCounter& Add(ui64 delta) {
+        Value += delta;
+        return *this;
     }
 
     TTabletSimpleCounter& Sub(ui64 delta) {
@@ -69,9 +69,9 @@ public:
         return *this;
     }
 
-    TTabletSimpleCounter& operator = (ui64 value) { 
-        return Set(value); 
-    } 
+    TTabletSimpleCounter& operator = (ui64 value) {
+        return Set(value);
+    }
 
     TTabletSimpleCounter& operator += (ui64 delta) {
         return Add(delta);

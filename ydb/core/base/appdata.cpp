@@ -10,27 +10,27 @@ TAppData::TAppData(
         const NMiniKQL::IFunctionRegistry* functionRegistry,
         const TFormatFactory* formatFactory,
         TProgramShouldContinue *kikimrShouldContinue)
-    : Magic(MagicTag) 
-    , SystemPoolId(sysPoolId) 
-    , UserPoolId(userPoolId) 
-    , IOPoolId(ioPoolId) 
-    , BatchPoolId(batchPoolId) 
+    : Magic(MagicTag)
+    , SystemPoolId(sysPoolId)
+    , UserPoolId(userPoolId)
+    , IOPoolId(ioPoolId)
+    , BatchPoolId(batchPoolId)
     , ServicePools(servicePools)
-    , TypeRegistry(typeRegistry) 
+    , TypeRegistry(typeRegistry)
     , FunctionRegistry(functionRegistry)
     , FormatFactory(formatFactory)
     , ProxySchemeCacheNodes(Max<ui64>() / 4)
     , ProxySchemeCacheDistrNodes(Max<ui64>() / 4)
     , CompilerSchemeCachePaths(Max<ui64>() / 4)
     , CompilerSchemeCacheTables(Max<ui64>() / 4)
-    , Mon(nullptr) 
+    , Mon(nullptr)
     , BusMonPage(nullptr)
     , Icb(new TControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
     , StaticBlobStorageConfig(new NKikimrBlobStorage::TNodeWardenServiceSet)
-    , KikimrShouldContinue(kikimrShouldContinue) 
-{} 
- 
+    , KikimrShouldContinue(kikimrShouldContinue)
+{}
+
 TAppData::TDefaultTabletTypes::TDefaultTabletTypes()
     : SchemeShard(TTabletTypes::FLAT_SCHEMESHARD)
     , DataShard(TTabletTypes::FLAT_DATASHARD)

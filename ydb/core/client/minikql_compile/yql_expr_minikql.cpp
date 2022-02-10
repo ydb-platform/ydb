@@ -536,7 +536,7 @@ private:
         auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
         TVector<const TItemExprType*> resultItems;
-        resultItems.reserve(2); 
+        resultItems.reserve(2);
         resultItems.push_back(ctx.MakeType<TItemExprType>("List", listSelectType));
         auto boolType = ctx.MakeType<TDataExprType>(EDataSlot::Bool);
         resultItems.push_back(ctx.MakeType<TItemExprType>("Truncated", boolType));
@@ -619,7 +619,7 @@ private:
 
         auto ui64Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
         TVector<const TTypeAnnotationNode*> items;
-        items.reserve(2); 
+        items.reserve(2);
         items.push_back(ui64Type);
         items.push_back(ui64Type);
 

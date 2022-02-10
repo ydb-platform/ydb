@@ -1,22 +1,22 @@
-#pragma once 
-#include "defs.h" 
- 
-namespace NKikimr { 
-namespace NPDisk { 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+#pragma once
+#include "defs.h"
+
+namespace NKikimr {
+namespace NPDisk {
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TAtomicBlockCounter
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 struct TAtomicBlockCounter {
     TAtomic Data = 0;
- 
+
     static constexpr ui64 BlockAFlag = (1ull << 63ull);
     static constexpr ui64 BlockBFlag = (1ull << 62ull);
     static constexpr ui64 BlockMask = BlockAFlag | BlockBFlag;
     static constexpr ui64 SeqnoShift = 46ull;
     static constexpr ui64 SeqnoMask = (0xFFFFull << SeqnoShift);
     static constexpr ui64 CounterMask = ~(BlockMask|SeqnoMask);
- 
+
     struct TResult {
         bool PrevA = false; // Block A state before operation
         bool PrevB = false; // Block B state before operation
@@ -24,7 +24,7 @@ struct TAtomicBlockCounter {
         bool B = false; // Block B state after operation
         ui16 Seqno = 0;
         ui16 PrevSeqno = 0;
- 
+
         bool Toggled() const noexcept {
             return WasBlocked() ^ IsBlocked();
         }
@@ -103,7 +103,7 @@ private:
     inline static ui64 GetCounter(ui64 data) noexcept;
     inline static ui64 ThresholdBlock(ui64 prevData, ui64 threshold) noexcept;
     inline static ui64 NextSeqno(ui64 data) noexcept;
-}; 
- 
-} // NPDisk 
-} // NKikimr 
+};
+
+} // NPDisk
+} // NKikimr

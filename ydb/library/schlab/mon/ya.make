@@ -15,7 +15,7 @@ RESOURCE(
     static/js/d3.v4.min.js schlab/js/d3.v4.min.js
     static/js/scharm.js schlab/js/scharm.js
     static/js/schviz.js schlab/js/schviz.js
-    static/js/scharm-test0.js schlab/js/scharm-test0.js 
+    static/js/scharm-test0.js schlab/js/scharm-test0.js
     static/scharm.html schlab/scharm.html
 )
 

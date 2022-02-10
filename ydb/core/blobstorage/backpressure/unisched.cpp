@@ -51,7 +51,7 @@ namespace NKikimr {
 
             void HandleWakeup(const TActorContext& ctx) {
                 for (const auto& [key, value] : Subscribers) {
-                    if (value->GetPredictedDelayNs()) { 
+                    if (value->GetPredictedDelayNs()) {
                         ctx.Send(key, new TEvents::TEvWakeup);
                     }
                 }

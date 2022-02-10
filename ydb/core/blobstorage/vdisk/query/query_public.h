@@ -24,7 +24,7 @@ namespace NKikimr {
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , MonGroup(HullCtx->VCtx->VDiskCounters, "subsystem", "interface")
-            , PDiskReadBytes(0) 
+            , PDiskReadBytes(0)
             , SkeletonId(skeletonId)
         {}
     };

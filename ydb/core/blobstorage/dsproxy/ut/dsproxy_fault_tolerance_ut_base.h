@@ -24,20 +24,20 @@ protected:
     // a set of sets of failed disks that exceed the fail model
     TSet<TBlobStorageGroupInfo::TGroupVDisks> FaultsExceedingFailModel;
 
-    const ui32 TestPartCount; 
-    const ui32 TestPartIdx; 
- 
+    const ui32 TestPartCount;
+    const ui32 TestPartIdx;
+
 public:
-    TFaultToleranceTestBase(TSystemEvent *finishEv, std::exception_ptr *eptr, NUnitTest::TTestBase *test, TFaultToleranceTestRuntime& runtime, 
-            ui32 testPartCount, ui32 testPartIdx) 
+    TFaultToleranceTestBase(TSystemEvent *finishEv, std::exception_ptr *eptr, NUnitTest::TTestBase *test, TFaultToleranceTestRuntime& runtime,
+            ui32 testPartCount, ui32 testPartIdx)
         : TActorCoroImpl(8 << 20) // 8 MB stack size
         , FinishEv(finishEv)
         , Eptr(eptr)
         , Test(test)
         , Runtime(runtime)
         , Info(Runtime.GroupInfo)
-        , TestPartCount(testPartCount) 
-        , TestPartIdx(testPartIdx) 
+        , TestPartCount(testPartCount)
+        , TestPartIdx(testPartIdx)
     {}
 
     void GenerateFailModel() {

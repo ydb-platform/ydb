@@ -1702,7 +1702,7 @@ private:
         }
 
         TVector<TIntrusivePtr<TKqpTransactionContext>> txs;
-        txs.reserve(AbortedTransactions.size()); 
+        txs.reserve(AbortedTransactions.size());
         for (auto& pair : AbortedTransactions) {
             txs.push_back(pair.second);
         }

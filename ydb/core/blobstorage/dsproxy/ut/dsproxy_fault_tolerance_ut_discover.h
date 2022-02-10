@@ -34,7 +34,7 @@ public:
             auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>();
             const auto& record = resp->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
-            UNIT_ASSERT(record.ResultSize() >= 1); 
+            UNIT_ASSERT(record.ResultSize() >= 1);
             const auto& item = record.GetResult(0);
             if (item.GetStatus() == NKikimrProto::OK) {
                 vdisksWithLastBlob.emplace(pair.first);
@@ -74,24 +74,24 @@ public:
 
             const NKikimrProto::EReplyStatus status = resp->Get()->Status;
 
-            CTEST << "recoverable# " << (recoverable ? "true" : "false") 
+            CTEST << "recoverable# " << (recoverable ? "true" : "false")
                 << " restorable# " << (restorable ? "true" : "false")
                 << " status# " << NKikimrProto::EReplyStatus_Name(status)
                 << " vdisksWithLastBlob# [";
             for (auto it = vdisksWithLastBlob.begin(); it != vdisksWithLastBlob.end(); ++it) {
-                CTEST << (it != vdisksWithLastBlob.begin() ? " " : "") 
+                CTEST << (it != vdisksWithLastBlob.begin() ? " " : "")
                     << it->ToString();
             }
-            CTEST << "] failedDisks# ["; 
+            CTEST << "] failedDisks# [";
             bool first = true;
             for (const auto& vdisk : Info->GetVDisks()) {
                 auto vd = Info->GetVDiskId(vdisk.OrderNumber);
                 if (failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vd)) {
-                    CTEST << (first ? "" : " ") << vd; 
+                    CTEST << (first ? "" : " ") << vd;
                     first = false;
                 }
             }
-            CTEST << "] num# " << num << Endl; 
+            CTEST << "] num# " << num << Endl;
 
             NKikimrProto::EReplyStatus expected = recoverable && restorable
                 ? NKikimrProto::OK

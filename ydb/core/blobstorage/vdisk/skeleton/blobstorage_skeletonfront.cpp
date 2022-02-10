@@ -60,7 +60,7 @@ namespace NKikimr {
                 EVENT_TYPE(TEvVPatchDiff)
                 EVENT_TYPE(TEvVPatchXorDiff)
                 EVENT_TYPE(TEvVPut)
-                EVENT_TYPE(TEvVMultiPut) 
+                EVENT_TYPE(TEvVMultiPut)
                 EVENT_TYPE(TEvVGet)
                 EVENT_TYPE(TEvVBlock)
                 EVENT_TYPE(TEvVGetBlock)
@@ -580,7 +580,7 @@ namespace NKikimr {
        GetAsync      ---------->  |  |      |  |  ---------->   IntGetAsync
        GetFast       ---------->  |  |      |  |  ---------->   IntGetFast
        GetDiscover   ---------->  |  |      |  |  ---------->   IntGetDiscover
-       GetLow        ---------->  |  |      |  |  ---------->   IntLowRead 
+       GetLow        ---------->  |  |      |  |  ---------->   IntLowRead
                                   +--+      +--+
      */
     class TSkeletonFront : public TActorBootstrapped<TSkeletonFront> {
@@ -606,7 +606,7 @@ namespace NKikimr {
         TExtQueueClass ExtQueueAsyncGets;
         TExtQueueClass ExtQueueFastGets;
         TExtQueueClass ExtQueueDiscoverGets;
-        TExtQueueClass ExtQueueLowGets; 
+        TExtQueueClass ExtQueueLowGets;
         TExtQueueClass ExtQueueTabletLogPuts;
         TExtQueueClass ExtQueueAsyncBlobPuts;
         TExtQueueClass ExtQueueUserDataPuts;
@@ -681,11 +681,11 @@ namespace NKikimr {
                     Config->SkeletonFrontDiscover_MaxInFlightCost,
                     SkeletonFrontGroup);
             IntQueueLowGets = std::make_unique<TIntQueueClass>(
-                    NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead, 
-                    "FastGets", 
-                    Config->SkeletonFrontGets_MaxInFlightCount, 
-                    Config->SkeletonFrontGets_MaxInFlightCost, 
-                    SkeletonFrontGroup); 
+                    NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead,
+                    "FastGets",
+                    Config->SkeletonFrontGets_MaxInFlightCount,
+                    Config->SkeletonFrontGets_MaxInFlightCost,
+                    SkeletonFrontGroup);
             IntQueueLogPuts = std::make_unique<TIntQueueClass>(
                     NKikimrBlobStorage::EVDiskInternalQueueId::IntPutLog,
                     "LogPuts",
@@ -874,7 +874,7 @@ namespace NKikimr {
                             DIV_CLASS("col-md-2") {str << IntQueueAsyncGets->GenerateHtmlState();}
                             DIV_CLASS("col-md-2") {str << IntQueueFastGets->GenerateHtmlState();}
                             DIV_CLASS("col-md-2") {str << IntQueueDiscover->GenerateHtmlState();}
-                            DIV_CLASS("col-md-2") {str << IntQueueLowGets->GenerateHtmlState();} 
+                            DIV_CLASS("col-md-2") {str << IntQueueLowGets->GenerateHtmlState();}
                         }
                         DIV_CLASS("row") {
                             // ext queues
@@ -884,7 +884,7 @@ namespace NKikimr {
                             DIV_CLASS("col-md-2") {str << ExtQueueAsyncGets.GenerateHtmlState();}
                             DIV_CLASS("col-md-2") {str << ExtQueueFastGets.GenerateHtmlState();}
                             DIV_CLASS("col-md-2") {str << ExtQueueDiscoverGets.GenerateHtmlState();}
-                            DIV_CLASS("col-md-2") {str << ExtQueueLowGets.GenerateHtmlState();} 
+                            DIV_CLASS("col-md-2") {str << ExtQueueLowGets.GenerateHtmlState();}
                             // uses column wrapping (sum is greater than 12)
                         }
                     }
@@ -1060,20 +1060,20 @@ namespace NKikimr {
             // IPHF = IntPutHugeForeground
             // IPHB = IntPutHugeBackground
             // ID  = IntDiscover
-            // IL  = IntLowRead 
-            static bool compatibilityMatrix[8][8] = { 
-                //                IU     IAG    IFG    IPL    IPHF    IPHB   ID     IL 
-                /*Unknown*/      {false, false, false, false, false,  false, false, false}, 
-                /*PutTabletLog*/ {false, false, false, true,  true,   false, false, false}, 
-                /*PutAsyncBlob*/ {false, false, false, true,  false,  true , false, false}, 
-                /*PutUserData*/  {false, false, false, true,  true,   false, false, false}, 
-                /*GetAsyncRead*/ {false, true,  false, false, false,  false, false, false}, 
-                /*GetFastRead*/  {false, false, true,  false, false,  false, false, false}, 
-                /*GetDiscover*/  {false, false, false, false, false,  false, true , false}, 
-                /*GetLowRead*/   {false, false, false, false, false,  false, false, true} 
+            // IL  = IntLowRead
+            static bool compatibilityMatrix[8][8] = {
+                //                IU     IAG    IFG    IPL    IPHF    IPHB   ID     IL
+                /*Unknown*/      {false, false, false, false, false,  false, false, false},
+                /*PutTabletLog*/ {false, false, false, true,  true,   false, false, false},
+                /*PutAsyncBlob*/ {false, false, false, true,  false,  true , false, false},
+                /*PutUserData*/  {false, false, false, true,  true,   false, false, false},
+                /*GetAsyncRead*/ {false, true,  false, false, false,  false, false, false},
+                /*GetFastRead*/  {false, false, true,  false, false,  false, false, false},
+                /*GetDiscover*/  {false, false, false, false, false,  false, true , false},
+                /*GetLowRead*/   {false, false, false, false, false,  false, false, true}
             };
 
-            Y_VERIFY_DEBUG(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7); 
+            Y_VERIFY_DEBUG(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
             return compatibilityMatrix[extId][intId];
         }
 
@@ -1148,33 +1148,33 @@ namespace NKikimr {
             }
         }
 
-        void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) { 
-            bool logPutInternalQueue = true; 
-            const ui64 cost = CostModel->GetCost(*ev->Get(), &logPutInternalQueue); 
- 
-            const NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record; 
-            LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId, 
-                 VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), record.ItemsSize(), 
-                 ev->Get()->GetSumBlobSize()); 
- 
-            if (logPutInternalQueue) { 
-                HandleRequestWithQoS(ctx, ev, "TEvVMultiPut", cost, *IntQueueLogPuts); 
-            } else { 
-                auto handleClass = ev->Get()->Record.GetHandleClass(); 
-                switch (handleClass) { 
-                    case NKikimrBlobStorage::TabletLog: 
-                    case NKikimrBlobStorage::UserData: 
-                        HandleRequestWithQoS(ctx, ev, "TEvVMultiPut", cost, *IntQueueHugePutsForeground); 
-                        break; 
-                    case NKikimrBlobStorage::AsyncBlob: 
-                        HandleRequestWithQoS(ctx, ev, "TEvVMultiPut", cost, *IntQueueHugePutsBackground); 
-                        break; 
-                    default: 
-                        Y_FAIL("Unexpected case"); 
-                } 
-            } 
-        } 
- 
+        void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
+            bool logPutInternalQueue = true;
+            const ui64 cost = CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
+
+            const NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
+            LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+                 VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), record.ItemsSize(),
+                 ev->Get()->GetSumBlobSize());
+
+            if (logPutInternalQueue) {
+                HandleRequestWithQoS(ctx, ev, "TEvVMultiPut", cost, *IntQueueLogPuts);
+            } else {
+                auto handleClass = ev->Get()->Record.GetHandleClass();
+                switch (handleClass) {
+                    case NKikimrBlobStorage::TabletLog:
+                    case NKikimrBlobStorage::UserData:
+                        HandleRequestWithQoS(ctx, ev, "TEvVMultiPut", cost, *IntQueueHugePutsForeground);
+                        break;
+                    case NKikimrBlobStorage::AsyncBlob:
+                        HandleRequestWithQoS(ctx, ev, "TEvVMultiPut", cost, *IntQueueHugePutsBackground);
+                        break;
+                    default:
+                        Y_FAIL("Unexpected case");
+                }
+            }
+        }
+
         void Handle(TEvBlobStorage::TEvVGet::TPtr &ev, const TActorContext &ctx) {
             const ui64 cost = CostModel->GetCost(*ev->Get());
             // select correct internal queue
@@ -1191,9 +1191,9 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EGetHandleClass::Discover:
                     intQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntGetDiscover;
                     break;
-                case NKikimrBlobStorage::EGetHandleClass::LowRead: 
-                    intQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead; 
-                    break; 
+                case NKikimrBlobStorage::EGetHandleClass::LowRead:
+                    intQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead;
+                    break;
                 default:
                     Y_FAIL("Unexpected case");
             }
@@ -1474,9 +1474,9 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EVDiskQueueId::GetDiscover:
                     extQueue = &ExtQueueDiscoverGets;
                     break;
-                case NKikimrBlobStorage::EVDiskQueueId::GetLowRead: 
-                    extQueue = &ExtQueueLowGets; 
-                    break; 
+                case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:
+                    extQueue = &ExtQueueLowGets;
+                    break;
                 default: Y_FAIL("Unexpected case extQueueId# %" PRIu32, static_cast<ui32>(extQueueId));
             }
             return *extQueue;
@@ -1494,9 +1494,9 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EVDiskInternalQueueId::IntGetDiscover:
                     intQueue = IntQueueDiscover.get();
                     break;
-                case NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead: 
+                case NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead:
                     intQueue = IntQueueLowGets.get();
-                    break; 
+                    break;
                 case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutLog:
                     intQueue = IntQueueLogPuts.get();
                     break;
@@ -1545,7 +1545,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVPut, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseNotReadyHandle) 
+            HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVGet, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVBlock, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVGetBlock, DatabaseNotReadyHandle)
@@ -1584,7 +1584,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVPut, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseNotReadyHandle) 
+            HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVGet, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVBlock, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVGetBlock, DatabaseNotReadyHandle)
@@ -1626,7 +1626,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVPut, DatabaseErrorHandle)
-            HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseErrorHandle) 
+            HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVGet, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVBlock, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVGetBlock, DatabaseErrorHandle)
@@ -1867,12 +1867,12 @@ namespace NKikimr {
                                Config->SkeletonFrontQueueBackpressureCheckMsgId,
                                SkeletonFrontGroup,
                                cfg)
-            , ExtQueueLowGets(NKikimrBlobStorage::EVDiskQueueId::GetLowRead, 
-                               "LowGet", 
-                               Config->SkeletonFrontExtGetLow_TotalCost, 
-                               Config->SkeletonFrontQueueBackpressureCheckMsgId, 
-                               SkeletonFrontGroup, 
-                               cfg) 
+            , ExtQueueLowGets(NKikimrBlobStorage::EVDiskQueueId::GetLowRead,
+                               "LowGet",
+                               Config->SkeletonFrontExtGetLow_TotalCost,
+                               Config->SkeletonFrontQueueBackpressureCheckMsgId,
+                               SkeletonFrontGroup,
+                               cfg)
             , ExtQueueTabletLogPuts(NKikimrBlobStorage::EVDiskQueueId::PutTabletLog,
                                     "PutTabletLog",
                                     Config->SkeletonFrontExtPutTabletLog_TotalCost,

@@ -1,36 +1,36 @@
-#include "defs.h" 
+#include "defs.h"
 #include "dsproxy_vdisk_mock_ut.h"
 #include "dsproxy_env_mock_ut.h"
- 
+
 #include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
- 
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NKikimr { 
-namespace NDSProxyPutTest { 
- 
-Y_UNIT_TEST_SUITE(TDSProxyPutTest) { 
- 
-TString AlphaData(ui32 size) { 
-    TString data = TString::Uninitialized(size); 
-    ui8 *p = (ui8*)(void*)data.Detach(); 
-    for (ui32 offset = 0; offset < size; ++offset) { 
-        p[offset] = (ui8)offset; 
-    } 
-    return data; 
-} 
- 
+
+namespace NKikimr {
+namespace NDSProxyPutTest {
+
+Y_UNIT_TEST_SUITE(TDSProxyPutTest) {
+
+TString AlphaData(ui32 size) {
+    TString data = TString::Uninitialized(size);
+    ui8 *p = (ui8*)(void*)data.Detach();
+    for (ui32 offset = 0; offset < size; ++offset) {
+        p[offset] = (ui8)offset;
+    }
+    return data;
+}
+
 void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) {
     TActorSystemStub actorSystemStub;
     i32 size = 786;
     TLogoBlobID blobId(72075186224047637, 1, 863, 1, size, 24576);
     TString data = AlphaData(size);
- 
+
     const ui32 groupId = 0;
     TBlobStorageGroupType groupType(erasureSpecies);
     const ui32 domainCount = groupType.BlobSubgroupSize();;
@@ -142,7 +142,7 @@ enum ETestPutAllOkMode {
     TPAOM_VPUT,
     TPAOM_VMULTIPUT
 };
- 
+
 template <TErasureType::EErasureSpecies ErasureSpecies, ETestPutAllOkMode TestMode>
 struct TTestPutAllOk {
     static constexpr ui32 GroupId = 0;
@@ -150,25 +150,25 @@ struct TTestPutAllOk {
     static constexpr bool IsVPut = TestMode == TPAOM_VPUT;
     static constexpr ui64 BlobCount = IsVPut ? 1 : 2;
     static constexpr ui32 MaxIterations = 10000;
- 
+
     TActorSystemStub ActorSystemStub;
     TBlobStorageGroupType GroupType;
     TGroupMock Group;
     TIntrusivePtr<TGroupQueues> GroupQueues;
- 
+
     TBatchedVec<TLogoBlobID> BlobIds;
     TString Data;
- 
+
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TDsProxyNodeMon> NodeMon;
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
- 
+
     TLogContext LogCtx;
- 
+
     TBatchedVec<TDataPartSet> PartSets;
- 
+
     TStackVec<ui32, 16> CheckStack;
- 
+
     TTestPutAllOk()
         : GroupType(ErasureSpecies)
         , Group(GroupId, ErasureSpecies, GroupType.BlobSubgroupSize(), 1)
@@ -182,11 +182,11 @@ struct TTestPutAllOk {
         , PartSets(BlobCount)
     {
         LogCtx.LogAcc.IsLogEnabled = false;
- 
+
         const ui32 totalvd = Group.GetInfo()->Type.BlobSubgroupSize();
         const ui32 totalParts = Group.GetInfo()->Type.TotalPartCount();
         Y_VERIFY(totalvd >= totalParts);
- 
+
         for (ui64 blobIdx = 0; blobIdx < BlobCount; ++blobIdx) {
             TLogoBlobID blobId = BlobIds[blobIdx];
             Y_VERIFY(blobId.BlobSize() == Data.size());
@@ -194,30 +194,30 @@ struct TTestPutAllOk {
             TBlobStorageGroupInfo::TVDiskIds vDisksId;
             const ui32 hash = blobId.Hash();
             Group.GetInfo()->PickSubgroup(hash, &vDisksId, &vDisksSvc);
- 
+
             TString encryptedData = Data;
             char *dataBytes = encryptedData.Detach();
             Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *Group.GetInfo());
- 
+
             PartSets[blobIdx].Parts.resize(totalParts);
             Group.GetInfo()->Type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedData, PartSets[blobIdx]);
         }
     }
- 
+
     void InitVPutResults(TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &vPuts,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPutResult>> &vPutResults)
     {
-        vPutResults.resize(vPuts.size()); 
-        for (ui32 vPutIdx = 0; vPutIdx < vPuts.size(); ++vPutIdx) { 
-            TEvBlobStorage::TEvVPut &vPut = *vPuts[vPutIdx]; 
+        vPutResults.resize(vPuts.size());
+        for (ui32 vPutIdx = 0; vPutIdx < vPuts.size(); ++vPutIdx) {
+            TEvBlobStorage::TEvVPut &vPut = *vPuts[vPutIdx];
             NKikimrProto::EReplyStatus status = Group.OnVPut(vPut);
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK); 
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
             vPutResults[vPutIdx].reset(new TEvBlobStorage::TEvVPutResult());
-            TEvBlobStorage::TEvVPutResult &vPutResult = *vPutResults[vPutIdx]; 
+            TEvBlobStorage::TEvVPutResult &vPutResult = *vPutResults[vPutIdx];
             vPutResult.MakeError(status, TString(), vPut.Record);
-        } 
+        }
     }
- 
+
     void InitVPutResults(TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> &vMultiPuts,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult>> &vMultiPutResults)
     {
@@ -266,30 +266,30 @@ struct TTestPutAllOk {
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPutResult>> &vPutResults,
             TPutImpl::TPutResultVec &putResults)
     {
-        bool isAborted = false; 
+        bool isAborted = false;
         for (ui64 resIdx = 0; resIdx < vPutResults.size(); ++resIdx) {
             PermutateVPutResults(resIdx, isAborted, vPutResults);
             if (isAborted) {
                 break;
-            } 
- 
+            }
+
             TActorId sender;
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts2;
             putImpl.OnVPutEventResult(LogCtx, sender, *vPutResults[resIdx], vPuts2, putResults);
             if (putResults.size()) {
-                break; 
-            } 
+                break;
+            }
 
-            for (ui32 vPutIdx = 0; vPutIdx < vPuts2.size(); ++vPutIdx) { 
-                TEvBlobStorage::TEvVPut &vPut = *vPuts2[vPutIdx]; 
+            for (ui32 vPutIdx = 0; vPutIdx < vPuts2.size(); ++vPutIdx) {
+                TEvBlobStorage::TEvVPut &vPut = *vPuts2[vPutIdx];
                 NKikimrProto::EReplyStatus status = Group.OnVPut(vPut);
-                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK); 
-                vPutResults.emplace_back(new TEvBlobStorage::TEvVPutResult()); 
-                TEvBlobStorage::TEvVPutResult &vPutResult = *vPutResults.back(); 
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+                vPutResults.emplace_back(new TEvBlobStorage::TEvVPutResult());
+                TEvBlobStorage::TEvVPutResult &vPutResult = *vPutResults.back();
                 vPutResult.MakeError(status, TString(), vPut.Record);
-            } 
-        } 
- 
+            }
+        }
+
         return isAborted;
     }
 
@@ -301,8 +301,8 @@ struct TTestPutAllOk {
         for (ui64 resIdx = 0; resIdx < vMultiPutResults.size(); ++resIdx) {
             PermutateVPutResults(resIdx, isAborted, vMultiPutResults);
             if (isAborted) {
-                break; 
-            } 
+                break;
+            }
 
             TActorId sender;
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vMultiPuts2;
@@ -338,11 +338,11 @@ struct TTestPutAllOk {
                     vMultiPutResult.AddVPutResult(status, TString(), blobId, cookie);
                 }
             }
-        } 
+        }
 
         return isAborted;
-    } 
- 
+    }
+
     void Run() {
         using TVPutEvent = std::conditional_t<IsVPut, TEvBlobStorage::TEvVPut, TEvBlobStorage::TEvVMultiPut>;
         using TVPutResultEvent = std::conditional_t<IsVPut, TEvBlobStorage::TEvVPutResult,
@@ -392,10 +392,10 @@ struct TTestPutAllOk {
     }
 };
 
-Y_UNIT_TEST(TestBlock42PutAllOk) { 
+Y_UNIT_TEST(TestBlock42PutAllOk) {
     TTestPutAllOk<TErasureType::Erasure4Plus2Block, TPAOM_VPUT>().Run();
-} 
- 
+}
+
 Y_UNIT_TEST(TestBlock42MultiPutAllOk) {
     TTestPutAllOk<TErasureType::Erasure4Plus2Block, TPAOM_VMULTIPUT>().Run();
 }
@@ -442,6 +442,6 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     }
 }
 
-} // Y_UNIT_TEST_SUITE TDSProxyPutTest 
-} // namespace NDSProxyPutTest 
-} // namespace NKikimr 
+} // Y_UNIT_TEST_SUITE TDSProxyPutTest
+} // namespace NDSProxyPutTest
+} // namespace NKikimr

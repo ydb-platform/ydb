@@ -431,8 +431,8 @@ namespace NKikimr {
             //BlockedGeneration
             struct TValue {
                 ui64 Number = 0;
-                ui32 CollectGen = 0; 
-                ui32 CollectStep = 0; 
+                ui32 CollectGen = 0;
+                ui32 CollectStep = 0;
             };
 
             using TBarrierKind = bool; // hard=true or soft=false

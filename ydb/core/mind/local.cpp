@@ -69,24 +69,24 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     struct TOnlineTabletEntry : TTabletEntry {
         NKikimrTabletBase::TMetrics ResourceValues;
- 
+
         TOnlineTabletEntry() = default;
         TOnlineTabletEntry(TTabletEntry& tablet)
             : TTabletEntry(tablet)
         {}
-    }; 
- 
+    };
+
     const TActorId Owner;
-    const ui64 HiveId; 
+    const ui64 HiveId;
     TVector<TSubDomainKey> ServicedDomains;
 
     TActorId HivePipeClient;
     bool Connected;
- 
+
     TIntrusivePtr<TLocalConfig> Config;
 
     TActorId BootQueue;
-    ui32 HiveGeneration; 
+    ui32 HiveGeneration;
 
     TActorId KnownHiveLeader;
 
@@ -145,7 +145,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HivePipeClient = TActorId();
 
         for (const auto &xpair : OnlineTablets) {
-            ctx.Send(xpair.second.Tablet, new TEvents::TEvPoisonPill()); 
+            ctx.Send(xpair.second.Tablet, new TEvents::TEvPoisonPill());
         }
         OnlineTablets.clear();
 
@@ -168,7 +168,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void TryToRegister(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::TryToRegister"); 
+        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::TryToRegister");
 
         Y_VERIFY_DEBUG(!HivePipeClient);
 
@@ -212,34 +212,34 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
-    void Handle(TEvLocal::TEvEnumerateTablets::TPtr &ev, const TActorContext &ctx) { 
-        const NKikimrLocal::TEvEnumerateTablets &record = ev->Get()->Record; 
- 
-        THolder<TEvLocal::TEvEnumerateTabletsResult> result( 
-            new TEvLocal::TEvEnumerateTabletsResult(NKikimrProto::OK)); 
- 
-        bool isFilteringNeeded = false; 
+    void Handle(TEvLocal::TEvEnumerateTablets::TPtr &ev, const TActorContext &ctx) {
+        const NKikimrLocal::TEvEnumerateTablets &record = ev->Get()->Record;
+
+        THolder<TEvLocal::TEvEnumerateTabletsResult> result(
+            new TEvLocal::TEvEnumerateTabletsResult(NKikimrProto::OK));
+
+        bool isFilteringNeeded = false;
         TTabletTypes::EType tabletType = TTabletTypes::Unknown;
-        if (record.HasTabletType()) { 
-            isFilteringNeeded = true; 
-            tabletType = record.GetTabletType(); 
-        } 
- 
-        ui32 tabletIdx = 0; 
-        for (const auto &tablet: OnlineTablets) { 
-            if (!isFilteringNeeded || tablet.second.TabletType == tabletType) { 
-                auto *info = result->Record.AddTabletInfo(); 
+        if (record.HasTabletType()) {
+            isFilteringNeeded = true;
+            tabletType = record.GetTabletType();
+        }
+
+        ui32 tabletIdx = 0;
+        for (const auto &tablet: OnlineTablets) {
+            if (!isFilteringNeeded || tablet.second.TabletType == tabletType) {
+                auto *info = result->Record.AddTabletInfo();
                 info->SetTabletId(tablet.first.first);
                 info->SetFollowerId(tablet.first.second);
-                info->SetTabletType(tablet.second.TabletType); 
+                info->SetTabletType(tablet.second.TabletType);
                 info->SetBootMode(tablet.second.BootMode);
-                ++tabletIdx; 
-            } 
-        } 
- 
-        ctx.Send(ev->Sender, result.Release()); 
-    } 
- 
+                ++tabletIdx;
+            }
+        }
+
+        ctx.Send(ev->Sender, result.Release());
+    }
+
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TEvTabletPipe::TEvClientConnected {"
@@ -308,13 +308,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void Handle(TEvLocal::TEvPing::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing"); 
+        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing");
         const TActorId &sender = ev->Sender;
         const NKikimrLocal::TEvPing &record = ev->Get()->Record;
         Y_VERIFY(HiveId == record.GetHiveId());
 
-        const ui32 hiveGen = record.GetHiveGeneration(); 
-        if (hiveGen < HiveGeneration) { 
+        const ui32 hiveGen = record.GetHiveGeneration();
+        if (hiveGen < HiveGeneration) {
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing - outdated");
             ctx.Send(sender, new TEvLocal::TEvStatus(TEvLocal::TEvStatus::StatusOutdated));
             return;
@@ -393,10 +393,10 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
         if (ev->Sender != BootQueue) {
             LOG_NOTICE(ctx, NKikimrServices::LOCAL,
-                "TLocalNodeRegistrar: Handle TEvLocal::TEvBootTablet unexpected sender:%s", 
-                ev->Sender.ToString().c_str()); 
-            ctx.Send(ev->Sender, new TEvLocal::TEvTabletStatus( 
-                TEvLocal::TEvTabletStatus::StatusBootQueueUnknown, tabletId, suggestedGen)); 
+                "TLocalNodeRegistrar: Handle TEvLocal::TEvBootTablet unexpected sender:%s",
+                ev->Sender.ToString().c_str());
+            ctx.Send(ev->Sender, new TEvLocal::TEvTabletStatus(
+                TEvLocal::TEvTabletStatus::StatusBootQueueUnknown, tabletId, suggestedGen));
             return;
         }
 
@@ -411,7 +411,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             ctx.Send(ev->Sender, new TEvLocal::TEvTabletStatus(
                 TEvLocal::TEvTabletStatus::StatusTypeUnknown, tabletId, suggestedGen));
             return;
-        } 
+        }
 
         {
             auto it = OnlineTablets.find(tabletId);
@@ -458,7 +458,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
         entry.Generation = suggestedGen;
         entry.From = ctx.Now();
-        entry.TabletType = tabletType; 
+        entry.TabletType = tabletType;
         entry.BootMode = record.GetBootMode();
 
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet tabletId:" << tabletId << " tablet entry created");
@@ -473,10 +473,10 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         Y_VERIFY(record.HasTabletId());
         TTabletId tabletId(record.GetTabletId(), record.GetFollowerId());
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvStopTablet TabletId:" << tabletId);
- 
-        auto onlineTabletIt = OnlineTablets.find(tabletId); 
-        if (onlineTabletIt != OnlineTablets.end()) { 
-            // Provide/check generation here 
+
+        auto onlineTabletIt = OnlineTablets.find(tabletId);
+        if (onlineTabletIt != OnlineTablets.end()) {
+            // Provide/check generation here
             ctx.Send(onlineTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
         } else {
             auto inbootTabletIt = InbootTablets.find(tabletId);
@@ -484,9 +484,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 // Provide/check generation here
                 ctx.Send(inbootTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
             }
-        } 
-    } 
- 
+        }
+    }
+
     void Handle(TEvLocal::TEvDeadTabletAck::TPtr &ev, const TActorContext &ctx) {
         const NKikimrLocal::TEvDeadTabletAck &record = ev->Get()->Record;
         Y_VERIFY(record.HasTabletId());
@@ -780,7 +780,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             OnlineTablets.erase(onlineIt);
             UpdateEstimate();
             return;
-        } 
+        }
 
         auto inbootIt = std::find_if(InbootTablets.begin(), InbootTablets.end(), [&](const auto& pr) -> bool {
             return pr.second.Tablet == ev->Sender;
@@ -794,11 +794,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         // deprecated tablet, we don't care
     }
 
-    void HandlePoison(const TActorContext &ctx) { 
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: HandlePoison"); 
-        Die(ctx); 
-    } 
- 
+    void HandlePoison(const TActorContext &ctx) {
+        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: HandlePoison");
+        Die(ctx);
+    }
+
     void HandleDrainNodeResult(TEvHive::TEvDrainNodeResult::TPtr &ev, const TActorContext &ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Drain node result received. Online tablets: " << OnlineTablets.size());
         Y_VERIFY(SentDrainNode);
@@ -865,11 +865,11 @@ public:
                         const NKikimrTabletBase::TMetrics &resourceLimit, TIntrusivePtr<TLocalConfig> config,
                         NMonitoring::TDynamicCounterPtr counters)
         : Owner(owner)
-        , HiveId(hiveId) 
+        , HiveId(hiveId)
         , ServicedDomains(std::move(servicedDomains))
         , Connected(false)
         , Config(config)
-        , HiveGeneration(0) 
+        , HiveGeneration(0)
         , SendTabletMetricsInProgress(false)
         , ResourceLimit(resourceLimit)
         , Counters(counters)
@@ -899,7 +899,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Bootstrap"); 
+        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Bootstrap");
         Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
         StartTime = ctx.Now();
         TryToRegister(ctx);
@@ -915,7 +915,7 @@ public:
             HFunc(TEvLocal::TEvPing, Handle); // command to update link to per-local boot-queue
             HFunc(TEvLocal::TEvStopTablet, Handle); // stop tablet
             HFunc(TEvLocal::TEvDeadTabletAck, Handle);
-            HFunc(TEvLocal::TEvEnumerateTablets, Handle); 
+            HFunc(TEvLocal::TEvEnumerateTablets, Handle);
             HFunc(TEvLocal::TEvTabletMetrics, Handle);
             HFunc(TEvLocal::TEvTabletMetricsAck, Handle);
             HFunc(TEvLocal::TEvAlterTenant, Handle);
@@ -928,11 +928,11 @@ public:
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
             HFunc(TEvHive::TEvDrainNodeResult, HandleDrainNodeResult);
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
-            CFunc(TEvents::TSystem::PoisonPill, HandlePoison); 
-            default: 
-                LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32 
+            CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
+            default:
+                LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32
                     " event: %s", ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
-                break; 
+                break;
         }
     }
 
@@ -1032,8 +1032,8 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         for (auto &r : recipients)
             SendStatus(tenant, r, ctx);
-    } 
- 
+    }
+
     void SendStatus(const TString &tenant,
                     TEvLocal::TEvTenantStatus::EStatus status,
                     const TString &msg,
@@ -1338,7 +1338,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             it->second.Info = info;
             for (auto &aid : it->second.Locals)
                 ctx.Send(aid, new TEvLocal::TEvAlterTenant(info));
-        } 
+        }
 
         SendStatus(info.TenantName, ev->Sender, ctx);
     }

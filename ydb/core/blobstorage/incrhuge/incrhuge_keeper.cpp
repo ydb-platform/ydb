@@ -116,7 +116,7 @@ namespace NKikimr {
             const EDiskState newState =
                 flags & NKikimrBlobStorage::StatusDiskSpaceRed    ? EDiskState::SpaceRed    :
                 flags & NKikimrBlobStorage::StatusDiskSpaceOrange ? EDiskState::SpaceOrange :
-                flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove ? EDiskState::SpaceYellow : EDiskState::SpaceGreen; 
+                flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove ? EDiskState::SpaceYellow : EDiskState::SpaceGreen;
 
             if (newState != State.DiskState) {
                 // kick defragmenter when it's going to be worse

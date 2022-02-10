@@ -276,7 +276,7 @@ namespace NKikimr {
         void Schedule(const TActorContext &ctx) {
             Become(&TThis::StateFunc);
 
-            TInstant now = TAppData::TimeProvider->Now(); 
+            TInstant now = TAppData::TimeProvider->Now();
             // NOTE: After full recovery we run sync op immediately. We achieve this by setting
             //       SchTime to 'now' in ApplyChanges and running sync op below
             //       (SchTime <= now is always true):
@@ -317,7 +317,7 @@ namespace NKikimr {
             ctx.Send(ev->Sender, result.release());
         }
 
-        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) { 
+        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
             ctx.Send(ev->Forward(CommitterId));
         }
 

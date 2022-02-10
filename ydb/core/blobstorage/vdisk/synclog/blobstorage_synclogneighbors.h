@@ -53,9 +53,9 @@ namespace NKikimr {
 
         public:
             bool CheckSyncPosQueue() const {
-                if (Neighbors.GetTotalDisks() == 1) { 
-                    return true; 
-                } 
+                if (Neighbors.GetTotalDisks() == 1) {
+                    return true;
+                }
                 TSyncPosQueue &spq = (const_cast<TSyncLogNeighbors*>(this))->SyncPosQueue;
                 ui64 minLsn = (ui64)(-1);
                 for (TSyncPosQueue::iterator it = spq.Begin(), e = spq.End(); it != e; ++it) {
@@ -65,9 +65,9 @@ namespace NKikimr {
             }
 
             ui64 GlobalSyncedLsn() const {
-                if (Neighbors.GetTotalDisks() == 1) { 
-                    return (ui64)-1; 
-                } 
+                if (Neighbors.GetTotalDisks() == 1) {
+                    return (ui64)-1;
+                }
                 Y_VERIFY_DEBUG(CheckSyncPosQueue());
                 // TAvlTree doesn't have const Begin, se we have to remove 'const' qualifier
                 ui64 result = (const_cast<TSyncLogNeighbors*>(this))->SyncPosQueue.Begin()->SyncedLsn;

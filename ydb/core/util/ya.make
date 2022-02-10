@@ -22,16 +22,16 @@ SRCS(
     fast_tls.cpp
     format.cpp
     format.h
-    fragmented_buffer.cpp 
-    fragmented_buffer.h 
+    fragmented_buffer.cpp
+    fragmented_buffer.h
     hazard.cpp
     hyperlog_counter.cpp
     hyperlog_counter.h
-    interval_set.h 
+    interval_set.h
     intrusive_fixed_hash_set.h
     intrusive_heap.cpp
     intrusive_heap.h
-    intrusive_stack.h 
+    intrusive_stack.h
     log_priority_mute_checker.h
     memory_tracker.cpp
     memory_tracker.h
@@ -48,8 +48,8 @@ SRCS(
     templates.h
     testactorsys.cpp
     testactorsys.h
-    text.cpp 
-    text.h 
+    text.cpp
+    text.h
     time_series_vec.h
     token_bucket.h
     throughput_meter.h

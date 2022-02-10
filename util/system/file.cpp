@@ -184,25 +184,25 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     }
     */
     #if defined(_freebsd_)
-    if (oMode & (Direct | DirectAligned)) { 
-        fcMode |= O_DIRECT; 
-    } 
- 
-    if (oMode & Sync) { 
-        fcMode |= O_SYNC; 
-    } 
+    if (oMode & (Direct | DirectAligned)) {
+        fcMode |= O_DIRECT;
+    }
+
+    if (oMode & Sync) {
+        fcMode |= O_SYNC;
+    }
     #elif defined(_linux_)
-    if (oMode & DirectAligned) { 
+    if (oMode & DirectAligned) {
         /*
          * O_DIRECT in Linux requires aligning request size and buffer address
          * to size of hardware sector (see hw_sector_size or ioctl BLKSSZGET).
          * Usually 512 bytes, but modern hardware works better with 4096 bytes.
          */
         fcMode |= O_DIRECT;
-    } 
-    if (oMode & Sync) { 
-        fcMode |= O_SYNC; 
-    } 
+    }
+    if (oMode & Sync) {
+        fcMode |= O_SYNC;
+    }
     #endif
 
     #if defined(_linux_)

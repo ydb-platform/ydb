@@ -15,7 +15,7 @@ SRCS(
     perf.cpp
     probes.cpp
     shuttle.cpp
-    sleep_action.cpp 
+    sleep_action.cpp
     start.cpp
     stderr_writer.cpp
     symbol.cpp

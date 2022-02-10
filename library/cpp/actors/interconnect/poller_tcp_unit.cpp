@@ -88,7 +88,7 @@ namespace NInterconnect {
     TPollerUnit::IdleThread(void* param) {
     // TODO: musl-libc version of `sched_param` struct is for some reason different from pthread
     // version in Ubuntu 12.04
-#if defined(_linux_) && !defined(_musl_) 
+#if defined(_linux_) && !defined(_musl_)
         pthread_t threadSelf = pthread_self();
         sched_param sparam = {20};
         pthread_setschedparam(threadSelf, SCHED_FIFO, &sparam);

@@ -30,14 +30,14 @@ namespace NTabletFlatExecutor {
 
         using TResults = TDeque<TResult>;
 
-        TProdCompact(bool ok, ui32 step, THolder<NTable::TCompactionParams> params, 
-                TVector<ui32>&& yellowMoveChannels, 
-                TVector<ui32>&& yellowStopChannels) 
+        TProdCompact(bool ok, ui32 step, THolder<NTable::TCompactionParams> params,
+                TVector<ui32>&& yellowMoveChannels,
+                TVector<ui32>&& yellowStopChannels)
             : Success(ok)
             , Step(step)
             , Params(std::move(params))
-            , YellowMoveChannels(std::move(yellowMoveChannels)) 
-            , YellowStopChannels(std::move(yellowStopChannels)) 
+            , YellowMoveChannels(std::move(yellowMoveChannels))
+            , YellowStopChannels(std::move(yellowStopChannels))
         {
 
         }
@@ -47,8 +47,8 @@ namespace NTabletFlatExecutor {
         TResults Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         THolder<NTable::TCompactionParams> Params;
-        TVector<ui32> YellowMoveChannels; 
-        TVector<ui32> YellowStopChannels; 
+        TVector<ui32> YellowMoveChannels;
+        TVector<ui32> YellowStopChannels;
     };
 
     class TOpsCompact: private ::NActors::IActor, public NTable::IVersionScan {
@@ -303,8 +303,8 @@ namespace NTabletFlatExecutor {
         {
             const auto fail = Failed || !Finished || abort != EAbort::None;
 
-            auto *prod = new TProdCompact(!fail, Mask.Step(), std::move(Conf->Params), 
-                    std::move(YellowMoveChannels), std::move(YellowStopChannels)); 
+            auto *prod = new TProdCompact(!fail, Mask.Step(), std::move(Conf->Params),
+                    std::move(YellowMoveChannels), std::move(YellowStopChannels));
 
             for (auto &result : Results) {
                 Y_VERIFY(result.PageCollections, "Compaction produced a part without page collections");
@@ -424,22 +424,22 @@ namespace NTabletFlatExecutor {
             Flushing -= msg.Id.BlobSize();
 
 
-            if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) { 
+            if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
                 const ui32 channel = msg.Id.Channel();
                 Y_VERIFY_DEBUG(channel < 256);
-                if (!SeenYellowMoveChannels[channel]) { 
-                    SeenYellowMoveChannels[channel] = true; 
-                    YellowMoveChannels.push_back(channel); 
+                if (!SeenYellowMoveChannels[channel]) {
+                    SeenYellowMoveChannels[channel] = true;
+                    YellowMoveChannels.push_back(channel);
                 }
             }
-            if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) { 
-                const ui32 channel = msg.Id.Channel(); 
-                Y_VERIFY_DEBUG(channel < 256); 
-                if (!SeenYellowStopChannels[channel]) { 
-                    SeenYellowStopChannels[channel] = true; 
-                    YellowStopChannels.push_back(channel); 
-                } 
-            } 
+            if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+                const ui32 channel = msg.Id.Channel();
+                Y_VERIFY_DEBUG(channel < 256);
+                if (!SeenYellowStopChannels[channel]) {
+                    SeenYellowStopChannels[channel] = true;
+                    YellowStopChannels.push_back(channel);
+                }
+            }
 
             const auto ok = (msg.Status == NKikimrProto::OK);
 
@@ -530,10 +530,10 @@ namespace NTabletFlatExecutor {
         ui64 Writing = 0;   /* Bytes flying to storage  */
         ui64 Flushing = 0;  /* Bytes flushing to storage */
 
-        std::bitset<256> SeenYellowMoveChannels; 
-        std::bitset<256> SeenYellowStopChannels; 
-        TVector<ui32> YellowMoveChannels; 
-        TVector<ui32> YellowStopChannels; 
+        std::bitset<256> SeenYellowMoveChannels;
+        std::bitset<256> SeenYellowStopChannels;
+        TVector<ui32> YellowMoveChannels;
+        TVector<ui32> YellowStopChannels;
         TDeque<NPageCollection::TGlob> WriteQueue;
 
         THashMap<ui64, TRow> Deltas;

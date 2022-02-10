@@ -100,42 +100,42 @@ void TManyGetsTest::operator ()(TConfiguration *conf) {
 }
 
 ///////////////////////////////////////////////////////////////////////////
- 
-class TManyMultiPutsActor : public TSyncTestBase { 
-    const ui32 MsgNum; 
-    const ui32 BatchSize; 
-    const ui32 MsgSize; 
+
+class TManyMultiPutsActor : public TSyncTestBase {
+    const ui32 MsgNum;
+    const ui32 BatchSize;
+    const ui32 MsgSize;
     std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
     std::shared_ptr<TSet<ui32>> BadSteps;
- 
-    virtual void Scenario(const TActorContext &ctx) { 
-        ui64 tabletId = 0; 
-        ui32 channel = 0; 
-        ui32 gen = 1; 
-        SyncRunner->Run(ctx, CreateManyMultiPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), 
-                                            MsgSize, MsgNum, BatchSize, tabletId, channel, gen, HandleClassGen, 
-                                            BadSteps, TDuration::Seconds(0))); 
-    } 
- 
-public: 
-    TManyMultiPutsActor(TConfiguration *conf, bool /*waitForCompaction*/, ui32 msgNum, ui32 msgSize, ui32 batchSize, 
+
+    virtual void Scenario(const TActorContext &ctx) {
+        ui64 tabletId = 0;
+        ui32 channel = 0;
+        ui32 gen = 1;
+        SyncRunner->Run(ctx, CreateManyMultiPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0),
+                                            MsgSize, MsgNum, BatchSize, tabletId, channel, gen, HandleClassGen,
+                                            BadSteps, TDuration::Seconds(0)));
+    }
+
+public:
+    TManyMultiPutsActor(TConfiguration *conf, bool /*waitForCompaction*/, ui32 msgNum, ui32 msgSize, ui32 batchSize,
                     NKikimrBlobStorage::EPutHandleClass cls, std::shared_ptr<TSet<ui32>> badSteps)
-        : TSyncTestBase(conf) 
-        , MsgNum(msgNum) 
-        , BatchSize(batchSize) 
-        , MsgSize(msgSize) 
+        : TSyncTestBase(conf)
+        , MsgNum(msgNum)
+        , BatchSize(batchSize)
+        , MsgSize(msgSize)
         , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
-        , BadSteps(badSteps) 
-    {} 
-}; 
- 
- 
-void TManyMultiPutsTest::operator ()(TConfiguration *conf) { 
-    conf->ActorSystem1->Register(new TManyMultiPutsActor(conf, WaitForCompaction, MsgNum, BatchSize, 
-                                                         MsgSize, HandleClass, BadSteps)); 
-} 
- 
-/////////////////////////////////////////////////////////////////////////// 
+        , BadSteps(badSteps)
+    {}
+};
+
+
+void TManyMultiPutsTest::operator ()(TConfiguration *conf) {
+    conf->ActorSystem1->Register(new TManyMultiPutsActor(conf, WaitForCompaction, MsgNum, BatchSize,
+                                                         MsgSize, HandleClass, BadSteps));
+}
+
+///////////////////////////////////////////////////////////////////////////
 class TChaoticManyPutsActor : public NActors::TActorBootstrapped<TChaoticManyPutsActor> {
     TConfiguration *Conf;
     const ui32 Parallel;

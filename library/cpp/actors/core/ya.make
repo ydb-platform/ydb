@@ -34,8 +34,8 @@ SRCS(
     balancer.cpp
     buffer.cpp
     buffer.h
-    callstack.cpp 
-    callstack.h 
+    callstack.cpp
+    callstack.h
     config.h
     cpu_manager.cpp
     cpu_manager.h

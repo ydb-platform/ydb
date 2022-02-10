@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
                 UNIT_ASSERT(msg->Offset + msg->Size <= chunkSize);
                 result.Data.SetData(chunks.at(msg->ChunkIdx).substr(msg->Offset, msg->Size));
                 batcher.Apply(&result);
-            } else if (auto msg = batcher.GetPendingMessage(0, 0, 0)) { 
+            } else if (auto msg = batcher.GetPendingMessage(0, 0, 0)) {
                 pendingReads.push_back(std::move(msg));
             } else if (!pendingReads) {
                 UNIT_ASSERT_VALUES_EQUAL(expectedSerial, numRequests);

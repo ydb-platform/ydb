@@ -251,7 +251,7 @@ namespace NLWTrace {
                 reader.Push(probe);
             }
         }
- 
+
         template <class TReader>
         void ReadTraces(TReader& reader) const {
             TGuard<TMutex> g(Mtx);

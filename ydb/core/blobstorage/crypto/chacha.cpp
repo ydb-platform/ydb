@@ -5,7 +5,7 @@ Public domain.
 */
 
 #include "chacha.h"
-#include "secured_block.h" 
+#include "secured_block.h"
 
 #include <util/system/yassert.h>
 
@@ -33,7 +33,7 @@ Public domain.
 static const char sigma[] = "expand 32-byte k";
 static const char tau[] = "expand 16-byte k";
 
-#if (!defined(_win_) && !defined(_arm64_)) 
+#if (!defined(_win_) && !defined(_arm64_))
 constexpr size_t ChaCha::KEY_SIZE;
 constexpr size_t ChaCha::BLOCK_SIZE;
 #endif
@@ -63,14 +63,14 @@ void ChaCha::SetKey(const ui8* key, size_t size)
   state_[3] = U8TO32_LITTLE(constants + 12);
 }
 
-void ChaCha::SetIV(const ui8* iv, const ui8* blockIdx) 
-{ 
-  state_[12] = U8TO32_LITTLE(blockIdx + 0); 
-  state_[13] = U8TO32_LITTLE(blockIdx + 4); 
-  state_[14] = U8TO32_LITTLE(iv + 0); 
-  state_[15] = U8TO32_LITTLE(iv + 4); 
-} 
- 
+void ChaCha::SetIV(const ui8* iv, const ui8* blockIdx)
+{
+  state_[12] = U8TO32_LITTLE(blockIdx + 0);
+  state_[13] = U8TO32_LITTLE(blockIdx + 4);
+  state_[14] = U8TO32_LITTLE(iv + 0);
+  state_[15] = U8TO32_LITTLE(iv + 4);
+}
+
 void ChaCha::SetIV(const ui8* iv)
 {
   state_[12] = 0;
@@ -214,8 +214,8 @@ void ChaCha::Decipher(const ui8* ciphertext, ui8* plaintext, size_t size)
 {
     Encipher(ciphertext, plaintext, size);
 }
- 
-ChaCha::~ChaCha() { 
-    SecureWipeBuffer((ui8*)&state_[4], 32); 
-} 
- 
+
+ChaCha::~ChaCha() {
+    SecureWipeBuffer((ui8*)&state_[4], 32);
+}
+

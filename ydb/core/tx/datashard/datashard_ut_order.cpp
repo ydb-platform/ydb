@@ -12,7 +12,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/testlib/tenant_runtime.h>
-#include <util/system/valgrind.h> 
+#include <util/system/valgrind.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
@@ -2913,7 +2913,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
 
     // Split shouldn't take too much time to complete
     TDuration elapsed = TInstant::Now() - splitStart;
-    UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(2, 10)), 
+    UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(2, 10)),
         "Split needed " << elapsed.ToString() << " to complete, which is too long");
 }
 
@@ -3617,7 +3617,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
 
     // Split shouldn't take too much time to complete
     TDuration elapsed = TInstant::Now() - splitStart;
-    UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(5, 25)), 
+    UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(5, 25)),
         "Split needed " << elapsed.ToString() << " to complete, which is too long");
 
     // Count transaction results

@@ -1,8 +1,8 @@
-#include "keyvalue_state.h" 
-#include "keyvalue_data.h" 
+#include "keyvalue_state.h"
+#include "keyvalue_data.h"
 #include "keyvalue_storage_read_request.h"
-#include "keyvalue_storage_request.h" 
-#include "keyvalue_trash_key_arbitrary.h" 
+#include "keyvalue_storage_request.h"
+#include "keyvalue_trash_key_arbitrary.h"
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
@@ -15,21 +15,21 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/escape.h>
 #include <util/charset/utf8.h>
- 
-// Set to 1 in order for tablet to reboot instead of failing a Y_VERIFY on database damage 
-#define KIKIMR_KEYVALUE_ALLOW_DAMAGE 0 
- 
-namespace NKikimr { 
-namespace NKeyValue { 
- 
-constexpr ui64 KeyValuePairSizeEstimation = 1 + 5 // Key id, length 
-    + 1 + 5 // Value id, length 
+
+// Set to 1 in order for tablet to reboot instead of failing a Y_VERIFY on database damage
+#define KIKIMR_KEYVALUE_ALLOW_DAMAGE 0
+
+namespace NKikimr {
+namespace NKeyValue {
+
+constexpr ui64 KeyValuePairSizeEstimation = 1 + 5 // Key id, length
+    + 1 + 5 // Value id, length
     + 1 + 4 // ValueSize id, value
     + 1 + 8 // CreationUnixTime id, value
-    + 1 + 1 // StorageChannel id, value 
-    + 1 + 1 // Status id, value 
-    ; 
- 
+    + 1 + 1 // StorageChannel id, value
+    + 1 + 1 // Status id, value
+    ;
+
 constexpr ui64 KeyValuePairSizeEstimationNewApi = 1 + 5 // Key id, length
     + 1 + 5 // Value id, length
     + 1 + 4 // ValueSize id, value
@@ -48,10 +48,10 @@ constexpr ui64 ReadRangeRequestMetaDataSizeEstimation = 1 + 5 // pair id, length
     + 1 + 1 // Status id, value
     ;
 
-constexpr ui64 ReadResultSizeEstimation = 1 + 1 // Status id, value 
-    + 1 + 5 // Value id, length OR Message id, length 
-    ; 
- 
+constexpr ui64 ReadResultSizeEstimation = 1 + 1 // Status id, value
+    + 1 + 5 // Value id, length OR Message id, length
+    ;
+
 constexpr ui64 ReadResultSizeEstimationNewApi = 1 + 5 // Key id, length
     + 1 + 5 // Value id, length
     + 1 + 8 // Offset id, value
@@ -59,73 +59,73 @@ constexpr ui64 ReadResultSizeEstimationNewApi = 1 + 5 // Key id, length
     + 1 + 1 // Status id, value
     ;
 
-constexpr ui64 ErrorMessageSizeEstimation = 128; 
- 
-// Guideline: 
-// Check SetError calls: there must be no changes made to the DB before SetError call (!) 
- 
-TKeyValueState::TKeyValueState() { 
-    TabletCounters = nullptr; 
-    Clear(); 
-} 
- 
+constexpr ui64 ErrorMessageSizeEstimation = 128;
+
+// Guideline:
+// Check SetError calls: there must be no changes made to the DB before SetError call (!)
+
+TKeyValueState::TKeyValueState() {
+    TabletCounters = nullptr;
+    Clear();
+}
+
 void TKeyValueState::Clear() {
-    IsStatePresent = false; 
-    IsEmptyDbStart = true; 
-    IsDamaged = false; 
-    IsTabletYellowStop = false; 
-    IsTabletYellowMove = false; 
- 
-    StoredState.Clear(); 
-    NextLogoBlobStep = 1; 
-    NextLogoBlobCookie = 1; 
-    Index.clear(); 
+    IsStatePresent = false;
+    IsEmptyDbStart = true;
+    IsDamaged = false;
+    IsTabletYellowStop = false;
+    IsTabletYellowMove = false;
+
+    StoredState.Clear();
+    NextLogoBlobStep = 1;
+    NextLogoBlobCookie = 1;
+    Index.clear();
     RefCounts.clear();
-    Trash.clear(); 
-    InFlightForStep.clear(); 
-    CollectOperation.Reset(nullptr); 
-    IsCollectEventSent = false; 
-    IsSpringCleanupDone = false; 
+    Trash.clear();
+    InFlightForStep.clear();
+    CollectOperation.Reset(nullptr);
+    IsCollectEventSent = false;
+    IsSpringCleanupDone = false;
     ChannelDataUsage.fill(0);
     UsedChannels.reset();
- 
-    TabletId = 0; 
+
+    TabletId = 0;
     KeyValueActorId = TActorId();
-    ExecutorGeneration = 0; 
- 
-    Queue.clear(); 
-    IntermediatesInFlight = 0; 
-    IntermediatesInFlightLimit = 3; // FIXME: Change to something like 10 
-    RoInlineIntermediatesInFlight = 0; 
-    DeletesPerRequestLimit = 100'000; 
- 
-    PerGenerationCounter = 0; 
- 
-    if (TabletCounters) { 
-        ClearTabletCounters(); 
-        CountStarting(); 
-    } 
-} 
- 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// 
-// Tablet Counters 
-// 
+    ExecutorGeneration = 0;
+
+    Queue.clear();
+    IntermediatesInFlight = 0;
+    IntermediatesInFlightLimit = 3; // FIXME: Change to something like 10
+    RoInlineIntermediatesInFlight = 0;
+    DeletesPerRequestLimit = 100'000;
+
+    PerGenerationCounter = 0;
+
+    if (TabletCounters) {
+        ClearTabletCounters();
+        CountStarting();
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Tablet Counters
+//
 void TKeyValueState::SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters) {
     TabletCountersPtr = counters;
-    TabletCounters = TabletCountersPtr.Get(); 
-} 
- 
-void TKeyValueState::ClearTabletCounters() { 
-    for (ui32 i = 0; i < TabletCounters->Simple().Size(); ++i) { 
-       TabletCounters->Simple()[i].Set(0); 
-    } 
-} 
- 
-TAutoPtr<TTabletCountersBase> TKeyValueState::TakeTabletCounters() { 
-    return TabletCountersPtr; 
-} 
- 
+    TabletCounters = TabletCountersPtr.Get();
+}
+
+void TKeyValueState::ClearTabletCounters() {
+    for (ui32 i = 0; i < TabletCounters->Simple().Size(); ++i) {
+       TabletCounters->Simple()[i].Set(0);
+    }
+}
+
+TAutoPtr<TTabletCountersBase> TKeyValueState::TakeTabletCounters() {
+    return TabletCountersPtr;
+}
+
 TTabletCountersBase& TKeyValueState::GetTabletCounters() {
     return *TabletCounters;
 }
@@ -138,66 +138,66 @@ void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
         const TRequestStat &stat, const TActorContext &ctx)
 {
     ui64 fullLatencyMs = (TAppData::TimeProvider->Now() - stat.IntermediateCreatedAt).MilliSeconds();
-    if (stat.RequestType == TRequestType::WriteOnly) { 
-        TabletCounters->Percentile()[COUNTER_LATENCY_FULL_WO].IncrementFor(fullLatencyMs); 
-        TabletCounters->Simple()[COUNTER_REQ_WO_IN_FLY].Add((ui64)-1); 
-        if (status == NMsgBusProxy::MSTATUS_OK) { 
-            TabletCounters->Cumulative()[COUNTER_REQ_WO_OK].Increment(1); 
-        } else if (status == NMsgBusProxy::MSTATUS_TIMEOUT) { 
-            TabletCounters->Cumulative()[COUNTER_REQ_WO_TIMEOUT].Increment(1); 
-        } else { 
-            TabletCounters->Cumulative()[COUNTER_REQ_WO_OTHER_ERROR].Increment(1); 
-        } 
-    } else { 
-        if (stat.RequestType == TRequestType::ReadOnlyInline) { 
-            TabletCounters->Simple()[COUNTER_REQ_RO_INLINE_IN_FLY].Set(RoInlineIntermediatesInFlight); 
-        } else { 
-            TabletCounters->Simple()[COUNTER_REQ_RO_RW_IN_FLY].Set(IntermediatesInFlight); 
-        } 
-        if (stat.RequestType == TRequestType::ReadOnlyInline || stat.RequestType == TRequestType::ReadOnly) { 
-            if (stat.RequestType == TRequestType::ReadOnlyInline) { 
-                TabletCounters->Percentile()[COUNTER_LATENCY_FULL_RO_INLINE].IncrementFor(fullLatencyMs); 
-            } else { 
-                TabletCounters->Percentile()[COUNTER_LATENCY_FULL_RO].IncrementFor(fullLatencyMs); 
-            } 
-            if (status == NMsgBusProxy::MSTATUS_OK) { 
-                TabletCounters->Cumulative()[COUNTER_REQ_RO_OK].Increment(1); 
-            } else if (status == NMsgBusProxy::MSTATUS_TIMEOUT) { 
-                TabletCounters->Cumulative()[COUNTER_REQ_RO_TIMEOUT].Increment(1); 
-            } else { 
-                TabletCounters->Cumulative()[COUNTER_REQ_RO_OTHER_ERROR].Increment(1); 
-            } 
-        } else { 
-            TabletCounters->Percentile()[COUNTER_LATENCY_FULL_RW].IncrementFor(fullLatencyMs); 
-            if (status == NMsgBusProxy::MSTATUS_OK) { 
-                TabletCounters->Cumulative()[COUNTER_REQ_RW_OK].Increment(1); 
-            } else if (status == NMsgBusProxy::MSTATUS_TIMEOUT) { 
-                TabletCounters->Cumulative()[COUNTER_REQ_RW_TIMEOUT].Increment(1); 
-            } else { 
-                TabletCounters->Cumulative()[COUNTER_REQ_RW_OTHER_ERROR].Increment(1); 
-            } 
-        } 
-    } 
- 
+    if (stat.RequestType == TRequestType::WriteOnly) {
+        TabletCounters->Percentile()[COUNTER_LATENCY_FULL_WO].IncrementFor(fullLatencyMs);
+        TabletCounters->Simple()[COUNTER_REQ_WO_IN_FLY].Add((ui64)-1);
+        if (status == NMsgBusProxy::MSTATUS_OK) {
+            TabletCounters->Cumulative()[COUNTER_REQ_WO_OK].Increment(1);
+        } else if (status == NMsgBusProxy::MSTATUS_TIMEOUT) {
+            TabletCounters->Cumulative()[COUNTER_REQ_WO_TIMEOUT].Increment(1);
+        } else {
+            TabletCounters->Cumulative()[COUNTER_REQ_WO_OTHER_ERROR].Increment(1);
+        }
+    } else {
+        if (stat.RequestType == TRequestType::ReadOnlyInline) {
+            TabletCounters->Simple()[COUNTER_REQ_RO_INLINE_IN_FLY].Set(RoInlineIntermediatesInFlight);
+        } else {
+            TabletCounters->Simple()[COUNTER_REQ_RO_RW_IN_FLY].Set(IntermediatesInFlight);
+        }
+        if (stat.RequestType == TRequestType::ReadOnlyInline || stat.RequestType == TRequestType::ReadOnly) {
+            if (stat.RequestType == TRequestType::ReadOnlyInline) {
+                TabletCounters->Percentile()[COUNTER_LATENCY_FULL_RO_INLINE].IncrementFor(fullLatencyMs);
+            } else {
+                TabletCounters->Percentile()[COUNTER_LATENCY_FULL_RO].IncrementFor(fullLatencyMs);
+            }
+            if (status == NMsgBusProxy::MSTATUS_OK) {
+                TabletCounters->Cumulative()[COUNTER_REQ_RO_OK].Increment(1);
+            } else if (status == NMsgBusProxy::MSTATUS_TIMEOUT) {
+                TabletCounters->Cumulative()[COUNTER_REQ_RO_TIMEOUT].Increment(1);
+            } else {
+                TabletCounters->Cumulative()[COUNTER_REQ_RO_OTHER_ERROR].Increment(1);
+            }
+        } else {
+            TabletCounters->Percentile()[COUNTER_LATENCY_FULL_RW].IncrementFor(fullLatencyMs);
+            if (status == NMsgBusProxy::MSTATUS_OK) {
+                TabletCounters->Cumulative()[COUNTER_REQ_RW_OK].Increment(1);
+            } else if (status == NMsgBusProxy::MSTATUS_TIMEOUT) {
+                TabletCounters->Cumulative()[COUNTER_REQ_RW_TIMEOUT].Increment(1);
+            } else {
+                TabletCounters->Cumulative()[COUNTER_REQ_RW_OTHER_ERROR].Increment(1);
+            }
+        }
+    }
+
     TInstant now(ctx.Now());
     ResourceMetrics->Network.Increment(stat.ReadBytes + stat.RangeReadBytes + stat.WriteBytes, now);
- 
-    constexpr ui64 MaxStatChannels = 16; 
+
+    constexpr ui64 MaxStatChannels = 16;
     for (const auto& pr : stat.GroupReadBytes) {
         ResourceMetrics->ReadThroughput[pr.first].Increment(pr.second, now);
-        NMetrics::TChannel channel = pr.first.first; 
-        if (channel >= MaxStatChannels) { 
-            channel = MaxStatChannels - 1; 
-        } 
-        TabletCounters->Cumulative()[COUNTER_READ_BYTES_CHANNEL_0 + channel].Increment(pr.second); 
+        NMetrics::TChannel channel = pr.first.first;
+        if (channel >= MaxStatChannels) {
+            channel = MaxStatChannels - 1;
+        }
+        TabletCounters->Cumulative()[COUNTER_READ_BYTES_CHANNEL_0 + channel].Increment(pr.second);
     }
     for (const auto& pr : stat.GroupWrittenBytes) {
         ResourceMetrics->WriteThroughput[pr.first].Increment(pr.second, now);
-        NMetrics::TChannel channel = pr.first.first; 
-        if (channel >= MaxStatChannels) { 
-            channel = MaxStatChannels - 1; 
-        } 
-        TabletCounters->Cumulative()[COUNTER_WRITE_BYTES_CHANNEL_0 + channel].Increment(pr.second); 
+        NMetrics::TChannel channel = pr.first.first;
+        if (channel >= MaxStatChannels) {
+            channel = MaxStatChannels - 1;
+        }
+        TabletCounters->Cumulative()[COUNTER_WRITE_BYTES_CHANNEL_0 + channel].Increment(pr.second);
     }
     for (const auto& pr : stat.GroupReadIops) {
         ResourceMetrics->ReadIops[pr.first].Increment(pr.second, now);
@@ -206,290 +206,290 @@ void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
         ResourceMetrics->WriteIops[pr.first].Increment(pr.second, now);
     }
 
-    if (status == NMsgBusProxy::MSTATUS_OK) { 
-        TabletCounters->Cumulative()[COUNTER_CMD_READ_BYTES_OK].Increment(stat.ReadBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_READ_OK].Increment(stat.Reads); 
-        TabletCounters->Cumulative()[COUNTER_CMD_READ_NODATA].Increment(stat.ReadNodata); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_BYTES_OK].Increment(stat.RangeReadBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_ITEMS_OK].Increment(stat.RangeReadItems); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_ITEMS_NODATA].Increment(stat.RangeReadItemsNodata); 
-        TabletCounters->Cumulative()[COUNTER_CMD_INDEX_RANGE_READ_OK].Increment(stat.IndexRangeRead); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_OK].Increment(stat.Deletes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_BYTES_OK].Increment(stat.DeleteBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_RENAME_OK].Increment(stat.Renames); 
-        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_BYTES_OK].Increment(stat.WriteBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_OK].Increment(stat.Writes); 
+    if (status == NMsgBusProxy::MSTATUS_OK) {
+        TabletCounters->Cumulative()[COUNTER_CMD_READ_BYTES_OK].Increment(stat.ReadBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_READ_OK].Increment(stat.Reads);
+        TabletCounters->Cumulative()[COUNTER_CMD_READ_NODATA].Increment(stat.ReadNodata);
+        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_BYTES_OK].Increment(stat.RangeReadBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_ITEMS_OK].Increment(stat.RangeReadItems);
+        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_ITEMS_NODATA].Increment(stat.RangeReadItemsNodata);
+        TabletCounters->Cumulative()[COUNTER_CMD_INDEX_RANGE_READ_OK].Increment(stat.IndexRangeRead);
+        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_OK].Increment(stat.Deletes);
+        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_BYTES_OK].Increment(stat.DeleteBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_RENAME_OK].Increment(stat.Renames);
+        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_BYTES_OK].Increment(stat.WriteBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_OK].Increment(stat.Writes);
         TabletCounters->Cumulative()[COUNTER_CMD_COPY_RANGE_OK].Increment(stat.CopyRanges);
         TabletCounters->Cumulative()[COUNTER_CMD_GUM_OK].Increment(stat.Concats);
-    } else if (status == NMsgBusProxy::MSTATUS_TIMEOUT) { 
-        TabletCounters->Cumulative()[COUNTER_CMD_READ_BYTES_TIMEOUT].Increment(stat.ReadBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_READ_TIMEOUT].Increment(stat.Reads); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_BYTES_TIMEOUT].Increment(stat.RangeReadBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_ITEMS_TIMEOUT].Increment(stat.RangeReadItems); 
-        TabletCounters->Cumulative()[COUNTER_CMD_INDEX_RANGE_READ_TIMEOUT].Increment(stat.IndexRangeRead); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_TIMEOUT].Increment(stat.Deletes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_BYTES_TIMEOUT].Increment(stat.DeleteBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_RENAME_TIMEOUT].Increment(stat.Renames); 
-        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_BYTES_TIMEOUT].Increment(stat.WriteBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_TIMEOUT].Increment(stat.Writes); 
+    } else if (status == NMsgBusProxy::MSTATUS_TIMEOUT) {
+        TabletCounters->Cumulative()[COUNTER_CMD_READ_BYTES_TIMEOUT].Increment(stat.ReadBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_READ_TIMEOUT].Increment(stat.Reads);
+        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_BYTES_TIMEOUT].Increment(stat.RangeReadBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_ITEMS_TIMEOUT].Increment(stat.RangeReadItems);
+        TabletCounters->Cumulative()[COUNTER_CMD_INDEX_RANGE_READ_TIMEOUT].Increment(stat.IndexRangeRead);
+        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_TIMEOUT].Increment(stat.Deletes);
+        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_BYTES_TIMEOUT].Increment(stat.DeleteBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_RENAME_TIMEOUT].Increment(stat.Renames);
+        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_BYTES_TIMEOUT].Increment(stat.WriteBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_TIMEOUT].Increment(stat.Writes);
         TabletCounters->Cumulative()[COUNTER_CMD_COPY_RANGE_TIMEOUT].Increment(stat.CopyRanges);
         TabletCounters->Cumulative()[COUNTER_CMD_GUM_TIMEOUT].Increment(stat.Concats);
-    } else { 
-        TabletCounters->Cumulative()[COUNTER_CMD_READ_BYTES_OTHER_ERROR].Increment(stat.ReadBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_READ_OTHER_ERROR].Increment(stat.Reads); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_BYTES_OTHER_ERROR].Increment(stat.RangeReadBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_ITEMS_OTHER_ERROR].Increment(stat.RangeReadItems); 
-        TabletCounters->Cumulative()[COUNTER_CMD_INDEX_RANGE_READ_OTHER_ERROR].Increment(stat.IndexRangeRead); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_OTHER_ERROR].Increment(stat.Deletes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_BYTES_OTHER_ERROR].Increment(stat.DeleteBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_RENAME_OTHER_ERROR].Increment(stat.Renames); 
-        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_BYTES_OTHER_ERROR].Increment(stat.WriteBytes); 
-        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_OTHER_ERROR].Increment(stat.Writes); 
+    } else {
+        TabletCounters->Cumulative()[COUNTER_CMD_READ_BYTES_OTHER_ERROR].Increment(stat.ReadBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_READ_OTHER_ERROR].Increment(stat.Reads);
+        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_BYTES_OTHER_ERROR].Increment(stat.RangeReadBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_DATA_RANGE_READ_ITEMS_OTHER_ERROR].Increment(stat.RangeReadItems);
+        TabletCounters->Cumulative()[COUNTER_CMD_INDEX_RANGE_READ_OTHER_ERROR].Increment(stat.IndexRangeRead);
+        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_OTHER_ERROR].Increment(stat.Deletes);
+        TabletCounters->Cumulative()[COUNTER_CMD_DELETE_BYTES_OTHER_ERROR].Increment(stat.DeleteBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_RENAME_OTHER_ERROR].Increment(stat.Renames);
+        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_BYTES_OTHER_ERROR].Increment(stat.WriteBytes);
+        TabletCounters->Cumulative()[COUNTER_CMD_WRITE_OTHER_ERROR].Increment(stat.Writes);
         TabletCounters->Cumulative()[COUNTER_CMD_COPY_RANGE_OTHER_ERROR].Increment(stat.CopyRanges);
         TabletCounters->Cumulative()[COUNTER_CMD_GUM_OTHER_ERROR].Increment(stat.Concats);
-    } 
- 
-    for (const auto latency: stat.GetLatencies) { 
-        TabletCounters->Percentile()[COUNTER_LATENCY_BS_GET].IncrementFor(latency); 
-    } 
-    for (const auto latency: stat.PutLatencies) { 
-        TabletCounters->Percentile()[COUNTER_LATENCY_BS_PUT].IncrementFor(latency); 
-    } 
-} 
- 
-void TKeyValueState::CountRequestTakeOffOrEnqueue(TRequestType::EType requestType) { 
-    if (requestType == TRequestType::WriteOnly) { 
-        TabletCounters->Simple()[COUNTER_REQ_WO_IN_FLY].Add(1); 
-    } else { 
-        if (requestType == TRequestType::ReadOnlyInline) { 
-            TabletCounters->Simple()[COUNTER_REQ_RO_INLINE_IN_FLY].Set(RoInlineIntermediatesInFlight); 
-        } else { 
-            TabletCounters->Simple()[COUNTER_REQ_RO_RW_IN_FLY].Set(IntermediatesInFlight); 
-        } 
-        TabletCounters->Simple()[COUNTER_REQ_RO_RW_QUEUED].Set(Queue.size()); 
-    } 
-} 
- 
-void TKeyValueState::CountRequestOtherError(TRequestType::EType requestType) { 
-    if (requestType == TRequestType::ReadOnly || requestType == TRequestType::ReadOnlyInline) { 
-        TabletCounters->Cumulative()[COUNTER_REQ_RO_OTHER_ERROR].Increment(1); 
-    } else if (requestType == TRequestType::WriteOnly) { 
-        TabletCounters->Cumulative()[COUNTER_REQ_WO_OTHER_ERROR].Increment(1); 
-    } else { 
-        TabletCounters->Cumulative()[COUNTER_REQ_RW_OTHER_ERROR].Increment(1); 
-    } 
-} 
- 
-void TKeyValueState::CountRequestIncoming(TRequestType::EType requestType) { 
-    // CountRequestIncoming is called before the request type is fully determined 
-    // it's impossible to separate ReadOnly and ReadOnlyInline, both are actually ReadOnly here 
-    if (requestType == TRequestType::ReadOnly || requestType == TRequestType::ReadOnlyInline) { 
-        TabletCounters->Cumulative()[COUNTER_REQ_RO].Increment(1); 
-    } else if (requestType == TRequestType::WriteOnly) { 
-        TabletCounters->Cumulative()[COUNTER_REQ_WO].Increment(1); 
-    } else { 
-        TabletCounters->Cumulative()[COUNTER_REQ_RW].Increment(1); 
-    } 
-} 
- 
+    }
+
+    for (const auto latency: stat.GetLatencies) {
+        TabletCounters->Percentile()[COUNTER_LATENCY_BS_GET].IncrementFor(latency);
+    }
+    for (const auto latency: stat.PutLatencies) {
+        TabletCounters->Percentile()[COUNTER_LATENCY_BS_PUT].IncrementFor(latency);
+    }
+}
+
+void TKeyValueState::CountRequestTakeOffOrEnqueue(TRequestType::EType requestType) {
+    if (requestType == TRequestType::WriteOnly) {
+        TabletCounters->Simple()[COUNTER_REQ_WO_IN_FLY].Add(1);
+    } else {
+        if (requestType == TRequestType::ReadOnlyInline) {
+            TabletCounters->Simple()[COUNTER_REQ_RO_INLINE_IN_FLY].Set(RoInlineIntermediatesInFlight);
+        } else {
+            TabletCounters->Simple()[COUNTER_REQ_RO_RW_IN_FLY].Set(IntermediatesInFlight);
+        }
+        TabletCounters->Simple()[COUNTER_REQ_RO_RW_QUEUED].Set(Queue.size());
+    }
+}
+
+void TKeyValueState::CountRequestOtherError(TRequestType::EType requestType) {
+    if (requestType == TRequestType::ReadOnly || requestType == TRequestType::ReadOnlyInline) {
+        TabletCounters->Cumulative()[COUNTER_REQ_RO_OTHER_ERROR].Increment(1);
+    } else if (requestType == TRequestType::WriteOnly) {
+        TabletCounters->Cumulative()[COUNTER_REQ_WO_OTHER_ERROR].Increment(1);
+    } else {
+        TabletCounters->Cumulative()[COUNTER_REQ_RW_OTHER_ERROR].Increment(1);
+    }
+}
+
+void TKeyValueState::CountRequestIncoming(TRequestType::EType requestType) {
+    // CountRequestIncoming is called before the request type is fully determined
+    // it's impossible to separate ReadOnly and ReadOnlyInline, both are actually ReadOnly here
+    if (requestType == TRequestType::ReadOnly || requestType == TRequestType::ReadOnlyInline) {
+        TabletCounters->Cumulative()[COUNTER_REQ_RO].Increment(1);
+    } else if (requestType == TRequestType::WriteOnly) {
+        TabletCounters->Cumulative()[COUNTER_REQ_WO].Increment(1);
+    } else {
+        TabletCounters->Cumulative()[COUNTER_REQ_RW].Increment(1);
+    }
+}
+
 void TKeyValueState::CountTrashRecord(ui32 sizeBytes) {
-    TabletCounters->Simple()[COUNTER_TRASH_COUNT].Add((ui64)1); 
-    TabletCounters->Simple()[COUNTER_TRASH_BYTES].Add((ui64)sizeBytes); 
-    TabletCounters->Simple()[COUNTER_RECORD_COUNT].Add((ui64)-1); 
-    TabletCounters->Simple()[COUNTER_RECORD_BYTES].Add((ui64)-(i64)sizeBytes); 
+    TabletCounters->Simple()[COUNTER_TRASH_COUNT].Add((ui64)1);
+    TabletCounters->Simple()[COUNTER_TRASH_BYTES].Add((ui64)sizeBytes);
+    TabletCounters->Simple()[COUNTER_RECORD_COUNT].Add((ui64)-1);
+    TabletCounters->Simple()[COUNTER_RECORD_BYTES].Add((ui64)-(i64)sizeBytes);
     ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
-} 
- 
+}
+
 void TKeyValueState::CountWriteRecord(ui8 channel, ui32 sizeBytes) {
-    TabletCounters->Simple()[COUNTER_RECORD_COUNT].Add(1); 
-    TabletCounters->Simple()[COUNTER_RECORD_BYTES].Add(sizeBytes); 
+    TabletCounters->Simple()[COUNTER_RECORD_COUNT].Add(1);
+    TabletCounters->Simple()[COUNTER_RECORD_BYTES].Add(sizeBytes);
     ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
     Y_VERIFY(channel < ChannelDataUsage.size());
     ChannelDataUsage[channel] += sizeBytes;
-} 
- 
-void TKeyValueState::CountInitialTrashRecord(ui32 sizeBytes) { 
-    TabletCounters->Simple()[COUNTER_TRASH_COUNT].Add((ui64)1); 
-    TabletCounters->Simple()[COUNTER_TRASH_BYTES].Add((ui64)sizeBytes); 
-} 
- 
-void TKeyValueState::CountTrashCollected(ui32 sizeBytes) { 
-    TabletCounters->Simple()[COUNTER_TRASH_COUNT].Add((ui64)-1); 
-    TabletCounters->Simple()[COUNTER_TRASH_BYTES].Add((ui64)-(i64)sizeBytes); 
-} 
- 
-void TKeyValueState::CountOverrun() { 
-    TabletCounters->Cumulative()[COUNTER_REQ_OVERRUN].Increment(1); 
-} 
- 
-void TKeyValueState::CountLatencyBsOps(const TRequestStat &stat) { 
+}
+
+void TKeyValueState::CountInitialTrashRecord(ui32 sizeBytes) {
+    TabletCounters->Simple()[COUNTER_TRASH_COUNT].Add((ui64)1);
+    TabletCounters->Simple()[COUNTER_TRASH_BYTES].Add((ui64)sizeBytes);
+}
+
+void TKeyValueState::CountTrashCollected(ui32 sizeBytes) {
+    TabletCounters->Simple()[COUNTER_TRASH_COUNT].Add((ui64)-1);
+    TabletCounters->Simple()[COUNTER_TRASH_BYTES].Add((ui64)-(i64)sizeBytes);
+}
+
+void TKeyValueState::CountOverrun() {
+    TabletCounters->Cumulative()[COUNTER_REQ_OVERRUN].Increment(1);
+}
+
+void TKeyValueState::CountLatencyBsOps(const TRequestStat &stat) {
     ui64 bsDuration = (TAppData::TimeProvider->Now() - stat.KeyvalueStorageRequestSentAt).MilliSeconds();
-    TabletCounters->Percentile()[COUNTER_LATENCY_BS_OPS].IncrementFor(bsDuration); 
-} 
- 
-void TKeyValueState::CountLatencyBsCollect() { 
+    TabletCounters->Percentile()[COUNTER_LATENCY_BS_OPS].IncrementFor(bsDuration);
+}
+
+void TKeyValueState::CountLatencyBsCollect() {
     ui64 collectDurationMs = (TAppData::TimeProvider->Now() - LastCollectStartedAt).MilliSeconds();
-    TabletCounters->Percentile()[COUNTER_LATENCY_BS_COLLECT].IncrementFor(collectDurationMs); 
-} 
- 
-void TKeyValueState::CountLatencyQueue(const TRequestStat &stat) { 
+    TabletCounters->Percentile()[COUNTER_LATENCY_BS_COLLECT].IncrementFor(collectDurationMs);
+}
+
+void TKeyValueState::CountLatencyQueue(const TRequestStat &stat) {
     ui64 enqueuedMs = (TAppData::TimeProvider->Now() - stat.IntermediateCreatedAt).MilliSeconds();
-    if (stat.RequestType == TRequestType::WriteOnly) { 
-        TabletCounters->Percentile()[COUNTER_LATENCY_QUEUE_WO].IncrementFor(enqueuedMs); 
-    } else { 
-        TabletCounters->Percentile()[COUNTER_LATENCY_QUEUE_RO_RW].IncrementFor(enqueuedMs); 
-    } 
-} 
- 
-void TKeyValueState::CountLatencyLocalBase(const TIntermediate &intermediate) { 
-    ui64 localBaseTxDurationMs = 
-        (TAppData::TimeProvider->Now() - intermediate.Stat.LocalBaseTxCreatedAt).MilliSeconds(); 
-    if (intermediate.Stat.RequestType == TRequestType::WriteOnly) { 
-        TabletCounters->Percentile()[COUNTER_LATENCY_LOCAL_BASE_WO].IncrementFor(localBaseTxDurationMs); 
-    } else if (intermediate.Stat.RequestType == TRequestType::ReadWrite) { 
-        TabletCounters->Percentile()[COUNTER_LATENCY_LOCAL_BASE_RW].IncrementFor(localBaseTxDurationMs); 
-    } 
-} 
- 
-void TKeyValueState::CountStarting() { 
-    TabletCounters->Simple()[COUNTER_STATE_STARTING].Set(1); 
-    TabletCounters->Simple()[COUNTER_STATE_PROCESSING_INIT_QUEUE].Set(0); 
-    TabletCounters->Simple()[COUNTER_STATE_ONLINE].Set(0); 
-} 
- 
-void TKeyValueState::CountProcessingInitQueue() { 
-    TabletCounters->Simple()[COUNTER_STATE_STARTING].Set(0); 
-    TabletCounters->Simple()[COUNTER_STATE_PROCESSING_INIT_QUEUE].Set(1); 
-    TabletCounters->Simple()[COUNTER_STATE_ONLINE].Set(0); 
-} 
- 
-void TKeyValueState::CountOnline() { 
-    TabletCounters->Simple()[COUNTER_STATE_STARTING].Set(0); 
-    TabletCounters->Simple()[COUNTER_STATE_PROCESSING_INIT_QUEUE].Set(0); 
-    TabletCounters->Simple()[COUNTER_STATE_ONLINE].Set(1); 
-} 
- 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// 
-// Initialization 
-// 
- 
+    if (stat.RequestType == TRequestType::WriteOnly) {
+        TabletCounters->Percentile()[COUNTER_LATENCY_QUEUE_WO].IncrementFor(enqueuedMs);
+    } else {
+        TabletCounters->Percentile()[COUNTER_LATENCY_QUEUE_RO_RW].IncrementFor(enqueuedMs);
+    }
+}
+
+void TKeyValueState::CountLatencyLocalBase(const TIntermediate &intermediate) {
+    ui64 localBaseTxDurationMs =
+        (TAppData::TimeProvider->Now() - intermediate.Stat.LocalBaseTxCreatedAt).MilliSeconds();
+    if (intermediate.Stat.RequestType == TRequestType::WriteOnly) {
+        TabletCounters->Percentile()[COUNTER_LATENCY_LOCAL_BASE_WO].IncrementFor(localBaseTxDurationMs);
+    } else if (intermediate.Stat.RequestType == TRequestType::ReadWrite) {
+        TabletCounters->Percentile()[COUNTER_LATENCY_LOCAL_BASE_RW].IncrementFor(localBaseTxDurationMs);
+    }
+}
+
+void TKeyValueState::CountStarting() {
+    TabletCounters->Simple()[COUNTER_STATE_STARTING].Set(1);
+    TabletCounters->Simple()[COUNTER_STATE_PROCESSING_INIT_QUEUE].Set(0);
+    TabletCounters->Simple()[COUNTER_STATE_ONLINE].Set(0);
+}
+
+void TKeyValueState::CountProcessingInitQueue() {
+    TabletCounters->Simple()[COUNTER_STATE_STARTING].Set(0);
+    TabletCounters->Simple()[COUNTER_STATE_PROCESSING_INIT_QUEUE].Set(1);
+    TabletCounters->Simple()[COUNTER_STATE_ONLINE].Set(0);
+}
+
+void TKeyValueState::CountOnline() {
+    TabletCounters->Simple()[COUNTER_STATE_STARTING].Set(0);
+    TabletCounters->Simple()[COUNTER_STATE_PROCESSING_INIT_QUEUE].Set(0);
+    TabletCounters->Simple()[COUNTER_STATE_ONLINE].Set(1);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Initialization
+//
+
 void TKeyValueState::Terminate(const TActorContext& ctx) {
     ctx.Send(ChannelBalancerActorId, new TEvents::TEvPoisonPill);
 }
 
 void TKeyValueState::Load(const TString &key, const TString& value) {
-    if (IsEmptyDbStart) { 
-        IsEmptyDbStart = false; 
-    } 
- 
+    if (IsEmptyDbStart) {
+        IsEmptyDbStart = false;
+    }
+
     TString arbitraryPart;
-    TKeyHeader header; 
-    bool isOk = THelpers::ExtractKeyParts(key, arbitraryPart, header); 
+    TKeyHeader header;
+    bool isOk = THelpers::ExtractKeyParts(key, arbitraryPart, header);
     Y_VERIFY(isOk);
- 
-    switch (header.ItemType) { 
-        case EIT_UNKNOWN: { 
+
+    switch (header.ItemType) {
+        case EIT_UNKNOWN: {
             Y_VERIFY(false, "Unexpected EIT_UNKNOWN key header.");
-            break; 
-        } 
-        case EIT_KEYVALUE_1: 
-        { 
-            TIndexRecord &record = Index[arbitraryPart]; 
+            break;
+        }
+        case EIT_KEYVALUE_1:
+        {
+            TIndexRecord &record = Index[arbitraryPart];
             TString errorInfo;
-            bool isOk = false; 
-            EItemType headerItemType = TIndexRecord::ReadItemType(value); 
-            if (headerItemType == EIT_KEYVALUE_1) { 
-                isOk = record.Deserialize1(value, errorInfo); 
-            } else { 
-                isOk = record.Deserialize2(value, errorInfo); 
-            } 
-            if (!isOk) { 
-                TStringStream str; 
-                str << " Tablet# " << TabletId; 
-                str << " KeyArbitraryPart# \"" << arbitraryPart << "\""; 
-                str << errorInfo; 
-                if (KIKIMR_KEYVALUE_ALLOW_DAMAGE) { 
-                    str << Endl; 
-                    Cerr << str.Str(); 
-                    IsDamaged = true; 
-                } else { 
+            bool isOk = false;
+            EItemType headerItemType = TIndexRecord::ReadItemType(value);
+            if (headerItemType == EIT_KEYVALUE_1) {
+                isOk = record.Deserialize1(value, errorInfo);
+            } else {
+                isOk = record.Deserialize2(value, errorInfo);
+            }
+            if (!isOk) {
+                TStringStream str;
+                str << " Tablet# " << TabletId;
+                str << " KeyArbitraryPart# \"" << arbitraryPart << "\"";
+                str << errorInfo;
+                if (KIKIMR_KEYVALUE_ALLOW_DAMAGE) {
+                    str << Endl;
+                    Cerr << str.Str();
+                    IsDamaged = true;
+                } else {
                     Y_VERIFY(false, "%s", str.Str().data());
-                } 
-            } 
+                }
+            }
             for (const TIndexRecord::TChainItem& item : record.Chain) {
-                if (!item.IsInline()) { 
-                    const ui32 newRefCount = ++RefCounts[item.LogoBlobId]; 
-                    if (newRefCount == 1) { 
+                if (!item.IsInline()) {
+                    const ui32 newRefCount = ++RefCounts[item.LogoBlobId];
+                    if (newRefCount == 1) {
                         CountWriteRecord(item.LogoBlobId.Channel(), item.LogoBlobId.BlobSize());
-                    } 
+                    }
                 } else {
                     CountWriteRecord(0, item.InlineData.size());
                 }
             }
-            break; 
-        } 
-        case EIT_TRASH: { 
+            break;
+        }
+        case EIT_TRASH: {
             Y_VERIFY(value.size() == 0);
             Y_VERIFY(arbitraryPart.size() == sizeof(TTrashKeyArbitrary));
             const TTrashKeyArbitrary *trashKey = (const TTrashKeyArbitrary *) arbitraryPart.data();
-            Trash.insert(trashKey->LogoBlobId); 
-            CountInitialTrashRecord(trashKey->LogoBlobId.BlobSize()); 
-            break; 
-        } 
-        case EIT_COLLECT: { 
+            Trash.insert(trashKey->LogoBlobId);
+            CountInitialTrashRecord(trashKey->LogoBlobId.BlobSize());
+            break;
+        }
+        case EIT_COLLECT: {
             Y_VERIFY(arbitraryPart.size() == 0);
             Y_VERIFY(!CollectOperation.Get());
             Y_VERIFY(value.size() >= sizeof(TCollectOperationHeader));
             const TCollectOperationHeader *header = (const TCollectOperationHeader*)value.data();
             Y_VERIFY(header->DataHeader.ItemType == EIT_COLLECT);
-            ui64 totalSize = sizeof(TCollectOperationHeader) 
-                + sizeof(TLogoBlobID) * (header->KeepCount + header->DoNotKeepCount); 
+            ui64 totalSize = sizeof(TCollectOperationHeader)
+                + sizeof(TLogoBlobID) * (header->KeepCount + header->DoNotKeepCount);
             Y_VERIFY(value.size() == totalSize);
             TVector<TLogoBlobID> keep;
             TVector<TLogoBlobID> doNotKeep;
-            keep.resize(header->KeepCount); 
-            doNotKeep.resize(header->DoNotKeepCount); 
+            keep.resize(header->KeepCount);
+            doNotKeep.resize(header->DoNotKeepCount);
             const char* data = value.data() + sizeof(TCollectOperationHeader);
-            if (keep.size()) { 
-                memcpy((char *) &keep[0], data, sizeof(TLogoBlobID) * keep.size()); 
-            } 
-            data += sizeof(TLogoBlobID) * keep.size(); 
-            if (doNotKeep.size()) { 
-                memcpy((char *) &doNotKeep[0], data, sizeof(TLogoBlobID) * doNotKeep.size()); 
-            } 
-            CollectOperation.Reset(new TCollectOperation( 
+            if (keep.size()) {
+                memcpy((char *) &keep[0], data, sizeof(TLogoBlobID) * keep.size());
+            }
+            data += sizeof(TLogoBlobID) * keep.size();
+            if (doNotKeep.size()) {
+                memcpy((char *) &doNotKeep[0], data, sizeof(TLogoBlobID) * doNotKeep.size());
+            }
+            CollectOperation.Reset(new TCollectOperation(
                 header->CollectGeneration, header->CollectStep, std::move(keep), std::move(doNotKeep)));
-            break; 
-        } 
-        case EIT_STATE: { 
+            break;
+        }
+        case EIT_STATE: {
             Y_VERIFY(!IsStatePresent);
-            IsStatePresent = true; 
+            IsStatePresent = true;
             Y_VERIFY(arbitraryPart.size() == 0);
             Y_VERIFY(value.size() >= sizeof(TKeyValueStoredStateData));
             const TKeyValueStoredStateData *data = (const TKeyValueStoredStateData *) value.data();
             Y_VERIFY(data->CheckChecksum());
             Y_VERIFY(data->DataHeader.ItemType == EIT_STATE);
-            StoredState = *data; 
-            break; 
-        } 
-        default: { 
+            StoredState = *data;
+            break;
+        }
+        default: {
             Y_VERIFY(false, "Unexcpected header.ItemType# %" PRIu32, (ui32)header.ItemType);
-            break; 
-        } 
-    } 
-} 
- 
+            break;
+        }
+    }
+}
+
 void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration,
-        ISimpleDb &db, const TActorContext &ctx, const TTabletStorageInfo *info) { 
-    Y_UNUSED(info); 
+        ISimpleDb &db, const TActorContext &ctx, const TTabletStorageInfo *info) {
+    Y_UNUSED(info);
     Y_VERIFY(IsEmptyDbStart || IsStatePresent);
-    TabletId = tabletId; 
-    KeyValueActorId = keyValueActorId; 
-    ExecutorGeneration = executorGeneration; 
-    if (IsDamaged) { 
-        return; 
-    } 
+    TabletId = tabletId;
+    KeyValueActorId = keyValueActorId;
+    ExecutorGeneration = executorGeneration;
+    if (IsDamaged) {
+        return;
+    }
     ui8 maxChannel = 0;
     for (const auto& channel : info->Channels) {
         const ui32 index = channel.Channel;
@@ -500,7 +500,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         }
     }
     ChannelBalancerActorId = ctx.Register(new TChannelBalancer(maxChannel + 1, KeyValueActorId));
- 
+
     // Issue hard barriers
     {
         using TGroupChannel = std::tuple<ui32, ui8>;
@@ -557,8 +557,8 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             std::tie(generation, step) = kv.second;
 
             auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(info->TabletID, executorGeneration,
-                PerGenerationCounter, channel, generation, step, TInstant::Max()); 
-            ++PerGenerationCounter; 
+                PerGenerationCounter, channel, generation, step, TInstant::Max());
+            ++PerGenerationCounter;
 
             const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
             const TActorId proxy = MakeBlobStorageProxyID(group);
@@ -567,135 +567,135 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         }
     }
 
-    // Issue soft barriers 
-    // Mark fresh blobs (after previous collected GenStep) with keep flag and issue barrier at current GenStep 
-    // to remove all phantom blobs 
-    { 
-        using TGroupChannel = std::tuple<ui32, ui8>; 
-        THashMap<TGroupChannel, THolder<TVector<TLogoBlobID>>> keepForGroupChannel; 
-        const ui32 barrierGeneration = executorGeneration - 1; 
-        const ui32 barrierStep = Max<ui32>(); 
-        for (const auto &refInfo : RefCounts) { 
-            // Extract blob id and validate its channel 
-            const TLogoBlobID &id = refInfo.first; 
-            Y_VERIFY(id.Channel() >= BLOB_CHANNEL); 
- 
+    // Issue soft barriers
+    // Mark fresh blobs (after previous collected GenStep) with keep flag and issue barrier at current GenStep
+    // to remove all phantom blobs
+    {
+        using TGroupChannel = std::tuple<ui32, ui8>;
+        THashMap<TGroupChannel, THolder<TVector<TLogoBlobID>>> keepForGroupChannel;
+        const ui32 barrierGeneration = executorGeneration - 1;
+        const ui32 barrierStep = Max<ui32>();
+        for (const auto &refInfo : RefCounts) {
+            // Extract blob id and validate its channel
+            const TLogoBlobID &id = refInfo.first;
+            Y_VERIFY(id.Channel() >= BLOB_CHANNEL);
+
             const THelpers::TGenerationStep blobGenStep = THelpers::GenerationStep(id);
             const THelpers::TGenerationStep storedGenStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep());
-            // Mark with keep flag only new blobs 
-            if (storedGenStep < blobGenStep) { 
-                const ui32 group = info->GroupFor(id.Channel(), id.Generation()); 
-                Y_VERIFY(group != Max<ui32>(), "RefBlob# %s is mapped to an invalid group (-1)!", 
-                        id.ToString().c_str()); 
-                const TGroupChannel key(group, id.Channel()); 
-                auto it = keepForGroupChannel.find(key); 
-                if (it == keepForGroupChannel.end()) { 
-                    bool isInserted = false; 
-                    std::tie(it, isInserted) = keepForGroupChannel.emplace(key, MakeHolder<TVector<TLogoBlobID>>()); 
-                    Y_VERIFY(isInserted); 
-                } 
-                it->second->emplace_back(id); 
-            } 
-        } 
-        for (const auto &channelInfo : info->Channels) { 
-            if (channelInfo.Channel < BLOB_CHANNEL) { 
-                continue; 
-            } 
-            // Issue soft barriers for groups without blobs because 
-            // we can possibly write in them on previous generations 
-            for (ui64 gen = StoredState.GetCollectGeneration(); gen <= barrierGeneration; ++gen) { 
-                const ui32 groupId = channelInfo.GroupForGeneration(gen); 
-                if (groupId != Max<ui32>()) { 
-                    const TGroupChannel groupChannel(groupId, channelInfo.Channel); 
-                    if (keepForGroupChannel.find(groupChannel) == keepForGroupChannel.end()) { 
-                        keepForGroupChannel[groupChannel] = nullptr; 
-                    } 
-                } 
-            } 
-        } 
+            // Mark with keep flag only new blobs
+            if (storedGenStep < blobGenStep) {
+                const ui32 group = info->GroupFor(id.Channel(), id.Generation());
+                Y_VERIFY(group != Max<ui32>(), "RefBlob# %s is mapped to an invalid group (-1)!",
+                        id.ToString().c_str());
+                const TGroupChannel key(group, id.Channel());
+                auto it = keepForGroupChannel.find(key);
+                if (it == keepForGroupChannel.end()) {
+                    bool isInserted = false;
+                    std::tie(it, isInserted) = keepForGroupChannel.emplace(key, MakeHolder<TVector<TLogoBlobID>>());
+                    Y_VERIFY(isInserted);
+                }
+                it->second->emplace_back(id);
+            }
+        }
+        for (const auto &channelInfo : info->Channels) {
+            if (channelInfo.Channel < BLOB_CHANNEL) {
+                continue;
+            }
+            // Issue soft barriers for groups without blobs because
+            // we can possibly write in them on previous generations
+            for (ui64 gen = StoredState.GetCollectGeneration(); gen <= barrierGeneration; ++gen) {
+                const ui32 groupId = channelInfo.GroupForGeneration(gen);
+                if (groupId != Max<ui32>()) {
+                    const TGroupChannel groupChannel(groupId, channelInfo.Channel);
+                    if (keepForGroupChannel.find(groupChannel) == keepForGroupChannel.end()) {
+                        keepForGroupChannel[groupChannel] = nullptr;
+                    }
+                }
+            }
+        }
         InitialCollectsSent = keepForGroupChannel.size();
-        for (auto &keepInfo : keepForGroupChannel) { 
-            ui32 group; 
-            ui8 channel; 
-            std::tie(group, channel) = keepInfo.first; 
- 
-            THolder<TVector<TLogoBlobID>>& keep = keepInfo.second; 
-            auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(info->TabletID, executorGeneration, 
-                    PerGenerationCounter, channel, true /*collect*/, barrierGeneration, barrierStep, keep.Release(), 
-                    nullptr /*doNotKeep*/, TInstant::Max(), false /*isMultiCollectAllowed*/, false /*hard*/); 
-            ++PerGenerationCounter; 
- 
+        for (auto &keepInfo : keepForGroupChannel) {
+            ui32 group;
+            ui8 channel;
+            std::tie(group, channel) = keepInfo.first;
+
+            THolder<TVector<TLogoBlobID>>& keep = keepInfo.second;
+            auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(info->TabletID, executorGeneration,
+                    PerGenerationCounter, channel, true /*collect*/, barrierGeneration, barrierStep, keep.Release(),
+                    nullptr /*doNotKeep*/, TInstant::Max(), false /*isMultiCollectAllowed*/, false /*hard*/);
+            ++PerGenerationCounter;
+
             const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
             const TActorId proxy = MakeBlobStorageProxyID(group);
             ctx.ExecutorThread.Send(new IEventHandle(proxy, KeyValueActorId, ev.Release(),
-                IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden)); 
-        } 
-    } 
- 
-    // Make a copy of the channel history (need a way to map channel/generation to history record) 
-    // History entry contains data on from-to generation for each channel 
-    auto &channels = info->Channels; 
+                IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden));
+        }
+    }
+
+    // Make a copy of the channel history (need a way to map channel/generation to history record)
+    // History entry contains data on from-to generation for each channel
+    auto &channels = info->Channels;
     ChannelRangeSets.reserve(channels.size());
-    for (ui64 idx = 0; idx < channels.size(); ++idx) { 
-        auto &channelInfo = channels[idx]; 
-        if (channelInfo.Channel < BLOB_CHANNEL) { 
-             // Remove (do not add) non-KV tablet managed channels 
-            continue; 
-        } 
+    for (ui64 idx = 0; idx < channels.size(); ++idx) {
+        auto &channelInfo = channels[idx];
+        if (channelInfo.Channel < BLOB_CHANNEL) {
+             // Remove (do not add) non-KV tablet managed channels
+            continue;
+        }
         if (channelInfo.Channel >= ChannelRangeSets.size()) {
             ChannelRangeSets.resize(channelInfo.Channel + 1);
-        } 
-        auto &history = channelInfo.History; 
+        }
+        auto &history = channelInfo.History;
         auto &rangeSet = ChannelRangeSets[channelInfo.Channel];
-        // Remove (do not add) the latest entries for all channels 
-        auto endIt = history.end(); 
-        if (endIt != history.begin()) { 
-            endIt--; 
-        } 
-        for (auto it = history.begin(); it != endIt; ++it) { 
-            ui64 begin = it->FromGeneration; 
-            auto nextIt = it; 
-            nextIt++; 
-            ui64 end = nextIt->FromGeneration; 
-            rangeSet.Add(begin, end); 
-        } 
-    } 
-    // Walk through the index,trash and coolect operaton lists and remove non-empty channel-generation pairs 
-    for (auto recordIt = Index.begin(); recordIt != Index.end(); ++recordIt) { 
-        auto &chain = recordIt->second.Chain; 
-        for (auto itemIt = chain.begin(); itemIt != chain.end(); ++itemIt) { 
-            TLogoBlobID &id = itemIt->LogoBlobId; 
+        // Remove (do not add) the latest entries for all channels
+        auto endIt = history.end();
+        if (endIt != history.begin()) {
+            endIt--;
+        }
+        for (auto it = history.begin(); it != endIt; ++it) {
+            ui64 begin = it->FromGeneration;
+            auto nextIt = it;
+            nextIt++;
+            ui64 end = nextIt->FromGeneration;
+            rangeSet.Add(begin, end);
+        }
+    }
+    // Walk through the index,trash and coolect operaton lists and remove non-empty channel-generation pairs
+    for (auto recordIt = Index.begin(); recordIt != Index.end(); ++recordIt) {
+        auto &chain = recordIt->second.Chain;
+        for (auto itemIt = chain.begin(); itemIt != chain.end(); ++itemIt) {
+            TLogoBlobID &id = itemIt->LogoBlobId;
             if (id.Channel() < ChannelRangeSets.size()) {
                 ChannelRangeSets[id.Channel()].Remove(id.Generation());
-            } 
-        } 
-    } 
-    for (auto it = Trash.begin(); it != Trash.end(); ++it) { 
-        const TLogoBlobID &id = *it; 
+            }
+        }
+    }
+    for (auto it = Trash.begin(); it != Trash.end(); ++it) {
+        const TLogoBlobID &id = *it;
         if (id.Channel() < ChannelRangeSets.size()) {
             ChannelRangeSets[id.Channel()].Remove(id.Generation());
-        } 
-    } 
-    if (CollectOperation.Get()) { 
-        auto &keep = CollectOperation->Keep; 
-        for (auto it = keep.begin(); it != keep.end(); ++it) { 
-            const TLogoBlobID &id = *it; 
+        }
+    }
+    if (CollectOperation.Get()) {
+        auto &keep = CollectOperation->Keep;
+        for (auto it = keep.begin(); it != keep.end(); ++it) {
+            const TLogoBlobID &id = *it;
             if (id.Channel() < ChannelRangeSets.size()) {
                 ChannelRangeSets[id.Channel()].Remove(id.Generation());
-            } 
-        } 
-        auto &doNotKeep = CollectOperation->DoNotKeep; 
-        for (auto it = doNotKeep.begin(); it != doNotKeep.end(); ++it) { 
-            const TLogoBlobID &id = *it; 
+            }
+        }
+        auto &doNotKeep = CollectOperation->DoNotKeep;
+        for (auto it = doNotKeep.begin(); it != doNotKeep.end(); ++it) {
+            const TLogoBlobID &id = *it;
             if (id.Channel() < ChannelRangeSets.size()) {
                 ChannelRangeSets[id.Channel()].Remove(id.Generation());
-            } 
-        } 
-        // Patch collect operation generation and step 
-        Y_VERIFY(CollectOperation->Header.GetCollectGeneration() < ExecutorGeneration); 
-        CollectOperation->Header.SetCollectGeneration(ExecutorGeneration); 
-        CollectOperation->Header.SetCollectStep(0); 
-    } 
+            }
+        }
+        // Patch collect operation generation and step
+        Y_VERIFY(CollectOperation->Header.GetCollectGeneration() < ExecutorGeneration);
+        CollectOperation->Header.SetCollectGeneration(ExecutorGeneration);
+        CollectOperation->Header.SetCollectStep(0);
+    }
     THelpers::DbUpdateState(StoredState, db, ctx);
 
     // corner case, if no CollectGarbage events were sent
@@ -723,139 +723,139 @@ void TKeyValueState::RegisterInitialCollectResult(const TActorContext &ctx) {
 void TKeyValueState::SendCutHistory(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
         << " SendCutHistory Marker# KV51");
-    // Prepare and send a messages to the Local 
+    // Prepare and send a messages to the Local
     for (ui64 channel = 0; channel < ChannelRangeSets.size(); ++channel) {
         auto endForBegin = ChannelRangeSets[channel].EndForBegin;
-        for (auto it = endForBegin.begin(); it != endForBegin.end(); ++it) { 
-            ui32 fromGeneration = it->first; 
-            TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory); 
-            auto &record = ev->Record; 
-            record.SetTabletID(TabletId); 
-            record.SetChannel(channel); 
-            record.SetFromGeneration(fromGeneration); 
+        for (auto it = endForBegin.begin(); it != endForBegin.end(); ++it) {
+            ui32 fromGeneration = it->first;
+            TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
+            auto &record = ev->Record;
+            record.SetTabletID(TabletId);
+            record.SetChannel(channel);
+            record.SetFromGeneration(fromGeneration);
             TActorId localActorId = MakeLocalID(ctx.SelfID.NodeId());
-            ctx.Send(localActorId, ev.Release()); 
-        } 
-    } 
+            ctx.Send(localActorId, ev.Release());
+        }
+    }
     ChannelRangeSets.clear();
-} 
- 
-void TKeyValueState::OnInitQueueEmpty(const TActorContext &ctx) { 
+}
+
+void TKeyValueState::OnInitQueueEmpty(const TActorContext &ctx) {
     Y_UNUSED(ctx);
-    CountOnline(); 
-} 
- 
-void TKeyValueState::OnStateWork(const TActorContext &ctx) { 
+    CountOnline();
+}
+
+void TKeyValueState::OnStateWork(const TActorContext &ctx) {
     Y_UNUSED(ctx);
-    CountProcessingInitQueue(); 
-} 
- 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// 
-// User Request Processing 
-// 
- 
-void TKeyValueState::Step() { 
-    if (NextLogoBlobStep < Max<ui32>()) { 
-        NextLogoBlobCookie = 1; 
-        ++NextLogoBlobStep; 
-    } else { 
+    CountProcessingInitQueue();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// User Request Processing
+//
+
+void TKeyValueState::Step() {
+    if (NextLogoBlobStep < Max<ui32>()) {
+        NextLogoBlobCookie = 1;
+        ++NextLogoBlobStep;
+    } else {
         Y_FAIL("Max step reached!");
-    } 
-} 
- 
-TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx) { 
-    ui32 generation = ExecutorGeneration; 
-    TLogoBlobID id(TabletId, generation, NextLogoBlobStep, storageChannelIdx, size, NextLogoBlobCookie); 
-    if (NextLogoBlobCookie < TLogoBlobID::MaxCookie) { 
-        ++NextLogoBlobCookie; 
-    } else { 
-        Step(); 
-    } 
+    }
+}
+
+TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx) {
+    ui32 generation = ExecutorGeneration;
+    TLogoBlobID id(TabletId, generation, NextLogoBlobStep, storageChannelIdx, size, NextLogoBlobCookie);
+    if (NextLogoBlobCookie < TLogoBlobID::MaxCookie) {
+        ++NextLogoBlobCookie;
+    } else {
+        Step();
+    }
     Y_VERIFY(!CollectOperation || THelpers::GenerationStep(id) >
         THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep()));
-    return id; 
-} 
- 
-void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) { 
-    if (IsDamaged) { 
-        return; 
-    } 
-    intermediate->Response.Clear(); 
-    intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN); 
-    if (intermediate->HasCookie) { 
-        intermediate->Response.SetCookie(intermediate->Cookie); 
-    } 
- 
-    // Check the generation 
-    if (intermediate->HasGeneration) { 
-        if (intermediate->Generation != StoredState.GetUserGeneration()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " Generation mismatch! Requested# " << intermediate->Generation; 
-            str << " Actual# " << StoredState.GetUserGeneration(); 
+    return id;
+}
+
+void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
+        const TTabletStorageInfo *info) {
+    if (IsDamaged) {
+        return;
+    }
+    intermediate->Response.Clear();
+    intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN);
+    if (intermediate->HasCookie) {
+        intermediate->Response.SetCookie(intermediate->Cookie);
+    }
+
+    // Check the generation
+    if (intermediate->HasGeneration) {
+        if (intermediate->Generation != StoredState.GetUserGeneration()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Generation mismatch! Requested# " << intermediate->Generation;
+            str << " Actual# " << StoredState.GetUserGeneration();
             str << " Marker# KV17";
             LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, str.Str());
-            // All reads done 
-            intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_REJECTED); 
-            intermediate->Response.SetErrorReason(str.Str()); 
-            return; 
-        } 
-    } 
- 
-    // Process CmdIncrementGeneration() 
-    if (intermediate->HasIncrementGeneration) { 
- 
+            // All reads done
+            intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_REJECTED);
+            intermediate->Response.SetErrorReason(str.Str());
+            return;
+        }
+    }
+
+    // Process CmdIncrementGeneration()
+    if (intermediate->HasIncrementGeneration) {
+
         bool IsOk = intermediate->Commands.size() == 0
             && intermediate->Deletes.size() == 0 && intermediate->RangeReads.size() == 0
-            && intermediate->Reads.size() == 0 && intermediate->Renames.size() == 0 
-            && intermediate->Writes.size() == 0 && intermediate->GetStatuses.size() == 0; 
- 
-        if (IsOk) { 
-            IncrementGeneration(intermediate, db, ctx); 
-            return; 
-        } else { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " CmdIncrementGeneration can't be grouped with any other Cmd!"; 
+            && intermediate->Reads.size() == 0 && intermediate->Renames.size() == 0
+            && intermediate->Writes.size() == 0 && intermediate->GetStatuses.size() == 0;
+
+        if (IsOk) {
+            IncrementGeneration(intermediate, db, ctx);
+            return;
+        } else {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " CmdIncrementGeneration can't be grouped with any other Cmd!";
             str << " Commands# " << intermediate->Commands.size();
-            str << " Deletes# " << intermediate->Deletes.size(); 
-            str << " RangeReads# " << intermediate->RangeReads.size(); 
-            str << " Reads# " << intermediate->Reads.size(); 
-            str << " Renames# " << intermediate->Renames.size(); 
-            str << " Writes# " << intermediate->Writes.size(); 
-            str << " GetStatuses# " << intermediate->GetStatuses.size(); 
+            str << " Deletes# " << intermediate->Deletes.size();
+            str << " RangeReads# " << intermediate->RangeReads.size();
+            str << " Reads# " << intermediate->Reads.size();
+            str << " Renames# " << intermediate->Renames.size();
+            str << " Writes# " << intermediate->Writes.size();
+            str << " GetStatuses# " << intermediate->GetStatuses.size();
             str << " CopyRanges# " << intermediate->CopyRanges.size();
             LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, str.Str());
-            // All reads done 
-            intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_INTERNALERROR); 
-            intermediate->Response.SetErrorReason(str.Str()); 
-            return; 
-        } 
-    } 
- 
-    // TODO: Validate arguments 
- 
-    ProcessCmds(intermediate, db, ctx, info); 
- 
-} 
- 
-void TKeyValueState::RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) { 
- 
-    Reply(intermediate, ctx, info); 
-    // Make sure there is no way for a successfull delete transaction to end without getting here 
-    PrepareCollectIfNeeded(ctx); 
-} 
- 
-/////////////////////////////////////////////////////////////////////////////// 
-// Request processing 
-// 
+            // All reads done
+            intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_INTERNALERROR);
+            intermediate->Response.SetErrorReason(str.Str());
+            return;
+        }
+    }
 
-void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) { 
-    if (!intermediate->IsReplied) { 
+    // TODO: Validate arguments
+
+    ProcessCmds(intermediate, db, ctx, info);
+
+}
+
+void TKeyValueState::RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx,
+        const TTabletStorageInfo *info) {
+
+    Reply(intermediate, ctx, info);
+    // Make sure there is no way for a successfull delete transaction to end without getting here
+    PrepareCollectIfNeeded(ctx);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Request processing
+//
+
+void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx,
+        const TTabletStorageInfo *info) {
+    if (!intermediate->IsReplied) {
         if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) {
             THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
             response->Record = intermediate->Response;
@@ -881,16 +881,16 @@ void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorCon
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
             ctx.Send(intermediate->RespondTo, response.Release());
         }
-        intermediate->IsReplied = true; 
-        intermediate->UpdateStat(); 
- 
-        CountLatencyLocalBase(*intermediate); 
- 
-        OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep, 
-            ctx, info, (NMsgBusProxy::EResponseStatus)intermediate->Response.GetStatus(), intermediate->Stat); 
-    } 
-} 
- 
+        intermediate->IsReplied = true;
+        intermediate->UpdateStat();
+
+        CountLatencyLocalBase(*intermediate);
+
+        OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep,
+            ctx, info, (NMsgBusProxy::EResponseStatus)intermediate->Response.GetStatus(), intermediate->Stat);
+    }
+}
+
 void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
         NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse,
         NKikimrKeyValue::Channel */*response*/,
@@ -929,7 +929,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
         }
     }
 }
- 
+
 void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
         NKikimrClient::TKeyValueResponse::TReadRangeResult *legacyResponse,
         NKikimrKeyValue::Channel */*response*/,
@@ -947,31 +947,31 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
             //    << " message " << read.Message
             //    << " key " << EscapeC(read.Key));
 
-            if (outStatus == NKikimrProto::NODATA) { 
+            if (outStatus == NKikimrProto::NODATA) {
                 for (ui32 itemIdx = 0; itemIdx < read.ReadItems.size(); ++itemIdx) {
                     TIntermediate::TRead::TReadItem &item = read.ReadItems[itemIdx];
-                    // Make sure the blob is not referenced anymore 
-                    auto refCountIt = RefCounts.find(item.LogoBlobId); 
-                    if (refCountIt != RefCounts.end()) { 
-                        TStringStream str; 
-                        str << "KeyValue# " << TabletId 
+                    // Make sure the blob is not referenced anymore
+                    auto refCountIt = RefCounts.find(item.LogoBlobId);
+                    if (refCountIt != RefCounts.end()) {
+                        TStringStream str;
+                        str << "KeyValue# " << TabletId
                             << " CmdReadRange "
                             // << " RangeReadIdx# " << i
                             << " ReadIdx# " << r
-                            << " ItemIdx# " << itemIdx 
+                            << " ItemIdx# " << itemIdx
                             << " key# " << EscapeC(read.Key)
-                            << " BlobId# " << item.LogoBlobId.ToString() 
-                            << " Status# " << NKikimrProto::EReplyStatus_Name(item.Status) 
-                            << " outStatus# " << NKikimrProto::EReplyStatus_Name(outStatus) 
-                            << " but blob has RefCount# " << refCountIt->second 
-                            << " ! KEYVALUE CONSISTENCY ERROR!" 
+                            << " BlobId# " << item.LogoBlobId.ToString()
+                            << " Status# " << NKikimrProto::EReplyStatus_Name(item.Status)
+                            << " outStatus# " << NKikimrProto::EReplyStatus_Name(outStatus)
+                            << " but blob has RefCount# " << refCountIt->second
+                            << " ! KEYVALUE CONSISTENCY ERROR!"
                             << " Message# " << read.Message
                             << " Marker# KV47";
-                        Y_VERIFY(false, "%s", str.Str().c_str()); 
-                    } 
-                } 
-            } 
-        } 
+                        Y_VERIFY(false, "%s", str.Str().c_str());
+                    }
+                }
+            }
+        }
 
         resultKv->SetStatus(outStatus);
         resultKv->SetKey(read.Key);
@@ -982,12 +982,12 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
         resultKv->SetValueSize(read.ValueSize);
         resultKv->SetCreationUnixTime(read.CreationUnixTime);
         resultKv->SetStorageChannel(read.StorageChannel);
-    } 
+    }
 
     legacyResponse->SetStatus(request.Status);
-} 
- 
- 
+}
+
+
 void SetStatusFlags(NKikimrKeyValue::Flags *flags, const TStorageStatusFlags &statusFlags) {
     if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan)) {
         flags->set_disk_space_cyan(true);
@@ -1019,7 +1019,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
 {
     TIndexRecord& record = Index[request.Key];
     Dereference(record, db, ctx);
- 
+
     record.Chain = {};
     ui32 storage_channel = 0;
     if (request.Status == NKikimrProto::SCHEDULED) {
@@ -1030,7 +1030,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
         storage_channel = InlineStorageChannelInPublicApi;
     } else {
         int channel = -1;
- 
+
         ui64 offset = 0;
         for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
             record.Chain.push_back(TIndexRecord::TChainItem(logoBlobId, offset));
@@ -1123,8 +1123,8 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
         for (const TIndexRecord::TChainItem& item : sourceRecord.Chain) {
             if (!item.IsInline()) {
                 ++RefCounts[item.LogoBlobId];
-            } 
-        } 
+            }
+        }
 
         TString newKey = request.PrefixToAdd + it->first.substr(request.PrefixToRemove.size());
         TIndexRecord& record = Index[newKey];
@@ -1132,13 +1132,13 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
         record.Chain = sourceRecord.Chain;
         record.CreationUnixTime = sourceRecord.CreationUnixTime;
         UpdateKeyValue(newKey, record, db, ctx);
-    } 
+    }
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
     }
-} 
- 
+}
+
 void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
         NKikimrClient::TKeyValueResponse::TConcatResult *legacyResponse,
         NKikimrKeyValue::Channel */*response*/,
@@ -1146,12 +1146,12 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
 {
     TVector<TIndexRecord::TChainItem> chain;
     ui64 offset = 0;
- 
+
     for (const TString& key : request.InputKeys) {
         auto it = Index.find(key);
         Y_VERIFY(it != Index.end());
         TIndexRecord& input = it->second;
- 
+
         for (TIndexRecord::TChainItem& chainItem : input.Chain) {
             if (chainItem.IsInline()) {
                 chain.push_back(TIndexRecord::TChainItem(chainItem.InlineData, offset));
@@ -1162,14 +1162,14 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
             }
             offset += chainItem.GetSize();
         }
- 
+
         if (!request.KeepInputs) {
             Dereference(input, db, ctx);
             THelpers::DbEraseUserKey(it->first, db, ctx);
             Index.erase(it);
         }
     }
- 
+
     TIndexRecord& record = Index[request.OutputKey];
     Dereference(record, db, ctx);
     record.Chain = std::move(chain);
@@ -1186,14 +1186,14 @@ void TKeyValueState::CmdRead(THolder<TIntermediate> &intermediate, ISimpleDb &db
         auto &request = intermediate->Reads[i];
         auto *response = intermediate->Response.AddReadResult();
         ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0);
-    } 
+    }
     if (intermediate->ReadCommand && std::holds_alternative<TIntermediate::TRead>(*intermediate->ReadCommand)) {
         auto &request = std::get<TIntermediate::TRead>(*intermediate->ReadCommand);
         auto *response = intermediate->Response.AddReadResult();
         ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0);
     }
-} 
- 
+}
+
 void TKeyValueState::CmdReadRange(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     Y_UNUSED(db);
@@ -1218,32 +1218,32 @@ void TKeyValueState::CmdRename(THolder<TIntermediate> &intermediate, ISimpleDb &
     }
 }
 
-void TKeyValueState::CmdDelete(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) { 
-    for (ui32 i = 0; i < intermediate->Deletes.size(); ++i) { 
+void TKeyValueState::CmdDelete(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
+    for (ui32 i = 0; i < intermediate->Deletes.size(); ++i) {
         auto& request = intermediate->Deletes[i];
         auto *response = intermediate->Response.AddDeleteRangeResult();
         ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0);
-    } 
-} 
- 
-void TKeyValueState::CmdWrite(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) { 
+    }
+}
+
+void TKeyValueState::CmdWrite(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
     ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
-    for (ui32 i = 0; i < intermediate->Writes.size(); ++i) { 
+    for (ui32 i = 0; i < intermediate->Writes.size(); ++i) {
         auto& request = intermediate->Writes[i];
         auto *response = intermediate->Response.AddWriteResult();
         ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime);
-    } 
+    }
     ResourceMetrics->TryUpdate(ctx);
-} 
- 
-void TKeyValueState::CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) { 
-    Y_UNUSED(db); 
-    Y_UNUSED(ctx); 
-    for (ui32 i = 0; i < intermediate->GetStatuses.size(); ++i) { 
-        auto& request = intermediate->GetStatuses[i]; 
+}
+
+void TKeyValueState::CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
+    Y_UNUSED(db);
+    Y_UNUSED(ctx);
+    for (ui32 i = 0; i < intermediate->GetStatuses.size(); ++i) {
+        auto& request = intermediate->GetStatuses[i];
         if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) {
             auto& response = *intermediate->Response.AddGetStatusResult();
- 
+
             response.SetStatus(request.Status);
             response.SetStorageChannel(request.StorageChannel);
             response.SetStatusFlags(request.StatusFlags.Raw);
@@ -1266,10 +1266,10 @@ void TKeyValueState::CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleD
 
             SetStatusFlags(response->mutable_status_flags(), request.StatusFlags);
         }
-    } 
+    }
     intermediate->GetStatusResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
-} 
- 
+}
+
 void TKeyValueState::CmdCopyRange(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx) {
     for (const auto& request : intermediate->CopyRanges) {
         auto *response = intermediate->Response.AddCopyRangeResult();
@@ -1312,14 +1312,14 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
     }
 }
 
-void TKeyValueState::CmdSetExecutorFastLogPolicy(THolder<TIntermediate> &intermediate, ISimpleDb &/*db*/, 
-        const TActorContext &/*ctx*/) { 
-    if (intermediate->SetExecutorFastLogPolicy) { 
-        auto& response = *intermediate->Response.MutableSetExecutorFastLogPolicyResult(); 
-        response.SetStatus(NKikimrProto::OK); 
-    } 
-} 
- 
+void TKeyValueState::CmdSetExecutorFastLogPolicy(THolder<TIntermediate> &intermediate, ISimpleDb &/*db*/,
+        const TActorContext &/*ctx*/) {
+    if (intermediate->SetExecutorFastLogPolicy) {
+        auto& response = *intermediate->Response.MutableSetExecutorFastLogPolicyResult();
+        response.SetStatus(NKikimrProto::OK);
+    }
+}
+
 void TKeyValueState::CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
     ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
     bool wasWrite = false;
@@ -1498,12 +1498,12 @@ bool TKeyValueState::CheckCmdWrites(THolder<TIntermediate>& intermediate, const 
     return true;
 }
 
-bool TKeyValueState::CheckCmdGetStatus(THolder<TIntermediate>& /*intermediate*/, const TActorContext& /*ctx*/, 
+bool TKeyValueState::CheckCmdGetStatus(THolder<TIntermediate>& /*intermediate*/, const TActorContext& /*ctx*/,
         TKeySet& /*keys*/, const TTabletStorageInfo* /*info*/)
 {
-    return true; 
-} 
- 
+    return true;
+}
+
 bool TKeyValueState::CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
         const TTabletStorageInfo* info)
 {
@@ -1534,15 +1534,15 @@ bool TKeyValueState::CheckCmds(THolder<TIntermediate>& intermediate, const TActo
     return true;
 }
 
-void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) { 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " TTxRequest ProcessCmds"); 
- 
+void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
+        const TTabletStorageInfo *info) {
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " TTxRequest ProcessCmds");
+
     TKeySet keys(Index);
- 
+
     bool success = true;
 
-    if (intermediate->HasGeneration && intermediate->Generation != StoredState.GetUserGeneration()) { 
+    if (intermediate->HasGeneration && intermediate->Generation != StoredState.GetUserGeneration()) {
         TStringStream str;
         str << "KeyValue# " << TabletId
             << " Generation changed during command execution, aborted"
@@ -1557,7 +1557,7 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
     success = success && CheckCmdDeletes(intermediate, ctx, keys, info);
     success = success && CheckCmdWrites(intermediate, ctx, keys, info);
     success = success && CheckCmds(intermediate, ctx, keys, info);
-    success = success && CheckCmdGetStatus(intermediate, ctx, keys, info); 
+    success = success && CheckCmdGetStatus(intermediate, ctx, keys, info);
     if (!success) {
         for (const auto& cmd : intermediate->Writes) {
             for (const TLogoBlobID& logoBlobId : cmd.LogoBlobIds) {
@@ -1579,48 +1579,48 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
         CmdReadRange(intermediate, db, ctx);
         CmdCopyRange(intermediate, db, ctx);
         CmdRename(intermediate, db, ctx);
- 
+
         // All reads done
         CmdConcat(intermediate, db, ctx);
         CmdDelete(intermediate, db, ctx);
         CmdWrite(intermediate, db, ctx);
-        CmdGetStatus(intermediate, db, ctx); 
+        CmdGetStatus(intermediate, db, ctx);
         CmdCmds(intermediate, db, ctx);
 
         // Blob trimming
         CmdTrimLeakedBlobs(intermediate, db, ctx);
- 
-        CmdSetExecutorFastLogPolicy(intermediate, db, ctx); 
+
+        CmdSetExecutorFastLogPolicy(intermediate, db, ctx);
     }
 
-    // Safe to change the internal state and prepare the response 
-    intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_OK); 
- 
-    if (intermediate->Stat.RequestType == TRequestType::ReadOnly || 
-            intermediate->Stat.RequestType == TRequestType::ReadOnlyInline) { 
-        Reply(intermediate, ctx, info); 
-    } 
-} 
- 
-bool TKeyValueState::IncrementGeneration(THolder<TIntermediate> &intermediate, ISimpleDb &db, 
-        const TActorContext &ctx) { 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " TTxRequest IncrementGeneration"); 
- 
-    ui64 nextGeneration = StoredState.GetUserGeneration() + 1; 
-    Y_VERIFY(nextGeneration > StoredState.GetUserGeneration()); 
-    StoredState.SetUserGeneration(nextGeneration); 
- 
-    THelpers::DbUpdateState(StoredState, db, ctx); 
- 
-    intermediate->Response.MutableIncrementGenerationResult()->SetGeneration(nextGeneration); 
-    intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_OK); 
- 
-    return true; 
-} 
- 
+    // Safe to change the internal state and prepare the response
+    intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_OK);
+
+    if (intermediate->Stat.RequestType == TRequestType::ReadOnly ||
+            intermediate->Stat.RequestType == TRequestType::ReadOnlyInline) {
+        Reply(intermediate, ctx, info);
+    }
+}
+
+bool TKeyValueState::IncrementGeneration(THolder<TIntermediate> &intermediate, ISimpleDb &db,
+        const TActorContext &ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " TTxRequest IncrementGeneration");
+
+    ui64 nextGeneration = StoredState.GetUserGeneration() + 1;
+    Y_VERIFY(nextGeneration > StoredState.GetUserGeneration());
+    StoredState.SetUserGeneration(nextGeneration);
+
+    THelpers::DbUpdateState(StoredState, db, ctx);
+
+    intermediate->Response.MutableIncrementGenerationResult()->SetGeneration(nextGeneration);
+    intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_OK);
+
+    return true;
+}
+
 void TKeyValueState::Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx) {
     for (const TIndexRecord::TChainItem& item : record.Chain) {
-        if (!item.IsInline()) { 
+        if (!item.IsInline()) {
             Dereference(item.LogoBlobId, db, ctx, false);
         }
     }
@@ -1646,112 +1646,112 @@ void TKeyValueState::Dereference(const TLogoBlobID& id, ISimpleDb& db, const TAc
 }
 
 void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db,
-        const TActorContext& ctx) { 
+        const TActorContext& ctx) {
     TString value = record.Serialize();
     THelpers::DbUpdateUserKeyValue(key, value, db, ctx);
 }
 
-void TKeyValueState::OnPeriodicRefresh(const TActorContext &ctx) { 
-    Y_UNUSED(ctx); 
-    TInstant now = TAppData::TimeProvider->Now(); 
-    TInstant oldestInstant = now; 
-    for (const auto &requestInputTime : RequestInputTime) { 
-        oldestInstant = Min(oldestInstant, requestInputTime.second); 
-    } 
-    TDuration maxDuration = now - oldestInstant; 
-    TabletCounters->Simple()[COUNTER_REQ_AGE_MS].Set(maxDuration.MilliSeconds()); 
-} 
- 
+void TKeyValueState::OnPeriodicRefresh(const TActorContext &ctx) {
+    Y_UNUSED(ctx);
+    TInstant now = TAppData::TimeProvider->Now();
+    TInstant oldestInstant = now;
+    for (const auto &requestInputTime : RequestInputTime) {
+        oldestInstant = Min(oldestInstant, requestInputTime.second);
+    }
+    TDuration maxDuration = now - oldestInstant;
+    TabletCounters->Simple()[COUNTER_REQ_AGE_MS].Set(maxDuration.MilliSeconds());
+}
+
 void TKeyValueState::OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev) {
     WeightManager = std::move(ev->Get()->WeightManager);
 }
 
-void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx, 
-        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat) { 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-        << " OnRequestComplete uid# " << requestUid << " generation# " << generation 
-        << " step# " << step << " ChannelGeneration# " << StoredState.GetChannelGeneration() 
-        << " ChannelStep# " << StoredState.GetChannelStep()); 
- 
-    CountLatencyBsOps(stat); 
- 
-    RequestInputTime.erase(requestUid); 
- 
-    if (stat.RequestType != TRequestType::WriteOnly) { 
-        if (stat.RequestType == TRequestType::ReadOnlyInline) { 
-            RoInlineIntermediatesInFlight--; 
-        } else { 
-            IntermediatesInFlight--; 
-        } 
-    } 
- 
+void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
+        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat) {
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+        << " OnRequestComplete uid# " << requestUid << " generation# " << generation
+        << " step# " << step << " ChannelGeneration# " << StoredState.GetChannelGeneration()
+        << " ChannelStep# " << StoredState.GetChannelStep());
+
+    CountLatencyBsOps(stat);
+
+    RequestInputTime.erase(requestUid);
+
+    if (stat.RequestType != TRequestType::WriteOnly) {
+        if (stat.RequestType == TRequestType::ReadOnlyInline) {
+            RoInlineIntermediatesInFlight--;
+        } else {
+            IntermediatesInFlight--;
+        }
+    }
+
     CountRequestComplete(status, stat, ctx);
     ResourceMetrics->TryUpdate(ctx);
- 
+
     if (Queue.size() && IntermediatesInFlight < IntermediatesInFlightLimit) {
         TRequestType::EType requestType = Queue.front()->Stat.RequestType;
- 
+
         CountLatencyQueue(Queue.front()->Stat);
- 
+
         ProcessPostponedIntermediate(ctx, std::move(Queue.front()), info);
         Queue.pop_front();
         ++IntermediatesInFlight;
- 
+
         CountRequestTakeOffOrEnqueue(requestType);
-    } 
- 
-    if (StoredState.GetChannelGeneration() == generation) { 
-        auto it = InFlightForStep.find(step); 
+    }
+
+    if (StoredState.GetChannelGeneration() == generation) {
+        auto it = InFlightForStep.find(step);
         Y_VERIFY(it != InFlightForStep.end(), "Unexpected step# %" PRIu64, (ui64)step);
-        it->second--; 
-        if (it->second == 0) { 
-            InFlightForStep.erase(it); 
- 
+        it->second--;
+        if (it->second == 0) {
+            InFlightForStep.erase(it);
+
             // Initiate Garbage collection process if needed
            StartCollectingIfPossible(ctx);
-        } 
-    } 
-} 
- 
+        }
+    }
+}
+
 bool TKeyValueState::CheckDeadline(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate) {
-    if (kvRequest.HasDeadlineInstantMs()) { 
+    if (kvRequest.HasDeadlineInstantMs()) {
         TInstant now = TAppData::TimeProvider->Now();
         intermediate->Deadline = TInstant::MicroSeconds(kvRequest.GetDeadlineInstantMs() * 1000ull);
- 
+
         if (intermediate->Deadline <= now) {
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " Deadline reached before processing the request!"; 
-            str << " DeadlineInstantMs# " << (ui64)kvRequest.GetDeadlineInstantMs(); 
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Deadline reached before processing the request!";
+            str << " DeadlineInstantMs# " << (ui64)kvRequest.GetDeadlineInstantMs();
             str << " < Now# " << (ui64)now.MilliSeconds();
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_TIMEOUT, intermediate);
-            return true; 
-        } 
-    } 
-    return false; 
-} 
- 
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TKeyValueState::CheckGeneration(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate) {
-    if (kvRequest.HasGeneration()) { 
-        intermediate->HasGeneration = true; 
-        intermediate->Generation = kvRequest.GetGeneration(); 
-        if (kvRequest.GetGeneration() != StoredState.GetUserGeneration()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " Generation mismatch! Requested# " << kvRequest.GetGeneration(); 
-            str << " Actual# " << StoredState.GetUserGeneration(); 
+    if (kvRequest.HasGeneration()) {
+        intermediate->HasGeneration = true;
+        intermediate->Generation = kvRequest.GetGeneration();
+        if (kvRequest.GetGeneration() != StoredState.GetUserGeneration()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Generation mismatch! Requested# " << kvRequest.GetGeneration();
+            str << " Actual# " << StoredState.GetUserGeneration();
             str << " Marker# KV01";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_REJECTED, intermediate);
-            return true; 
-        } 
-    } else { 
-        intermediate->HasGeneration = false; 
-    } 
-    return false; 
-} 
- 
+            return true;
+        }
+    } else {
+        intermediate->HasGeneration = false;
+    }
+    return false;
+}
+
 
 template <typename TypeWithPriority>
 void SetPriority(NKikimrBlobStorage::EGetHandleClass *outHandleClass, ui8 priority) {
@@ -1956,21 +1956,21 @@ bool PrepareOneReadFromRangeReadWithData(const TString &key, TIndexRecord &index
 }
 
 bool TKeyValueState::PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, bool &outIsInlineOnly) { 
-    outIsInlineOnly = true; 
-    intermediate->Reads.resize(kvRequest.CmdReadSize()); 
-    for (ui32 i = 0; i < kvRequest.CmdReadSize(); ++i) { 
-        auto &request = kvRequest.GetCmdRead(i); 
-        auto &response = intermediate->Reads[i]; 
- 
-        if (!request.HasKey()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
+        THolder<TIntermediate> &intermediate, bool &outIsInlineOnly) {
+    outIsInlineOnly = true;
+    intermediate->Reads.resize(kvRequest.CmdReadSize());
+    for (ui32 i = 0; i < kvRequest.CmdReadSize(); ++i) {
+        auto &request = kvRequest.GetCmdRead(i);
+        auto &response = intermediate->Reads[i];
+
+        if (!request.HasKey()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
             str << " Missing Key in CmdRead(" << (ui32)i << ") Marker# KV02";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
-            return true; 
-        } 
- 
+            return true;
+        }
+
         ui64 offset = request.HasOffset() ? request.GetOffset() : 0;
         ui64 size = request.HasSize() ? request.GetSize() : 0;
         NKikimrClient::TKeyValueRequest::EPriority priority = NKikimrClient::TKeyValueRequest::REALTIME;
@@ -1980,22 +1980,22 @@ bool TKeyValueState::PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKe
 
         auto it = Index.find(request.GetKey());
         if (it == Index.end()) {
-            response.Status = NKikimrProto::NODATA; 
-            response.Message = "No such key Marker# KV48"; 
-        } else { 
+            response.Status = NKikimrProto::NODATA;
+            response.Message = "No such key Marker# KV48";
+        } else {
             bool isOverrun = PrepareOneRead<NKikimrClient::TKeyValueRequest>(it->first, it->second, offset, size,
                     priority, 0, intermediate, response, outIsInlineOnly);
             if (isOverrun) {
-                if (!intermediate->IsTruncated) { 
-                    CountOverrun(); 
-                    intermediate->IsTruncated = true; 
-                } 
-            } 
-        } 
-    } 
-    return false; 
-} 
- 
+                if (!intermediate->IsTruncated) {
+                    CountOverrun();
+                    intermediate->IsTruncated = true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 template <typename TypeWithPriority, bool CheckUTF8 = false,
         ui64 MetaDataSizeWithData = KeyValuePairSizeEstimation,
         ui64 MetaDataSizeWithoutData = KeyValuePairSizeEstimation>
@@ -2047,100 +2047,100 @@ void ProcessOneCmdReadRange(TKeyValueState *self, const TKeyRange &range, ui64 c
 }
 
 bool TKeyValueState::PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, bool &inOutIsInlineOnly) { 
-    intermediate->RangeReads.resize(kvRequest.CmdReadRangeSize()); 
-    for (ui32 i = 0; i < kvRequest.CmdReadRangeSize(); ++i) { 
-        auto &request = kvRequest.GetCmdReadRange(i); 
-        auto &response = intermediate->RangeReads[i]; 
- 
-        if (!request.HasRange()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
+        THolder<TIntermediate> &intermediate, bool &inOutIsInlineOnly) {
+    intermediate->RangeReads.resize(kvRequest.CmdReadRangeSize());
+    for (ui32 i = 0; i < kvRequest.CmdReadRangeSize(); ++i) {
+        auto &request = kvRequest.GetCmdReadRange(i);
+        auto &response = intermediate->RangeReads[i];
+
+        if (!request.HasRange()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
             str << " Missing Range in CmdReadRange(" << i << ") Marker# KV03";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
-            return true; 
-        } 
+            return true;
+        }
 
         TKeyRange range;
         if (!ConvertRange(request.GetRange(), &range, ctx, intermediate, "CmdReadRange", i)) {
-            return true; 
-        } 
- 
-        ui64 cmdLimitBytes = request.HasLimitBytes() ? request.GetLimitBytes() : Max<ui64>(); 
-        bool includeData = request.HasIncludeData() && request.GetIncludeData(); 
+            return true;
+        }
+
+        ui64 cmdLimitBytes = request.HasLimitBytes() ? request.GetLimitBytes() : Max<ui64>();
+        bool includeData = request.HasIncludeData() && request.GetIncludeData();
         ui8 priority = request.HasPriority() ? request.GetPriority() : Max<ui8>();
-        response.IncludeData = includeData; 
+        response.IncludeData = includeData;
         response.LimitBytes = cmdLimitBytes;
 
         ProcessOneCmdReadRange<NKikimrClient::TKeyValueRequest>(this, range, cmdLimitBytes, includeData, priority,
                 response, intermediate, &inOutIsInlineOnly);
-    } 
-    return false; 
-} 
- 
+    }
+    return false;
+}
+
 bool TKeyValueState::PrepareCmdRename(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate) {
-    for (ui32 i = 0; i < kvRequest.CmdRenameSize(); ++i) { 
+    for (ui32 i = 0; i < kvRequest.CmdRenameSize(); ++i) {
         auto& request = kvRequest.GetCmdRename(i);
         intermediate->Commands.emplace_back(TIntermediate::TRename());
         auto& interm = std::get<TIntermediate::TRename>(intermediate->Commands.back());
- 
-        if (!request.HasOldKey()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " Missing OldKey in CmdRename(" << i << ") Marker# KV06"; 
+
+        if (!request.HasOldKey()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Missing OldKey in CmdRename(" << i << ") Marker# KV06";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
-            return true; 
-        } 
-        if (!request.HasNewKey()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
+            return true;
+        }
+        if (!request.HasNewKey()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
             str << " Missing NewKey in CmdRename(" << i << ") Marker# KV07";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
-            return true; 
-        } 
+            return true;
+        }
 
         interm.OldKey = request.GetOldKey();
         interm.NewKey = request.GetNewKey();
-    } 
-    return false; 
-} 
- 
+    }
+    return false;
+}
+
 bool TKeyValueState::PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate) {
-    ui64 nToDelete = 0; 
-    for (ui32 i = 0; i < kvRequest.CmdDeleteRangeSize(); ++i) { 
+    ui64 nToDelete = 0;
+    for (ui32 i = 0; i < kvRequest.CmdDeleteRangeSize(); ++i) {
         auto& request = kvRequest.GetCmdDeleteRange(i);
         intermediate->Commands.emplace_back(TIntermediate::TDelete());
         auto& interm = std::get<TIntermediate::TDelete>(intermediate->Commands.back());
- 
-        if (!request.HasRange()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " Missing Range in CmdDelete(" << i << ") Marker# KV08"; 
+
+        if (!request.HasRange()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Missing Range in CmdDelete(" << i << ") Marker# KV08";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
-            return true; 
-        } 
+            return true;
+        }
         if (!ConvertRange(request.GetRange(), &interm.Range, ctx, intermediate, "CmdDelete", i)) {
-            return true; 
-        } 
-        TraverseRange(interm.Range, [&](TIndex::iterator it) { 
-                Y_UNUSED(it); 
-                nToDelete++; 
-            }); 
-        // The use of >, not >= is important here. 
-        if (nToDelete > DeletesPerRequestLimit && !AppData(ctx)->AllowHugeKeyValueDeletes) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " Can't delete Range, in CmdDelete(" << i << "), total limit of deletions per request (" 
-                << DeletesPerRequestLimit << ") reached, Marker# KV32"; 
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate); 
-            return true; 
-        } 
-    } 
-    return false; 
-} 
- 
+            return true;
+        }
+        TraverseRange(interm.Range, [&](TIndex::iterator it) {
+                Y_UNUSED(it);
+                nToDelete++;
+            });
+        // The use of >, not >= is important here.
+        if (nToDelete > DeletesPerRequestLimit && !AppData(ctx)->AllowHugeKeyValueDeletes) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Can't delete Range, in CmdDelete(" << i << "), total limit of deletions per request ("
+                << DeletesPerRequestLimit << ") reached, Marker# KV32";
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            return true;
+        }
+    }
+    return false;
+}
+
 void TKeyValueState::SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx) {
     if (isInline) {
         cmd.Status = NKikimrProto::SCHEDULED;
@@ -2167,46 +2167,46 @@ void TKeyValueState::SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, u
 }
 
 bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) { 
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
     intermediate->WriteIndices.reserve(kvRequest.CmdWriteSize());
-    for (ui32 i = 0; i < kvRequest.CmdWriteSize(); ++i) { 
+    for (ui32 i = 0; i < kvRequest.CmdWriteSize(); ++i) {
         auto& request = kvRequest.GetCmdWrite(i);
         intermediate->WriteIndices.push_back(intermediate->Commands.size());
         auto& cmd = intermediate->Commands.emplace_back(TIntermediate::TWrite());
         auto& interm = std::get<TIntermediate::TWrite>(cmd);
- 
-        if (!request.HasKey()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
+
+        if (!request.HasKey()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
             str << " Missing Key in CmdWrite(" << i << ") Marker# KV09";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
-            return true; 
-        } 
-        if (!request.HasValue()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
+            return true;
+        }
+        if (!request.HasValue()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
             str << " Missing Value in CmdWrite(" << i << ") Marker# KV10";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
-            return true; 
-        } 
- 
-        bool isInline = false; 
-        ui32 storageChannelIdx = BLOB_CHANNEL; 
-        if (request.HasStorageChannel()) { 
-            auto storageChannel = request.GetStorageChannel(); 
-            ui32 storageChannelOffset = (ui32)storageChannel; 
+            return true;
+        }
+
+        bool isInline = false;
+        ui32 storageChannelIdx = BLOB_CHANNEL;
+        if (request.HasStorageChannel()) {
+            auto storageChannel = request.GetStorageChannel();
+            ui32 storageChannelOffset = (ui32)storageChannel;
             if (storageChannelOffset == NKikimrClient::TKeyValueRequest::INLINE) {
-                isInline = true; 
-            } else { 
-                storageChannelIdx = storageChannelOffset + BLOB_CHANNEL; 
-                ui32 endChannel = info->Channels.size(); 
-                if (storageChannelIdx >= endChannel) { 
-                    storageChannelIdx = BLOB_CHANNEL; 
-                    LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                            << " CmdWrite StorageChannel# " << storageChannelOffset 
-                            << " does not exist, using MAIN"); 
-                } 
-            } 
+                isInline = true;
+            } else {
+                storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
+                ui32 endChannel = info->Channels.size();
+                if (storageChannelIdx >= endChannel) {
+                    storageChannelIdx = BLOB_CHANNEL;
+                    LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                            << " CmdWrite StorageChannel# " << storageChannelOffset
+                            << " does not exist, using MAIN");
+                }
+            }
         } else if (request.AutoselectChannelSize() && WeightManager) {
             std::bitset<256> enabled;
             for (const auto& channel : request.GetAutoselectChannel()) {
@@ -2225,35 +2225,35 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
                     storageChannelIdx = index;
                 }
             }
-        } 
- 
+        }
+
         interm.Key = request.GetKey();
         interm.Data = request.GetValue();
-        interm.Tactic = TEvBlobStorage::TEvPut::TacticDefault; 
-        switch (request.GetTactic()) { 
-            case NKikimrClient::TKeyValueRequest::MIN_LATENCY: 
-                interm.Tactic = TEvBlobStorage::TEvPut::TacticMinLatency; 
-            break; 
-            case NKikimrClient::TKeyValueRequest::MAX_THROUGHPUT: 
-                interm.Tactic = TEvBlobStorage::TEvPut::TacticMaxThroughput; 
-            break; 
-        } 
-        interm.HandleClass = NKikimrBlobStorage::UserData; 
-        if (request.HasPriority()) { 
-            switch (request.GetPriority()) { 
-                case NKikimrClient::TKeyValueRequest::REALTIME: 
-                    interm.HandleClass = NKikimrBlobStorage::UserData; 
-                    break; 
-                case NKikimrClient::TKeyValueRequest::BACKGROUND: 
-                    interm.HandleClass = NKikimrBlobStorage::AsyncBlob; 
-                    break; 
-            } 
-        } 
+        interm.Tactic = TEvBlobStorage::TEvPut::TacticDefault;
+        switch (request.GetTactic()) {
+            case NKikimrClient::TKeyValueRequest::MIN_LATENCY:
+                interm.Tactic = TEvBlobStorage::TEvPut::TacticMinLatency;
+            break;
+            case NKikimrClient::TKeyValueRequest::MAX_THROUGHPUT:
+                interm.Tactic = TEvBlobStorage::TEvPut::TacticMaxThroughput;
+            break;
+        }
+        interm.HandleClass = NKikimrBlobStorage::UserData;
+        if (request.HasPriority()) {
+            switch (request.GetPriority()) {
+                case NKikimrClient::TKeyValueRequest::REALTIME:
+                    interm.HandleClass = NKikimrBlobStorage::UserData;
+                    break;
+                case NKikimrClient::TKeyValueRequest::BACKGROUND:
+                    interm.HandleClass = NKikimrBlobStorage::AsyncBlob;
+                    break;
+            }
+        }
         SplitIntoBlobs(interm, isInline, storageChannelIdx);
-    } 
-    return false; 
-} 
- 
+    }
+    return false;
+}
+
 
 TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info)
@@ -2289,27 +2289,27 @@ TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediat
 }
 
 bool TKeyValueState::PrepareCmdGetStatus(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) { 
-    intermediate->GetStatuses.resize(kvRequest.CmdGetStatusSize()); 
-    for (ui32 i = 0; i < kvRequest.CmdGetStatusSize(); ++i) { 
-        auto& request = kvRequest.GetCmdGetStatus(i); 
-        auto& interm = intermediate->GetStatuses[i]; 
- 
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
+    intermediate->GetStatuses.resize(kvRequest.CmdGetStatusSize());
+    for (ui32 i = 0; i < kvRequest.CmdGetStatusSize(); ++i) {
+        auto& request = kvRequest.GetCmdGetStatus(i);
+        auto& interm = intermediate->GetStatuses[i];
+
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel =
             NKikimrClient::TKeyValueRequest::MAIN;
- 
-        if (request.HasStorageChannel()) { 
-            storageChannel = request.GetStorageChannel(); 
-        } 
+
+        if (request.HasStorageChannel()) {
+            storageChannel = request.GetStorageChannel();
+        }
         TPrepareResult result = InitGetStatusCommand(interm, storageChannel, info);
         if (result.ErrorMsg && !result.WithError) {
             LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, result.ErrorMsg  << " Marker# KV76");
-        } 
-    } 
-    return false; 
-} 
- 
- 
+        }
+    }
+    return false;
+}
+
+
 bool TKeyValueState::PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
         THolder<TIntermediate>& intermediate) {
     for (ui32 i = 0; i < kvRequest.CmdCopyRangeSize(); ++i) {
@@ -2320,8 +2320,8 @@ bool TKeyValueState::PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient
         if ((!request.HasPrefixToAdd() || request.GetPrefixToAdd().empty()) &&
                 (!request.HasPrefixToRemove() || request.GetPrefixToRemove().empty())) {
             TStringStream str;
-            str << "KeyValue# " << TabletId 
-                << " Missing or empty both PrefixToAdd and PrefixToRemove in CmdCopyRange(" << i << ") Marker# KV11"; 
+            str << "KeyValue# " << TabletId
+                << " Missing or empty both PrefixToAdd and PrefixToRemove in CmdCopyRange(" << i << ") Marker# KV11";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
             return true;
         }
@@ -2377,18 +2377,18 @@ bool TKeyValueState::PrepareCmdTrimLeakedBlobs(const TActorContext& /*ctx*/,
     return false;
 }
 
-bool TKeyValueState::PrepareCmdSetExecutorFastLogPolicy(const TActorContext & /*ctx*/, 
-        NKikimrClient::TKeyValueRequest &kvRequest, THolder<TIntermediate> &intermediate, 
-        const TTabletStorageInfo * /*info*/) { 
-    if (kvRequest.HasCmdSetExecutorFastLogPolicy()) { 
-        const auto& request = kvRequest.GetCmdSetExecutorFastLogPolicy(); 
-        TIntermediate::TSetExecutorFastLogPolicy interm; 
-        interm.IsAllowed = request.GetIsAllowed(); 
-        intermediate->SetExecutorFastLogPolicy = interm; 
-    } 
-    return false; 
-} 
- 
+bool TKeyValueState::PrepareCmdSetExecutorFastLogPolicy(const TActorContext & /*ctx*/,
+        NKikimrClient::TKeyValueRequest &kvRequest, THolder<TIntermediate> &intermediate,
+        const TTabletStorageInfo * /*info*/) {
+    if (kvRequest.HasCmdSetExecutorFastLogPolicy()) {
+        const auto& request = kvRequest.GetCmdSetExecutorFastLogPolicy();
+        TIntermediate::TSetExecutorFastLogPolicy interm;
+        interm.IsAllowed = request.GetIsAllowed();
+        intermediate->SetExecutorFastLogPolicy = interm;
+    }
+    return false;
+}
+
 using TPrepareResult = TKeyValueState::TPrepareResult;
 
 TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Rename &request, THolder<TIntermediate> &intermediate) {
@@ -2538,27 +2538,27 @@ void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescripti
         const TTabletStorageInfo *info) {
     LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription);
     Y_VERIFY(!intermediate->IsReplied);
-    THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse); 
-    if (intermediate->HasCookie) { 
-        response->Record.SetCookie(intermediate->Cookie); 
-    } 
-    response->Record.SetErrorReason(errorDescription); 
-    response->Record.SetStatus(status); 
+    THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
+    if (intermediate->HasCookie) {
+        response->Record.SetCookie(intermediate->Cookie);
+    }
+    response->Record.SetErrorReason(errorDescription);
+    response->Record.SetStatus(status);
 
     ResourceMetrics->Network.Increment(response->Record.ByteSize());
 
-    intermediate->IsReplied = true; 
-    ctx.Send(intermediate->RespondTo, response.Release()); 
+    intermediate->IsReplied = true;
+    ctx.Send(intermediate->RespondTo, response.Release());
     if (info) {
         intermediate->UpdateStat();
-        OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep, 
-                ctx, info, status, intermediate->Stat); 
+        OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep,
+                ctx, info, status, intermediate->Stat);
     } else { //metrics change report in OnRequestComplete is not done
         ResourceMetrics->TryUpdate(ctx);
-        RequestInputTime.erase(intermediate->RequestUid); 
+        RequestInputTime.erase(intermediate->RequestUid);
     }
-} 
- 
+}
+
 bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::TEvRead::TPtr &ev,
         THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType)
 {
@@ -2976,110 +2976,110 @@ void TKeyValueState::OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const 
     }
 }
 
-void TKeyValueState::OnEvIntermediate(TIntermediate &intermediate, const TActorContext &ctx) { 
+void TKeyValueState::OnEvIntermediate(TIntermediate &intermediate, const TActorContext &ctx) {
     Y_UNUSED(ctx);
-    CountLatencyBsOps(intermediate.Stat); 
+    CountLatencyBsOps(intermediate.Stat);
     intermediate.Stat.LocalBaseTxCreatedAt = TAppData::TimeProvider->Now();
-} 
- 
-void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) { 
-    THolder<TIntermediate> intermediate; 
+}
+
+void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx,
+        const TTabletStorageInfo *info) {
+    THolder<TIntermediate> intermediate;
     NKikimrClient::TKeyValueRequest &request = ev->Get()->Record;
- 
+
     ResourceMetrics->Network.Increment(request.ByteSize());
     ResourceMetrics->TryUpdate(ctx);
 
     bool hasWrites = request.CmdWriteSize() || request.CmdDeleteRangeSize() || request.CmdRenameSize()
-                  || request.CmdCopyRangeSize() || request.CmdConcatSize() || request.HasCmdSetExecutorFastLogPolicy(); 
+                  || request.CmdCopyRangeSize() || request.CmdConcatSize() || request.HasCmdSetExecutorFastLogPolicy();
 
-    bool hasReads = request.CmdReadSize() || request.CmdReadRangeSize(); 
+    bool hasReads = request.CmdReadSize() || request.CmdReadRangeSize();
 
-    TRequestType::EType requestType; 
-    if (hasWrites) { 
-        if (hasReads) { 
-            requestType = TRequestType::ReadWrite; 
-        } else { 
-            requestType = TRequestType::WriteOnly; 
-        } 
-    } else { 
-        requestType = TRequestType::ReadOnly; 
-    } 
- 
-    CountRequestIncoming(requestType); 
- 
-    if (PrepareIntermediate(ev, intermediate, requestType, ctx, info)) { 
-        // Spawn KeyValueStorageRequest actor on the same thread 
+    TRequestType::EType requestType;
+    if (hasWrites) {
+        if (hasReads) {
+            requestType = TRequestType::ReadWrite;
+        } else {
+            requestType = TRequestType::WriteOnly;
+        }
+    } else {
+        requestType = TRequestType::ReadOnly;
+    }
+
+    CountRequestIncoming(requestType);
+
+    if (PrepareIntermediate(ev, intermediate, requestType, ctx, info)) {
+        // Spawn KeyValueStorageRequest actor on the same thread
         ++InFlightForStep[StoredState.GetChannelStep()];
-        if (requestType == TRequestType::WriteOnly) { 
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                << " Create storage request for WO, Marker# KV42"); 
+        if (requestType == TRequestType::WriteOnly) {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                << " Create storage request for WO, Marker# KV42");
             RegisterRequestActor(ctx, std::move(intermediate), info);
-        } else if (requestType == TRequestType::ReadOnlyInline) { 
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                << " Create storage request for RO_INLINE, Marker# KV45"); 
+        } else if (requestType == TRequestType::ReadOnlyInline) {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                << " Create storage request for RO_INLINE, Marker# KV45");
             RegisterRequestActor(ctx, std::move(intermediate), info);
-            ++RoInlineIntermediatesInFlight; 
-        } else { 
-            if (IntermediatesInFlight < IntermediatesInFlightLimit) { 
-                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                    << " Create storage request for RO/RW, Marker# KV43"); 
+            ++RoInlineIntermediatesInFlight;
+        } else {
+            if (IntermediatesInFlight < IntermediatesInFlightLimit) {
+                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Create storage request for RO/RW, Marker# KV43");
                 RegisterRequestActor(ctx, std::move(intermediate), info);
-                ++IntermediatesInFlight; 
-            } else { 
-                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                    << " Enqueue storage request for RO/RW, Marker# KV44"); 
+                ++IntermediatesInFlight;
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Enqueue storage request for RO/RW, Marker# KV44");
                 PostponeIntermediate<TEvKeyValue::TEvRequest>(std::move(intermediate));
-            } 
-        } 
- 
-        CountRequestTakeOffOrEnqueue(requestType); 
- 
-    } else { 
-        intermediate->UpdateStat(); 
- 
-        CountRequestOtherError(requestType); 
-    } 
-} 
- 
-bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THolder<TIntermediate> &intermediate, 
-        TRequestType::EType &inOutRequestType, const TActorContext &ctx, const TTabletStorageInfo *info) { 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareIntermediate Marker# KV40"); 
+            }
+        }
+
+        CountRequestTakeOffOrEnqueue(requestType);
+
+    } else {
+        intermediate->UpdateStat();
+
+        CountRequestOtherError(requestType);
+    }
+}
+
+bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THolder<TIntermediate> &intermediate,
+        TRequestType::EType &inOutRequestType, const TActorContext &ctx, const TTabletStorageInfo *info) {
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareIntermediate Marker# KV40");
     NKikimrClient::TKeyValueRequest &request = ev->Get()->Record;
- 
-    StoredState.SetChannelGeneration(ExecutorGeneration); 
-    StoredState.SetChannelStep(NextLogoBlobStep - 1); 
- 
-    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID, 
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), inOutRequestType)); 
-    intermediate->RequestUid = NextRequestUid; 
-    ++NextRequestUid; 
-    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now(); 
+
+    StoredState.SetChannelGeneration(ExecutorGeneration);
+    StoredState.SetChannelStep(NextLogoBlobStep - 1);
+
+    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), inOutRequestType));
+    intermediate->RequestUid = NextRequestUid;
+    ++NextRequestUid;
+    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
     intermediate->EvType = TEvKeyValue::TEvRequest::EventType;
- 
-    intermediate->HasCookie = request.HasCookie(); 
-    if (request.HasCookie()) { 
-        intermediate->Cookie = request.GetCookie(); 
-    } 
-    intermediate->HasIncrementGeneration = request.HasCmdIncrementGeneration(); 
- 
+
+    intermediate->HasCookie = request.HasCookie();
+    if (request.HasCookie()) {
+        intermediate->Cookie = request.GetCookie();
+    }
+    intermediate->HasIncrementGeneration = request.HasCmdIncrementGeneration();
+
     if (CheckDeadline(ctx, request, intermediate)) {
-        return false; 
-    } 
- 
+        return false;
+    }
+
     if (CheckGeneration(ctx, request, intermediate)) {
-        return false; 
-    } 
- 
+        return false;
+    }
+
     bool error = false;
 
-    bool isInlineOnly = true; 
-    error = error || PrepareCmdRead(ctx, request, intermediate, isInlineOnly); 
-    error = error || PrepareCmdReadRange(ctx, request, intermediate, isInlineOnly); 
-    if (!error && isInlineOnly && inOutRequestType == TRequestType::ReadOnly) { 
-        inOutRequestType = TRequestType::ReadOnlyInline; 
-        intermediate->Stat.RequestType = inOutRequestType; 
-    } 
+    bool isInlineOnly = true;
+    error = error || PrepareCmdRead(ctx, request, intermediate, isInlineOnly);
+    error = error || PrepareCmdReadRange(ctx, request, intermediate, isInlineOnly);
+    if (!error && isInlineOnly && inOutRequestType == TRequestType::ReadOnly) {
+        inOutRequestType = TRequestType::ReadOnlyInline;
+        intermediate->Stat.RequestType = inOutRequestType;
+    }
 
     ui32 cmdCount = request.CmdWriteSize() + request.CmdDeleteRangeSize() + request.CmdRenameSize()
             + request.CmdCopyRangeSize() + request.CmdConcatSize();
@@ -3089,10 +3089,10 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     error = error || PrepareCmdRename(ctx, request, intermediate);
     error = error || PrepareCmdConcat(ctx, request, intermediate);
     error = error || PrepareCmdDelete(ctx, request, intermediate);
-    error = error || PrepareCmdWrite(ctx, request, intermediate, info); 
-    error = error || PrepareCmdGetStatus(ctx, request, intermediate, info); 
+    error = error || PrepareCmdWrite(ctx, request, intermediate, info);
+    error = error || PrepareCmdGetStatus(ctx, request, intermediate, info);
     error = error || PrepareCmdTrimLeakedBlobs(ctx, request, intermediate, info);
-    error = error || PrepareCmdSetExecutorFastLogPolicy(ctx, request, intermediate, info); 
+    error = error || PrepareCmdSetExecutorFastLogPolicy(ctx, request, intermediate, info);
 
     intermediate->WriteCount = request.CmdWriteSize();
     intermediate->DeleteCount = request.CmdDeleteRangeSize();
@@ -3119,8 +3119,8 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
             }
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                << " PrepareIntermediate return flase, Marker# KV41"); 
+        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                << " PrepareIntermediate return flase, Marker# KV41");
         return false;
     }
 
@@ -3157,9 +3157,9 @@ bool TKeyValueState::ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRan
             << " Range.IncludeTo unexpectedly set without Range.To in " << cmd << "(" << index << ")"
             << " Marker# KV14";
         ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, intermediate);
-        return false; 
-    } 
- 
+        return false;
+    }
+
     if (to->HasFrom && to->HasTo) {
         if (!to->IncludeFrom && !to->IncludeTo && to->KeyFrom >= to->KeyTo) {
             TStringStream str;
@@ -3178,9 +3178,9 @@ bool TKeyValueState::ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRan
         }
     }
 
-    return true; 
-} 
- 
+    return true;
+}
+
 TString TKeyValueState::Dump() const {
     TStringStream ss;
     ss << "=== INDEX ===\n";
@@ -3217,13 +3217,13 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
         H2() {out << "KeyValue Tablet";}
         UL_CLASS("nav nav-tabs") {
             LI_CLASS("active") {
-                out << "<a href=\"#database\" data-toggle=\"tab\">Database</a>"; 
+                out << "<a href=\"#database\" data-toggle=\"tab\">Database</a>";
             }
             LI() {
                 out << "<a href=\"#refcounts\" data-toggle=\"tab\">RefCounts</a>";
             }
             LI() {
-                out << "<a href=\"#trash\" data-toggle=\"tab\">Trash</a>"; 
+                out << "<a href=\"#trash\" data-toggle=\"tab\">Trash</a>";
             }
             LI() {
                 out << "<a href=\"#channelstat\" data-toggle=\"tab\">Channel Stat</a>";
@@ -3243,29 +3243,29 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                         }
                     }
                     TABLEBODY() {
-                        ui64 idx = 1; 
-                        for (auto it = Index.begin(); it != Index.end(); ++it) { 
+                        ui64 idx = 1;
+                        for (auto it = Index.begin(); it != Index.end(); ++it) {
                             TABLER() {
                                 TABLED() {out << idx;}
-                                ++idx; 
-                                TABLED() {out << EscapeC(it->first);} 
+                                ++idx;
+                                TABLED() {out << EscapeC(it->first);}
                                 TABLED() {out << it->second.GetFullValueSize();}
                                 TABLED() {out << it->second.CreationUnixTime;}
                                 TABLED() {
                                     NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel =
                                         NKikimrClient::TKeyValueRequest::MAIN;
-                                    if (it->second.Chain.size()) { 
-                                        if (it->second.Chain[0].IsInline()) { 
+                                    if (it->second.Chain.size()) {
+                                        if (it->second.Chain[0].IsInline()) {
                                             storageChannel = NKikimrClient::TKeyValueRequest::INLINE;
-                                        } else { 
-                                            ui32 storageChannelIdx = it->second.Chain[0].LogoBlobId.Channel(); 
-                                            ui32 storageChannelOffset = storageChannelIdx - BLOB_CHANNEL; 
+                                        } else {
+                                            ui32 storageChannelIdx = it->second.Chain[0].LogoBlobId.Channel();
+                                            ui32 storageChannelOffset = storageChannelIdx - BLOB_CHANNEL;
                                             storageChannel = (NKikimrClient::TKeyValueRequest::EStorageChannel)
-                                                storageChannelOffset; 
-                                        } 
-                                    } 
+                                                storageChannelOffset;
+                                        }
+                                    }
                                     out << NKikimrClient::TKeyValueRequest::EStorageChannel_Name(
-                                        storageChannel); 
+                                        storageChannel);
                                 }
 
                                 TABLED() {
@@ -3273,15 +3273,15 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                                         if (i > 0) {
                                             out << "<br/>";
                                         }
-                                        if (it->second.Chain[i].IsInline()) { 
-                                            out << "[INLINE:" << it->second.Chain[i].InlineData.size() << "]"; 
-                                        } else { 
-                                            out << it->second.Chain[i].LogoBlobId.ToString(); 
-                                        } 
+                                        if (it->second.Chain[i].IsInline()) {
+                                            out << "[INLINE:" << it->second.Chain[i].InlineData.size() << "]";
+                                        } else {
+                                            out << it->second.Chain[i].LogoBlobId.ToString();
+                                        }
                                     }
                                 }
                             }
-                        } 
+                        }
                     }
                 }
             }
@@ -3316,14 +3316,14 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                         }
                     }
                     TABLEBODY() {
-                        ui64 idx = 1; 
-                        for (auto it = Trash.begin(); it != Trash.end(); ++it) { 
+                        ui64 idx = 1;
+                        for (auto it = Trash.begin(); it != Trash.end(); ++it) {
                             TABLER() {
                                 TABLED() {out << idx;}
-                                ++idx; 
+                                ++idx;
                                 TABLED() {out << *it;}
                             }
-                        } 
+                        }
                     }
                 }
             }
@@ -3361,7 +3361,7 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                     }
                 }
             }
- 
+
         }
     }
 }
@@ -3373,7 +3373,7 @@ void TKeyValueState::MonChannelStat(NJson::TJsonValue& out) const {
             out[key] = ChannelDataUsage[i];
         }
     }
-} 
- 
-} // NKeyValue 
-} // NKikimr 
+}
+
+} // NKeyValue
+} // NKikimr

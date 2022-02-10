@@ -1,12 +1,12 @@
-#pragma once 
-#include "defs.h" 
- 
-namespace NKikimr { 
- 
-struct TInterconnectChannels { 
-    enum EInterconnectChannels { 
-        IC_COMMON, 
-        IC_BLOBSTORAGE, 
+#pragma once
+#include "defs.h"
+
+namespace NKikimr {
+
+struct TInterconnectChannels {
+    enum EInterconnectChannels {
+        IC_COMMON,
+        IC_BLOBSTORAGE,
         IC_BLOBSTORAGE_ASYNC_DATA,
         IC_BLOBSTORAGE_SYNCER,
         IC_BLOBSTORAGE_DISCOVER,
@@ -14,7 +14,7 @@ struct TInterconnectChannels {
         IC_TABLETS_SMALL,   // < 1 KB
         IC_TABLETS_MEDIUM,  // < 1 MB
         IC_TABLETS_LARGE,   // > 1 MB
-    }; 
+    };
 
     enum ETabletBorders : ui64 {
         EChannelSmall = 1024,
@@ -28,6 +28,6 @@ struct TInterconnectChannels {
             return IC_TABLETS_MEDIUM;
         return IC_TABLETS_LARGE;
     }
-}; 
- 
-} 
+};
+
+}

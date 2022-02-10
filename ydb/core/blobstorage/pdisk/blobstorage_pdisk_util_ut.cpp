@@ -217,24 +217,24 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             UNIT_ASSERT_EQUAL(count->Val(), cnt);
         }
     }
- 
+
     Y_UNIT_TEST(LightOverflow) {
-        TLight l; 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> c(new NMonitoring::TDynamicCounters()); 
-        l.Initialize(c, "l"); 
-        auto state = c->GetCounter("l_state"); 
-        auto count = c->GetCounter("l_count"); 
- 
-        { // Seqno overflow 
-            ui64 seqno = 0; 
-            ui64 N = 3ull << 16ull; 
-            for (ui64 i = 0; i < N; i++) { 
-                l.Set(false, seqno); 
-                ++seqno; 
-            } 
-            UNIT_ASSERT_EQUAL(state->Val(), 0); 
-        } 
-    } 
+        TLight l;
+        TIntrusivePtr<NMonitoring::TDynamicCounters> c(new NMonitoring::TDynamicCounters());
+        l.Initialize(c, "l");
+        auto state = c->GetCounter("l_state");
+        auto count = c->GetCounter("l_count");
+
+        { // Seqno overflow
+            ui64 seqno = 0;
+            ui64 N = 3ull << 16ull;
+            for (ui64 i = 0; i < N; i++) {
+                l.Set(false, seqno);
+                ++seqno;
+            }
+            UNIT_ASSERT_EQUAL(state->Val(), 0);
+        }
+    }
 
     Y_UNIT_TEST(DriveEstimator) {
         TTempFileHandle file;
@@ -389,7 +389,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(SectorPrint) {
         TSectorsWithData sectors(97, 1);
-        memset(sectors[0].Begin(), 0, sectors[0].Size()); 
+        memset(sectors[0].Begin(), 0, sectors[0].Size());
         sectors[0][0] = 12;
         sectors[0][1] = 9;
         sectors[0].SetCanary();
@@ -497,7 +497,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
         TPDiskConfig cfg("SectorMap:1024042", 12345, 0, {});
         FormatPDisk(cfg.Path, 0, 4096, MIN_CHUNK_SIZE, cfg.PDiskGuid, chunkKey, logKey, sysLogKey,
-                YdbDefaultPDiskSequence, TString(), false, false, sectorMap); 
+                YdbDefaultPDiskSequence, TString(), false, false, sectorMap);
     }
 
     Y_UNIT_TEST(SectorMapStoreLoadFromFile) {

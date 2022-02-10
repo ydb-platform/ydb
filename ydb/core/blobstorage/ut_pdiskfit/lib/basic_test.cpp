@@ -3,7 +3,7 @@
 #include "state_manager.h"
 #include <util/generic/set.h>
 #include <util/generic/bitmap.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 class TFakeVDisk
@@ -326,10 +326,10 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TFakeVDisk::StateFunc);
-        SendPDiskRequest(ctx, new NPDisk::TEvYardInit(2, VDiskId, PDiskGuid), [] {}); 
+        SendPDiskRequest(ctx, new NPDisk::TEvYardInit(2, VDiskId, PDiskGuid), [] {});
     }
 
-    void Handle(NPDisk::TEvYardInitResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NPDisk::TEvYardInitResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
         Y_VERIFY(msg->Status == NKikimrProto::OK);
         PDiskParams = msg->PDiskParams;
@@ -361,10 +361,10 @@ public:
     }
 
     void IssueReadLogRequest(const TActorContext& ctx) {
-        SendPDiskRequest(ctx, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound, ReadLogPosition), [] {}); 
+        SendPDiskRequest(ctx, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound, ReadLogPosition), [] {});
     }
 
-    void Handle(NPDisk::TEvReadLogResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NPDisk::TEvReadLogResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
         Y_VERIFY(msg->Status == NKikimrProto::OK);
         Y_VERIFY(msg->Position == ReadLogPosition);
@@ -452,8 +452,8 @@ public:
         ++Lsn;
 
         for (const auto& pair : Recovered.Chunks) {
-            SendPDiskRequest(ctx, new NPDisk::TEvChunkRead(PDiskParams->Owner, PDiskParams->OwnerRound, 
-                    pair.first, 0, PDiskParams->ChunkSize, NPriRead::HullLoad, nullptr), [] {}); 
+            SendPDiskRequest(ctx, new NPDisk::TEvChunkRead(PDiskParams->Owner, PDiskParams->OwnerRound,
+                    pair.first, 0, PDiskParams->ChunkSize, NPriRead::HullLoad, nullptr), [] {});
             ++ReadMsgPending;
         }
 
@@ -543,7 +543,7 @@ public:
             }
         }
 
-        NPDisk::TCommitRecord cr; 
+        NPDisk::TCommitRecord cr;
 
         // advance LSN every 30000 items avg
         if (Lsn > Params.LsnToKeepCount && RandomNumber<double>() < Params.LogCutProbability) {
@@ -579,23 +579,23 @@ public:
         }
 
         auto lsn = Lsn++;
-        SendPDiskRequest(ctx, new NPDisk::TEvLog(PDiskParams->Owner, PDiskParams->OwnerRound, signature, cr, data, 
+        SendPDiskRequest(ctx, new NPDisk::TEvLog(PDiskParams->Owner, PDiskParams->OwnerRound, signature, cr, data,
             TLsnSeg(lsn, lsn), info), [&] {
-                State.InFlight.insert(*info); 
-                if (cr.FirstLsnToKeep) { 
-                    Y_VERIFY(cr.FirstLsnToKeep >= State.FirstLsnToKeep); 
-                    State.FirstLsnToKeep = cr.FirstLsnToKeep; 
-                } 
-            }); 
+                State.InFlight.insert(*info);
+                if (cr.FirstLsnToKeep) {
+                    Y_VERIFY(cr.FirstLsnToKeep >= State.FirstLsnToKeep);
+                    State.FirstLsnToKeep = cr.FirstLsnToKeep;
+                }
+            });
 
         ++LogsSent;
         ++InFlightLog;
     }
 
-    void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
-        Y_VERIFY(msg->Results, "No results in TEvLogResult, Owner# %" PRIu32 " Status# %s", 
-                (ui32)PDiskParams->Owner, NKikimrProto::EReplyStatus_Name(msg->Status).c_str()); 
+        Y_VERIFY(msg->Results, "No results in TEvLogResult, Owner# %" PRIu32 " Status# %s",
+                (ui32)PDiskParams->Owner, NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
         InFlightLog -= msg->Results.size();
         for (const auto& result : msg->Results) {
             std::unique_ptr<TLogRecord> info(static_cast<TLogRecord *>(result.Cookie));
@@ -640,10 +640,10 @@ public:
     }
 
     void IssueAllocateRequest(const TActorContext& ctx) {
-        SendPDiskRequest(ctx, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 1), [] {}); 
+        SendPDiskRequest(ctx, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 1), [] {});
     }
 
-    void Handle(NPDisk::TEvChunkReserveResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NPDisk::TEvChunkReserveResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
         Y_VERIFY(msg->Status == NKikimrProto::OK);
 
@@ -739,15 +739,15 @@ public:
 
         void *cookie = reinterpret_cast<void *>(NextWriteCookie++);
 
-        SendPDiskRequest(ctx, new NPDisk::TEvChunkWrite(PDiskParams->Owner, PDiskParams->OwnerRound, it->first, 
-                offsetInBlocks * PDiskParams->AppendBlockSize, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), 
+        SendPDiskRequest(ctx, new NPDisk::TEvChunkWrite(PDiskParams->Owner, PDiskParams->OwnerRound, it->first,
+                offsetInBlocks * PDiskParams->AppendBlockSize, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data),
                 cookie, true, NPriWrite::HullHugeAsyncBlob), [&] {
             State.WritesInFlight.push_back(TWriteRecord{it->first, offsetInBlocks, numBlocks, std::move(checksums),
                     cookie});
         });
     }
 
-    void Handle(NPDisk::TEvChunkWriteResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NPDisk::TEvChunkWriteResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
         Y_VERIFY(msg->Status == NKikimrProto::OK);
 
@@ -781,7 +781,7 @@ public:
         Activity(ctx);
     }
 
-    void Handle(NPDisk::TEvChunkReadResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NPDisk::TEvChunkReadResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
         TState::TChunkInfo chunk = Recovered.GetChunk(msg->ChunkIdx);
 
@@ -871,18 +871,18 @@ public:
 
     TString GenerateRandomDataBuffer(size_t len) {
         TString data(len, ' ');
-        char *mutableData = data.Detach(); 
+        char *mutableData = data.Detach();
         ui64 pattern = RandomNumber<ui64>();
         if (!pattern) {
             pattern = ~pattern;
         }
         size_t i;
         for (i = 0; i + 8 <= len; ++i) {
-            WriteUnaligned<ui64>(mutableData + i, pattern); 
+            WriteUnaligned<ui64>(mutableData + i, pattern);
             pattern = (pattern ^ pattern << 1 ^ pattern << 3 ^ pattern << 4) >> 63 | pattern << 1;
         }
         while (i < len) {
-            *(char *)(mutableData + i) = pattern; 
+            *(char *)(mutableData + i) = pattern;
             pattern >>= 8;
             ++i;
         }
@@ -892,12 +892,12 @@ public:
     STFUNC(StateFunc) {
         switch (const ui32 type = ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::Bootstrap, Bootstrap);
-            HFunc(NPDisk::TEvYardInitResult, Handle); 
-            HFunc(NPDisk::TEvReadLogResult, Handle); 
-            HFunc(NPDisk::TEvLogResult, Handle); 
-            HFunc(NPDisk::TEvChunkReserveResult, Handle); 
-            HFunc(NPDisk::TEvChunkWriteResult, Handle); 
-            HFunc(NPDisk::TEvChunkReadResult, Handle); 
+            HFunc(NPDisk::TEvYardInitResult, Handle);
+            HFunc(NPDisk::TEvReadLogResult, Handle);
+            HFunc(NPDisk::TEvLogResult, Handle);
+            HFunc(NPDisk::TEvChunkReserveResult, Handle);
+            HFunc(NPDisk::TEvChunkWriteResult, Handle);
+            HFunc(NPDisk::TEvChunkReadResult, Handle);
             default: Y_FAIL("unexpected message 0x%08" PRIx32, type);
         }
     }

@@ -93,8 +93,8 @@ public:
         TIntrusivePtr<NKikimr::TVDiskConfig> Cfg;
     };
 
-    TAllVDisks(TAllPDisks *pdisks, ui32 domainsNum, ui32 disksInDomain, IVDiskSetup *vdiskSetup, bool onePDisk, 
-            bool runRepl, ui64 *inOutInitOwnerRound); 
+    TAllVDisks(TAllPDisks *pdisks, ui32 domainsNum, ui32 disksInDomain, IVDiskSetup *vdiskSetup, bool onePDisk,
+            bool runRepl, ui64 *inOutInitOwnerRound);
     ~TAllVDisks();
     TVDiskInstance &Get(ui32 vdisk) {
         return VDisks.at(vdisk);
@@ -127,7 +127,7 @@ public:
     }
 
     virtual bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j,
-                       ui32 pDiskID, ui32 slotId, bool runRepl, ui64 initOwnerRound) = 0; 
+                       ui32 pDiskID, ui32 slotId, bool runRepl, ui64 initOwnerRound) = 0;
     virtual ~IVDiskSetup() = default;
 
 protected:
@@ -137,7 +137,7 @@ protected:
 struct TDefaultVDiskSetup : public IVDiskSetup {
     TDefaultVDiskSetup();
     bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32
-               pDiskID, ui32 slotId, bool runRepl, ui64 initOwnerRound) override; 
+               pDiskID, ui32 slotId, bool runRepl, ui64 initOwnerRound) override;
 };
 
 

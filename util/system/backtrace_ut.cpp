@@ -18,9 +18,9 @@ int Dbg2(void** buf, size_t len) {
 }
 
 void FormatBackTraceReplacement(IOutputStream* out, void* const*, size_t) {
-    *out << "WorksLikeACharm" << Endl; 
-} 
- 
+    *out << "WorksLikeACharm" << Endl;
+}
+
 void SomeMethod() {
     TStringStream out;
 
@@ -39,22 +39,22 @@ class TBackTraceTest: public TTestBase {
     UNIT_TEST(TestBackTrace)
     UNIT_TEST(TestBackTraceView)
     UNIT_TEST(TestPrintBackTrace)
-    UNIT_TEST(TestSetFormatBackTraceFn) 
+    UNIT_TEST(TestSetFormatBackTraceFn)
     UNIT_TEST_SUITE_END();
 
     void TestPrintBackTrace() {
         SomeMethod();
     }
 
-    void TestSetFormatBackTraceFn() { 
-        TFormatBackTraceFn prevFn = SetFormatBackTraceFn(FormatBackTraceReplacement); 
-        TStringStream out; 
-        FormatBackTrace(&out); 
-        SetFormatBackTraceFn(prevFn); 
+    void TestSetFormatBackTraceFn() {
+        TFormatBackTraceFn prevFn = SetFormatBackTraceFn(FormatBackTraceReplacement);
+        TStringStream out;
+        FormatBackTrace(&out);
+        SetFormatBackTraceFn(prevFn);
         UNIT_ASSERT(out.Str().Contains("WorksLikeACharm"));
-        TestPrintBackTrace(); 
-    } 
- 
+        TestPrintBackTrace();
+    }
+
     void TestBackTrace() {
         //PrintBackTrace();
         void* buf1[100];

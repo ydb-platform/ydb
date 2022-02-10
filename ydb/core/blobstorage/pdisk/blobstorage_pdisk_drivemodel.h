@@ -1,16 +1,16 @@
-#pragma once 
-#include "defs.h" 
+#pragma once
+#include "defs.h"
 #include <ydb/core/protos/drivemodel.pb.h>
 #include <cmath>
- 
-namespace NKikimr { 
-namespace NPDisk { 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// Drive Model 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-class TDriveModel : public TThrRefBase { 
-public: 
+
+namespace NKikimr {
+namespace NPDisk {
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Drive Model
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class TDriveModel : public TThrRefBase {
+public:
     enum EOperationType {
         OP_TYPE_READ = 0,
         OP_TYPE_WRITE = 1,
@@ -18,10 +18,10 @@ public:
         OP_TYPE_COUNT = 3,
     };
 
-protected: 
-    // Model data 
-    ui64 SeekTimeNsec; 
-    ui64 BulkReadBlockSizeBytes; 
+protected:
+    // Model data
+    ui64 SeekTimeNsec;
+    ui64 BulkReadBlockSizeBytes;
     ui64 BulkWriteBlockSizeBytes;
     ui64 TrimSpeedBps;
     ui32 TotalChunksCount;
@@ -31,38 +31,38 @@ protected:
     TVector<ui64> ChunkSpeedBps[OP_TYPE_COUNT];
     ui32 OptimalQueueDepth[OP_TYPE_COUNT];
     ui32 GlueingDeadline[OP_TYPE_COUNT];
-    // Model metadata 
-    NKikimrBlobStorage::TDriveModel::EModelSource ModelSource; 
-    TString SourceModelNumber; 
-    TString SourceFirmwareRevision; 
-    TString SourceSerialNumber; 
-    bool IsSourceWriteCacheEnabled; 
-    bool IsSourceSharedWithOs; 
+    // Model metadata
+    NKikimrBlobStorage::TDriveModel::EModelSource ModelSource;
+    TString SourceModelNumber;
+    TString SourceFirmwareRevision;
+    TString SourceSerialNumber;
+    bool IsSourceWriteCacheEnabled;
+    bool IsSourceSharedWithOs;
 
-    friend class TDriveEstimator; 
-public: 
+    friend class TDriveEstimator;
+public:
     TDriveModel() {
         Clear();
     }
 
-    TDriveModel(ui64 seekTimeNs, ui64 speedBps, ui64 bulkWriteBlockSize, ui64 trimSpeedBps, 
-                ui64 speedBpsMin, ui64 speedBpsMax, ui32 queueDepth) { 
-        Clear(); 
-        SeekTimeNsec = seekTimeNs; 
-        BulkReadBlockSizeBytes = bulkWriteBlockSize; 
-        BulkWriteBlockSizeBytes = bulkWriteBlockSize; 
-        TrimSpeedBps = trimSpeedBps; 
+    TDriveModel(ui64 seekTimeNs, ui64 speedBps, ui64 bulkWriteBlockSize, ui64 trimSpeedBps,
+                ui64 speedBpsMin, ui64 speedBpsMax, ui32 queueDepth) {
+        Clear();
+        SeekTimeNsec = seekTimeNs;
+        BulkReadBlockSizeBytes = bulkWriteBlockSize;
+        BulkWriteBlockSizeBytes = bulkWriteBlockSize;
+        TrimSpeedBps = trimSpeedBps;
         for (ui32 type = OP_TYPE_READ; type <= OP_TYPE_WRITE; ++type) {
             SpeedBps[type] = speedBps;
             SpeedBpsMin[type] = speedBpsMin > 100ull ? speedBpsMin : 100ull;
             SpeedBpsMax[type] = speedBpsMax < 1000000000000ull ? speedBpsMax : 1000000000000ull;
             OptimalQueueDepth[type] = queueDepth;
         }
- 
-        CalculateAvgs(); 
-    } 
- 
-    void CalculateAvgs() { 
+
+        CalculateAvgs();
+    }
+
+    void CalculateAvgs() {
         SpeedBps[OP_TYPE_AVG] = (SpeedBps[OP_TYPE_READ] + SpeedBps[OP_TYPE_WRITE]) / 2;
         SpeedBpsMin[OP_TYPE_AVG] = (SpeedBpsMin[OP_TYPE_READ] + SpeedBpsMin[OP_TYPE_WRITE]) / 2;
         SpeedBpsMax[OP_TYPE_AVG] = (SpeedBpsMax[OP_TYPE_READ] + SpeedBpsMax[OP_TYPE_WRITE]) / 2;
@@ -72,7 +72,7 @@ public:
 
     void Clear() {
         SeekTimeNsec = 0;
-        BulkReadBlockSizeBytes = 0; 
+        BulkReadBlockSizeBytes = 0;
         BulkWriteBlockSizeBytes = 0;
         TrimSpeedBps = 0;
         TotalChunksCount = 0;
@@ -84,73 +84,73 @@ public:
             OptimalQueueDepth[type] = 0;
             GlueingDeadline[type] = 0;
         }
-        ModelSource = NKikimrBlobStorage::TDriveModel::SourceClear; 
-        SourceModelNumber = ""; 
-        SourceFirmwareRevision = ""; 
-        SourceSerialNumber = ""; 
-        IsSourceWriteCacheEnabled = false; 
-        IsSourceSharedWithOs = false; 
+        ModelSource = NKikimrBlobStorage::TDriveModel::SourceClear;
+        SourceModelNumber = "";
+        SourceFirmwareRevision = "";
+        SourceSerialNumber = "";
+        IsSourceWriteCacheEnabled = false;
+        IsSourceSharedWithOs = false;
     }
 
-    void Apply(const NKikimrBlobStorage::TDriveModel *cfg) { 
-        if (!cfg) { 
-            return; 
-        } 
-        SeekTimeNsec = cfg->GetSeekTimeNsec(); 
-        BulkReadBlockSizeBytes = cfg->GetBulkReadBlockSizeBytes(); 
-        BulkWriteBlockSizeBytes = cfg->GetBulkWriteBlockSizeBytes(); 
-        TrimSpeedBps = cfg->GetTrimSpeedBps(); 
-        TotalChunksCount = cfg->GetTotalChunksCount(); 
-        SpeedBps[OP_TYPE_READ] = cfg->GetSpeedBpsRead(); 
-        SpeedBps[OP_TYPE_WRITE] = cfg->GetSpeedBpsWrite(); 
-        SpeedBpsMin[OP_TYPE_READ] = cfg->GetSpeedBpsMinRead(); 
-        SpeedBpsMin[OP_TYPE_WRITE] = cfg->GetSpeedBpsMinWrite(); 
-        SpeedBpsMax[OP_TYPE_READ] = cfg->GetSpeedBpsMaxRead(); 
-        SpeedBpsMax[OP_TYPE_WRITE] = cfg->GetSpeedBpsMaxWrite(); 
-        OptimalQueueDepth[OP_TYPE_READ] = cfg->GetOptimalQueueDepthRead(); 
-        OptimalQueueDepth[OP_TYPE_WRITE] = cfg->GetOptimalQueueDepthWrite(); 
-        GlueingDeadline[OP_TYPE_READ] = cfg->GetGlueingDeadlineRead(); 
-        GlueingDeadline[OP_TYPE_WRITE] = cfg->GetGlueingDeadlineWrite(); 
- 
-        // Model metadata 
-        ModelSource = cfg->GetModelSource(); 
-        SourceModelNumber = cfg->GetSourceModelNumber(); 
-        SourceFirmwareRevision = cfg->GetSourceFirmwareRevision(); 
-        SourceSerialNumber = cfg->GetSourceSerialNumber(); 
-        IsSourceWriteCacheEnabled = cfg->GetIsSourceWriteCacheEnabled(); 
-        IsSourceSharedWithOs = cfg->GetIsSourceSharedWithOs(); 
-    } 
- 
-    void ToProto(NKikimrBlobStorage::TDriveModel *outCfg) { 
-        if (!outCfg) { 
-            return; 
-        } 
-        // Model data 
-        outCfg->SetSeekTimeNsec(SeekTimeNsec); 
-        outCfg->SetBulkReadBlockSizeBytes(BulkReadBlockSizeBytes); 
-        outCfg->SetBulkWriteBlockSizeBytes(BulkWriteBlockSizeBytes); 
-        outCfg->SetTrimSpeedBps(TrimSpeedBps); 
-        outCfg->SetTotalChunksCount(TotalChunksCount); 
-        outCfg->SetSpeedBpsRead(SpeedBps[OP_TYPE_READ]); 
-        outCfg->SetSpeedBpsWrite(SpeedBps[OP_TYPE_WRITE]); 
-        outCfg->SetSpeedBpsMinRead(SpeedBpsMin[OP_TYPE_READ]); 
-        outCfg->SetSpeedBpsMinWrite(SpeedBpsMin[OP_TYPE_WRITE]); 
-        outCfg->SetSpeedBpsMaxRead(SpeedBpsMax[OP_TYPE_READ]); 
-        outCfg->SetSpeedBpsMaxWrite(SpeedBpsMax[OP_TYPE_WRITE]); 
-        outCfg->SetOptimalQueueDepthRead(OptimalQueueDepth[OP_TYPE_READ]); 
-        outCfg->SetOptimalQueueDepthWrite(OptimalQueueDepth[OP_TYPE_WRITE]); 
-        outCfg->SetGlueingDeadlineRead(GlueingDeadline[OP_TYPE_READ]); 
-        outCfg->SetGlueingDeadlineWrite(GlueingDeadline[OP_TYPE_WRITE]); 
- 
-        // Model metadata 
-        outCfg->SetModelSource(ModelSource); 
-        outCfg->SetSourceModelNumber(SourceModelNumber); 
-        outCfg->SetSourceFirmwareRevision(SourceFirmwareRevision); 
-        outCfg->SetSourceSerialNumber(SourceSerialNumber); 
-        outCfg->SetIsSourceWriteCacheEnabled(IsSourceWriteCacheEnabled); 
-        outCfg->SetIsSourceSharedWithOs(IsSourceSharedWithOs); 
-    } 
- 
+    void Apply(const NKikimrBlobStorage::TDriveModel *cfg) {
+        if (!cfg) {
+            return;
+        }
+        SeekTimeNsec = cfg->GetSeekTimeNsec();
+        BulkReadBlockSizeBytes = cfg->GetBulkReadBlockSizeBytes();
+        BulkWriteBlockSizeBytes = cfg->GetBulkWriteBlockSizeBytes();
+        TrimSpeedBps = cfg->GetTrimSpeedBps();
+        TotalChunksCount = cfg->GetTotalChunksCount();
+        SpeedBps[OP_TYPE_READ] = cfg->GetSpeedBpsRead();
+        SpeedBps[OP_TYPE_WRITE] = cfg->GetSpeedBpsWrite();
+        SpeedBpsMin[OP_TYPE_READ] = cfg->GetSpeedBpsMinRead();
+        SpeedBpsMin[OP_TYPE_WRITE] = cfg->GetSpeedBpsMinWrite();
+        SpeedBpsMax[OP_TYPE_READ] = cfg->GetSpeedBpsMaxRead();
+        SpeedBpsMax[OP_TYPE_WRITE] = cfg->GetSpeedBpsMaxWrite();
+        OptimalQueueDepth[OP_TYPE_READ] = cfg->GetOptimalQueueDepthRead();
+        OptimalQueueDepth[OP_TYPE_WRITE] = cfg->GetOptimalQueueDepthWrite();
+        GlueingDeadline[OP_TYPE_READ] = cfg->GetGlueingDeadlineRead();
+        GlueingDeadline[OP_TYPE_WRITE] = cfg->GetGlueingDeadlineWrite();
+
+        // Model metadata
+        ModelSource = cfg->GetModelSource();
+        SourceModelNumber = cfg->GetSourceModelNumber();
+        SourceFirmwareRevision = cfg->GetSourceFirmwareRevision();
+        SourceSerialNumber = cfg->GetSourceSerialNumber();
+        IsSourceWriteCacheEnabled = cfg->GetIsSourceWriteCacheEnabled();
+        IsSourceSharedWithOs = cfg->GetIsSourceSharedWithOs();
+    }
+
+    void ToProto(NKikimrBlobStorage::TDriveModel *outCfg) {
+        if (!outCfg) {
+            return;
+        }
+        // Model data
+        outCfg->SetSeekTimeNsec(SeekTimeNsec);
+        outCfg->SetBulkReadBlockSizeBytes(BulkReadBlockSizeBytes);
+        outCfg->SetBulkWriteBlockSizeBytes(BulkWriteBlockSizeBytes);
+        outCfg->SetTrimSpeedBps(TrimSpeedBps);
+        outCfg->SetTotalChunksCount(TotalChunksCount);
+        outCfg->SetSpeedBpsRead(SpeedBps[OP_TYPE_READ]);
+        outCfg->SetSpeedBpsWrite(SpeedBps[OP_TYPE_WRITE]);
+        outCfg->SetSpeedBpsMinRead(SpeedBpsMin[OP_TYPE_READ]);
+        outCfg->SetSpeedBpsMinWrite(SpeedBpsMin[OP_TYPE_WRITE]);
+        outCfg->SetSpeedBpsMaxRead(SpeedBpsMax[OP_TYPE_READ]);
+        outCfg->SetSpeedBpsMaxWrite(SpeedBpsMax[OP_TYPE_WRITE]);
+        outCfg->SetOptimalQueueDepthRead(OptimalQueueDepth[OP_TYPE_READ]);
+        outCfg->SetOptimalQueueDepthWrite(OptimalQueueDepth[OP_TYPE_WRITE]);
+        outCfg->SetGlueingDeadlineRead(GlueingDeadline[OP_TYPE_READ]);
+        outCfg->SetGlueingDeadlineWrite(GlueingDeadline[OP_TYPE_WRITE]);
+
+        // Model metadata
+        outCfg->SetModelSource(ModelSource);
+        outCfg->SetSourceModelNumber(SourceModelNumber);
+        outCfg->SetSourceFirmwareRevision(SourceFirmwareRevision);
+        outCfg->SetSourceSerialNumber(SourceSerialNumber);
+        outCfg->SetIsSourceWriteCacheEnabled(IsSourceWriteCacheEnabled);
+        outCfg->SetIsSourceSharedWithOs(IsSourceSharedWithOs);
+    }
+
     void SetTotalChunksCount(ui32 totalChunksCount) {
         TotalChunksCount = totalChunksCount;
         for (ui32 type = OP_TYPE_READ; type <= OP_TYPE_AVG; ++type) {
@@ -164,14 +164,14 @@ public:
         }
     }
 
-    ui64 SeekTimeNs() const { 
-        return SeekTimeNsec; 
-    } 
- 
+    ui64 SeekTimeNs() const {
+        return SeekTimeNsec;
+    }
+
     ui64 Speed(EOperationType type) const {
         return SpeedBps[type];
-    } 
- 
+    }
+
     ui64 Speed(ui32 chunkIdx, EOperationType type) const {
         if (chunkIdx < TotalChunksCount) {
             return ChunkSpeedBps[type][chunkIdx];
@@ -198,8 +198,8 @@ public:
 
     ui64 SizeForTimeNs(ui64 durationNs, ui32 chunkIdx, EOperationType type) const {
         return Speed(chunkIdx, type) * durationNs / 1000000000ull;
-    } 
- 
+    }
+
     ui64 BulkWriteBlockSize() const {
         return BulkWriteBlockSizeBytes;
     }
@@ -209,16 +209,16 @@ public:
     }
 
     TString ToString() const {
-        return ToString(false); 
-    } 
- 
+        return ToString(false);
+    }
+
     TString ToString(bool isMultiline) const {
-        TStringStream str; 
-        const char *x = isMultiline ? "\n" : ""; 
-        str << "{TDriveModel" << x; 
+        TStringStream str;
+        const char *x = isMultiline ? "\n" : "";
+        str << "{TDriveModel" << x;
         str << " SeekTimeNsec# " << SeekTimeNsec << x;
         str << " TrimSpeedBps# " << TrimSpeedBps << x;
-        str << " BulkWriteBlockSizeBytes# " << BulkWriteBlockSizeBytes << x; 
+        str << " BulkWriteBlockSizeBytes# " << BulkWriteBlockSizeBytes << x;
         str << " SpeedBps[OP_TYPE_READ]# " << SpeedBps[OP_TYPE_READ] << x;
         str << " SpeedBps[OP_TYPE_WRITE]# " << SpeedBps[OP_TYPE_WRITE] << x;
         str << " SpeedBpsMin[OP_TYPE_READ]# " << SpeedBpsMin[OP_TYPE_READ] << x;
@@ -229,17 +229,17 @@ public:
         str << " OptimalQueueDepth[OP_TYPE_WRITE]# " << OptimalQueueDepth[OP_TYPE_WRITE] << x;
         str << " GlueingDeadline[OP_TYPE_READ]# " << GlueingDeadline[OP_TYPE_READ] << x;
         str << " GlueingDeadline[OP_TYPE_WRITE]# " << GlueingDeadline[OP_TYPE_WRITE] << x;
-        str << " ModelSource# " << (ui64)ModelSource << x; 
-        str << " SourceModelNumber# \"" << SourceModelNumber << "\"" << x; 
-        str << " SourceFirmwareRevision# \"" << SourceFirmwareRevision << "\"" << x; 
-        str << " SourceSerialNumber# \"" << SourceSerialNumber << "\"" << x; 
-        str << " IsSourceWriteCacheEnabled# " << IsSourceWriteCacheEnabled << x; 
-        str << " IsSourceSharedWithOs# " << IsSourceSharedWithOs << x; 
- 
-        str << "}"; 
-        return str.Str(); 
-    } 
-}; 
- 
-} 
-} 
+        str << " ModelSource# " << (ui64)ModelSource << x;
+        str << " SourceModelNumber# \"" << SourceModelNumber << "\"" << x;
+        str << " SourceFirmwareRevision# \"" << SourceFirmwareRevision << "\"" << x;
+        str << " SourceSerialNumber# \"" << SourceSerialNumber << "\"" << x;
+        str << " IsSourceWriteCacheEnabled# " << IsSourceWriteCacheEnabled << x;
+        str << " IsSourceSharedWithOs# " << IsSourceSharedWithOs << x;
+
+        str << "}";
+        return str.Str();
+    }
+};
+
+}
+}

@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
                     if (addYellowFlag && msg->Id.TabletID() == shards[0] && msg->Id.Channel() == 0) {
                         Cerr << "--- Adding yellow flag to TEvPutResult for " << msg->Id << Endl;
                         const_cast<TStorageStatusFlags&>(msg->StatusFlags)
-                            .Raw |= NKikimrBlobStorage::StatusDiskSpaceLightYellowMove; 
+                            .Raw |= NKikimrBlobStorage::StatusDiskSpaceLightYellowMove;
                     }
                     break;
                 }
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
             ui32 group = 2181038080;
             for (auto& ev : capturedCheckResult) {
                 auto* msg = ev->Get<TEvTablet::TEvCheckBlobstorageStatusResult>();
-                msg->LightYellowMoveGroups.push_back(group); 
+                msg->LightYellowMoveGroups.push_back(group);
                 runtime.Send(ev.Release(), 0, /* viaActorSystem */ true);
             }
             capturedCheckResult.clear();

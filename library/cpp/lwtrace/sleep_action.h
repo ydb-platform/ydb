@@ -1,13 +1,13 @@
-#pragma once 
- 
-#include "probe.h" 
- 
+#pragma once
+
+#include "probe.h"
+
 namespace NLWTrace {
     namespace NPrivate {
         class TSleepActionExecutor: public IExecutor {
         private:
             ui64 NanoSeconds;
- 
+
         public:
             TSleepActionExecutor(const TProbe*, ui64 nanoSeconds)
                 : IExecutor()
@@ -16,6 +16,6 @@ namespace NLWTrace {
             }
             bool DoExecute(TOrbit& orbit, const TParams& params) override;
         };
- 
+
     }
 }

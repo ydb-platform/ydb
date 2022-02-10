@@ -402,7 +402,7 @@ namespace NActors {
 
         NLwTraceMonPage::RegisterPages((TBase*)this);
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));
-        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(MONITORING_PROVIDER)); 
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(MONITORING_PROVIDER));
         TBase::Start();
     }
 

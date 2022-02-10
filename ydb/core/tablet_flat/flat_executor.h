@@ -448,8 +448,8 @@ class TExecutor
     void ActivateFollower(const TActorContext &ctx);
     void RecreatePageCollectionsCache() noexcept;
     void ReflectSchemeSettings() noexcept;
-    void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) override; 
-    void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false); 
+    void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) override;
+    void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);
     void SendReassignYellowChannels(const TVector<ui32> &yellowChannels);
     void CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier);
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,

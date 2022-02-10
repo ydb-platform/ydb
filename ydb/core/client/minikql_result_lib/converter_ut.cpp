@@ -13,7 +13,7 @@ using namespace NResultLib;
 Y_UNIT_TEST_SUITE(TMiniKQLResultConverterTest) {
 
 Y_UNIT_TEST(TTestWithSimpleProgram) {
-    TPortManager pm; 
+    TPortManager pm;
     ui16 port = pm.GetPort(2134);
     auto settings = Tests::TServerSettings(port);
     Tests::TServer server = Tests::TServer(settings);

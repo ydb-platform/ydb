@@ -87,7 +87,7 @@ namespace NKikimr {
         }
     }
 
-    void TDynamicPDiskWeightsManager::Feedback(const NPDisk::TEvConfigureSchedulerResult &res, 
+    void TDynamicPDiskWeightsManager::Feedback(const NPDisk::TEvConfigureSchedulerResult &res,
                                                const TActorContext &ctx) {
         NActors::NLog::EPriority pri = res.Status == NKikimrProto::OK ?
                 NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;

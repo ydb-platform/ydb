@@ -35,33 +35,33 @@ struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvRep
             Record.SetLockedFor(lockedFor);
         }
     }
- 
+
     TString ToString() const {
-        TStringStream str; 
-        str << "{EvReplicaInfo Status: " << (ui32)Record.GetStatus(); 
-        str << " TabletID: " << Record.GetTabletID(); 
+        TStringStream str;
+        str << "{EvReplicaInfo Status: " << (ui32)Record.GetStatus();
+        str << " TabletID: " << Record.GetTabletID();
         if (Record.HasCurrentLeader()) {
             str << " CurrentLeader: " << ActorIdFromProto(Record.GetCurrentLeader()).ToString();
-        } 
+        }
         if (Record.HasCurrentLeaderTablet()) {
             str << " CurrentLeaderTablet: " << ActorIdFromProto(Record.GetCurrentLeaderTablet()).ToString();
-        } 
-        if (Record.HasCurrentGeneration()) { 
-            str << " CurrentGeneration: " << Record.GetCurrentGeneration(); 
-        } 
-        if (Record.HasCurrentStep()) { 
-            str << " CurrentStep: " << Record.GetCurrentStep(); 
-        } 
-        if (Record.HasLocked()) { 
-            str << " Locked: " << (Record.GetLocked() ? "true" : "false"); 
-        } 
-        if (Record.HasLockedFor()) { 
-            str << " LockedFor: " << Record.GetLockedFor(); 
-        } 
-        str << "}"; 
-        return str.Str(); 
-    } 
- 
+        }
+        if (Record.HasCurrentGeneration()) {
+            str << " CurrentGeneration: " << Record.GetCurrentGeneration();
+        }
+        if (Record.HasCurrentStep()) {
+            str << " CurrentStep: " << Record.GetCurrentStep();
+        }
+        if (Record.HasLocked()) {
+            str << " Locked: " << (Record.GetLocked() ? "true" : "false");
+        }
+        if (Record.HasLockedFor()) {
+            str << " LockedFor: " << Record.GetLockedFor();
+        }
+        str << "}";
+        return str.Str();
+    }
+
 };
 
 struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroupConfig, EvUpdateGroupConfig> {
@@ -178,7 +178,7 @@ struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvR
         Record.SetTabletID(tabletId);
         Record.SetCookie(cookie);
     }
- 
+
     TEvReplicaLookup(ui64 tabletId, ui64 cookie, TActualityCounterPtr &actualityRefCounter)
         : ActualityRefCounter(actualityRefCounter)
     {
@@ -187,12 +187,12 @@ struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvR
     }
 
     TString ToString() const {
-        TStringStream str; 
-        str << "{EvReplicaLookup TabletID: " << Record.GetTabletID(); 
-        str << " Cookie: " << Record.GetCookie(); 
-        str << "}"; 
-        return str.Str(); 
-    } 
+        TStringStream str;
+        str << "{EvReplicaLookup TabletID: " << Record.GetTabletID();
+        str << " Cookie: " << Record.GetCookie();
+        str << "}";
+        return str.Str();
+    }
 };
 
 struct TEvStateStorage::TEvReplicaUpdate : public TEventPB<TEvStateStorage::TEvReplicaUpdate, NKikimrStateStorage::TEvUpdate, TEvStateStorage::EvReplicaUpdate> {
@@ -205,15 +205,15 @@ struct TEvStateStorage::TEvReplicaUpdate : public TEventPB<TEvStateStorage::TEvR
         Record.SetProposedGeneration(proposedGeneration);
         Record.SetProposedStep(proposedStep);
     }
- 
+
     TString ToString() const {
-        TStringStream str; 
-        str << "{EvReplicaUpdate TabletID: " << Record.GetTabletID(); 
-        str << " ProposedGeneration: " << Record.GetProposedGeneration(); 
-        str << " ProposedStep: " << Record.GetProposedStep(); 
-        str << "}"; 
-        return str.Str(); 
-    } 
+        TStringStream str;
+        str << "{EvReplicaUpdate TabletID: " << Record.GetTabletID();
+        str << " ProposedGeneration: " << Record.GetProposedGeneration();
+        str << " ProposedStep: " << Record.GetProposedStep();
+        str << "}";
+        return str.Str();
+    }
 };
 
 struct TEvStateStorage::TEvReplicaDelete : public TEventPB<TEvStateStorage::TEvReplicaDelete, NKikimrStateStorage::TEvDelete, TEvStateStorage::EvReplicaDelete> {
@@ -253,14 +253,14 @@ struct TEvStateStorage::TEvReplicaLock : public TEventPB<TEvStateStorage::TEvRep
         Record.SetTabletID(tabletId);
         Record.SetProposedGeneration(proposedGeneration);
     }
- 
+
     TString ToString() const {
-        TStringStream str; 
-        str << "{EvReplicaLock TabletID: " << Record.GetTabletID(); 
-        str << " ProposedGeneration: " << Record.GetProposedGeneration(); 
-        str << "}"; 
-        return str.Str(); 
-    } 
+        TStringStream str;
+        str << "{EvReplicaLock TabletID: " << Record.GetTabletID();
+        str << " ProposedGeneration: " << Record.GetProposedGeneration();
+        str << "}";
+        return str.Str();
+    }
 };
 
 struct TEvStateStorage::TEvReplicaBoardPublish : public TEventPB<TEvStateStorage::TEvReplicaBoardPublish, NKikimrStateStorage::TEvReplicaBoardPublish, TEvStateStorage::EvReplicaBoardPublish> {

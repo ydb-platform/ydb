@@ -1,120 +1,120 @@
-#include "defs.h" 
-#include "keyvalue.h" 
+#include "defs.h"
+#include "keyvalue.h"
 #include "keyvalue_state.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
- 
-const bool ENABLE_DETAILED_KV_LOG = false; 
- 
-namespace NKikimr { 
-namespace { 
- 
-void SetupLogging(TTestActorRuntime& runtime) { 
-    NActors::NLog::EPriority priority = ENABLE_DETAILED_KV_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR; 
-    NActors::NLog::EPriority otherPriority = NLog::PRI_ERROR; 
- 
+
+const bool ENABLE_DETAILED_KV_LOG = false;
+
+namespace NKikimr {
+namespace {
+
+void SetupLogging(TTestActorRuntime& runtime) {
+    NActors::NLog::EPriority priority = ENABLE_DETAILED_KV_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
+    NActors::NLog::EPriority otherPriority = NLog::PRI_ERROR;
+
     runtime.SetLogPriority(NKikimrServices::KEYVALUE, priority);
-    runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, priority); 
-    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, priority); 
-    runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, priority); 
-    runtime.SetLogPriority(NKikimrServices::BS_PROXY, priority); 
-    runtime.SetLogPriority(NKikimrServices::BS_PROXY_STATUS, priority); 
- 
-    runtime.SetLogPriority(NKikimrServices::HIVE, otherPriority); 
-    runtime.SetLogPriority(NKikimrServices::LOCAL, otherPriority); 
-    runtime.SetLogPriority(NKikimrServices::BS_NODE, otherPriority); 
-    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, otherPriority); 
-    runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, otherPriority); 
-    runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, otherPriority); 
-} 
- 
-class TInitialEventsFilter : TNonCopyable { 
-    bool IsDone; 
-public: 
-    TInitialEventsFilter() 
-        : IsDone(false) 
-    {} 
- 
-    TTestActorRuntime::TEventFilter Prepare() { 
-        IsDone = false; 
+    runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, priority);
+    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, priority);
+    runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, priority);
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY, priority);
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY_STATUS, priority);
+
+    runtime.SetLogPriority(NKikimrServices::HIVE, otherPriority);
+    runtime.SetLogPriority(NKikimrServices::LOCAL, otherPriority);
+    runtime.SetLogPriority(NKikimrServices::BS_NODE, otherPriority);
+    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, otherPriority);
+    runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, otherPriority);
+    runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, otherPriority);
+}
+
+class TInitialEventsFilter : TNonCopyable {
+    bool IsDone;
+public:
+    TInitialEventsFilter()
+        : IsDone(false)
+    {}
+
+    TTestActorRuntime::TEventFilter Prepare() {
+        IsDone = false;
         return [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            return (*this)(runtime, event); 
-        }; 
-    } 
- 
+            return (*this)(runtime, event);
+        };
+    }
+
     bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
         Y_UNUSED(runtime);
         Y_UNUSED(event);
-        return false; 
-    } 
-}; 
- 
-} // anonymous namespace 
- 
+        return false;
+    }
+};
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(TKeyValueTest) {
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// SETUP 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
-struct TTestContext { 
-    TTabletTypes::EType TabletType; 
-    ui64 TabletId; 
-    TInitialEventsFilter InitialEventsFilter; 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SETUP
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct TTestContext {
+    TTabletTypes::EType TabletType;
+    ui64 TabletId;
+    TInitialEventsFilter InitialEventsFilter;
     TVector<ui64> TabletIds;
-    THolder<TTestActorRuntime> Runtime; 
+    THolder<TTestActorRuntime> Runtime;
     TActorId Edge;
- 
-    TTestContext() { 
-        TabletType = TTabletTypes::KEYVALUEFLAT; 
-        TabletId = MakeTabletID(0, 0, 1); 
-        TabletIds.push_back(TabletId); 
-    } 
- 
+
+    TTestContext() {
+        TabletType = TTabletTypes::KEYVALUEFLAT;
+        TabletId = MakeTabletID(0, 0, 1);
+        TabletIds.push_back(TabletId);
+    }
+
     void Prepare(const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &outActiveZone) {
         Y_UNUSED(dispatchName);
-        outActiveZone = false; 
+        outActiveZone = false;
         Runtime.Reset(new TTestBasicRuntime);
-        Runtime->SetScheduledLimit(100); 
+        Runtime->SetScheduledLimit(100);
         Runtime->SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
-        SetupLogging(*Runtime); 
+        SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
-        setup(*Runtime); 
+        setup(*Runtime);
         CreateTestBootstrapper(*Runtime,
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
-            &CreateKeyValueFlat); 
- 
-        TDispatchOptions options; 
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot)); 
-        Runtime->DispatchEvents(options); 
- 
-        Edge = Runtime->AllocateEdgeActor(); 
-        outActiveZone = true; 
-    } 
- 
-    void Finalize() { 
-        Runtime.Reset(nullptr); 
-    } 
-}; 
- 
-struct TFinalizer { 
-    TTestContext &TestContext; 
- 
-    TFinalizer(TTestContext &testContext) 
-        : TestContext(testContext) 
-    {} 
- 
-    ~TFinalizer() { 
-        TestContext.Finalize(); 
-    } 
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// SINGLE COMMAND TEST FUNCTIONS 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
+            &CreateKeyValueFlat);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        Runtime->DispatchEvents(options);
+
+        Edge = Runtime->AllocateEdgeActor();
+        outActiveZone = true;
+    }
+
+    void Finalize() {
+        Runtime.Reset(nullptr);
+    }
+};
+
+struct TFinalizer {
+    TTestContext &TestContext;
+
+    TFinalizer(TTestContext &testContext)
+        : TestContext(testContext)
+    {}
+
+    ~TFinalizer() {
+        TestContext.Finalize();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SINGLE COMMAND TEST FUNCTIONS
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void DoWithRetry(std::function<bool(void)> action, i32 retryCount = 2) {
     bool isEnd = false;
     for (i32 retriesLeft = retryCount; !isEnd && retriesLeft > 0; --retriesLeft) {
@@ -131,9 +131,9 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) {
     Y_VERIFY(keys.size() == values.size());
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -157,28 +157,28 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
             UNIT_ASSERT(writeResult.HasStatusFlags());
             if (values[idx].size()) {
                 UNIT_ASSERT(writeResult.GetStatusFlags() & ui32(NKikimrBlobStorage::StatusIsValid));
-            } 
-        } 
+            }
+        }
         return true;
     });
-} 
- 
+}
+
 void CmdWrite(const TString &key, const TString &value,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) {
     TDeque<TString> keys = {key};
     TDeque<TString> values = {value};
-    CmdWrite(keys, values, storageChannel, priority, tc); 
-} 
- 
+    CmdWrite(keys, values, storageChannel, priority, tc);
+}
+
 void CmdRead(const TDeque<TString> &keys,
         const NKikimrClient::TKeyValueRequest::EPriority priority,
         const TDeque<TString> &expectedValues, const TDeque<bool> expectedNodatas, TTestContext &tc) {
     Y_VERIFY(keys.size() == expectedValues.size());
     Y_VERIFY(expectedNodatas.size() == 0 || expectedNodatas.size() == keys.size());
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -203,18 +203,18 @@ void CmdRead(const TDeque<TString> &keys,
                 UNIT_ASSERT_VALUES_EQUAL(readResult.GetValue(), expectedValues[idx]);
             } else {
                 UNIT_ASSERT_EQUAL(readResult.GetStatus(), NKikimrProto::NODATA);
-            } 
-        } 
+            }
+        }
         return true;
     });
-} 
- 
-void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, TTestContext &tc, 
-        bool expectOk = true) { 
+}
+
+void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, TTestContext &tc,
+        bool expectOk = true) {
     Y_VERIFY(oldKeys.size() == newKeys.size());
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -231,29 +231,29 @@ void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, T
         if (expectOk) {
             UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
             UNIT_ASSERT_VALUES_EQUAL(result->Record.RenameResultSize(), oldKeys.size());
-            for (ui64 idx = 0; idx < oldKeys.size(); ++idx) { 
+            for (ui64 idx = 0; idx < oldKeys.size(); ++idx) {
                 const auto &renameResult = result->Record.GetRenameResult(idx);
                 UNIT_ASSERT(renameResult.HasStatus());
                 UNIT_ASSERT_EQUAL(renameResult.GetStatus(), NKikimrProto::OK);
-            } 
+            }
         } else {
             UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
-        } 
+        }
 
         return true;
     });
-} 
- 
-void CmdRename(const TString &oldKey, const TString &newKey, TTestContext &tc, bool expectOk = true) { 
+}
+
+void CmdRename(const TString &oldKey, const TString &newKey, TTestContext &tc, bool expectOk = true) {
     TDeque<TString> oldKeys = {oldKey};
     TDeque<TString> newKeys = {newKey};
-    CmdRename(oldKeys, newKeys, tc, expectOk); 
-} 
- 
+    CmdRename(oldKeys, newKeys, tc, expectOk);
+}
+
 void CmdConcat(const TDeque<TString> &inputKeys, const TString &outputKey, const bool keepInputs, TTestContext &tc) {
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -261,7 +261,7 @@ void CmdConcat(const TDeque<TString> &inputKeys, const TString &outputKey, const
         auto cmd = request->Record.AddCmdConcat();
         for (ui64 idx = 0; idx < inputKeys.size(); ++idx) {
             cmd->AddInputKeys(inputKeys[idx]);
-        } 
+        }
         cmd->SetOutputKey(outputKey);
         cmd->SetKeepInputs(keepInputs);
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
@@ -275,13 +275,13 @@ void CmdConcat(const TDeque<TString> &inputKeys, const TString &outputKey, const
 
         return true;
     });
-} 
- 
+}
+
 void CmdDeleteRange(const TString &from, const bool includeFrom, const TString &to, const bool includeTo,
-        TTestContext &tc, ui32 expectedStatus = (ui32)NMsgBusProxy::MSTATUS_OK) { 
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
+        TTestContext &tc, ui32 expectedStatus = (ui32)NMsgBusProxy::MSTATUS_OK) {
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -305,17 +305,17 @@ void CmdDeleteRange(const TString &from, const bool includeFrom, const TString &
                     "Expected# " << (ui32)expectedStatus
                     << " Got# " << (ui32)result->Record.GetStatus()
                     << " ErrorReason# \"" << result->Record.GetErrorReason() << "\"");
-        } 
+        }
 
         return true;
     });
-} 
- 
+}
+
 void CmdCopyRange(const TString &from, const bool includeFrom, const TString &to, const bool includeTo,
         const TString &prefixToAdd, const TString &prefixToRemove, TTestContext &tc) {
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -338,64 +338,64 @@ void CmdCopyRange(const TString &from, const bool includeFrom, const TString &to
 
         return true;
     });
-} 
- 
+}
+
 template <typename TRequest>
-struct TDesiredPair { 
+struct TDesiredPair {
     typename TRequest::ProtoRecordType Request;
     typename TRequest::TResponse::ProtoRecordType Response;
 };
 
 template <>
 struct TDesiredPair<TEvKeyValue::TEvRequest> {
-    NKikimrClient::TKeyValueRequest Request; 
-    NKikimrClient::TKeyValueResponse Response; 
-}; 
- 
-void CheckResponse(NKikimrClient::TResponse &ar, NKikimrClient::TKeyValueResponse &er, ui64 line) { 
-    UNIT_ASSERT_VALUES_EQUAL_C(ar.ReadRangeResultSize(), er.ReadRangeResultSize(), "Line# " << line); 
-    for (size_t readRangeIdx = 0; readRangeIdx < ar.ReadRangeResultSize(); ++readRangeIdx) { 
-        const auto &aRange = ar.GetReadRangeResult(readRangeIdx); 
-        const auto &eRange = er.GetReadRangeResult(readRangeIdx); 
-        UNIT_ASSERT_C(aRange.HasStatus(), "Line# " << line); 
-        UNIT_ASSERT_C(eRange.HasStatus(), "Line# " << line); 
-        UNIT_ASSERT_EQUAL_C(aRange.GetStatus(), eRange.GetStatus(), 
-                NKikimrProto::EReplyStatus_Name((NKikimrProto::EReplyStatus)aRange.GetStatus()) << " Line# " << line); 
-        UNIT_ASSERT_VALUES_EQUAL_C(aRange.PairSize(), eRange.PairSize(), "Line# " << line); 
-        for (ui64 idx = 0; idx < aRange.PairSize(); ++idx) { 
-            const auto &aPair = aRange.GetPair(idx); 
-            const auto &ePair = eRange.GetPair(idx); 
-            UNIT_ASSERT_C(aPair.HasKey(), "Line# " << line); 
-            UNIT_ASSERT_C(ePair.HasKey(), "Line# " << line); 
-            if (ePair.HasValue()) { 
-                UNIT_ASSERT_C(aPair.HasValue(), "Line# " << line); 
-            } else { 
-                UNIT_ASSERT_C(!aPair.HasValue(), "Line# " << line); 
-            } 
-            UNIT_ASSERT_C(aPair.HasValueSize(), "Line# " << line); 
-            UNIT_ASSERT_VALUES_EQUAL_C(aPair.GetKey(), ePair.GetKey(), "Line# " << line); 
-            if (ePair.HasValue()) { 
-                UNIT_ASSERT_VALUES_EQUAL_C(aPair.GetValue(), ePair.GetValue(), "Line# " << line); 
-            } 
-            UNIT_ASSERT_C(aPair.HasCreationUnixTime(), "Line# " << line); 
-            //TODO: UNIT_ASSERT(aPair.GetCreationUnixTime() >= unixTime); 
-        } 
-    } 
-} 
- 
+    NKikimrClient::TKeyValueRequest Request;
+    NKikimrClient::TKeyValueResponse Response;
+};
+
+void CheckResponse(NKikimrClient::TResponse &ar, NKikimrClient::TKeyValueResponse &er, ui64 line) {
+    UNIT_ASSERT_VALUES_EQUAL_C(ar.ReadRangeResultSize(), er.ReadRangeResultSize(), "Line# " << line);
+    for (size_t readRangeIdx = 0; readRangeIdx < ar.ReadRangeResultSize(); ++readRangeIdx) {
+        const auto &aRange = ar.GetReadRangeResult(readRangeIdx);
+        const auto &eRange = er.GetReadRangeResult(readRangeIdx);
+        UNIT_ASSERT_C(aRange.HasStatus(), "Line# " << line);
+        UNIT_ASSERT_C(eRange.HasStatus(), "Line# " << line);
+        UNIT_ASSERT_EQUAL_C(aRange.GetStatus(), eRange.GetStatus(),
+                NKikimrProto::EReplyStatus_Name((NKikimrProto::EReplyStatus)aRange.GetStatus()) << " Line# " << line);
+        UNIT_ASSERT_VALUES_EQUAL_C(aRange.PairSize(), eRange.PairSize(), "Line# " << line);
+        for (ui64 idx = 0; idx < aRange.PairSize(); ++idx) {
+            const auto &aPair = aRange.GetPair(idx);
+            const auto &ePair = eRange.GetPair(idx);
+            UNIT_ASSERT_C(aPair.HasKey(), "Line# " << line);
+            UNIT_ASSERT_C(ePair.HasKey(), "Line# " << line);
+            if (ePair.HasValue()) {
+                UNIT_ASSERT_C(aPair.HasValue(), "Line# " << line);
+            } else {
+                UNIT_ASSERT_C(!aPair.HasValue(), "Line# " << line);
+            }
+            UNIT_ASSERT_C(aPair.HasValueSize(), "Line# " << line);
+            UNIT_ASSERT_VALUES_EQUAL_C(aPair.GetKey(), ePair.GetKey(), "Line# " << line);
+            if (ePair.HasValue()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(aPair.GetValue(), ePair.GetValue(), "Line# " << line);
+            }
+            UNIT_ASSERT_C(aPair.HasCreationUnixTime(), "Line# " << line);
+            //TODO: UNIT_ASSERT(aPair.GetCreationUnixTime() >= unixTime);
+        }
+    }
+}
+
 void RunRequest(TDesiredPair<TEvKeyValue::TEvRequest> &dp, TTestContext &tc, ui64 line) {
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
- 
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
+
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
         request->Record = dp.Request;
- 
+
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
         result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
- 
+
         UNIT_ASSERT_C(result, "Line# " << line);
         UNIT_ASSERT_C(result->Record.HasStatus(), "Line# " << line);
         UNIT_ASSERT_EQUAL_C(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK, "Line# " << line);
@@ -404,48 +404,48 @@ void RunRequest(TDesiredPair<TEvKeyValue::TEvRequest> &dp, TTestContext &tc, ui6
 
         return true;
     });
-} 
+}
 
-void AddCmdReadRange(const TString &from, const bool includeFrom, const TString &to, const bool includeTo, 
-        const bool includeData, const ui64 limitBytes, 
-        const NKikimrClient::TKeyValueRequest::EPriority priority, 
-        const TDeque<TString> &expectedKeys, const TDeque<TString> &expectedValues, 
+void AddCmdReadRange(const TString &from, const bool includeFrom, const TString &to, const bool includeTo,
+        const bool includeData, const ui64 limitBytes,
+        const NKikimrClient::TKeyValueRequest::EPriority priority,
+        const TDeque<TString> &expectedKeys, const TDeque<TString> &expectedValues,
         const NKikimrProto::EReplyStatus expectedStatus, TTestContext &tc, TDesiredPair<TEvKeyValue::TEvRequest> &dp) {
-    Y_UNUSED(tc); 
-    Y_VERIFY(!includeData || expectedKeys.size() == expectedValues.size()); 
- 
-    { 
-        auto cmd = dp.Request.AddCmdReadRange(); 
-        auto range = cmd->MutableRange(); 
-        range->SetFrom(from); 
-        range->SetIncludeFrom(includeFrom); 
-        range->SetTo(to); 
-        range->SetIncludeTo(includeTo); 
-        cmd->SetIncludeData(includeData); 
-        cmd->SetLimitBytes(limitBytes); 
-        cmd->SetPriority(priority); 
-    } 
-    { 
-        auto res = dp.Response.AddReadRangeResult(); 
-        res->SetStatus(expectedStatus); 
-        size_t itemCount = std::max(expectedKeys.size(), expectedValues.size()); 
-        for (size_t i = 0; i < itemCount; ++i) { 
-            auto pair = res->AddPair(); 
-            if (i < expectedKeys.size()) { 
-                pair->SetKey(expectedKeys[i]); 
-            } 
-            if (i < expectedValues.size()) { 
-                pair->SetValue(expectedValues[i]); 
-            } 
-        } 
-    } 
-} 
- 
+    Y_UNUSED(tc);
+    Y_VERIFY(!includeData || expectedKeys.size() == expectedValues.size());
+
+    {
+        auto cmd = dp.Request.AddCmdReadRange();
+        auto range = cmd->MutableRange();
+        range->SetFrom(from);
+        range->SetIncludeFrom(includeFrom);
+        range->SetTo(to);
+        range->SetIncludeTo(includeTo);
+        cmd->SetIncludeData(includeData);
+        cmd->SetLimitBytes(limitBytes);
+        cmd->SetPriority(priority);
+    }
+    {
+        auto res = dp.Response.AddReadRangeResult();
+        res->SetStatus(expectedStatus);
+        size_t itemCount = std::max(expectedKeys.size(), expectedValues.size());
+        for (size_t i = 0; i < itemCount; ++i) {
+            auto pair = res->AddPair();
+            if (i < expectedKeys.size()) {
+                pair->SetKey(expectedKeys[i]);
+            }
+            if (i < expectedValues.size()) {
+                pair->SetValue(expectedValues[i]);
+            }
+        }
+    }
+}
+
 void CmdGetStatus(const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
-        const ui32 expectedStatusFlags, TTestContext &tc) { 
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
+        const ui32 expectedStatusFlags, TTestContext &tc) {
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -465,12 +465,12 @@ void CmdGetStatus(const NKikimrClient::TKeyValueRequest::EStorageChannel storage
 
         return true;
     });
-} 
- 
-void CmdSetExecutorFastLogPolicy(bool isAllowed, TTestContext &tc) { 
-    TAutoPtr<IEventHandle> handle; 
-    TEvKeyValue::TEvResponse *result; 
-    THolder<TEvKeyValue::TEvRequest> request; 
+}
+
+void CmdSetExecutorFastLogPolicy(bool isAllowed, TTestContext &tc) {
+    TAutoPtr<IEventHandle> handle;
+    TEvKeyValue::TEvResponse *result;
+    THolder<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -723,14 +723,14 @@ void ExecuteRead(TTestContext &tc, const TString &key, const TString &expectedVa
         UNIT_ASSERT(dp.Response.value() == expectedValue);
         if (size) {
             UNIT_ASSERT_VALUES_EQUAL(dp.Response.requested_size(), size);
-        } 
+        }
     } else {
         UNIT_ASSERT(dp.Response.value() == "");
-    } 
+    }
     UNIT_ASSERT_VALUES_EQUAL(dp.Response.requested_key(), key);
     UNIT_ASSERT_VALUES_EQUAL(dp.Response.requested_offset(), offset);
-} 
- 
+}
+
 
 template <NKikimrKeyValue::Statuses::ReplyStatus ExpectedStatus = NKikimrKeyValue::Statuses::RSTATUS_OK>
 void ExecuteReadRange(TTestContext &tc,
@@ -817,9 +817,9 @@ void ExecuteObtainLock(TTestContext &tc, ui64 expectedLockGeneration) {
     UNIT_ASSERT_VALUES_EQUAL(dp.Response.lock_generation(), expectedLockGeneration);
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// TEST CASES 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TEST CASES
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST(TestBasicWriteRead) {
     TTestContext tc;
@@ -851,20 +851,20 @@ Y_UNIT_TEST(TestBasicWriteReadOverrun) {
     });
 }
 
-Y_UNIT_TEST(TestWriteReadDeleteWithRestartsThenResponseOk) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+Y_UNIT_TEST(TestWriteReadDeleteWithRestartsThenResponseOk) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
         CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {"value"}, {}, tc); 
-        CmdDeleteRange("key", true, "key", true, tc); 
+            {"value"}, {}, tc);
+        CmdDeleteRange("key", true, "key", true, tc);
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {""}, {true}, tc); 
+            {""}, {true}, tc);
     });
 }
 
@@ -929,99 +929,99 @@ Y_UNIT_TEST(TestRewriteThenLastValueNewApi) {
 }
 
 
-Y_UNIT_TEST(TestWriteTrimWithRestartsThenResponseOk) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
- 
-        for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) { 
-            try { 
-                THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest); 
-                auto trim = request->Record.MutableCmdTrimLeakedBlobs(); 
-                trim->SetMaxItemsToTrim(100); 
-                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-                TAutoPtr<IEventHandle> handle; 
-                TEvKeyValue::TEvResponse *result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle); 
-                UNIT_ASSERT(result); 
-                UNIT_ASSERT(result->Record.HasStatus()); 
-                UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
-                retriesLeft = 0; 
-            } catch (NActors::TSchedulingLimitReachedException) { 
-                UNIT_ASSERT(retriesLeft == 2); 
-            } 
-        } 
- 
-    }); 
-} 
- 
-Y_UNIT_TEST(TestIncorrectRequestThenResponseError) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        activeZone = false; 
- 
-        TAutoPtr<IEventHandle> handle; 
-        TEvKeyValue::TEvResponse *result; 
-        THolder<TEvKeyValue::TEvRequest> request; 
-        try { 
-            tc.Runtime->ResetScheduledCount(); 
-            request.Reset(new TEvKeyValue::TEvRequest); 
-            auto write = request->Record.AddCmdWrite(); 
-            //write->SetKey("k"); 
-            write->SetValue("v"); 
-            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::MAIN); 
-            write->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME); 
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle); 
-            UNIT_ASSERT(result); 
-            UNIT_ASSERT(result->Record.HasStatus()); 
-            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_INTERNALERROR); 
- 
-            request.Reset(new TEvKeyValue::TEvRequest); 
-            auto write2 = request->Record.AddCmdWrite(); 
-            write2->SetKey("k"); 
-            //write->SetValue("v"); 
-            write2->SetStorageChannel(NKikimrClient::TKeyValueRequest::MAIN); 
-            write2->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME); 
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle); 
-            UNIT_ASSERT(result); 
-            UNIT_ASSERT(result->Record.HasStatus()); 
-            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_INTERNALERROR); 
- 
-            CmdRename("2", "3", tc, false); 
- 
-        } catch (NActors::TSchedulingLimitReachedException) { 
-            UNIT_ASSERT(false); 
-        } 
- 
-    }); 
-} 
- 
-Y_UNIT_TEST(TestInlineWriteReadDeleteWithRestartsThenResponseOk) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+Y_UNIT_TEST(TestWriteTrimWithRestartsThenResponseOk) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+        for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
+            try {
+                THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+                auto trim = request->Record.MutableCmdTrimLeakedBlobs();
+                trim->SetMaxItemsToTrim(100);
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+                TAutoPtr<IEventHandle> handle;
+                TEvKeyValue::TEvResponse *result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+                UNIT_ASSERT(result);
+                UNIT_ASSERT(result->Record.HasStatus());
+                UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+                retriesLeft = 0;
+            } catch (NActors::TSchedulingLimitReachedException) {
+                UNIT_ASSERT(retriesLeft == 2);
+            }
+        }
+
+    });
+}
+
+Y_UNIT_TEST(TestIncorrectRequestThenResponseError) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+
+        TAutoPtr<IEventHandle> handle;
+        TEvKeyValue::TEvResponse *result;
+        THolder<TEvKeyValue::TEvRequest> request;
+        try {
+            tc.Runtime->ResetScheduledCount();
+            request.Reset(new TEvKeyValue::TEvRequest);
+            auto write = request->Record.AddCmdWrite();
+            //write->SetKey("k");
+            write->SetValue("v");
+            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::MAIN);
+            write->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT(result->Record.HasStatus());
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_INTERNALERROR);
+
+            request.Reset(new TEvKeyValue::TEvRequest);
+            auto write2 = request->Record.AddCmdWrite();
+            write2->SetKey("k");
+            //write->SetValue("v");
+            write2->SetStorageChannel(NKikimrClient::TKeyValueRequest::MAIN);
+            write2->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT(result->Record.HasStatus());
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_INTERNALERROR);
+
+            CmdRename("2", "3", tc, false);
+
+        } catch (NActors::TSchedulingLimitReachedException) {
+            UNIT_ASSERT(false);
+        }
+
+    });
+}
+
+Y_UNIT_TEST(TestInlineWriteReadDeleteWithRestartsThenResponseOk) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
         CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::INLINE,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {"value"}, {}, tc); 
-        CmdDeleteRange("key", true, "key", true, tc); 
+            {"value"}, {}, tc);
+        CmdDeleteRange("key", true, "key", true, tc);
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {""}, {true}, tc); 
-    }); 
-} 
+            {""}, {true}, tc);
+    });
+}
 
 
 Y_UNIT_TEST(TestInlineWriteReadDeleteWithRestartsThenResponseOkNewApi) {
@@ -1039,34 +1039,34 @@ Y_UNIT_TEST(TestInlineWriteReadDeleteWithRestartsThenResponseOkNewApi) {
 }
 
 
-Y_UNIT_TEST(TestWrite200KDeleteThenResponseError) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        tc.Runtime->GetAppData(0).AllowHugeKeyValueDeletes = false; 
-        tc.Runtime->SetDispatchedEventsLimit(10'000'0000); 
-        activeZone = false; 
-        const ui32 BatchCount = 60; 
-        const ui32 ItemsPerBatch = 2048; 
-        for (ui32 i = 0; i < BatchCount; ++i) { 
-            TDeque<TString> keys; 
-            TDeque<TString> values; 
-            for (ui32 j = 0; j < ItemsPerBatch; ++j) { 
-                TString key = Sprintf("k%08" PRIu32, i * ItemsPerBatch + j); 
-                keys.push_back(key); 
-                values.push_back(TString("v")); 
-            } 
-            CmdWrite(keys, values, //NKikimrClient::TKeyValueRequest::INLINE, 
-                    NKikimrClient::TKeyValueRequest::MAIN, 
-                    NKikimrClient::TKeyValueRequest::BACKGROUND, tc); // Background is selected to increase coverage 
-        } 
-        CmdDeleteRange("a", true, "z", true, tc, NMsgBusProxy::MSTATUS_INTERNALERROR); 
-    }); 
-} 
- 
+Y_UNIT_TEST(TestWrite200KDeleteThenResponseError) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        tc.Runtime->GetAppData(0).AllowHugeKeyValueDeletes = false;
+        tc.Runtime->SetDispatchedEventsLimit(10'000'0000);
+        activeZone = false;
+        const ui32 BatchCount = 60;
+        const ui32 ItemsPerBatch = 2048;
+        for (ui32 i = 0; i < BatchCount; ++i) {
+            TDeque<TString> keys;
+            TDeque<TString> values;
+            for (ui32 j = 0; j < ItemsPerBatch; ++j) {
+                TString key = Sprintf("k%08" PRIu32, i * ItemsPerBatch + j);
+                keys.push_back(key);
+                values.push_back(TString("v"));
+            }
+            CmdWrite(keys, values, //NKikimrClient::TKeyValueRequest::INLINE,
+                    NKikimrClient::TKeyValueRequest::MAIN,
+                    NKikimrClient::TKeyValueRequest::BACKGROUND, tc); // Background is selected to increase coverage
+        }
+        CmdDeleteRange("a", true, "z", true, tc, NMsgBusProxy::MSTATUS_INTERNALERROR);
+    });
+}
+
 
 Y_UNIT_TEST(TestWrite200KDeleteThenResponseErrorNewApi) {
     TTestContext tc;
@@ -1093,96 +1093,96 @@ Y_UNIT_TEST(TestWrite200KDeleteThenResponseErrorNewApi) {
 }
 
 
-/*Y_UNIT_TEST(TestWrite16MillionReadDeleteWithRestartsThenResponseOk) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
-        TInstant startTime = TInstant::Now(); 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        activeZone = false; 
-        const ui32 BatchCount = 4; 
-        //const ui32 ItemsPerBatch = 2048000; 
-        const ui32 ItemsPerBatch = 2048; 
-        for (ui32 i = 0; i < BatchCount; ++i) { 
-            Cerr << "i=" << i << " Duration=" << (TInstant::Now() - startTime).Seconds() << Endl; 
-            TDeque<TString> keys; 
-            TDeque<TString> values; 
-            for (ui32 j = 0; j < ItemsPerBatch; ++j) { 
-                TString key = Sprintf("k%08" PRIu32, i * ItemsPerBatch + j); 
-                keys.push_back(key); 
-                values.push_back(TString("v")); 
-            } 
-            CmdWrite(keys, values, //NKikimrClient::TKeyValueRequest::INLINE, 
-                    NKikimrClient::TKeyValueRequest::MAIN, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        } 
-        //activeZone = true; 
-//        CmdRead({"k00100500"}, NKikimrClient::TKeyValueRequest::REALTIME, 
-//            {"v"}, {}, tc); 
-//        CmdDeleteRange("a", true, "z", true, tc, NMsgBusProxy::MSTATUS_INTERNALERROR); 
-        ui32 deleteBatchSize = 200; 
-        ui32 deleteBatchCount = (BatchCount * ItemsPerBatch + deleteBatchSize - 1) / deleteBatchSize; 
-        for (ui32 batch = 0; batch < deleteBatchCount; ++batch) { 
-            Cerr << "batch=" << batch << " Duration=" << (TInstant::Now() - startTime).Seconds() << Endl; 
-            TString k1 = Sprintf("k%08" PRIu32, batch * deleteBatchSize); 
-            TString k2 = Sprintf("k%08" PRIu32, (batch + 1) * deleteBatchSize); 
-            CmdDeleteRange(k1, true, k2, false, tc); 
-        } 
- 
-        CmdRead({"k00100500"}, NKikimrClient::TKeyValueRequest::REALTIME, 
-            {""}, {true}, tc); 
-    }); 
-} 
-*/ 
- 
-Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+/*Y_UNIT_TEST(TestWrite16MillionReadDeleteWithRestartsThenResponseOk) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
+        TInstant startTime = TInstant::Now();
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        const ui32 BatchCount = 4;
+        //const ui32 ItemsPerBatch = 2048000;
+        const ui32 ItemsPerBatch = 2048;
+        for (ui32 i = 0; i < BatchCount; ++i) {
+            Cerr << "i=" << i << " Duration=" << (TInstant::Now() - startTime).Seconds() << Endl;
+            TDeque<TString> keys;
+            TDeque<TString> values;
+            for (ui32 j = 0; j < ItemsPerBatch; ++j) {
+                TString key = Sprintf("k%08" PRIu32, i * ItemsPerBatch + j);
+                keys.push_back(key);
+                values.push_back(TString("v"));
+            }
+            CmdWrite(keys, values, //NKikimrClient::TKeyValueRequest::INLINE,
+                    NKikimrClient::TKeyValueRequest::MAIN,
+                    NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        }
+        //activeZone = true;
+//        CmdRead({"k00100500"}, NKikimrClient::TKeyValueRequest::REALTIME,
+//            {"v"}, {}, tc);
+//        CmdDeleteRange("a", true, "z", true, tc, NMsgBusProxy::MSTATUS_INTERNALERROR);
+        ui32 deleteBatchSize = 200;
+        ui32 deleteBatchCount = (BatchCount * ItemsPerBatch + deleteBatchSize - 1) / deleteBatchSize;
+        for (ui32 batch = 0; batch < deleteBatchCount; ++batch) {
+            Cerr << "batch=" << batch << " Duration=" << (TInstant::Now() - startTime).Seconds() << Endl;
+            TString k1 = Sprintf("k%08" PRIu32, batch * deleteBatchSize);
+            TString k2 = Sprintf("k%08" PRIu32, (batch + 1) * deleteBatchSize);
+            CmdDeleteRange(k1, true, k2, false, tc);
+        }
+
+        CmdRead({"k00100500"}, NKikimrClient::TKeyValueRequest::REALTIME,
+            {""}, {true}, tc);
+    });
+}
+*/
+
+Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
         TDeque<TString> keys;
         TDeque<TString> values;
-        { 
-            TStringStream value; 
-            for (ui32 itemIdx = 0; itemIdx <= 4; ++itemIdx) { 
-                value << "x"; 
-                keys.push_back(Sprintf("key%" PRIu32, itemIdx)); 
-                values.push_back(value.Str()); 
+        {
+            TStringStream value;
+            for (ui32 itemIdx = 0; itemIdx <= 4; ++itemIdx) {
+                value << "x";
+                keys.push_back(Sprintf("key%" PRIu32, itemIdx));
+                values.push_back(value.Str());
             }
         }
-        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::EXTRA9, 
+        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::EXTRA9,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
-        for (ui32 itemIdx = 1; itemIdx < 4; ++itemIdx) { 
-            expectedKeys.push_back(keys[itemIdx]); 
-            expectedValues.push_back(values[itemIdx]); 
+        for (ui32 itemIdx = 1; itemIdx < 4; ++itemIdx) {
+            expectedKeys.push_back(keys[itemIdx]);
+            expectedValues.push_back(values[itemIdx]);
         }
-        { 
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("key1", true, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        { 
+            AddCmdReadRange("key1", true, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("key0", false, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        { 
+            AddCmdReadRange("key0", false, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("key0", false, "key3", true, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-    }); 
-} 
+            AddCmdReadRange("key0", false, "key3", true, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+    });
+}
 
 
 Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOkNewApi) {
@@ -1217,60 +1217,60 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOkNewApi) {
 
 
 Y_UNIT_TEST(TestInlineWriteReadWithRestartsThenResponseOk) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
+        TFinalizer finalizer(tc);
         TDeque<TString> keys;
         TDeque<TString> values;
-        tc.Prepare(dispatchName, setup, activeZone); 
-        { 
-            TStringStream value; 
-            for (ui32 itemIdx = 0; itemIdx <= 4; ++itemIdx) { 
+        tc.Prepare(dispatchName, setup, activeZone);
+        {
+            TStringStream value;
+            for (ui32 itemIdx = 0; itemIdx <= 4; ++itemIdx) {
                 TDeque<TString> keys1;
                 TDeque<TString> values1;
-                value << "x"; 
-                keys1.push_back(Sprintf("key%" PRIu32, itemIdx)); 
-                keys.push_back(Sprintf("key%" PRIu32, itemIdx)); 
-                values1.push_back(value.Str()); 
-                values.push_back(value.Str()); 
-                CmdWrite(keys1, values1, 
-                    itemIdx % 2 == 0 ? 
+                value << "x";
+                keys1.push_back(Sprintf("key%" PRIu32, itemIdx));
+                keys.push_back(Sprintf("key%" PRIu32, itemIdx));
+                values1.push_back(value.Str());
+                values.push_back(value.Str());
+                CmdWrite(keys1, values1,
+                    itemIdx % 2 == 0 ?
                         NKikimrClient::TKeyValueRequest::INLINE :
                         NKikimrClient::TKeyValueRequest::MAIN,
                     NKikimrClient::TKeyValueRequest::REALTIME, tc);
-            } 
-        } 
- 
+            }
+        }
+
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
-        for (ui32 itemIdx = 1; itemIdx < 4; ++itemIdx) { 
-            expectedKeys.push_back(keys[itemIdx]); 
-            expectedValues.push_back(values[itemIdx]); 
-        } 
-        { 
+        for (ui32 itemIdx = 1; itemIdx < 4; ++itemIdx) {
+            expectedKeys.push_back(keys[itemIdx]);
+            expectedValues.push_back(values[itemIdx]);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("key1", true, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        { 
+            AddCmdReadRange("key1", true, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("key0", false, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        { 
+            AddCmdReadRange("key0", false, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("key0", false, "key3", true, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-    }); 
-} 
- 
- 
+            AddCmdReadRange("key0", false, "key3", true, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+    });
+}
+
+
 Y_UNIT_TEST(TestInlineWriteReadWithRestartsThenResponseOkNewApi) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1290,7 +1290,7 @@ Y_UNIT_TEST(TestInlineWriteReadWithRestartsThenResponseOkNewApi) {
                 ExecuteWrite(tc, {pair}, 0, itemIdx % 2 == 0, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
             }
         }
- 
+
         ExecuteReadRange(tc, "key1", EBorderKind::Include, "key4", EBorderKind::Exclude, expectedPairs, 0, true, 0);
         ExecuteReadRange(tc, "key0", EBorderKind::Exclude, "key4", EBorderKind::Exclude, expectedPairs, 0, true, 0);
         ExecuteReadRange(tc, "key0", EBorderKind::Exclude, "key3", EBorderKind::Include, expectedPairs, 0, true, 0);
@@ -1317,7 +1317,7 @@ Y_UNIT_TEST(TestInlineWriteReadWithRestartsWithNotCorrectUTF8NewApi) {
 }
 
 
-Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOk) { 
+Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOk) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1333,12 +1333,12 @@ Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOk) {
         TDeque<TString> expectedValues;
         expectedKeys.push_back("key");
         expectedValues.push_back("");
-        { 
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("a", true, "z", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
+            AddCmdReadRange("a", true, "z", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                    expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
 
         CmdDeleteRange("key", true, "key", true, tc);
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
@@ -1366,35 +1366,35 @@ Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOkNewApi) {
 }
 
 
-Y_UNIT_TEST(TestInlineEmptyWriteReadDeleteWithRestartsThenResponseOk) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+Y_UNIT_TEST(TestInlineEmptyWriteReadDeleteWithRestartsThenResponseOk) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
         CmdWrite("key", "", NKikimrClient::TKeyValueRequest::INLINE,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {""}, {}, tc); 
- 
+            {""}, {}, tc);
+
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
-        expectedKeys.push_back("key"); 
-        expectedValues.push_back(""); 
-        { 
+        expectedKeys.push_back("key");
+        expectedValues.push_back("");
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("a", true, "z", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
- 
-        CmdDeleteRange("key", true, "key", true, tc); 
+            AddCmdReadRange("a", true, "z", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+
+        CmdDeleteRange("key", true, "key", true, tc);
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {""}, {true}, tc); 
-    }); 
-} 
- 
+            {""}, {true}, tc);
+    });
+}
+
 
 Y_UNIT_TEST(TestInlineEmptyWriteReadDeleteWithRestartsThenResponseOkNewApi) {
     TTestContext tc;
@@ -1415,72 +1415,72 @@ Y_UNIT_TEST(TestInlineEmptyWriteReadDeleteWithRestartsThenResponseOkNewApi) {
 }
 
 
-TString PrepareData(ui32 size, ui32 flavor) { 
-    TString data = TString::Uninitialized(size); 
-    for (ui32 i = 0; i < size; ++i) { 
-        data[i] = '0' + (i + size + flavor) % 8; 
-    } 
-    return data; 
-} 
- 
- 
+TString PrepareData(ui32 size, ui32 flavor) {
+    TString data = TString::Uninitialized(size);
+    for (ui32 i = 0; i < size; ++i) {
+        data[i] = '0' + (i + size + flavor) % 8;
+    }
+    return data;
+}
+
+
 Y_UNIT_TEST(TestWriteReadRangeLimitThenLimitWorks) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        const ui32 itemCount = 1000; 
-        TDeque<TString> keys; 
-        TDeque<TString> values; 
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            keys.push_back(Sprintf("k%07" PRIu32, itemIdx)); 
-            values.push_back(PrepareData(10000, itemIdx)); 
-        } 
-        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
- 
-        TDeque<TString> expectedKeys; 
-        TDeque<TString> expectedValues; 
-        ui64 totalSize = 0; 
-        ui64 sizeLimit = 200; 
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            totalSize += keys[itemIdx].size() + 32; 
-            if (totalSize > sizeLimit) { 
-                break; 
-            } 
-            expectedKeys.push_back(keys[itemIdx]); 
-        } 
-        Y_VERIFY(expectedKeys.size()); 
- 
-        { 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        const ui32 itemCount = 1000;
+        TDeque<TString> keys;
+        TDeque<TString> values;
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            keys.push_back(Sprintf("k%07" PRIu32, itemIdx));
+            values.push_back(PrepareData(10000, itemIdx));
+        }
+        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+        TDeque<TString> expectedKeys;
+        TDeque<TString> expectedValues;
+        ui64 totalSize = 0;
+        ui64 sizeLimit = 200;
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            totalSize += keys[itemIdx].size() + 32;
+            if (totalSize > sizeLimit) {
+                break;
+            }
+            expectedKeys.push_back(keys[itemIdx]);
+        }
+        Y_VERIFY(expectedKeys.size());
+
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        { 
+            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit,
+                    NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp); 
-            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        { 
+            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit,
+                    NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp);
+            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit,
+                    NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("k0000000", true, expectedKeys[expectedKeys.size() - 1], true, false, sizeLimit, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp); 
-            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-    }); 
-} 
- 
+            AddCmdReadRange("k0000000", true, expectedKeys[expectedKeys.size() - 1], true, false, sizeLimit,
+                    NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit,
+                    NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp);
+            AddCmdReadRange("k0000000", true, "k9999999", true, false, sizeLimit,
+                    NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+    });
+}
+
 
 Y_UNIT_TEST(TestWriteReadRangeLimitThenLimitWorksNewApi) {
     TTestContext tc;
@@ -1518,51 +1518,51 @@ Y_UNIT_TEST(TestWriteReadRangeLimitThenLimitWorksNewApi) {
 }
 
 
-Y_UNIT_TEST(TestWriteReadRangeDataLimitThenLimitWorks) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        const ui32 itemCount = 10000; 
+Y_UNIT_TEST(TestWriteReadRangeDataLimitThenLimitWorks) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        const ui32 itemCount = 10000;
         TDeque<TString> keys;
         TDeque<TString> values;
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            keys.push_back(Sprintf("k%07" PRIu32, itemIdx)); 
-            values.push_back(PrepareData(8, itemIdx)); 
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            keys.push_back(Sprintf("k%07" PRIu32, itemIdx));
+            values.push_back(PrepareData(8, itemIdx));
         }
         CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
-        ui64 totalSize = 0; 
-        ui64 sizeLimit = 200; 
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            totalSize += values[itemIdx].size() + keys[itemIdx].size() + 32; 
-            if (totalSize > sizeLimit) { 
-                break; 
+        ui64 totalSize = 0;
+        ui64 sizeLimit = 200;
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            totalSize += values[itemIdx].size() + keys[itemIdx].size() + 32;
+            if (totalSize > sizeLimit) {
+                break;
             }
-            expectedKeys.push_back(keys[itemIdx]); 
-            expectedValues.push_back(values[itemIdx]); 
+            expectedKeys.push_back(keys[itemIdx]);
+            expectedValues.push_back(values[itemIdx]);
         }
-        Y_VERIFY(expectedKeys.size()); 
+        Y_VERIFY(expectedKeys.size());
 
-        { 
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit, 
-                NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        { 
+            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit,
+                NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit, 
-                NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp); 
-            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit, 
-                NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
+            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit,
+                NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp);
+            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit,
+                NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
     });
 }
 
@@ -1607,53 +1607,53 @@ Y_UNIT_TEST(TestWriteReadRangeDataLimitThenLimitWorksNewApi) {
 
 
 Y_UNIT_TEST(TestInlineWriteReadRangeLimitThenLimitWorks) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        const ui32 itemCount = 1000; 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        const ui32 itemCount = 1000;
         TDeque<TString> keys;
         TDeque<TString> values;
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            keys.push_back(Sprintf("k%07" PRIu32, itemIdx)); 
-            values.push_back(PrepareData(8, itemIdx)); 
-        } 
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            keys.push_back(Sprintf("k%07" PRIu32, itemIdx));
+            values.push_back(PrepareData(8, itemIdx));
+        }
         CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::INLINE,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
-        ui64 totalSize = 0; 
-        ui64 sizeLimit = 200; 
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            totalSize += values[itemIdx].size() + keys[itemIdx].size() + 32; 
-            if (totalSize > sizeLimit) { 
-                break; 
-            } 
-            expectedKeys.push_back(keys[itemIdx]); 
-            expectedValues.push_back(values[itemIdx]); 
-        } 
-        Y_VERIFY(expectedKeys.size()); 
- 
-        { 
+        ui64 totalSize = 0;
+        ui64 sizeLimit = 200;
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            totalSize += values[itemIdx].size() + keys[itemIdx].size() + 32;
+            if (totalSize > sizeLimit) {
+                break;
+            }
+            expectedKeys.push_back(keys[itemIdx]);
+            expectedValues.push_back(values[itemIdx]);
+        }
+        Y_VERIFY(expectedKeys.size());
+
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit, 
-                NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        { 
+            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit,
+                NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit, 
-                NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp); 
-            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit, 
-                NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-    }); 
-} 
- 
+            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit,
+                NKikimrClient::TKeyValueRequest::REALTIME, expectedKeys, expectedValues, NKikimrProto::OVERRUN, tc, dp);
+            AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit,
+                NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+    });
+}
+
 
 Y_UNIT_TEST(TestInlineWriteReadRangeLimitThenLimitWorksNewApi) {
     MakeTestWriteReadRangeDataLimitThenLimitWorksNewApi(1);
@@ -1661,38 +1661,38 @@ Y_UNIT_TEST(TestInlineWriteReadRangeLimitThenLimitWorksNewApi) {
 
 
 Y_UNIT_TEST(TestCopyRangeWorks) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        const ui32 itemCount = 100; 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        const ui32 itemCount = 100;
         TDeque<TString> keys;
         TDeque<TString> values;
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            keys.push_back(Sprintf("k%07" PRIu32, itemIdx)); 
-            values.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx)); 
-        } 
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            keys.push_back(Sprintf("k%07" PRIu32, itemIdx));
+            values.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx));
+        }
         CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
-        CmdCopyRange("", false, "~", false, "p", "", tc); 
+        CmdCopyRange("", false, "~", false, "p", "", tc);
         CmdWrite("0", "0", NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            expectedKeys.push_back(Sprintf("pk%07" PRIu32, itemIdx)); 
-            expectedValues.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx)); 
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            expectedKeys.push_back(Sprintf("pk%07" PRIu32, itemIdx));
+            expectedValues.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx));
         }
         TDesiredPair<TEvKeyValue::TEvRequest> dp;
-        AddCmdReadRange("p", false, "q", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-            expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-        RunRequest(dp, tc, __LINE__); 
-    }); 
-} 
+        AddCmdReadRange("p", false, "q", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+            expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+        RunRequest(dp, tc, __LINE__);
+    });
+}
 
 
 void MakeTestCopyRangeWorksNewApi(ui64 storageChannel) {
@@ -1731,78 +1731,78 @@ Y_UNIT_TEST(TestCopyRangeWorksNewApi) {
 
 
 Y_UNIT_TEST(TestInlineCopyRangeWorks) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        const ui32 itemCount = 100; 
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ) { 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        const ui32 itemCount = 100;
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ) {
             TDeque<TString> keys;
             TDeque<TString> values;
-            ui32 endItemIdx = Min(itemCount, itemIdx + 20); 
-            for (; itemIdx < endItemIdx; ++itemIdx) { 
-                keys.push_back(Sprintf("k%07" PRIu32, itemIdx)); 
-                values.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx)); 
-            } 
-            CmdWrite(keys, values, 
-                    ((itemIdx / 20) % 2 == 0) ? 
+            ui32 endItemIdx = Min(itemCount, itemIdx + 20);
+            for (; itemIdx < endItemIdx; ++itemIdx) {
+                keys.push_back(Sprintf("k%07" PRIu32, itemIdx));
+                values.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx));
+            }
+            CmdWrite(keys, values,
+                    ((itemIdx / 20) % 2 == 0) ?
                         NKikimrClient::TKeyValueRequest::INLINE :
                         NKikimrClient::TKeyValueRequest::INLINE,
                     NKikimrClient::TKeyValueRequest::REALTIME, tc);
-        } 
+        }
 
-        CmdCopyRange("", false, "~", false, "p", "", tc); 
+        CmdCopyRange("", false, "~", false, "p", "", tc);
         CmdWrite("0", "0", NKikimrClient::TKeyValueRequest::INLINE,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
- 
+
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
-        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) { 
-            expectedKeys.push_back(Sprintf("pk%07" PRIu32, itemIdx)); 
-            expectedValues.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx)); 
-        } 
+        for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
+            expectedKeys.push_back(Sprintf("pk%07" PRIu32, itemIdx));
+            expectedValues.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx));
+        }
         TDesiredPair<TEvKeyValue::TEvRequest> dp;
-        AddCmdReadRange("p", false, "q", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-            expectedKeys, expectedValues, NKikimrProto::OK, tc, dp); 
-        RunRequest(dp, tc, __LINE__); 
-    }); 
-} 
- 
- 
-Y_UNIT_TEST(TestInlineCopyRangeWorksNewApi) {
-    MakeTestCopyRangeWorksNewApi(1);
-}
- 
-
-Y_UNIT_TEST(TestConcatWorks) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        CmdWrite({"1", "2", "3", "4"}, {"hello", ", ", "world", "!"}, NKikimrClient::TKeyValueRequest::MAIN,
-            NKikimrClient::TKeyValueRequest::REALTIME, tc);
-        CmdConcat({"1", "2", "3", "4"}, "5", false, tc); 
-        { 
-            TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("1", true, "5", true, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                    {"5"}, {"hello, world!"}, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-        CmdConcat({"5", "5"}, "5", true, tc); 
-        { 
-            TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("1", true, "5", true, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME, 
-                {"5"}, {"hello, world!hello, world!"}, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
+        AddCmdReadRange("p", false, "q", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+            expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
+        RunRequest(dp, tc, __LINE__);
     });
 }
 
- 
+
+Y_UNIT_TEST(TestInlineCopyRangeWorksNewApi) {
+    MakeTestCopyRangeWorksNewApi(1);
+}
+
+
+Y_UNIT_TEST(TestConcatWorks) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        CmdWrite({"1", "2", "3", "4"}, {"hello", ", ", "world", "!"}, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdConcat({"1", "2", "3", "4"}, "5", false, tc);
+        {
+            TDesiredPair<TEvKeyValue::TEvRequest> dp;
+            AddCmdReadRange("1", true, "5", true, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                    {"5"}, {"hello, world!"}, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+        CmdConcat({"5", "5"}, "5", true, tc);
+        {
+            TDesiredPair<TEvKeyValue::TEvRequest> dp;
+            AddCmdReadRange("1", true, "5", true, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
+                {"5"}, {"hello, world!hello, world!"}, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+    });
+}
+
+
 Y_UNIT_TEST(TestConcatWorksNewApi) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1827,25 +1827,25 @@ Y_UNIT_TEST(TestConcatWorksNewApi) {
 
 
 Y_UNIT_TEST(TestRenameWorks) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
         CmdWrite({"1", "2", "3", "4"}, {"123", "456", "789", "012"}, NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
-        CmdRename("2", "3", tc); 
-        { 
+        CmdRename("2", "3", tc);
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("1", true, "3", true, true, 1000, NKikimrClient::TKeyValueRequest::REALTIME, 
-                {"1", "3"}, {"123", "456"}, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-   }); 
+            AddCmdReadRange("1", true, "3", true, true, 1000, NKikimrClient::TKeyValueRequest::REALTIME,
+                {"1", "3"}, {"123", "456"}, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+   });
 }
 
- 
+
 Y_UNIT_TEST(TestRenameWorksewApi) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1869,12 +1869,12 @@ Y_UNIT_TEST(TestRenameWorksewApi) {
 
 
 Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOk) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
         CmdWrite("key1", "value1", NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
         CmdWrite("key2", "value2", NKikimrClient::TKeyValueRequest::EXTRA,
@@ -1882,14 +1882,14 @@ Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOk) {
         CmdWrite("key3", "value3", NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
         CmdRead({"key1", "key2", "key3"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {"value1", "value2", "value3"}, {}, tc); 
-        { 
+            {"value1", "value2", "value3"}, {}, tc);
+        {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
-            AddCmdReadRange("key1", true, "key3", true, true, 1000, NKikimrClient::TKeyValueRequest::REALTIME, 
-                {"key1", "key2", "key3"}, {"value1", "value2", "value3"}, NKikimrProto::OK, tc, dp); 
-            RunRequest(dp, tc, __LINE__); 
-        } 
-    }); 
+            AddCmdReadRange("key1", true, "key3", true, true, 1000, NKikimrClient::TKeyValueRequest::REALTIME,
+                {"key1", "key2", "key3"}, {"value1", "value2", "value3"}, NKikimrProto::OK, tc, dp);
+            RunRequest(dp, tc, __LINE__);
+        }
+    });
 }
 
 
@@ -1990,19 +1990,19 @@ Y_UNIT_TEST(TestIncrementalKeySet) {
 }
 
 Y_UNIT_TEST(TestGetStatusWorks) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
         CmdGetStatus(NKikimrClient::TKeyValueRequest::MAIN,
-            ui32(NKikimrBlobStorage::StatusIsValid), tc); 
-        CmdGetStatus(NKikimrClient::TKeyValueRequest::INLINE, 
-            ui32(NKikimrBlobStorage::StatusIsValid), tc); 
-   }); 
-} 
- 
+            ui32(NKikimrBlobStorage::StatusIsValid), tc);
+        CmdGetStatus(NKikimrClient::TKeyValueRequest::INLINE,
+            ui32(NKikimrBlobStorage::StatusIsValid), tc);
+   });
+}
+
 Y_UNIT_TEST(TestGetStatusWorksNewApi) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -2015,55 +2015,55 @@ Y_UNIT_TEST(TestGetStatusWorksNewApi) {
 }
 
 Y_UNIT_TEST(TestWriteReadWhileWriteWorks) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        CmdWrite("key1", "value1", NKikimrClient::TKeyValueRequest::INLINE, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdWrite("key2", "value2", NKikimrClient::TKeyValueRequest::INLINE, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdWrite("key3", "value3", NKikimrClient::TKeyValueRequest::INLINE, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        activeZone = false; 
-        // Send huge Write + Read 
-        for (ui32 n = 1; n <= 20; ++n) { 
-            tc.Runtime->ResetScheduledCount(); 
-            THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest); 
-            auto write = request->Record.AddCmdWrite(); 
-            TStringStream str; 
-            str << "value4."; 
-            for (ui32 i = 0; i < (8ul << n); ++i) { 
-            str << "x"; 
-            } 
-            TString value = str.Str(); 
-            write->SetKey("key4"); 
-            write->SetValue(value); 
-            write->SetStorageChannel(n == 0 ? 
-                    NKikimrClient::TKeyValueRequest::INLINE : 
-                    NKikimrClient::TKeyValueRequest::MAIN); 
-            write->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME); 
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-        } 
-        CmdRead({"key2"}, NKikimrClient::TKeyValueRequest::REALTIME, {"value2"}, {}, tc); 
-    }); 
-} 
- 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        CmdWrite("key1", "value1", NKikimrClient::TKeyValueRequest::INLINE,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdWrite("key2", "value2", NKikimrClient::TKeyValueRequest::INLINE,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdWrite("key3", "value3", NKikimrClient::TKeyValueRequest::INLINE,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        activeZone = false;
+        // Send huge Write + Read
+        for (ui32 n = 1; n <= 20; ++n) {
+            tc.Runtime->ResetScheduledCount();
+            THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+            auto write = request->Record.AddCmdWrite();
+            TStringStream str;
+            str << "value4.";
+            for (ui32 i = 0; i < (8ul << n); ++i) {
+            str << "x";
+            }
+            TString value = str.Str();
+            write->SetKey("key4");
+            write->SetValue(value);
+            write->SetStorageChannel(n == 0 ?
+                    NKikimrClient::TKeyValueRequest::INLINE :
+                    NKikimrClient::TKeyValueRequest::MAIN);
+            write->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        }
+        CmdRead({"key2"}, NKikimrClient::TKeyValueRequest::REALTIME, {"value2"}, {}, tc);
+    });
+}
+
 Y_UNIT_TEST(TestSetExecutorFastLogPolicy) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        CmdSetExecutorFastLogPolicy(true, tc); 
-        CmdSetExecutorFastLogPolicy(false, tc); 
-        CmdSetExecutorFastLogPolicy(true, tc); 
-   }); 
-} 
- 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        CmdSetExecutorFastLogPolicy(true, tc);
+        CmdSetExecutorFastLogPolicy(false, tc);
+        CmdSetExecutorFastLogPolicy(true, tc);
+   });
+}
+
 Y_UNIT_TEST(TestWriteDeleteThenReadRemaining) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -2071,7 +2071,7 @@ Y_UNIT_TEST(TestWriteDeleteThenReadRemaining) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        activeZone = false; 
+        activeZone = false;
         const ui32 BatchCount = 5;
         const ui32 ItemsPerBatch = 50;
         TDeque<TString> allKeys;
@@ -2118,7 +2118,7 @@ Y_UNIT_TEST(TestWriteDeleteThenReadRemaining) {
             }
         }
         // Cerr << "total keys: " << BatchCount * ItemsPerBatch << ", after deletes: " << aliveKeys.size() << Endl;
-        activeZone = true; 
+        activeZone = true;
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
             AddCmdReadRange("a", true, "z", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
@@ -2127,7 +2127,7 @@ Y_UNIT_TEST(TestWriteDeleteThenReadRemaining) {
         }
     });
 }
- 
+
 
 Y_UNIT_TEST(TestObtainLockNewApi) {
     TTestContext tc;
@@ -2150,5 +2150,5 @@ Y_UNIT_TEST(TestObtainLockNewApi) {
    });
 }
 
-} // TKeyValueTest 
-} // NKikimr 
+} // TKeyValueTest
+} // NKikimr

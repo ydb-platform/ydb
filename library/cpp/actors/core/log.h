@@ -12,7 +12,7 @@
 
 #include <util/generic/vector.h>
 #include <util/string/printf.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 #include <library/cpp/logger/all.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
@@ -24,14 +24,14 @@
 // TODO: limit number of messages per second
 // TODO: make TLogComponentLevelRequest/Response network messages
 
-#define IS_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component)                           \ 
-    (static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()) &&            \ 
-     static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings())->Satisfies(   \ 
-             static_cast<::NActors::NLog::EPriority>(priority),                                  \ 
-             static_cast<::NActors::NLog::EComponent>(component),                                \ 
-             0ull)                                                                               \ 
-    ) 
- 
+#define IS_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component)                           \
+    (static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()) &&            \
+     static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings())->Satisfies(   \
+             static_cast<::NActors::NLog::EPriority>(priority),                                  \
+             static_cast<::NActors::NLog::EComponent>(component),                                \
+             0ull)                                                                               \
+    )
+
 #define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
     do {                                                                                                                       \
         ::NActors::NLog::TSettings* mSettings = static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()); \
@@ -49,9 +49,9 @@
         logStringBuilder << stream;                                                    \
         return static_cast<TString>(logStringBuilder);                                 \
     }().data())
- 
-#define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__) 
-#define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream) 
+
+#define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
+#define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
 
 // use these macros for logging via actor system or actor context
 #define LOG_EMERG(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, __VA_ARGS__)
@@ -69,11 +69,11 @@
 #define LOG_CRIT_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, stream)
 #define LOG_ERROR_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_ERROR, component, stream)
 #define LOG_WARN_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_WARN, component, stream)
-#define LOG_NOTICE_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, stream) 
+#define LOG_NOTICE_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, stream)
 #define LOG_INFO_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_INFO, component, stream)
 #define LOG_DEBUG_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
 #define LOG_TRACE_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, stream)
- 
+
 #define LOG_EMERG_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, sampleBy, __VA_ARGS__)
 #define LOG_ALERT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, sampleBy, __VA_ARGS__)
 #define LOG_CRIT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, sampleBy, __VA_ARGS__)
@@ -83,7 +83,7 @@
 #define LOG_INFO_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_INFO, component, sampleBy, __VA_ARGS__)
 #define LOG_DEBUG_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, __VA_ARGS__)
 #define LOG_TRACE_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, __VA_ARGS__)
- 
+
 #define LOG_EMERG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, sampleBy, stream)
 #define LOG_ALERT_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, sampleBy, stream)
 #define LOG_CRIT_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, sampleBy, stream)
@@ -167,11 +167,11 @@ namespace NActors {
     };
 
     class TLogIgnored: public TEventLocal<TLogIgnored, int(NLog::EEv::Ignored)> {
-    public: 
-        TLogIgnored() { 
-        } 
-    }; 
- 
+    public:
+        TLogIgnored() {
+        }
+    };
+
     ////////////////////////////////////////////////////////////////////////////////
     // LOGGER ACTOR
     ////////////////////////////////////////////////////////////////////////////////
@@ -212,7 +212,7 @@ namespace NActors {
 
         void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TLogIgnored, HandleIgnoredEvent); 
+                HFunc(TLogIgnored, HandleIgnoredEvent);
                 HFunc(NLog::TEvLog, HandleLogEvent);
                 HFunc(TLogComponentLevelRequest, HandleLogComponentLevelRequest);
                 HFunc(NMon::TEvHttpInfo, HandleMonInfo);
@@ -298,7 +298,7 @@ namespace NActors {
                                               bool logPError, bool logCons);
     TAutoPtr<TLogBackend> CreateStderrBackend();
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName);
-    TAutoPtr<TLogBackend> CreateNullBackend(); 
+    TAutoPtr<TLogBackend> CreateNullBackend();
     TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends);
 
     /////////////////////////////////////////////////////////////////////

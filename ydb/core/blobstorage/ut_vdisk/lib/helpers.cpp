@@ -23,8 +23,8 @@ bool PDiskGenStatusHandlerDefault(const TActorContext &ctx,
                                   const TActorId &notifyId,
                                   typename TMsg::TPtr &ev) {
     Y_UNUSED(notifyId);
-    Y_VERIFY(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%d (%s)", ev->Get()->Record.GetStatus(), 
-            NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).c_str()); 
+    Y_VERIFY(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%d (%s)", ev->Get()->Record.GetStatus(),
+            NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).c_str());
     LOG_DEBUG(ctx, NActorsServices::TEST, "  TEvVPutResult succeded");
     return false;
 }
@@ -43,14 +43,14 @@ bool PDiskGenStatusHandlerErrorAware(const TActorContext &ctx,
 }
 
 template <class TMsg>
-bool PDiskGenStatusHandleYellowMoveZone(const TActorContext &ctx, 
+bool PDiskGenStatusHandleYellowMoveZone(const TActorContext &ctx,
                                     const TActorId &notifyId,
                                     typename TMsg::TPtr &ev) {
     auto status = ev->Get()->Record.GetStatus();
     auto flags = ev->Get()->Record.GetStatusFlags();
 
-    Y_VERIFY(status == NKikimrProto::OK, "Status=%d (%s)", status, NKikimrProto::EReplyStatus_Name(status).c_str()); 
-    if (flags & NKikimrBlobStorage::EStatusFlags::StatusDiskSpaceLightYellowMove) { 
+    Y_VERIFY(status == NKikimrProto::OK, "Status=%d (%s)", status, NKikimrProto::EReplyStatus_Name(status).c_str());
+    if (flags & NKikimrBlobStorage::EStatusFlags::StatusDiskSpaceLightYellowMove) {
         // Finished
         ctx.Send(notifyId, new TEvents::TEvCompleted(0, 0x28733642)); // signature
         return true;
@@ -73,10 +73,10 @@ bool PDiskPutStatusHandlerErrorAware(const TActorContext &ctx,
     return PDiskGenStatusHandlerErrorAware<TEvBlobStorage::TEvVPutResult>(ctx, notifyId, ev);
 }
 
-bool PDiskPutStatusHandlerYellowMoveZone(const NActors::TActorContext &ctx, 
+bool PDiskPutStatusHandlerYellowMoveZone(const NActors::TActorContext &ctx,
                                      const NActors::TActorId &notifyId,
                                      NKikimr::TEvBlobStorage::TEvVPutResult::TPtr &ev) {
-    return PDiskGenStatusHandleYellowMoveZone<TEvBlobStorage::TEvVPutResult>(ctx, notifyId, ev); 
+    return PDiskGenStatusHandleYellowMoveZone<TEvBlobStorage::TEvVPutResult>(ctx, notifyId, ev);
 }
 
 
@@ -216,7 +216,7 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
         Become(&TThis::StateWriteFunc);
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
-        TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord); 
+        TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);
         QueueActorId = ctx.Register(CreateVDiskBackpressureClient(Conf->GroupInfo, VDiskInfo.VDiskID,
             NKikimrBlobStorage::PutTabletLog, counters, new TBSProxyContext{counters}, {}, "PutTabletLog", 0, false,
             TDuration::Minutes(10), flowRecord, NMonitoring::TCountableBase::EVisibility::Public));
@@ -374,183 +374,183 @@ IActor *CreateManyPuts(TConfiguration *conf, const TActorId &notifyID, const TAl
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> { 
-    TConfiguration *Conf; 
+class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
+    TConfiguration *Conf;
     TActorId NotifyID;
-    const TAllVDisks::TVDiskInstance VDiskInfo; 
-    const ui32 MsgDataSize; 
-    const ui32 MsgNum; 
-    const ui32 BatchSize; 
-    const ui64 TabletId; 
-    const ui32 Channel; 
-    const ui32 Gen; 
+    const TAllVDisks::TVDiskInstance VDiskInfo;
+    const ui32 MsgDataSize;
+    const ui32 MsgNum;
+    const ui32 BatchSize;
+    const ui64 TabletId;
+    const ui32 Channel;
+    const ui32 Gen;
     std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
     std::shared_ptr<TSet<ui32>> BadSteps;
-    const TDuration RequestTimeout; 
-    TVector<ui32> Steps; 
-    ui32 Step; 
-    TString MsgData; 
+    const TDuration RequestTimeout;
+    TVector<ui32> Steps;
+    ui32 Step;
+    TString MsgData;
     TActorId QueueActorId;
-    bool Started = false; 
-    // how many deadline statuses we got 
-    ui64 RequestDeadlines = 0; 
- 
-    ui64 LastBatchSize = 0; 
- 
-    friend class TActorBootstrapped<TManyMultiPuts>; 
- 
-    void Bootstrap(const TActorContext &ctx) { 
-        Become(&TThis::StateWriteFunc); 
- 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters; 
-        TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord); 
+    bool Started = false;
+    // how many deadline statuses we got
+    ui64 RequestDeadlines = 0;
+
+    ui64 LastBatchSize = 0;
+
+    friend class TActorBootstrapped<TManyMultiPuts>;
+
+    void Bootstrap(const TActorContext &ctx) {
+        Become(&TThis::StateWriteFunc);
+
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);
         QueueActorId = ctx.Register(CreateVDiskBackpressureClient(Conf->GroupInfo, VDiskInfo.VDiskID,
             NKikimrBlobStorage::PutTabletLog, counters, new TBSProxyContext{counters}, {}, "PutTabletLog", 0, false,
             TDuration::Minutes(10), flowRecord, NMonitoring::TCountableBase::EVisibility::Public));
-    } 
- 
-    void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& ctx) { 
-        if (ev->Get()->IsConnected && !Started) { 
-            // put logo blob 
-            SendPut(ctx); 
-            Started = true; 
-        } 
-    } 
- 
-    void Finish(const TActorContext &ctx) { 
-        // Finished 
-        const bool noTimeout = RequestTimeout == TDuration::Seconds(0); 
-        if (!noTimeout) { 
-            // got some deadlines 
-            Y_VERIFY(RequestDeadlines); 
-        } 
-        ui32 msgsSent = MsgNum - BadSteps->size(); 
-        LOG_NOTICE(ctx, NActorsServices::TEST, "TOTALLY SENT %u messages", msgsSent); 
-        ctx.Send(NotifyID, new TEvents::TEvCompleted()); 
-        Die(ctx); 
-    } 
- 
-    void SendPut(const TActorContext &ctx) { 
-        // put logo blob 
-        Y_VERIFY(Step <= MsgNum); 
-        ui32 putCount = 0; 
-        const bool noTimeout = RequestTimeout == TDuration::Seconds(0); 
-        const TInstant deadline = noTimeout ? TInstant::Max() : TInstant::Now() + RequestTimeout; 
- 
+    }
+
+    void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->IsConnected && !Started) {
+            // put logo blob
+            SendPut(ctx);
+            Started = true;
+        }
+    }
+
+    void Finish(const TActorContext &ctx) {
+        // Finished
+        const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
+        if (!noTimeout) {
+            // got some deadlines
+            Y_VERIFY(RequestDeadlines);
+        }
+        ui32 msgsSent = MsgNum - BadSteps->size();
+        LOG_NOTICE(ctx, NActorsServices::TEST, "TOTALLY SENT %u messages", msgsSent);
+        ctx.Send(NotifyID, new TEvents::TEvCompleted());
+        Die(ctx);
+    }
+
+    void SendPut(const TActorContext &ctx) {
+        // put logo blob
+        Y_VERIFY(Step <= MsgNum);
+        ui32 putCount = 0;
+        const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
+        const TInstant deadline = noTimeout ? TInstant::Max() : TInstant::Now() + RequestTimeout;
+
         std::unique_ptr<TEvBlobStorage::TEvVMultiPut> vMultiPut(
-            new TEvBlobStorage::TEvVMultiPut(VDiskInfo.VDiskID, deadline, HandleClassGen->GetHandleClass(), 
-                                             false, nullptr)); 
-        while (Step < MsgNum) { 
-            if (Step % 100 == 0) 
-                LOG_NOTICE(ctx, NActorsServices::TEST, "PUT Step=%u", Step); 
- 
-            TLogoBlobID logoBlobID(TabletId, Gen, Steps[Step], Channel, MsgData.size(), 0, 1); 
-            TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID); 
-            if (mainVDiskId == VDiskInfo.VDiskID) { 
-                ui64 cookieValue = Step; 
-                vMultiPut->AddVPut(logoBlobID, MsgData, &cookieValue); 
-                putCount++; 
- 
-                Step++; 
-                if (putCount == BatchSize) { 
-                    // next increment in Handle 
-                    break; 
-                } 
-            } else { 
-                BadSteps->insert(Steps[Step]); 
-                Step++; 
-            } 
-        } 
- 
-        if (putCount) { 
+            new TEvBlobStorage::TEvVMultiPut(VDiskInfo.VDiskID, deadline, HandleClassGen->GetHandleClass(),
+                                             false, nullptr));
+        while (Step < MsgNum) {
+            if (Step % 100 == 0)
+                LOG_NOTICE(ctx, NActorsServices::TEST, "PUT Step=%u", Step);
+
+            TLogoBlobID logoBlobID(TabletId, Gen, Steps[Step], Channel, MsgData.size(), 0, 1);
+            TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID);
+            if (mainVDiskId == VDiskInfo.VDiskID) {
+                ui64 cookieValue = Step;
+                vMultiPut->AddVPut(logoBlobID, MsgData, &cookieValue);
+                putCount++;
+
+                Step++;
+                if (putCount == BatchSize) {
+                    // next increment in Handle
+                    break;
+                }
+            } else {
+                BadSteps->insert(Steps[Step]);
+                Step++;
+            }
+        }
+
+        if (putCount) {
             ctx.Send(QueueActorId, vMultiPut.release());
-            LastBatchSize = putCount; 
-            return; 
-        } 
- 
-        if (Step == MsgNum) { 
-            Finish(ctx); 
-        } 
-    } 
- 
-    void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr &ev, const TActorContext &ctx) { 
-        NKikimrBlobStorage::TEvVMultiPutResult &record = ev->Get()->Record; 
-        //Cerr << "Handle\n"; 
-        Y_VERIFY_DEBUG(LastBatchSize && LastBatchSize == record.ItemsSize()); 
-        const bool noTimeout = RequestTimeout == TDuration::Seconds(0); 
-        auto status = record.GetStatus(); 
-        Y_VERIFY(status == NKikimrProto::OK || noTimeout && status == NKikimrProto::DEADLINE, 
-            "Event# %s", ev->Get()->ToString().data()); 
- 
-        switch (status) { 
-        case NKikimrProto::OK: 
-            for (auto &item : record.GetItems()) { 
-                Y_VERIFY(item.GetStatus() == NKikimrProto::OK); 
-            } 
-            break; 
-        case NKikimrProto::DEADLINE: 
-            RequestDeadlines++; 
-            break; 
-        default: 
-            // IMPOSSIBLE 
-            Y_FAIL(); 
-        } 
- 
-        if (Step == MsgNum) { 
-            Finish(ctx); 
-        } else { 
-            SendPut(ctx); 
-        } 
-    } 
- 
-    STFUNC(StateWriteFunc) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvBlobStorage::TEvVMultiPutResult, Handle); 
-            HFunc(TEvProxyQueueState, Handle); 
-        } 
-    } 
- 
-public: 
+            LastBatchSize = putCount;
+            return;
+        }
+
+        if (Step == MsgNum) {
+            Finish(ctx);
+        }
+    }
+
+    void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr &ev, const TActorContext &ctx) {
+        NKikimrBlobStorage::TEvVMultiPutResult &record = ev->Get()->Record;
+        //Cerr << "Handle\n";
+        Y_VERIFY_DEBUG(LastBatchSize && LastBatchSize == record.ItemsSize());
+        const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
+        auto status = record.GetStatus();
+        Y_VERIFY(status == NKikimrProto::OK || noTimeout && status == NKikimrProto::DEADLINE,
+            "Event# %s", ev->Get()->ToString().data());
+
+        switch (status) {
+        case NKikimrProto::OK:
+            for (auto &item : record.GetItems()) {
+                Y_VERIFY(item.GetStatus() == NKikimrProto::OK);
+            }
+            break;
+        case NKikimrProto::DEADLINE:
+            RequestDeadlines++;
+            break;
+        default:
+            // IMPOSSIBLE
+            Y_FAIL();
+        }
+
+        if (Step == MsgNum) {
+            Finish(ctx);
+        } else {
+            SendPut(ctx);
+        }
+    }
+
+    STFUNC(StateWriteFunc) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvBlobStorage::TEvVMultiPutResult, Handle);
+            HFunc(TEvProxyQueueState, Handle);
+        }
+    }
+
+public:
     TManyMultiPuts(TConfiguration *conf, const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
-              ui32 msgDataSize, ui32 msgNum, ui32 batchSize, ui64 tabletId, ui32 channel, ui32 gen, 
+              ui32 msgDataSize, ui32 msgNum, ui32 batchSize, ui64 tabletId, ui32 channel, ui32 gen,
               std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
-              TDuration requestTimeout) 
-        : TActorBootstrapped<TManyMultiPuts>() 
-        , Conf(conf) 
-        , NotifyID(notifyID) 
-        , VDiskInfo(vdiskInfo) 
-        , MsgDataSize(msgDataSize) 
-        , MsgNum(msgNum) 
-        , BatchSize(batchSize) 
-        , TabletId(tabletId) 
-        , Channel(channel) 
-        , Gen(gen) 
-        , HandleClassGen(cls) 
-        , BadSteps(badSteps) 
-        , RequestTimeout(requestTimeout) 
-        , Step(0) 
-    { 
-        MsgData.reserve(MsgDataSize); 
-        for (ui32 i = 0; i < MsgDataSize; i++) { 
-            MsgData.append('a' + char(i % 26)); 
-        } 
- 
-        for (ui32 i = 0; i < MsgNum; i++) { 
-            Steps.push_back(i); 
-        } 
-        Shuffle(Steps.begin(), Steps.end()); 
-    } 
-}; 
- 
+              TDuration requestTimeout)
+        : TActorBootstrapped<TManyMultiPuts>()
+        , Conf(conf)
+        , NotifyID(notifyID)
+        , VDiskInfo(vdiskInfo)
+        , MsgDataSize(msgDataSize)
+        , MsgNum(msgNum)
+        , BatchSize(batchSize)
+        , TabletId(tabletId)
+        , Channel(channel)
+        , Gen(gen)
+        , HandleClassGen(cls)
+        , BadSteps(badSteps)
+        , RequestTimeout(requestTimeout)
+        , Step(0)
+    {
+        MsgData.reserve(MsgDataSize);
+        for (ui32 i = 0; i < MsgDataSize; i++) {
+            MsgData.append('a' + char(i % 26));
+        }
+
+        for (ui32 i = 0; i < MsgNum; i++) {
+            Steps.push_back(i);
+        }
+        Shuffle(Steps.begin(), Steps.end());
+    }
+};
+
 IActor *CreateManyMultiPuts(TConfiguration *conf, const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
-                       ui32 msgDataSize, ui32 msgNum, ui32 batchSize, ui64 tabletId, ui32 channel, ui32 gen, 
+                       ui32 msgDataSize, ui32 msgNum, ui32 batchSize, ui64 tabletId, ui32 channel, ui32 gen,
                        std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
-                       TDuration requestTimeout) { 
-    return new TManyMultiPuts(conf, notifyID, vdiskInfo, msgDataSize, msgNum, batchSize, tabletId, channel, gen, cls, 
-                         badSteps, requestTimeout); 
-} 
- 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+                       TDuration requestTimeout) {
+    return new TManyMultiPuts(conf, notifyID, vdiskInfo, msgDataSize, msgNum, batchSize, tabletId, channel, gen, cls,
+                         badSteps, requestTimeout);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TManyGets : public TActorBootstrapped<TManyGets> {
     TActorId NotifyID;
     const TAllVDisks::TVDiskInstance VDiskInfo;
@@ -1393,7 +1393,7 @@ NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, T
 void PutLogoBlobToVDisk(const TActorContext &ctx, const TActorId &actorID, const TVDiskID &vdiskID,
                         const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) {
     LOG_DEBUG(ctx, NActorsServices::TEST, "  Sending TEvPut: id=%s data='%s'", id.ToString().data(), LimitData(data).data());
-    ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, data, vdiskID, false, nullptr, TInstant::Max(), cls)); 
+    ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, data, vdiskID, false, nullptr, TInstant::Max(), cls));
 }
 
 // returns number of messages sent

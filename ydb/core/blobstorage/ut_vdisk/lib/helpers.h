@@ -48,7 +48,7 @@ bool PDiskPutStatusHandlerErrorAware(const NActors::TActorContext &ctx,
                                      const NActors::TActorId &notifyId,
                                      NKikimr::TEvBlobStorage::TEvVPutResult::TPtr &ev);
 
-bool PDiskPutStatusHandlerYellowMoveZone(const NActors::TActorContext &ctx, 
+bool PDiskPutStatusHandlerYellowMoveZone(const NActors::TActorContext &ctx,
                                      const NActors::TActorId &notifyId,
                                      NKikimr::TEvBlobStorage::TEvVPutResult::TPtr &ev);
 
@@ -102,12 +102,12 @@ NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &n
                                 TDuration requestTimeout);
 
 NActors::IActor *CreateManyMultiPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
-                                     const TAllVDisks::TVDiskInstance &vdiskInfo, 
-                                     ui32 msgDataSize, ui32 msgNum, ui32 batchSize, 
-                                     ui64 tabletId, ui32 channel, ui32 gen, 
+                                     const TAllVDisks::TVDiskInstance &vdiskInfo,
+                                     ui32 msgDataSize, ui32 msgNum, ui32 batchSize,
+                                     ui64 tabletId, ui32 channel, ui32 gen,
                                      std::shared_ptr<IPutHandleClassGenerator> cls,
                                      std::shared_ptr<TSet<ui32>> badSteps, TDuration requestTimeout);
- 
+
 NActors::IActor *CreateManyGets(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                                 ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen,
                                 std::shared_ptr<TSet<ui32>> badSteps);

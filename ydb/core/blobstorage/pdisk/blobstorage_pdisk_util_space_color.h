@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include "defs.h"
 
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -17,10 +17,10 @@ inline NKikimrBlobStorage::TPDiskSpaceColor::E StatusFlagToSpaceColor(NPDisk::TS
         return TColor::ORANGE;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
         return TColor::LIGHT_ORANGE;
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceYellowStop) { 
+    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceYellowStop) {
         return TColor::YELLOW;
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) { 
-        return TColor::LIGHT_YELLOW; 
+    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) {
+        return TColor::LIGHT_YELLOW;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceCyan) {
         return TColor::CYAN;
     } else {
@@ -35,29 +35,29 @@ inline NPDisk::TStatusFlags SpaceColorToStatusFlag(NKikimrBlobStorage::TPDiskSpa
     switch (color) {
         case TColor::BLACK:
             flags |= NKikimrBlobStorage::StatusDiskSpaceBlack;
-            [[fallthrough]]; 
+            [[fallthrough]];
         case TColor::RED:
             flags |= NKikimrBlobStorage::StatusDiskSpaceRed;
-            [[fallthrough]]; 
+            [[fallthrough]];
         case TColor::ORANGE:
             flags |= NKikimrBlobStorage::StatusDiskSpaceOrange;
-            [[fallthrough]]; 
+            [[fallthrough]];
         case TColor::LIGHT_ORANGE:
             flags |= NKikimrBlobStorage::StatusDiskSpaceLightOrange;
-            [[fallthrough]]; 
+            [[fallthrough]];
         case TColor::YELLOW:
-            flags |= NKikimrBlobStorage::StatusDiskSpaceYellowStop; 
-            [[fallthrough]]; 
-        case TColor::LIGHT_YELLOW: 
-            flags |= NKikimrBlobStorage::StatusDiskSpaceLightYellowMove; 
-            [[fallthrough]]; 
+            flags |= NKikimrBlobStorage::StatusDiskSpaceYellowStop;
+            [[fallthrough]];
+        case TColor::LIGHT_YELLOW:
+            flags |= NKikimrBlobStorage::StatusDiskSpaceLightYellowMove;
+            [[fallthrough]];
         case TColor::CYAN:
             flags |= NKikimrBlobStorage::StatusDiskSpaceCyan;
-            [[fallthrough]]; 
+            [[fallthrough]];
         case TColor::GREEN:
-            [[fallthrough]]; 
+            [[fallthrough]];
         case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
-            [[fallthrough]]; 
+            [[fallthrough]];
         case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
             break;
     }

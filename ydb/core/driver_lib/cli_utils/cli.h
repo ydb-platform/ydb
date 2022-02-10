@@ -31,7 +31,7 @@ namespace NDriverClient {
     int BSAdmCreateGroup(TCommandConfig &cmdConf, int argc, char **argv);
     int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv);
     int MessageBusTrace(TCommandConfig &cmdConf, int argc, char** argv);
-    int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv); 
+    int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int PersQueueRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int PersQueueStress(TCommandConfig &cmdConf, int argc, char **argv);
     int PersQueueDiscoverClustersRequest(TCommandConfig &cmdConf, int argc, char **argv);

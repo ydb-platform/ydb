@@ -1,119 +1,119 @@
-#pragma once 
-#include "defs.h" 
- 
-#include "blobstorage_pdisk_ut.h" 
-#include "blobstorage_pdisk_ut_base_test.h" 
-#include "blobstorage_pdisk_ut_http_request.h" 
+#pragma once
+#include "defs.h"
+
+#include "blobstorage_pdisk_ut.h"
+#include "blobstorage_pdisk_ut_base_test.h"
+#include "blobstorage_pdisk_ut_http_request.h"
 #include "blobstorage_pdisk_chunk_id_formatter.h"
- 
+
 #include <util/random/mersenne64.h>
 
-namespace NKikimr { 
- 
-template <bool IsNewOwner, ui32 GroupGeneration> 
-class TTestInit : public TBaseTest { 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-        { 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
- 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            TVDiskID vDiskId2 = VDiskID; 
-            vDiskId2.GroupGeneration = GroupGeneration; 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, vDiskId2, *PDiskGuid)); 
-            break; 
-        } 
-        case 10: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            if (IsNewOwner) { 
-                ASSERT_YTHROW(LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusNewOwner), 
-                    " Error: found existing owner!"); 
-            } else { 
-                ASSERT_YTHROW(!(LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusNewOwner)), 
-                    " Error: new owner created!"); 
-            } 
- 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestInit(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
+namespace NKikimr {
+
+template <bool IsNewOwner, ui32 GroupGeneration>
+class TTestInit : public TBaseTest {
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+        {
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+
+            VERBOSE_COUT(" Sending TEvInit");
+            TVDiskID vDiskId2 = VDiskID;
+            vDiskId2.GroupGeneration = GroupGeneration;
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, vDiskId2, *PDiskGuid));
+            break;
+        }
+        case 10:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            if (IsNewOwner) {
+                ASSERT_YTHROW(LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusNewOwner),
+                    " Error: found existing owner!");
+            } else {
+                ASSERT_YTHROW(!(LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusNewOwner)),
+                    " Error: new owner created!");
+            }
+
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestInit(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
 class TTestInitCorruptedError : public TBaseTest {
-    void TestFSM(const TActorContext &ctx); 
-public: 
+    void TestFSM(const TActorContext &ctx);
+public:
     TTestInitCorruptedError(const TIntrusivePtr<TTestConfig> &cfg)
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestInitOwner : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestInitOwner(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestLogStartingPoint : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogStartingPoint(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestIncorrectRequests : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    ui32 ChunkIdx0; 
-    ui32 ChunkIdx; 
-    ui64 Lsn; 
- 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
- 
-    ui64 NextLsn() { 
-        ++Lsn; 
-        return Lsn; 
-    } 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestIncorrectRequests(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestEmptyLogRead : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestEmptyLogRead(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestInitOwner : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestInitOwner(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestLogStartingPoint : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogStartingPoint(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestIncorrectRequests : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    ui32 ChunkIdx0;
+    ui32 ChunkIdx;
+    ui64 Lsn;
+
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+
+    ui64 NextLsn() {
+        ++Lsn;
+        return Lsn;
+    }
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestIncorrectRequests(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestEmptyLogRead : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestEmptyLogRead(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
 class TTestWholeLogRead : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
@@ -158,99 +158,99 @@ public:
     {}
 };
 
-template <ui32 Size> 
-class TTestLogWriteRead : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        TString data = PrepareData(Size); 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            VERBOSE_COUT(" Sending TEvLog"); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, data, TLsnSeg(123, 123), (void*)456)); 
-            break; 
-        case 20: 
-            TEST_RESPONSE(EvLogResult, OK); 
-            VERBOSE_COUT(" Sending TEvInit 2"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid)); 
-            break; 
-        case 30: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            VERBOSE_COUT(" Sending TEvLogRead"); 
+template <ui32 Size>
+class TTestLogWriteRead : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx) {
+        TString data = PrepareData(Size);
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            VERBOSE_COUT(" Sending TEvLog");
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, data, TLsnSeg(123, 123), (void*)456));
+            break;
+        case 20:
+            TEST_RESPONSE(EvLogResult, OK);
+            VERBOSE_COUT(" Sending TEvInit 2");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+            break;
+        case 30:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            VERBOSE_COUT(" Sending TEvLogRead");
             ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}));
-            break; 
-        case 40: 
-            TEST_RESPONSE(EvReadLogResult, OK); 
-            ASSERT_YTHROW(LastResponse.LogRecords.size() == 1, 
-                "Unexpected LogRecords size == " << LastResponse.LogRecords.size()); 
-            TEST_LOG_RECORD(LastResponse.LogRecords[0], 123, 0, data); 
+            break;
+        case 40:
+            TEST_RESPONSE(EvReadLogResult, OK);
+            ASSERT_YTHROW(LastResponse.LogRecords.size() == 1,
+                "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
+            TEST_LOG_RECORD(LastResponse.LogRecords[0], 123, 0, data);
             ASSERT_YTHROW(LastResponse.IsEndOfLog,
-                "Unexpected IsEndOfLog = " << (int)LastResponse.IsEndOfLog); 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestLogWriteRead(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-template <ui32 Size, ui64 Lsn> 
-class TTestLogWrite : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        TString data = PrepareData(Size); 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            VERBOSE_COUT(" Sending TEvLog"); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data, TLsnSeg(Lsn, Lsn), (void*)456)); 
-            break; 
-        case 20: 
-            TEST_RESPONSE(EvLogResult, OK); 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestLogWrite(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
+                "Unexpected IsEndOfLog = " << (int)LastResponse.IsEndOfLog);
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestLogWriteRead(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+template <ui32 Size, ui64 Lsn>
+class TTestLogWrite : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx) {
+        TString data = PrepareData(Size);
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            VERBOSE_COUT(" Sending TEvLog");
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data, TLsnSeg(Lsn, Lsn), (void*)456));
+            break;
+        case 20:
+            TEST_RESPONSE(EvLogResult, OK);
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestLogWrite(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
 template<bool Equal>
 class TTestLogWriteCut : public TBaseTest {
     static constexpr ui32 VDiskCount = 2;
@@ -493,562 +493,562 @@ TAtomic TTestLogWriteCut<Equal>::VDiskNum = 0;
 template<bool Equal>
 TVector<TChunkIdx> TTestLogWriteCut<Equal>::CommitedChunks[VDiskCount];
 
-template<ui64 LogRequests> 
-class TTestLogWriteLsnConsistency : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    const ui64 StartLsn = 100; 
-    ui64 Lsn = StartLsn; 
-    ui64 LastSeenLsn = 0; 
-    ui64 LogRequestsRecived = 0; 
- 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        TString data = PrepareData(2000); 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            VERBOSE_COUT(" Sending TEvLog"); 
-            for (ui64 i = 0; i < LogRequests; ++i) { 
-                ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data, TLsnSeg(Lsn, Lsn), (void*)456)); 
-                ++Lsn; 
-            } 
-            break; 
-        case 20: 
-            TEST_RESPONSE(EvLogResult, OK); 
-            for (ui64 i = 0; i < LastResponse.LogResults.size(); ++i) { 
-                ui64 expectedLsn = StartLsn + LogRequestsRecived; 
-                ui64 actualLsn = LastResponse.LogResults[i].Lsn; 
-                VERBOSE_COUT("Expected Lsn# " << expectedLsn << " actual Lsn# " << actualLsn); 
-                ASSERT_YTHROW(expectedLsn == actualLsn, "Error in response Lsn "); 
-                ++LogRequestsRecived; 
-            } 
-            VERBOSE_COUT("LogRequestsRecived# " << LogRequestsRecived); 
-            if (LogRequestsRecived < LogRequests) { 
-                TestStep -= 10; 
-            } else if (LogRequestsRecived > LogRequests) { 
-                ythrow TWithBackTrace<yexception>() << "More results recived then expected " << TestStep << Endl; 
-            } else { 
-                VERBOSE_COUT("Done"); 
-                SignalDoneEvent(); 
-            } 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestLogWriteLsnConsistency(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-template <ui32 Size1, ui32 Size2, ui32 Size3> 
-class TTestLog3Read : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            VERBOSE_COUT(" Sending TEvLogRead"); 
+template<ui64 LogRequests>
+class TTestLogWriteLsnConsistency : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    const ui64 StartLsn = 100;
+    ui64 Lsn = StartLsn;
+    ui64 LastSeenLsn = 0;
+    ui64 LogRequestsRecived = 0;
+
+
+    void TestFSM(const TActorContext &ctx) {
+        TString data = PrepareData(2000);
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            VERBOSE_COUT(" Sending TEvLog");
+            for (ui64 i = 0; i < LogRequests; ++i) {
+                ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data, TLsnSeg(Lsn, Lsn), (void*)456));
+                ++Lsn;
+            }
+            break;
+        case 20:
+            TEST_RESPONSE(EvLogResult, OK);
+            for (ui64 i = 0; i < LastResponse.LogResults.size(); ++i) {
+                ui64 expectedLsn = StartLsn + LogRequestsRecived;
+                ui64 actualLsn = LastResponse.LogResults[i].Lsn;
+                VERBOSE_COUT("Expected Lsn# " << expectedLsn << " actual Lsn# " << actualLsn);
+                ASSERT_YTHROW(expectedLsn == actualLsn, "Error in response Lsn ");
+                ++LogRequestsRecived;
+            }
+            VERBOSE_COUT("LogRequestsRecived# " << LogRequestsRecived);
+            if (LogRequestsRecived < LogRequests) {
+                TestStep -= 10;
+            } else if (LogRequestsRecived > LogRequests) {
+                ythrow TWithBackTrace<yexception>() << "More results recived then expected " << TestStep << Endl;
+            } else {
+                VERBOSE_COUT("Done");
+                SignalDoneEvent();
+            }
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestLogWriteLsnConsistency(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+template <ui32 Size1, ui32 Size2, ui32 Size3>
+class TTestLog3Read : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            VERBOSE_COUT(" Sending TEvLogRead");
             ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, Size1+Size2+Size3));
-            break; 
-        case 20: 
-        { 
-            TEST_RESPONSE(EvReadLogResult, OK); 
-            ASSERT_YTHROW(LastResponse.LogRecords.size() == 3, 
-                "Unexpected LogRecords size == " << LastResponse.LogRecords.size()); 
-            ui32 sizes[] ={Size1, Size2, Size3}; 
-            for (ui32 idx = 0; idx < LastResponse.LogRecords.size(); ++idx) { 
-                VERBOSE_COUT(" Checking idx " << idx << " size " << sizes[idx]); 
-                TString data = PrepareData(sizes[idx]); 
-                TEST_LOG_RECORD(LastResponse.LogRecords[idx], 123 + idx, 7, data); 
-            } 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        } 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestLog3Read(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-template <ui32 Size1, ui32 Size2, ui32 Size3> 
-class TTestLog3Write : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 RecordsRemaining; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        TString data1 = PrepareData(Size1); 
-        TString data2 = PrepareData(Size2); 
-        TString data3 = PrepareData(Size3); 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            VERBOSE_COUT(" Sending 3 TEvLog messages"); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data1, TLsnSeg(123, 123), (void*)456)); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data2, TLsnSeg(124, 124), (void*)456)); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data3, TLsnSeg(125, 125), (void*)456)); 
-            RecordsRemaining = 3; 
-            break; 
-        case 20: 
-            TEST_RESPONSE(EvLogResult, OK); 
-            RecordsRemaining -= LastResponse.LogResults.size(); 
-            VERBOSE_COUT(" Got EvLogResult with " << LastResponse.LogResults.size() << 
-                " records, RecordsRemaining=" << RecordsRemaining); 
-            if (RecordsRemaining) { 
-                TestStep -= 10; 
-                break; 
-            } 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestLog3Write(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-template <ui32 ReadSize, ui32 StepSize, ui32 StepsCount> 
-class TTestChunkReadRandomOffset : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    ui32 ChunkReadsDone = 0; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-        { 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            ui32 chunkSize = LastResponse.ChunkSize; 
-            UNIT_ASSERT_C(StepSize * StepsCount < chunkSize, "Cannot test chunk reads with readSize < chunkSize," 
-                    << " readSize# " << StepSize * StepsCount << " chunkSize# " << chunkSize); 
- 
-            VERBOSE_COUT(" Sending TEvChunkReserve"); 
-            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
-            TestStep = 15; 
-            return; 
-        } 
-        case 15: 
-        { 
-            TEST_RESPONSE(EvChunkReserveResult, OK); 
-            ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
-                "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
-            ChunkIdx = LastResponse.ChunkIds[0]; 
- 
-            VERBOSE_COUT(" Sending TEvChunkWrite"); 
-            ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]); 
-            ChunkWriteData = PrepareData(ReadSize + StepSize * StepsCount); 
+            break;
+        case 20:
+        {
+            TEST_RESPONSE(EvReadLogResult, OK);
+            ASSERT_YTHROW(LastResponse.LogRecords.size() == 3,
+                "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
+            ui32 sizes[] ={Size1, Size2, Size3};
+            for (ui32 idx = 0; idx < LastResponse.LogRecords.size(); ++idx) {
+                VERBOSE_COUT(" Checking idx " << idx << " size " << sizes[idx]);
+                TString data = PrepareData(sizes[idx]);
+                TEST_LOG_RECORD(LastResponse.LogRecords[idx], 123 + idx, 7, data);
+            }
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        }
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestLog3Read(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+template <ui32 Size1, ui32 Size2, ui32 Size3>
+class TTestLog3Write : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 RecordsRemaining;
+
+    void TestFSM(const TActorContext &ctx) {
+        TString data1 = PrepareData(Size1);
+        TString data2 = PrepareData(Size2);
+        TString data3 = PrepareData(Size3);
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            VERBOSE_COUT(" Sending 3 TEvLog messages");
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data1, TLsnSeg(123, 123), (void*)456));
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data2, TLsnSeg(124, 124), (void*)456));
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, data3, TLsnSeg(125, 125), (void*)456));
+            RecordsRemaining = 3;
+            break;
+        case 20:
+            TEST_RESPONSE(EvLogResult, OK);
+            RecordsRemaining -= LastResponse.LogResults.size();
+            VERBOSE_COUT(" Got EvLogResult with " << LastResponse.LogResults.size() <<
+                " records, RecordsRemaining=" << RecordsRemaining);
+            if (RecordsRemaining) {
+                TestStep -= 10;
+                break;
+            }
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestLog3Write(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+template <ui32 ReadSize, ui32 StepSize, ui32 StepsCount>
+class TTestChunkReadRandomOffset : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    ui32 ChunkReadsDone = 0;
+
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+        {
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            ui32 chunkSize = LastResponse.ChunkSize;
+            UNIT_ASSERT_C(StepSize * StepsCount < chunkSize, "Cannot test chunk reads with readSize < chunkSize,"
+                    << " readSize# " << StepSize * StepsCount << " chunkSize# " << chunkSize);
+
+            VERBOSE_COUT(" Sending TEvChunkReserve");
+            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
+            TestStep = 15;
+            return;
+        }
+        case 15:
+        {
+            TEST_RESPONSE(EvChunkReserveResult, OK);
+            ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
+                "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
+            ChunkIdx = LastResponse.ChunkIds[0];
+
+            VERBOSE_COUT(" Sending TEvChunkWrite");
+            ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
+            ChunkWriteData = PrepareData(ReadSize + StepSize * StepsCount);
             ChunkWriteParts[0].Data = ChunkWriteData.data();
             ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
-                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), nullptr, false, 1)); 
-            TestStep = 20; 
-            return; 
-        } 
-        case 20: 
-        { 
-            TEST_RESPONSE(EvChunkWriteResult, OK); 
-            VERBOSE_COUT(" Sending TEvLog to commit"); 
-            NPDisk::TCommitRecord commitRecord; 
-            commitRecord.CommitChunks.push_back(ChunkIdx); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, "", TLsnSeg(1, 1), nullptr)); 
-            break; 
-        } 
-        case 30: 
-            TEST_RESPONSE(EvLogResult, OK); 
-            VERBOSE_COUT(" Sending TEvChunkRead"); 
-            for (ui32 i = 0; i < StepsCount; i++) { 
-                ui64 offset = i * StepSize; 
-                ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, offset, ReadSize, 1, (void*)offset)); 
-            } 
-            break; 
-        case 40: 
-        { 
-            TEST_RESPONSE(EvChunkReadResult, OK); 
-            ui64 offset = reinterpret_cast<ui64>(LastResponse.Cookie); 
-            TString expectedData = TString(ChunkWriteData, offset, ReadSize); 
-            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData); 
-            ++ChunkReadsDone; 
- 
-            if (ChunkReadsDone == StepsCount) { 
-                SignalDoneEvent(); 
-            } 
-            return; 
-        } 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestChunkReadRandomOffset(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , ChunkIdx(0) 
-    {} 
-}; 
- 
-template <ui32 Size1, ui32 Size2> 
-class TTestChunkWriteRead : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    ui32 BlockSize; 
-    TVector<ui32> ReservedChunks; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        TString data2("testdata2"); 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-        { 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            BlockSize = LastResponse.AppendBlockSize; 
- 
-            VERBOSE_COUT(" Sending TEvChunkReserve"); 
-            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
-            TestStep = 15; 
-            return; 
-        } 
-        case 15: 
-        { 
-            TEST_RESPONSE(EvChunkReserveResult, OK); 
-            ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
-                "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
-            ReservedChunks = LastResponse.ChunkIds; 
-            ChunkIdx = ReservedChunks[0]; 
- 
-            VERBOSE_COUT(" Sending TEvChunkWrite"); 
-            ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]); 
-            ChunkWriteData = PrepareData((Size1 + BlockSize - 1) / BlockSize * BlockSize); 
+            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), nullptr, false, 1));
+            TestStep = 20;
+            return;
+        }
+        case 20:
+        {
+            TEST_RESPONSE(EvChunkWriteResult, OK);
+            VERBOSE_COUT(" Sending TEvLog to commit");
+            NPDisk::TCommitRecord commitRecord;
+            commitRecord.CommitChunks.push_back(ChunkIdx);
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, "", TLsnSeg(1, 1), nullptr));
+            break;
+        }
+        case 30:
+            TEST_RESPONSE(EvLogResult, OK);
+            VERBOSE_COUT(" Sending TEvChunkRead");
+            for (ui32 i = 0; i < StepsCount; i++) {
+                ui64 offset = i * StepSize;
+                ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, offset, ReadSize, 1, (void*)offset));
+            }
+            break;
+        case 40:
+        {
+            TEST_RESPONSE(EvChunkReadResult, OK);
+            ui64 offset = reinterpret_cast<ui64>(LastResponse.Cookie);
+            TString expectedData = TString(ChunkWriteData, offset, ReadSize);
+            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData);
+            ++ChunkReadsDone;
+
+            if (ChunkReadsDone == StepsCount) {
+                SignalDoneEvent();
+            }
+            return;
+        }
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestChunkReadRandomOffset(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , ChunkIdx(0)
+    {}
+};
+
+template <ui32 Size1, ui32 Size2>
+class TTestChunkWriteRead : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    ui32 BlockSize;
+    TVector<ui32> ReservedChunks;
+
+    void TestFSM(const TActorContext &ctx) {
+        TString data2("testdata2");
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+        {
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            BlockSize = LastResponse.AppendBlockSize;
+
+            VERBOSE_COUT(" Sending TEvChunkReserve");
+            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
+            TestStep = 15;
+            return;
+        }
+        case 15:
+        {
+            TEST_RESPONSE(EvChunkReserveResult, OK);
+            ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
+                "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
+            ReservedChunks = LastResponse.ChunkIds;
+            ChunkIdx = ReservedChunks[0];
+
+            VERBOSE_COUT(" Sending TEvChunkWrite");
+            ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
+            ChunkWriteData = PrepareData((Size1 + BlockSize - 1) / BlockSize * BlockSize);
             ChunkWriteParts[0].Data = ChunkWriteData.data();
             ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
-                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1)); 
-            TestStep = 20; 
-            return; 
-        } 
-        case 20: 
-        { 
-            TEST_RESPONSE(EvChunkWriteResult, OK); 
-            ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie); 
-            VERBOSE_COUT(" Sending TEvLog to commit"); 
-            NPDisk::TCommitRecord commitRecord; 
-            commitRecord.CommitChunks.push_back(ChunkIdx); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data2, TLsnSeg(1, 1), (void*)43)); 
-            break; 
-        } 
-        case 30: 
-            TEST_RESPONSE(EvLogResult, OK); 
-            VERBOSE_COUT(" Sending TEvChunkRead"); 
-            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, 128, 1, nullptr)); 
-            break; 
-        case 40: 
-        { 
-            TEST_RESPONSE(EvChunkReadResult, OK); 
-            TString expectedData = TString(ChunkWriteData, 0, 128); 
-            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData); 
- 
-            VERBOSE_COUT(" Sending TEvChunkRead with offset"); 
-            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 4 << 10, 127, 1, nullptr)); 
-            TestStep = 45; 
-            return; 
-        } 
-        case 45: 
-        { 
-            TEST_RESPONSE(EvChunkReadResult, OK); 
-            TString expectedData = TString(ChunkWriteData, 4 << 10, 127); 
-            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData); 
- 
-            VERBOSE_COUT(" Sending TEvChunkRead with offset"); 
+            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
+            TestStep = 20;
+            return;
+        }
+        case 20:
+        {
+            TEST_RESPONSE(EvChunkWriteResult, OK);
+            ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
+            VERBOSE_COUT(" Sending TEvLog to commit");
+            NPDisk::TCommitRecord commitRecord;
+            commitRecord.CommitChunks.push_back(ChunkIdx);
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data2, TLsnSeg(1, 1), (void*)43));
+            break;
+        }
+        case 30:
+            TEST_RESPONSE(EvLogResult, OK);
+            VERBOSE_COUT(" Sending TEvChunkRead");
+            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, 128, 1, nullptr));
+            break;
+        case 40:
+        {
+            TEST_RESPONSE(EvChunkReadResult, OK);
+            TString expectedData = TString(ChunkWriteData, 0, 128);
+            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData);
+
+            VERBOSE_COUT(" Sending TEvChunkRead with offset");
+            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 4 << 10, 127, 1, nullptr));
+            TestStep = 45;
+            return;
+        }
+        case 45:
+        {
+            TEST_RESPONSE(EvChunkReadResult, OK);
+            TString expectedData = TString(ChunkWriteData, 4 << 10, 127);
+            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData);
+
+            VERBOSE_COUT(" Sending TEvChunkRead with offset");
             ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 127, ChunkWriteData.size() - 127, 1, nullptr));
-            TestStep = 46; 
-            return; 
-        } 
-        case 46: 
-        { 
-            TEST_RESPONSE(EvChunkReadResult, OK); 
+            TestStep = 46;
+            return;
+        }
+        case 46:
+        {
+            TEST_RESPONSE(EvChunkReadResult, OK);
             TString expectedData = TString(ChunkWriteData, 127, ChunkWriteData.size() - 127);
-            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData); 
- 
-            VERBOSE_COUT(" Sending TEvChunkRead with offset"); 
-            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 317, 128, 1, nullptr)); 
-            TestStep = 50; 
-            return; 
-        } 
-        case 50: 
-        { 
-            TEST_RESPONSE(EvChunkReadResult, OK); 
-            TString expectedData = TString(ChunkWriteData, 317, 128); 
-            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData); 
- 
-            VERBOSE_COUT(" Sending TEvChunkRead with OOB offset"); 
-            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, (ui32)-1, 128, 1, nullptr)); 
-            break; 
-        } 
-        case 60: 
-        { 
-            TEST_RESPONSE(EvChunkReadResult, ERROR); 
- 
-            VERBOSE_COUT(" Sending TEvChunkWrite"); 
-            ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]); 
-            ChunkWriteData = PrepareData(Size2 / BlockSize * BlockSize); 
+            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData);
+
+            VERBOSE_COUT(" Sending TEvChunkRead with offset");
+            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 317, 128, 1, nullptr));
+            TestStep = 50;
+            return;
+        }
+        case 50:
+        {
+            TEST_RESPONSE(EvChunkReadResult, OK);
+            TString expectedData = TString(ChunkWriteData, 317, 128);
+            TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData);
+
+            VERBOSE_COUT(" Sending TEvChunkRead with OOB offset");
+            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, (ui32)-1, 128, 1, nullptr));
+            break;
+        }
+        case 60:
+        {
+            TEST_RESPONSE(EvChunkReadResult, ERROR);
+
+            VERBOSE_COUT(" Sending TEvChunkWrite");
+            ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
+            ChunkWriteData = PrepareData(Size2 / BlockSize * BlockSize);
             ChunkWriteParts[0].Data = ChunkWriteData.data();
             ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
-                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1)); 
+            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
             ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size(),
-                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1)); 
-            break; 
-        } 
-        case 70: 
-            TEST_RESPONSE(EvChunkWriteResult, OK); 
-            ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie); 
-            ChunkIdx = LastResponse.ChunkIdx; 
-            break; 
-        case 80: 
-        { 
-            TEST_RESPONSE(EvChunkWriteResult, OK); 
-            ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie); 
-            ChunkIdx = LastResponse.ChunkIdx; 
- 
-            VERBOSE_COUT(" Sending TEvLog to commit"); 
-            NPDisk::TCommitRecord commitRecord; 
-            commitRecord.CommitChunks.push_back(ChunkIdx); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data2, TLsnSeg(2, 2), (void*)43)); 
-            break; 
-        } 
-        case 90: 
-            TEST_RESPONSE(EvLogResult, OK); 
- 
-            VERBOSE_COUT(" Sending TEvChunkRead"); 
+                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
+            break;
+        }
+        case 70:
+            TEST_RESPONSE(EvChunkWriteResult, OK);
+            ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
+            ChunkIdx = LastResponse.ChunkIdx;
+            break;
+        case 80:
+        {
+            TEST_RESPONSE(EvChunkWriteResult, OK);
+            ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
+            ChunkIdx = LastResponse.ChunkIdx;
+
+            VERBOSE_COUT(" Sending TEvLog to commit");
+            NPDisk::TCommitRecord commitRecord;
+            commitRecord.CommitChunks.push_back(ChunkIdx);
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data2, TLsnSeg(2, 2), (void*)43));
+            break;
+        }
+        case 90:
+            TEST_RESPONSE(EvLogResult, OK);
+
+            VERBOSE_COUT(" Sending TEvChunkRead");
             ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, ChunkWriteData.size(), 1, nullptr));
             ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size(),
                         ChunkWriteData.size(), 1, nullptr));
-            break; 
-        case 100: 
-            TEST_RESPONSE(EvChunkReadResult, OK); 
-            TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData); 
-            break; 
-        case 110: 
-            TEST_RESPONSE(EvChunkReadResult, OK); 
-            TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData); 
- 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestChunkWriteRead(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , ChunkIdx(0) 
-    {} 
-}; 
- 
-class TTestChunkWriteReadWhole : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    ui32 ChunkSize; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkWriteReadWhole(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , ChunkIdx(0) 
-    {} 
-}; 
- 
-class TTestChunkWrite20Read02 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    ui32 BlockSize; 
-    TVector<ui32> ReservedChunks; 
-    TString CommitData; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkWrite20Read02(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , ChunkIdx(0) 
-        , BlockSize(0) 
-    {} 
-}; 
- 
- 
-class TTestChunkRecommit : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData1; 
-    TString ChunkWriteData2; 
-    TString Commit1Data; 
-    TString Commit2Data; 
-    TString ChunkData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    ui32 BlockSize; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkRecommit(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
- 
-class TTestChunkRestartRecommit1 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData1; 
-    TString Commit1Data; 
-    TString ChunkData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkRestartRecommit1(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunkRestartRecommit2 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData1; 
-    TString ChunkWriteData2; 
-    TString Commit2Data; 
-    TString ChunkData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkRestartRecommit2(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunkDelete1 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData; 
-    TString CommitData; 
-    TVector<ui32> ReservedChunks; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkDelete1(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunkDelete2 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString CommitData; 
-    TString ChunkData; 
-    TVector<ui32> ReservedChunks; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkDelete2(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-template<ui32 WishDataSize> 
-class TTestChunk3WriteRead : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkIdx; 
-    ui32 Iteration; 
-    ui32 BlockSize; 
-    ui32 DataSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
+            break;
+        case 100:
+            TEST_RESPONSE(EvChunkReadResult, OK);
+            TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData);
+            break;
+        case 110:
+            TEST_RESPONSE(EvChunkReadResult, OK);
+            TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData);
+
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestChunkWriteRead(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , ChunkIdx(0)
+    {}
+};
+
+class TTestChunkWriteReadWhole : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    ui32 ChunkSize;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkWriteReadWhole(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , ChunkIdx(0)
+    {}
+};
+
+class TTestChunkWrite20Read02 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    ui32 BlockSize;
+    TVector<ui32> ReservedChunks;
+    TString CommitData;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkWrite20Read02(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , ChunkIdx(0)
+        , BlockSize(0)
+    {}
+};
+
+
+class TTestChunkRecommit : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData1;
+    TString ChunkWriteData2;
+    TString Commit1Data;
+    TString Commit2Data;
+    TString ChunkData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    ui32 BlockSize;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkRecommit(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+
+class TTestChunkRestartRecommit1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData1;
+    TString Commit1Data;
+    TString ChunkData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkRestartRecommit1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkRestartRecommit2 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData1;
+    TString ChunkWriteData2;
+    TString Commit2Data;
+    TString ChunkData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkRestartRecommit2(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkDelete1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TString CommitData;
+    TVector<ui32> ReservedChunks;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkDelete1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkDelete2 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString CommitData;
+    TString ChunkData;
+    TVector<ui32> ReservedChunks;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkDelete2(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+template<ui32 WishDataSize>
+class TTestChunk3WriteRead : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkIdx;
+    ui32 Iteration;
+    ui32 BlockSize;
+    ui32 DataSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
             Owner = LastResponse.Owner;
             OwnerRound = LastResponse.OwnerRound;
@@ -1056,504 +1056,504 @@ class TTestChunk3WriteRead : public TBaseTest {
             DataSize = (WishDataSize + BlockSize - 1) / BlockSize * BlockSize;
             ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
             break;
-        case 20: 
+        case 20:
             TEST_RESPONSE(EvChunkReserveResult, OK);
             ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
                 "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
             ChunkIdx = LastResponse.ChunkIds[0];
             Iteration = 0;
             [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
-        case 30: 
+        case 30:
         case 40:
-        { 
+        {
             if (Iteration) {
-                TEST_RESPONSE(EvChunkWriteResult, OK); 
-                ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie); 
-            } 
-            VERBOSE_COUT(" Sending TEvChunkWrite"); 
-            ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]); 
-            ChunkWriteData = PrepareData(DataSize); 
+                TEST_RESPONSE(EvChunkWriteResult, OK);
+                ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
+            }
+            VERBOSE_COUT(" Sending TEvChunkWrite");
+            ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
+            ChunkWriteData = PrepareData(DataSize);
             ChunkWriteParts[0].Data = ChunkWriteData.data();
             ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, DataSize * Iteration, 
-                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1)); 
+            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, DataSize * Iteration,
+                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
             ++Iteration;
-            break; 
-        } 
+            break;
+        }
         case 50:
-        { 
-            TEST_RESPONSE(EvChunkWriteResult, OK); 
-            ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie); 
-            VERBOSE_COUT(" Sending TEvLog to commit"); 
-            NPDisk::TCommitRecord commitRecord; 
-            commitRecord.CommitChunks.push_back(LastResponse.ChunkIdx); 
-            TString data = PrepareData(32); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data, TLsnSeg(1, 1), (void*)43)); 
-            break; 
-        } 
+        {
+            TEST_RESPONSE(EvChunkWriteResult, OK);
+            ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
+            VERBOSE_COUT(" Sending TEvLog to commit");
+            NPDisk::TCommitRecord commitRecord;
+            commitRecord.CommitChunks.push_back(LastResponse.ChunkIdx);
+            TString data = PrepareData(32);
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data, TLsnSeg(1, 1), (void*)43));
+            break;
+        }
         case 60:
-            TEST_RESPONSE(EvLogResult, OK); 
-            VERBOSE_COUT(" Sending TEvChunkRead"); 
-            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, DataSize*3, 1, nullptr)); 
-            break; 
+            TEST_RESPONSE(EvLogResult, OK);
+            VERBOSE_COUT(" Sending TEvChunkRead");
+            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, DataSize*3, 1, nullptr));
+            break;
         case 70:
-        { 
-            TString fullData = PrepareData(DataSize) + PrepareData(DataSize) + PrepareData(DataSize); 
-            TEST_RESPONSE(EvChunkReadResult, OK); 
-            TEST_DATA_EQUALS(LastResponse.Data.ToString(), fullData); 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        } 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestChunk3WriteRead(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , Iteration(0) 
-    {} 
-}; 
- 
- 
-class TTestInitStartingPoints : public TBaseTest { 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestInitStartingPoints(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-template <ui32 FirstSize, ui32 LastSize, ui32 ReadSizeLimit> 
-class TTestLogMultipleWriteRead : public TBaseTest { 
-    bool IsFirstLog; 
-    bool IsFirstReadLog; 
-    ui32 CurrentSize; 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui64 Lsn; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        if (TestStep == 0) { 
-            Lsn = 1; 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            TestStep += 10; 
-        } else if (TestStep == 10) { 
-            if (IsFirstLog) { 
-                TEST_RESPONSE(EvYardInitResult, OK); 
-                Owner = LastResponse.Owner; 
-                OwnerRound = LastResponse.OwnerRound; 
-                IsFirstLog = false; 
-            } else { 
-                TEST_RESPONSE(EvLogResult, OK); 
-            } 
-            VERBOSE_COUT(" Sending TEvLog Lsn: " << Lsn); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, PrepareData(CurrentSize), TLsnSeg(Lsn, Lsn), 
-                        (void*)456)); 
-            ++Lsn; 
-            ++CurrentSize; 
-            if (CurrentSize > LastSize) { 
-                TestStep += 10; 
-                CurrentSize = FirstSize; 
-            } 
-        } else if (TestStep == 20) { 
-            TEST_RESPONSE(EvLogResult, OK); 
-            Lsn = 1; 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid)); 
-            TestStep += 10; 
-        } else if (TestStep == 30) { 
+        {
+            TString fullData = PrepareData(DataSize) + PrepareData(DataSize) + PrepareData(DataSize);
+            TEST_RESPONSE(EvChunkReadResult, OK);
+            TEST_DATA_EQUALS(LastResponse.Data.ToString(), fullData);
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        }
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestChunk3WriteRead(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , Iteration(0)
+    {}
+};
+
+
+class TTestInitStartingPoints : public TBaseTest {
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestInitStartingPoints(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+template <ui32 FirstSize, ui32 LastSize, ui32 ReadSizeLimit>
+class TTestLogMultipleWriteRead : public TBaseTest {
+    bool IsFirstLog;
+    bool IsFirstReadLog;
+    ui32 CurrentSize;
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui64 Lsn;
+
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        if (TestStep == 0) {
+            Lsn = 1;
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            TestStep += 10;
+        } else if (TestStep == 10) {
+            if (IsFirstLog) {
+                TEST_RESPONSE(EvYardInitResult, OK);
+                Owner = LastResponse.Owner;
+                OwnerRound = LastResponse.OwnerRound;
+                IsFirstLog = false;
+            } else {
+                TEST_RESPONSE(EvLogResult, OK);
+            }
+            VERBOSE_COUT(" Sending TEvLog Lsn: " << Lsn);
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, PrepareData(CurrentSize), TLsnSeg(Lsn, Lsn),
+                        (void*)456));
+            ++Lsn;
+            ++CurrentSize;
+            if (CurrentSize > LastSize) {
+                TestStep += 10;
+                CurrentSize = FirstSize;
+            }
+        } else if (TestStep == 20) {
+            TEST_RESPONSE(EvLogResult, OK);
+            Lsn = 1;
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+            TestStep += 10;
+        } else if (TestStep == 30) {
             NPDisk::TLogPosition position{0, 0};
-            if (IsFirstReadLog) { 
-                TEST_RESPONSE(EvYardInitResult, OK); 
-                Owner = LastResponse.Owner; 
-                OwnerRound = LastResponse.OwnerRound; 
-                IsFirstReadLog = false; 
-            } else { 
-                TEST_RESPONSE(EvReadLogResult, OK); 
-                position = LastResponse.NextPosition; 
-                ASSERT_YTHROW(LastResponse.LogRecords.size() >= 1, 
-                    "Unexpected LogRecords size == " << LastResponse.LogRecords.size()); 
-                ui32 totalSize = 0; 
-                for (ui32 idx = 0; idx < LastResponse.LogRecords.size(); ++idx) { 
-                    TString data = PrepareData(CurrentSize); 
-                    TEST_LOG_RECORD(LastResponse.LogRecords[idx], Lsn, 7, data); 
-                    ++Lsn; 
-                    ASSERT_YTHROW(CurrentSize <= LastSize, "Excessive records"); 
- 
+            if (IsFirstReadLog) {
+                TEST_RESPONSE(EvYardInitResult, OK);
+                Owner = LastResponse.Owner;
+                OwnerRound = LastResponse.OwnerRound;
+                IsFirstReadLog = false;
+            } else {
+                TEST_RESPONSE(EvReadLogResult, OK);
+                position = LastResponse.NextPosition;
+                ASSERT_YTHROW(LastResponse.LogRecords.size() >= 1,
+                    "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
+                ui32 totalSize = 0;
+                for (ui32 idx = 0; idx < LastResponse.LogRecords.size(); ++idx) {
+                    TString data = PrepareData(CurrentSize);
+                    TEST_LOG_RECORD(LastResponse.LogRecords[idx], Lsn, 7, data);
+                    ++Lsn;
+                    ASSERT_YTHROW(CurrentSize <= LastSize, "Excessive records");
+
                     totalSize += LastResponse.LogRecords[idx].Data.size();
-                    ++CurrentSize; 
-                } 
-                ASSERT_YTHROW(totalSize <= ReadSizeLimit, "totalSize=" << totalSize << ", sizeLimit=" << ReadSizeLimit); 
-            } 
-            if (CurrentSize > LastSize) { 
-                ASSERT_YTHROW(LastResponse.IsEndOfLog, "Log does not end where is should to"); 
-                VERBOSE_COUT("Done"); 
-                SignalDoneEvent(); 
-                TestStep += 10; 
-            } else { 
-                VERBOSE_COUT(" Sending TEvLogRead"); 
-                ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, position, ReadSizeLimit)); 
-            } 
-        } else { 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            //TestStep += 10; 
-        } 
-    } 
-public: 
-    TTestLogMultipleWriteRead(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , IsFirstLog(true) 
-        , IsFirstReadLog(true) 
-        , CurrentSize(FirstSize) 
-    {} 
-}; 
- 
- 
-class TTestChunkReserve : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkReserve(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestCheckSpace : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestCheckSpace(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunksLockByRange : public TBaseTest { 
-    ui32 ChunksToBeLockedBegin; 
-    ui32 ChunksToBeLockedEnd; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunksLockByRange(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunksLockUnlockReserve : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunksToBeLockedCount; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunksLockUnlockReserve(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
-class TTestHttpInfo : public TBaseTest { 
-    THttpRequest HttpRequest; 
-    NMonitoring::TMonService2HttpRequest MonService2HttpRequest; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestHttpInfo(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , MonService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, "", nullptr) 
-    {} 
-}; 
- 
-class TTestHttpInfoFileDoesntExist : public TBaseTest { 
-    THttpRequest HttpRequest; 
-    NMonitoring::TMonService2HttpRequest MonService2HttpRequest; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestHttpInfoFileDoesntExist(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , MonService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, "", nullptr) 
-    {} 
-}; 
- 
-class TTestBootingState : public TBaseTest { 
-    const ui32 HttpRequestsCount = 1000; 
-    THttpRequest HttpRequest; 
-    NMonitoring::TMonService2HttpRequest MonService2HttpRequest; 
-    bool EvYardAnswered = false; 
-    ui32 AnsweredRequests = 0; 
-    ui32 BootingAnsweredRequests = 0; 
-    ui32 OKAnsweredRequests = 0; 
-    ui32 ErrorAnsweredRequests = 0; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestBootingState(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , MonService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, "", nullptr) 
-    {} 
-}; 
- 
-class TTestWhiteboard : public TBaseTest { 
-    bool IsPDiskResultReceived = false; 
-    const int ExpectedOwnerCount = 5; 
+                    ++CurrentSize;
+                }
+                ASSERT_YTHROW(totalSize <= ReadSizeLimit, "totalSize=" << totalSize << ", sizeLimit=" << ReadSizeLimit);
+            }
+            if (CurrentSize > LastSize) {
+                ASSERT_YTHROW(LastResponse.IsEndOfLog, "Log does not end where is should to");
+                VERBOSE_COUT("Done");
+                SignalDoneEvent();
+                TestStep += 10;
+            } else {
+                VERBOSE_COUT(" Sending TEvLogRead");
+                ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, position, ReadSizeLimit));
+            }
+        } else {
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            //TestStep += 10;
+        }
+    }
+public:
+    TTestLogMultipleWriteRead(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , IsFirstLog(true)
+        , IsFirstReadLog(true)
+        , CurrentSize(FirstSize)
+    {}
+};
+
+
+class TTestChunkReserve : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkReserve(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestCheckSpace : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestCheckSpace(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunksLockByRange : public TBaseTest {
+    ui32 ChunksToBeLockedBegin;
+    ui32 ChunksToBeLockedEnd;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunksLockByRange(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunksLockUnlockReserve : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunksToBeLockedCount;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunksLockUnlockReserve(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+class TTestHttpInfo : public TBaseTest {
+    THttpRequest HttpRequest;
+    NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestHttpInfo(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , MonService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, "", nullptr)
+    {}
+};
+
+class TTestHttpInfoFileDoesntExist : public TBaseTest {
+    THttpRequest HttpRequest;
+    NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestHttpInfoFileDoesntExist(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , MonService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, "", nullptr)
+    {}
+};
+
+class TTestBootingState : public TBaseTest {
+    const ui32 HttpRequestsCount = 1000;
+    THttpRequest HttpRequest;
+    NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
+    bool EvYardAnswered = false;
+    ui32 AnsweredRequests = 0;
+    ui32 BootingAnsweredRequests = 0;
+    ui32 OKAnsweredRequests = 0;
+    ui32 ErrorAnsweredRequests = 0;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestBootingState(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , MonService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, "", nullptr)
+    {}
+};
+
+class TTestWhiteboard : public TBaseTest {
+    bool IsPDiskResultReceived = false;
+    const int ExpectedOwnerCount = 5;
     int RemainingVDiskResults = ExpectedOwnerCount;
-    bool IsDiskMetricsResultReceived = false; 
-    bool IsPDiskLightsResultReceived = false; 
- 
-    void TestFSM(const TActorContext &ctx); 
-    void ReceiveEvent(); 
- 
-public: 
-    TTestWhiteboard(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestFirstRecordToKeepWriteAB : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui64 Lsn; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestFirstRecordToKeepWriteAB(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , Owner(0) 
-        , Lsn(1) 
-    {} 
-}; 
- 
-class TTestFirstRecordToKeepReadB : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestFirstRecordToKeepReadB(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestLotsOfTinyAsyncLogLatency : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Data; 
-    ui32 MessagesToSend; 
-    ui32 Responses; 
-    TInstant PreviousTime; 
-    TInstant StartTime; 
-    double DurationSum; 
-    double TotalResponses; 
-    TQueue<double> Durations; 
-    ui32 TotalDataSize; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLotsOfTinyAsyncLogLatency(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
- 
-class TTestLogLatency : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Data; 
-    ui32 MessagesToSend; 
-    ui32 Responses; 
-    TInstant PreviousTime; 
-    TInstant StartTime; 
-    double DurationSum; 
-    double TotalResponses; 
-    TQueue<double> Durations; 
-    ui32 TotalDataSize; 
-    ui64 MessageIdx; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogLatency(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestHugeChunkAndLotsOfTinyAsyncLogOrder : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Data; 
-    ui32 MessagesToSend; 
-    ui32 Responses; 
-    ui32 TotalDataSize; 
-    ui32 ChunkIdx; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    TString Commit1Data; 
- 
-    TInstant PreviousTime; 
-    TInstant StartTime; 
-    double DurationSum; 
-    double TotalResponses; 
-    TQueue<double> Durations; 
-    ui32 BlockSize; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestHugeChunkAndLotsOfTinyAsyncLogOrder(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunkPriorityBlock : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 SafeSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
+    bool IsDiskMetricsResultReceived = false;
+    bool IsPDiskLightsResultReceived = false;
+
+    void TestFSM(const TActorContext &ctx);
+    void ReceiveEvent();
+
+public:
+    TTestWhiteboard(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestFirstRecordToKeepWriteAB : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui64 Lsn;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestFirstRecordToKeepWriteAB(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , Owner(0)
+        , Lsn(1)
+    {}
+};
+
+class TTestFirstRecordToKeepReadB : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestFirstRecordToKeepReadB(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestLotsOfTinyAsyncLogLatency : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Data;
+    ui32 MessagesToSend;
+    ui32 Responses;
+    TInstant PreviousTime;
+    TInstant StartTime;
+    double DurationSum;
+    double TotalResponses;
+    TQueue<double> Durations;
+    ui32 TotalDataSize;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLotsOfTinyAsyncLogLatency(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+
+class TTestLogLatency : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Data;
+    ui32 MessagesToSend;
+    ui32 Responses;
+    TInstant PreviousTime;
+    TInstant StartTime;
+    double DurationSum;
+    double TotalResponses;
+    TQueue<double> Durations;
+    ui32 TotalDataSize;
+    ui64 MessageIdx;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogLatency(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestHugeChunkAndLotsOfTinyAsyncLogOrder : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Data;
+    ui32 MessagesToSend;
+    ui32 Responses;
+    ui32 TotalDataSize;
+    ui32 ChunkIdx;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    TString Commit1Data;
+
+    TInstant PreviousTime;
+    TInstant StartTime;
+    double DurationSum;
+    double TotalResponses;
+    TQueue<double> Durations;
+    ui32 BlockSize;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestHugeChunkAndLotsOfTinyAsyncLogOrder(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkPriorityBlock : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 SafeSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
     TVector<ui32> ChunkIds;
     ui32 PausedChunkWrites = 5;
-    ui32 Iteration; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkPriorityBlock(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestLog2Records3Sectors : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLog2Records3Sectors(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-template<int Size> 
-class TTestLogMoreSectors : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            Data = PrepareData(Size); 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            VERBOSE_COUT(" Sending 1 TEvLog"); 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg((ui64)100500, (ui64)100500), 
-                        (void*)456)); 
-            break; 
-        case 20: 
-            TEST_RESPONSE(EvLogResult, OK); 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestLogMoreSectors(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestLogDamageSector3Append1 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogDamageSector3Append1(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
- 
-class TTestLogRead2Sectors : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogRead2Sectors(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
- 
-class TTestLogFillChunkPlus1 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogFillChunkPlus1(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , Owner(0) 
-    {} 
-}; 
- 
- 
-class TTestLogKeep5Plus1 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Data; 
-    ui32 ChunkSize; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogKeep5Plus1(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , Owner(0) 
-    {} 
-}; 
- 
- 
-class TTestLogReadRecords2To5 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Data; 
-    ui32 ChunkSize; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogReadRecords2To5(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , Owner(0) 
-    {} 
-}; 
- 
+    ui32 Iteration;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkPriorityBlock(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestLog2Records3Sectors : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLog2Records3Sectors(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+template<int Size>
+class TTestLogMoreSectors : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            Data = PrepareData(Size);
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            VERBOSE_COUT(" Sending 1 TEvLog");
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg((ui64)100500, (ui64)100500),
+                        (void*)456));
+            break;
+        case 20:
+            TEST_RESPONSE(EvLogResult, OK);
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestLogMoreSectors(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestLogDamageSector3Append1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogDamageSector3Append1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+
+class TTestLogRead2Sectors : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogRead2Sectors(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+
+class TTestLogFillChunkPlus1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogFillChunkPlus1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , Owner(0)
+    {}
+};
+
+
+class TTestLogKeep5Plus1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Data;
+    ui32 ChunkSize;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogKeep5Plus1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , Owner(0)
+    {}
+};
+
+
+class TTestLogReadRecords2To5 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Data;
+    ui32 ChunkSize;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogReadRecords2To5(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , Owner(0)
+    {}
+};
+
 class TTestSysLogReordering : public TBaseTest {
     friend class TTestSysLogReorderingLogCheck;
 
@@ -1577,10 +1577,10 @@ private:
             ui32 CommittedChunks[ChunksToReserve];
             ui32 DeletedChunk;
         } Data;
- 
-        TLogRecAboutChunks() { 
-            memset(static_cast<void*>(this), 0, sizeof(TLogRecAboutChunks)); 
-        } 
+
+        TLogRecAboutChunks() {
+            memset(static_cast<void*>(this), 0, sizeof(TLogRecAboutChunks));
+        }
     };
 #pragma pack(pop)
 
@@ -1817,329 +1817,329 @@ public:
     }
 };
 
-template <ui32 Size> 
-class TTestCommitChunks : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Commit1Data; 
-    TString ChunkData; 
-    ui32 ChunkIdx; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-        { 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
- 
-            VERBOSE_COUT(" Sending TEvChunkReserve"); 
-            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, Size)); 
-            break; 
-        case 20: 
-            TEST_RESPONSE(EvChunkReserveResult, OK); 
-            ASSERT_YTHROW(LastResponse.ChunkIds.size() == Size, 
-                "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
- 
-            VERBOSE_COUT(" Sending TEvLog to commit"); 
-            NPDisk::TCommitRecord commitRecord; 
-            for (size_t i = 0; i < LastResponse.ChunkIds.size(); ++i) { 
-                commitRecord.CommitChunks.push_back(LastResponse.ChunkIds[i]); 
-            } 
-            commitRecord.IsStartingPoint = true; 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, Commit1Data, TLsnSeg(1, 1), 
-                        (void*)43)); 
-            break; 
-        } 
-        case 30: 
-            TEST_RESPONSE(EvLogResult, OK); 
-            VERBOSE_COUT("Done"); 
-            SignalDoneEvent(); 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestCommitChunks(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
- 
-class TTestWriteAndReleaseChunk2A : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    TString commitData; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestWriteAndReleaseChunk2A(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
- 
-class TTestWriteAndCheckChunk2B : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestWriteAndCheckChunk2B(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestCheckErrorChunk2B : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestCheckErrorChunk2B(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , ChunkIdx(0) 
-    {} 
-}; 
- 
-class TTestWriteChunksAndLog : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    ui32 ChunkSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx2; 
-    ui32 ChunkIdx3; 
-    TString commitData; 
-    ui64 Lsn; 
- 
-    ui64 NextLsn() { 
-        ++Lsn; 
-        return Lsn; 
-    } 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestWriteChunksAndLog(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestContinueWriteLogChunk : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    ui32 ChunkSize; 
-    ui64 Lsn; 
-    ui64 SentSize = 0; 
- 
-    ui64 NextLsn() { 
-        ++Lsn; 
-        return Lsn; 
-    } 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestContinueWriteLogChunk(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestLastLsn : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    ui32 ChunkSize; 
-    ui64 Lsn; 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLastLsn(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
+template <ui32 Size>
+class TTestCommitChunks : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Commit1Data;
+    TString ChunkData;
+    ui32 ChunkIdx;
+
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            VERBOSE_COUT(" Sending TEvInit");
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+        {
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+
+            VERBOSE_COUT(" Sending TEvChunkReserve");
+            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, Size));
+            break;
+        case 20:
+            TEST_RESPONSE(EvChunkReserveResult, OK);
+            ASSERT_YTHROW(LastResponse.ChunkIds.size() == Size,
+                "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
+
+            VERBOSE_COUT(" Sending TEvLog to commit");
+            NPDisk::TCommitRecord commitRecord;
+            for (size_t i = 0; i < LastResponse.ChunkIds.size(); ++i) {
+                commitRecord.CommitChunks.push_back(LastResponse.ChunkIds[i]);
+            }
+            commitRecord.IsStartingPoint = true;
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, Commit1Data, TLsnSeg(1, 1),
+                        (void*)43));
+            break;
+        }
+        case 30:
+            TEST_RESPONSE(EvLogResult, OK);
+            VERBOSE_COUT("Done");
+            SignalDoneEvent();
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestCommitChunks(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+
+class TTestWriteAndReleaseChunk2A : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    TString commitData;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestWriteAndReleaseChunk2A(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+
+class TTestWriteAndCheckChunk2B : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestWriteAndCheckChunk2B(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestCheckErrorChunk2B : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestCheckErrorChunk2B(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , ChunkIdx(0)
+    {}
+};
+
+class TTestWriteChunksAndLog : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    ui32 ChunkSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx2;
+    ui32 ChunkIdx3;
+    TString commitData;
+    ui64 Lsn;
+
+    ui64 NextLsn() {
+        ++Lsn;
+        return Lsn;
+    }
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestWriteChunksAndLog(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestContinueWriteLogChunk : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    ui32 ChunkSize;
+    ui64 Lsn;
+    ui64 SentSize = 0;
+
+    ui64 NextLsn() {
+        ++Lsn;
+        return Lsn;
+    }
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestContinueWriteLogChunk(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestLastLsn : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    ui32 ChunkSize;
+    ui64 Lsn;
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLastLsn(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
 class TTestCheckLog : public TBaseTest {
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    ui32 ChunkSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    TString commitData; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    ui32 ChunkSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    TString commitData;
+
+    void TestFSM(const TActorContext &ctx);
+public:
     TTestCheckLog(const TIntrusivePtr<TTestConfig> &cfg)
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunkFlush : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    TString commitData; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkFlush(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunkUnavailable : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    ui32 ChunkIdx; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkUnavailable(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestRedZoneSurvivability : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TVector<TChunkIdx> ChunkIds; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestRedZoneSurvivability(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestFillDiskPhase1 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
-    ui32 MessageIdx; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkId; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestFillDiskPhase1(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestFillDiskPhase2 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
-    ui32 MessageIdx; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui64 SentCount = 0; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestFillDiskPhase2(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestHarakiri : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkIdx; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 GoodChunkCount; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestHarakiri(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , ChunkIdx(0) 
-    {} 
-}; 
- 
-class TTestSimpleHarakiri : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestSimpleHarakiri(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestSlay : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestSlay(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestSlayRace : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestSlayRace(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestSlayRecreate : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    TVDiskID VDiskId2; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestSlayRecreate(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkFlush : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    TString commitData;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkFlush(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkUnavailable : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    ui32 ChunkIdx;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkUnavailable(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestRedZoneSurvivability : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TVector<TChunkIdx> ChunkIds;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestRedZoneSurvivability(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestFillDiskPhase1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+    ui32 MessageIdx;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkId;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestFillDiskPhase1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestFillDiskPhase2 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+    ui32 MessageIdx;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui64 SentCount = 0;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestFillDiskPhase2(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestHarakiri : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkIdx;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 GoodChunkCount;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestHarakiri(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , ChunkIdx(0)
+    {}
+};
+
+class TTestSimpleHarakiri : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestSimpleHarakiri(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestSlay : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestSlay(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestSlayRace : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestSlayRace(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestSlayRecreate : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    TVDiskID VDiskId2;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestSlayRecreate(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
 
 
 class TActorTestSlayLogWriteRace final : public TCommonBaseTest {
@@ -2241,187 +2241,187 @@ private:
     bool FirstRound = true;
 };
 
-class TTestDestructionWhileWritingChunk : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 AppendBlockSize; 
-    ui32 ChunkSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    TString commitData; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestDestructionWhileWritingChunk(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestDestructionWhileReadingChunk : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestDestructionWhileReadingChunk(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , ChunkIdx(0) 
-    {} 
-}; 
- 
-class TTestDestructionWhileWritingLog : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestDestructionWhileWritingLog(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestDestructionWhileReadingLog : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestDestructionWhileReadingLog(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestChunkDeletionWhileWritingIt : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    ui32 ChunkIdx; 
-    bool IsOk; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestChunkDeletionWhileWritingIt(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestAllocateAllChunks : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
-    ui32 MessageIdx; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
-    TVector<ui32> ReservedChunks; 
-    ui32 AppendBlockSize; 
-    ui32 ResponsesExpected; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestAllocateAllChunks(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestCutMultipleLogChunks1 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestCutMultipleLogChunks1(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestCutMultipleLogChunks2 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestCutMultipleLogChunks2(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestLogOwerwrite1 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogOwerwrite1(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestLogOwerwrite2 : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui32 ChunkSize; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestLogOwerwrite2(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
-class TTestWriteAndCutLogChunk : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui64 Lsn; 
-    TString Data; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestWriteAndCutLogChunk(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , Owner(0) 
-        , Lsn(1) 
-    {} 
-}; 
- 
- 
-class TTestStartingPointRebootsIteration : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TString Commit1Data; 
-    ui64 FirstLsn; 
-    ui64 StartingPointLsn; 
-    ui64 NextLsn; 
-    ui32 ItemsToWrite; 
-    TString ChunkWriteData; 
-    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts; 
- 
-    void TestFSM(const TActorContext &ctx); 
-public: 
-    TTestStartingPointRebootsIteration(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-        , FirstLsn(0) 
-        , StartingPointLsn(0) 
-        , NextLsn(1) 
-    {} 
-}; 
- 
- 
-} // NKikimr 
+class TTestDestructionWhileWritingChunk : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 AppendBlockSize;
+    ui32 ChunkSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    TString commitData;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestDestructionWhileWritingChunk(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestDestructionWhileReadingChunk : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestDestructionWhileReadingChunk(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , ChunkIdx(0)
+    {}
+};
+
+class TTestDestructionWhileWritingLog : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestDestructionWhileWritingLog(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestDestructionWhileReadingLog : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestDestructionWhileReadingLog(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkDeletionWhileWritingIt : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    ui32 ChunkIdx;
+    bool IsOk;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkDeletionWhileWritingIt(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestAllocateAllChunks : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+    ui32 MessageIdx;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+    TVector<ui32> ReservedChunks;
+    ui32 AppendBlockSize;
+    ui32 ResponsesExpected;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestAllocateAllChunks(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestCutMultipleLogChunks1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestCutMultipleLogChunks1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestCutMultipleLogChunks2 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestCutMultipleLogChunks2(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestLogOwerwrite1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogOwerwrite1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestLogOwerwrite2 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 ChunkSize;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestLogOwerwrite2(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestWriteAndCutLogChunk : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui64 Lsn;
+    TString Data;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestWriteAndCutLogChunk(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , Owner(0)
+        , Lsn(1)
+    {}
+};
+
+
+class TTestStartingPointRebootsIteration : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString Commit1Data;
+    ui64 FirstLsn;
+    ui64 StartingPointLsn;
+    ui64 NextLsn;
+    ui32 ItemsToWrite;
+    TString ChunkWriteData;
+    TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestStartingPointRebootsIteration(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+        , FirstLsn(0)
+        , StartingPointLsn(0)
+        , NextLsn(1)
+    {}
+};
+
+
+} // NKikimr

@@ -137,8 +137,8 @@ namespace NKikimr {
         }
 
         std::pair<TOneChunkIndexPtr, const char *> TOneChunkIndex::Construct(const char *serialized) {
-            ui64 lastRealLsn; 
-            memcpy(&lastRealLsn, serialized, sizeof(ui64)); 
+            ui64 lastRealLsn;
+            memcpy(&lastRealLsn, serialized, sizeof(ui64));
             serialized += sizeof(ui64);
             ui32 recsNum = *(const ui32 *)serialized;
             serialized += sizeof(ui32);
@@ -146,8 +146,8 @@ namespace NKikimr {
             TDiskIndexRecs index;
             index.reserve(recsNum);
             for (ui32 i = 0; i < recsNum; i++) {
-                ui64 firstLsn; 
-                memcpy(&firstLsn, serialized, sizeof(ui64)); 
+                ui64 firstLsn;
+                memcpy(&firstLsn, serialized, sizeof(ui64));
                 serialized += sizeof(ui64);
                 ui16 offsetInPages = *(const ui16 *)serialized;
                 serialized += sizeof(ui16);

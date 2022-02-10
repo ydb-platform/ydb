@@ -105,15 +105,15 @@ namespace NKikimr {
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
             groupInfo.PickSubgroup(lb1.Hash(), &vDisks, &serviceIds);
-            TVDiskID vdiskM1 = vDisks[0]; 
-            TVDiskID vdiskM2 = vDisks[1]; 
-            //TVDiskID vdiskM3 = vDisks[2]; 
-            TVDiskID vdisk00 = vDisks[3]; 
+            TVDiskID vdiskM1 = vDisks[0];
+            TVDiskID vdiskM2 = vDisks[1];
+            //TVDiskID vdiskM3 = vDisks[2];
+            TVDiskID vdisk00 = vDisks[3];
             // replicas for this disk:
-            // main1 
-            // main2 
-            // main3 
-            // handoff 
+            // main1
+            // main2
+            // main3
+            // handoff
 
             // for main disk 0
             TIngress i1 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM1, TLogoBlobID(lb1, 1));
@@ -199,14 +199,14 @@ namespace NKikimr {
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
             groupInfo.PickSubgroup(lb1.Hash(), &vDisks, &serviceIds);
-            TVDiskID vdiskM1 = vDisks[0]; 
-            TVDiskID vdiskM2 = vDisks[1]; 
-            TVDiskID vdiskM3 = vDisks[2]; 
-            // replicas for this blob 
-            // main1 
-            // main2 
-            // main3 
-            // handoff 
+            TVDiskID vdiskM1 = vDisks[0];
+            TVDiskID vdiskM2 = vDisks[1];
+            TVDiskID vdiskM3 = vDisks[2];
+            // replicas for this blob
+            // main1
+            // main2
+            // main3
+            // handoff
 
 
             UNIT_ASSERT(TVDiskIdShort(vdiskM1) == TIngress::GetMainReplica(&groupInfo.GetTopology(), TLogoBlobID(lb1, 1)));
@@ -220,15 +220,15 @@ namespace NKikimr {
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
             groupInfo.PickSubgroup(lb1.Hash(), &vDisks, &serviceIds);
-            TVDiskID vdiskM1 = vDisks[0]; 
-            TVDiskID vdiskM2 = vDisks[1]; 
-            TVDiskID vdiskM3 = vDisks[2]; 
-            TVDiskID vdisk00 = vDisks[3]; 
+            TVDiskID vdiskM1 = vDisks[0];
+            TVDiskID vdiskM2 = vDisks[1];
+            TVDiskID vdiskM3 = vDisks[2];
+            TVDiskID vdisk00 = vDisks[3];
             // replicas for this logoblob:
-            // main1 
-            // main2 
-            // main3 
-            // handoff 
+            // main1
+            // main2
+            // main3
+            // handoff
 
             TVectorType emptyVec(0, 3);
 

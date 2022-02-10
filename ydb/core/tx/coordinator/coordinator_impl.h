@@ -385,17 +385,17 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr TxInFly;
         NMonitoring::TDynamicCounters::TCounterPtr StepsUncommited;
         NMonitoring::TDynamicCounters::TCounterPtr StepsInFly;
- 
-        NMonitoring::TDynamicCounters::TCounterPtr PlanTxCalls; 
-        NMonitoring::TDynamicCounters::TCounterPtr PlanTxOutdated; 
-        NMonitoring::TDynamicCounters::TCounterPtr PlanTxAccepted; 
- 
-        NMonitoring::TDynamicCounters::TCounterPtr StepConsideredTx; 
-        NMonitoring::TDynamicCounters::TCounterPtr StepOutdatedTx; 
-        NMonitoring::TDynamicCounters::TCounterPtr StepPlannedDeclinedTx; 
-        NMonitoring::TDynamicCounters::TCounterPtr StepPlannedTx; 
+
+        NMonitoring::TDynamicCounters::TCounterPtr PlanTxCalls;
+        NMonitoring::TDynamicCounters::TCounterPtr PlanTxOutdated;
+        NMonitoring::TDynamicCounters::TCounterPtr PlanTxAccepted;
+
+        NMonitoring::TDynamicCounters::TCounterPtr StepConsideredTx;
+        NMonitoring::TDynamicCounters::TCounterPtr StepOutdatedTx;
+        NMonitoring::TDynamicCounters::TCounterPtr StepPlannedDeclinedTx;
+        NMonitoring::TDynamicCounters::TCounterPtr StepPlannedTx;
         NMonitoring::TDynamicCounters::TCounterPtr StepDeclinedNoSpaceTx;
- 
+
         NMon::THistogramCounterHelper LegacyTxFromReceiveToPlan;
         NMonitoring::THistogramPtr TxFromReceiveToPlan;
         NMon::THistogramCounterHelper LegacyTxPlanLatency;

@@ -33,7 +33,7 @@ namespace NKikimr {
         }
 
         bool IsOverflow() const {
-            return Size > MaxProtobufSize; 
+            return Size > MaxProtobufSize;
         }
 
         ui64 GetSize() const {

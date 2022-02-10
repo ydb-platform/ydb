@@ -27,10 +27,10 @@
 typedef __m128i xmmi;
 typedef unsigned __int128 uint128_t;
 
-alignas(16) static const uint32_t poly1305_x64_sse2_message_mask[4] = 
+alignas(16) static const uint32_t poly1305_x64_sse2_message_mask[4] =
     {(1 << 26) - 1, 0, (1 << 26) - 1, 0};
-alignas(16) static const uint32_t poly1305_x64_sse2_5[4] = {5, 0, 5, 0}; 
-alignas(16) static const uint32_t poly1305_x64_sse2_1shl128[4] = 
+alignas(16) static const uint32_t poly1305_x64_sse2_5[4] = {5, 0, 5, 0};
+alignas(16) static const uint32_t poly1305_x64_sse2_1shl128[4] =
     {(1 << 24), 0, (1 << 24), 0};
 
 static uint128_t INLINE add128(uint128_t a, uint128_t b)
@@ -99,31 +99,31 @@ static void INLINE
 poly1305_block_copy(uint8_t *dst, const uint8_t *src, size_t bytes)
 {
     if (bytes & 32) {
-        _mm_storeu_si128((xmmi *)(dst + 0), _mm_loadu_si128((xmmi *)(src + 0))); 
-        _mm_storeu_si128((xmmi *)(dst + 16), _mm_loadu_si128((xmmi *)(src + 16))); 
+        _mm_storeu_si128((xmmi *)(dst + 0), _mm_loadu_si128((xmmi *)(src + 0)));
+        _mm_storeu_si128((xmmi *)(dst + 16), _mm_loadu_si128((xmmi *)(src + 16)));
         dst += 32;
-        src += 32; 
+        src += 32;
     }
     if (bytes & 16) {
         _mm_storeu_si128((xmmi *)dst,
-                 _mm_loadu_si128((xmmi *)(src))); 
+                 _mm_loadu_si128((xmmi *)(src)));
         dst += 16;
-        src += 16; 
+        src += 16;
     }
     if (bytes &  8) {
         WriteUnaligned<uint64_t>(dst, ReadUnaligned<uint64_t>(src));
         dst += 8;
-        src += 8; 
+        src += 8;
     }
     if (bytes &  4) {
         WriteUnaligned<uint32_t>(dst, ReadUnaligned<uint32_t>(src));
         dst += 4;
-        src += 4; 
+        src += 4;
     }
     if (bytes &  2) {
         WriteUnaligned<uint16_t>(dst, ReadUnaligned<uint16_t>(src));
         dst += 2;
-        src += 2; 
+        src += 2;
     }
     if (bytes &  1) {
         WriteUnaligned<uint8_t>(dst, ReadUnaligned<uint8_t>(src));
@@ -133,9 +133,9 @@ poly1305_block_copy(uint8_t *dst, const uint8_t *src, size_t bytes)
 /* zero 0-15 bytes */
 static void INLINE poly1305_block_zero(uint8_t *dst, size_t bytes)
 {
-    if (bytes &  1) { *( uint8_t *)dst = 0; dst++; } 
-    if (bytes &  2) { *(uint16_t *)dst = 0; dst += 2; } 
-    if (bytes &  4) { *(uint32_t *)dst = 0; dst += 4; } 
+    if (bytes &  1) { *( uint8_t *)dst = 0; dst++; }
+    if (bytes &  2) { *(uint16_t *)dst = 0; dst += 2; }
+    if (bytes &  4) { *(uint32_t *)dst = 0; dst += 4; }
     if (bytes &  8) { *(uint64_t *)dst = 0; dst += 8; }
 }
 

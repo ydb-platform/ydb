@@ -396,7 +396,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
             break;
         case ELogReaderState::NewLogChunk:
             if (ChunkIdx == 0) {
-                ReplyOk(); 
+                ReplyOk();
                 return; // Already replied
             }
             if (IsInitial) {
@@ -443,7 +443,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
                 } else {
                     ++CurrentChunkToRead;
                     if (CurrentChunkToRead == ChunksToRead.end()) {
-                        ReplyOk(); 
+                        ReplyOk();
                         return; // Already replied
                     }
                     SwitchToChunk(*CurrentChunkToRead);
@@ -478,7 +478,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
         }
         case ELogReaderState::ProcessAlreadyReadSectors:
         {
-            ui64 sizeToProcess = (ui64)format.SectorSize; 
+            ui64 sizeToProcess = (ui64)format.SectorSize;
             TSectorData *data = Sector->DataByIdx(idxRead);
             Y_VERIFY(data->IsAvailable(sizeToProcess));
             bool isEndOfLog = ProcessSectorSet(data);
@@ -535,7 +535,7 @@ bool TLogReader::PrepareToRead() {
         if (IsInitial) {
             Y_FAIL();
         }
-        ReplyOk(); 
+        ReplyOk();
         return true;
     }
     if (Position == TLogPosition{0, 0}) {
@@ -543,7 +543,7 @@ bool TLogReader::PrepareToRead() {
             Position = PDisk->LogPosition(PDisk->SysLogRecord.LogHeadChunkIdx, 0, 0);
         } else {
             if (ChunksToRead.size() == 0) {
-                ReplyOk(); 
+                ReplyOk();
                 return true;
             }
             if (OwnerLogStartPosition != TLogPosition{0, 0}) {
@@ -577,13 +577,13 @@ bool TLogReader::PrepareToRead() {
     EndSectorIdx = PDisk->UsableSectorsPerLogChunk();
     ui64 noErasureSectorIdx = Position.OffsetInChunk / format.SectorSize;
     // TODO(cthulhu): Check that Position format can be used with 16 TB HDD
-    SectorIdx = noErasureSectorIdx; 
+    SectorIdx = noErasureSectorIdx;
     OffsetInSector = Position.OffsetInChunk - noErasureSectorIdx * format.SectorSize;
 
     LastGoodToWriteLogPosition = Position;
 
     if (!IsInitial && ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx) {
-        ReplyOk(); 
+        ReplyOk();
         return true;
     }
 
@@ -608,7 +608,7 @@ void TLogReader::UpdateLastGoodToWritePosition() {
     // SET ? Initial ?
     if (IsInitial || SetLastGoodToWritePosition) {
         // TODO: consider fixing offset in sector!
-        LastGoodToWriteLogPosition = PDisk->LogPosition(ChunkIdx, SectorIdx + 0, OffsetInSector); 
+        LastGoodToWriteLogPosition = PDisk->LogPosition(ChunkIdx, SectorIdx + 0, OffsetInSector);
         if (IsInitial) {
             PDisk->InitialPreviousNonce = MaxNonce;
         }
@@ -649,7 +649,7 @@ void TLogReader::ProcessLogPageTerminator(ui8 *data, ui32 sectorPayloadSize) {
     SetLastGoodToWritePosition = true;
 }
 
-void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, const ui64 previousDataNonce) { 
+void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, const ui64 previousDataNonce) {
     auto *nonceJumpLogPageHeader2 = reinterpret_cast<TNonceJumpLogPageHeader2*>(data);
     OffsetInSector += sizeof(TNonceJumpLogPageHeader2);
 
@@ -666,12 +666,12 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
                 previousDataNonce > nonceJumpLogPageHeader2->PreviousNonce) {
             // We just came across an outdated nonce jump. This means the end of the log.
             LOG_WARN_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                    << " currentSectorIdx# " << SectorIdx 
+                    << " currentSectorIdx# " << SectorIdx
                     << " previousNonce# " << previousNonce
                     << " previousDataNonce# " << previousDataNonce
                     << " nonceJumpLogPageHeader2->PreviousNonce# " << nonceJumpLogPageHeader2->PreviousNonce
                     << " ReplyOk, marker LR001");
-            ReplyOk(); 
+            ReplyOk();
             return;
         } else if (previousNonce < nonceJumpLogPageHeader2->PreviousNonce &&
                 previousDataNonce < nonceJumpLogPageHeader2->PreviousNonce) {
@@ -695,7 +695,7 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
                 << " LogEndChunkIdx# " << LogEndChunkIdx
                 << " SectorIdx# " << SectorIdx
                 << " LogEndSectorId# " << LogEndSectorIdx);
-        ReplyOk(); 
+        ReplyOk();
         return;
     }
 
@@ -704,14 +704,14 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
     IsLastRecordHeaderValid = false;
 }
 
-void TLogReader::ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce) { 
+void TLogReader::ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce) {
     auto *nonceJumpLogPageHeader1 = reinterpret_cast<TNonceJumpLogPageHeader1*>(data);
     OffsetInSector += sizeof(TNonceJumpLogPageHeader1);
     if (IsInitial) {
         // TODO: Investigate / process error the proper way here.
         if (previousNonce > nonceJumpLogPageHeader1->PreviousNonce) {
             // We just came across an outdated nonce jump. This means the end of the log.
-            ReplyOk(); 
+            ReplyOk();
             return;
         }
         Y_VERIFY(previousNonce == nonceJumpLogPageHeader1->PreviousNonce,
@@ -724,7 +724,7 @@ void TLogReader::ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce) {
     }
 
     if (!IsInitial && ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx) {
-        ReplyOk(); 
+        ReplyOk();
         return;
     }
 
@@ -738,28 +738,28 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
     UpdateLastGoodToWritePosition();
 
     const ui64 magic = format.MagicLogChunk;
-    TSectorRestorator restorator(false, LogErasureDataParts, false, format, 
+    TSectorRestorator restorator(false, LogErasureDataParts, false, format,
         PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
     restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, PDisk->Cfg->UseT1ha0HashInFooter);
 
     if (!restorator.GoodSectorFlags) {
-        ReplyOk(); 
+        ReplyOk();
         return true;
     }
-    { 
+    {
         UpdateLastGoodToWritePosition();
-        if (!(restorator.GoodSectorFlags & 1)) { 
-            ReplyOk(); 
+        if (!(restorator.GoodSectorFlags & 1)) {
+            ReplyOk();
             return true;
         }
 
-        ui8* rawSector = sector->GetData(); 
+        ui8* rawSector = sector->GetData();
         TDataSectorFooter *sectorFooter = (TDataSectorFooter*)
             (rawSector + format.SectorSize - sizeof(TDataSectorFooter));
 
         LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
                 << " SectorIdx# " << SectorIdx
-                << " currentSectorIdx# " << SectorIdx 
+                << " currentSectorIdx# " << SectorIdx
                 << " sectorFooter->Nonce# " << sectorFooter->Nonce);
 
         ui64 previousNonce = std::exchange(LastNonce, sectorFooter->Nonce);
@@ -778,7 +778,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         // Decrypt data
         Cypher.StartMessage(sectorFooter->Nonce);
         Cypher.InplaceEncrypt(data, format.SectorSize - ui32(sizeof(TDataSectorFooter)));
-        PDisk->CheckLogCanary(rawSector, ChunkIdx, SectorIdx); 
+        PDisk->CheckLogCanary(rawSector, ChunkIdx, SectorIdx);
 
         ui32 maxOffsetInSector = format.SectorPayloadSize() - ui32(sizeof(TFirstLogPageHeader));
         while (OffsetInSector <= maxOffsetInSector) {
@@ -788,21 +788,21 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                 " (expected: %" PRIu32 ") at chunk %" PRIu32 " SectorSet: %" PRIu32 " Sector: %" PRIu32
                 " Offset in sector: %" PRIu32 " A: %" PRIu32 " B: %" PRIu32, (ui32)PDisk->PDiskId,
                 (ui32)pageHeader->Version, (ui32)PDISK_DATA_VERSION, (ui32)ChunkIdx, (ui32)SectorIdx,
-                (ui32)0, (ui32)OffsetInSector, (ui32)pageHeader->A, (ui32)pageHeader->B); 
+                (ui32)0, (ui32)OffsetInSector, (ui32)pageHeader->A, (ui32)pageHeader->B);
 
             if (pageHeader->Flags & LogPageTerminator) {
                 ProcessLogPageTerminator(data + OffsetInSector, format.SectorPayloadSize());
                 continue;
             }
             if (pageHeader->Flags & LogPageNonceJump2) {
-                ProcessLogPageNonceJump2(data + OffsetInSector, previousNonce, previousDataNonce); 
+                ProcessLogPageNonceJump2(data + OffsetInSector, previousNonce, previousDataNonce);
                 if (IsReplied.load()) {
                     return true;
                 }
                 continue;
             }
             if (pageHeader->Flags & LogPageNonceJump1) {
-                ProcessLogPageNonceJump1(data + OffsetInSector, previousNonce); 
+                ProcessLogPageNonceJump1(data + OffsetInSector, previousNonce);
                 if (IsReplied.load()) {
                     return true;
                 }
@@ -810,15 +810,15 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
             }
 
             if (IsInitial && previousNonce != 0) {
-                if (SectorIdx != 0) { 
+                if (SectorIdx != 0) {
                     // Suspicious place!
-                    if (LastNonce != previousNonce + 1) { 
-                        ReplyOk(); 
+                    if (LastNonce != previousNonce + 1) {
+                        ReplyOk();
                         return true;
                     }
                 } else {
                     if (LastNonce != previousNonce + 1) {
-                        ReplyOk(); 
+                        ReplyOk();
                         return true;
                     }
                 }
@@ -841,7 +841,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                             FirstLsnToKeep = ownerData.CurrentFirstLsnToKeep;
                             FirstNonceToKeep = PDisk->SysLogFirstNoncesToKeep.FirstNonceToKeep[recordOwnerId];
                             if (ownerData.LogStartPosition == TLogPosition{0, 0}) {
-                                ownerData.LogStartPosition = PDisk->LogPosition(ChunkIdx, SectorIdx, 
+                                ownerData.LogStartPosition = PDisk->LogPosition(ChunkIdx, SectorIdx,
                                     OffsetInSector - sizeof(TFirstLogPageHeader));
                                 TStringStream str;
                                 str << "(B) Initial ownerId# " << (ui32)recordOwnerId
@@ -885,7 +885,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     continue;
                 }
                 if (!IsLastRecordHeaderValid) {
-                    Y_FAIL_S(SelfInfo() << " Last record header is corrupted!" << Endl); 
+                    Y_FAIL_S(SelfInfo() << " Last record header is corrupted!" << Endl);
 
                     // TODO: skip the incorrect entry gracefully?  ReplyError() and return true
                 }
@@ -936,12 +936,12 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         }// while OffsetInSector <= maxOffsetInSector
 
         OffsetInSector = 0;
-    } 
-    ++SectorIdx; 
+    }
+    ++SectorIdx;
     return false;
 }
 
-void TLogReader::ReplyOk() { 
+void TLogReader::ReplyOk() {
     {
         TPDiskHashCalculator hasher(PDisk->Cfg->UseT1ha0HashInFooter);
         TGuard<TMutex> guard(PDisk->StateMutex);
@@ -970,7 +970,7 @@ void TLogReader::ReplyOk() {
 
 void TLogReader::ReplyOkInTheMiddle() {
     Result->Status = NKikimrProto::OK;
-    Result->NextPosition = PDisk->LogPosition(ChunkIdx, SectorIdx, OffsetInSector); 
+    Result->NextPosition = PDisk->LogPosition(ChunkIdx, SectorIdx, OffsetInSector);
     Result->IsEndOfLog = false;
     Reply();
 }
@@ -1033,7 +1033,7 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
             // Stop
             // Restore C3C4 and get B9C10 C3C4 -B5C6- B7C8
             // Start
-            ReplyOk(); 
+            ReplyOk();
             return true;
         }
 
@@ -1091,7 +1091,7 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         // As we always write next chunk reference, the situation we are in is impossible.
         LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
                 << " ProcessNextChunkReference, nextLogChunkReference not in a valid state");
-        ReplyOk(); 
+        ReplyOk();
         return true;
     }
 }
@@ -1149,7 +1149,7 @@ bool TLogReader::RegisterBadOffsets(TVector<ui64> &badOffsets) {
         ui32 prevChunk = ui32(prevOffset / format.ChunkSize);
         ui64 prevSector = (prevOffset - ui64(prevChunk) * ui64(format.ChunkSize)) / ui64(format.SectorSize);
         ui32 prevErasurePartSetBads = 1;
-        ui64 prevErasurePartSet = prevSector; 
+        ui64 prevErasurePartSet = prevSector;
         if (prevSector >= erasureSectors) {
             prevErasurePartSet = (ui64)-1;
         }
@@ -1168,7 +1168,7 @@ bool TLogReader::RegisterBadOffsets(TVector<ui64> &badOffsets) {
             }
             prevSector = currSector;
             if (currSector < erasureSectors) {
-                ui32 currErasurePartSet = currSector; 
+                ui32 currErasurePartSet = currSector;
                 if (currErasurePartSet == prevErasurePartSet) {
                     ++prevErasurePartSetBads;
                     if (prevErasurePartSetBads > 1) {
@@ -1197,7 +1197,7 @@ bool TLogReader::RegisterBadOffsets(TVector<ui64> &badOffsets) {
 }
 
 void TLogReader::ReleaseUsedBadOffsets() {
-    ui64 firstSectorToKeep = SectorIdx; 
+    ui64 firstSectorToKeep = SectorIdx;
     ui32 erasureSectors = PDisk->UsableSectorsPerLogChunk();
     if (SectorIdx >= erasureSectors) {
         firstSectorToKeep = erasureSectors;

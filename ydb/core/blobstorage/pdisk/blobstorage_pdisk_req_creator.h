@@ -72,9 +72,9 @@ private:
                     case NPriRead::SyncLog:
                         request->GateId = GateSyncLog;
                         break;
-                    case NPriRead::HullLow: 
-                        request->GateId = GateLow; 
-                        break; 
+                    case NPriRead::HullLow:
+                        request->GateId = GateLow;
+                        break;
                     default:
                         request->GateId = GateOtherRead;
                         break;
@@ -171,7 +171,7 @@ private:
 public:
     TReqCreator(ui32 pDiskId, TPDiskMon *mon, TDriveModel *model, TAtomic *estimatedChunkIdx)
         : PDiskId(pDiskId)
-        , ActorSystem(nullptr) 
+        , ActorSystem(nullptr)
         , Mon(mon)
         , Model(model)
         , EstimatedLogChunkIdx(estimatedChunkIdx)

@@ -195,51 +195,51 @@ void TExecutor::ReflectSchemeSettings() noexcept
     }
 }
 
-void TExecutor::OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) { 
-    CheckYellow(std::move(yellowMoveChannels), std::move(yellowStopChannels)); 
+void TExecutor::OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) {
+    CheckYellow(std::move(yellowMoveChannels), std::move(yellowStopChannels));
 }
 
-void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal) { 
-    if (!yellowMoveChannels && !yellowStopChannels) { 
+void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal) {
+    if (!yellowMoveChannels && !yellowStopChannels) {
         // Make sure to send known yellow channels one last time
-        if (Stats->YellowMoveChannels && terminal) { 
-            SendReassignYellowChannels(Stats->YellowMoveChannels); 
+        if (Stats->YellowMoveChannels && terminal) {
+            SendReassignYellowChannels(Stats->YellowMoveChannels);
         }
         return;
     }
 
-    size_t oldMoveCount = Stats->YellowMoveChannels.size(); 
-    size_t oldStopCount = Stats->YellowStopChannels.size(); 
-    Stats->YellowMoveChannels.insert(Stats->YellowMoveChannels.end(), yellowMoveChannels.begin(), yellowMoveChannels.end()); 
-    SortUnique(Stats->YellowMoveChannels); 
-    size_t newMoveCount = Stats->YellowMoveChannels.size(); 
-    Stats->IsAnyChannelYellowMove = !Stats->YellowMoveChannels.empty(); 
-    Stats->YellowStopChannels.insert(Stats->YellowStopChannels.end(), yellowStopChannels.begin(), yellowStopChannels.end()); 
-    SortUnique(Stats->YellowStopChannels); 
-    size_t newStopCount = Stats->YellowStopChannels.size(); 
-    Stats->IsAnyChannelYellowStop = !Stats->YellowStopChannels.empty(); 
+    size_t oldMoveCount = Stats->YellowMoveChannels.size();
+    size_t oldStopCount = Stats->YellowStopChannels.size();
+    Stats->YellowMoveChannels.insert(Stats->YellowMoveChannels.end(), yellowMoveChannels.begin(), yellowMoveChannels.end());
+    SortUnique(Stats->YellowMoveChannels);
+    size_t newMoveCount = Stats->YellowMoveChannels.size();
+    Stats->IsAnyChannelYellowMove = !Stats->YellowMoveChannels.empty();
+    Stats->YellowStopChannels.insert(Stats->YellowStopChannels.end(), yellowStopChannels.begin(), yellowStopChannels.end());
+    SortUnique(Stats->YellowStopChannels);
+    size_t newStopCount = Stats->YellowStopChannels.size();
+    Stats->IsAnyChannelYellowStop = !Stats->YellowStopChannels.empty();
 
-    if (newMoveCount > oldMoveCount) { 
+    if (newMoveCount > oldMoveCount) {
         if (auto line = Logger->Log(ELnLev::Debug)) {
-            line << NFmt::Do(*this) << " CheckYellow current light yellow move channels:"; 
-            for (ui32 channel : Stats->YellowMoveChannels) { 
+            line << NFmt::Do(*this) << " CheckYellow current light yellow move channels:";
+            for (ui32 channel : Stats->YellowMoveChannels) {
                 line << ' ' << channel;
             }
         }
     }
-    if (newStopCount > oldStopCount) { 
-        if (auto line = Logger->Log(ELnLev::Debug)) { 
-            line << NFmt::Do(*this) << " CheckYellow current yellow stop channels:"; 
-            for (ui32 channel : Stats->YellowStopChannels) { 
-                line << ' ' << channel; 
-            } 
-        } 
-    } 
+    if (newStopCount > oldStopCount) {
+        if (auto line = Logger->Log(ELnLev::Debug)) {
+            line << NFmt::Do(*this) << " CheckYellow current yellow stop channels:";
+            for (ui32 channel : Stats->YellowStopChannels) {
+                line << ' ' << channel;
+            }
+        }
+    }
 
     // Request reassignment of currently known yellow channels
     // Each time we discover a new yellow channel or every 15 seconds
-    if (newMoveCount != oldMoveCount || !HasYellowCheckInFly || terminal) { 
-        SendReassignYellowChannels(Stats->YellowMoveChannels); 
+    if (newMoveCount != oldMoveCount || !HasYellowCheckInFly || terminal) {
+        SendReassignYellowChannels(Stats->YellowMoveChannels);
     }
 
     if (HasYellowCheckInFly || terminal)
@@ -278,32 +278,32 @@ void TExecutor::Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev) {
     const auto* info = Owner->Info();
     Y_VERIFY(info);
 
-    TVector<ui32> lightYellowMoveGroups = std::move(ev->Get()->LightYellowMoveGroups); 
-    SortUnique(lightYellowMoveGroups); 
-    TVector<ui32> yellowStopGroups = std::move(ev->Get()->YellowStopGroups); 
-    SortUnique(yellowStopGroups); 
+    TVector<ui32> lightYellowMoveGroups = std::move(ev->Get()->LightYellowMoveGroups);
+    SortUnique(lightYellowMoveGroups);
+    TVector<ui32> yellowStopGroups = std::move(ev->Get()->YellowStopGroups);
+    SortUnique(yellowStopGroups);
 
     // Transform groups to a list of channels
-    TVector<ui32> lightYellowMoveChannels; 
-    TVector<ui32> yellowStopChannels; 
+    TVector<ui32> lightYellowMoveChannels;
+    TVector<ui32> yellowStopChannels;
     for (ui32 channel : xrange(info->Channels.size())) {
         const ui32 group = info->ChannelInfo(channel)->LatestEntry()->GroupID;
-        auto it = std::lower_bound(lightYellowMoveGroups.begin(), lightYellowMoveGroups.end(), group); 
-        if (it != lightYellowMoveGroups.end() && *it == group) { 
-            lightYellowMoveChannels.push_back(channel); 
+        auto it = std::lower_bound(lightYellowMoveGroups.begin(), lightYellowMoveGroups.end(), group);
+        if (it != lightYellowMoveGroups.end() && *it == group) {
+            lightYellowMoveChannels.push_back(channel);
         }
-        auto itStop = std::lower_bound(yellowStopGroups.begin(), yellowStopGroups.end(), group); 
-        if (itStop != yellowStopGroups.end() && *itStop == group) { 
-            yellowStopChannels.push_back(channel); 
-        } 
+        auto itStop = std::lower_bound(yellowStopGroups.begin(), yellowStopGroups.end(), group);
+        if (itStop != yellowStopGroups.end() && *itStop == group) {
+            yellowStopChannels.push_back(channel);
+        }
     }
 
-    Stats->YellowMoveChannels.clear(); 
-    Stats->YellowStopChannels.clear(); 
-    Stats->IsAnyChannelYellowMove = false; 
-    Stats->IsAnyChannelYellowStop = false; 
+    Stats->YellowMoveChannels.clear();
+    Stats->YellowStopChannels.clear();
+    Stats->IsAnyChannelYellowMove = false;
+    Stats->IsAnyChannelYellowStop = false;
 
-    CheckYellow(std::move(lightYellowMoveChannels), std::move(yellowStopChannels)); 
+    CheckYellow(std::move(lightYellowMoveChannels), std::move(yellowStopChannels));
 }
 
 void TExecutor::ActivateFollower(const TActorContext &ctx) {
@@ -2668,7 +2668,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         Y_FAIL("unknown event cookie");
     }
 
-    CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels)); 
+    CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));
 
     ui64 totalBytes = 0;
     for (auto& kv : msg->GroupWrittenBytes) {
@@ -2961,7 +2961,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             logl << NFmt::Do(*this) << " Broken on compaction error";
         }
 
-        CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels), /* terminal */ true); 
+        CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels), /* terminal */ true);
         return Broken();
     }
 
@@ -3179,8 +3179,8 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     const ui64 partSwitchCpuuS = ui64(1000000. * partSwitchCpuTimer.Passed());
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_PARTSWITCH_CPUTIME].IncrementFor(partSwitchCpuuS);
 
-    if (msg->YellowMoveChannels || msg->YellowStopChannels) { 
-        CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels)); 
+    if (msg->YellowMoveChannels || msg->YellowStopChannels) {
+        CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));
     }
 
     for (auto &snap : logicResult.CompleteSnapshots) {

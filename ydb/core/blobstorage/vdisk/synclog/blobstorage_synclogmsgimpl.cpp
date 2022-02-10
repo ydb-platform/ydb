@@ -2,7 +2,7 @@
 #include "codecs.h"
 
 #include <library/cpp/codecs/pfor_codec.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 
 using namespace NCodecs;
 
@@ -167,7 +167,7 @@ namespace NKikimr {
                 if (end - pos < 4)
                     return nullptr;
 
-                const ui32 blobsSize = ReadUnaligned<ui32>(pos); 
+                const ui32 blobsSize = ReadUnaligned<ui32>(pos);
                 pos += 4;
 
                 if (size_t(end - pos) < (blobsSize * LogoBlobColumnizedRowSize))
@@ -234,7 +234,7 @@ namespace NKikimr {
                 if (end - pos < 4)
                     return nullptr;
 
-                const ui32 bufSize = ReadUnaligned<ui32>(pos); 
+                const ui32 bufSize = ReadUnaligned<ui32>(pos);
                 pos += 4;
                 if (size_t(end - pos) < bufSize)
                     return nullptr;
@@ -288,7 +288,7 @@ namespace NKikimr {
                 if (end - pos < 4)
                     return nullptr;
 
-                const ui32 blobsSize = ReadUnaligned<ui32>(pos); 
+                const ui32 blobsSize = ReadUnaligned<ui32>(pos);
                 pos += 4;
 
                 if (blobsSize) {
@@ -384,7 +384,7 @@ namespace NKikimr {
                     return false;
                 }
 
-                const ui32 blocksSize = ReadUnaligned<ui32>(pos); 
+                const ui32 blocksSize = ReadUnaligned<ui32>(pos);
                 pos += sizeof(ui32);
                 if (size_t(end - pos) < sizeof(TBlockRecWithSerial) * blocksSize) {
                     return false;
@@ -401,7 +401,7 @@ namespace NKikimr {
                     return false;
                 }
 
-                const ui32 barriersSize = ReadUnaligned<ui32>(pos); 
+                const ui32 barriersSize = ReadUnaligned<ui32>(pos);
                 pos += sizeof(ui32);
                 if (size_t(end - pos) < sizeof(TBarrierRecWithSerial) * barriersSize) {
                     return false;

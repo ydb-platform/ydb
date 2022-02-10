@@ -15,7 +15,7 @@ struct Schema : NIceDb::Schema {
     struct Node : Table<2> {
         struct ID : Column<1, NScheme::NTypeIds::Uint32> {};
         struct NextPDiskID : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct NextGroupKeyNonce : Column<9, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; }; 
+        struct NextGroupKeyNonce : Column<9, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, NextPDiskID>;
@@ -51,17 +51,17 @@ struct Schema : NIceDb::Schema {
         struct Owner : Column<4, NScheme::NTypeIds::Uint64> {};
         struct DesiredPDiskCategory : Column<5, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory; };
         struct DesiredVDiskCategory : Column<6, NScheme::NTypeIds::Uint64> { using Type = NKikimrBlobStorage::TVDiskKind::EVDiskKind; };
-        struct EncryptionMode : Column<7, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; }; 
-        struct LifeCyclePhase : Column<8, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; }; 
+        struct EncryptionMode : Column<7, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct LifeCyclePhase : Column<8, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct MainKeyId : Column<9, NScheme::NTypeIds::String> {};
-        struct EncryptedGroupKey : Column<10, NScheme::NTypeIds::String> {}; 
-        struct GroupKeyNonce : Column<11, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; }; 
+        struct EncryptedGroupKey : Column<10, NScheme::NTypeIds::String> {};
+        struct GroupKeyNonce : Column<11, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct MainKeyVersion : Column<12, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct Down : Column<13, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory, 
+        using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
               SeenOperational>;
     };
@@ -250,7 +250,7 @@ struct Schema : NIceDb::Schema {
         // configuration item generation to prevent concurrent access
         struct Generation : Column<21, NScheme::NTypeIds::Uint64> {};
         // DS_PROXY encryption params
-        struct EncryptionMode : Column<22, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; }; 
+        struct EncryptionMode : Column<22, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         // scope id for the tenant
         struct SchemeshardId : Column<23, NScheme::NTypeIds::Uint64> {};
         struct PathItemId : Column<24, NScheme::NTypeIds::Uint64> {};

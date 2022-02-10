@@ -112,9 +112,9 @@ namespace NKikimr {
                     BackwardIt.Prev();
                 }
             }
-            if (Counter == 0 || ResultSize.IsOverflow()) { 
-                Result->MarkRangeOverflow(); 
-            } 
+            if (Counter == 0 || ResultSize.IsOverflow()) {
+                Result->MarkRangeOverflow();
+            }
 
             // send response and die
             SendResponseAndDie(ctx, this);
@@ -128,7 +128,7 @@ namespace NKikimr {
                 const TIngress &ingress = merger.GetMemRec().GetIngress();
                 ui64 ingr = ingress.Raw();
                 ui64 *pingr = (ShowInternals ? &ingr : nullptr);
-                Y_VERIFY(logoBlobId.PartId() == 0); // Index-only response must contain a single record for the blob 
+                Y_VERIFY(logoBlobId.PartId() == 0); // Index-only response must contain a single record for the blob
                 const NMatrix::TVectorType local = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
                 Result->AddResult(NKikimrProto::OK, logoBlobId, CookiePtr, pingr, &local);
                 --Counter;
@@ -154,7 +154,7 @@ namespace NKikimr {
             , TActorBootstrapped<TLevelIndexRangeQueryViaBatcherIndexOnly>()
             , Merger(QueryCtx->HullCtx->VCtx->Top->GType)
         {
-            Y_VERIFY_DEBUG(Record.GetIndexOnly()); 
+            Y_VERIFY_DEBUG(Record.GetIndexOnly());
         }
     };
 
@@ -169,7 +169,7 @@ namespace NKikimr {
                     TEvBlobStorage::TEvVGet::TPtr &ev,
                     std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
                     TActorId replSchedulerId) {
-        bool indexOnly = ev->Get()->Record.GetIndexOnly(); 
+        bool indexOnly = ev->Get()->Record.GetIndexOnly();
         if (indexOnly) {
             return new TLevelIndexRangeQueryViaBatcherIndexOnly(queryCtx, parentId,
                     std::move(logoBlobsSnapshot), std::move(barriersSnapshot), ev, std::move(result), replSchedulerId);

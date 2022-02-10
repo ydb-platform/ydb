@@ -179,7 +179,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
 
 
 
-    void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) { 
+    void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) {
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         Y_VERIFY(ev->Get()->Status == status != NKikimrProto::OK);
 

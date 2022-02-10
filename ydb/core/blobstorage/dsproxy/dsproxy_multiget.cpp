@@ -4,64 +4,64 @@
 #include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/vdisk/query/query_spacetracker.h>
 
-#include <util/generic/set.h> 
- 
-namespace NKikimr { 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// GET request 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
-class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest> { 
-    struct TRequestInfo { 
-        ui64 BeginIdx; 
-        ui64 EndIdx; 
-        bool IsReplied; 
-    }; 
- 
-    const ui64 QuerySize; 
-    const TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries; 
-    const TInstant Deadline; 
+#include <util/generic/set.h>
+
+namespace NKikimr {
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// GET request
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest> {
+    struct TRequestInfo {
+        ui64 BeginIdx;
+        ui64 EndIdx;
+        bool IsReplied;
+    };
+
+    const ui64 QuerySize;
+    const TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
+    const TInstant Deadline;
     const bool IsInternal;
-    TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses; 
- 
-    const TInstant StartTime; 
-    const bool MustRestoreFirst; 
-    const NKikimrBlobStorage::EGetHandleClass GetHandleClass; 
-    const ui32 ForceBlockedGeneration; 
- 
+    TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
+
+    const TInstant StartTime;
+    const bool MustRestoreFirst;
+    const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+    const ui32 ForceBlockedGeneration;
+
     static constexpr ui64 MaxRequestsInFlight = 3;
     ui64 RequestsInFlight = 0;
     std::deque<std::pair<std::unique_ptr<TEvBlobStorage::TEvGet>, ui64>> PendingGets;
- 
-    TStackVec<TRequestInfo, TypicalDisksInGroup> RequestInfos; 
- 
+
+    TStackVec<TRequestInfo, TypicalDisksInGroup> RequestInfos;
+
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
-        RequestsInFlight--; 
- 
+        RequestsInFlight--;
+
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetResultReceived, MergedNode = std::move(ev->TraceId));
 
-        const TEvBlobStorage::TEvGetResult &res = *ev->Get(); 
-        if (res.Status != NKikimrProto::OK) { 
+        const TEvBlobStorage::TEvGetResult &res = *ev->Get();
+        if (res.Status != NKikimrProto::OK) {
             R_LOG_ERROR_S("BPMG1", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(res.Status));
             ReplyAndDie(res.Status);
-            return; 
-        } 
- 
+            return;
+        }
+
         Y_VERIFY(ev->Cookie < RequestInfos.size());
-        TRequestInfo &info = RequestInfos[ev->Cookie]; 
+        TRequestInfo &info = RequestInfos[ev->Cookie];
         Y_VERIFY(!info.IsReplied);
-        info.IsReplied = true; 
+        info.IsReplied = true;
         Y_VERIFY(res.ResponseSz == info.EndIdx - info.BeginIdx);
- 
-        for (ui64 offset = 0; offset < res.ResponseSz; ++offset) { 
-            Responses[info.BeginIdx + offset] = res.Responses[offset]; 
-        } 
- 
+
+        for (ui64 offset = 0; offset < res.ResponseSz; ++offset) {
+            Responses[info.BeginIdx + offset] = res.Responses[offset];
+        }
+
         SendRequests();
-    } 
- 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest>; 
+    }
+
+    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest>;
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         std::unique_ptr<TEvBlobStorage::TEvGetResult> ev(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
         for (ui32 i = 0, e = QuerySize; i != e; ++i) {
@@ -69,19 +69,19 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
             TEvBlobStorage::TEvGetResult::TResponse &x = ev->Responses[i];
             x.Status = NKikimrProto::UNKNOWN;
             x.Id = query.Id;
-        } 
-        ev->ErrorReason = ErrorReason; 
+        }
+        ev->ErrorReason = ErrorReason;
         Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetResultSent);
         Y_VERIFY(status != NKikimrProto::OK);
         SendResponseAndDie(std::move(ev));
-    } 
- 
+    }
+
     std::unique_ptr<IEventBase> RestartQuery(ui32) {
         Y_FAIL();
     }
 
-public: 
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_PROXY_MULTIGET_ACTOR;
     }
@@ -90,38 +90,38 @@ public:
         return mon->ActiveMultiGet;
     }
 
-    TBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info, 
+    TBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
-            NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now, 
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) 
+            NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
+            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0)
-        , QuerySize(ev->QuerySize) 
-        , Queries(ev->Queries.Release()) 
-        , Deadline(ev->Deadline) 
+        , QuerySize(ev->QuerySize)
+        , Queries(ev->Queries.Release())
+        , Deadline(ev->Deadline)
         , IsInternal(ev->IsInternal)
-        , Responses(new TEvBlobStorage::TEvGetResult::TResponse[QuerySize]) 
-        , StartTime(now) 
-        , MustRestoreFirst(ev->MustRestoreFirst) 
-        , GetHandleClass(ev->GetHandleClass) 
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration) 
+        , Responses(new TEvBlobStorage::TEvGetResult::TResponse[QuerySize])
+        , StartTime(now)
+        , MustRestoreFirst(ev->MustRestoreFirst)
+        , GetHandleClass(ev->GetHandleClass)
+        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
     {}
- 
+
     void PrepareRequest(ui32 beginIdx, ui32 endIdx) {
         Y_VERIFY(endIdx > beginIdx);
-        ui64 cookie = RequestInfos.size(); 
-        RequestInfos.push_back({beginIdx, endIdx, false}); 
-        TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[endIdx - beginIdx]); 
-        for (ui32 idx = beginIdx; idx < endIdx; ++idx) { 
-            queries[idx - beginIdx] = Queries[idx]; 
-        } 
+        ui64 cookie = RequestInfos.size();
+        RequestInfos.push_back({beginIdx, endIdx, false});
+        TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[endIdx - beginIdx]);
+        for (ui32 idx = beginIdx; idx < endIdx; ++idx) {
+            queries[idx - beginIdx] = Queries[idx];
+        }
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, endIdx - beginIdx, Deadline, GetHandleClass,
             MustRestoreFirst, false, ForceBlockedGeneration);
         ev->IsInternal = IsInternal;
         PendingGets.emplace_back(std::move(ev), cookie);
     }
- 
+
     void SendRequests() {
         for (; RequestsInFlight < MaxRequestsInFlight && !PendingGets.empty(); ++RequestsInFlight, PendingGets.pop_front()) {
             auto& [ev, cookie] = PendingGets.front();
@@ -136,8 +136,8 @@ public:
             WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetResultSent);
             SendResponseAndDie(std::move(ev));
         }
-    } 
- 
+    }
+
     void Bootstrap() {
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetReceived);
 
@@ -160,51 +160,51 @@ public:
             << " Deadline# " << Deadline);
 
         Y_VERIFY(QuerySize != 0); // reply with error?
-        ui32 beginIdx = 0; 
-        TLogoBlobID lastBlobId; 
+        ui32 beginIdx = 0;
+        TLogoBlobID lastBlobId;
         TQueryResultSizeTracker resultSize;
         resultSize.Init();
 
-        for (ui32 queryIdx = 0; queryIdx < QuerySize; ++queryIdx) { 
-            const TEvBlobStorage::TEvGet::TQuery &query = Queries[queryIdx]; 
-            if (lastBlobId == query.Id && queryIdx != 0) { 
-                continue; 
-            } 
+        for (ui32 queryIdx = 0; queryIdx < QuerySize; ++queryIdx) {
+            const TEvBlobStorage::TEvGet::TQuery &query = Queries[queryIdx];
+            if (lastBlobId == query.Id && queryIdx != 0) {
+                continue;
+            }
             resultSize.AddAllPartsOfLogoBlob(Info->Type, query.Id);
- 
-            if (queryIdx != beginIdx) { 
+
+            if (queryIdx != beginIdx) {
                 if (resultSize.IsOverflow() || queryIdx - beginIdx == 10000) {
                     PrepareRequest(beginIdx, queryIdx);
-                    beginIdx = queryIdx; 
+                    beginIdx = queryIdx;
                     resultSize.Init();
                     resultSize.AddAllPartsOfLogoBlob(Info->Type, query.Id);
-                } 
-            } 
-        } 
+                }
+            }
+        }
         PrepareRequest(beginIdx, QuerySize);
- 
+
         SendRequests();
 
-        Become(&TThis::StateWait); 
-    } 
- 
+        Become(&TThis::StateWait);
+    }
+
     STATEFN(StateWait) {
         if (ProcessEvent(ev)) {
             return;
         }
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
-        } 
-    } 
-}; 
- 
-IActor* CreateBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info, 
+        }
+    }
+};
+
+IActor* CreateBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
         const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, 
+        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
         ui64 cookie, NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind,
-        TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) { 
+        TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
     return new TBlobStorageGroupMultiGetRequest(info, state, source, mon, ev, cookie, std::move(traceId),
-        latencyQueueKind, now, storagePoolCounters); 
-} 
- 
-}//NKikimr 
+        latencyQueueKind, now, storagePoolCounters);
+}
+
+}//NKikimr

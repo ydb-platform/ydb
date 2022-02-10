@@ -305,26 +305,26 @@ public:
 struct TExecutorStats {
     bool IsActive = false;
     bool IsFollower = false;
-    bool IsAnyChannelYellowMove = false; 
-    bool IsAnyChannelYellowStop = false; 
+    bool IsAnyChannelYellowMove = false;
+    bool IsAnyChannelYellowStop = false;
     ui64 TxInFly = 0;
     ui64 TxPending = 0;
     const THashMap<TLogoBlobID, TCompactedPartLoans>* CompactedPartLoans = nullptr;
     const bool* HasSharedBlobs = nullptr;
 
-    TVector<ui32> YellowMoveChannels; 
-    TVector<ui32> YellowStopChannels; 
+    TVector<ui32> YellowMoveChannels;
+    TVector<ui32> YellowStopChannels;
 
-    bool IsYellowMoveChannel(ui32 channel) const { 
-        auto it = std::lower_bound(YellowMoveChannels.begin(), YellowMoveChannels.end(), channel); 
-        return it != YellowMoveChannels.end() && *it == channel; 
+    bool IsYellowMoveChannel(ui32 channel) const {
+        auto it = std::lower_bound(YellowMoveChannels.begin(), YellowMoveChannels.end(), channel);
+        return it != YellowMoveChannels.end() && *it == channel;
     }
 
-    bool IsYellowStopChannel(ui32 channel) const { 
-        auto it = std::lower_bound(YellowStopChannels.begin(), YellowStopChannels.end(), channel); 
-        return it != YellowStopChannels.end() && *it == channel; 
-    } 
- 
+    bool IsYellowStopChannel(ui32 channel) const {
+        auto it = std::lower_bound(YellowStopChannels.begin(), YellowStopChannels.end(), channel);
+        return it != YellowStopChannels.end() && *it == channel;
+    }
+
 protected:
     virtual ~TExecutorStats() {}
 };
@@ -534,7 +534,7 @@ namespace NFlatExecutorSetup {
         virtual THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const = 0;
 
         // This method lets executor know about new yellow channels
-        virtual void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) = 0; 
+        virtual void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) = 0;
 
         virtual const TExecutorStats& GetStats() const = 0;
         virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;

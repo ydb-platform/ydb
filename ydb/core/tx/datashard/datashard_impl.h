@@ -1322,14 +1322,14 @@ public:
 
     using TTabletExecutedFlat::TryCaptureTxCache;
 
-    bool IsAnyChannelYellowMove() const { 
-        return Executor()->GetStats().IsAnyChannelYellowMove; 
+    bool IsAnyChannelYellowMove() const {
+        return Executor()->GetStats().IsAnyChannelYellowMove;
     }
 
-    bool IsAnyChannelYellowStop() const { 
-        return Executor()->GetStats().IsAnyChannelYellowStop; 
-    } 
- 
+    bool IsAnyChannelYellowStop() const {
+        return Executor()->GetStats().IsAnyChannelYellowStop;
+    }
+
     bool IsSubDomainOutOfSpace() const
     {
         return SubDomainOutOfSpace;

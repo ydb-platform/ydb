@@ -158,7 +158,7 @@ namespace NKikimr {
             const TRecordHdr *Get() const {
                 Y_VERIFY_DEBUG(Valid());
                 return Pos;
-            } 
+            }
         private:
             const TSyncLogPage *PagePtr;
             const TRecordHdr *Pos;

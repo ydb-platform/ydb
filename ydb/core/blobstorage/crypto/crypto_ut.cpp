@@ -6,116 +6,116 @@
 #include <util/random/fast.h>
 #include <util/stream/format.h>
 #include <util/string/printf.h>
- 
+
 #include <numeric>
 
 #include <ydb/core/blobstorage/crypto/ut/ut_helpers.h>
 
-namespace NKikimr { 
- 
-Y_UNIT_TEST_SUITE(TBlobStorageCrypto) { 
+namespace NKikimr {
 
-    Y_UNIT_TEST(TestMixedStreamCypher) { 
-        TStreamCypher cypher1; 
-        TStreamCypher cypher2; 
-        constexpr int SIZE = 5000; 
-        alignas(16) ui8 in[SIZE]; 
-        alignas(16) ui8 out[SIZE]; 
-        for (ui32 i = 0; i < SIZE; ++i) { 
-            in[i] = (ui8)i; 
-        } 
- 
-        ui64 key = 1; 
-        ui64 nonce = 1; 
-        cypher1.SetKey(key); 
- 
-        for (ui32 size = 1; size < SIZE; ++size) { 
-            ui32 in_offset = size / 7; 
-            cypher1.StartMessage(nonce, 0); 
-            ui32 size1 = (size - in_offset) % 257; 
-            ui32 size2 = (size - in_offset - size1) % 263; 
-            ui32 size3 = size - size1 - size2 - in_offset; 
-            cypher1.Encrypt(out, in + in_offset, size1); 
-            cypher1.Encrypt(out + size1, in + in_offset + size1, size2); 
-            cypher1.Encrypt(out + size1 + size2, in + in_offset + size1 + size2, size3); 
- 
-            cypher2.SetKey(key); 
-            cypher2.StartMessage(nonce, 0); 
-            cypher2.InplaceEncrypt(out, size - in_offset); 
- 
+Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
+
+    Y_UNIT_TEST(TestMixedStreamCypher) {
+        TStreamCypher cypher1;
+        TStreamCypher cypher2;
+        constexpr int SIZE = 5000;
+        alignas(16) ui8 in[SIZE];
+        alignas(16) ui8 out[SIZE];
+        for (ui32 i = 0; i < SIZE; ++i) {
+            in[i] = (ui8)i;
+        }
+
+        ui64 key = 1;
+        ui64 nonce = 1;
+        cypher1.SetKey(key);
+
+        for (ui32 size = 1; size < SIZE; ++size) {
+            ui32 in_offset = size / 7;
+            cypher1.StartMessage(nonce, 0);
+            ui32 size1 = (size - in_offset) % 257;
+            ui32 size2 = (size - in_offset - size1) % 263;
+            ui32 size3 = size - size1 - size2 - in_offset;
+            cypher1.Encrypt(out, in + in_offset, size1);
+            cypher1.Encrypt(out + size1, in + in_offset + size1, size2);
+            cypher1.Encrypt(out + size1 + size2, in + in_offset + size1 + size2, size3);
+
+            cypher2.SetKey(key);
+            cypher2.StartMessage(nonce, 0);
+            cypher2.InplaceEncrypt(out, size - in_offset);
+
             UNIT_ASSERT_ARRAYS_EQUAL(in + in_offset, out, size - in_offset);
-        } 
-    } 
- 
-    Y_UNIT_TEST(TestOffsetStreamCypher) { 
-        TStreamCypher cypher1; 
-        TStreamCypher cypher2; 
-        constexpr int SIZE = 5000; 
-        alignas(16) ui8 in[SIZE]; 
-        alignas(16) ui8 out[SIZE]; 
-        for (ui32 i = 0; i < SIZE; ++i) { 
-            in[i] = (ui8)i; 
-        } 
- 
-        ui64 key = 1; 
-        ui64 nonce = 1; 
-        cypher1.SetKey(key); 
- 
-        for (ui32 size = 1; size < SIZE; ++size) { 
-            ui32 in_offset = size / 7; 
-            ui32 size1 = (size - in_offset) % 257; 
-            ui32 size2 = (size - in_offset - size1) % 263; 
-            ui32 size3 = size - size1 - size2 - in_offset; 
-            cypher1.StartMessage(nonce, 0); 
-            cypher1.Encrypt(out, in + in_offset, size1); 
-            cypher1.StartMessage(nonce, size1); 
-            cypher1.Encrypt(out + size1, in + in_offset + size1, size2); 
-            cypher1.StartMessage(nonce, size1 + size2); 
-            cypher1.Encrypt(out + size1 + size2, in + in_offset + size1 + size2, size3); 
- 
-            cypher2.SetKey(key); 
-            cypher2.StartMessage(nonce, 0); 
-            cypher2.InplaceEncrypt(out, size - in_offset); 
- 
-            for (ui32 i = 0; i < size - in_offset; ++i) { 
-                UNIT_ASSERT(in[i + in_offset] == out[i]); 
-            } 
-        } 
-    } 
- 
-    Y_UNIT_TEST(TestInplaceStreamCypher) { 
-        TStreamCypher cypher1; 
-        TStreamCypher cypher2; 
-        constexpr int SIZE = 5000; 
-        ui8 in[SIZE]; 
-        ui8 out[SIZE]; 
-        for (ui32 i = 0; i < SIZE; ++i) { 
-            in[i] = (ui8)i; 
-        } 
- 
-        ui64 key = 1; 
-        ui64 nonce = 1; 
- 
-        for (ui32 size = 1; size < SIZE; ++size) { 
-            cypher1.SetKey(key); 
-            cypher1.StartMessage(nonce, 0); 
-            cypher1.InplaceEncrypt(in, size); 
- 
-            memcpy(out, in, size); 
- 
-            cypher2.SetKey(key); 
-            cypher2.StartMessage(nonce, 0); 
-            cypher2.InplaceEncrypt(out, size); 
- 
-            for (ui32 i = 0; i < SIZE; ++i) { 
-                in[i] = (ui8)i; 
-            } 
- 
-            for (ui32 i = 0; i < size; ++i) { 
-                UNIT_ASSERT_C(in[i] == out[i], "Mismatch at " << i << " of " << size << Endl); 
-            } 
-        } 
-    } 
+        }
+    }
+
+    Y_UNIT_TEST(TestOffsetStreamCypher) {
+        TStreamCypher cypher1;
+        TStreamCypher cypher2;
+        constexpr int SIZE = 5000;
+        alignas(16) ui8 in[SIZE];
+        alignas(16) ui8 out[SIZE];
+        for (ui32 i = 0; i < SIZE; ++i) {
+            in[i] = (ui8)i;
+        }
+
+        ui64 key = 1;
+        ui64 nonce = 1;
+        cypher1.SetKey(key);
+
+        for (ui32 size = 1; size < SIZE; ++size) {
+            ui32 in_offset = size / 7;
+            ui32 size1 = (size - in_offset) % 257;
+            ui32 size2 = (size - in_offset - size1) % 263;
+            ui32 size3 = size - size1 - size2 - in_offset;
+            cypher1.StartMessage(nonce, 0);
+            cypher1.Encrypt(out, in + in_offset, size1);
+            cypher1.StartMessage(nonce, size1);
+            cypher1.Encrypt(out + size1, in + in_offset + size1, size2);
+            cypher1.StartMessage(nonce, size1 + size2);
+            cypher1.Encrypt(out + size1 + size2, in + in_offset + size1 + size2, size3);
+
+            cypher2.SetKey(key);
+            cypher2.StartMessage(nonce, 0);
+            cypher2.InplaceEncrypt(out, size - in_offset);
+
+            for (ui32 i = 0; i < size - in_offset; ++i) {
+                UNIT_ASSERT(in[i + in_offset] == out[i]);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestInplaceStreamCypher) {
+        TStreamCypher cypher1;
+        TStreamCypher cypher2;
+        constexpr int SIZE = 5000;
+        ui8 in[SIZE];
+        ui8 out[SIZE];
+        for (ui32 i = 0; i < SIZE; ++i) {
+            in[i] = (ui8)i;
+        }
+
+        ui64 key = 1;
+        ui64 nonce = 1;
+
+        for (ui32 size = 1; size < SIZE; ++size) {
+            cypher1.SetKey(key);
+            cypher1.StartMessage(nonce, 0);
+            cypher1.InplaceEncrypt(in, size);
+
+            memcpy(out, in, size);
+
+            cypher2.SetKey(key);
+            cypher2.StartMessage(nonce, 0);
+            cypher2.InplaceEncrypt(out, size);
+
+            for (ui32 i = 0; i < SIZE; ++i) {
+                in[i] = (ui8)i;
+            }
+
+            for (ui32 i = 0; i < size; ++i) {
+                UNIT_ASSERT_C(in[i] == out[i], "Mismatch at " << i << " of " << size << Endl);
+            }
+        }
+    }
 
     Y_UNIT_TEST(PerfTestStreamCypher) {
         TStreamCypher cypher1;
@@ -170,8 +170,8 @@ void Test(const ui8* a, const ui8* b, size_t size) {
             " a[" << i << "]# " << Hex(a[i], HF_FULL) << " != "
             " b[" << i << "]# " << Hex(b[i], HF_FULL));
     }
-} 
- 
+}
+
     Y_UNIT_TEST(UnalignedTestStreamCypher) {
         constexpr size_t BUF_ALIGN = 8;
 
@@ -321,4 +321,4 @@ static const ui64 Avx2ReferenceHash[] = {
         T1haHashResultsStablilityTestImpl<TT1ha0Avx2Hasher>(buf);
     }
 }
-} // namespace NKikimr 
+} // namespace NKikimr

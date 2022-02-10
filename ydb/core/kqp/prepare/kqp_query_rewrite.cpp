@@ -202,7 +202,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
         });
 
     TVector<TExprBase> jointNodes;
-    jointNodes.reserve(jointsMap.size()); 
+    jointNodes.reserve(jointsMap.size());
     for (auto& pair : jointsMap) {
         jointNodes.push_back(pair.second);
     }

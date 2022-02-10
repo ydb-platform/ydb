@@ -39,8 +39,8 @@ public:
 
         NActors::TActorId loggerActorId = TActorId(1, "logger");
         TIntrusivePtr<NLog::TSettings> logSettings = new NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
-                (IsVerbose ? NLog::PRI_NOTICE : NLog::PRI_CRIT), 
-                NLog::PRI_DEBUG, 0); 
+                (IsVerbose ? NLog::PRI_NOTICE : NLog::PRI_CRIT),
+                NLog::PRI_DEBUG, 0);
         logSettings->Append(
             NActorsServices::EServiceCommon_MIN,
             NActorsServices::EServiceCommon_MAX,
@@ -83,8 +83,8 @@ public:
                         TMailboxType::Simple, 0));
         }
         TIntrusivePtr<TDsProxyNodeMon> nodeMon(new TDsProxyNodeMon(Counters, true));
-        TDsProxyPerPoolCounters perPoolCounters(Counters); 
-        TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name"); 
+        TDsProxyPerPoolCounters perPoolCounters(Counters);
+        TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(GroupInfo), false, nodeMon,

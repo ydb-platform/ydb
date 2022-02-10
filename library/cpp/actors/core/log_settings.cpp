@@ -9,7 +9,7 @@ namespace NActors {
                              EPriority defPriority, EPriority defSamplingPriority,
                              ui32 defSamplingRate, ui64 timeThresholdMs)
             : LoggerActorId(loggerActorId)
-            , LoggerComponent(loggerComponent) 
+            , LoggerComponent(loggerComponent)
             , TimeThresholdMs(timeThresholdMs)
             , AllowDrop(true)
             , ThrottleDelay(TDuration::MilliSeconds(100))
@@ -31,7 +31,7 @@ namespace NActors {
                              EPriority defPriority, EPriority defSamplingPriority,
                              ui32 defSamplingRate, ui64 timeThresholdMs)
             : LoggerActorId(loggerActorId)
-            , LoggerComponent(loggerComponent) 
+            , LoggerComponent(loggerComponent)
             , TimeThresholdMs(timeThresholdMs)
             , AllowDrop(true)
             , ThrottleDelay(TDuration::MilliSeconds(100))
@@ -102,16 +102,16 @@ namespace NActors {
             }
 
             if (component == InvalidComponent) {
-                for (int i = 0; i < Mask + 1; i++) { 
-                    TComponentSettings settings = AtomicGet(ComponentInfo[i]); 
-                    if (isSampling) { 
-                        settings.Raw.X.SamplingLevel = priority; 
-                    } else { 
-                        settings.Raw.X.Level = priority; 
-                    } 
-                    AtomicSet(ComponentInfo[i], settings.Raw.Data); 
-                } 
- 
+                for (int i = 0; i < Mask + 1; i++) {
+                    TComponentSettings settings = AtomicGet(ComponentInfo[i]);
+                    if (isSampling) {
+                        settings.Raw.X.SamplingLevel = priority;
+                    } else {
+                        settings.Raw.X.Level = priority;
+                    }
+                    AtomicSet(ComponentInfo[i], settings.Raw.Data);
+                }
+
                 TStringStream str;
 
                 str << titleName
@@ -124,16 +124,16 @@ namespace NActors {
                     explanation = "Invalid component";
                     return 1;
                 }
-                TComponentSettings settings = AtomicGet(ComponentInfo[component]); 
-                EPriority oldPriority; 
-                if (isSampling) { 
-                    oldPriority = (EPriority)settings.Raw.X.SamplingLevel; 
-                    settings.Raw.X.SamplingLevel = priority; 
-                } else { 
-                    oldPriority = (EPriority)settings.Raw.X.Level; 
-                    settings.Raw.X.Level = priority; 
-                } 
-                AtomicSet(ComponentInfo[component], settings.Raw.Data); 
+                TComponentSettings settings = AtomicGet(ComponentInfo[component]);
+                EPriority oldPriority;
+                if (isSampling) {
+                    oldPriority = (EPriority)settings.Raw.X.SamplingLevel;
+                    settings.Raw.X.SamplingLevel = priority;
+                } else {
+                    oldPriority = (EPriority)settings.Raw.X.Level;
+                    settings.Raw.X.Level = priority;
+                }
+                AtomicSet(ComponentInfo[component], settings.Raw.Data);
                 TStringStream str;
                 str << titleName << " for the component " << ComponentNames[component]
                     << " has been changed from " << PriorityToString(EPrio(oldPriority))
@@ -144,21 +144,21 @@ namespace NActors {
         }
 
         int TSettings::SetLevel(EPriority priority, EComponent component, TString& explanation) {
-            return SetLevelImpl("priority", false, 
+            return SetLevelImpl("priority", false,
                                 priority, component, explanation);
         }
 
         int TSettings::SetSamplingLevel(EPriority priority, EComponent component, TString& explanation) {
-            return SetLevelImpl("sampling priority", true, 
+            return SetLevelImpl("sampling priority", true,
                                 priority, component, explanation);
         }
 
         int TSettings::SetSamplingRate(ui32 sampling, EComponent component, TString& explanation) {
             if (component == InvalidComponent) {
                 for (int i = 0; i < Mask + 1; i++) {
-                    TComponentSettings settings = AtomicGet(ComponentInfo[i]); 
-                    settings.Raw.X.SamplingRate = sampling; 
-                    AtomicSet(ComponentInfo[i], settings.Raw.Data); 
+                    TComponentSettings settings = AtomicGet(ComponentInfo[i]);
+                    settings.Raw.X.SamplingRate = sampling;
+                    AtomicSet(ComponentInfo[i], settings.Raw.Data);
                 }
                 TStringStream str;
                 str << "Sampling rate for all components has been changed to " << sampling;
@@ -168,10 +168,10 @@ namespace NActors {
                     explanation = "Invalid component";
                     return 1;
                 }
-                TComponentSettings settings = AtomicGet(ComponentInfo[component]); 
-                ui32 oldSampling = settings.Raw.X.SamplingRate; 
-                settings.Raw.X.SamplingRate = sampling; 
-                AtomicSet(ComponentInfo[component], settings.Raw.Data); 
+                TComponentSettings settings = AtomicGet(ComponentInfo[component]);
+                ui32 oldSampling = settings.Raw.X.SamplingRate;
+                settings.Raw.X.SamplingRate = sampling;
+                AtomicSet(ComponentInfo[component], settings.Raw.Data);
                 TStringStream str;
                 str << "Sampling rate for the component " << ComponentNames[component]
                     << " has been changed from " << oldSampling

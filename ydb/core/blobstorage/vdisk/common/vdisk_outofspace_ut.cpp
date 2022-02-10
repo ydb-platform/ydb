@@ -35,7 +35,7 @@ namespace NKikimr {
             state.Update(5, flags | NKikimrBlobStorage::StatusDiskSpaceRed);
             UNIT_ASSERT_EQUAL(state.GetGlobalColor(), TSpaceColor::RED);
             state.Update(4, flags | NKikimrBlobStorage::StatusDiskSpaceOrange);
-            state.Update(5, flags | NKikimrBlobStorage::StatusDiskSpaceLightYellowMove); 
+            state.Update(5, flags | NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
             UNIT_ASSERT_EQUAL(state.GetGlobalColor(), TSpaceColor::ORANGE);
         }
     }

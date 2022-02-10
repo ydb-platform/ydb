@@ -33,20 +33,20 @@ namespace NKikimr {
             , NumStatusRemain(2 * Info->GetTotalVDisksNum())
         {}
 
-        void Output(IOutputStream &out) { 
-            out << "{Erroneous# "; 
-            ErroneousDisks.Output(out); 
-            out << " Successful# "; 
-            SuccessfulDisks.Output(out); 
-            out << "}"; 
-        } 
- 
-        TString ToString() { 
-            TStringStream str; 
-            Output(str); 
-            return str.Str(); 
-        } 
- 
+        void Output(IOutputStream &out) {
+            out << "{Erroneous# ";
+            ErroneousDisks.Output(out);
+            out << " Successful# ";
+            SuccessfulDisks.Output(out);
+            out << "}";
+        }
+
+        TString ToString() {
+            TStringStream str;
+            Output(str);
+            return str.Str();
+        }
+
         NKikimrProto::EReplyStatus ProcessReply(const TVDiskID& from, NKikimrProto::EReplyStatus status) {
             // should be handled in CheckForTermErrors
             Y_VERIFY(status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE);

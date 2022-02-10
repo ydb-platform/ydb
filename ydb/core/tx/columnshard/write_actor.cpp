@@ -38,14 +38,14 @@ public:
         TEvBlobStorage::TEvPutResult* msg = ev->Get();
         auto status = msg->Status;
 
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) { 
-            YellowMoveChannels.insert(msg->Id.Channel()); 
+        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+            YellowMoveChannels.insert(msg->Id.Channel());
         }
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) { 
-            YellowStopChannels.insert(msg->Id.Channel()); 
-        } 
+        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+            YellowStopChannels.insert(msg->Id.Channel());
+        }
 
- 
+
         if (status != NKikimrProto::OK) {
             LOG_S_WARN("Unsuccessful TEvPutResult for blob " << msg->Id.ToString()
                 << " status: " << status << " reason: " << msg->ErrorReason);
@@ -265,8 +265,8 @@ private:
     TAutoPtr<TEvColumnShard::TEvWrite> WriteEv;
     TAutoPtr<TEvPrivate::TEvWriteIndex> WriteIndexEv;
     TInstant Deadline;
-    THashSet<ui32> YellowMoveChannels; 
-    THashSet<ui32> YellowStopChannels; 
+    THashSet<ui32> YellowMoveChannels;
+    THashSet<ui32> YellowStopChannels;
     TUsage ResourceUsage;
 
     void SaveResourceUsage() {
@@ -284,14 +284,14 @@ private:
             LOG_S_DEBUG("Write Blob " << WriteEv->BlobId.ToStringNew() << " Status: " << status);
             WriteEv->PutStatus = status;
             WriteEv->BlobBatch = std::move(BlobBatch);
-            WriteEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end()); 
-            WriteEv->YellowStopChannels = TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end()); 
+            WriteEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end());
+            WriteEv->YellowStopChannels = TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end());
             ctx.Send(DstActor, WriteEv.Release());
         } else {
             WriteIndexEv->PutStatus = status;
             WriteIndexEv->BlobBatch = std::move(BlobBatch);
-            WriteIndexEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end()); 
-            WriteIndexEv->YellowStopChannels = TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end()); 
+            WriteIndexEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end());
+            WriteIndexEv->YellowStopChannels = TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end());
             ctx.Send(DstActor, WriteIndexEv.Release());
         }
     }

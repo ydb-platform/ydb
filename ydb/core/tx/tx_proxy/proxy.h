@@ -157,7 +157,7 @@ struct TEvTxUserProxy {
         EStatus Status() const {
             return static_cast<EStatus>(Record.GetStatus());
         }
- 
+
         TString ToString() const;
     };
 

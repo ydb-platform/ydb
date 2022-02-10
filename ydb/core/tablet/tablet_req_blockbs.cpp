@@ -5,14 +5,14 @@
 
 namespace NKikimr {
 
-constexpr ui32 MAX_ATTEMPTS = 3; 
- 
+constexpr ui32 MAX_ATTEMPTS = 3;
+
 class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBlockBlobStorageGroup> {
     const TActorId Owner;
     const ui64 TabletId;
     const ui32 GroupId;
     const ui32 Generation;
-    ui32 ErrorCount; 
+    ui32 ErrorCount;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) {
         Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason));
@@ -36,16 +36,16 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
         switch (msg->Status) {
         case NKikimrProto::OK:
             return ReplyAndDie(NKikimrProto::OK);
-        case NKikimrProto::BLOCKED: 
+        case NKikimrProto::BLOCKED:
         case NKikimrProto::RACE:
         case NKikimrProto::NO_GROUP:
-            // The request will never succeed 
+            // The request will never succeed
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:
-            ++ErrorCount; 
+            ++ErrorCount;
             if (ErrorCount >= MAX_ATTEMPTS) {
                 return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
-            } 
+            }
             return SendRequest();
         }
     }
@@ -74,7 +74,7 @@ public:
         , TabletId(tabletId)
         , GroupId(groupId)
         , Generation(gen)
-        , ErrorCount(0) 
+        , ErrorCount(0)
     {}
 };
 

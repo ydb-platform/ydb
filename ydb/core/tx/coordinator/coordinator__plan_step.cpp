@@ -45,7 +45,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         Y_UNUSED(txc);
         NIceDb::TNiceDb db(txc.DB);
         ExecStartMoment = ctx.Now();
-        const bool lowDiskSpace = Self->Executor()->GetStats().IsAnyChannelYellowStop; 
+        const bool lowDiskSpace = Self->Executor()->GetStats().IsAnyChannelYellowStop;
 
         THashSet<TTxId> newTransactions;
         TVector<TAutoPtr<TMediatorStep>> mediatorSteps;

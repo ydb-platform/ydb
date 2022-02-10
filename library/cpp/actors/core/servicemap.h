@@ -107,7 +107,7 @@ namespace NActors {
                 if (ScanBranch(branch, key, hash / BaseSize, ret))
                     return ret;
             }
- 
+
             return TValue();
         }
 

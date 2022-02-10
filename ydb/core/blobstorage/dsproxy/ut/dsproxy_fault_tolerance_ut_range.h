@@ -4,7 +4,7 @@
 #include "dsproxy_fault_tolerance_ut_base.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
- 
+
 #include <util/random/fast.h>
 
 namespace NKikimr {
@@ -22,7 +22,7 @@ public:
 
             ui32 statusMap = generation - 1;
 
-            CTEST << "tabletId# " << tabletId << " generation# " << generation << " statusMap#"; 
+            CTEST << "tabletId# " << tabletId << " generation# " << generation << " statusMap#";
 
             for (ui32 step = 1; step <= 2; ++step) {
                 TString buffer = Sprintf("%256s/%" PRIu64 "/%" PRIu32 "/%" PRIu32, "kikimr", tabletId, generation, step);
@@ -52,13 +52,13 @@ public:
 
                 switch (blobStatus) {
                     case Lost:
-                        CTEST << " Lost"; 
+                        CTEST << " Lost";
                         // delete blobs from selected disks -- the data is missing, but the metadata is still here
                         Delete(id, disks, false);
                         break;
 
                     case Unconfirmed:
-                        CTEST << " Unconfirmed"; 
+                        CTEST << " Unconfirmed";
                         // wipe out blobs from selected disks, including any metadata
                         Delete(id, disks, true);
                         break;
@@ -69,10 +69,10 @@ public:
 
                 // now collect information about actually written replicas
                 ui32 writtenPartsMask = 0;
-                TSubgroupPartLayout layout; 
+                TSubgroupPartLayout layout;
                 for (ui32 i = 0; i < vdisks.size(); ++i) {
                     auto event = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdisks[i], TInstant::Max(),
-                        NKikimrBlobStorage::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, {i}, {id}); 
+                        NKikimrBlobStorage::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, {i}, {id});
                     GetActorContext().Send(services[i], event.release());
                 }
                 for (ui32 i = 0; i < vdisks.size(); ++i) {
@@ -85,7 +85,7 @@ public:
                                 Y_VERIFY(partId.PartId() > 0);
                                 Y_VERIFY(partId.FullID() == id);
                                 writtenPartsMask |= 1 << (partId.PartId() - 1);
-                                layout.AddItem(event->Get()->Record.GetCookie(), partId.PartId() - 1, Info->Type); 
+                                layout.AddItem(event->Get()->Record.GetCookie(), partId.PartId() - 1, Info->Type);
                             }
                         }
                     }
@@ -95,10 +95,10 @@ public:
                 const bool restorable = Info->GetQuorumChecker().GetBlobState(layout, {&Info->GetTopology()}) &
                     TBlobStorageGroupInfo::EBSF_RECOVERABLE;
                 if (restorable) {
-                    CTEST << "/Y"; 
+                    CTEST << "/Y";
                     expectedResponse.emplace_back(id, buffer);
                 } else {
-                    CTEST << "/N(" << writtenPartsMask << ")"; 
+                    CTEST << "/N(" << writtenPartsMask << ")";
                     switch (blobStatus) {
                         case Lost:
                             // FIXME: uncomment when KIKIMR-2271 is done
@@ -112,30 +112,30 @@ public:
                 }
             }
 
-            CTEST << Endl; 
+            CTEST << Endl;
 
             auto query = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, TLogoBlobID(tabletId, generation, 0, 0, 0, 0),
                     TLogoBlobID(tabletId, generation, Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie),
                     false, TInstant::Max());
             SendToBSProxy(GetActorContext(), Info->GroupID, query.release());
             auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvRangeResult>();
-            CTEST << resp->Get()->ToString() << Endl; 
+            CTEST << resp->Get()->ToString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(resp->Get()->Status, expectedStatus);
             if (expectedStatus == NKikimrProto::OK) {
-                auto it1 = resp->Get()->Responses.begin(); 
-                auto it2 = expectedResponse.begin(); 
- 
-                while (it1 != resp->Get()->Responses.end() && it2 != expectedResponse.end()) { 
-                    if (it1->Id < it2->Id) { 
-                        ++it1; 
-                    } else { 
-                        UNIT_ASSERT_VALUES_EQUAL(it1->Id, it2->Id); 
-                        UNIT_ASSERT_VALUES_EQUAL(it1->Buffer, it2->Buffer); 
-                        ++it1; 
-                        ++it2; 
-                    } 
+                auto it1 = resp->Get()->Responses.begin();
+                auto it2 = expectedResponse.begin();
+
+                while (it1 != resp->Get()->Responses.end() && it2 != expectedResponse.end()) {
+                    if (it1->Id < it2->Id) {
+                        ++it1;
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(it1->Id, it2->Id);
+                        UNIT_ASSERT_VALUES_EQUAL(it1->Buffer, it2->Buffer);
+                        ++it1;
+                        ++it2;
+                    }
                 }
-                UNIT_ASSERT(it2 == expectedResponse.end()); 
+                UNIT_ASSERT(it2 == expectedResponse.end());
             }
         }
     }

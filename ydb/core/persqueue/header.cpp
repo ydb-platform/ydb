@@ -1,7 +1,7 @@
 #include "header.h"
 #include <google/protobuf/io/coded_stream.h>
 #include <util/generic/buffer.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -15,7 +15,7 @@ ui32 GetMaxHeaderSize() {
 }
 
 NKikimrPQ::TBatchHeader ExtractHeader(const char *data, ui32 size) {
-    ui16 sz = ReadUnaligned<ui16>(data); 
+    ui16 sz = ReadUnaligned<ui16>(data);
     Y_VERIFY(sz < size);
     data += sizeof(ui16);
     NKikimrPQ::TBatchHeader header;

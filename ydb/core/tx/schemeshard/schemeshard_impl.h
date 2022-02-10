@@ -128,9 +128,9 @@ public:
     TTenantInitState::EInitState InitState = TTenantInitState::InvalidState;
 
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
-    bool IsReadOnlyMode = false; 
+    bool IsReadOnlyMode = false;
 
-    bool IsDomainSchemeShard = false; 
+    bool IsDomainSchemeShard = false;
 
     TPathId ParentDomainId = InvalidPathId;
     TString ParentDomainEffectiveACL;
@@ -204,7 +204,7 @@ public:
     TShardDeleter ShardDeleter;
 
     // Counter-strike stuff
-    TTabletCountersBase* TabletCounters = nullptr; 
+    TTabletCountersBase* TabletCounters = nullptr;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 
     TAutoPtr<TSelfPinger> SelfPinger;

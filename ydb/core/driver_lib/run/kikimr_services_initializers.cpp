@@ -763,7 +763,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 }
 
 // TImmediateControlBoardInitializer
- 
+
 TImmediateControlBoardInitializer::TImmediateControlBoardInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig) {
 }
@@ -795,14 +795,14 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasBlobStorageConfig()) {
         const auto& bsc = Config.GetBlobStorageConfig();
         appData->StaticBlobStorageConfig->MergeFrom(bsc.GetServiceSet());
-        nodeWardenConfig->FeatureFlags = Config.GetFeatureFlags(); 
+        nodeWardenConfig->FeatureFlags = Config.GetFeatureFlags();
         nodeWardenConfig->ServiceSet.MergeFrom(bsc.GetServiceSet());
         if (Config.HasVDiskConfig()) {
             nodeWardenConfig->AllVDiskKinds->Merge(Config.GetVDiskConfig());
         }
-        if (Config.HasDriveModelConfig()) { 
-            nodeWardenConfig->AllDriveModels->Merge(Config.GetDriveModelConfig()); 
-        } 
+        if (Config.HasDriveModelConfig()) {
+            nodeWardenConfig->AllDriveModels->Merge(Config.GetDriveModelConfig());
+        }
         if (bsc.HasCacheFilePath()) {
             nodeWardenConfig->CacheAccessor = CreateFileCacheAccessor(bsc.GetCacheFilePath());
         }
@@ -1688,8 +1688,8 @@ void TSelfPingInitializer::InitializeServices(
         const auto& poolName = setup->GetPoolName(poolId);
         auto poolGroup = counters->GetSubgroup("execpool", poolName);
         auto counter = poolGroup->GetCounter("SelfPingMaxUs", false);
-        auto cpuTimeCounter = poolGroup->GetCounter("CpuMatBenchNs", false); 
-        IActor* selfPingActor = CreateSelfPingActor(selfPingInterval, counter, cpuTimeCounter); 
+        auto cpuTimeCounter = poolGroup->GetCounter("CpuMatBenchNs", false);
+        IActor* selfPingActor = CreateSelfPingActor(selfPingInterval, counter, cpuTimeCounter);
         setup->LocalServices.push_back(std::make_pair(TActorId(),
                                                       TActorSetupCmd(selfPingActor,
                                                                      TMailboxType::HTSwap,

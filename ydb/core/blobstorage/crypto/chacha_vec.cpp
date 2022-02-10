@@ -5,7 +5,7 @@ Public domain.
 */
 
 #include "chacha_vec.h"
-#include "secured_block.h" 
+#include "secured_block.h"
 
 #include <util/system/align.h>
 #include <util/system/yassert.h>
@@ -27,7 +27,7 @@ Public domain.
 #if (__ARM_NEON__ || defined(_arm64_))
 #   include <arm_neon.h>
 #   define ONE       (vec)vsetq_lane_u32(1,vdupq_n_u32(0),0)
-#   define NONCE(p, bp)  (vec)vcombine_u32(vcreate_u32(*(uint64_t *)(bp)), vcreate_u32(*(uint64_t *)(p))) 
+#   define NONCE(p, bp)  (vec)vcombine_u32(vcreate_u32(*(uint64_t *)(bp)), vcreate_u32(*(uint64_t *)(p)))
 #   define ROTV1(x)  (vec)vextq_u32((uint32x4_t)x,(uint32x4_t)x,1)
 #   define ROTV2(x)  (vec)vextq_u32((uint32x4_t)x,(uint32x4_t)x,2)
 #   define ROTV3(x)  (vec)vextq_u32((uint32x4_t)x,(uint32x4_t)x,3)
@@ -44,7 +44,7 @@ Public domain.
 #elif __SSE2__
 #   include <emmintrin.h>
 #   define ONE       (vec)_mm_set_epi32(0,0,0,1)
-#   define NONCE(p, bp)  (vec)(_mm_slli_si128(_mm_loadl_epi64((__m128i *)(p)),8) ^ _mm_loadl_epi64((__m128i *)(bp))) 
+#   define NONCE(p, bp)  (vec)(_mm_slli_si128(_mm_loadl_epi64((__m128i *)(p)),8) ^ _mm_loadl_epi64((__m128i *)(bp)))
 #   define ROTV1(x)  (vec)_mm_shuffle_epi32((__m128i)x,_MM_SHUFFLE(0,3,2,1))
 #   define ROTV2(x)  (vec)_mm_shuffle_epi32((__m128i)x,_MM_SHUFFLE(1,0,3,2))
 #   define ROTV3(x)  (vec)_mm_shuffle_epi32((__m128i)x,_MM_SHUFFLE(2,1,0,3))
@@ -152,7 +152,7 @@ Y_FORCE_INLINE void ReadW(ui32 *ip, vec i_v[4], vec& next_i_v) {
 constexpr size_t ChaChaVec::KEY_SIZE;
 constexpr size_t ChaChaVec::BLOCK_SIZE;
 
-alignas(16) ui32 chacha_const[] = { 
+alignas(16) ui32 chacha_const[] = {
     0x61707865, 0x3320646e, 0x79622d32, 0x6b206574
 };
 
@@ -160,14 +160,14 @@ void ChaChaVec::SetKey(const ui8* key, size_t size)
 {
     Y_ASSERT((size == KEY_SIZE) && "key must be 32 bytes long");
 
-    alignas(16) ui8 aligned_key[KEY_SIZE]; 
+    alignas(16) ui8 aligned_key[KEY_SIZE];
     memcpy(aligned_key, key, size);
 
     ui32 *kp;
     #if ( __ARM_NEON__ || __SSE2__ || defined(_arm64_))
         kp = (ui32*)aligned_key;
     #else
-        alignas(16) ui32 k[4]; 
+        alignas(16) ui32 k[4];
         ((vec *)k)[0] = ((vec *)aligned_key)[0];
         ((vec *)k)[1] = ((vec *)aligned_key)[1];
         kp = (ui32*)k;
@@ -175,36 +175,36 @@ void ChaChaVec::SetKey(const ui8* key, size_t size)
     s0_ = *(vec *)chacha_const;
     s1_ = ((vec *)kp)[0];
     s2_ = ((vec *)kp)[1];
- 
-    SecureWipeBuffer(aligned_key, KEY_SIZE); 
+
+    SecureWipeBuffer(aligned_key, KEY_SIZE);
 }
 
-void ChaChaVec::SetIV(const ui8* iv, const ui8* blockIdx) 
+void ChaChaVec::SetIV(const ui8* iv, const ui8* blockIdx)
 {
     ui32 *np;
-    ui32 *bp; 
+    ui32 *bp;
     #if ( __ARM_NEON__ || __SSE2__ || defined(_arm64_))
         np = (ui32*)iv;
-        bp = (ui32*)blockIdx; 
+        bp = (ui32*)blockIdx;
     #else
-        alignas(16) ui32 nonce[2]; 
+        alignas(16) ui32 nonce[2];
         nonce[0] = REVW_BE(((ui32*)iv)[0]);
         nonce[1] = REVW_BE(((ui32*)iv)[1]);
         np = (ui32*)nonce;
-        alignas(16) ui32 idx[2]; 
-        idx[0] = REVW_BE(((ui32*)blockIdx)[0]); 
-        idx[1] = REVW_BE(((ui32*)blockIdx)[1]); 
-        bp = (ui32*)idx; 
+        alignas(16) ui32 idx[2];
+        idx[0] = REVW_BE(((ui32*)blockIdx)[0]);
+        idx[1] = REVW_BE(((ui32*)blockIdx)[1]);
+        bp = (ui32*)idx;
     #endif
-    s3_ = NONCE(np, bp); 
+    s3_ = NONCE(np, bp);
 }
 
 
-void ChaChaVec::SetIV(const ui8* iv) { 
-    const ui8 zero[8] = {0, 0, 0, 0, 0, 0, 0, 0}; 
-    SetIV(iv, zero); 
-} 
- 
+void ChaChaVec::SetIV(const ui8* iv) {
+    const ui8 zero[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    SetIV(iv, zero);
+}
+
 template<bool Aligned>
 void ChaChaVec::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 {
@@ -475,7 +475,7 @@ void ChaChaVec::EncipherOld(const ui8* plaintext, ui8* ciphertext, size_t len)
     }
     len = len % BLOCK_SIZE;
     if (len) {
-        alignas(16) char buf[16]; 
+        alignas(16) char buf[16];
         vec tail;
         vec v0, v1, v2, v3;
         v0 = s0_; v1 = s1_; v2 = s2_; v3 = s3_;
@@ -528,8 +528,8 @@ void ChaChaVec::Decipher(const ui8* ciphertext, ui8* plaintext, size_t len)
 {
     Encipher(ciphertext, plaintext, len);
 }
- 
-ChaChaVec::~ChaChaVec() { 
-    SecureWipeBuffer((ui8*)&s1_, 16); 
-    SecureWipeBuffer((ui8*)&s2_, 16); 
-} 
+
+ChaChaVec::~ChaChaVec() {
+    SecureWipeBuffer((ui8*)&s1_, 16);
+    SecureWipeBuffer((ui8*)&s2_, 16);
+}

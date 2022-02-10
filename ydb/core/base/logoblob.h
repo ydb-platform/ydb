@@ -8,15 +8,15 @@ namespace NKikimrProto {
 namespace NKikimr {
 
     struct TLogoBlobID {
-        static const ui32 MaxChannel = 255ul; 
-        static const ui32 MaxBlobSize = 67108863ul; 
-        static const ui32 MaxCookie = 16777215ul; 
-        static const ui32 MaxPartId = 15ul; 
-        static const ui32 MaxCrcMode = 3ul; 
+        static const ui32 MaxChannel = 255ul;
+        static const ui32 MaxBlobSize = 67108863ul;
+        static const ui32 MaxCookie = 16777215ul;
+        static const ui32 MaxPartId = 15ul;
+        static const ui32 MaxCrcMode = 3ul;
 
         TLogoBlobID()
         {
-            Set(0, 0, 0, 0, 0, 0, 0, 0); 
+            Set(0, 0, 0, 0, 0, 0, 0, 0);
         }
 
         explicit TLogoBlobID(const TLogoBlobID &source, ui32 partId)
@@ -24,18 +24,18 @@ namespace NKikimr {
             Y_VERIFY_DEBUG(partId < 16);
             Raw.X[0] = source.Raw.X[0];
             Raw.X[1] = source.Raw.X[1];
-            Raw.X[2] = (source.Raw.X[2] & 0xFFFFFFFFFFFFFFF0ull) | partId; 
+            Raw.X[2] = (source.Raw.X[2] & 0xFFFFFFFFFFFFFFF0ull) | partId;
         }
 
         explicit TLogoBlobID(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie)
         {
-            Set(tabletId, generation, step, channel, blobSize, cookie, 0, 0); 
+            Set(tabletId, generation, step, channel, blobSize, cookie, 0, 0);
         }
 
         explicit TLogoBlobID(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId)
         {
             Y_VERIFY_DEBUG(partId != 0);
-            Set(tabletId, generation, step, channel, blobSize, cookie, partId, 0); 
+            Set(tabletId, generation, step, channel, blobSize, cookie, partId, 0);
         }
 
         explicit TLogoBlobID(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie,
@@ -51,8 +51,8 @@ namespace NKikimr {
             Raw.X[2] = raw3;
         }
 
-        explicit TLogoBlobID(const ui64 raw[3]) { 
-            memcpy(Raw.X, raw, 3 * sizeof(ui64)); 
+        explicit TLogoBlobID(const ui64 raw[3]) {
+            memcpy(Raw.X, raw, 3 * sizeof(ui64));
         }
 
         static TLogoBlobID PrevFull(const TLogoBlobID& id, ui32 size) {
@@ -70,21 +70,21 @@ namespace NKikimr {
             return TLogoBlobID(tablet, generation, step, channel, size, cookie);
         }
 
-        static TLogoBlobID Make(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, 
-                ui32 crcMode) { 
-            TLogoBlobID id; 
-            id.Set(tabletId, generation, step, channel, blobSize, cookie, 0, crcMode); 
-            return id; 
-        } 
- 
+        static TLogoBlobID Make(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie,
+                ui32 crcMode) {
+            TLogoBlobID id;
+            id.Set(tabletId, generation, step, channel, blobSize, cookie, 0, crcMode);
+            return id;
+        }
+
         ui32 Hash() const {
-            const ui64 x1 = 0x001DFF3D8DC48F5Dull * (Raw.X[0] & 0xFFFFFFFFull); 
+            const ui64 x1 = 0x001DFF3D8DC48F5Dull * (Raw.X[0] & 0xFFFFFFFFull);
             const ui64 x2 = 0x179CA10C9242235Dull * (Raw.X[0] >> 32);
-            const ui64 x3 = 0x0F530CAD458B0FB1ull * (Raw.X[1] & 0xFFFFFFFFull); 
+            const ui64 x3 = 0x0F530CAD458B0FB1ull * (Raw.X[1] & 0xFFFFFFFFull);
             const ui64 x4 = 0xB5026F5AA96619E9ull * (Raw.X[1] >> 32);
             const ui64 x5 = 0x5851F42D4C957F2Dull * (Raw.X[2] >> 32);
 
-            const ui64 sum = 0x06C9C021156EAA1Full + x1 + x2 + x3 + x4 + x5; 
+            const ui64 sum = 0x06C9C021156EAA1Full + x1 + x2 + x3 + x4 + x5;
 
             return (sum >> 32);
         }
@@ -96,7 +96,7 @@ namespace NKikimr {
         ui32 BlobSize() const { return Raw.N.BlobSize; }
         ui32 Cookie() const { return Raw.N.Cookie; }
         ui32 PartId() const { return Raw.N.PartId; }
-        ui32 CrcMode() const { return Raw.N.CrcMode; } 
+        ui32 CrcMode() const { return Raw.N.CrcMode; }
 
         const ui64* GetRaw() const { return Raw.X; }
 
@@ -105,17 +105,17 @@ namespace NKikimr {
         static bool Parse(TLogoBlobID &out, const TString &buf, TString &errorExplanation);
         static void Out(IOutputStream &o, const TVector<TLogoBlobID> &vec);
 
-        // Returns -1 if *this < x, 0 if *this == x, 1 if *this > x 
-        int Compare(const TLogoBlobID &x) const { 
-            const ui64 *r1 = GetRaw(); 
-            const ui64 *r2 = x.GetRaw(); 
- 
-            return 
+        // Returns -1 if *this < x, 0 if *this == x, 1 if *this > x
+        int Compare(const TLogoBlobID &x) const {
+            const ui64 *r1 = GetRaw();
+            const ui64 *r2 = x.GetRaw();
+
+            return
                  r1[0] != r2[0] ? (r1[0] < r2[0] ? -1 : 1) :
-                 r1[1] != r2[1] ? (r1[1] < r2[1] ? -1 : 1) : 
-                 r1[2] != r2[2] ? (r1[2] < r2[2] ? -1 : 1) : 0; 
-        } 
- 
+                 r1[1] != r2[1] ? (r1[1] < r2[1] ? -1 : 1) :
+                 r1[2] != r2[2] ? (r1[2] < r2[2] ? -1 : 1) : 0;
+        }
+
         bool operator<(const TLogoBlobID &x) const {
             const ui64 *r1 = GetRaw();
             const ui64 *r2 = x.GetRaw();
@@ -149,7 +149,7 @@ namespace NKikimr {
             const ui64 *r2 = x.GetRaw();
 
             return
-                r1[2] == r2[2] && r1[1] == r2[1] && r1[0] == r2[0]; 
+                r1[2] == r2[2] && r1[1] == r2[1] && r1[0] == r2[0];
         }
 
         bool operator!=(const TLogoBlobID &x) const {
@@ -157,23 +157,23 @@ namespace NKikimr {
             const ui64 *r2 = x.GetRaw();
 
             return
-                r1[2] != r2[2] || r1[1] != r2[1] || r1[0] != r2[0]; 
+                r1[2] != r2[2] || r1[1] != r2[1] || r1[0] != r2[0];
         }
 
         explicit operator bool() const noexcept {
             return (Raw.N.TabletID != 0);
         }
 
-        bool IsValid() const noexcept { 
-            return (Raw.N.TabletID != 0); 
-        } 
- 
+        bool IsValid() const noexcept {
+            return (Raw.N.TabletID != 0);
+        }
+
         // compares only main part (without part id)
         bool IsSameBlob(const TLogoBlobID &x) const {
             const ui64 *r1 = GetRaw();
             const ui64 *r2 = x.GetRaw();
 
-            return r1[0] == r2[0] && r1[1] == r2[1] && (r1[2] & 0xFFFFFFFFFFFFFFF0ull) == (r2[2] & 0xFFFFFFFFFFFFFFF0ull); 
+            return r1[0] == r2[0] && r1[1] == r2[1] && (r1[2] & 0xFFFFFFFFFFFFFFF0ull) == (r2[2] & 0xFFFFFFFFFFFFFFF0ull);
         }
 
         TLogoBlobID FullID() const {
@@ -189,8 +189,8 @@ namespace NKikimr {
                 ui64 Channel : 8;
 
                 ui64 PartId : 4; // 8
-                ui64 BlobSize : 26; 
-                ui64 CrcMode : 2; 
+                ui64 BlobSize : 26;
+                ui64 CrcMode : 2;
 
                 ui64 Cookie : 24;
                 ui64 StepR2 : 8;
@@ -199,24 +199,24 @@ namespace NKikimr {
             ui64 X[3];
         } Raw;
 
-        void Set(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId, 
-                ui32 crcMode) { 
+        void Set(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId,
+                ui32 crcMode) {
             Y_VERIFY_DEBUG(channel <= MaxChannel);
-            Y_VERIFY(blobSize <= MaxBlobSize); 
+            Y_VERIFY(blobSize <= MaxBlobSize);
             Y_VERIFY_DEBUG(cookie <= MaxCookie);
             Y_VERIFY_DEBUG(partId <= MaxPartId);
-            Y_VERIFY(crcMode <= MaxCrcMode); 
+            Y_VERIFY(crcMode <= MaxCrcMode);
 
             Raw.N.TabletID = tabletId;
             Raw.N.Generation = generation;
 
-            Raw.N.StepR1 = (step & 0xFFFFFF00ull) >> 8; 
-            Raw.N.StepR2 = (step & 0x000000FFull); 
+            Raw.N.StepR1 = (step & 0xFFFFFF00ull) >> 8;
+            Raw.N.StepR2 = (step & 0x000000FFull);
 
             Raw.N.Channel = channel;
             Raw.N.Cookie = cookie;
             Raw.N.BlobSize = blobSize;
-            Raw.N.CrcMode = crcMode; 
+            Raw.N.CrcMode = crcMode;
             Raw.N.PartId = partId;
         }
 

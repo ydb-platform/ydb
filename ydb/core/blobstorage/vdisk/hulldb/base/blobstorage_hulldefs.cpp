@@ -43,7 +43,7 @@ namespace NKikimr {
         Id = TLogoBlobID(raw[0], raw[1], raw[2]);
         pos += 24;
 
-        ui64 partSize = gtype.PartSize(Id); 
+        ui64 partSize = gtype.PartSize(Id);
 
         if (size_t(end - pos) != partSize)
             return false;

@@ -21,7 +21,7 @@ namespace NKikimr {
             NVDiskMon::TLtcHistoPtr VGetDiscoverLatencyHistogram;
             NVDiskMon::TLtcHistoPtr VGetFastLatencyHistogram;
             NVDiskMon::TLtcHistoPtr VGetAsyncLatencyHistogram;
-            NVDiskMon::TLtcHistoPtr VGetLowLatencyHistogram; 
+            NVDiskMon::TLtcHistoPtr VGetLowLatencyHistogram;
             NVDiskMon::TLtcHistoPtr VPutTabletLogLatencyHistogram;
             NVDiskMon::TLtcHistoPtr VPutUserDataLatencyHistogram;
             NVDiskMon::TLtcHistoPtr VPutAsyncBlobLatencyHistogram;

@@ -532,12 +532,12 @@ public:
 
     TTabletGuardian(TGuardedInfo *info)
         : Info(info)
-        , ReplicasOnlineThreshold(0) 
+        , ReplicasOnlineThreshold(0)
     {}
 
     TTabletGuardian(TFollowerInfo *info)
         : FollowerInfo(info)
-        , ReplicasOnlineThreshold(0) 
+        , ReplicasOnlineThreshold(0)
     {}
 
     void Bootstrap() {

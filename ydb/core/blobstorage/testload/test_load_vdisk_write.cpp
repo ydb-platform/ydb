@@ -124,7 +124,7 @@ namespace NKikimr {
                 }
                 Y_VERIFY(queueId != NKikimrBlobStorage::Unknown);
 
-                TIntrusivePtr<TFlowRecord> flowRecord(new TFlowRecord); 
+                TIntrusivePtr<TFlowRecord> flowRecord(new TFlowRecord);
                 QueueActorId = ctx.Register(CreateVDiskBackpressureClient(
                     Info,
                     VDiskId,
@@ -135,7 +135,7 @@ namespace NKikimr {
                     "",
                     TInterconnectChannels::IC_BLOBSTORAGE,
                     ctx.ExecutorThread.ActorSystem->NodeId == VDiskActorId.NodeId(),
-                    TDuration::Minutes(1), 
+                    TDuration::Minutes(1),
                     flowRecord,
                     NMonitoring::TCountableBase::EVisibility::Public
                 ));
@@ -143,7 +143,7 @@ namespace NKikimr {
 
             void HandlePoison(const TActorContext& ctx) {
                 ctx.Send(QueueActorId, new TEvents::TEvPoisonPill);
-                ctx.Send(ParentActorId, new TEvTestLoadFinished(Tag, nullptr, "Poison pill")); 
+                ctx.Send(ParentActorId, new TEvTestLoadFinished(Tag, nullptr, "Poison pill"));
                 Die(ctx);
             }
 
@@ -186,9 +186,9 @@ namespace NKikimr {
             void IssuePutRequest(const TLogoBlobID& logoBlobId, ui64 cookie, const TActorContext& ctx) {
                 TString whole(logoBlobId.BlobSize(), 'X');
                 TDataPartSet parts;
-                GType.SplitData((TErasureType::ECrcMode)logoBlobId.CrcMode(), whole, parts); 
+                GType.SplitData((TErasureType::ECrcMode)logoBlobId.CrcMode(), whole, parts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(logoBlobId,
-                        parts.Parts[logoBlobId.PartId() - 1].OwnedString, VDiskId, true, &cookie, TInstant::Max(), PutHandleClass); 
+                        parts.Parts[logoBlobId.PartId() - 1].OwnedString, VDiskId, true, &cookie, TInstant::Max(), PutHandleClass);
                 ctx.Send(QueueActorId, ev.release());
                 ++TEvVPutsSent;
             }

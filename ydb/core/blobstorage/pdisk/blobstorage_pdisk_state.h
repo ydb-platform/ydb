@@ -1,25 +1,25 @@
-#pragma once 
-#include "defs.h" 
+#pragma once
+#include "defs.h"
 
-#include "blobstorage_pdisk.h" 
+#include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_logreader_base.h"
- 
+
 #include <ydb/core/util/metrics.h>
 
-namespace NKikimr { 
-namespace NPDisk { 
- 
-//////////////////////////////////////////////////////////////////////////// 
-// PDisk In-memory structures 
-//////////////////////////////////////////////////////////////////////////// 
- 
+namespace NKikimr {
+namespace NPDisk {
+
+////////////////////////////////////////////////////////////////////////////
+// PDisk In-memory structures
+////////////////////////////////////////////////////////////////////////////
+
 enum class EInitPhase {
     Uninitialized,
     ReadingSysLog,
     ReadingLog,
     Initialized,
 };
- 
+
 enum EOwner {
     OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, mens "for dynamic" in requests
     OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands
@@ -143,7 +143,7 @@ struct TOwnerData {
     }
 };
 
-struct TChunkState { 
+struct TChunkState {
     enum ECommitState : ui8 {
         FREE = 0,
         DATA_RESERVED_DELETE_IN_PROGRESS,
@@ -156,23 +156,23 @@ struct TChunkState {
         LOG_COMMITTED,
     };
 
-    ui64 Nonce; 
-    ui64 CurrentNonce; 
-    ui64 PreviousNonce; 
+    ui64 Nonce;
+    ui64 CurrentNonce;
+    ui64 PreviousNonce;
     std::atomic<i64> OperationsInProgress;
-    TOwner OwnerId; 
+    TOwner OwnerId;
     ECommitState CommitState;
     ui64 CommitsInProgress;
- 
-    TChunkState() 
-        : Nonce(0) 
-        , CurrentNonce(0) 
-        , PreviousNonce(0) 
-        , OperationsInProgress(0) 
-        , OwnerId(OwnerUnallocated) 
+
+    TChunkState()
+        : Nonce(0)
+        , CurrentNonce(0)
+        , PreviousNonce(0)
+        , OperationsInProgress(0)
+        , OwnerId(OwnerUnallocated)
         , CommitState(FREE)
         , CommitsInProgress(0)
-    {} 
+    {}
 
     bool HasAnyOperationsInProgress() const {
         return OperationsInProgress || CommitsInProgress;
@@ -196,8 +196,8 @@ struct TChunkState {
         return str.Str();
     }
 #undef OUT_VAR
-}; 
- 
+};
+
 struct TLogChunkInfo {
     struct TLsnRange {
         ui64 FirstLsn;
@@ -268,9 +268,9 @@ struct TLogChunkInfo {
     }
 };
 
-} // NPDisk 
-} // NKikimr 
- 
+} // NPDisk
+} // NKikimr
+
 template<>
 inline void Out<NKikimr::NPDisk::TLogChunkInfo>(IOutputStream& os, const NKikimr::NPDisk::TLogChunkInfo& x) {
     os << x.ToString();

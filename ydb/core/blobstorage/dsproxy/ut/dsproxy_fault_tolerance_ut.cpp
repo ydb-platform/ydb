@@ -9,7 +9,7 @@ using namespace NActors;
 using namespace NKikimr;
 
 template<typename T>
-void RunTest(TBlobStorageGroupType groupType, bool minimum = false, ui32 testPartCount = 1, ui32 testPartIdx = 0) { 
+void RunTest(TBlobStorageGroupType groupType, bool minimum = false, ui32 testPartCount = 1, ui32 testPartIdx = 0) {
     ui32 numVDisks;
     ui32 numFailDomains;
     ui32 numFailRealms;
@@ -33,8 +33,8 @@ void RunTest(TBlobStorageGroupType groupType, bool minimum = false, ui32 testPar
 
     TAutoEvent finishEvent;
     std::exception_ptr eptr;
-    auto test = MakeHolder<T>(&finishEvent, &eptr, NUnitTest::NPrivate::GetCurrentTest(), runtime, 
-            testPartCount, testPartIdx); 
+    auto test = MakeHolder<T>(&finishEvent, &eptr, NUnitTest::NPrivate::GetCurrentTest(), runtime,
+            testPartCount, testPartIdx);
     runtime.ActorSystem->Register(new TActorCoro(std::move(test)), TMailboxType::Simple, 0, {});
     finishEvent.WaitI();
     runtime.Finish();
@@ -67,13 +67,13 @@ Y_UNIT_TEST_SUITE(TBsProxyFaultToleranceTest) {
     ERASURE_TEST(ErasureMirror3dc)
     ERASURE_TEST(ErasureMirror3of4)
 
-    Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx0) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 0); } 
-    Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx1) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 1); } 
-    Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx2) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 2); } 
-    Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx3) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 3); } 
-    Y_UNIT_TEST(CheckGetHardenedErasureBlock42Count4Idx0) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure4Plus2Block, true, 4, 0); } 
-    Y_UNIT_TEST(CheckGetHardenedErasureBlock42Count4Idx1) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure4Plus2Block, true, 4, 1); } 
-    Y_UNIT_TEST(CheckGetHardenedErasureBlock42Count4Idx2) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure4Plus2Block, true, 4, 2); } 
-    Y_UNIT_TEST(CheckGetHardenedErasureBlock42Count4Idx3) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure4Plus2Block, true, 4, 3); } 
+    Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx0) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 0); }
+    Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx1) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 1); }
+    Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx2) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 2); }
+    Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx3) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 3); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock42Count4Idx0) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure4Plus2Block, true, 4, 0); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock42Count4Idx1) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure4Plus2Block, true, 4, 1); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock42Count4Idx2) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure4Plus2Block, true, 4, 2); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock42Count4Idx3) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure4Plus2Block, true, 4, 3); }
 
 }

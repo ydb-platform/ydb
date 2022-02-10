@@ -73,40 +73,40 @@ enum ECumulativeCounters {
     COUNTER_CMD_GUM_OK = 48                                          [(CounterOpts) = {Name: "ConcatOk"}];
     COUNTER_CMD_GUM_TIMEOUT = 49                                     [(CounterOpts) = {Name: "ConcatTimeout"}];
     COUNTER_CMD_GUM_OTHER_ERROR = 50                                 [(CounterOpts) = {Name: "ConcatOtherError"}];
- 
-    COUNTER_READ_BYTES_CHANNEL_0 = 51                                [(CounterOpts) = {Name: "ReadBytesChannel0"}]; 
-    COUNTER_READ_BYTES_CHANNEL_1 = 52                                [(CounterOpts) = {Name: "ReadBytesChannel1"}]; 
-    COUNTER_READ_BYTES_CHANNEL_2 = 53                                [(CounterOpts) = {Name: "ReadBytesChannel2"}]; 
-    COUNTER_READ_BYTES_CHANNEL_3 = 54                                [(CounterOpts) = {Name: "ReadBytesChannel3"}]; 
-    COUNTER_READ_BYTES_CHANNEL_4 = 55                                [(CounterOpts) = {Name: "ReadBytesChannel4"}]; 
-    COUNTER_READ_BYTES_CHANNEL_5 = 56                                [(CounterOpts) = {Name: "ReadBytesChannel5"}]; 
-    COUNTER_READ_BYTES_CHANNEL_6 = 57                                [(CounterOpts) = {Name: "ReadBytesChannel6"}]; 
-    COUNTER_READ_BYTES_CHANNEL_7 = 58                                [(CounterOpts) = {Name: "ReadBytesChannel7"}]; 
-    COUNTER_READ_BYTES_CHANNEL_8 = 59                                [(CounterOpts) = {Name: "ReadBytesChannel8"}]; 
-    COUNTER_READ_BYTES_CHANNEL_9 = 60                                [(CounterOpts) = {Name: "ReadBytesChannel9"}]; 
-    COUNTER_READ_BYTES_CHANNEL_10 = 61                               [(CounterOpts) = {Name: "ReadBytesChannel10"}]; 
-    COUNTER_READ_BYTES_CHANNEL_11 = 62                               [(CounterOpts) = {Name: "ReadBytesChannel11"}]; 
-    COUNTER_READ_BYTES_CHANNEL_12 = 63                               [(CounterOpts) = {Name: "ReadBytesChannel12"}]; 
-    COUNTER_READ_BYTES_CHANNEL_13 = 64                               [(CounterOpts) = {Name: "ReadBytesChannel13"}]; 
-    COUNTER_READ_BYTES_CHANNEL_14 = 65                               [(CounterOpts) = {Name: "ReadBytesChannel14"}]; 
-    COUNTER_READ_BYTES_CHANNEL_15 = 66                               [(CounterOpts) = {Name: "ReadBytesChannel15"}]; 
- 
-    COUNTER_WRITE_BYTES_CHANNEL_0 = 67                               [(CounterOpts) = {Name: "WriteBytesChannel0"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_1 = 68                               [(CounterOpts) = {Name: "WriteBytesChannel1"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_2 = 69                               [(CounterOpts) = {Name: "WriteBytesChannel2"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_3 = 70                               [(CounterOpts) = {Name: "WriteBytesChannel3"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_4 = 71                               [(CounterOpts) = {Name: "WriteBytesChannel4"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_5 = 72                               [(CounterOpts) = {Name: "WriteBytesChannel5"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_6 = 73                               [(CounterOpts) = {Name: "WriteBytesChannel6"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_7 = 74                               [(CounterOpts) = {Name: "WriteBytesChannel7"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_8 = 75                               [(CounterOpts) = {Name: "WriteBytesChannel8"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_9 = 76                               [(CounterOpts) = {Name: "WriteBytesChannel9"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_10 = 77                              [(CounterOpts) = {Name: "WriteBytesChannel10"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_11 = 78                              [(CounterOpts) = {Name: "WriteBytesChannel11"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_12 = 79                              [(CounterOpts) = {Name: "WriteBytesChannel12"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_13 = 80                              [(CounterOpts) = {Name: "WriteBytesChannel13"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_14 = 81                              [(CounterOpts) = {Name: "WriteBytesChannel14"}]; 
-    COUNTER_WRITE_BYTES_CHANNEL_15 = 82                              [(CounterOpts) = {Name: "WriteBytesChannel15"}]; 
+
+    COUNTER_READ_BYTES_CHANNEL_0 = 51                                [(CounterOpts) = {Name: "ReadBytesChannel0"}];
+    COUNTER_READ_BYTES_CHANNEL_1 = 52                                [(CounterOpts) = {Name: "ReadBytesChannel1"}];
+    COUNTER_READ_BYTES_CHANNEL_2 = 53                                [(CounterOpts) = {Name: "ReadBytesChannel2"}];
+    COUNTER_READ_BYTES_CHANNEL_3 = 54                                [(CounterOpts) = {Name: "ReadBytesChannel3"}];
+    COUNTER_READ_BYTES_CHANNEL_4 = 55                                [(CounterOpts) = {Name: "ReadBytesChannel4"}];
+    COUNTER_READ_BYTES_CHANNEL_5 = 56                                [(CounterOpts) = {Name: "ReadBytesChannel5"}];
+    COUNTER_READ_BYTES_CHANNEL_6 = 57                                [(CounterOpts) = {Name: "ReadBytesChannel6"}];
+    COUNTER_READ_BYTES_CHANNEL_7 = 58                                [(CounterOpts) = {Name: "ReadBytesChannel7"}];
+    COUNTER_READ_BYTES_CHANNEL_8 = 59                                [(CounterOpts) = {Name: "ReadBytesChannel8"}];
+    COUNTER_READ_BYTES_CHANNEL_9 = 60                                [(CounterOpts) = {Name: "ReadBytesChannel9"}];
+    COUNTER_READ_BYTES_CHANNEL_10 = 61                               [(CounterOpts) = {Name: "ReadBytesChannel10"}];
+    COUNTER_READ_BYTES_CHANNEL_11 = 62                               [(CounterOpts) = {Name: "ReadBytesChannel11"}];
+    COUNTER_READ_BYTES_CHANNEL_12 = 63                               [(CounterOpts) = {Name: "ReadBytesChannel12"}];
+    COUNTER_READ_BYTES_CHANNEL_13 = 64                               [(CounterOpts) = {Name: "ReadBytesChannel13"}];
+    COUNTER_READ_BYTES_CHANNEL_14 = 65                               [(CounterOpts) = {Name: "ReadBytesChannel14"}];
+    COUNTER_READ_BYTES_CHANNEL_15 = 66                               [(CounterOpts) = {Name: "ReadBytesChannel15"}];
+
+    COUNTER_WRITE_BYTES_CHANNEL_0 = 67                               [(CounterOpts) = {Name: "WriteBytesChannel0"}];
+    COUNTER_WRITE_BYTES_CHANNEL_1 = 68                               [(CounterOpts) = {Name: "WriteBytesChannel1"}];
+    COUNTER_WRITE_BYTES_CHANNEL_2 = 69                               [(CounterOpts) = {Name: "WriteBytesChannel2"}];
+    COUNTER_WRITE_BYTES_CHANNEL_3 = 70                               [(CounterOpts) = {Name: "WriteBytesChannel3"}];
+    COUNTER_WRITE_BYTES_CHANNEL_4 = 71                               [(CounterOpts) = {Name: "WriteBytesChannel4"}];
+    COUNTER_WRITE_BYTES_CHANNEL_5 = 72                               [(CounterOpts) = {Name: "WriteBytesChannel5"}];
+    COUNTER_WRITE_BYTES_CHANNEL_6 = 73                               [(CounterOpts) = {Name: "WriteBytesChannel6"}];
+    COUNTER_WRITE_BYTES_CHANNEL_7 = 74                               [(CounterOpts) = {Name: "WriteBytesChannel7"}];
+    COUNTER_WRITE_BYTES_CHANNEL_8 = 75                               [(CounterOpts) = {Name: "WriteBytesChannel8"}];
+    COUNTER_WRITE_BYTES_CHANNEL_9 = 76                               [(CounterOpts) = {Name: "WriteBytesChannel9"}];
+    COUNTER_WRITE_BYTES_CHANNEL_10 = 77                              [(CounterOpts) = {Name: "WriteBytesChannel10"}];
+    COUNTER_WRITE_BYTES_CHANNEL_11 = 78                              [(CounterOpts) = {Name: "WriteBytesChannel11"}];
+    COUNTER_WRITE_BYTES_CHANNEL_12 = 79                              [(CounterOpts) = {Name: "WriteBytesChannel12"}];
+    COUNTER_WRITE_BYTES_CHANNEL_13 = 80                              [(CounterOpts) = {Name: "WriteBytesChannel13"}];
+    COUNTER_WRITE_BYTES_CHANNEL_14 = 81                              [(CounterOpts) = {Name: "WriteBytesChannel14"}];
+    COUNTER_WRITE_BYTES_CHANNEL_15 = 82                              [(CounterOpts) = {Name: "WriteBytesChannel15"}];
 }
 
 enum ESimpleCounters {
@@ -124,10 +124,10 @@ enum ESimpleCounters {
     COUNTER_STATE_STARTING = 8                                       [(CounterOpts) = {Name: "StateStarting"}];
     COUNTER_STATE_PROCESSING_INIT_QUEUE = 9                          [(CounterOpts) = {Name: "StateProcessingInitQueue"}];
     COUNTER_STATE_ONLINE = 10                                        [(CounterOpts) = {Name: "StateOnline"}];
- 
-    COUNTER_REQ_RO_INLINE_IN_FLY = 11                                [(CounterOpts) = {Name: "ReqRoInlineInFly"}]; 
- 
-    COUNTER_REQ_AGE_MS = 12                                          [(CounterOpts) = {Name: "ReqAgeMs"}]; 
+
+    COUNTER_REQ_RO_INLINE_IN_FLY = 11                                [(CounterOpts) = {Name: "ReqRoInlineInFly"}];
+
+    COUNTER_REQ_AGE_MS = 12                                          [(CounterOpts) = {Name: "ReqAgeMs"}];
 }
 
 enum EPercentileCounters {
@@ -166,7 +166,7 @@ enum EPercentileCounters {
     COUNTER_LATENCY_FULL_RO = 8                                      [(CounterOpts) = {Name: "LatencyFullRo"}];
     COUNTER_LATENCY_FULL_WO = 9                                      [(CounterOpts) = {Name: "LatencyFullWo"}];
     COUNTER_LATENCY_FULL_RW = 10                                     [(CounterOpts) = {Name: "LatencyFullRw"}];
-    COUNTER_LATENCY_FULL_RO_INLINE = 11                              [(CounterOpts) = {Name: "LatencyFullRoInline"}]; 
+    COUNTER_LATENCY_FULL_RO_INLINE = 11                              [(CounterOpts) = {Name: "LatencyFullRoInline"}];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_0 = 12                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel0)"
                                                                                         Ranges { Value: 0           Name: "0"        }

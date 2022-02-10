@@ -12,12 +12,12 @@
 
 #include <library/cpp/digest/crc32c/crc32c.h>
 
-#include <util/string/printf.h> 
+#include <util/string/printf.h>
 #include <util/string/escape.h>
 #include <util/stream/input.h>
 #include <util/random/fast.h>
 #include <util/system/unaligned_mem.h>
- 
+
 namespace NKikimr {
 
 class TQuorumCheckerBase : public TBlobStorageGroupInfo::IQuorumChecker {
@@ -338,7 +338,7 @@ void TBlobStorageGroupInfo::TTopology::FinalizeConstruction() {
                 // fill in VDiskIdForOrderNumber
                 VDiskIdForOrderNumber.push_back(vdisk->VDiskIdShort);
             }
-        } 
+        }
     }
 
     TotalFailDomains = failDomainOrderNumber;
@@ -347,34 +347,34 @@ void TBlobStorageGroupInfo::TTopology::FinalizeConstruction() {
     BlobMapper.reset(CreateMapper(GType, this));
     // create quorum checker
     QuorumChecker.reset(CreateQuorumChecker(this));
-} 
- 
-bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskID& vdisk) const { 
-    if (vdisk.FailRealm >= FailRealms.size()) { 
-        return false; 
-    } 
-    if (vdisk.FailDomain >= TotalFailDomains) { 
-        return false; 
-    } 
-    if (vdisk.VDisk >= GetNumVDisksPerFailDomain()) { 
-        return false; 
-    } 
-    return true; 
-} 
- 
-bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskIdShort& vdisk) const { 
-    if (vdisk.FailRealm >= FailRealms.size()) { 
-        return false; 
-    } 
-    if (vdisk.FailDomain >= TotalFailDomains) { 
-        return false; 
-    } 
-    if (vdisk.VDisk >= GetNumVDisksPerFailDomain()) { 
-        return false; 
-    } 
-    return true; 
-} 
- 
+}
+
+bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskID& vdisk) const {
+    if (vdisk.FailRealm >= FailRealms.size()) {
+        return false;
+    }
+    if (vdisk.FailDomain >= TotalFailDomains) {
+        return false;
+    }
+    if (vdisk.VDisk >= GetNumVDisksPerFailDomain()) {
+        return false;
+    }
+    return true;
+}
+
+bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskIdShort& vdisk) const {
+    if (vdisk.FailRealm >= FailRealms.size()) {
+        return false;
+    }
+    if (vdisk.FailDomain >= TotalFailDomains) {
+        return false;
+    }
+    if (vdisk.VDisk >= GetNumVDisksPerFailDomain()) {
+        return false;
+    }
+    return true;
+}
+
 ui32 TBlobStorageGroupInfo::TTopology::GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const {
     return FailRealms[vdisk.FailRealm].FailDomains[vdisk.FailDomain].VDisks[vdisk.VDisk].FailDomainOrderNumber;
 }
@@ -555,14 +555,14 @@ TBlobStorageGroupInfo::TDynamicInfo::TDynamicInfo(ui32 groupId, ui32 groupGen)
 ////////////////////////////////////////////////////////////////////////////
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain,
         ui32 numFailDomains, ui32 numFailRealms, const TVector<TActorId> *vdiskIds, EEncryptionMode encryptionMode,
-        ELifeCyclePhase lifeCyclePhase, TCypherKey key) 
+        ELifeCyclePhase lifeCyclePhase, TCypherKey key)
     : GroupID(0)
     , GroupGeneration(1)
     , Type(gtype)
     , Dynamic(GroupID, GroupGeneration)
-    , EncryptionMode(encryptionMode) 
-    , LifeCyclePhase(lifeCyclePhase) 
-    , Key(key) 
+    , EncryptionMode(encryptionMode)
+    , LifeCyclePhase(lifeCyclePhase)
+    , Key(key)
 {
     if (!numFailDomains) {
         numFailDomains = gtype.BlobSubgroupSize();
@@ -753,26 +753,26 @@ TVDiskID TBlobStorageGroupInfo::CreateVDiskID(const TVDiskIdShort &id) const {
 }
 
 TString TBlobStorageGroupInfo::BlobStateToString(EBlobState state) {
-    switch (state) { 
-        case EBS_DISINTEGRATED: 
-            return "EBS_DISINTEGRATED"; 
-        case EBS_UNRECOVERABLE_FRAGMENTARY: 
-            return "EBS_UNRECOVERABLE_FRAGMENTARY"; 
-        case EBS_RECOVERABLE_FRAGMENTARY: 
-            return "EBS_RECOVERABLE_FRAGMENTARY"; 
-        case EBS_RECOVERABLE_DOUBTED: 
-            return "EBS_RECOVERABLE_DOUBTED"; 
-        case EBS_FULL: 
-            return "EBS_FULL"; 
-        default: 
-            Y_VERIFY(false, "Unexpected state# %" PRIu64, (ui64)state); 
-    } 
-} 
- 
-TBlobStorageGroupInfo::EBlobState TBlobStorageGroupInfo::BlobState(ui32 effectiveReplicas, ui32 errorDomains) const { 
+    switch (state) {
+        case EBS_DISINTEGRATED:
+            return "EBS_DISINTEGRATED";
+        case EBS_UNRECOVERABLE_FRAGMENTARY:
+            return "EBS_UNRECOVERABLE_FRAGMENTARY";
+        case EBS_RECOVERABLE_FRAGMENTARY:
+            return "EBS_RECOVERABLE_FRAGMENTARY";
+        case EBS_RECOVERABLE_DOUBTED:
+            return "EBS_RECOVERABLE_DOUBTED";
+        case EBS_FULL:
+            return "EBS_FULL";
+        default:
+            Y_VERIFY(false, "Unexpected state# %" PRIu64, (ui64)state);
+    }
+}
+
+TBlobStorageGroupInfo::EBlobState TBlobStorageGroupInfo::BlobState(ui32 effectiveReplicas, ui32 errorDomains) const {
     return GetTopology().BlobState(effectiveReplicas, errorDomains);
-} 
- 
+}
+
 void TBlobStorageGroupInfo::PickSubgroup(ui32 hash, TVDiskIds *outVDisk, TServiceIds *outServiceIds) const {
     TOrderNums orderNums;
     Topology->PickSubgroup(hash, orderNums);
@@ -791,21 +791,21 @@ bool TBlobStorageGroupInfo::BelongsToSubgroup(const TVDiskID &vdisk, ui32 hash) 
     Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->BelongsToSubgroup(TVDiskIdShort(vdisk), hash);
-} 
- 
+}
+
 // Returns either vdisk idx in the blob subgroup, or BlobSubgroupSize if the vdisk is not in the blob subgroup
 ui32 TBlobStorageGroupInfo::GetIdxInSubgroup(const TVDiskID &vdisk, ui32 hash) const {
     Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
     Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->GetIdxInSubgroup(vdisk, hash);
-} 
- 
+}
+
 TVDiskID TBlobStorageGroupInfo::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const {
     auto shortId = Topology->GetVDiskInSubgroup(idxInSubgroup, hash);
     return TVDiskID(GroupID, GroupGeneration, shortId);
-} 
- 
+}
+
 ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskID &vdisk) const {
     Y_VERIFY_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
     Y_VERIFY_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
@@ -813,30 +813,30 @@ ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskID &vdisk) const {
     return Topology->GetOrderNumber(vdisk);
 }
 
-ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskIdShort &vdisk) const { 
-    return Topology->GetOrderNumber(vdisk); 
-} 
- 
-bool TBlobStorageGroupInfo::IsValidId(const TVDiskID &vdisk) const { 
-    return Topology->IsValidId(vdisk); 
-} 
- 
-bool TBlobStorageGroupInfo::IsValidId(const TVDiskIdShort  &vdisk) const { 
-    return Topology->IsValidId(vdisk); 
-} 
- 
+ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskIdShort &vdisk) const {
+    return Topology->GetOrderNumber(vdisk);
+}
+
+bool TBlobStorageGroupInfo::IsValidId(const TVDiskID &vdisk) const {
+    return Topology->IsValidId(vdisk);
+}
+
+bool TBlobStorageGroupInfo::IsValidId(const TVDiskIdShort  &vdisk) const {
+    return Topology->IsValidId(vdisk);
+}
+
 ui32 TBlobStorageGroupInfo::GetFailDomainOrderNumber(const TVDiskID& vdisk) const {
     return Topology->GetFailDomainOrderNumber(vdisk);
 }
 
-ui32 TBlobStorageGroupInfo::GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const { 
-    return Topology->GetFailDomainOrderNumber(vdisk); 
-} 
- 
+ui32 TBlobStorageGroupInfo::GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const {
+    return Topology->GetFailDomainOrderNumber(vdisk);
+}
+
 TVDiskID TBlobStorageGroupInfo::GetVDiskId(ui32 orderNumber) const {
     return TVDiskID(GroupID, GroupGeneration, Topology->GetVDiskId(orderNumber));
-} 
- 
+}
+
 TVDiskID TBlobStorageGroupInfo::GetVDiskId(const TVDiskIdShort &vd) const {
     return TVDiskID(GroupID, GroupGeneration, vd);
 }
@@ -870,7 +870,7 @@ const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::GetFailDomain(u
 }
 
 TString TBlobStorageGroupInfo::ToString() const {
-    TStringStream str; 
+    TStringStream str;
     str << "{GroupID# " << GroupID;
     str << " GroupGeneration# " << GroupGeneration;
     str << " Type# " << Type.ToString();
@@ -891,16 +891,16 @@ TString TBlobStorageGroupInfo::ToString() const {
                     << " OrderNumber# " << info.OrderNumber
                     << " FailDomainOrderNumber# " << info.FailDomainOrderNumber
                     << "}";
-            } 
-            str << "}"; 
-        } 
+            }
+            str << "}";
+        }
         str << "}}";
-    } 
-    str << "}}"; 
-    return str.Str(); 
-} 
- 
- 
+    }
+    str << "}}";
+    return str.Str();
+}
+
+
 
 TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x) {
     return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
@@ -915,224 +915,224 @@ void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto)
 }
 
 
-TFailDomain::TLevelIds::TLevelIds() { 
+TFailDomain::TLevelIds::TLevelIds() {
 }
- 
-bool TFailDomain::TLevelIds::IsEmpty() const { 
-    return Ids.empty(); 
-} 
- 
-bool TFailDomain::TLevelIds::operator==(const TLevelIds& other) const { 
-    if (Ids.size() != other.Ids.size()) { 
-        return false; 
-    } 
-    return (memcmp(Ids.data(), other.Ids.data(), Ids.size()) == 0); 
-} 
- 
-bool TFailDomain::TLevelIds::operator<(const TLevelIds& other) const { 
+
+bool TFailDomain::TLevelIds::IsEmpty() const {
+    return Ids.empty();
+}
+
+bool TFailDomain::TLevelIds::operator==(const TLevelIds& other) const {
+    if (Ids.size() != other.Ids.size()) {
+        return false;
+    }
+    return (memcmp(Ids.data(), other.Ids.data(), Ids.size()) == 0);
+}
+
+bool TFailDomain::TLevelIds::operator<(const TLevelIds& other) const {
     TVector<ui8>::const_iterator a = Ids.begin();
     TVector<ui8>::const_iterator b = other.Ids.begin();
-    while (true) { 
-        if (a == Ids.end()) { 
-            if (b == other.Ids.end()) { 
-                return false; 
-            } 
-            return true; 
-        } 
-        if (b == other.Ids.end()) { 
-            return false; 
-        } 
-        if (*a < *b) { 
-            return true; 
-        } 
-        if (*a > *b) { 
-            return false; 
-        } 
-        ++a; 
-        ++b; 
-    } 
-} 
- 
-TFailDomain::TFailDomain() { 
-} 
- 
+    while (true) {
+        if (a == Ids.end()) {
+            if (b == other.Ids.end()) {
+                return false;
+            }
+            return true;
+        }
+        if (b == other.Ids.end()) {
+            return false;
+        }
+        if (*a < *b) {
+            return true;
+        }
+        if (*a > *b) {
+            return false;
+        }
+        ++a;
+        ++b;
+    }
+}
+
+TFailDomain::TFailDomain() {
+}
+
 TFailDomain::TFailDomain(const TString &data) {
     ui8 *end = (ui8*)const_cast<char*>(data.data()) + (data.size() / RecordSize) * RecordSize;
     for (ui8 *cursor = (ui8*)const_cast<char*>(data.data()); cursor < end; cursor += RecordSize) {
         Levels[*cursor] = ReadUnaligned<ui32>((ui32*)(cursor + 1));
-    } 
-} 
- 
+    }
+}
+
 TString TFailDomain::SerializeFailDomain() const {
     TString data = TString::Uninitialized(RecordSize * Levels.size());
-    TLevels::const_iterator a = Levels.begin(); 
-    size_t offset = 0; 
-    while (a != Levels.end()) { 
+    TLevels::const_iterator a = Levels.begin();
+    size_t offset = 0;
+    while (a != Levels.end()) {
         *(ui8*)(data.data() + offset) = a->first;
         WriteUnaligned<ui32>((ui32*)(data.data() + offset + sizeof(ui8)), a->second);
-        offset += RecordSize; 
-        ++a; 
-    } 
-    return data; 
-} 
- 
-TFailDomain::TLevelIds TFailDomain::MakeIds() const { 
-    TLevelIds id; 
-    TLevels::const_iterator it = Levels.begin(); 
-    while (it != Levels.end()) { 
-        id.Ids.push_back(it->first); 
-        ++it; 
-    } 
-    return id; 
-} 
- 
-TFailDomain::TLevelIds TFailDomain::Intersect(const TLevelIds &id) const { 
-    TLevelIds result; 
+        offset += RecordSize;
+        ++a;
+    }
+    return data;
+}
+
+TFailDomain::TLevelIds TFailDomain::MakeIds() const {
+    TLevelIds id;
+    TLevels::const_iterator it = Levels.begin();
+    while (it != Levels.end()) {
+        id.Ids.push_back(it->first);
+        ++it;
+    }
+    return id;
+}
+
+TFailDomain::TLevelIds TFailDomain::Intersect(const TLevelIds &id) const {
+    TLevelIds result;
     TVector<ui8>::const_iterator a = id.Ids.begin();
-    TLevels::const_iterator b = Levels.begin(); 
-    while (a != id.Ids.end() && b != Levels.end()) { 
-        if (*a == b->first) { 
-            result.Ids.push_back(*a); 
-            ++a; 
-            ++b; 
-        } else if (*a < b->first) { 
-            ++a; 
-        } else { 
-            ++b; 
-        } 
-    } 
-    return result; 
-} 
- 
-bool TFailDomain::IsColliding(const TFailDomain &other) const { 
-    TLevels::const_iterator a = Levels.begin(); 
-    TLevels::const_iterator b = other.Levels.begin(); 
-    while (a != Levels.end() && b != other.Levels.end()) { 
-        if (a->first < b->first) { 
-            ++a; 
-        } else if (b->first < a->first) { 
-            ++b; 
-        } else { 
-            if (a->second != b->second) { 
-                return false; 
-            } 
-            ++a; 
-            ++b; 
-        } 
-    } 
-    return true; 
-} 
- 
-bool TFailDomain::IsSubdomainOf(const TFailDomain &other) const { 
-    TLevels::const_iterator a = Levels.begin(); 
-    TLevels::const_iterator b = other.Levels.begin(); 
-    while (a != Levels.end() && b != other.Levels.end()) { 
-        if (a->first < b->first) { 
-            a++; 
-        } else if (b->first < a->first) { 
-            return false; 
-        } else { 
-            if (a->second != b->second) { 
-                return false; 
-            } 
-            ++a; 
-            ++b; 
-        } 
-    } 
-    if (a != Levels.end() && b == other.Levels.end()) { 
-        return false; 
-    } 
-    return true; 
-} 
- 
-bool TFailDomain::IsEqual(const TFailDomain &other) const { 
-    TLevels::const_iterator a = Levels.begin(); 
-    TLevels::const_iterator b = other.Levels.begin(); 
-    while (a != Levels.end() && b != other.Levels.end()) { 
-        if (a->first != b->first || a->second != b->second) { 
-            return false; 
-        } 
-        ++a; 
-        ++b; 
-    } 
-    return true; 
-} 
- 
-bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) const { 
+    TLevels::const_iterator b = Levels.begin();
+    while (a != id.Ids.end() && b != Levels.end()) {
+        if (*a == b->first) {
+            result.Ids.push_back(*a);
+            ++a;
+            ++b;
+        } else if (*a < b->first) {
+            ++a;
+        } else {
+            ++b;
+        }
+    }
+    return result;
+}
+
+bool TFailDomain::IsColliding(const TFailDomain &other) const {
+    TLevels::const_iterator a = Levels.begin();
+    TLevels::const_iterator b = other.Levels.begin();
+    while (a != Levels.end() && b != other.Levels.end()) {
+        if (a->first < b->first) {
+            ++a;
+        } else if (b->first < a->first) {
+            ++b;
+        } else {
+            if (a->second != b->second) {
+                return false;
+            }
+            ++a;
+            ++b;
+        }
+    }
+    return true;
+}
+
+bool TFailDomain::IsSubdomainOf(const TFailDomain &other) const {
+    TLevels::const_iterator a = Levels.begin();
+    TLevels::const_iterator b = other.Levels.begin();
+    while (a != Levels.end() && b != other.Levels.end()) {
+        if (a->first < b->first) {
+            a++;
+        } else if (b->first < a->first) {
+            return false;
+        } else {
+            if (a->second != b->second) {
+                return false;
+            }
+            ++a;
+            ++b;
+        }
+    }
+    if (a != Levels.end() && b == other.Levels.end()) {
+        return false;
+    }
+    return true;
+}
+
+bool TFailDomain::IsEqual(const TFailDomain &other) const {
+    TLevels::const_iterator a = Levels.begin();
+    TLevels::const_iterator b = other.Levels.begin();
+    while (a != Levels.end() && b != other.Levels.end()) {
+        if (a->first != b->first || a->second != b->second) {
+            return false;
+        }
+        ++a;
+        ++b;
+    }
+    return true;
+}
+
+bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) const {
     TVector<ui8>::const_iterator key = id.Ids.begin();
-    TLevels::const_iterator a = Levels.begin(); 
-    TLevels::const_iterator b = other.Levels.begin(); 
- 
-    while (key != id.Ids.end()) { 
-        while (true) { 
-            if (a == Levels.end()) { 
+    TLevels::const_iterator a = Levels.begin();
+    TLevels::const_iterator b = other.Levels.begin();
+
+    while (key != id.Ids.end()) {
+        while (true) {
+            if (a == Levels.end()) {
                 Y_FAIL("Not enough a levels for FailDomain comparison");
-            } 
-            if (a->first < *key) { 
-                ++a; 
-            } else if (a->first == *key) { 
- 
-                while (true) { 
-                    if (b == other.Levels.end()) { 
+            }
+            if (a->first < *key) {
+                ++a;
+            } else if (a->first == *key) {
+
+                while (true) {
+                    if (b == other.Levels.end()) {
                         Y_FAIL("Not enough b levels for FailDomain comparison");
-                    } 
-                    if (b->first < *key) { 
-                        ++b; 
-                    } else if (b->first == *key) { 
-                        if (a->second != b->second) { 
-                            return true; 
-                        } 
-                        ++key; 
-                        ++a; 
-                        ++b; 
-                        break; 
-                    } else { 
+                    }
+                    if (b->first < *key) {
+                        ++b;
+                    } else if (b->first == *key) {
+                        if (a->second != b->second) {
+                            return true;
+                        }
+                        ++key;
+                        ++a;
+                        ++b;
+                        break;
+                    } else {
                         Y_FAIL("Missing b level for FailDomain comparison");
-                    } 
-                } 
-                break; 
-            } else { 
+                    }
+                }
+                break;
+            } else {
                 Y_FAIL("Missing a level for FailDomain comparison");
-            } 
-        } 
-    } 
-    return false; 
-} 
- 
-bool TFailDomain::operator<(const TFailDomain &other) const { 
-    TLevels::const_iterator a = Levels.begin(); 
-    TLevels::const_iterator b = other.Levels.begin(); 
-    while (a != Levels.end() && b != other.Levels.end()) { 
-        if (a->first < b->first) { 
-            return true; 
-        } else if (a->first > b->first) { 
-            return false; 
-        } else { 
-            if (a->second < b->second) { 
-                return true; 
-            } else if (a->second > b->second) { 
-                return false; 
-            } 
-            ++a; 
-            ++b; 
-        } 
-    } 
-    if (b != other.Levels.end()) { 
-        return true; 
-    } 
-    return false; 
-} 
- 
+            }
+        }
+    }
+    return false;
+}
+
+bool TFailDomain::operator<(const TFailDomain &other) const {
+    TLevels::const_iterator a = Levels.begin();
+    TLevels::const_iterator b = other.Levels.begin();
+    while (a != Levels.end() && b != other.Levels.end()) {
+        if (a->first < b->first) {
+            return true;
+        } else if (a->first > b->first) {
+            return false;
+        } else {
+            if (a->second < b->second) {
+                return true;
+            } else if (a->second > b->second) {
+                return false;
+            }
+            ++a;
+            ++b;
+        }
+    }
+    if (b != other.Levels.end()) {
+        return true;
+    }
+    return false;
+}
+
 TString TFailDomain::ToString() const {
-    TStringBuilder builder; 
-    builder << "["; 
-    for (TLevels::const_iterator a = Levels.begin(); a != Levels.end(); ++a) { 
-        builder << "{" << (ui32)a->first << ":" << (ui32)a->second << "}"; 
-    } 
-    builder << "]"; 
-    return builder; 
-} 
- 
+    TStringBuilder builder;
+    builder << "[";
+    for (TLevels::const_iterator a = Levels.begin(); a != Levels.end(); ++a) {
+        builder << "{" << (ui32)a->first << ":" << (ui32)a->second << "}";
+    }
+    builder << "]";
+    return builder;
+}
+
 TFailDomain TFailDomain::Slice(ui32 level) const {
     TFailDomain res;
     for (const auto& [key, value] : Levels) {

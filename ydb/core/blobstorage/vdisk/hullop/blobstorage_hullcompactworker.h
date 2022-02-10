@@ -243,13 +243,13 @@ namespace NKikimr {
                 ItemsWritten++;
             }
 
-            void Update(const NPDisk::TEvChunkRead *msg) { 
+            void Update(const NPDisk::TEvChunkRead *msg) {
                 BytesRead += msg->Size;
                 ReadIOPS++;
                 HullCtx->LsmHullGroup.LsmCompactionBytesRead() += msg->Size;
             }
 
-            void Update(const NPDisk::TEvChunkWrite *msg) { 
+            void Update(const NPDisk::TEvChunkWrite *msg) {
                 ui32 bytes = msg->PartsPtr ? msg->PartsPtr->ByteSize() : 0;
                 BytesWritten += bytes;
                 WriteIOPS++;
@@ -500,14 +500,14 @@ namespace NKikimr {
             return nullptr;
         }
 
-        void Apply(NPDisk::TEvChunkWriteResult * /*msg*/) { 
+        void Apply(NPDisk::TEvChunkWriteResult * /*msg*/) {
             // adjust number of in flight messages
             Y_VERIFY(InFlightWrites > 0);
             --InFlightWrites;
             AtomicDecrement(*WritesInFlight);
         }
 
-        void Apply(NPDisk::TEvChunkReserveResult *msg) { 
+        void Apply(NPDisk::TEvChunkReserveResult *msg) {
             // reset in flight allocation counter
             ChunkReservePending = 0;
 
@@ -701,7 +701,7 @@ namespace NKikimr {
             }
 
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
-            while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage( 
+            while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
                 Statistics.Update(readMsg.get());
                 msgsForYard.push_back(std::move(readMsg));

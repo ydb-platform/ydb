@@ -4,7 +4,7 @@
 #include <ydb/core/protos/statestorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <library/cpp/actors/interconnect/event_filter.h>
-#include <util/stream/str.h> 
+#include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
 
@@ -78,15 +78,15 @@ struct TEvStateStorage {
         TProxyOptions(ESigWaitMode sigWaitMode = SigNone)
             : SigWaitMode(sigWaitMode)
         {}
- 
+
         TString ToString() const {
-            switch (SigWaitMode) { 
-            case SigNone: return "SigNone"; 
-            case SigAsync: return "SigAsync"; 
-            case SigSync: return "SigSync"; 
-            default: return "Unknown"; 
-            } 
-        } 
+            switch (SigWaitMode) {
+            case SigNone: return "SigNone";
+            case SigAsync: return "SigAsync";
+            case SigSync: return "SigSync";
+            default: return "Unknown";
+            }
+        }
     };
 
     struct TEvLookup : public TEventLocal<TEvLookup, EvLookup> {
@@ -99,15 +99,15 @@ struct TEvStateStorage {
             , Cookie(cookie)
             , ProxyOptions(proxyOptions)
         {}
- 
+
         TString ToString() const {
-            TStringStream str; 
-            str << "{EvLookup TabletID: " << TabletID; 
-            str << " Cookie: " << Cookie; 
-            str << " ProxyOptions: " << ProxyOptions.ToString(); 
-            str << "}"; 
-            return str.Str(); 
-        } 
+            TStringStream str;
+            str << "{EvLookup TabletID: " << TabletID;
+            str << " Cookie: " << Cookie;
+            str << " ProxyOptions: " << ProxyOptions.ToString();
+            str << "}";
+            return str.Str();
+        }
     };
 
     struct TEvUpdate : public TEventLocal<TEvUpdate, EvUpdate> {
@@ -134,27 +134,27 @@ struct TEvStateStorage {
         {
             Copy(sig, sig + sigsz, Signature.Get());
         }
- 
+
         TString ToString() const {
-            TStringStream str; 
-            str << "{EvUpdate TabletID: " << TabletID; 
-            str << " Cookie: " << Cookie; 
+            TStringStream str;
+            str << "{EvUpdate TabletID: " << TabletID;
+            str << " Cookie: " << Cookie;
             str << " ProposedLeader: " << ProposedLeader.ToString();
             str << " ProposedLeaderTablet: " << ProposedLeaderTablet.ToString();
-            str << " ProposedGeneration: " << ProposedGeneration; 
-            str << " ProposedStep: " << ProposedStep; 
-            str << " SignatureSz: " << SignatureSz; 
-            if (SignatureSz) { 
-                str << " Signature: {" << Signature[0]; 
-                for (size_t i = 1; i < SignatureSz; ++i) { 
-                    str << ", " << Signature[i]; 
-                } 
-                str << "}"; 
-            } 
-            str << " ProxyOptions: " << ProxyOptions.ToString(); 
-            str << "}"; 
-            return str.Str(); 
-        } 
+            str << " ProposedGeneration: " << ProposedGeneration;
+            str << " ProposedStep: " << ProposedStep;
+            str << " SignatureSz: " << SignatureSz;
+            if (SignatureSz) {
+                str << " Signature: {" << Signature[0];
+                for (size_t i = 1; i < SignatureSz; ++i) {
+                    str << ", " << Signature[i];
+                }
+                str << "}";
+            }
+            str << " ProxyOptions: " << ProxyOptions.ToString();
+            str << "}";
+            return str.Str();
+        }
     };
 
     struct TEvDelete : TEventLocal<TEvDelete, EvDelete> {
@@ -223,25 +223,25 @@ struct TEvStateStorage {
         {
             Copy(sig, sig + sigsz, Signature.Get());
         }
- 
+
         TString ToString() const {
-            TStringStream str; 
-            str << "{EvLock TabletID: " << TabletID; 
-            str << " Cookie: " << Cookie; 
+            TStringStream str;
+            str << "{EvLock TabletID: " << TabletID;
+            str << " Cookie: " << Cookie;
             str << " ProposedLeader: " << ProposedLeader.ToString();
-            str << " ProposedGeneration: " << ProposedGeneration; 
-            str << " SignatureSz: " << SignatureSz; 
-            if (SignatureSz) { 
-                str << " Signature: {" << Signature[0]; 
-                for (size_t i = 1; i < SignatureSz; ++i) { 
-                    str << ", " << Signature[i]; 
-                } 
-                str << "}"; 
-            } 
-            str << " ProxyOptions: " << ProxyOptions.ToString(); 
-            str << "}"; 
-            return str.Str(); 
-        } 
+            str << " ProposedGeneration: " << ProposedGeneration;
+            str << " SignatureSz: " << SignatureSz;
+            if (SignatureSz) {
+                str << " Signature: {" << Signature[0];
+                for (size_t i = 1; i < SignatureSz; ++i) {
+                    str << ", " << Signature[i];
+                }
+                str << "}";
+            }
+            str << " ProxyOptions: " << ProxyOptions.ToString();
+            str << "}";
+            return str.Str();
+        }
     };
 
     inline static void MakeFilteredSignatureCopy(const ui64 *sig, ui32 sigsz, ui64 *target) {
@@ -283,26 +283,26 @@ struct TEvStateStorage {
         {
             MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
         }
- 
+
         TString ToString() const {
-            TStringStream str; 
-            str << "{EvInfo Status: " << (ui32)Status; 
-            str << " TabletID: " << TabletID; 
-            str << " Cookie: " << Cookie; 
+            TStringStream str;
+            str << "{EvInfo Status: " << (ui32)Status;
+            str << " TabletID: " << TabletID;
+            str << " Cookie: " << Cookie;
             str << " CurrentLeader: " << CurrentLeader.ToString();
             str << " CurrentLeaderTablet: " << CurrentLeaderTablet.ToString();
-            str << " CurrentGeneration: " << CurrentGeneration; 
-            str << " CurrentStep: " << CurrentStep; 
-            str << " Locked: " << (Locked ? "true" : "false"); 
-            str << " LockedFor: " << LockedFor; 
-            str << " SignatureSz: " << SignatureSz; 
-            if (SignatureSz) { 
-                str << " Signature: {" << Signature[0]; 
-                for (size_t i = 1; i < SignatureSz; ++i) { 
-                    str << ", " << Signature[i]; 
-                } 
-                str << "}"; 
-            } 
+            str << " CurrentGeneration: " << CurrentGeneration;
+            str << " CurrentStep: " << CurrentStep;
+            str << " Locked: " << (Locked ? "true" : "false");
+            str << " LockedFor: " << LockedFor;
+            str << " SignatureSz: " << SignatureSz;
+            if (SignatureSz) {
+                str << " Signature: {" << Signature[0];
+                for (size_t i = 1; i < SignatureSz; ++i) {
+                    str << ", " << Signature[i];
+                }
+                str << "}";
+            }
             if (!Followers.empty()) {
                 str << " Followers: [";
                 for (auto it = Followers.begin(); it != Followers.end(); ++it) {
@@ -313,9 +313,9 @@ struct TEvStateStorage {
                 }
                 str << "]";
             }
-            str << "}"; 
-            return str.Str(); 
-        } 
+            str << "}";
+            return str.Str();
+        }
     };
 
     struct TEvUpdateSignature : public TEventLocal<TEvUpdateSignature, EvUpdateSignature> {
@@ -330,21 +330,21 @@ struct TEvStateStorage {
         {
             MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
         }
- 
+
         TString ToString() const {
-            TStringStream str; 
-            str << "{EvUpdateSignature TabletID: " << TabletID; 
-            str << " Sz: " << Sz; 
-            if (Sz) { 
-                str << " Signature: {" << Signature[0]; 
-                for (size_t i = 1; i < Sz; ++i) { 
-                    str << ", " << Signature[i]; 
-                } 
-                str << "}"; 
-            } 
-            str << "}"; 
-            return str.Str(); 
-        } 
+            TStringStream str;
+            str << "{EvUpdateSignature TabletID: " << TabletID;
+            str << " Sz: " << Sz;
+            if (Sz) {
+                str << " Signature: {" << Signature[0];
+                for (size_t i = 1; i < Sz; ++i) {
+                    str << ", " << Signature[i];
+                }
+                str << "}";
+            }
+            str << "}";
+            return str.Str();
+        }
     };
 
     struct TEvReplicaLeaderDemoted : public TEventPB<TEvReplicaLeaderDemoted, NKikimrStateStorage::TEvReplicaLeaderDemoted, EvReplicaLeaderDemoted> {

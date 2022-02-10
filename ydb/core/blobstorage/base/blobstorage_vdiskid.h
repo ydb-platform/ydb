@@ -56,17 +56,17 @@ struct TVDiskID {
 
     auto ConvertToTuple() const {
         return std::make_tuple(GroupID, GroupGeneration, FailRealm, FailDomain, VDisk);
-    } 
- 
+    }
+
     friend bool operator ==(const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() == y.ConvertToTuple(); }
     friend bool operator !=(const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() != y.ConvertToTuple(); }
     friend bool operator < (const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() <  y.ConvertToTuple(); }
- 
+
     TString ToString() const;
     TString ToStringWOGeneration() const;
     void Serialize(IOutputStream &s) const;
     bool Deserialize(IInputStream &s);
- 
+
     ui64 Hash() const {
         ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk);
         ui64 y = GroupID;
@@ -75,7 +75,7 @@ struct TVDiskID {
         return CombineHashes(IntHash<ui64>(y), IntHash<ui64>(x));
     }
 
-    static const TVDiskID InvalidId; 
+    static const TVDiskID InvalidId;
 };
 #pragma pack(pop)
 
@@ -94,19 +94,19 @@ struct TVDiskIdShort {
     ui8 Padding = 0;
 
     TVDiskIdShort() = default;
- 
+
     explicit TVDiskIdShort(ui64 raw)
         : FailRealm(ui8((raw >> 16) & 0xff))
         , FailDomain(ui8((raw >> 8) & 0xff))
         , VDisk(ui8(raw & 0xff))
     {}
- 
+
     TVDiskIdShort(ui8 realm, ui8 domain, ui8 vDisk)
         : FailRealm(realm)
         , FailDomain(domain)
         , VDisk(vDisk)
     {}
- 
+
     TVDiskIdShort(const TVDiskID &id)
         : FailRealm(id.FailRealm)
         , FailDomain(id.FailDomain)
@@ -132,7 +132,7 @@ struct TVDiskIdShort {
     bool operator!=(const TVDiskIdShort &x) const {
         return !((*this)==x);
     }
- 
+
     TString ToString() const {
         TStringStream str;
         str << "{FailRealm# " << (ui32)FailRealm;

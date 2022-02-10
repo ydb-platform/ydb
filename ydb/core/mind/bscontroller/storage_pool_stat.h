@@ -14,7 +14,7 @@ namespace NKikimr::NBsController {
             NMonitoring::TDynamicCounters::TCounterPtr NumUnknown;
             NMonitoring::TDynamicCounters::TCounterPtr NumGreen;
             NMonitoring::TDynamicCounters::TCounterPtr NumCyan;
-            NMonitoring::TDynamicCounters::TCounterPtr NumLightYellow; 
+            NMonitoring::TDynamicCounters::TCounterPtr NumLightYellow;
             NMonitoring::TDynamicCounters::TCounterPtr NumYellow;
             NMonitoring::TDynamicCounters::TCounterPtr NumLightOrange;
             NMonitoring::TDynamicCounters::TCounterPtr NumOrange;
@@ -31,7 +31,7 @@ namespace NKikimr::NBsController {
                 , NumUnknown(FlagsSubgroup->GetCounter("unknown"))
                 , NumGreen(FlagsSubgroup->GetCounter("green"))
                 , NumCyan(FlagsSubgroup->GetCounter("cyan"))
-                , NumLightYellow(FlagsSubgroup->GetCounter("lightYellow")) 
+                , NumLightYellow(FlagsSubgroup->GetCounter("lightYellow"))
                 , NumYellow(FlagsSubgroup->GetCounter("yellow"))
                 , NumLightOrange(FlagsSubgroup->GetCounter("lightOrange"))
                 , NumOrange(FlagsSubgroup->GetCounter("orange"))
@@ -73,10 +73,10 @@ namespace NKikimr::NBsController {
                     return NumOrange;
                 } else if (flags.Check(NKikimrBlobStorage::StatusDiskSpaceLightOrange)) {
                     return NumLightOrange;
-                } else if (flags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) { 
+                } else if (flags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
                     return NumYellow;
-                } else if (flags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) { 
-                    return NumLightYellow; 
+                } else if (flags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+                    return NumLightYellow;
                 } else if (flags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan)) {
                     return NumCyan;
                 } else {

@@ -1,25 +1,25 @@
 #include "dsproxy_monactor.h"
 #include "dsproxy_mon.h"
-#include "dsproxy.h" 
- 
+#include "dsproxy.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/mon/crossref.h>
- 
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
- 
+
 #include <library/cpp/monlib/service/pages/templates.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 struct TEvThroughputUpdate : public TEventLocal<TEvThroughputUpdate, TEvBlobStorage::EvThroughputUpdate> {
 };
 
 class TMonQueryProcessor : public TActorBootstrapped<TMonQueryProcessor> {
-    TIntrusivePtr<TBlobStorageGroupProxyMon> Mon; 
+    TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
     TIntrusivePtr<TGroupQueues> GroupQueues;
     const ui32 GroupId;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
@@ -27,21 +27,21 @@ class TMonQueryProcessor : public TActorBootstrapped<TMonQueryProcessor> {
     std::vector<TString> Urls;
     ui32 PendingReplyCount = 0;
 
-public: 
+public:
     TMonQueryProcessor(TIntrusivePtr<TBlobStorageGroupProxyMon> mon, TIntrusivePtr<TGroupQueues> groupQueues,
             ui32 groupId, TIntrusivePtr<TBlobStorageGroupInfo> info, NMon::TEvHttpInfo::TPtr ev)
         : Mon(std::move(mon))
         , GroupQueues(std::move(groupQueues))
-        , GroupId(groupId) 
+        , GroupId(groupId)
         , Info(std::move(info))
         , Ev(ev)
     {}
- 
+
     void Bootstrap() {
         if (Info) {
             const TInstant deadline = TActivationContext::Now() + TDuration::Seconds(5);
             const TString pagePath(Ev->Get()->Request.GetPath());
- 
+
             Urls.resize(Info->GetTotalVDisksNum());
             for (ui32 i = 0; i < Urls.size(); ++i) {
                 const TActorId& serviceId = Info->GetActorId(i);
@@ -55,9 +55,9 @@ public:
         Become(&TThis::StateFunc);
         if (!PendingReplyCount) {
             GenerateResponse();
-        } 
-    } 
- 
+        }
+    }
+
     void Handle(NCrossRef::TEvCrossRef::TPtr ev) {
         Urls[ev->Cookie] = ev->Get()->Url;
         if (!--PendingReplyCount) {
@@ -94,7 +94,7 @@ public:
             }                                                                    \
         }
 
-        TStringStream str; 
+        TStringStream str;
 
         HTML(str) {
             DIV_CLASS("panel panel-info") {
@@ -255,70 +255,70 @@ public:
                     }
                 }
             }
- 
-            DIV_CLASS("panel panel-info") { 
-                DIV_CLASS("panel-heading") { 
-                    str << "Queue latencies, ms"; 
-                } 
-                DIV_CLASS("panel-body") { 
+
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    str << "Queue latencies, ms";
+                }
+                DIV_CLASS("panel-body") {
                     if (!GroupQueues) {
                         str << "No data available, GroupQueues is nullptr.";
-                    } else { 
-                        TABLE_CLASS ("table table-condensed") { 
-                            TABLEHEAD() { 
-                                TABLER() { 
-                                    TABLEH() { str << "FailDomain"; } 
-                                    TABLEH() { str << "VDisk"; } 
-                                    TABLEH() { str << "PutTabletLog"; } 
-                                    TABLEH() { str << "PutAsyncBlob"; } 
-                                    TABLEH() { str << "PutUserData"; } 
-                                    TABLEH() { str << "GetAsyncRead"; } 
-                                    TABLEH() { str << "GetFastRead"; } 
-                                    TABLEH() { str << "GetDiscover"; } 
-                                    TABLEH() { str << "GetLowRead"; } 
-                                } 
-                            } 
-                            TABLEBODY() { 
+                    } else {
+                        TABLE_CLASS ("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { str << "FailDomain"; }
+                                    TABLEH() { str << "VDisk"; }
+                                    TABLEH() { str << "PutTabletLog"; }
+                                    TABLEH() { str << "PutAsyncBlob"; }
+                                    TABLEH() { str << "PutUserData"; }
+                                    TABLEH() { str << "GetAsyncRead"; }
+                                    TABLEH() { str << "GetFastRead"; }
+                                    TABLEH() { str << "GetDiscover"; }
+                                    TABLEH() { str << "GetLowRead"; }
+                                }
+                            }
+                            TABLEBODY() {
                                 for (size_t fdIdx = 0; fdIdx < GroupQueues->FailDomains.size(); ++fdIdx) {
                                     const TGroupQueues::TFailDomain &failDomain = GroupQueues->FailDomains[fdIdx];
-                                    for (size_t vdIdx = 0; vdIdx < failDomain.VDisks.size(); ++vdIdx) { 
+                                    for (size_t vdIdx = 0; vdIdx < failDomain.VDisks.size(); ++vdIdx) {
                                         const TGroupQueues::TVDisk &vDisk = failDomain.VDisks[vdIdx];
                                         const TGroupQueues::TVDisk::TQueues &q = vDisk.Queues;
-                                        TABLER() { 
-                                            TABLED() { str << fdIdx; } 
-                                            TABLED() { str << vdIdx; } 
-#define LATENCY_DATA(NAME) \ 
-            TABLED() { \ 
-                if (q.NAME.FlowRecord) { \ 
-                    str << (q.NAME.FlowRecord->GetPredictedDelayNs() * 0.000001f); \ 
-                } else { \ 
-                    str << "No FlowRecord"; \ 
-                } \ 
-            } 
-                                            LATENCY_DATA(PutTabletLog); 
-                                            LATENCY_DATA(PutAsyncBlob); 
-                                            LATENCY_DATA(PutUserData); 
-                                            LATENCY_DATA(GetAsyncRead); 
-                                            LATENCY_DATA(GetFastRead); 
-                                            LATENCY_DATA(GetDiscover); 
-                                            LATENCY_DATA(GetLowRead); 
-#undef LATENCY_DATA 
-                                        } 
-                                    } 
-                                } 
-                            } 
-                        } 
-                    } 
-                } 
-            } 
+                                        TABLER() {
+                                            TABLED() { str << fdIdx; }
+                                            TABLED() { str << vdIdx; }
+#define LATENCY_DATA(NAME) \
+            TABLED() { \
+                if (q.NAME.FlowRecord) { \
+                    str << (q.NAME.FlowRecord->GetPredictedDelayNs() * 0.000001f); \
+                } else { \
+                    str << "No FlowRecord"; \
+                } \
+            }
+                                            LATENCY_DATA(PutTabletLog);
+                                            LATENCY_DATA(PutAsyncBlob);
+                                            LATENCY_DATA(PutUserData);
+                                            LATENCY_DATA(GetAsyncRead);
+                                            LATENCY_DATA(GetFastRead);
+                                            LATENCY_DATA(GetDiscover);
+                                            LATENCY_DATA(GetLowRead);
+#undef LATENCY_DATA
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Mon->TimeStats.Render(str);
 
         Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
         PassAway();
-    } 
- 
+    }
+
     STRICT_STFUNC(StateFunc,
         hFunc(NCrossRef::TEvCrossRef, Handle);
     )
@@ -423,18 +423,18 @@ public:
         for (auto& monEv : std::exchange(MonQueue, {})) {
             Register(new TMonQueryProcessor(Mon, ev->Get()->GroupQueues, GroupId, Info, monEv));
         }
-    } 
- 
+    }
+
     void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
         Info = std::move(ev->Get()->Info);
     }
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // Actor state functions 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Actor state functions
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     STATEFN(StateOnline) {
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TSystem::Poison, PassAway);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
@@ -443,19 +443,19 @@ public:
             hFunc(TEvThroughputAddRequest, Handle);
             hFunc(TEvProxySessionsState, Handle);
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle);
-        default: 
-            break; 
-        } 
-    } 
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// Blob Storage Group Proxy Mon Creation 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        default:
+            break;
+        }
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Blob Storage Group Proxy Mon Creation
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 IActor* CreateBlobStorageGroupProxyMon(TIntrusivePtr<TBlobStorageGroupProxyMon> mon, ui32 groupId,
         TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId) {
     return new TBlobStorageGroupProxyMonActor(std::move(mon), groupId, std::move(info), proxyId);
-} 
- 
-} // NKikimr 
- 
+}
+
+} // NKikimr
+

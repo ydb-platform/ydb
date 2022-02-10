@@ -126,7 +126,7 @@ namespace NKikimr {
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
 
-        void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) { 
+        void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) {
             CHECK_PDISK_RESPONSE(Ctx->HullCtx->VCtx, ev, ctx);
 
             // notify delayed deleter when log record is actually written; we MUST ensure that updates are coming in
@@ -134,7 +134,7 @@ namespace NKikimr {
             LevelIndex->DelayedHugeBlobDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
                     ctx, Ctx->HugeKeeperId, PDiskSignatureForHullDbKey<TKey>());
 
-            NPDisk::TEvLogResult* msg = ev->Get(); 
+            NPDisk::TEvLogResult* msg = ev->Get();
 
             // notify descendants about successful commit
             bool finished = OnLogResult(msg);
@@ -256,7 +256,7 @@ namespace NKikimr {
             }
         }
 
-        virtual bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) { 
+        virtual bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) {
             return true;
         }
 
@@ -326,7 +326,7 @@ namespace NKikimr {
     {
         using TBase = TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitFresh, NKikimrServices::TActivity::BS_ASYNC_FRESH_COMMITTER>;
 
-        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override { 
+        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override {
             TBase::LevelIndex->FreshCompactionFinished();
             return true;
         }
@@ -390,7 +390,7 @@ namespace NKikimr {
             }
         }
 
-        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override { 
+        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override {
             LogCommitted = true;
             return Done();
         }
@@ -430,7 +430,7 @@ namespace NKikimr {
         using TBase = TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitReplSst,  NKikimrServices::TActivity::BS_ASYNC_REPLSST_COMMITTER>;
         using TLevelSegment = NKikimr::TLevelSegment<TKey, TMemRec>;
 
-        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override { 
+        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override {
             return true;
         }
 

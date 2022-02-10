@@ -33,7 +33,7 @@ d3.schviz = function() {
         window.onwheel = function(){ return false; }
 
         zoom = d3.zoom()
-            .scaleExtent([0.1, 1000]) 
+            .scaleExtent([0.1, 1000])
             //.translateExtent([0, 0], [1000,0])
             .on("zoom", function() {
                 var tr = d3.event.transform;
@@ -494,7 +494,7 @@ d3.schviz = function() {
             .attr("x1", 0)
             .attr("x2", 0)
             .attr("y1", 0)
-            .attr("y2", y.bandwidth() * 1.4) 
+            .attr("y2", y.bandwidth() * 1.4)
             .attr("transform", function(d) {
                 return "translate("
                     + x(d.get('deadline')) + ","
@@ -729,7 +729,7 @@ d3.schviz = function() {
             .attr("x1", 0)
             .attr("x2", 0)
             .attr("y1", y.bandwidth() * 0.5)
-            .attr("y2", -y.bandwidth() * 0.4) 
+            .attr("y2", -y.bandwidth() * 0.4)
             .attr("transform", function(d) {
                 return "translate("
                     + x(d[0].get('arrived')) + ","
@@ -784,7 +784,7 @@ d3.schviz = function() {
     }
 
     var posTextFormat = d3.format(".1f");
- 
+
     var positionRuler = function(pageX) {
         if (!arguments.length) {
             pageX = positionRuler.pageX || 0;
@@ -805,14 +805,14 @@ d3.schviz = function() {
         var text = ruler.select("text")
             .attr("y", scroll.y2 + 16)
         ;
- 
-        // getBBox() is very slow, so compute symbol width once 
+
+        // getBBox() is very slow, so compute symbol width once
         var xpadding = 5;
         var ypadding = 5;
         if (!positionRuler.bbox) {
             positionRuler.bbox = text.node().getBBox();
         }
- 
+
         text.text(posText);
         var textWidth = 10 * posText.length;
         ruler.select("#bgrect")
@@ -927,42 +927,42 @@ d3.schviz = function() {
         } else {
             // update current req info
             var r = data.req[id];
-            if (r.state == "PENDING" && ( 
-                (req.hasOwnProperty('state') && req.state == "PENDING") || !req.hasOwnProperty('state'))) { 
-                // process the cost update ONLY while still in PENDING state and the update is stateless or still PENDING 
-                if (req.hasOwnProperty('cost')) { 
+            if (r.state == "PENDING" && (
+                (req.hasOwnProperty('state') && req.state == "PENDING") || !req.hasOwnProperty('state'))) {
+                // process the cost update ONLY while still in PENDING state and the update is stateless or still PENDING
+                if (req.hasOwnProperty('cost')) {
                     c.costIn -= r.cost;
-                    r.cost = +req.cost * timeUnit; 
-                    r.initCost = r.cost; 
-                    c.costIn += r.cost; 
-                 } 
-            } else { 
-                r.band = []; 
+                    r.cost = +req.cost * timeUnit;
+                    r.initCost = r.cost;
+                    c.costIn += r.cost;
+                 }
+            } else {
+                r.band = [];
 
-                // deep copy current request state as the first band's element 
-                r.band.push(d3.map(r)); 
+                // deep copy current request state as the first band's element
+                r.band.push(d3.map(r));
 
-                // update current req info 
-                r.ts = +frame.ts * timeUnit; 
+                // update current req info
+                r.ts = +frame.ts * timeUnit;
 
 
-                if (req.hasOwnProperty('cost')) { r.cost = +req.cost * timeUnit; } 
-                if (req.hasOwnProperty('seqno')) { r.seqno = +req.seqno; } 
-                if (req.hasOwnProperty('state')) { r.state = req.state; } 
- 
-                // update cbs/req statistics 
-                if (r.state == "RUNNING") { 
-                    r.partNo++; 
-                } 
-                if (r.state == "DONE") { 
-                    c.reqOut++; 
-                    c.costOut += r.band[0].get('cost'); 
-                } else if (r.band[0].get('state') == "RUNNING") { 
-                    c.costOut += r.band[0].get('cost') - r.cost; 
-                } 
-                if (r.state == "RUNNING") { 
-                    c.hasRunningRequest = true; 
-                } 
+                if (req.hasOwnProperty('cost')) { r.cost = +req.cost * timeUnit; }
+                if (req.hasOwnProperty('seqno')) { r.seqno = +req.seqno; }
+                if (req.hasOwnProperty('state')) { r.state = req.state; }
+
+                // update cbs/req statistics
+                if (r.state == "RUNNING") {
+                    r.partNo++;
+                }
+                if (r.state == "DONE") {
+                    c.reqOut++;
+                    c.costOut += r.band[0].get('cost');
+                } else if (r.band[0].get('state') == "RUNNING") {
+                    c.costOut += r.band[0].get('cost') - r.cost;
+                }
+                if (r.state == "RUNNING") {
+                    c.hasRunningRequest = true;
+                }
             }
         }
     }

@@ -36,8 +36,8 @@ message TVDiskKind {
         // optimized for tablet log
         Log = 10;
         LocalMode = 11;
-        Extra2 = 22; 
-        Extra3 = 23; 
+        Extra2 = 22;
+        Extra3 = 23;
         Extra4 = 24;
         Extra5 = 25;
     };

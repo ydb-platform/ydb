@@ -1,9 +1,9 @@
 #include "counters.h"
 
-#include "monitoring_provider.h" 
- 
-LWTRACE_DEFINE_PROVIDER(MONITORING_PROVIDER) 
- 
+#include "monitoring_provider.h"
+
+LWTRACE_DEFINE_PROVIDER(MONITORING_PROVIDER)
+
 namespace NKikimr {
 
 static const THashSet<TString> DATABASE_SERVICES
@@ -95,10 +95,10 @@ static TIntrusivePtr<TDynamicCounters> SkipLabels(TIntrusivePtr<TDynamicCounters
     return counters;
 }
 
-void OnCounterLookup(const char *methodName, const TString &name, const TString &value) { 
-    GLOBAL_LWPROBE(MONITORING_PROVIDER, MonitoringCounterLookup, methodName, name, value); 
-} 
- 
+void OnCounterLookup(const char *methodName, const TString &name, const TString &value) {
+    GLOBAL_LWPROBE(MONITORING_PROVIDER, MonitoringCounterLookup, methodName, name, value);
+}
+
 
 std::pair<TString, TString> ExtractSubServiceName(const TString &service)
 {
@@ -145,7 +145,7 @@ TIntrusivePtr<TDynamicCounters> GetServiceCounters(TIntrusivePtr<TDynamicCounter
     utils = SkipLabels(utils, SERVICE_COUNTERS_EXTRA_LABELS);
     auto lookupCounter = utils->GetSubgroup("component", service)->GetCounter("CounterLookups", true);
     res->SetLookupCounter(lookupCounter);
-    res->SetOnLookup(OnCounterLookup); 
+    res->SetOnLookup(OnCounterLookup);
 
     return res;
 }

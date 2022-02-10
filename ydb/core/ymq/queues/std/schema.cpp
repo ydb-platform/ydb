@@ -62,7 +62,7 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
         TColumn("DelayDeadline",             NScheme::NTypeIds::Uint64)};
 
     TVector<TTable> list;
-    list.reserve(2 + 4 * shards); 
+    list.reserve(2 + 4 * shards);
 
     list.push_back(TTable("Attributes")
                     .SetColumns(AttributesColumns)
@@ -103,7 +103,7 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
 
 TVector<TTable> GetStandardTableNames(ui64 shards) {
     TVector<TTable> list;
-    list.reserve(2 + 4 * shards); 
+    list.reserve(2 + 4 * shards);
 
     list.push_back(TTable("Attributes").SetShard(-1));
     list.push_back(TTable("State").SetShard(-1));

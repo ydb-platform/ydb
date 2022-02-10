@@ -17,10 +17,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EPutHandleClass, stream, value) {
         stream << NKikimrBlobStorage::EPutHandleClass_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EGetHandleClass, stream, value) { 
-        stream << NKikimrBlobStorage::EGetHandleClass_Name(value); 
-} 
- 
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EGetHandleClass, stream, value) {
+        stream << NKikimrBlobStorage::EGetHandleClass_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TVDiskKind::EVDiskKind, stream, value) {
         stream << NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(value);
 }

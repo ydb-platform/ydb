@@ -48,14 +48,14 @@ namespace NKikimr {
     NActors::IActor *CreateVDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd,
             const NActors::TActorId& parent, ui64 tag);
 
-    NActors::IActor *CreateKeyValueWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd, 
-            const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, 
-            ui64 index, ui64 tag); 
+    NActors::IActor *CreateKeyValueWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
+            const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+            ui64 index, ui64 tag);
 
     NActors::IActor *CreateKqpWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKqpLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
- 
+
     NActors::IActor *CreateMemoryTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TMemoryLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
@@ -76,19 +76,19 @@ namespace NKikimr {
         TMap<double, ui64> DeviceLatency;
 
         double GetAverageSpeed() const {
-            if (RwSpeedBps.size() < 1) { 
+            if (RwSpeedBps.size() < 1) {
                 return 0;
             }
             double avg = 0;
             for (const ui64& speed : RwSpeedBps) {
                 avg += speed;
             }
-            avg /= RwSpeedBps.size(); 
+            avg /= RwSpeedBps.size();
             return avg;
         }
 
         double GetSpeedDeviation() const {
-            if (RwSpeedBps.size() <= 1) { 
+            if (RwSpeedBps.size() <= 1) {
                 return 0;
             }
             i64 avg = (i64)GetAverageSpeed();
@@ -96,7 +96,7 @@ namespace NKikimr {
             for (const ui64& speed : RwSpeedBps) {
                 sd += ((i64)speed - avg) * ((i64)speed - avg);
             }
-            sd /= RwSpeedBps.size(); 
+            sd /= RwSpeedBps.size();
             return std::sqrt(sd);
         }
 
@@ -114,13 +114,13 @@ namespace NKikimr {
 
     struct TEvTestLoadFinished : public TEventLocal<TEvTestLoadFinished, TEvBlobStorage::EvTestLoadFinished> {
         ui64 Tag;
-        TIntrusivePtr<TLoadReport> Report; // nullptr indicates error 
-        TString ErrorReason; 
+        TIntrusivePtr<TLoadReport> Report; // nullptr indicates error
+        TString ErrorReason;
 
-        TEvTestLoadFinished(ui64 tag, TIntrusivePtr<TLoadReport> report, TString errorReason) 
+        TEvTestLoadFinished(ui64 tag, TIntrusivePtr<TLoadReport> report, TString errorReason)
             : Tag(tag)
             , Report(report)
-            , ErrorReason(errorReason) 
+            , ErrorReason(errorReason)
         {}
     };
 

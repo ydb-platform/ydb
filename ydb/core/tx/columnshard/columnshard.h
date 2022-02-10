@@ -179,8 +179,8 @@ struct TEvColumnShard {
         NColumnShard::TUnifiedBlobId BlobId;
         NColumnShard::TBlobBatch BlobBatch;
         NColumnShard::TUsage ResourceUsage;
-        TVector<ui32> YellowMoveChannels; 
-        TVector<ui32> YellowStopChannels; 
+        TVector<ui32> YellowMoveChannels;
+        TVector<ui32> YellowStopChannels;
         ui64 MaxSmallBlobSize;
     };
 

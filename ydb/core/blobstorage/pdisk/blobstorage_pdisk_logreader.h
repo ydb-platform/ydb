@@ -1,43 +1,43 @@
-#pragma once 
-#include "defs.h" 
- 
+#pragma once
+#include "defs.h"
+
 #include "blobstorage_pdisk_state.h"
 #include "blobstorage_pdisk_logreader_base.h"
 
-namespace NKikimr { 
-namespace NPDisk { 
- 
-class TCompletionLogReadPart : public TCompletionAction { 
-private:
-    TIntrusivePtr<TLogReaderBase> Reader; 
-    ui64 Offset; 
+namespace NKikimr {
+namespace NPDisk {
 
-public: 
-    TCompletionLogReadPart(const TIntrusivePtr<TLogReaderBase> &reader, 
-            ui64 offset) 
-        : Reader(reader) 
-        , Offset(offset) 
-    {} 
- 
-    void Exec(TActorSystem *actorSystem) override { 
-        Reader->Exec(Offset, BadOffsets, actorSystem); 
-        delete this; 
-    } 
- 
-    void Release(TActorSystem *actorSystem) override { 
-        Y_UNUSED(actorSystem); 
-        delete this; 
-    } 
-}; 
- 
+class TCompletionLogReadPart : public TCompletionAction {
+private:
+    TIntrusivePtr<TLogReaderBase> Reader;
+    ui64 Offset;
+
+public:
+    TCompletionLogReadPart(const TIntrusivePtr<TLogReaderBase> &reader,
+            ui64 offset)
+        : Reader(reader)
+        , Offset(offset)
+    {}
+
+    void Exec(TActorSystem *actorSystem) override {
+        Reader->Exec(Offset, BadOffsets, actorSystem);
+        delete this;
+    }
+
+    void Release(TActorSystem *actorSystem) override {
+        Y_UNUSED(actorSystem);
+        delete this;
+    }
+};
+
 class TPDisk;
- 
-class TLogReader : public TLogReaderBase { 
-    static constexpr ui32 BufferSizeSectors = 105; 
- 
+
+class TLogReader : public TLogReaderBase {
+    static constexpr ui32 BufferSizeSectors = 105;
+
     struct TSectorData;
     class TDoubleBuffer;
- 
+
     enum class ELogReaderState {
         PrepareToRead,
         NewLogChunk,
@@ -47,68 +47,68 @@ class TLogReader : public TLogReaderBase {
     };
 
     bool IsInitial;
-    TPDisk * const PDisk; 
-    TActorSystem * const ActorSystem; 
+    TPDisk * const PDisk;
+    TActorSystem * const ActorSystem;
     const TActorId ReplyTo;
- 
+
     TOwner Owner;
     TLogPosition OwnerLogStartPosition;
     TLogPosition Position;
-    ui64 SizeLimit; 
+    ui64 SizeLimit;
     THolder<TEvReadLogResult> Result;
-    TLogChunkInfo *ChunkInfo; 
- 
+    TLogChunkInfo *ChunkInfo;
+
     THolder<TDoubleBuffer> Sector;
- 
+
     THolder<TMap<ui32, TChunkState>> ChunkOwnerMap;
     ELogReaderState State;
     std::atomic<bool> IsReplied;
- 
+
     TLogPosition LastGoodToWriteLogPosition;
-    ui64 MaxNonce; 
-    ui64 LastNonce; 
-    ui64 LastDataNonce; 
+    ui64 MaxNonce;
+    ui64 LastNonce;
+    ui64 LastDataNonce;
     bool OnEndOfSplice;
     TPDiskStreamCypher Cypher;
-    ui32 OffsetInSector; 
-    bool SetLastGoodToWritePosition; 
-    ui32 ChunkIdx; 
-    ui64 SectorIdx; 
-    bool IsLastRecordHeaderValid; 
-    ui64 FirstLsnToKeep; 
-    ui64 FirstNonceToKeep; 
-    TVDiskID OwnerVDiskId; 
-    bool IsLastRecordSkipped; 
-    ui64 ResultSize; 
-    TLogRecordHeader LastRecordHeader; 
-    ui64 LastRecordHeaderNonce; 
+    ui32 OffsetInSector;
+    bool SetLastGoodToWritePosition;
+    ui32 ChunkIdx;
+    ui64 SectorIdx;
+    bool IsLastRecordHeaderValid;
+    ui64 FirstLsnToKeep;
+    ui64 FirstNonceToKeep;
+    TVDiskID OwnerVDiskId;
+    bool IsLastRecordSkipped;
+    ui64 ResultSize;
+    TLogRecordHeader LastRecordHeader;
+    ui64 LastRecordHeaderNonce;
     TString LastRecordData;
-    ui32 LastRecordDataWritePosition; 
-    ui64 MaxCompleteLsnCyclic; 
-    ui64 EndSectorIdx; 
-    ui64 SectorsToSkip; 
-    ui64 ExpectedOffset; 
-    ui32 LogEndChunkIdx; 
-    ui64 LogEndSectorIdx; 
-    TReqId ReqId; 
-    TVector<TChunkIdx> ChunksToRead; 
-    TVector<TChunkIdx>::iterator CurrentChunkToRead; 
+    ui32 LastRecordDataWritePosition;
+    ui64 MaxCompleteLsnCyclic;
+    ui64 EndSectorIdx;
+    ui64 SectorsToSkip;
+    ui64 ExpectedOffset;
+    ui32 LogEndChunkIdx;
+    ui64 LogEndSectorIdx;
+    TReqId ReqId;
+    TVector<TChunkIdx> ChunksToRead;
+    TVector<TChunkIdx>::iterator CurrentChunkToRead;
     TVector<ui64> BadOffsets;
-    TMutex ExecMutex; 
- 
+    TMutex ExecMutex;
+
     ui32 ErasurePartCount;
     bool ParseCommits;
 
-public: 
+public:
     TLogReader(bool isInitial, TPDisk *pDisk, TActorSystem * const actorSystem, const TActorId &replyTo, TOwner owner,
             TLogPosition ownerLogStartPosition, EOwnerGroupType ownerGroupType, TLogPosition position, ui64 sizeLimit,
             ui64 lastNonce, ui32 logEndChunkIdx, ui64 logEndSectorIdx, TReqId reqId,
             TVector<TChunkIdx> &&chunksToRead, ui64 firstLsnToKeep, ui64 firstNonceToKeep, TVDiskID ownerVDiskId);
- 
+
     virtual ~TLogReader();
- 
+
     void Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *actorSystem) override;
- 
+
 private:
     TString SelfInfo();
     bool PrepareToRead();
@@ -117,10 +117,10 @@ private:
     void UpdateLastGoodToWritePosition();
     void LogRawData(ui8* data, ui64 size, TString info);
     void ProcessLogPageTerminator(ui8 *data, ui32 sectorPayloadSize);
-    void ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, const ui64 previousDataNonce); 
-    void ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce); 
+    void ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, const ui64 previousDataNonce);
+    void ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce);
     bool ProcessSectorSet(TSectorData *sector);
-    void ReplyOk(); 
+    void ReplyOk();
     void ReplyOkInTheMiddle();
     void ReplyError();
     void Reply();
@@ -131,8 +131,8 @@ private:
     void ScheduleReadAsync(TSectorData &sector, ui32 sectorsToRead);
     bool RegisterBadOffsets(TVector<ui64> &badOffsets);
     void ReleaseUsedBadOffsets();
-}; 
- 
-} // NPDisk 
-} // NKikimr 
- 
+};
+
+} // NPDisk
+} // NKikimr
+

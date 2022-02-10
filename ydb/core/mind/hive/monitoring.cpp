@@ -3437,7 +3437,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
                 metrics.MutableResourceUsage()->SetNetwork(FromStringWithDefault<ui64>(cgi.Get("network"), 0));
             }
             ctx.RegisterWithSameMailbox(new TUpdateResourcesActor(ev->Sender, SelfId(), metrics));
-            return; 
+            return;
         }
     }
     if (page == "Storage") {

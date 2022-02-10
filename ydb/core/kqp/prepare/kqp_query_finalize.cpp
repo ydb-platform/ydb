@@ -92,7 +92,7 @@ const TTypeAnnotationNode* GetTxLockListType(TExprContext& ctx) {
     auto ui32Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint32);
     auto ui64Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
     TVector<const TItemExprType*> lockItems;
-    lockItems.reserve(6); 
+    lockItems.reserve(6);
     lockItems.push_back(ctx.MakeType<TItemExprType>("LockId", ui64Type));
     lockItems.push_back(ctx.MakeType<TItemExprType>("DataShard", ui64Type));
     lockItems.push_back(ctx.MakeType<TItemExprType>("SchemeShard", ui64Type));

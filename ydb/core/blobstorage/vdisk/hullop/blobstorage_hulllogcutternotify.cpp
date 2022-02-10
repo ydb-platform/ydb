@@ -32,7 +32,7 @@ namespace NKikimr {
             if (lsn != ui64(-1)) {
                 Y_VERIFY(!PreviousCutLsn || *PreviousCutLsn <= lsn);
                 if (!PreviousCutLsn || PreviousCutLsn < lsn) {
-                    ctx.Send(LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Hull, lsn)); 
+                    ctx.Send(LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Hull, lsn));
                     PreviousCutLsn = lsn;
                 }
             }

@@ -30,7 +30,7 @@ namespace NKikimr {
         TVMovedPatchHandler VMovedPatchHandler;
         TVPatchStartHandler VPatchStartHandler;
         TVPutHandler VPutHandler;
-        TVMultiPutHandler VMultiPutHandler; 
+        TVMultiPutHandler VMultiPutHandler;
         TLocalSyncDataHandler LocalSyncDataHandler;
         TAnubisOsirisPutHandler AnubisOsirisPutHandler;
 
@@ -40,14 +40,14 @@ namespace NKikimr {
                 TVMovedPatchHandler &&vMovedPatch,
                 TVPatchStartHandler &&vPatchStart,
                 TVPutHandler &&vput,
-                TVMultiPutHandler &&vMultiPut, 
+                TVMultiPutHandler &&vMultiPut,
                 TLocalSyncDataHandler &&loc,
                 TAnubisOsirisPutHandler &&aoput)
             : Mon(mon)
             , VMovedPatchHandler(std::move(vMovedPatch))
             , VPatchStartHandler(std::move(vPatchStart))
             , VPutHandler(std::move(vput))
-            , VMultiPutHandler(std::move(vMultiPut)) 
+            , VMultiPutHandler(std::move(vMultiPut))
             , LocalSyncDataHandler(std::move(loc))
             , AnubisOsirisPutHandler(std::move(aoput))
         {}
@@ -70,12 +70,12 @@ namespace NKikimr {
             Queue.Push(TItem(ev));
         }
 
-        void Push(TEvBlobStorage::TEvVMultiPut::TPtr ev) { 
+        void Push(TEvBlobStorage::TEvVMultiPut::TPtr ev) {
             ++Mon.EmergencyMultiPutQueueItems();
             Mon.EmergencyMultiPutQueueBytes() += ev->Get()->Record.ByteSize();
-            Queue.Push(TItem(ev)); 
-        } 
- 
+            Queue.Push(TItem(ev));
+        }
+
         void Push(TEvLocalSyncData::TPtr ev) {
             ++Mon.EmergencyLocalSyncDataQueueItems();
             Mon.EmergencyLocalSyncDataQueueBytes() += ev->Get()->ByteSize();
@@ -119,13 +119,13 @@ namespace NKikimr {
                     VPutHandler(ctx, *evPut);
                     break;
                 }
-                case TEvBlobStorage::EvVMultiPut: { 
-                    auto *evMultiPut = reinterpret_cast<TEvBlobStorage::TEvVMultiPut::TPtr*>(&ev); 
-                    --Mon.EmergencyMultiPutQueueItems(); 
-                    Mon.EmergencyMultiPutQueueBytes() -= (*evMultiPut)->Get()->Record.ByteSize(); 
-                    VMultiPutHandler(ctx, *evMultiPut); 
-                    break; 
-                } 
+                case TEvBlobStorage::EvVMultiPut: {
+                    auto *evMultiPut = reinterpret_cast<TEvBlobStorage::TEvVMultiPut::TPtr*>(&ev);
+                    --Mon.EmergencyMultiPutQueueItems();
+                    Mon.EmergencyMultiPutQueueBytes() -= (*evMultiPut)->Get()->Record.ByteSize();
+                    VMultiPutHandler(ctx, *evMultiPut);
+                    break;
+                }
                 case TEvBlobStorage::EvLocalSyncData: {
                     auto *evLocalSyncData = reinterpret_cast<TEvLocalSyncData::TPtr*>(&ev);
                     --Mon.EmergencyLocalSyncDataQueueItems();
@@ -141,7 +141,7 @@ namespace NKikimr {
                     break;
                 }
                 default:
-                    Y_FAIL("unexpected event type in emergency queue(%" PRIu64 ")", (ui64)ev->GetTypeRewrite()); 
+                    Y_FAIL("unexpected event type in emergency queue(%" PRIu64 ")", (ui64)ev->GetTypeRewrite());
             }
         }
     };
@@ -157,7 +157,7 @@ namespace NKikimr {
             TVMovedPatchHandler &&vMovedPatch,
             TVPatchStartHandler &&vPatchStart,
             TVPutHandler &&vput,
-            TVMultiPutHandler &&vMultiPut, 
+            TVMultiPutHandler &&vMultiPut,
             TLocalSyncDataHandler &&loc,
             TAnubisOsirisPutHandler &&aoput)
         : Hull(std::move(hull))
@@ -222,10 +222,10 @@ namespace NKikimr {
         return PostponeEventPrivate(ev, ctx, skeleton);
     }
 
-    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton) { 
-        return PostponeEventPrivate(ev, ctx, skeleton); 
-    } 
- 
+    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
+        return PostponeEventPrivate(ev, ctx, skeleton);
+    }
+
     bool TOverloadHandler::PostponeEvent(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
         return PostponeEventPrivate(ev, ctx, skeleton);
     }

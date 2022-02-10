@@ -459,15 +459,15 @@ namespace NKikimr {
             return true;
         }
 
-        void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) { 
+        void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) {
             NKikimrProto::EReplyStatus status = ev->Get()->Status;
 
             if (status != NKikimrProto::OK) {
-                TStringStream reason; 
-                reason << "Yard::Init failed, errorReason# \"" 
-                    << ev->Get()->ErrorReason 
-                    << "\""; 
-                SignalErrorAndDie(ctx, status, reason.Str()); 
+                TStringStream reason;
+                reason << "Yard::Init failed, errorReason# \""
+                    << ev->Get()->ErrorReason
+                    << "\"";
+                SignalErrorAndDie(ctx, status, reason.Str());
             } else {
                 VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadDb;
                 const auto &m = ev->Get();

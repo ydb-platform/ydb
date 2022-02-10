@@ -56,7 +56,7 @@ namespace NKikimr {
     TString TPDiskParams::ToString() const {
         TStringStream str;
         str << "{TPDiskParams ownerId# " << Owner;
-        str << " ownerRound# " << OwnerRound; 
+        str << " ownerRound# " << OwnerRound;
         str << " ChunkSize# " << ChunkSize;
         str << " AppendBlockSize# " << AppendBlockSize;
         str << " RecommendedReadSize# " << RecommendedReadSize;

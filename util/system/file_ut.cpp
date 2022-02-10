@@ -10,7 +10,7 @@
 class TFileTest: public TTestBase {
     UNIT_TEST_SUITE(TFileTest);
     UNIT_TEST(TestOpen);
-    UNIT_TEST(TestOpenSync); 
+    UNIT_TEST(TestOpenSync);
     UNIT_TEST(TestRW);
     UNIT_TEST(TestReWrite);
     UNIT_TEST(TestAppend);
@@ -28,7 +28,7 @@ class TFileTest: public TTestBase {
 
 public:
     void TestOpen();
-    void TestOpenSync(); 
+    void TestOpenSync();
     void TestRW();
     void TestLocale();
     void TestFlush();
@@ -154,14 +154,14 @@ void TFileTest::TestOpen() {
     UNIT_ASSERT(unlink("f1.txt") == 0);
 }
 
-void TFileTest::TestOpenSync() { 
-    TFile f1("f1.txt", CreateNew | Sync); 
-    UNIT_ASSERT(f1.IsOpen()); 
-    f1.Close(); 
-    UNIT_ASSERT(!f1.IsOpen()); 
-    UNIT_ASSERT(unlink("f1.txt") == 0); 
-} 
- 
+void TFileTest::TestOpenSync() {
+    TFile f1("f1.txt", CreateNew | Sync);
+    UNIT_ASSERT(f1.IsOpen());
+    f1.Close();
+    UNIT_ASSERT(!f1.IsOpen());
+    UNIT_ASSERT(unlink("f1.txt") == 0);
+}
+
 void TFileTest::TestRW() {
     TFile f1("f1.txt", CreateNew);
     UNIT_ASSERT(f1.IsOpen());

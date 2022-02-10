@@ -55,8 +55,8 @@ public:
             Cout << "UserAccessibleChunkSizeBytes: " << info.UserAccessibleChunkSizeBytes << Endl;
             Cout << "RawChunkSizeBytes: " << info.RawChunkSizeBytes << Endl;
             Cout << "Guid: " << info.DiskGuid << Endl;
-            Cout << "Timestamp: " << info.Timestamp.ToString() << Endl; 
-            Cout << "FormatFlags: " << info.FormatFlags << Endl; 
+            Cout << "Timestamp: " << info.Timestamp.ToString() << Endl;
+            Cout << "FormatFlags: " << info.FormatFlags << Endl;
             Cout << "TextMessage: " << info.TextMessage << Endl;
             if (IsVerbose) {
                 Cout << Endl;
@@ -110,7 +110,7 @@ public:
     ui64 Guid;
     ui64 MainKey;
     TString TextMessage;
-    bool IsErasureEncode; 
+    bool IsErasureEncode;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -119,7 +119,7 @@ public:
         ChunkSize = 128 << 20;
         SectorSize = 4 << 10;
         Guid = 0;
-        IsErasureEncode = false; 
+        IsErasureEncode = false;
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<PATH>", "Disk path");
         config.Opts->AddLongOption('d', "disk-size", "disk size to set (supports K/M/G/T suffixes, 0 to autodetect, default = 0)\n"
@@ -135,14 +135,14 @@ public:
         config.Opts->AddLongOption('g', "guid", "guid to set while formatting").RequiredArgument("NUM").Required()
             .StoreResult(&Guid);
         config.Opts->AddLongOption('k', "main-key", "encryption main-key to set while formatting.\n"
-            "Make sure you use the same master key when you format your pdisks and when you run kikimr.") 
+            "Make sure you use the same master key when you format your pdisks and when you run kikimr.")
             .RequiredArgument("NUM").Optional().StoreResult(&MainKey);
         config.Opts->AddLongOption("master-key", "obsolete: user main-key")
             .RequiredArgument("NUM").Optional().StoreResult(&MainKey);
-        config.Opts->AddLongOption('t', "text-message", "text message to store in format sector (up to 4000 characters long)") 
-            .OptionalArgument("STR").Optional().StoreResult(&TextMessage); 
-        config.Opts->AddLongOption('e', "erasure-encode", "erasure-encode data to recover from single-sector failures") 
-            .Optional().NoArgument().SetFlag(&IsErasureEncode); 
+        config.Opts->AddLongOption('t', "text-message", "text message to store in format sector (up to 4000 characters long)")
+            .OptionalArgument("STR").Optional().StoreResult(&TextMessage);
+        config.Opts->AddLongOption('e', "erasure-encode", "erasure-encode data to recover from single-sector failures")
+            .Optional().NoArgument().SetFlag(&IsErasureEncode);
 
         config.Opts->SetCmdLineDescr("\n\n"
             "Kikimr was designed to work with large block-devices, like 4 TiB HDDs and 1 TiB SSDs\n"
@@ -169,7 +169,7 @@ public:
 
     virtual int Run(TConfig&) override {
         FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey, TextMessage,
-                IsErasureEncode); 
+                IsErasureEncode);
         return 0;
     }
 };

@@ -1,14 +1,14 @@
-#include "callstack.h" 
-#include <util/thread/singleton.h> 
- 
-#ifdef USE_ACTOR_CALLSTACK 
- 
-namespace NActors { 
+#include "callstack.h"
+#include <util/thread/singleton.h>
+
+#ifdef USE_ACTOR_CALLSTACK
+
+namespace NActors {
     namespace {
         void (*PreviousFormatBackTrace)(IOutputStream*) = 0;
         ui32 ActorBackTraceEnableCounter = 0;
     }
- 
+
     void ActorFormatBackTrace(IOutputStream* out) {
         TStringStream str;
         PreviousFormatBackTrace(&str);
@@ -16,19 +16,19 @@ namespace NActors {
         TCallstack::DumpCallstack(str);
         *out << str.Str();
     }
- 
+
     void EnableActorCallstack() {
         if (ActorBackTraceEnableCounter == 0) {
             Y_VERIFY(PreviousFormatBackTrace == 0);
             PreviousFormatBackTrace = SetFormatBackTraceFn(ActorFormatBackTrace);
         }
- 
+
         ++ActorBackTraceEnableCounter;
     }
 
     void DisableActorCallstack() {
         --ActorBackTraceEnableCounter;
- 
+
         if (ActorBackTraceEnableCounter == 0) {
             Y_VERIFY(PreviousFormatBackTrace);
             SetFormatBackTraceFn(PreviousFormatBackTrace);
@@ -42,12 +42,12 @@ namespace NActors {
         , LinesToSkip(0)
     {
     }
- 
+
     void TCallstack::SetLinesToSkip() {
         TTrace record;
         LinesToSkip = BackTrace(record.Data, TTrace::CAPACITY);
     }
- 
+
     void TCallstack::Trace() {
         size_t currentIdx = (BeginIdx + Size) % RECORDS;
         if (Size == RECORDS) {
@@ -59,18 +59,18 @@ namespace NActors {
         record.Size = BackTrace(record.Data, TTrace::CAPACITY);
         record.LinesToSkip = LinesToSkip;
     }
- 
+
     void TCallstack::TraceIfEmpty() {
         if (Size == 0) {
             LinesToSkip = 0;
             Trace();
         }
-    } 
- 
+    }
+
     TCallstack& TCallstack::GetTlsCallstack() {
         return *FastTlsSingleton<TCallstack>();
-    } 
- 
+    }
+
     void TCallstack::DumpCallstack(TStringStream& str) {
         TCallstack& callstack = GetTlsCallstack();
         for (int i = callstack.Size - 1; i >= 0; --i) {
@@ -86,8 +86,8 @@ namespace NActors {
                 FormatBackTrace(&str, record.Data, size);
             }
             str << Endl;
-        } 
-    } 
+        }
+    }
 }
- 
-#endif 
+
+#endif

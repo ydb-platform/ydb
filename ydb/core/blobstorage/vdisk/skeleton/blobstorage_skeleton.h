@@ -6,7 +6,7 @@
 namespace NKikimr {
 
     struct TVDiskConfig;
-    class TBlobStorageGroupInfo; 
+    class TBlobStorageGroupInfo;
     class TVDiskContext;
     using TVDiskContextPtr = TIntrusivePtr<TVDiskContext>;
 

@@ -16,9 +16,9 @@ namespace NKikimr {
     struct TTestStorageFactory {
         using TRuntime = TTestActorRuntime;
 
-        static constexpr ui64 MEM_DISK_SIZE = ui64(32) << 30; 
+        static constexpr ui64 MEM_DISK_SIZE = ui64(32) << 30;
         static constexpr ui64 DISK_SIZE = ui64(16000) << 20;
-        static constexpr ui64 SECTOR_SIZE = ui64(4) << 10; 
+        static constexpr ui64 SECTOR_SIZE = ui64(4) << 10;
         static constexpr ui64 MEM_CHUNK_SIZE = 32000000;
         static constexpr ui64 CHUNK_SIZE = 80000000;
         static constexpr bool STRAND_PDISK = true;
@@ -34,12 +34,12 @@ namespace NKikimr {
             /* Do not use real backend for storage mock, it is useless */
 
             if (!Conf.UseDisk && !Mock) {
-                static TIntrusivePtr<NPDisk::TSectorMap> unsafeSectorMap; 
+                static TIntrusivePtr<NPDisk::TSectorMap> unsafeSectorMap;
                 static TMutex unsafeBufferLock;
                 with_lock (unsafeBufferLock) {
-                    unsafeSectorMap.Reset(new NPDisk::TSectorMap()); 
-                    unsafeSectorMap->ForceSize(Conf.DiskSize); 
-                    SectorMap = unsafeSectorMap; 
+                    unsafeSectorMap.Reset(new NPDisk::TSectorMap());
+                    unsafeSectorMap->ForceSize(Conf.DiskSize);
+                    SectorMap = unsafeSectorMap;
                 }
             }
 
@@ -50,7 +50,7 @@ namespace NKikimr {
                 Factory = new TRealPDiskServiceFactory();
             }
 
-            NPDisk::TKey mainKey = NPDisk::YdbDefaultPDiskSequence; 
+            NPDisk::TKey mainKey = NPDisk::YdbDefaultPDiskSequence;
 
             static ui64 keySalt = 0;
             ui64 salt = ++keySalt;
@@ -74,7 +74,7 @@ namespace NKikimr {
         {
             if (conf.DiskSize == 0) {
                 conf.DiskSize = conf.UseDisk ? DISK_SIZE : MEM_DISK_SIZE;
-                conf.SectorSize = SECTOR_SIZE; 
+                conf.SectorSize = SECTOR_SIZE;
                 conf.ChunkSize = conf.UseDisk ? CHUNK_SIZE : MEM_CHUNK_SIZE;
             }
 
@@ -176,7 +176,7 @@ namespace NKikimr {
         TTestActorRuntime &Runtime;
         TIntrusivePtr<IPDiskServiceFactory> Factory;
         TString PDiskPath;
-        TIntrusivePtr<NPDisk::TSectorMap> SectorMap; 
+        TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
     };
 
 }

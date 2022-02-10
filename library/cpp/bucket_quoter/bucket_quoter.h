@@ -82,12 +82,12 @@ public:
     /* fixed quota */
     TBucketQuoter(ui64 inflow, ui64 capacity, StatCounter* msgPassed = nullptr,
                   StatCounter* bucketUnderflows = nullptr, StatCounter* tokensUsed = nullptr,
-                  StatCounter* usecWaited = nullptr, bool fill = false, StatCounter* aggregateInflow = nullptr) 
+                  StatCounter* usecWaited = nullptr, bool fill = false, StatCounter* aggregateInflow = nullptr)
         : MsgPassed(msgPassed)
         , BucketUnderflows(bucketUnderflows)
         , TokensUsed(tokensUsed)
         , UsecWaited(usecWaited)
-        , AggregateInflow(aggregateInflow) 
+        , AggregateInflow(aggregateInflow)
         , Bucket(fill ? capacity : 0)
         , LastAdd(Timer::Now())
         , InflowTokensPerSecond(&FixedInflow)
@@ -101,12 +101,12 @@ public:
     /* adjustable quotas */
     TBucketQuoter(TAtomic* inflow, TAtomic* capacity, StatCounter* msgPassed = nullptr,
                   StatCounter* bucketUnderflows = nullptr, StatCounter* tokensUsed = nullptr,
-                  StatCounter* usecWaited = nullptr, bool fill = false, StatCounter* aggregateInflow = nullptr) 
+                  StatCounter* usecWaited = nullptr, bool fill = false, StatCounter* aggregateInflow = nullptr)
         : MsgPassed(msgPassed)
         , BucketUnderflows(bucketUnderflows)
         , TokensUsed(tokensUsed)
         , UsecWaited(usecWaited)
-        , AggregateInflow(aggregateInflow) 
+        , AggregateInflow(aggregateInflow)
         , Bucket(fill ? AtomicGet(*capacity) : 0)
         , LastAdd(Timer::Now())
         , InflowTokensPerSecond(inflow)
@@ -231,11 +231,11 @@ private:
 
         ui64 elapsed = Timer::Duration(LastAdd, now);
         if (*InflowTokensPerSecond * elapsed >= Timer::Resolution) {
-            ui64 inflow = *InflowTokensPerSecond * elapsed / Timer::Resolution; 
-            if (AggregateInflow) { 
-                *AggregateInflow += inflow; 
-            } 
-            Bucket += inflow; 
+            ui64 inflow = *InflowTokensPerSecond * elapsed / Timer::Resolution;
+            if (AggregateInflow) {
+                *AggregateInflow += inflow;
+            }
+            Bucket += inflow;
             if (Bucket > *BucketTokensCapacity) {
                 Bucket = *BucketTokensCapacity;
             }
@@ -267,7 +267,7 @@ private:
     StatCounter* BucketUnderflows;
     StatCounter* TokensUsed;
     StatCounter* UsecWaited;
-    StatCounter* AggregateInflow; 
+    StatCounter* AggregateInflow;
 
     i64 Bucket;
     TTime LastAdd;

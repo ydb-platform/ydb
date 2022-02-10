@@ -102,7 +102,7 @@ namespace NActors {
         class TWriterWithPadding: public TWriter {
         private:
             ui8 CacheLinePadding[64 - sizeof(TWriter)];
- 
+
             void UnusedCacheLinePadding() {
                 Y_UNUSED(CacheLinePadding);
             }

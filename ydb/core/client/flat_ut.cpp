@@ -112,8 +112,8 @@ namespace {
 Y_UNIT_TEST_SUITE(TFlatTest) {
 
     Y_UNIT_TEST(Init) {
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         if (true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
         }
 
-        TFlatMsgBusClient annoyingClient(port); 
+        TFlatMsgBusClient annoyingClient(port);
 
         annoyingClient.InitRoot();
         auto status = annoyingClient.MkDir("/dc-1", "Berkanavt");
@@ -1112,11 +1112,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(Ls) {
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
 
-        TFlatMsgBusClient annoyingClient(port); 
+        TFlatMsgBusClient annoyingClient(port);
         annoyingClient.InitRoot();
 
         // Listing all domains always works
@@ -1251,11 +1251,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(LsPathId) {
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
 
-        TFlatMsgBusClient annoyingClient(port); 
+        TFlatMsgBusClient annoyingClient(port);
 
         TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls("/");
         ui64 schemeshardId = res->Record.GetPathDescription().GetChildren(0).GetSchemeshardId();
@@ -1280,14 +1280,14 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(InitRoot) {
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         if (true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         }
 
-        TFlatMsgBusClient annoyingClient(port); 
+        TFlatMsgBusClient annoyingClient(port);
 
         UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-1"), NMsgBusProxy::MSTATUS_OK);
         // Reinitializing same root is Ok

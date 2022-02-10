@@ -277,7 +277,7 @@ public:
 
                 case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
                     Doubted = true;
-                    [[fallthrough]]; 
+                    [[fallthrough]];
                 case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
                 case TBlobStorageGroupInfo::EBS_FULL: {
                     // we have to process this blob

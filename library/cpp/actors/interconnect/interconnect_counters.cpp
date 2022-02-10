@@ -232,7 +232,7 @@ namespace {
             if (name != std::exchange(HumanFriendlyPeerHostName, name)) {
                 PerSessionCounters.Reset();
             }
-            VALGRIND_MAKE_READABLE(&DataCenterId, sizeof(DataCenterId)); 
+            VALGRIND_MAKE_READABLE(&DataCenterId, sizeof(DataCenterId));
             if (dataCenterId != std::exchange(DataCenterId, dataCenterId)) {
                 PerDataCenterCounters.Reset();
             }

@@ -16,12 +16,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/valgrind.h>
 
-namespace NKikimr { 
-namespace NPDisk { 
-    extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000; 
-} 
-} 
- 
+namespace NKikimr {
+namespace NPDisk {
+    extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
+}
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class TTest, class TVDiskSetup = TDefaultVDiskSetup>
 void TestRun(TTest *test,
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRangeHuge) {
 #define SMALL_MSG_NUM   100
 #endif
 
-Y_UNIT_TEST_SUITE(TBsVDiskManyPutGetCheckSize) { 
+Y_UNIT_TEST_SUITE(TBsVDiskManyPutGetCheckSize) {
     Y_UNIT_TEST(ManyPutGetCheckSize) {
         std::shared_ptr<TVector<TMsgPackInfo>> msgPacks(std::unique_ptr<TVector<TMsgPackInfo>>(new TVector<TMsgPackInfo>{
             TMsgPackInfo(100'000, 672),
@@ -273,29 +273,29 @@ Y_UNIT_TEST_SUITE(TBsVDiskManyPutGetCheckSize) {
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testError, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
     }
-} 
-Y_UNIT_TEST_SUITE(TBsVDiskManyPutGet) { 
+}
+Y_UNIT_TEST_SUITE(TBsVDiskManyPutGet) {
     //// Group
     Y_UNIT_TEST(ManyPutGet) {
         TManyPutGet test(false, LARGE_MSG_NUM, 100, UNK);
         TestRun<TManyPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100));
     }
 
-    Y_UNIT_TEST(ManyMultiSinglePutGet) { 
-        TManyMultiPutGet test(false, LARGE_MSG_NUM, 100, 1, UNK); 
-        TestRun<TManyMultiPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100)); 
-    } 
- 
-    Y_UNIT_TEST(ManyMultiPutGet) { 
-        TManyMultiPutGet test(false, LARGE_MSG_NUM, 100, 2, UNK); 
-        TestRun<TManyMultiPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100)); 
-    } 
- 
-    Y_UNIT_TEST(ManyMultiPutGetWithLargeBatch) { 
-        TManyMultiPutGet test(false, LARGE_MSG_NUM, 100, 16, UNK); 
-        TestRun<TManyMultiPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100)); 
-    } 
- 
+    Y_UNIT_TEST(ManyMultiSinglePutGet) {
+        TManyMultiPutGet test(false, LARGE_MSG_NUM, 100, 1, UNK);
+        TestRun<TManyMultiPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100));
+    }
+
+    Y_UNIT_TEST(ManyMultiPutGet) {
+        TManyMultiPutGet test(false, LARGE_MSG_NUM, 100, 2, UNK);
+        TestRun<TManyMultiPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100));
+    }
+
+    Y_UNIT_TEST(ManyMultiPutGetWithLargeBatch) {
+        TManyMultiPutGet test(false, LARGE_MSG_NUM, 100, 16, UNK);
+        TestRun<TManyMultiPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100));
+    }
+
     Y_UNIT_TEST(ManyPutGetWaitCompaction) {
         TManyPutGet test(true, SMALL_MSG_NUM, 100, UNK);
         TestRun<TManyPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100));
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskOutOfSpace) {
 
         TWriteUntilOrangeZone test;
         const ui32 chunkSize = 512u << 10u;
-        const ui64 diskSize = 500ull << 20ull; 
+        const ui64 diskSize = 500ull << 20ull;
         TestRun<TWriteUntilOrangeZone, TFastVDiskSetupCompacted>(&test, TIMEOUT, chunkSize, diskSize);
     }
 
@@ -480,18 +480,18 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         WriteRestartRead(settings, TIMEOUT);
     }
 
-    Y_UNIT_TEST(MultiPutWriteRestartRead) { 
+    Y_UNIT_TEST(MultiPutWriteRestartRead) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
-        auto settings = TMultiPutWriteRestartReadSettings::OneSetup(1000, 10, 10, UNK, vdiskSetup); 
-        MultiPutWriteRestartRead(settings, TIMEOUT); 
-    } 
- 
-    Y_UNIT_TEST(MultiPutWriteRestartReadHuge) { 
+        auto settings = TMultiPutWriteRestartReadSettings::OneSetup(1000, 10, 10, UNK, vdiskSetup);
+        MultiPutWriteRestartRead(settings, TIMEOUT);
+    }
+
+    Y_UNIT_TEST(MultiPutWriteRestartReadHuge) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
-        auto settings = TMultiPutWriteRestartReadSettings::OneSetup(1000, 10, 65u << 10u, HUGEB, vdiskSetup); 
-        MultiPutWriteRestartRead(settings, TIMEOUT); 
-    } 
- 
+        auto settings = TMultiPutWriteRestartReadSettings::OneSetup(1000, 10, 65u << 10u, HUGEB, vdiskSetup);
+        MultiPutWriteRestartRead(settings, TIMEOUT);
+    }
+
     /* FIXME: working on new tests on changing huge blobs map
     struct TWriteVDiskSetup : public TFastVDiskSetup {
         bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32 pDiskID,
@@ -561,7 +561,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsOther1) { 
+Y_UNIT_TEST_SUITE(TBsOther1) {
 
     Y_UNIT_TEST(PoisonPill) {
         TManyPutRangeGet2Channels test(false, true, LARGE_MSG_NUM, 100, UNK);
@@ -592,12 +592,12 @@ Y_UNIT_TEST_SUITE(TBsOther1) {
 
     Y_UNIT_TEST(ChaoticParallelWrite) {
         auto cls = std::make_shared<TPutHandleClassGenerator>(UNK);
-        NTestSuiteTBsOther1::ChaoticParallelWriteGeneric<TFastVDiskSetup>( 
-                5000, 100, 10, cls, TDuration::Seconds(600), TDuration()); 
+        NTestSuiteTBsOther1::ChaoticParallelWriteGeneric<TFastVDiskSetup>(
+                5000, 100, 10, cls, TDuration::Seconds(600), TDuration());
     }
-} 
+}
 
-Y_UNIT_TEST_SUITE(TBsOther2) { 
+Y_UNIT_TEST_SUITE(TBsOther2) {
     Y_UNIT_TEST(ChaoticParallelWrite_SkeletonFrontQueuesOverload) {
         // randomly generate put class
         class TRandomPutHandleClassGenerator : public IPutHandleClassGenerator {
@@ -610,11 +610,11 @@ Y_UNIT_TEST_SUITE(TBsOther2) {
 
         // According to TFastVDiskSetupSmallVDiskQueues we have very small queues at SkeletonFront
         // and get them overflow
-        // vdisk must handle request in 0.1 sec or drop it, expect overload 
-        const auto requestTimeout = TDuration::MilliSeconds(100); 
+        // vdisk must handle request in 0.1 sec or drop it, expect overload
+        const auto requestTimeout = TDuration::MilliSeconds(100);
         auto cls = std::make_shared<TRandomPutHandleClassGenerator>();
-        NTestSuiteTBsOther1::ChaoticParallelWriteGeneric<TFastVDiskSetupSmallVDiskQueues>( 
-                5000, 100, 10, cls, TDuration::Seconds(600), requestTimeout); 
+        NTestSuiteTBsOther1::ChaoticParallelWriteGeneric<TFastVDiskSetupSmallVDiskQueues>(
+                5000, 100, 10, cls, TDuration::Seconds(600), requestTimeout);
     }
 }
 
@@ -651,7 +651,7 @@ Y_UNIT_TEST_SUITE(TBsDbStat) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Sync/Repl
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskRepl1) { 
+Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
     Y_UNIT_TEST(ReplProxyData) {
         TTestReplProxyData test;
         TestRun<TTestReplProxyData, TFastVDiskSetupCompacted>(&test, TIMEOUT);
@@ -683,9 +683,9 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
         Conf.Shutdown();
         UNIT_ASSERT(success2);
     }
-} 
+}
 
-Y_UNIT_TEST_SUITE(TBsVDiskRepl2) { 
+Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
     Y_UNIT_TEST(ReplEraseDiskRestoreWOOneDisk) {
         TSmallCommonDataSet dataSet;
         ui32 domainsNum = 4u;
@@ -707,9 +707,9 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
         Conf.Shutdown();
         UNIT_ASSERT(success2);
     }
-} 
+}
 
-Y_UNIT_TEST_SUITE(TBsVDiskRepl3) { 
+Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
     Y_UNIT_TEST(ReplEraseDiskRestoreMultipart) {
         TSmallCommonDataSet dataSet;
         ui32 domainsNum = 4u;

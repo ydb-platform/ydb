@@ -120,9 +120,9 @@ namespace NKikimr {
                 return reinterpret_cast<const ui8&>(Data) >> 6;
             case EMode::MIRROR3OF4:
                 return Data >> 62;
-        } 
-    } 
- 
+        }
+    }
+
     bool TIngress::MustKnowAboutLogoBlob(const TBlobStorageGroupInfo::TTopology *top,
                                          const TVDiskIdShort &vdisk,
                                          const TLogoBlobID &id) {
@@ -134,8 +134,8 @@ namespace NKikimr {
                                                       const TLogoBlobID &id) {
         const ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
         return CreateIngressInternal(top->GType, nodeId, id, true); // create local bits
-    } 
- 
+    }
+
     TMaybe<TIngress> TIngress::CreateIngressWOLocal(const TBlobStorageGroupInfo::TTopology *top,
                                                     const TVDiskIdShort &vdisk,
                                                     const TLogoBlobID &id) {
@@ -267,11 +267,11 @@ namespace NKikimr {
                 // CollectMode[2] Local[numParts] Disk0[numParts] Disk1[numParts] ... Disk7[numParts]
                 return NMatrix::TVectorType(Data >> (62 - 8 - numParts * (1 + nodeId)), numParts);
         }
-    } 
- 
+    }
+
     TVDiskIdShort TIngress::GetMainReplica(const TBlobStorageGroupInfo::TTopology *top, const TLogoBlobID &id) {
         Y_VERIFY(IngressMode(top->GType) == EMode::GENERIC);
- 
+
         Y_VERIFY_DEBUG(id.PartId() != 0);
         ui8 partId = id.PartId();
         return top->GetVDiskInSubgroup(partId - 1, id.Hash());

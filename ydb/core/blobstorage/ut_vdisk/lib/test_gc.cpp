@@ -430,7 +430,7 @@ virtual void Scenario(const TActorContext &ctx) {
         TLogoBlobID from(0, 4294967295, 4294967295, 0, 0, TLogoBlobID::HashGeneric, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (0, 0, 0, 0, 0, TLogoBlobID::HashGeneric, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", ~from.ToString(), ~to.ToString());
-        req->AddRangeQuery(from, to, 10, nullptr); 
+        req->AddRangeQuery(from, to, 10, nullptr);
         ctx.Send(instance.ActorID, req.release());
 
         ExpectedSet.Put(TLogoBlobID(0, 1, 37, 0, 0, TLogoBlobID::HashGeneric, 0, 1), NKikimrProto::OK, "pppp");

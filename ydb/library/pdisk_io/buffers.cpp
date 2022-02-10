@@ -1,14 +1,14 @@
 #include "buffers.h"
- 
+
 #include <util/system/align.h>
 
-namespace NKikimr { 
-namespace NPDisk { 
- 
-// 
-// TBuffer 
-// 
- 
+namespace NKikimr {
+namespace NPDisk {
+
+//
+// TBuffer
+//
+
 TBuffer::TBuffer(ui32 bufferSize, bool useHugePages)
     : FallbackData(bufferSize, useHugePages)
     , Buffer(FallbackData.Get())
@@ -18,25 +18,25 @@ TBuffer::TBuffer(ui32 bufferSize, bool useHugePages)
 {
 }
 
-TBuffer::TBuffer(ui8* buffer, ui32 bufferSize, TBufferPool *pool) 
-    : Buffer(buffer) 
+TBuffer::TBuffer(ui8* buffer, ui32 bufferSize, TBufferPool *pool)
+    : Buffer(buffer)
     , BufferSize(bufferSize)
-    , Pool(pool) 
-    , PopCount(0) 
-{} 
- 
-TBuffer::~TBuffer() { 
+    , Pool(pool)
+    , PopCount(0)
+{}
+
+TBuffer::~TBuffer() {
     Y_VERIFY(!Pool);
-} 
- 
+}
+
 void TBuffer::Exec(TActorSystem*) {
     ReturnToPool();
-} 
- 
+}
+
 void TBuffer::Release(TActorSystem*) {
     ReturnToPool();
-} 
- 
+}
+
 bool TBuffer::ReturnToPool() {
     if (Pool) {
         Pool->Push(this);
@@ -45,48 +45,48 @@ bool TBuffer::ReturnToPool() {
     return false;
 }
 
-ui8* TBuffer::Data() const { 
-    return Buffer; 
-} 
- 
-ui32 TBuffer::Size() const { 
-    return BufferSize; 
-} 
- 
-void TBuffer::RemoveFromPool() { 
-    Pool = nullptr; 
-    BufferSize = 0; 
-    Buffer = nullptr; 
-} 
- 
-// 
-// TBufferPool 
-// 
- 
+ui8* TBuffer::Data() const {
+    return Buffer;
+}
+
+ui32 TBuffer::Size() const {
+    return BufferSize;
+}
+
+void TBuffer::RemoveFromPool() {
+    Pool = nullptr;
+    BufferSize = 0;
+    Buffer = nullptr;
+}
+
+//
+// TBufferPool
+//
+
 static constexpr size_t Alignment = 4096; // Block-device block size
 static constexpr size_t PopRetries = 5;
- 
+
 TBufferPool::TBufferPool(ui32 bufferSize, ui32 buffersCount, TPDiskParams params)
-    : BufferSize(bufferSize) 
+    : BufferSize(bufferSize)
     , BuffersCount(buffersCount)
-    , ReadRotation(0) 
-    , WriteRotation(0) 
+    , ReadRotation(0)
+    , WriteRotation(0)
     , Params(params)
-{ 
+{
 }
 
 void TBufferPool::MarkUpPool(ui8 *alignedData) {
     AlignedData = alignedData;
     for (ui32 i = 0; i < BuffersCount; ++i) {
         TBuffer *buffer = new TBuffer(AlignedData + i * AlignUp((size_t)BufferSize, Alignment), BufferSize, this);
-        Buffers.Push(buffer, AtomicIncrement(WriteRotation)); 
-    } 
-} 
- 
+        Buffers.Push(buffer, AtomicIncrement(WriteRotation));
+    }
+}
+
 ui32 TBufferPool::GetBufferSize() {
     return BufferSize;
 }
- 
+
 TBuffer *TBufferPool::Pop() {
     size_t retry = 0;
     while (retry < PopRetries) {
@@ -103,7 +103,7 @@ TBuffer *TBufferPool::Pop() {
         }
         Sleep(TDuration::MilliSeconds((retry + 1) * 10));
         ++retry;
-    } 
+    }
     if (Params.ActorSystem) {
         //LOG_NOTICE_S(*Params.ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << Params.PDiskId
         //        << "Failed to pop buffer from pool, retry# " << retry);
@@ -112,25 +112,25 @@ TBuffer *TBufferPool::Pop() {
     TBuffer *buffer = new TBuffer(BufferSize, UseHugePages);
     Y_VERIFY_S(buffer, "PDiskId# " << Params.PDiskId << "Cannot pop new buffer from PDisk's buffer pool");
     return buffer;
-} 
- 
-void TBufferPool::Push(TBuffer *buffer) { 
+}
+
+void TBufferPool::Push(TBuffer *buffer) {
     NSan::Poison(buffer->Data(), buffer->Size());
-    REQUEST_VALGRIND_MAKE_MEM_UNDEFINED(buffer->Data(), buffer->Size()); 
+    REQUEST_VALGRIND_MAKE_MEM_UNDEFINED(buffer->Data(), buffer->Size());
     Y_VERIFY_S(buffer->PopCount == 1, "BufferPopCount# " << buffer->PopCount);
-    buffer->PopCount--; 
-    Buffers.Push(buffer, AtomicIncrement(WriteRotation)); 
-} 
- 
-TBufferPool::~TBufferPool() { 
-    TBuffer *buffer = Buffers.Pop(AtomicIncrement(ReadRotation)); 
-    while (buffer) { 
-        buffer->RemoveFromPool(); 
-        delete buffer; 
-        buffer = Buffers.Pop(AtomicIncrement(ReadRotation)); 
-    } 
-} 
- 
+    buffer->PopCount--;
+    Buffers.Push(buffer, AtomicIncrement(WriteRotation));
+}
+
+TBufferPool::~TBufferPool() {
+    TBuffer *buffer = Buffers.Pop(AtomicIncrement(ReadRotation));
+    while (buffer) {
+        buffer->RemoveFromPool();
+        delete buffer;
+        buffer = Buffers.Pop(AtomicIncrement(ReadRotation));
+    }
+}
+
 //
 // TBufferPoolCommon
 //
@@ -143,7 +143,7 @@ TBufferPoolCommon::TBufferPoolCommon(ui32 bufferSize, ui32 bufferCount, TBufferP
     Y_VERIFY((ui64)alignedData % Alignment == 0);
     MarkUpPool(alignedData);
 }
- 
+
 TBufferPoolCommon::~TBufferPoolCommon() {
 }
 
@@ -159,5 +159,5 @@ TBufferPool *CreateBufferPool(ui64 size, ui32 bufferCount, bool UseHugePages, TB
     }
 }
 
-} // NPDisk 
-} // NKikimr 
+} // NPDisk
+} // NKikimr

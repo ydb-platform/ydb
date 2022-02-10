@@ -22,7 +22,7 @@ SRCS(
     board_replica.cpp
     blobstorage.h
     blobstorage.cpp
-    channel_profiles.h 
+    channel_profiles.h
     counters.cpp
     counters.h
     defs.h
@@ -32,8 +32,8 @@ SRCS(
     events.h
     group_stat.cpp
     group_stat.h
-    hive.h 
-    interconnect_channels.h 
+    hive.h
+    interconnect_channels.h
     kikimr_issue.cpp
     kikimr_issue.h
     localdb.cpp

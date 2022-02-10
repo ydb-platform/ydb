@@ -124,7 +124,7 @@ TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& nam
             res = MakeIntrusive<TDynamicCounters>(this);
             Counters.emplace_hint(it, key, res);
         }
-    } 
+    }
     return res;
 }
 
@@ -138,7 +138,7 @@ void TDynamicCounters::RemoveSubgroup(const TString& name, const TString& value)
     auto g = LockForUpdate("RemoveSubgroup", name, value);
     if (const auto it = Counters.find({name, value}); it != Counters.end() && AsDynamicCounters(it->second)) {
         Counters.erase(it);
-    } 
+    }
 }
 
 void TDynamicCounters::ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup) {

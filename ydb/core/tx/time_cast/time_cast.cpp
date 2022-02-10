@@ -100,21 +100,21 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
 
         if (ev->Record.BucketSize()) {
             mediator.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, mediatorTabletId));
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString() 
-                << " SEND to# " << mediatorTabletId << " Mediator " << ev->ToString()); 
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
+                << " SEND to# " << mediatorTabletId << " Mediator " << ev->ToString());
             NTabletPipe::SendData(ctx, mediator.PipeClient, ev.Release());
         }
     }
 
     void SubscribeBucket(ui64 mediatorTabletId, TMediator &mediator, ui32 bucketId, const TActorContext &ctx) {
-        if (mediator.PipeClient) { 
-            TAutoPtr<TEvMediatorTimecast::TEvWatch> ev(new TEvMediatorTimecast::TEvWatch(bucketId)); 
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString() 
-                << " SEND to# " << mediatorTabletId << " Mediator " << ev->ToString()); 
-            NTabletPipe::SendData(ctx, mediator.PipeClient, ev.Release()); 
-        } else { 
+        if (mediator.PipeClient) {
+            TAutoPtr<TEvMediatorTimecast::TEvWatch> ev(new TEvMediatorTimecast::TEvWatch(bucketId));
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
+                << " SEND to# " << mediatorTabletId << " Mediator " << ev->ToString());
+            NTabletPipe::SendData(ctx, mediator.PipeClient, ev.Release());
+        } else {
             RegisterMediator(mediatorTabletId, mediator, ctx);
-        } 
+        }
     }
 
     void TryResync(const TActorId &pipeClient, ui64 tabletId, const TActorContext &ctx) {
@@ -162,8 +162,8 @@ public:
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr &ev, const TActorContext &ctx) {
     const TEvMediatorTimecast::TEvRegisterTablet *msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString() 
-        << " HANDLE " << msg->ToString()); 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
+        << " HANDLE " << msg->ToString());
     const ui64 tabletId = msg->TabletId;
     const NKikimrSubDomains::TProcessingParams &processingParams = msg->ProcessingParams;
 
@@ -188,11 +188,11 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr
 
     ++tabletInfo.RefCount;
 
-    TAutoPtr<TEvMediatorTimecast::TEvRegisterTabletResult> result( 
+    TAutoPtr<TEvMediatorTimecast::TEvRegisterTabletResult> result(
         new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, bucket.Entry));
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString() 
-        << " SEND to# " << ev->Sender.ToString() << " Sender " << result->ToString()); 
-    ctx.Send(ev->Sender, result.Release()); 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
+        << " SEND to# " << ev->Sender.ToString() << " Sender " << result->ToString());
+    ctx.Send(ev->Sender, result.Release());
 
     SubscribeBucket(mediatorTabletId, mediator, bucketId, ctx);
 }
@@ -242,8 +242,8 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvWaitPlanStep::TPtr &
 }
 
 void TMediatorTimecastProxy::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString() 
-        << " HANDLE EvClientConnected"); 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
+        << " HANDLE EvClientConnected");
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->Status != NKikimrProto::OK) {
         TryResync(msg->ClientId, msg->TabletId, ctx);
@@ -251,15 +251,15 @@ void TMediatorTimecastProxy::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
 }
 
 void TMediatorTimecastProxy::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString() 
-        << " HANDLE EvClientDestroyed"); 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
+        << " HANDLE EvClientDestroyed");
     TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
     TryResync(msg->ClientId, msg->TabletId, ctx);
 }
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUpdate::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString() 
-        << " HANDLE "<< ev->Get()->ToString()); 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
+        << " HANDLE "<< ev->Get()->ToString());
 
     const NKikimrTxMediatorTimecast::TEvUpdate &record = ev->Get()->Record;
     Y_VERIFY(record.ExemptionSize() == 0, "exemption lists are not supported yet");

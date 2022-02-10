@@ -126,18 +126,18 @@ public:
         }
     }
 
-    ~TUnorderedCache() { 
+    ~TUnorderedCache() {
         Y_VERIFY(!Pop(0));
 
-        for (ui64 i = 0; i < Concurrency; ++i) { 
+        for (ui64 i = 0; i < Concurrency; ++i) {
             if (ReadSlots[i].ReadFrom) {
                 delete ReadSlots[i].ReadFrom;
                 ReadSlots[i].ReadFrom = nullptr;
-            } 
+            }
             WriteSlots[i].WriteTo = nullptr;
-        } 
-    } 
- 
+        }
+    }
+
     T Pop(ui64 readerRotation) noexcept {
         ui64 readerIndex = readerRotation;
         const ui64 endIndex = readerIndex + Concurrency;

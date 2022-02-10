@@ -88,7 +88,7 @@ public:
 
         TBSProxyContextPtr bsCtx;
         bsCtx = new TBSProxyContext{Counters};
-        TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord); 
+        TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);
 
         TActorId actorId = ctx.Register(CreateVDiskBackpressureClient(Info, VDiskId, NKikimrBlobStorage::PutTabletLog,
                 Counters, bsCtx, NBackpressure::TQueueClientId(), "PutTabletLog", 0, false, TDuration::Minutes(1),
@@ -137,7 +137,7 @@ class TQueueTestRuntime {
     TActorId FilterActorId;
     TActorId ProxyActorId;
     TProxyActor *Proxy;
-    TIntrusivePtr<NPDisk::TSectorMap> SectorMap; 
+    TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
 
 public:
     TQueueTestRuntime(TFilterActor::TFilterFunc&& func) {
@@ -154,21 +154,21 @@ public:
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk
-        SectorMap.Reset(new NPDisk::TSectorMap(128ull << 30)); 
+        SectorMap.Reset(new NPDisk::TSectorMap(128ull << 30));
         Cerr << Path << Endl;
         ChunkSize = 128 << 20;
-        DiskSize = SectorMap->DeviceSize; 
+        DiskSize = SectorMap->DeviceSize;
         PDiskGuid = 1;
         PDiskKey = 1;
-        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, PDiskKey, "queue_test", 
+        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, PDiskKey, "queue_test",
                 false, false, SectorMap);
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);
         ui64 pDiskCategory = 0;
         TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(Path, PDiskGuid, 1, pDiskCategory);
-        pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch; 
-        pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch; 
-        pDiskConfig->SectorMap = SectorMap; 
+        pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        pDiskConfig->SectorMap = SectorMap;
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), PDiskKey, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.emplace_back(PDiskId, pDiskSetup);

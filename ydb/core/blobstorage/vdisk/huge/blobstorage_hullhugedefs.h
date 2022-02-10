@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <util/generic/bitmap.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
 
@@ -146,11 +146,11 @@ namespace NKikimr {
                 if (e < b || size_t(e - b) != SerializedSize)
                     return false;
 
-                ChunkId = ReadUnaligned<ui32>(b); 
+                ChunkId = ReadUnaligned<ui32>(b);
                 b += sizeof(ui32);
-                Offset = ReadUnaligned<ui32>(b); 
+                Offset = ReadUnaligned<ui32>(b);
                 b += sizeof(ui32);
-                Size = ReadUnaligned<ui32>(b); 
+                Size = ReadUnaligned<ui32>(b);
                 return true;
             }
             static const ui32 SerializedSize;

@@ -1,10 +1,10 @@
-#pragma once 
+#pragma once
 
-#include "defs.h" 
+#include "defs.h"
 #include "dsproxy_mon.h"
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 struct TEvThroughputAddRequest : public TEventLocal<TEvThroughputAddRequest, TEvBlobStorage::EvThroughputAddRequest> {
     NKikimrBlobStorage::EPutHandleClass PutHandleClass;
     ui64 Bytes;
@@ -17,6 +17,6 @@ struct TEvThroughputAddRequest : public TEventLocal<TEvThroughputAddRequest, TEv
 
 IActor* CreateBlobStorageGroupProxyMon(TIntrusivePtr<TBlobStorageGroupProxyMon> mon, ui32 groupId,
         TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId);
- 
-} // NKikimr 
- 
+
+} // NKikimr
+

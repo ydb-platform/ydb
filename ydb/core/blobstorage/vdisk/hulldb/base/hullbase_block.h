@@ -34,8 +34,8 @@ namespace NKikimr {
             return Sprintf("[%16" PRIu64 "]", TabletId);
         }
 
-        TLogoBlobID LogoBlobID() const { 
-            return TLogoBlobID(); 
+        TLogoBlobID LogoBlobID() const {
+            return TLogoBlobID();
         }
 
         static TKeyBlock First() {

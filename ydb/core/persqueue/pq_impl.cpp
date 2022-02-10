@@ -1300,7 +1300,7 @@ void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActo
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_MAX_SEQ_NO);
     const auto& cmd = req.GetCmdGetMaxSeqNo();
     TVector<TString> ids;
-    ids.reserve(cmd.SourceIdSize()); 
+    ids.reserve(cmd.SourceIdSize());
     for (ui32 i = 0; i < cmd.SourceIdSize(); ++i)
         ids.push_back(cmd.GetSourceId(i));
     THolder<TEvPQ::TEvGetMaxSeqNoRequest> event = MakeHolder<TEvPQ::TEvGetMaxSeqNoRequest>(responseCookie, ids);

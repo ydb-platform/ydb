@@ -68,7 +68,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
     // Check if we are out of space and tx wants to update user
     // or system table.
-    if (DataShard.IsAnyChannelYellowStop() 
+    if (DataShard.IsAnyChannelYellowStop()
         && (dataTx->HasWrites() || !op->IsImmediate())) {
         TString err = TStringBuilder()
             << "Cannot perform transaction: out of disk space at tablet "

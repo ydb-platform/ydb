@@ -1,44 +1,44 @@
-#include "blobstorage_pdisk_requestimpl.h" 
-#include "blobstorage_pdisk_completion_impl.h" 
- 
-namespace NKikimr { 
-namespace NPDisk { 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// TRequestBase 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
-void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem) { 
-    switch(request->GetType()) { 
-    case ERequestType::RequestChunkRead: 
-    { 
-        TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer); 
-        request->Abort(actorSystem); 
-        break; 
-    } 
-    case ERequestType::RequestChunkReadPiece: 
-    { 
-        TIntrusivePtr<TChunkReadPiece> piece = std::move(static_cast<TChunkReadPiece*>(request)->SelfPointer); 
-        request->Abort(actorSystem); 
-        break; 
-    } 
-    default: 
+#include "blobstorage_pdisk_requestimpl.h"
+#include "blobstorage_pdisk_completion_impl.h"
+
+namespace NKikimr {
+namespace NPDisk {
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TRequestBase
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem) {
+    switch(request->GetType()) {
+    case ERequestType::RequestChunkRead:
+    {
+        TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);
+        request->Abort(actorSystem);
+        break;
+    }
+    case ERequestType::RequestChunkReadPiece:
+    {
+        TIntrusivePtr<TChunkReadPiece> piece = std::move(static_cast<TChunkReadPiece*>(request)->SelfPointer);
+        request->Abort(actorSystem);
+        break;
+    }
+    default:
         request->Abort(actorSystem);
         delete request;
-        break; 
-    } 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        break;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkWrite
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TAtomic TChunkWrite::LastIndex = 0;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TChunkRead 
+// TChunkRead
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
- 
+
 TAtomic TChunkRead::LastIndex = 0;
 
 void TChunkRead::Abort(TActorSystem* actorSystem) {
@@ -55,14 +55,14 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
         actorSystem->Send(Sender, result.Release());
         IsReplied = true;
     }
-} 
- 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// TChunkReadPiece 
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
- 
-TChunkReadPiece::TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit, 
+// TChunkReadPiece
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TChunkReadPiece::TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
         bool isTheLastPiece)
         : TRequestBase(read->Sender, read->ReqId, read->Owner, read->OwnerRound, read->PriorityClass)
         , ChunkRead(read)
@@ -78,8 +78,8 @@ TChunkReadPiece::TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurr
 
 void TChunkReadPiece::Abort(TActorSystem* actorSystem) {
     ChunkRead->FinalCompletion->PartDeleted(actorSystem);
-} 
- 
+}
+
 void TChunkReadPiece::OnSuccessfulDestroy(TActorSystem* actorSystem) {
     if (!IsTheLastPiece) {
         ChunkRead->FinalCompletion->PartReadComplete(actorSystem);
@@ -87,6 +87,6 @@ void TChunkReadPiece::OnSuccessfulDestroy(TActorSystem* actorSystem) {
 }
 
 
-} // NPDisk 
-} // NKikimr 
- 
+} // NPDisk
+} // NKikimr
+

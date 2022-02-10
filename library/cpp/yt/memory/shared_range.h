@@ -19,7 +19,7 @@ class TSharedRange
     : public TRange<T>
 {
 public:
-    using THolderPtr = TRefCountedPtr; 
+    using THolderPtr = TRefCountedPtr;
 
     //! Constructs a null TSharedRange.
     TSharedRange()
@@ -104,7 +104,7 @@ protected:
 
 //! Constructs a combined holder instance by taking ownership of a given list of holders.
 template <class... THolders>
-TRefCountedPtr MakeCompositeHolder(THolders&&... holders) 
+TRefCountedPtr MakeCompositeHolder(THolders&&... holders)
 {
     struct THolder
         : public TRefCounted
@@ -185,7 +185,7 @@ class TSharedMutableRange
     : public TMutableRange<T>
 {
 public:
-    using THolderPtr = TRefCountedPtr; 
+    using THolderPtr = TRefCountedPtr;
 
     //! Constructs a null TSharedMutableRange.
     TSharedMutableRange()

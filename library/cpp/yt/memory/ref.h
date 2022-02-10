@@ -366,8 +366,8 @@ TString ToString(const TSharedRef& ref);
 TString ToString(const TSharedMutableRef& ref);
 
 size_t GetPageSize();
-size_t RoundUpToPage(size_t bytes); 
- 
+size_t RoundUpToPage(size_t bytes);
+
 size_t GetByteSize(TRef ref);
 size_t GetByteSize(const TSharedRefArray& array);
 template <class T>
@@ -375,8 +375,8 @@ size_t GetByteSize(TRange<T> parts);
 template <class T>
 size_t GetByteSize(const std::vector<T>& parts);
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT
 
 #define REF_INL_H_

@@ -1,26 +1,26 @@
-LIBRARY() 
- 
-OWNER(g:yt) 
- 
-SRCS( 
+LIBRARY()
+
+OWNER(g:yt)
+
+SRCS(
     guid.cpp
-    source_location.cpp 
-) 
- 
-PEERDIR( 
+    source_location.cpp
+)
+
+PEERDIR(
     library/cpp/yt/exception
-) 
- 
-CHECK_DEPENDENT_DIRS( 
-    ALLOW_ONLY ALL 
-    build 
-    contrib 
-    library 
-    util 
-    yt/yt/library/small_containers 
-) 
- 
-END() 
+)
+
+CHECK_DEPENDENT_DIRS(
+    ALLOW_ONLY ALL
+    build
+    contrib
+    library
+    util
+    yt/yt/library/small_containers
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     unittests

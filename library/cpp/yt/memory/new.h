@@ -1,10 +1,10 @@
 #pragma once
 
-#include "intrusive_ptr.h" 
-#include "ref_tracked.h" 
+#include "intrusive_ptr.h"
+#include "ref_tracked.h"
 
 #include <library/cpp/yt/misc/source_location.h>
- 
+
 #include <util/system/defaults.h>
 
 namespace NYT {
@@ -65,47 +65,47 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, class = void> 
-struct THasAllocator 
-{ 
-    using TFalse = void; 
-}; 
- 
-template <class T> 
+template <class T, class = void>
+struct THasAllocator
+{
+    using TFalse = void;
+};
+
+template <class T>
 struct THasAllocator<T, std::void_t<typename T::TAllocator>>
-{ 
-    using TTrue = void; 
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+{
+    using TTrue = void;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Allocates a new instance of |T|.
-template <class T, class... As, class = typename THasAllocator<T>::TFalse> 
+template <class T, class... As, class = typename THasAllocator<T>::TFalse>
 TIntrusivePtr<T> New(As&&... args);
 
-template <class T, class... As, class = typename THasAllocator<T>::TTrue> 
-TIntrusivePtr<T> New(typename T::TAllocator* allocator, As&&... args); 
- 
-//! Allocates an instance of |T| with additional storage of #extraSpaceSize bytes. 
-template <class T, class... As, class = typename THasAllocator<T>::TFalse> 
-TIntrusivePtr<T> NewWithExtraSpace(size_t extraSpaceSize, As&&... args); 
- 
-template <class T, class... As, class = typename THasAllocator<T>::TTrue> 
-TIntrusivePtr<T> NewWithExtraSpace(typename T::TAllocator* allocator, size_t extraSpaceSize, As&&... args); 
- 
-//! Allocates a new instance of |T| with user deleter. 
-template <class T, class TDeleter, class... As> 
-TIntrusivePtr<T> NewWithDelete(const TDeleter& deleter, As&&... args); 
- 
+template <class T, class... As, class = typename THasAllocator<T>::TTrue>
+TIntrusivePtr<T> New(typename T::TAllocator* allocator, As&&... args);
+
+//! Allocates an instance of |T| with additional storage of #extraSpaceSize bytes.
+template <class T, class... As, class = typename THasAllocator<T>::TFalse>
+TIntrusivePtr<T> NewWithExtraSpace(size_t extraSpaceSize, As&&... args);
+
+template <class T, class... As, class = typename THasAllocator<T>::TTrue>
+TIntrusivePtr<T> NewWithExtraSpace(typename T::TAllocator* allocator, size_t extraSpaceSize, As&&... args);
+
+//! Allocates a new instance of |T| with user deleter.
+template <class T, class TDeleter, class... As>
+TIntrusivePtr<T> NewWithDelete(const TDeleter& deleter, As&&... args);
+
 //! Allocates a new instance of |T|.
 //! The allocation is additionally marked with #location.
 template <class T, class TTag, int Counter, class... As>
-TIntrusivePtr<T> NewWithLocation(const TSourceLocation& location, As&&... args); 
+TIntrusivePtr<T> NewWithLocation(const TSourceLocation& location, As&&... args);
 
 //! Enables calling #New and co for types with private ctors.
 #define DECLARE_NEW_FRIEND() \
-    template <class DECLARE_NEW_FRIEND_T> \ 
-    friend struct NYT::TRefCountedWrapper; 
+    template <class DECLARE_NEW_FRIEND_T> \
+    friend struct NYT::TRefCountedWrapper;
 
 ////////////////////////////////////////////////////////////////////////////////
 

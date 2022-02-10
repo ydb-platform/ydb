@@ -59,12 +59,12 @@
 #if defined(__GNUC__) || defined(__clang__)
     #define PER_THREAD __thread
     #define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
-    // Prevent GCC from throwing out functions in release builds. 
-    #define ATTRIBUTE_USED __attribute__((used)) 
+    // Prevent GCC from throwing out functions in release builds.
+    #define ATTRIBUTE_USED __attribute__((used))
 #elif defined(_MSC_VER)
     #define PER_THREAD __declspec(thread)
     #define ATTRIBUTE_NO_SANITIZE_ADDRESS
-    #define ATTRIBUTE_USED 
+    #define ATTRIBUTE_USED
 #else
     #error Unsupported compiler
 #endif

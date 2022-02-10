@@ -300,7 +300,7 @@ def on_go_resource(unit, *args):
         # path in RUN_PROGRAM
         args[2*i+1] = "notafile" + args[2*i+1]
 
-    files = [file for file in files if file != "-"] 
+    files = [file for file in files if file != "-"]
     unit.onrun_program([
         "library/go/core/resource/cc",
         "-package", go_package_name(unit),

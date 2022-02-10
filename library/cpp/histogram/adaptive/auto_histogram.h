@@ -54,10 +54,10 @@ namespace NKiwiAggr {
             HistogramImpl->Add(histoRec);
         }
 
-        virtual void Merge(const THistogram& histo, double multiplier) { 
-            HistogramImpl->Merge(histo, multiplier); 
-        } 
- 
+        virtual void Merge(const THistogram& histo, double multiplier) {
+            HistogramImpl->Merge(histo, multiplier);
+        }
+
         virtual void Merge(const TVector<THistogram>& histogramsToMerge) {
             HistogramImpl->Merge(histogramsToMerge);
         }
@@ -73,14 +73,14 @@ namespace NKiwiAggr {
         virtual void FromProto(const THistogram& histo) {
             if (!histo.HasType() || histo.GetType() == HT_FIXED_BIN_HISTOGRAM) {
                 HistogramImpl.Reset(new TFixedBinHistogram(histo, Intervals, Id));
-            } else if (histo.GetType() == HT_ADAPTIVE_DISTANCE_HISTOGRAM) { 
+            } else if (histo.GetType() == HT_ADAPTIVE_DISTANCE_HISTOGRAM) {
                 HistogramImpl.Reset(new TAdaptiveDistanceHistogram(histo, Intervals, Id));
-            } else if (histo.GetType() == HT_ADAPTIVE_WEIGHT_HISTOGRAM) { 
+            } else if (histo.GetType() == HT_ADAPTIVE_WEIGHT_HISTOGRAM) {
                 HistogramImpl.Reset(new TAdaptiveWeightHistogram(histo, Intervals, Id));
-            } else if (histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM) { 
-                HistogramImpl.Reset(new TAdaptiveWardHistogram(histo, Intervals, Id)); 
-            } else { 
-                ythrow yexception() << "Can't parse TAutoHistogram from a THistogram of type " << (ui32)histo.GetType(); 
+            } else if (histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM) {
+                HistogramImpl.Reset(new TAdaptiveWardHistogram(histo, Intervals, Id));
+            } else {
+                ythrow yexception() << "Can't parse TAutoHistogram from a THistogram of type " << (ui32)histo.GetType();
             }
         }
 

@@ -124,10 +124,10 @@ namespace NKiwiAggr {
         }
     }
 
-    void TFixedBinHistogram::Merge(const THistogram& /*histo*/, double /*multiplier*/) { 
-        ythrow yexception() << "Method is not implemented for TFixedBinHistogram"; 
-    } 
- 
+    void TFixedBinHistogram::Merge(const THistogram& /*histo*/, double /*multiplier*/) {
+        ythrow yexception() << "Method is not implemented for TFixedBinHistogram";
+    }
+
     void TFixedBinHistogram::Merge(const TVector<THistogram>& histogramsToMerge) {
         TVector<IHistogramPtr> parsedHistogramsToMerge;
         for (size_t i = 0; i < histogramsToMerge.size(); ++i) {

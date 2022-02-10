@@ -1,7 +1,7 @@
 #pragma once
 
 #include "histogram.h"
-#include "common.h" 
+#include "common.h"
 
 #include <library/cpp/histogram/adaptive/protos/histo.pb.h>
 
@@ -124,8 +124,8 @@ namespace NKiwiAggr {
         }
     };
 
-    typedef TDefinedAdaptiveHistogram<CalcDistanceQuality> TAdaptiveDistanceHistogram; 
-    typedef TDefinedAdaptiveHistogram<CalcWeightQuality> TAdaptiveWeightHistogram; 
-    typedef TDefinedAdaptiveHistogram<CalcWardQuality> TAdaptiveWardHistogram; 
+    typedef TDefinedAdaptiveHistogram<CalcDistanceQuality> TAdaptiveDistanceHistogram;
+    typedef TDefinedAdaptiveHistogram<CalcWeightQuality> TAdaptiveWeightHistogram;
+    typedef TDefinedAdaptiveHistogram<CalcWardQuality> TAdaptiveWardHistogram;
 
 }

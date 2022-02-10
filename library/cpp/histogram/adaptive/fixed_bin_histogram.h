@@ -48,7 +48,7 @@ namespace NKiwiAggr {
         virtual void Add(double value, double weight);
         virtual void Add(const THistoRec& histoRec);
 
-        virtual void Merge(const THistogram& histo, double multiplier); 
+        virtual void Merge(const THistogram& histo, double multiplier);
         virtual void Merge(const TVector<THistogram>& histogramsToMerge);
         virtual void Merge(TVector<IHistogramPtr> histogramsToMerge);
 

@@ -1,14 +1,14 @@
 LIBRARY()
 
-OWNER( 
-    zosimov 
-    svirg 
-) 
+OWNER(
+    zosimov
+    svirg
+)
 
 SRCS(
-    common.cpp 
+    common.cpp
     adaptive_histogram.cpp
-    block_histogram.cpp 
+    block_histogram.cpp
     fixed_bin_histogram.cpp
 )
 

@@ -17,13 +17,13 @@ namespace NKiwiAggr {
     }
 
     TAdaptiveHistogram::TAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals, ui64 defaultId, TQualityFunction qualityFunc)
-        : TAdaptiveHistogram(defaultIntervals, defaultId, qualityFunc) 
+        : TAdaptiveHistogram(defaultIntervals, defaultId, qualityFunc)
     {
         FromProto(histo);
     }
 
     TAdaptiveHistogram::TAdaptiveHistogram(IHistogram* histo, size_t defaultIntervals, ui64 defaultId, TQualityFunction qualityFunc)
-        : TAdaptiveHistogram(defaultIntervals, defaultId, qualityFunc) 
+        : TAdaptiveHistogram(defaultIntervals, defaultId, qualityFunc)
     {
         TAdaptiveHistogram* adaptiveHisto = dynamic_cast<TAdaptiveHistogram*>(histo);
         if (!adaptiveHisto) {
@@ -42,7 +42,7 @@ namespace NKiwiAggr {
         }
     }
 
-    TQualityFunction TAdaptiveHistogram::GetQualityFunc() { 
+    TQualityFunction TAdaptiveHistogram::GetQualityFunc() {
         return CalcQuality;
     }
 
@@ -67,58 +67,58 @@ namespace NKiwiAggr {
         PrecomputedBins.clear();
     }
 
-    void TAdaptiveHistogram::Merge(const THistogram& histo, double multiplier) { 
-        if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) { 
+    void TAdaptiveHistogram::Merge(const THistogram& histo, double multiplier) {
+        if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) {
             fprintf(stderr, "Merging in histogram id %lu: skip bad histo with minvalue %f maxvalue %f\n", Id, histo.GetMinValue(), histo.GetMaxValue());
-            return; 
-        } 
-        if (histo.FreqSize() == 0) { 
-            return; // skip empty histos 
-        } 
-        if (histo.GetType() == HT_ADAPTIVE_DISTANCE_HISTOGRAM || 
-            histo.GetType() == HT_ADAPTIVE_WEIGHT_HISTOGRAM || 
-            histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM || 
+            return;
+        }
+        if (histo.FreqSize() == 0) {
+            return; // skip empty histos
+        }
+        if (histo.GetType() == HT_ADAPTIVE_DISTANCE_HISTOGRAM ||
+            histo.GetType() == HT_ADAPTIVE_WEIGHT_HISTOGRAM ||
+            histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM ||
             histo.GetType() == HT_ADAPTIVE_HISTOGRAM)
         {
             Y_VERIFY(histo.FreqSize() == histo.PositionSize(), "Corrupted histo");
-            for (size_t j = 0; j < histo.FreqSize(); ++j) { 
-                double value = histo.GetPosition(j); 
-                double weight = histo.GetFreq(j); 
-                if (!IsValidFloat(value) || !IsValidFloat(weight)) { 
+            for (size_t j = 0; j < histo.FreqSize(); ++j) {
+                double value = histo.GetPosition(j);
+                double weight = histo.GetFreq(j);
+                if (!IsValidFloat(value) || !IsValidFloat(weight)) {
                     fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
-                    continue; 
+                    continue;
                 }
-                Add(value, weight * multiplier); 
-            } 
- 
-            MinValue = Min(MinValue, histo.GetMinValue()); 
-            MaxValue = Max(MaxValue, histo.GetMaxValue()); 
-        } else if (histo.GetType() == HT_FIXED_BIN_HISTOGRAM) { 
-            double pos = histo.GetMinValue() + histo.GetBinRange() / 2.0; 
-            for (size_t j = 0; j < histo.FreqSize(); ++j) { 
-                double weight = histo.GetFreq(j); 
-                if (!IsValidFloat(pos) || !IsValidFloat(weight)) { 
+                Add(value, weight * multiplier);
+            }
+
+            MinValue = Min(MinValue, histo.GetMinValue());
+            MaxValue = Max(MaxValue, histo.GetMaxValue());
+        } else if (histo.GetType() == HT_FIXED_BIN_HISTOGRAM) {
+            double pos = histo.GetMinValue() + histo.GetBinRange() / 2.0;
+            for (size_t j = 0; j < histo.FreqSize(); ++j) {
+                double weight = histo.GetFreq(j);
+                if (!IsValidFloat(pos) || !IsValidFloat(weight)) {
                     fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, pos, weight);
                     pos += histo.GetBinRange();
-                    continue; 
+                    continue;
                 }
-                Add(pos, weight * multiplier); 
-                pos += histo.GetBinRange(); 
-            } 
+                Add(pos, weight * multiplier);
+                pos += histo.GetBinRange();
+            }
 
-            MinValue = Min(MinValue, histo.GetMinValue()); 
-            MaxValue = Max(MaxValue, histo.GetMaxValue()); 
-        } else { 
-            ythrow yexception() << "Unknown THistogram type"; 
+            MinValue = Min(MinValue, histo.GetMinValue());
+            MaxValue = Max(MaxValue, histo.GetMaxValue());
+        } else {
+            ythrow yexception() << "Unknown THistogram type";
         }
     }
 
     void TAdaptiveHistogram::Merge(const TVector<THistogram>& histogramsToMerge) {
-        for (size_t i = 0; i < histogramsToMerge.size(); ++i) { 
-            Merge(histogramsToMerge[i], 1.0); 
-        } 
-    } 
- 
+        for (size_t i = 0; i < histogramsToMerge.size(); ++i) {
+            Merge(histogramsToMerge[i], 1.0);
+        }
+    }
+
     void TAdaptiveHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) {
         TVector<IHistogramPtr> histogramsToMergeRepacked(0);
         TVector<TAdaptiveHistogram*> histograms(0);
@@ -182,19 +182,19 @@ namespace NKiwiAggr {
     void TAdaptiveHistogram::FromProto(const THistogram& histo) {
         Y_VERIFY(histo.HasType(), "Attempt to parse TAdaptiveHistogram from THistogram protobuf with no Type field set");
         ;
-        switch (histo.GetType()) { // check that histogram type could be deduced 
-            case HT_ADAPTIVE_DISTANCE_HISTOGRAM: 
-            case HT_ADAPTIVE_WEIGHT_HISTOGRAM: 
-            case HT_ADAPTIVE_WARD_HISTOGRAM: 
-                break; // ok 
-            case HT_ADAPTIVE_HISTOGRAM: 
+        switch (histo.GetType()) { // check that histogram type could be deduced
+            case HT_ADAPTIVE_DISTANCE_HISTOGRAM:
+            case HT_ADAPTIVE_WEIGHT_HISTOGRAM:
+            case HT_ADAPTIVE_WARD_HISTOGRAM:
+                break; // ok
+            case HT_ADAPTIVE_HISTOGRAM:
                 if (CalcQuality != nullptr)
-                    break; // ok 
+                    break; // ok
                 [[fallthrough]];
             default:       // not ok
-                ythrow yexception() << "Attempt to parse TAdaptiveHistogram from THistogram protobuf record of type = " << (ui32)histo.GetType(); 
+                ythrow yexception() << "Attempt to parse TAdaptiveHistogram from THistogram protobuf record of type = " << (ui32)histo.GetType();
         }
- 
+
         if (histo.FreqSize() != histo.PositionSize()) {
             ythrow yexception() << "Attempt to parse TAdaptiveHistogram from THistogram protobuf record where FreqSize != PositionSize. FreqSize == " << (ui32)histo.FreqSize() << ", PositionSize == " << (ui32)histo.PositionSize();
         }
@@ -203,8 +203,8 @@ namespace NKiwiAggr {
                 CalcQuality = CalcDistanceQuality;
             } else if (histo.GetType() == HT_ADAPTIVE_WEIGHT_HISTOGRAM) {
                 CalcQuality = CalcWeightQuality;
-            } else if (histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM) { 
-                CalcQuality = CalcWardQuality; 
+            } else if (histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM) {
+                CalcQuality = CalcWardQuality;
             } else {
                 ythrow yexception() << "Attempt to parse an HT_ADAPTIVE_HISTOGRAM without default quality function";
             }
@@ -236,8 +236,8 @@ namespace NKiwiAggr {
             histo.SetType(HT_ADAPTIVE_DISTANCE_HISTOGRAM);
         } else if (CalcQuality == CalcWeightQuality) {
             histo.SetType(HT_ADAPTIVE_WEIGHT_HISTOGRAM);
-        } else if (CalcQuality == CalcWardQuality) { 
-            histo.SetType(HT_ADAPTIVE_WARD_HISTOGRAM); 
+        } else if (CalcQuality == CalcWardQuality) {
+            histo.SetType(HT_ADAPTIVE_WARD_HISTOGRAM);
         } else {
             histo.SetType(HT_ADAPTIVE_HISTOGRAM);
         }
@@ -448,9 +448,9 @@ namespace NKiwiAggr {
         if (!histo) {
             ythrow yexception() << "Attempt to create TAdaptiveHistogram from a NULL pointer";
         }
-        if (CalcQuality == CalcWardQuality) { 
-            ythrow yexception() << "Not implemented"; 
-        } else if (CalcQuality != CalcDistanceQuality && CalcQuality != CalcWeightQuality) { 
+        if (CalcQuality == CalcWardQuality) {
+            ythrow yexception() << "Not implemented";
+        } else if (CalcQuality != CalcDistanceQuality && CalcQuality != CalcWeightQuality) {
             ythrow yexception() << "Attempt to create TAdaptiveHistogram from a pointer without default CalcQuality";
         }
         Id = histo->GetId();

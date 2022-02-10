@@ -34,8 +34,8 @@ IF (OS_DARWIN OR OS_LINUX OR OS_WINDOWS)
         go_fake_xcrun
         go_tools
         goyndexer
-        pnpm 
-        typescript 
+        pnpm
+        typescript
         ymake
         yolint
     )

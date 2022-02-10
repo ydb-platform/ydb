@@ -44,7 +44,7 @@ RECURSE(
     mpg123
     murmurhash
     nfs_ganesha
-    noc 
+    noc
     openal-soft
     patched
     protobuf-c

@@ -2702,10 +2702,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             Y_VERIFY(dataColId == alterData->IndexDataColumns.size());
                             alterData->IndexDataColumns.emplace_back(dataColName);
                         } else {
-                           leakedDataColumnsAlterData.emplace_back(pathId, dataColId); 
+                           leakedDataColumnsAlterData.emplace_back(pathId, dataColId);
                         }
                     } else {
-                       leakedDataColumnsAlterData.emplace_back(pathId, dataColId); 
+                       leakedDataColumnsAlterData.emplace_back(pathId, dataColId);
                     }
 
                     if (!rowset.Next())
@@ -3162,7 +3162,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 } else if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
                     Y_VERIFY(!extraData.empty(), "Split Tx must have non-empty split description");
-                    txState.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(); 
+                    txState.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
                     bool deserializeRes = ParseFromStringNoSizeLimit(*txState.SplitDescription, extraData);
                     Y_VERIFY(deserializeRes);
                     splitOpIds.push_back(operationId);

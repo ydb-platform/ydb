@@ -26,7 +26,7 @@ class TJsonQuery : public TActorBootstrapped<TJsonQuery> {
     TJsonSettings JsonSettings;
     TActorId Initiator;
     NMon::TEvHttpInfo::TPtr Event;
-    ui32 Timeout = 0; 
+    ui32 Timeout = 0;
     TVector<Ydb::ResultSet> ResultSets;
     TString Action;
     TString Stats;

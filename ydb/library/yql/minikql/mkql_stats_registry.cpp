@@ -69,9 +69,9 @@ ui32 TStatKey::IdSequence_ = 0;
 TStatKey* TStatKey::KeysChain_ = nullptr;
 
 
-TStatKey::TStatKey(TStringBuf name, bool deriv) 
+TStatKey::TStatKey(TStringBuf name, bool deriv)
     : Name_(name)
-    , Deriv_(deriv) 
+    , Deriv_(deriv)
     , Id_(IdSequence_++)
 {
     bool newOne = Singleton<TKeyNames>()->AddIfNotExists(name);

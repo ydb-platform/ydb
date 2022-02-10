@@ -28,7 +28,7 @@ protected:
 
 private:
     TActorId PipeClient;
-    ui64 TabletId = 0; 
+    ui64 TabletId = 0;
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();

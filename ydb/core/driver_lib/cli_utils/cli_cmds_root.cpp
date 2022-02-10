@@ -18,11 +18,11 @@ public:
     TClientCommandRoot(std::shared_ptr<TModuleFactories> factories)
         : TClientCommandRootKikimrBase("kikimr")
     {
-        AddCommand(std::make_unique<TClientCommandAdmin>()); 
-        AddCommand(std::make_unique<TClientCommandDb>()); 
-        AddCommand(std::make_unique<TClientCommandCms>()); 
-        AddCommand(std::make_unique<TClientCommandWhoAmI>()); 
-        AddCommand(std::make_unique<TClientCommandDiscovery>()); 
+        AddCommand(std::make_unique<TClientCommandAdmin>());
+        AddCommand(std::make_unique<TClientCommandDb>());
+        AddCommand(std::make_unique<TClientCommandCms>());
+        AddCommand(std::make_unique<TClientCommandWhoAmI>());
+        AddCommand(std::make_unique<TClientCommandDiscovery>());
         AddClientCommandServer(*this, std::move(factories));
     }
 

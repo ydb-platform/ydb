@@ -20,7 +20,7 @@ namespace NSQLTranslationV0 {
 
     typedef TMap<TString, TNodePtr> TNamedNodesMap;
 
-    class TContext { 
+    class TContext {
     public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
                  NYql::TIssues& issues);
@@ -58,26 +58,26 @@ namespace NSQLTranslationV0 {
             }
         }
 
-        bool HasCluster(const TString& cluster) const { 
-            return GetClusterProvider(cluster).Defined(); 
-        } 
- 
+        bool HasCluster(const TString& cluster) const {
+            return GetClusterProvider(cluster).Defined();
+        }
+
         TMaybe<TString> GetClusterProvider(const TString& cluster) const {
-            TString unusedNormalizedClusterName; 
-            return GetClusterProvider(cluster, unusedNormalizedClusterName); 
-        } 
- 
-        TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const { 
-            auto provider = ClusterMapping.GetClusterProvider(cluster, normalizedClusterName); 
+            TString unusedNormalizedClusterName;
+            return GetClusterProvider(cluster, unusedNormalizedClusterName);
+        }
+
+        TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const {
+            auto provider = ClusterMapping.GetClusterProvider(cluster, normalizedClusterName);
             if (!provider) {
                 if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) {
-                    normalizedClusterName = cluster; 
+                    normalizedClusterName = cluster;
                     return TString(NYql::KikimrProviderName);
                 }
                 return Nothing();
             }
 
-            return provider; 
+            return provider;
         }
 
         TString GetServiceName(const ISource& source) const;
@@ -118,7 +118,7 @@ namespace NSQLTranslationV0 {
     private:
         NYql::TPosition Position;
         THolder<TStringOutput> IssueMsgHolder;
-        NSQLTranslation::TClusterMapping ClusterMapping; 
+        NSQLTranslation::TClusterMapping ClusterMapping;
         TString PathPrefix;
         THashMap<TString, TString> ProviderPathPrefixes;
         THashMap<TString, TString> ClusterPathPrefixes;

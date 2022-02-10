@@ -172,7 +172,7 @@ void TThrowingNodeVisitor::Visit(TBlockType& node) {
 }
 
 void TThrowingNodeVisitor::ThrowUnexpectedNodeType() {
-    THROW yexception() << "Unexpected node type"; 
+    THROW yexception() << "Unexpected node type";
 }
 
 void TEmptyNodeVisitor::Visit(TTypeType& node) {

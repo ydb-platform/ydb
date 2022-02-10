@@ -73,8 +73,8 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
             return GetKeywordId(ctx, node.GetAlt_keyword1().GetRule_keyword_restricted1());
         case TRule_keyword::kAltKeyword2:
             return GetIdentifier(ctx, node.GetAlt_keyword2().GetRule_keyword_alter_uncompat1());
-        case TRule_keyword::kAltKeyword3: 
-            return GetIdentifier(ctx, node.GetAlt_keyword3().GetRule_keyword_table_uncompat1()); 
+        case TRule_keyword::kAltKeyword3:
+            return GetIdentifier(ctx, node.GetAlt_keyword3().GetRule_keyword_table_uncompat1());
         default:
             Y_FAIL("You should change implementation according grammar changes");
     }
@@ -116,24 +116,24 @@ static std::pair<bool, TString> Id(const TRule_id_or_at& node, TTranslation& ctx
     return std::make_pair(hasAt, Id(node.GetRule_id2(), ctx) );
 }
 
-static TString Id(const TRule_id_table& node, TTranslation& ctx) { 
-    // id_table: IDENTIFIER | keyword_restricted; 
-    switch (node.Alt_case()) { 
-    case TRule_id_table::kAltIdTable1: 
-        return ctx.Identifier(node.GetAlt_id_table1().GetToken1()); 
-    case TRule_id_table::kAltIdTable2: 
-        return GetKeyword(ctx, node.GetAlt_id_table2().GetRule_keyword_restricted1()); 
-    default: 
-        Y_FAIL("You should change implementation according grammar changes"); 
-    } 
-} 
- 
-static std::pair<bool, TString> Id(const TRule_id_table_or_at& node, TTranslation& ctx) { 
-    // id_table_or_at: AT? id_table; 
-    bool hasAt = node.HasBlock1(); 
-    return std::make_pair(hasAt, Id(node.GetRule_id_table2(), ctx)); 
-} 
- 
+static TString Id(const TRule_id_table& node, TTranslation& ctx) {
+    // id_table: IDENTIFIER | keyword_restricted;
+    switch (node.Alt_case()) {
+    case TRule_id_table::kAltIdTable1:
+        return ctx.Identifier(node.GetAlt_id_table1().GetToken1());
+    case TRule_id_table::kAltIdTable2:
+        return GetKeyword(ctx, node.GetAlt_id_table2().GetRule_keyword_restricted1());
+    default:
+        Y_FAIL("You should change implementation according grammar changes");
+    }
+}
+
+static std::pair<bool, TString> Id(const TRule_id_table_or_at& node, TTranslation& ctx) {
+    // id_table_or_at: AT? id_table;
+    bool hasAt = node.HasBlock1();
+    return std::make_pair(hasAt, Id(node.GetRule_id_table2(), ctx));
+}
+
 static TString Id(const TRule_id_expr& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
         case TRule_id_expr::kAltIdExpr1:
@@ -190,16 +190,16 @@ static TString IdOrString(const TRule_id_or_string& node, TTranslation& ctx, boo
     Y_FAIL("You should change implementation according grammar changes");
 }
 
-static TString IdOrStringAsCluster(const TRule_id_or_string& node, TTranslation& ctx) { 
-    TString cluster = IdOrString(node, ctx); 
-    TString normalizedClusterName; 
-    if (!ctx.Context().GetClusterProvider(cluster, normalizedClusterName)) { 
-        ctx.Error() << "Unknown cluster: " << cluster; 
-        return {}; 
-    } 
-    return normalizedClusterName; 
-} 
- 
+static TString IdOrStringAsCluster(const TRule_id_or_string& node, TTranslation& ctx) {
+    TString cluster = IdOrString(node, ctx);
+    TString normalizedClusterName;
+    if (!ctx.Context().GetClusterProvider(cluster, normalizedClusterName)) {
+        ctx.Error() << "Unknown cluster: " << cluster;
+        return {};
+    }
+    return normalizedClusterName;
+}
+
 static TString OptIdPrefixAsStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
     if (!node.HasBlock1()) {
         return defaultStr;
@@ -207,13 +207,13 @@ static TString OptIdPrefixAsStr(const TRule_opt_id_prefix& node, TTranslation& c
     return IdOrString(node.GetBlock1().GetRule_id_or_string1(), ctx);
 }
 
-static TString OptIdPrefixAsClusterStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) { 
-    if (!node.HasBlock1()) { 
-        return defaultStr; 
-    } 
-    return IdOrStringAsCluster(node.GetBlock1().GetRule_id_or_string1(), ctx); 
-} 
- 
+static TString OptIdPrefixAsClusterStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
+    if (!node.HasBlock1()) {
+        return defaultStr;
+    }
+    return IdOrStringAsCluster(node.GetBlock1().GetRule_id_or_string1(), ctx);
+}
+
 static void PureColumnListStr(const TRule_pure_column_list& node, TTranslation& ctx, TVector<TString>& outList) {
     outList.push_back(IdOrString(node.GetRule_id_or_string2(), ctx));
     for (auto& block: node.GetBlock3()) {
@@ -388,7 +388,7 @@ static std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& 
 }
 
 static std::pair<TString, TString> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx) {
-    auto nameWithAt(Id(node.GetRule_id_table_or_at1(), ctx)); 
+    auto nameWithAt(Id(node.GetRule_id_table_or_at1(), ctx));
     TString view;
     if (node.HasBlock2()) {
         view = IdOrString(node.GetBlock2().GetRule_id_or_string2(), ctx);
@@ -465,10 +465,10 @@ static TTableRef SimpleTableRefImpl(const TRule_simple_table_ref& node, NSQLTran
     switch (node.GetBlock1().Alt_case()) {
     case TRule_simple_table_ref_TBlock1::AltCase::kAlt1: {
         if (node.GetBlock1().GetAlt1().GetBlock1().HasRule_opt_id_prefix1()) {
-            cluster = OptIdPrefixAsClusterStr(node.GetBlock1().GetAlt1().GetBlock1().GetRule_opt_id_prefix1(), ctx, ctx.Context().CurrCluster); 
-            if (!cluster && ctx.Context().CurrCluster) { 
-                return TTableRef(ctx.Context().MakeName("table"), ctx.Context().CurrCluster, nullptr); 
-            } 
+            cluster = OptIdPrefixAsClusterStr(node.GetBlock1().GetAlt1().GetBlock1().GetRule_opt_id_prefix1(), ctx, ctx.Context().CurrCluster);
+            if (!cluster && ctx.Context().CurrCluster) {
+                return TTableRef(ctx.Context().MakeName("table"), ctx.Context().CurrCluster, nullptr);
+            }
         }
 
         tr.ConstructInPlace(ctx.Context().MakeName("table"), cluster.empty() ? ctx.Context().CurrCluster : cluster, nullptr);
@@ -908,10 +908,10 @@ TTableRef TSqlTranslation::TableRefImpl(const TRule_table_ref& node) {
         Ctx.Error() << "Cluster should not be used in limited view";
         return TTableRef(Ctx.MakeName("table"), Ctx.CurrCluster, nullptr);
     }
-    auto cluster = OptIdPrefixAsClusterStr(node.GetRule_opt_id_prefix1(), *this, Context().CurrCluster); 
-    if (!cluster) { 
-        return TTableRef(Ctx.MakeName("table"), Ctx.CurrCluster, nullptr); 
-    } 
+    auto cluster = OptIdPrefixAsClusterStr(node.GetRule_opt_id_prefix1(), *this, Context().CurrCluster);
+    if (!cluster) {
+        return TTableRef(Ctx.MakeName("table"), Ctx.CurrCluster, nullptr);
+    }
 
     TTableRef tr(Context().MakeName("table"), cluster, nullptr);
     TPosition pos(Context().Pos());
@@ -2881,17 +2881,17 @@ bool TSqlSelect::SortSpecificationList(const TRule_sort_specification_list& node
 
 TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteSettings& settings, TPosition& selectPos) {
     // PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING call_expr (AS id_or_string)?
-    // (WHERE expr)? (HAVING expr)?)? 
- 
+    // (WHERE expr)? (HAVING expr)?)?
+
     Token(node.GetToken1());
     TPosition startPos(Ctx.Pos());
- 
-    const bool stream = node.HasBlock2(); 
+
+    const bool stream = node.HasBlock2();
     if (!selectPos) {
         selectPos = startPos;
     }
 
-    TSourcePtr source(NamedSingleSource(node.GetRule_named_single_source3())); 
+    TSourcePtr source(NamedSingleSource(node.GetRule_named_single_source3()));
     if (!source) {
         return nullptr;
     }
@@ -2909,7 +2909,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
 
     bool hasUsing = node.HasBlock5();
     if (!hasUsing) {
-        return BuildProcess(startPos, std::move(source), nullptr, {}, true, stream, settings); 
+        return BuildProcess(startPos, std::move(source), nullptr, {}, true, stream, settings);
     }
 
     const auto& block5 = node.GetBlock5();
@@ -2921,7 +2921,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
         }
         Ctx.IncrementMonCounter("sql_features", "ProcessWhere");
     } else {
-        Ctx.IncrementMonCounter("sql_features", stream ? "ProcessStream" : "Process"); 
+        Ctx.IncrementMonCounter("sql_features", stream ? "ProcessStream" : "Process");
     }
 
     if (block5.HasBlock5()) {
@@ -2979,7 +2979,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
         with->SetLabel(IdOrString(block5.GetBlock3().GetRule_id_or_string2(), *this));
     }
 
-    return BuildProcess(startPos, std::move(source), with, std::move(args), listCall, stream, settings); 
+    return BuildProcess(startPos, std::move(source), with, std::move(args), listCall, stream, settings);
 }
 
 TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSettings& settings, TPosition& selectPos) {
@@ -4048,10 +4048,10 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     if (tableRef.HasBlock1()) {
         switch (tableRef.GetBlock1().Alt_case()) {
         case TRule_simple_table_ref_TBlock1::AltCase::kAlt1: {
-            cluster = OptIdPrefixAsClusterStr(tableRef.GetBlock1().GetAlt1().GetBlock1().GetRule_opt_id_prefix1(), *this, Ctx.CurrCluster); 
-            if (!cluster && Ctx.CurrCluster) { 
-                return nullptr; 
-            } 
+            cluster = OptIdPrefixAsClusterStr(tableRef.GetBlock1().GetAlt1().GetBlock1().GetRule_opt_id_prefix1(), *this, Ctx.CurrCluster);
+            if (!cluster && Ctx.CurrCluster) {
+                return nullptr;
+            }
             auto id = Id(tableRef.GetBlock1().GetAlt1().GetBlock1().GetRule_id_or_at2(), *this);
             nameOrAt = std::make_pair(id.first, TDeferredAtom(Ctx.Pos(), id.second));
             break;
@@ -4368,10 +4368,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore6: {
             const auto& rule = core.GetAlt_sql_stmt_core6().GetRule_use_stmt1();
             Token(rule.GetToken1());
-            Ctx.CurrCluster = IdOrStringAsCluster(rule.GetRule_id_or_string2(), *this); 
-            if (!Ctx.CurrCluster) { 
-                return false; 
-            } 
+            Ctx.CurrCluster = IdOrStringAsCluster(rule.GetRule_id_or_string2(), *this);
+            if (!Ctx.CurrCluster) {
+                return false;
+            }
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore7: {
@@ -5236,7 +5236,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
 #endif
     NSQLTranslation::TErrorCollectorOverIssues collector(err, maxErrors, "");
     NProtoAST::TProtoASTBuilder<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
-    return builder.BuildAST(collector); 
+    return builder.BuildAST(collector);
 }
 
 google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err, google::protobuf::Arena* arena) {
@@ -5256,15 +5256,15 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
     }
     TSqlQuery query(ctx, ctx.Settings.Mode, true);
     TNodePtr node(query.Build(static_cast<const TSQLParserAST&>(protoAst)));
-    try { 
-        if (node && node->Init(ctx, nullptr)) { 
-            return node->Translate(ctx); 
-        } 
-    } catch (const NProtoAST::TTooManyErrors&) { 
-        // do not add error issue, no room for it 
+    try {
+        if (node && node->Init(ctx, nullptr)) {
+            return node->Translate(ctx);
+        }
+    } catch (const NProtoAST::TTooManyErrors&) {
+        // do not add error issue, no room for it
     }
- 
-    return nullptr; 
+
+    return nullptr;
 }
 
 void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message& protoAst,
@@ -5277,7 +5277,7 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
-            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" << 
+            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" <<
                 ", please send this request over bug report into YQL interface or write on yql@ maillist";
         }
     }

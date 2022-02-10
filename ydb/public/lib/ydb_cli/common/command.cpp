@@ -253,12 +253,12 @@ TClientCommandTree::TClientCommandTree(const TString& name, const std::initializ
     Args[0] = "<subcommand>";
 }
 
-void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) { 
+void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) {
     for (const TString& a : command->Aliases) {
         Aliases[a] = command->Name;
     }
     command->Parent = this;
-    SubCommands[command->Name] = std::move(command); 
+    SubCommands[command->Name] = std::move(command);
 }
 
 void TClientCommandTree::Config(TConfig& config) {
@@ -302,7 +302,7 @@ void TClientCommandTree::Parse(TConfig& config) {
             it = SubCommands.find("*");
     }
     if (it != SubCommands.end()) {
-        SelectedCommand = it->second.get(); 
+        SelectedCommand = it->second.get();
     } else {
         throw yexception() << "Invalid command '" << cmd << "'";
     }

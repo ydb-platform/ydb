@@ -26,7 +26,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     IViewer* Viewer;
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
-    THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult; 
+    THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     NMon::TEvHttpInfo::TPtr Event;
@@ -34,7 +34,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     TMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> NodeSysInfo;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvTabletStateResponse>> NodeTabletInfo;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
+    ui32 Timeout = 0;
     TString User;
     TString Path;
     bool Tablets = false;
@@ -325,7 +325,7 @@ public:
                 tenant.MergeFrom(tenantBySubDomainKey);
                 if (!tenant.GetId()) {
                     tenant.SetId(GetDomainId(subDomainKey));
-                } 
+                }
                 if (tenant.GetType() == NKikimrViewer::UnknownTenantType) {
                     tenant.SetType(NKikimrViewer::Dedicated);
                 }
@@ -402,7 +402,7 @@ public:
                         overall = Max(overall, flag);
                     }
                 }
- 
+
                 THashSet<TNodeId> tenantNodes;
 
                 for (TNodeId nodeId : tenant.GetNodeIds()) {

@@ -18,7 +18,7 @@ namespace NKikimr {
         auto& rItems = context->Result->Items;
         for (auto& item : msg->Items) {
             rItems.emplace_back(std::move(item));
-            AddBlobQuery(rItems.back().BlobId, rItems.back().Needed, context, &rItems.back()); 
+            AddBlobQuery(rItems.back().BlobId, rItems.back().Needed, context, &rItems.back());
             ++context->NumUnrespondedBlobs;
         }
 

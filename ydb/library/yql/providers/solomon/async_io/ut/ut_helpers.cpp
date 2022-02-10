@@ -51,7 +51,7 @@ void InitSink(
             secureParams,
             &actor.GetSinkCallbacks(),
             counters,
-            nullptr, 
+            nullptr,
             freeSpace);
 
         actor.InitSink(dqSink, dqSinkAsActor);
@@ -98,7 +98,7 @@ NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud) {
     }
 
     settings.SetClusterType(isCloud ? NSo::NProto::ESolomonClusterType::CT_MONITORING : NSo::NProto::ESolomonClusterType::CT_SOLOMON);
-    settings.SetUseSsl(false); 
+    settings.SetUseSsl(false);
 
     FillDqSolomonScheme(*settings.MutableScheme());
 

@@ -44,13 +44,13 @@ public:
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TString& runner);
 
-    void AddUserDataTable(const TUserDataTable& userDataTable); 
+    void AddUserDataTable(const TUserDataTable& userDataTable);
     void AddCredentialsTable(TCredentialTablePtr credentialTable);
     void SetUserCredentials(const TUserCredentials& userCredentials);
     void SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig);
     void SetModules(IModuleResolver::TPtr modules);
     void SetUdfResolver(IUdfResolver::TPtr udfResolver);
-    void SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet); 
+    void SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet);
     void SetFileStorage(TFileStoragePtr fileStorage);
     void EnableRangeComputeFor();
 
@@ -70,14 +70,14 @@ private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
-    TUserDataTable UserDataTable_; 
+    TUserDataTable UserDataTable_;
     TVector<TCredentialTablePtr> CredentialTables_;
     TUserCredentials UserCredentials_;
     const TGatewaysConfig* GatewaysConfig_;
     IModuleResolver::TPtr Modules_;
     IUdfResolver::TPtr UdfResolver_;
-    TUdfIndex::TPtr UdfIndex_; 
-    TUdfIndexPackageSet::TPtr UdfIndexPackageSet_; 
+    TUdfIndex::TPtr UdfIndex_;
+    TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     TFileStoragePtr FileStorage_;
     TString Runner_;
     bool EnableRangeComputeFor_ = false;
@@ -100,7 +100,7 @@ public:
     bool ParseSql();
     bool ParseSql(const NSQLTranslation::TTranslationSettings& settings);
 
-    bool Compile(const TString& username); 
+    bool Compile(const TString& username);
 
     TStatus Discover(const TString& username);
 
@@ -169,13 +169,13 @@ public:
     }
 
     inline TIssues CompletedIssues() const {
-        if (ExprCtx_) { 
-            return ExprCtx_->IssueManager.GetCompletedIssues(); 
-        } else { 
+        if (ExprCtx_) {
+            return ExprCtx_->IssueManager.GetCompletedIssues();
+        } else {
             return {};
-        } 
-    } 
- 
+        }
+    }
+
     void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false);
 
     inline void PrintErrorsTo(IOutputStream& out) const {
@@ -231,11 +231,11 @@ public:
     NYson::EYsonFormat GetOutputFormat() const { return OutputFormat_; }
 
     void SetValidateOptions(NUdf::EValidateMode validateMode);
-    void SetDisableNativeUdfSupport(bool disable); 
+    void SetDisableNativeUdfSupport(bool disable);
     void SetUseTableMetaFromGraph(bool use);
 
     void SetProgressWriter(TOperationProgressWriter writer) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         ProgressWriter_ = ThreadSafeProgressWriter(writer);
     }
 
@@ -245,7 +245,7 @@ public:
     }
 
     void SetOperationId(const TString& id) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         OperationOptions_.Id = id;
     }
 
@@ -255,7 +255,7 @@ public:
     }
 
     void SetOperationTitle(const TString& title) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         if (!title.Contains("YQL")) {
             ythrow yexception() << "Please mention YQL in the title '" << title << "'";
         }
@@ -269,23 +269,23 @@ public:
     }
 
     void SetQueryName(const TString& name) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         OperationOptions_.QueryName = name;
     }
 
     void SetOperationAttrsYson(const TString& attrs) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         OperationOptions_.AttrsYson = attrs;
     }
 
-    void SetParametersYson(const TString& parameters); 
-    // should be used after Compile phase 
-    bool ExtractQueryParametersMetadata(); 
+    void SetParametersYson(const TString& parameters);
+    // should be used after Compile phase
+    bool ExtractQueryParametersMetadata();
 
-    const TString& GetExtractedQueryParametersMetadataYson() const { 
-        return ExtractedQueryParametersMetadataYson_; 
-    } 
- 
+    const TString& GetExtractedQueryParametersMetadataYson() const {
+        return ExtractedQueryParametersMetadataYson_;
+    }
+
     void EnableResultPosition() {
         SupportsResultPosition_ = true;
     }
@@ -299,13 +299,13 @@ private:
         const TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
-        const TUserDataTable& userDataTable, 
+        const TUserDataTable& userDataTable,
         const TVector<TCredentialTablePtr>& credentialTables,
         const TUserCredentials& userCredentials,
         const IModuleResolver::TPtr& modules,
         const IUdfResolver::TPtr& udfResolver,
-        const TUdfIndex::TPtr& udfIndex, 
-        const TUdfIndexPackageSet::TPtr& udfIndexPackageSet, 
+        const TUdfIndex::TPtr& udfIndex,
+        const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const TGatewaysConfig* gatewaysConfig,
         const TString& filename,
@@ -314,9 +314,9 @@ private:
         const TString& runner,
         bool enableRangeComputeFor);
 
-    TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username); 
-    TTypeAnnotationContextPtr GetAnnotationContext() const; 
-    TTypeAnnotationContextPtr ProvideAnnotationContext(const TString& username); 
+    TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
+    TTypeAnnotationContextPtr GetAnnotationContext() const;
+    TTypeAnnotationContextPtr ProvideAnnotationContext(const TString& username);
     bool CollectUsedClusters();
 
     NThreading::TFuture<void> OpenSession(const TString& username);
@@ -329,12 +329,12 @@ private:
     TFutureStatus RemoteKikimrRun(const TString& cluster, const IPipelineConfigurator* pipelineConf);
 
     bool FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules = nullptr);
-    TString GetSessionId() const; 
-    TString TakeSessionId(); 
+    TString GetSessionId() const;
+    TString TakeSessionId();
 
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
 
-private: 
+private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
@@ -345,10 +345,10 @@ private:
     TVector<TCredentialTablePtr> CredentialTables_;
     TUserCredentials UserCredentials_;
     const IUdfResolver::TPtr UdfResolver_;
-    const TUdfIndex::TPtr UdfIndex_; 
-    const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_; 
+    const TUdfIndex::TPtr UdfIndex_;
+    const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     const TFileStoragePtr FileStorage_;
-    const TUserDataStorage::TPtr UserDataStorage_; 
+    const TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
@@ -361,7 +361,7 @@ private:
     const IModuleResolver::TPtr Modules_;
     TExprNode::TPtr ExprRoot_;
     TExprNode::TPtr SavedExprRoot_;
-    mutable TAdaptiveLock SessionIdLock_; 
+    mutable TAdaptiveLock SessionIdLock_;
     TString SessionId_;
     TTypeAnnotationContextPtr TypeCtx_;
     TAutoPtr<IPlanBuilder> PlanBuilder_;
@@ -372,7 +372,7 @@ private:
     NYson::EYsonFormat OutputFormat_;
     TMaybe<NYson::EYsonFormat> DiagnosticFormat_;
     NUdf::EValidateMode ValidateMode_ = NUdf::EValidateMode::None;
-    bool DisableNativeUdfSupport_ = false; 
+    bool DisableNativeUdfSupport_ = false;
     bool UseTableMetaFromGraph_ = false;
     TMaybe<TSet<TString>> UsedClusters_;
     TMaybe<TSet<TString>> UsedProviders_;
@@ -383,7 +383,7 @@ private:
     IOutputStream* ExprStream_ = nullptr;
     IOutputStream* PlanStream_ = nullptr;
     TOperationProgressWriter ProgressWriter_ = [](const TOperationProgress&) {};
-    TString ExtractedQueryParametersMetadataYson_; 
+    TString ExtractedQueryParametersMetadataYson_;
     const bool EnableRangeComputeFor_;
 };
 

@@ -422,7 +422,7 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
     }
 }
 
-void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NKikimrMiniKQL::TValue& res, const TVector<ui32>* columnOrder = nullptr) { 
+void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NKikimrMiniKQL::TValue& res, const TVector<ui32>* columnOrder = nullptr) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
         case TType::EKind::EmptyList:
@@ -465,9 +465,9 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
             auto structType = static_cast<TStructType*>(type);
             res.MutableStruct()->Reserve(structType->GetMembersCount());
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
-                auto memberIndex = (!columnOrder || columnOrder->empty()) ?  index : (*columnOrder)[index]; 
-                auto memberType = structType->GetMemberType(memberIndex); 
-                ExportValueToProtoImpl(memberType, value.GetElement(memberIndex), *res.MutableStruct()->Add()); 
+                auto memberIndex = (!columnOrder || columnOrder->empty()) ?  index : (*columnOrder)[index];
+                auto memberType = structType->GetMemberType(memberIndex);
+                ExportValueToProtoImpl(memberType, value.GetElement(memberIndex), *res.MutableStruct()->Add());
             }
 
             break;
@@ -518,7 +518,7 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
     }
 }
 
-void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res, const TVector<ui32>* columnOrder = nullptr) { 
+void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res, const TVector<ui32>* columnOrder = nullptr) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
         case TType::EKind::EmptyList:
@@ -573,9 +573,9 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Yd
             auto structType = static_cast<TStructType*>(type);
             res.mutable_items()->Reserve(structType->GetMembersCount());
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
-                auto memberIndex = (!columnOrder || columnOrder->empty()) ?  index : (*columnOrder)[index]; 
-                auto memberType = structType->GetMemberType(memberIndex); 
-                ExportValueToProtoImpl(memberType, value.GetElement(memberIndex), *res.mutable_items()->Add()); 
+                auto memberIndex = (!columnOrder || columnOrder->empty()) ?  index : (*columnOrder)[index];
+                auto memberType = structType->GetMemberType(memberIndex);
+                ExportValueToProtoImpl(memberType, value.GetElement(memberIndex), *res.mutable_items()->Add());
             }
 
             break;
@@ -752,8 +752,8 @@ void ExportTypeToProto(TType* type, Ydb::Type& res) {
     ExportTypeToProtoImpl(type, res);
 }
 
-void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res, const TVector<ui32>* columnOrder) { 
-    ExportValueToProtoImpl(type, value, res, columnOrder); 
+void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res, const TVector<ui32>* columnOrder) {
+    ExportValueToProtoImpl(type, value, res, columnOrder);
 }
 
 template <typename ValueType> class TBufferArray {
@@ -1179,8 +1179,8 @@ void ExportTypeToProto(TType* type, NKikimrMiniKQL::TType& res) {
     ExportTypeToProtoImpl(type, res);
 }
 
-void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, NKikimrMiniKQL::TValue& res, const TVector<ui32>* columnOrder) { 
-    ExportValueToProtoImpl(type, value, res, columnOrder); 
+void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, NKikimrMiniKQL::TValue& res, const TVector<ui32>* columnOrder) {
+    ExportValueToProtoImpl(type, value, res, columnOrder);
 }
 
 

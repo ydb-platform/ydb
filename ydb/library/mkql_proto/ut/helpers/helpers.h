@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -31,7 +31,7 @@ void TestExportType(std::function<TRuntimeNode(TProgramBuilder& pgmBuilder)> set
 }
 
 template <typename TProtoValue>
-void TestExportValue(std::function<TRuntimeNode(TProgramBuilder& pgmBuilder)> setup, const TString& expectedString, const TVector<ui32>* columnOrder = nullptr) { 
+void TestExportValue(std::function<TRuntimeNode(TProgramBuilder& pgmBuilder)> setup, const TString& expectedString, const TVector<ui32>* columnOrder = nullptr) {
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
     auto randomProvider = CreateDeterministicRandomProvider(1);
     auto timeProvider = CreateDeterministicTimeProvider(1);
@@ -49,7 +49,7 @@ void TestExportValue(std::function<TRuntimeNode(TProgramBuilder& pgmBuilder)> se
     auto pattern = MakeComputationPattern(explorer, pgmReturn, {}, opts);
     auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider));
     TProtoValue res;
-    ExportValueToProto(pgmReturn.GetStaticType(), graph->GetValue(), res, columnOrder); 
+    ExportValueToProto(pgmReturn.GetStaticType(), graph->GetValue(), res, columnOrder);
     using ::google::protobuf::TextFormat;
     TString str;
     TextFormat::PrintToString(res, &str);

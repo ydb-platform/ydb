@@ -67,7 +67,7 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
                    TIssues& issues)
-    : ClusterMapping(settings.ClusterMapping) 
+    : ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , Settings(settings)
@@ -171,8 +171,8 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         } else if (action == EWarningAction::DISABLE) {
             return Cnull;
         }
-    } 
- 
+    }
+
     // we have the last cell for issue, let's fill it with our internal error
     if (severity >= TSeverityIds::S_WARNING) {
         const bool aboveHalf = Issues.Size() > Settings.MaxErrors / 2;
@@ -188,8 +188,8 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         if (Settings.MaxErrors <= Issues.Size()) {
             ythrow NProtoAST::TTooManyErrors() << "Too many issues";
         }
-    } 
- 
+    }
+
     Issues.AddIssue(TIssue(pos, TString()));
     auto& curIssue = Issues.back();
     curIssue.Severity = severity;
@@ -209,14 +209,14 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
             return true;
         }
 
-        TString normalizedClusterName; 
-        if (!GetClusterProvider(*arg, normalizedClusterName)) { 
-            Error() << "Unknown cluster or provider: " << *arg; 
+        TString normalizedClusterName;
+        if (!GetClusterProvider(*arg, normalizedClusterName)) {
+            Error() << "Unknown cluster or provider: " << *arg;
             IncrementMonCounter("sql_errors", "BadPragmaValue");
             return false;
         }
 
-        ClusterPathPrefixes[normalizedClusterName] = value; 
+        ClusterPathPrefixes[normalizedClusterName] = value;
     } else {
         PathPrefix = value;
     }
@@ -225,7 +225,7 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    auto* clusterPrefix = cluster.GetLiteral() ? ClusterPathPrefixes.FindPtr(*cluster.GetLiteral()) : nullptr; 
+    auto* clusterPrefix = cluster.GetLiteral() ? ClusterPathPrefixes.FindPtr(*cluster.GetLiteral()) : nullptr;
     if (clusterPrefix && !clusterPrefix->empty()) {
         return AddTablePathPrefix(*this, *clusterPrefix, path);
     } else {
@@ -287,10 +287,10 @@ TString TContext::AddSimpleUdf(const TString& udf) {
     return name;
 }
 
-void TContext::SetPackageVersion(const TString& packageName, ui32 version) { 
-    PackageVersions[packageName] = version; 
-} 
- 
+void TContext::SetPackageVersion(const TString& packageName, ui32 version) {
+    PackageVersions[packageName] = version;
+}
+
 void TScopedState::UseCluster(const TString& service, const TDeferredAtom& cluster) {
     YQL_ENSURE(!cluster.Empty());
     if (cluster.GetLiteral()) {

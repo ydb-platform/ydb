@@ -1153,8 +1153,8 @@ private:
 };
 
 void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {
-    parent.AddCommand(std::make_unique<TClientCommandServer>(factories)); 
-    parent.AddCommand(std::make_unique<TClientCommandServerConfig>()); 
+    parent.AddCommand(std::make_unique<TClientCommandServer>(factories));
+    parent.AddCommand(std::make_unique<TClientCommandServerConfig>());
 }
 
 }

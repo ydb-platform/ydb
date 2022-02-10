@@ -260,7 +260,7 @@ namespace NKikimr {
 
             // fill in header; calculate checksum for header (excluding CRC) + data
             header.ChunkSerNum = chunk.ChunkSerNum;
-            header.Checksum = Crc32cExtend(Crc32c(&header.IndexRecord, sizeof(TBlobHeader) - sizeof(ui32)), 
+            header.Checksum = Crc32cExtend(Crc32c(&header.IndexRecord, sizeof(TBlobHeader) - sizeof(ui32)),
                     item.Data.data(), item.Data.size());
             static_assert(offsetof(TBlobHeader, Checksum) == 0 && sizeof(TBlobHeader::Checksum) == sizeof(ui32),
                     "incorrect displacement of TBlobHeader::Checksum");
@@ -490,7 +490,7 @@ namespace NKikimr {
             memset(&indexHeader, 0, sizeof(indexHeader));
             indexHeader.ChunkSerNum = chunk.ChunkSerNum;
             indexHeader.NumItems = finIt->second.Index.size();
-            indexHeader.Checksum = Crc32cExtend(Crc32c(&indexHeader.ChunkSerNum, 
+            indexHeader.Checksum = Crc32cExtend(Crc32c(&indexHeader.ChunkSerNum,
                     sizeof(indexHeader) - sizeof(TBlobIndexHeader::Checksum)),
                     finIt->second.Index.data(), indexHeader.NumItems * sizeof(TBlobIndexRecord));
             static_assert(offsetof(TBlobIndexHeader, Checksum) == 0 && sizeof(TBlobIndexHeader::Checksum) == sizeof(ui32),

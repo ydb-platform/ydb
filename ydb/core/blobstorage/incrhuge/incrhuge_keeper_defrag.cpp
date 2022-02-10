@@ -232,7 +232,7 @@ namespace NKikimr {
 
                 const TBlobHeader& header = *result.Data.DataPtr<const TBlobHeader>(0);
                 if (!locator.DeleteInProgress && result.Data.IsReadable(0, totalSize)) {
-                    Y_VERIFY(Crc32c(&header.IndexRecord, totalSize - sizeof(ui32)) == header.Checksum); 
+                    Y_VERIFY(Crc32c(&header.IndexRecord, totalSize - sizeof(ui32)) == header.Checksum);
                     Y_VERIFY(header.IndexRecord == record);
                     Y_VERIFY(header.ChunkSerNum == ChunkInProgressSerNum);
                     TString data = header.ExtractInplacePayload();

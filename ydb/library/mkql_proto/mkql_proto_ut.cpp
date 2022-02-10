@@ -506,71 +506,71 @@ Variant {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportStructEmptyColumnOrder) { 
-        const TVector<ui32> emptyColumnOrder; 
-        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) { 
-            std::vector<std::pair<std::string_view, TRuntimeNode>> items; 
-            items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") }); 
-            items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) }); 
-            auto pgmReturn = pgmBuilder.NewStruct(items); 
-            return pgmReturn; 
-        }, 
-        // struct fields are in alpha order 
-        "Struct {\n" 
-        "  Int32: 42\n" 
-        "}\n" 
-        "Struct {\n" 
-        "  Bytes: \"abc\"\n" 
-        "}\n", 
-        &emptyColumnOrder); 
-    } 
- 
-    Y_UNIT_TEST(TestExportStructWithColumnOrder) { 
-        const TVector<ui32> columnOrder = {1, 0}; 
-        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) { 
-            std::vector<std::pair<std::string_view, TRuntimeNode>> items; 
-            items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) }); 
-            items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") }); 
-            auto pgmReturn = pgmBuilder.NewStruct(items); 
-            return pgmReturn; 
-        }, 
-        "Struct {\n" 
-        "  Bytes: \"abc\"\n" 
-        "}\n" 
-        "Struct {\n" 
-        "  Int32: 42\n" 
-        "}\n", 
-        &columnOrder); 
-    } 
- 
-    Y_UNIT_TEST(TestExportStructColumnOrderAffectsTopLevelOnly) { 
-        const TVector<ui32> columnOrder = {1, 0}; 
-        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) { 
-            std::vector<std::pair<std::string_view, TRuntimeNode>> items1; 
-            items1.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) }); 
-            items1.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") }); 
-            auto struct1 = pgmBuilder.NewStruct(items1); 
- 
-            std::vector<std::pair<std::string_view, TRuntimeNode>> items2; 
-            items2.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(777) }); 
-            items2.push_back({ "y", struct1 }); 
-            auto pgmReturn = pgmBuilder.NewStruct(items2); 
-            return pgmReturn; 
-        }, 
-        "Struct {\n" 
-        "  Struct {\n" 
-        "    Int32: 42\n" 
-        "  }\n" 
-        "  Struct {\n" 
-        "    Bytes: \"abc\"\n" 
-        "  }\n" 
-        "}\n" 
-        "Struct {\n" 
-        "  Int32: 777\n" 
-        "}\n", 
-        &columnOrder); 
-    } 
- 
+    Y_UNIT_TEST(TestExportStructEmptyColumnOrder) {
+        const TVector<ui32> emptyColumnOrder;
+        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
+            items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
+            items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
+            auto pgmReturn = pgmBuilder.NewStruct(items);
+            return pgmReturn;
+        },
+        // struct fields are in alpha order
+        "Struct {\n"
+        "  Int32: 42\n"
+        "}\n"
+        "Struct {\n"
+        "  Bytes: \"abc\"\n"
+        "}\n",
+        &emptyColumnOrder);
+    }
+
+    Y_UNIT_TEST(TestExportStructWithColumnOrder) {
+        const TVector<ui32> columnOrder = {1, 0};
+        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
+            items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
+            items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
+            auto pgmReturn = pgmBuilder.NewStruct(items);
+            return pgmReturn;
+        },
+        "Struct {\n"
+        "  Bytes: \"abc\"\n"
+        "}\n"
+        "Struct {\n"
+        "  Int32: 42\n"
+        "}\n",
+        &columnOrder);
+    }
+
+    Y_UNIT_TEST(TestExportStructColumnOrderAffectsTopLevelOnly) {
+        const TVector<ui32> columnOrder = {1, 0};
+        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items1;
+            items1.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
+            items1.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
+            auto struct1 = pgmBuilder.NewStruct(items1);
+
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items2;
+            items2.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(777) });
+            items2.push_back({ "y", struct1 });
+            auto pgmReturn = pgmBuilder.NewStruct(items2);
+            return pgmReturn;
+        },
+        "Struct {\n"
+        "  Struct {\n"
+        "    Int32: 42\n"
+        "  }\n"
+        "  Struct {\n"
+        "    Bytes: \"abc\"\n"
+        "  }\n"
+        "}\n"
+        "Struct {\n"
+        "  Int32: 777\n"
+        "}\n",
+        &columnOrder);
+    }
+
     Y_UNIT_TEST(TestExportDict) {
         TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
             auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<i32>::Id),

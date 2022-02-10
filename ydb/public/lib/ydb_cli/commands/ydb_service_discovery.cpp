@@ -6,8 +6,8 @@ namespace NConsoleClient {
 TCommandDiscovery::TCommandDiscovery()
     : TClientCommandTree("discovery", {}, "Discovery service operations")
 {
-    AddCommand(std::make_unique<TCommandListEndpoints>()); 
-    AddCommand(std::make_unique<TCommandWhoAmI>()); 
+    AddCommand(std::make_unique<TCommandListEndpoints>());
+    AddCommand(std::make_unique<TCommandWhoAmI>());
 }
 
 TCommandListEndpoints::TCommandListEndpoints()

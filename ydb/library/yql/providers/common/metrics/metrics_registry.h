@@ -21,12 +21,12 @@ using TMetricsDecorator = std::function<IMetricsRegistryPtr(
 //////////////////////////////////////////////////////////////////////////////
 struct IMetricsRegistry: public TThrRefBase {
 
-    virtual void SetCounter( 
-        const TString& labelName, 
-        const TString& labelValue, 
-        i64 value, 
-        bool derivative = false) = 0; 
- 
+    virtual void SetCounter(
+        const TString& labelName,
+        const TString& labelValue,
+        i64 value,
+        bool derivative = false) = 0;
+
     virtual void IncCounter(
             const TString& labelName,
             const TString& labelValue,

@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     ddoarn
-    xenoxeno 
+    xenoxeno
     g:kikimr
 )
 

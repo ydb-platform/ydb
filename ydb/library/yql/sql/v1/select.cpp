@@ -644,7 +644,7 @@ TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleInde
 
 class TTableSource: public IRealSource {
 public:
-    TTableSource(TPosition pos, const TTableRef& table, const TString& label) 
+    TTableSource(TPosition pos, const TTableRef& table, const TString& label)
         : IRealSource(pos)
         , Table(table)
         , FakeSource(BuildFakeSource(pos))
@@ -740,11 +740,11 @@ public:
     }
 
     bool IsStream() const override {
-        return IsStreamingService(Table.Service); 
+        return IsStreamingService(Table.Service);
     }
 
     TPtr DoClone() const final {
-        return new TTableSource(Pos, Table, GetLabel()); 
+        return new TTableSource(Pos, Table, GetLabel());
     }
 
     bool IsTableSource() const override {
@@ -756,8 +756,8 @@ private:
     const TSourcePtr FakeSource;
 };
 
-TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString& label) { 
-    return new TTableSource(pos, table, label); 
+TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString& label) {
+    return new TTableSource(pos, table, label);
 }
 
 class TInnerSource: public IProxySource {
@@ -860,17 +860,17 @@ public:
         return NewSource ? NewSource->Build(ctx) : Node;
     }
 
-    bool IsStream() const override { 
-        auto source = Node->GetSource(); 
-        if (source) { 
-            return source->IsStream(); 
-        } 
-        // NewSource will be built later in DoInit->TryMakeSourceFromExpression 
-        // where Service will be used in all situations 
-        // let's detect IsStream by Service value 
-        return IsStreamingService(Service); 
-    } 
- 
+    bool IsStream() const override {
+        auto source = Node->GetSource();
+        if (source) {
+            return source->IsStream();
+        }
+        // NewSource will be built later in DoInit->TryMakeSourceFromExpression
+        // where Service will be used in all situations
+        // let's detect IsStream by Service value
+        return IsStreamingService(Service);
+    }
+
     TPtr DoClone() const final {
         return new TInnerSource(Pos, SafeClone(Node), Service, Cluster, GetLabel());
     }
@@ -1404,7 +1404,7 @@ public:
         const TVector<TNodePtr>& terms,
         bool distinct,
         const TVector<TNodePtr>& without,
-        bool selectStream, 
+        bool selectStream,
         const TWriteSettings& settings
     )
         : IRealSource(pos)
@@ -1420,7 +1420,7 @@ public:
         , Without(without)
         , Distinct(distinct)
         , HoppingWindowSpec(hoppingWindowSpec)
-        , SelectStream(selectStream) 
+        , SelectStream(selectStream)
         , Settings(settings)
     {
     }
@@ -1444,7 +1444,7 @@ public:
         if (!Source->Init(ctx, initSrc)) {
             return false;
         }
-        if (SelectStream && !Source->IsStream()) { 
+        if (SelectStream && !Source->IsStream()) {
             ctx.Error(Pos) << "SELECT STREAM is unsupported for non-streaming sources";
             return false;
         }
@@ -1477,10 +1477,10 @@ public:
 
         for (auto& expr: GroupByExpr) {
             if (auto sessionWindow = dynamic_cast<TSessionWindow*>(expr.Get())) {
-                if (Source->IsStream()) { 
-                    ctx.Error(Pos) << "SessionWindow is unsupported for streaming sources"; 
+                if (Source->IsStream()) {
+                    ctx.Error(Pos) << "SessionWindow is unsupported for streaming sources";
                     return false;
-                } 
+                }
                 sessionWindow->MarkValid();
             }
 
@@ -1703,7 +1703,7 @@ public:
     }
 
     bool IsStream() const override {
-        return Source->IsStream(); 
+        return Source->IsStream();
     }
 
     EOrderKind GetOrderKind() const override {
@@ -1758,7 +1758,7 @@ public:
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
                 CloneContainer(GroupBy), CompactGroupBy, AssumeSorted, CloneContainer(OrderBy),
                 SafeClone(Having), newSpecs, SafeClone(HoppingWindowSpec),
-                CloneContainer(Terms), Distinct, Without, SelectStream, Settings); 
+                CloneContainer(Terms), Distinct, Without, SelectStream, Settings);
     }
 
 private:
@@ -2092,7 +2092,7 @@ private:
     const bool Distinct;
     bool OrderByInit = false;
     THoppingWindowSpecPtr HoppingWindowSpec;
-    const bool SelectStream; 
+    const bool SelectStream;
     const TWriteSettings Settings;
 };
 
@@ -2103,9 +2103,9 @@ public:
         TSourcePtr source,
         TNodePtr with,
         bool withExtFunction,
-        TVector<TNodePtr>&& terms, 
+        TVector<TNodePtr>&& terms,
         bool listCall,
-        bool processStream, 
+        bool processStream,
         const TWriteSettings& settings,
         const TVector<TSortSpecificationPtr>& assumeOrderBy
     )
@@ -2113,9 +2113,9 @@ public:
         , Source(std::move(source))
         , With(with)
         , WithExtFunction(withExtFunction)
-        , Terms(std::move(terms)) 
+        , Terms(std::move(terms))
         , ListCall(listCall)
-        , ProcessStream(processStream) 
+        , ProcessStream(processStream)
         , Settings(settings)
         , AssumeOrderBy(assumeOrderBy)
     {
@@ -2135,11 +2135,11 @@ public:
             return false;
         }
 
-        if (ProcessStream && !Source->IsStream()) { 
-            ctx.Error(Pos) << "PROCESS STREAM is unsupported for non-streaming sources"; 
-            return false; 
-        } 
- 
+        if (ProcessStream && !Source->IsStream()) {
+            ctx.Error(Pos) << "PROCESS STREAM is unsupported for non-streaming sources";
+            return false;
+        }
+
         auto src = Source.Get();
         if (!With) {
             src->AllColumns();
@@ -2306,17 +2306,17 @@ public:
         return false;
     }
 
-    bool IsStream() const override { 
-        return Source->IsStream(); 
-    } 
- 
+    bool IsStream() const override {
+        return Source->IsStream();
+    }
+
     TWriteSettings GetWriteSettings() const override {
         return Settings;
     }
 
     TNodePtr DoClone() const final {
         return new TProcessSource(Pos, Source->CloneSource(), SafeClone(With), WithExtFunction,
-            CloneContainer(Terms), ListCall, ProcessStream, Settings, CloneContainer(AssumeOrderBy)); 
+            CloneContainer(Terms), ListCall, ProcessStream, Settings, CloneContainer(AssumeOrderBy));
     }
 
 private:
@@ -2341,7 +2341,7 @@ private:
     const bool WithExtFunction;
     TVector<TNodePtr> Terms;
     const bool ListCall;
-    const bool ProcessStream; 
+    const bool ProcessStream;
     const TWriteSettings Settings;
     TVector<TSortSpecificationPtr> AssumeOrderBy;
 };
@@ -2353,7 +2353,7 @@ TSourcePtr BuildProcess(
     bool withExtFunction,
     TVector<TNodePtr>&& terms,
     bool listCall,
-    bool processStream, 
+    bool processStream,
     const TWriteSettings& settings,
     const TVector<TSortSpecificationPtr>& assumeOrderBy
 ) {
@@ -2465,12 +2465,12 @@ TSourcePtr DoBuildSelectCore(
     TVector<TNodePtr>&& terms,
     bool distinct,
     TVector<TNodePtr>&& without,
-    bool selectStream, 
+    bool selectStream,
     const TWriteSettings& settings
 ) {
     if (groupBy.empty() || !groupBy.front()->ContentListPtr()) {
         return new TSelectCore(pos, std::move(source), groupByExpr, groupBy, compactGroupBy, assumeSorted,
-            orderBy, having, winSpecs, hoppingWindowSpec, terms, distinct, without, selectStream, settings); 
+            orderBy, having, winSpecs, hoppingWindowSpec, terms, distinct, without, selectStream, settings);
     }
     if (groupBy.size() == 1) {
         /// actualy no big idea to use grouping function in this case (result allways 0)
@@ -2478,7 +2478,7 @@ TSourcePtr DoBuildSelectCore(
         source = new TNestedProxySource(pos, *contentPtr, source);
         return DoBuildSelectCore(ctx, pos, originalSource, source, groupByExpr, *contentPtr, compactGroupBy,
             assumeSorted, orderBy, having, std::move(winSpecs),
-            hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings); 
+            hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
     }
     /// \todo some smart merge logic, generalize common part of grouping (expr, flatten, etc)?
     TIntrusivePtr<TCompositeSelect> compositeSelect = new TCompositeSelect(pos, std::move(source), originalSource->CloneSource(), settings);
@@ -2505,7 +2505,7 @@ TSourcePtr DoBuildSelectCore(
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
             CloneContainer(*contentPtr), compactGroupBy, assumeSorted, orderBy, SafeClone(having), winSpecs,
-            hoppingWindowSpec, terms, distinct, without, selectStream, settings); 
+            hoppingWindowSpec, terms, distinct, without, selectStream, settings);
         subselects.emplace_back(selectCore);
     }
     if (totalGroups > ctx.PragmaGroupByLimit) {
@@ -2533,11 +2533,11 @@ TSourcePtr BuildSelectCore(
     TVector<TNodePtr>&& terms,
     bool distinct,
     TVector<TNodePtr>&& without,
-    bool selectStream, 
+    bool selectStream,
     const TWriteSettings& settings)
 {
     return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, assumeSorted, orderBy,
-        having, std::move(winSpecs), hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings); 
+        having, std::move(winSpecs), hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
 }
 
 class TUnionAll: public IRealSource {

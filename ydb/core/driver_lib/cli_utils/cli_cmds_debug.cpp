@@ -281,18 +281,18 @@ public:
     TInterconnect()
         : TClientCommandTree("interconnect", {"ic"}, "Interconnect debugging facilities")
     {
-        AddCommand(std::make_unique<TInterconnectLoad>()); 
-        AddCommand(std::make_unique<TInterconnectClosePeerSocket>()); 
-        AddCommand(std::make_unique<TInterconnectCloseInputSession>()); 
-        AddCommand(std::make_unique<TInterconnectPoisonSession>()); 
-        AddCommand(std::make_unique<TInterconnectSlowpoke>()); 
+        AddCommand(std::make_unique<TInterconnectLoad>());
+        AddCommand(std::make_unique<TInterconnectClosePeerSocket>());
+        AddCommand(std::make_unique<TInterconnectCloseInputSession>());
+        AddCommand(std::make_unique<TInterconnectPoisonSession>());
+        AddCommand(std::make_unique<TInterconnectSlowpoke>());
     }
 };
 
 TClientCommandDebug::TClientCommandDebug()
     : TClientCommandTree("debug")
 {
-    AddCommand(std::make_unique<TInterconnect>()); 
+    AddCommand(std::make_unique<TInterconnect>());
 }
 
 }

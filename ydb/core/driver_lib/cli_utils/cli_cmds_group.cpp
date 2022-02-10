@@ -70,7 +70,7 @@ public:
     TClientCommandGroupReconfigure()
         : TClientCommandTree("reconfigure", {}, "Change the configuration of a group")
     {
-        AddCommand(std::make_unique<TClientCommandGroupReconfigureWipe>()); 
+        AddCommand(std::make_unique<TClientCommandGroupReconfigureWipe>());
     }
 };
 
@@ -79,12 +79,12 @@ public:
     TClientCommandGroup()
         : TClientCommandTree("group", {}, "Group management")
     {
-        AddCommand(std::make_unique<TClientCommandGroupReconfigure>()); 
+        AddCommand(std::make_unique<TClientCommandGroupReconfigure>());
     }
 };
 
-std::unique_ptr<TClientCommand> CreateClientCommandGroup() { 
-    return std::make_unique<TClientCommandGroup>(); 
+std::unique_ptr<TClientCommand> CreateClientCommandGroup() {
+    return std::make_unique<TClientCommandGroup>();
 }
 
 

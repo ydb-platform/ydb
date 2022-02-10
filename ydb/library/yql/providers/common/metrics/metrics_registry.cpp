@@ -106,29 +106,29 @@ public:
     {
     }
 
-    void SetCounter( 
-        const TString& labelName, 
-        const TString& labelValue, 
-        i64 value, 
-        bool derivative) override 
-    { 
-        if (UserName_) { 
-            // per user counter 
-            auto userCnt = GetCounter(labelName, labelValue, UserName_.Get(), 
-                derivative); 
-            if (userCnt) { 
-                *userCnt = value; 
-            } 
- 
-            return; 
-        } 
- 
-        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative); 
-        if (totalCnt) { 
-            *totalCnt = value; 
-        } 
-    } 
- 
+    void SetCounter(
+        const TString& labelName,
+        const TString& labelValue,
+        i64 value,
+        bool derivative) override
+    {
+        if (UserName_) {
+            // per user counter
+            auto userCnt = GetCounter(labelName, labelValue, UserName_.Get(),
+                derivative);
+            if (userCnt) {
+                *userCnt = value;
+            }
+
+            return;
+        }
+
+        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative);
+        if (totalCnt) {
+            *totalCnt = value;
+        }
+    }
+
     void IncCounter(
             const TString& labelName,
             const TString& labelValue,

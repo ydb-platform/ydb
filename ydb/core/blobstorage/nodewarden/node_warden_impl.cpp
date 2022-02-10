@@ -346,7 +346,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
         return [this, drives = std::move(drives)] () {
             if (drives != WorkingLocalDrives) {
                 SendToController(std::make_unique<TEvBlobStorage::TEvControllerUpdateNodeDrives>(LocalNodeId, drives));
-                WorkingLocalDrives = std::move(drives); 
+                WorkingLocalDrives = std::move(drives);
             }
         };
     });

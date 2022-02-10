@@ -35,7 +35,7 @@ class TJsonNetInfo : public TViewerPipeClient<TJsonNetInfo> {
     std::unordered_map<TNodeId, std::unique_ptr<TEvWhiteboard::TEvNodeStateResponse>> NodeNetInfo;
     std::unique_ptr<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
+    ui32 Timeout = 0;
     TString User;
     TString Path;
 

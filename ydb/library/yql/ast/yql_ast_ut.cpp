@@ -349,15 +349,15 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
                     "string@@)";
         ParseAndPrint(s4, s4);
 
-        TString s5 = "(@@\n" 
-                     "one@\n" 
-                     "two@@@@\n" 
-                     "four@@@@@@@@\n" 
-                     "@@@@two\n" 
-                     "@one\n" 
-                     "@@)"; 
- 
-        TAstParseResult ast = ParseAst(s5); 
+        TString s5 = "(@@\n"
+                     "one@\n"
+                     "two@@@@\n"
+                     "four@@@@@@@@\n"
+                     "@@@@two\n"
+                     "@one\n"
+                     "@@)";
+
+        TAstParseResult ast = ParseAst(s5);
         UNIT_ASSERT(ast.IsOk());
         UNIT_ASSERT_VALUES_EQUAL(ast.Root->GetChildrenCount(), 1);
 
@@ -372,9 +372,9 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
                           "@@two\n"
                           "@one\n";
         UNIT_ASSERT_STRINGS_EQUAL(atom->GetContent(), expected);
- 
-        TString printResult = ast.Root->ToString(); 
-        UNIT_ASSERT_STRINGS_EQUAL(s5, printResult); 
+
+        TString printResult = ast.Root->ToString();
+        UNIT_ASSERT_STRINGS_EQUAL(s5, printResult);
     }
 
     Y_UNIT_TEST(UnicodePrettyPrint) {

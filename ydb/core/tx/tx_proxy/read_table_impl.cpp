@@ -2404,8 +2404,8 @@ private:
         // WARNING: we must work correctly even when ResolveKeySet flip-flops
         // between resolved partitions in some very unfortunate edge cases.
 
-        TShardList oldShardList; 
-        ShardList.swap(oldShardList); 
+        TShardList oldShardList;
+        ShardList.swap(oldShardList);
         auto oldShardListIt = oldShardList.begin();
         TShardState* oldShard = *oldShardListIt;
 

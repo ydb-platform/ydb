@@ -26,9 +26,9 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
 
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
-        state->CredentialsFactory = credentialsFactory; 
+        state->CredentialsFactory = credentialsFactory;
         if (gatewaysConfig) {
-            state->Configuration->Init(gatewaysConfig->GetS3(), typeCtx); 
+            state->Configuration->Init(gatewaysConfig->GetS3(), typeCtx);
         }
 
         TDataProviderInfo info;

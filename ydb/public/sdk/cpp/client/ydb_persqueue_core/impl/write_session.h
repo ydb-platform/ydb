@@ -29,7 +29,7 @@ public:
     {}
 
     void PushEvent(TEventInfo eventInfo) {
-        if (Closed || ApplyHandler(eventInfo)) { 
+        if (Closed || ApplyHandler(eventInfo)) {
             return;
         }
 
@@ -92,8 +92,8 @@ public:
             waiter = TWaiter(Waiter.ExtractPromise(), this);
         }
 
-        TEventInfo info(event); 
-        ApplyHandler(info); 
+        TEventInfo info(event);
+        ApplyHandler(info);
 
         waiter.Signal();
     }
@@ -121,8 +121,8 @@ private:
 
     };
 
-    bool ApplyHandler(TEventInfo& eventInfo) { 
-        THandlersVisitor visitor(Settings, eventInfo); 
+    bool ApplyHandler(TEventInfo& eventInfo) {
+        THandlersVisitor visitor(Settings, eventInfo);
         return visitor.Visit();
     }
 

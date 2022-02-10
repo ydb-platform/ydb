@@ -19,13 +19,13 @@ TArrayRef<TCell> TKeyRangeCache::AllocateArrayCopy(TSpecialMemoryPool* pool, TAr
         return { };
     }
 
-    TCell* rawPtr = static_cast<TCell*>(pool->Allocate(sizeof(TCell) * key.size())); 
-    TCell* nextCell = rawPtr; 
+    TCell* rawPtr = static_cast<TCell*>(pool->Allocate(sizeof(TCell) * key.size()));
+    TCell* nextCell = rawPtr;
     for (const TCell& cell : key) {
-        new(nextCell++) TCell(cell); 
+        new(nextCell++) TCell(cell);
     }
 
-    return TArrayRef<TCell>(rawPtr, key.size()); 
+    return TArrayRef<TCell>(rawPtr, key.size());
 }
 
 TCell TKeyRangeCache::AllocateCellCopy(TSpecialMemoryPool* pool, const TCell& cell) {

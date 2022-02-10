@@ -1,7 +1,7 @@
-OWNER( 
-    g:yq 
-    g:yql 
-) 
+OWNER(
+    g:yq
+    g:yql
+)
 
 PROTO_LIBRARY()
 

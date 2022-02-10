@@ -136,12 +136,12 @@ public:
     };
 
     static void* ListenSocketFunction(void* param) {
-        try { 
-            ((TImpl*)param)->ListenSocket(); 
-        } catch (...) { 
+        try {
+            ((TImpl*)param)->ListenSocket();
+        } catch (...) {
 
-        } 
- 
+        }
+
         return nullptr;
     }
 
@@ -798,11 +798,11 @@ bool TRequestReplier::Reply(void* threadSpecificResource) {
 
 bool TryToBindAddresses(const THttpServerOptions& options, const std::function<void(TSocket)>* callbackOnBoundAddress) {
     THttpServerOptions::TBindAddresses addrs;
-    try { 
-        options.BindAddresses(addrs); 
+    try {
+        options.BindAddresses(addrs);
     } catch (const std::exception&) {
         return false;
-    } 
+    }
 
     for (const auto& na : addrs) {
         for (TNetworkAddress::TIterator ai = na.Begin(); ai != na.End(); ++ai) {

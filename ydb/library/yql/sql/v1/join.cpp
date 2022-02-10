@@ -196,10 +196,10 @@ public:
         JoinLinkSettings.push_back(linkSettings);
     }
 
-    bool IsStream() const override { 
-        return AnyOf(Sources, [] (const TSourcePtr& s) { return s->IsStream(); }); 
-    } 
- 
+    bool IsStream() const override {
+        return AnyOf(Sources, [] (const TSourcePtr& s) { return s->IsStream(); });
+    }
+
 protected:
     static TString FullColumnName(const TColumnNode& column) {
         auto sourceName = *column.GetSourceName();

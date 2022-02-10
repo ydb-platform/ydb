@@ -4613,11 +4613,11 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         return;
     }
 
-    const TString user = info.User; 
+    const TString user = info.User;
     bool res = ReadInfo.insert({cookie, std::move(info)}).second;
     Y_VERIFY(res);
 
-    THolder<TEvPQ::TEvBlobRequest> request(new TEvPQ::TEvBlobRequest(user, cookie, Partition, 
+    THolder<TEvPQ::TEvBlobRequest> request(new TEvPQ::TEvBlobRequest(user, cookie, Partition,
                                                                      lastOffset, std::move(blobs)));
 
     ctx.Send(BlobCache, request.Release());

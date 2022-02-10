@@ -7,7 +7,7 @@ namespace NYql {
 
 bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx);
 bool CompileLibrary(const TString& alias, const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize = true);
- 
+
 bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx, TExprContext& ctxToClone, const std::function<const TExportTable*(const TString&)>& module2ExportTable);
 bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx, TExprContext& ctxToClone, const TModulesTable* loadedModules = nullptr);
 

@@ -91,8 +91,8 @@ namespace NRedo {
             TEvBegin_v1 ev{ { ERedo::Begin, 0, 0x8000, size },
                                 tail, head, serial, stamp };
 
-            void* evBegin = &ev; 
-            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size); 
+            void* evBegin = &ev;
+            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
         }
 
         TWriter& EvFlush(ui32 table, ui64 stamp, TEpoch epoch)
@@ -101,8 +101,8 @@ namespace NRedo {
 
             TEvFlush ev{ { ERedo::Flush, 0, 0x8000, size },
                                 table, 0, stamp, epoch.ToRedoLog() };
-            void* evBegin = &ev; 
-            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size); 
+            void* evBegin = &ev;
+            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
         }
 
         TWriter& EvAnnex(TArrayRef<const NPageCollection::TGlobId> blobs)

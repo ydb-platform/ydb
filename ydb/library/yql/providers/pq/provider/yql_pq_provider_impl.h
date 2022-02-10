@@ -10,8 +10,8 @@
 
 namespace NYql {
 
-TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway); 
-TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway); 
+TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);
+TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway);
 
 THolder<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state);
 
@@ -25,8 +25,8 @@ THolder<IGraphTransformer> CreatePqLogicalOptProposalTransformer(TPqState::TPtr 
 
 THolder<IGraphTransformer> CreatePqPhysicalOptProposalTransformer(TPqState::TPtr state);
 
-THolder<IGraphTransformer> CreatePqIODiscoveryTransformer(TPqState::TPtr state); 
- 
-TString MakeTopicDisplayName(TStringBuf cluster, TStringBuf path); 
- 
+THolder<IGraphTransformer> CreatePqIODiscoveryTransformer(TPqState::TPtr state);
+
+TString MakeTopicDisplayName(TStringBuf cluster, TStringBuf path);
+
 } // namespace NYql

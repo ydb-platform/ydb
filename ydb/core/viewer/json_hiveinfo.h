@@ -20,7 +20,7 @@ class TJsonHiveInfo : public TViewerPipeClient<TJsonHiveInfo> {
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvHive::TEvResponseHiveInfo> HiveInfo;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
+    ui32 Timeout = 0;
     TNodeId NodeId = 0;
 
 public:

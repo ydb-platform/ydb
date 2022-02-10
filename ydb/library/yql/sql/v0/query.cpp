@@ -53,8 +53,8 @@ public:
         }
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
             IsQueryMode(ctx.Settings.Mode) &&
-            ctx.GetClusterProvider(Cluster).GetRef() != "kikimr" && 
-            ctx.GetClusterProvider(Cluster).GetRef() != "rtmr") { 
+            ctx.GetClusterProvider(Cluster).GetRef() != "kikimr" &&
+            ctx.GetClusterProvider(Cluster).GetRef() != "rtmr") {
 
             key = Y("MrTableConcat", key);
         }
@@ -822,21 +822,21 @@ protected:
         }
 
         for (auto& cluster: *clusters) {
-            TString normalizedClusterName; 
-            auto service = ctx.GetClusterProvider(cluster, normalizedClusterName); 
+            TString normalizedClusterName;
+            auto service = ctx.GetClusterProvider(cluster, normalizedClusterName);
             if (!service) {
                 ctx.Error(ctx.Pos()) << "Unknown cluster: " << cluster;
                 return false;
             }
 
-            auto sinkName = normalizedClusterName + "_sink"; 
+            auto sinkName = normalizedClusterName + "_sink";
 
             auto op = ProduceOperation(ctx, sinkName, *service);
             if (!op) {
                 return false;
             }
 
-            block = L(block, Y("let", sinkName, Y("DataSink", BuildQuotedAtom(Pos, *service), BuildQuotedAtom(Pos, normalizedClusterName)))); 
+            block = L(block, Y("let", sinkName, Y("DataSink", BuildQuotedAtom(Pos, *service), BuildQuotedAtom(Pos, normalizedClusterName))));
             block = L(block, op);
         }
 
@@ -1083,7 +1083,7 @@ public:
             cluster = "$all";
             serviceName = Prefix;
         } else {
-            serviceName = *ctx.GetClusterProvider(Prefix, cluster); 
+            serviceName = *ctx.GetClusterProvider(Prefix, cluster);
         }
 
         auto datasource = Y("DataSource", BuildQuotedAtom(Pos, serviceName));

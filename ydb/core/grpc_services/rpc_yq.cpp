@@ -81,12 +81,12 @@ public:
         FolderId = path.back();
         if (!FolderId) {
             ReplyWithStatus("Folder id is empty", StatusIds::BAD_REQUEST);
-            return; 
+            return;
         }
 
         if (FolderId.length() > 1024) {
             ReplyWithStatus("Folder id length greater than 1024 characters: " + FolderId, StatusIds::BAD_REQUEST);
-            return; 
+            return;
         }
 
         const TString& internalToken = proxyCtx->GetInternalToken();

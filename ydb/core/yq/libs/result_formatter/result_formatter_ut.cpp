@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected either " << expected1 << " or " << expected2
             << ", got " << actual);
     }
- 
+
     Y_UNIT_TEST(VariantTuple) {
         Ydb::ResultSet rs;
         {
@@ -393,25 +393,25 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
 
-    Y_UNIT_TEST(FormatEmptySchema) { 
-        YandexQuery::Schema s; 
-        auto result = FormatSchema(s); 
-        UNIT_ASSERT_VALUES_EQUAL(result, R"(["StructType";[]])"); 
-    } 
- 
-    Y_UNIT_TEST(FormatNonEmptySchema) { 
-        YandexQuery::Schema s; 
-        auto& c1 = *s.Addcolumn(); 
-        c1.set_name("key"); 
-        c1.mutable_type()->set_type_id(Ydb::Type::STRING); 
- 
-        auto& c2 = *s.Addcolumn(); 
-        c2.set_name("value"); 
-        Ydb::Type t2; 
-        t2.set_type_id(Ydb::Type::UINT64); 
-        *c2.mutable_type()->mutable_optional_type()->mutable_item() = t2; 
- 
-        auto result = FormatSchema(s); 
-        UNIT_ASSERT_VALUES_EQUAL(result, R"(["StructType";[["key";["DataType";"String"]];["value";["OptionalType";["DataType";"Uint64"]]]]])"); 
-    } 
+    Y_UNIT_TEST(FormatEmptySchema) {
+        YandexQuery::Schema s;
+        auto result = FormatSchema(s);
+        UNIT_ASSERT_VALUES_EQUAL(result, R"(["StructType";[]])");
+    }
+
+    Y_UNIT_TEST(FormatNonEmptySchema) {
+        YandexQuery::Schema s;
+        auto& c1 = *s.Addcolumn();
+        c1.set_name("key");
+        c1.mutable_type()->set_type_id(Ydb::Type::STRING);
+
+        auto& c2 = *s.Addcolumn();
+        c2.set_name("value");
+        Ydb::Type t2;
+        t2.set_type_id(Ydb::Type::UINT64);
+        *c2.mutable_type()->mutable_optional_type()->mutable_item() = t2;
+
+        auto result = FormatSchema(s);
+        UNIT_ASSERT_VALUES_EQUAL(result, R"(["StructType";[["key";["DataType";"String"]];["value";["OptionalType";["DataType";"Uint64"]]]]])");
+    }
 }

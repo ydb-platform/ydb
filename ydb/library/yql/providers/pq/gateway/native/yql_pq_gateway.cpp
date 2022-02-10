@@ -16,7 +16,7 @@ public:
     explicit TPqNativeGateway(const TPqGatewayServices& services);
     ~TPqNativeGateway();
 
-    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override; 
+    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override;
     void CloseSession(const TString& sessionId) override;
 
     NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
@@ -25,7 +25,7 @@ public:
         const TString& database,
         const TString& path,
         const TString& token) override;
- 
+
     void UpdateClusterConfigs(
         const TString& clusterName,
         const TString& endpoint,
@@ -34,14 +34,14 @@ public:
 
 private:
     void InitClusterConfigs();
-    TPqSession::TPtr GetExistingSession(const TString& sessionId) const; 
+    TPqSession::TPtr GetExistingSession(const TString& sessionId) const;
 
 private:
-    mutable TMutex Mutex; 
+    mutable TMutex Mutex;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     TPqGatewayConfigPtr Config;
     IMetricsRegistryPtr Metrics;
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory; 
+    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     NYdb::TDriver YdbDriver;
     TPqClusterConfigsMapPtr ClusterConfigs;
@@ -52,7 +52,7 @@ TPqNativeGateway::TPqNativeGateway(const TPqGatewayServices& services)
     : FunctionRegistry(services.FunctionRegistry)
     , Config(services.Config)
     , Metrics(services.Metrics)
-    , CredentialsFactory(services.CredentialsFactory) 
+    , CredentialsFactory(services.CredentialsFactory)
     , CmConnections(services.CmConnections)
     , YdbDriver(services.YdbDriver)
 {
@@ -84,7 +84,7 @@ void TPqNativeGateway::UpdateClusterConfigs(
     }
 }
 
-NThreading::TFuture<void> TPqNativeGateway::OpenSession(const TString& sessionId, const TString& username) { 
+NThreading::TFuture<void> TPqNativeGateway::OpenSession(const TString& sessionId, const TString& username) {
     with_lock (Mutex) {
         auto [sessionIt, isNewSession] = Sessions.emplace(sessionId,
                                                           MakeIntrusive<TPqSession>(sessionId,
@@ -92,7 +92,7 @@ NThreading::TFuture<void> TPqNativeGateway::OpenSession(const TString& sessionId
                                                                                     CmConnections,
                                                                                     YdbDriver,
                                                                                     ClusterConfigs,
-                                                                                    CredentialsFactory)); 
+                                                                                    CredentialsFactory));
         if (!isNewSession) {
             YQL_LOG_CTX_THROW yexception() << "Session already exists: " << sessionId;
         }
@@ -104,20 +104,20 @@ void TPqNativeGateway::CloseSession(const TString& sessionId) {
     with_lock (Mutex) {
         Sessions.erase(sessionId);
     }
-} 
- 
-TPqSession::TPtr TPqNativeGateway::GetExistingSession(const TString& sessionId) const { 
+}
+
+TPqSession::TPtr TPqNativeGateway::GetExistingSession(const TString& sessionId) const {
     with_lock (Mutex) {
         auto sessionIt = Sessions.find(sessionId);
         if (sessionIt == Sessions.end()) {
             YQL_LOG_CTX_THROW yexception() << "Pq gateway session was not found: " << sessionId;
         }
         return sessionIt->second;
-    } 
+    }
 }
 
-NPq::NConfigurationManager::TAsyncDescribePathResult TPqNativeGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) { 
-    return GetExistingSession(sessionId)->DescribePath(cluster, database, path, token); 
+NPq::NConfigurationManager::TAsyncDescribePathResult TPqNativeGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
+    return GetExistingSession(sessionId)->DescribePath(cluster, database, path, token);
 }
 
 IPqGateway::TPtr CreatePqNativeGateway(const TPqGatewayServices& services) {

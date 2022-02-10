@@ -99,15 +99,15 @@ namespace NYql {
 
     }
 
-    TUserDataTable GetYqlDefaultMounts() { 
-        TUserDataTable userData; 
-        AddLibraryFromResource(userData, "/lib/yql/aggregate.yql"); 
-        AddLibraryFromResource(userData, "/lib/yql/window.yql"); 
-        AddLibraryFromResource(userData, "/lib/yql/id.yql"); 
-        AddLibraryFromResource(userData, "/lib/yql/sqr.yql"); 
-        AddLibraryFromResource(userData, "/lib/yql/core.yql"); 
+    TUserDataTable GetYqlDefaultMounts() {
+        TUserDataTable userData;
+        AddLibraryFromResource(userData, "/lib/yql/aggregate.yql");
+        AddLibraryFromResource(userData, "/lib/yql/window.yql");
+        AddLibraryFromResource(userData, "/lib/yql/id.yql");
+        AddLibraryFromResource(userData, "/lib/yql/sqr.yql");
+        AddLibraryFromResource(userData, "/lib/yql/core.yql");
 
-        return userData; 
+        return userData;
     }
 
     TUserDataTable GetYqlModuleResolverImpl(
@@ -121,11 +121,11 @@ namespace NYql {
     {
         auto ctx = rawCtx ? rawCtx : ownedCtx.Get();
         Y_ENSURE(ctx);
-        TUserDataTable mounts = GetYqlDefaultMounts(); 
+        TUserDataTable mounts = GetYqlDefaultMounts();
 
         TModulesTable modulesTable;
         if (!CompileLibraries(mounts, *ctx, modulesTable, optimizeLibraries)) {
-            return {}; 
+            return {};
         }
 
         for (const auto& item : userData) {

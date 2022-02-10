@@ -37,7 +37,7 @@ class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
     TMap<TNodeId, THolder<TEvWhiteboard::TEvTabletStateResponse>> NodeTabletInfo;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
+    ui32 Timeout = 0;
     TString User;
     TString Path;
     TPathId FilterSubDomain;

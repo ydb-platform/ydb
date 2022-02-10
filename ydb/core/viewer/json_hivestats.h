@@ -20,7 +20,7 @@ class TJsonHiveStats : public TViewerPipeClient<TJsonHiveStats> {
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvHive::TEvResponseHiveDomainStats> HiveStats;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
+    ui32 Timeout = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

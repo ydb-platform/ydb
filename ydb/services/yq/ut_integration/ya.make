@@ -21,7 +21,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib
-    ydb/core/yq/libs/control_plane_storage 
+    ydb/core/yq/libs/control_plane_storage
     ydb/core/yq/libs/db_resolver
     ydb/core/yq/libs/db_schema
     ydb/core/yq/libs/private_client

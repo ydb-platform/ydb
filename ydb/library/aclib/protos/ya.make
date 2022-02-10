@@ -5,7 +5,7 @@ OWNER(
     g:kikimr
 )
 
-INCLUDE_TAGS(GO_PROTO) 
+INCLUDE_TAGS(GO_PROTO)
 
 SRCS(
     aclib.proto

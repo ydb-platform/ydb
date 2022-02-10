@@ -110,7 +110,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
         case NKikimrProto::OK:
             if (++Replied == ReqActors.size())
                 return ReplyAndDie(NKikimrProto::OK);
-            break; 
+            break;
         default:
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         }

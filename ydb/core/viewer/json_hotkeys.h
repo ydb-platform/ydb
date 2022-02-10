@@ -23,10 +23,10 @@ class TJsonHotkeys : public TViewerPipeClient<TJsonHotkeys> {
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
-    ui32 Timeout = 0; 
-    ui32 Limit = 0; 
-    float PollingFactor = 0.0; 
-    bool EnableSampling = false; 
+    ui32 Timeout = 0;
+    ui32 Limit = 0;
+    float PollingFactor = 0.0;
+    bool EnableSampling = false;
 
     struct KeysComparator {
         bool operator ()(const std::pair<ui64, TVector<TString>>& a, const std::pair<ui64, TVector<TString>>& b) const {

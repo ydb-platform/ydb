@@ -3,8 +3,8 @@
 namespace NYql {
 namespace NCommon {
 
-NKikimr::NMiniKQL::TStatKey InputBytes("Job_InputBytes", true); 
-NKikimr::NMiniKQL::TStatKey OutputBytes("Job_OutputBytes", true); 
+NKikimr::NMiniKQL::TStatKey InputBytes("Job_InputBytes", true);
+NKikimr::NMiniKQL::TStatKey OutputBytes("Job_OutputBytes", true);
 
 ui32 TInputBuf::CopyVarUI32(TVector<char>& yson) {
     char cmd = Read();

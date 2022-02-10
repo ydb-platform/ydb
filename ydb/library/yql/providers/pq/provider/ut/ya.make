@@ -1,12 +1,12 @@
 UNITTEST_FOR(ydb/library/yql/providers/pq/provider)
- 
+
 OWNER(g:yql)
- 
-SRCS( 
-    yql_pq_ut.cpp 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    yql_pq_ut.cpp
+)
+
+PEERDIR(
     ydb/core/yq/libs/db_resolver
     ydb/library/yql/core/facade
     ydb/library/yql/core/file_storage
@@ -23,17 +23,17 @@ PEERDIR(
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/provider
-) 
- 
-YQL_LAST_ABI_VERSION() 
- 
-IF (SANITIZER_TYPE OR WITH_VALGRIND) 
-    TIMEOUT(1800) 
-    SIZE(LARGE) 
-    TAG(ya:fat) 
-ELSE() 
-    TIMEOUT(600) 
-    SIZE(MEDIUM) 
-ENDIF() 
- 
-END() 
+)
+
+YQL_LAST_ABI_VERSION()
+
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    TIMEOUT(1800)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
+
+END()

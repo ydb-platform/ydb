@@ -51,7 +51,7 @@ void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
 
                     return;
             }
-            [[fallthrough]]; 
+            [[fallthrough]];
 
         case TSwitchState::SWITCHING: {
             ui64 txInFly = TxInFly();
@@ -60,7 +60,7 @@ void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
             SetCounter(COUNTER_MVCC_STATE_CHANGE_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);
             if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps())
                 Execute(CreateTxExecuteMvccStateChange(), ctx);
-            break; 
+            break;
         }
         case TSwitchState::DONE:
             return;

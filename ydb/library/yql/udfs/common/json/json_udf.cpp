@@ -8,9 +8,9 @@ using namespace NUdf;
 namespace {
     class TGetField: public TBoxedValue {
     public:
-        typedef bool TTypeAwareMarker; 
- 
-    public: 
+        typedef bool TTypeAwareMarker;
+
+    public:
         static TStringRef Name() {
             return TStringRef::Of("GetField");
         }
@@ -58,19 +58,19 @@ namespace {
                     auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
                     if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
                         builder.SetError("Missing or invalid user type.");
-                        return true; 
+                        return true;
                     }
 
                     auto argsTypeTuple = userTypeInspector.GetElementType(0);
                     auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
                     if (!argsTypeInspector) {
                         builder.SetError("Invalid user type - expected tuple.");
-                        return true; 
+                        return true;
                     }
 
                     if (argsTypeInspector.GetElementsCount() != 2) {
                         builder.SetError("Invalid user type - expected two arguments.");
-                        return true; 
+                        return true;
                     }
 
                     auto inputType = argsTypeInspector.GetElementType(0);

@@ -201,8 +201,8 @@ public:
 
         Prime = type.Prime();
         CrcMode = crcMode;
- 
-        Data = nullptr; 
+
+        Data = nullptr;
     }
 
     template <bool isStripe>
@@ -277,7 +277,7 @@ public:
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
         if (TailSize) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {}; 
+            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockData<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -534,7 +534,7 @@ public:
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
         if (TailSize) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {}; 
+            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             if (!isFromDataParts) {
                 PrepareLastBlockData<isStripe>(lastBlockSource, bufferDataPart);
@@ -569,7 +569,7 @@ public:
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
         if (hasTail && outPartSet.IsSplitDone()) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {}; 
+            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             if (!isFromDataParts) {
                 PrepareLastBlockData<isStripe>(lastBlockSource, bufferDataPart);
@@ -753,7 +753,7 @@ public:
         // Read the tail of the data
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
             TRACE("EoDiagonalRestorePart tail" << Endl);
-            char lastBlock[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {}; 
+            char lastBlock[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlock, bufferDataPart);
 
@@ -1119,7 +1119,7 @@ public:
                     partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB);
 
         if (TailSize) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {}; 
+            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -1151,7 +1151,7 @@ public:
                     partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB, missingDataPartIdxC);
 
         if (TailSize) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {}; 
+            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -1197,7 +1197,7 @@ public:
 
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
             TRACE("EoMainRestoreParts restore tail" << Endl);
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {}; 
+            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -1316,8 +1316,8 @@ public:
             beginBlockIdx, beginBlockIdx + wholeBlocks, missingDataPartIdx);
 
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
-            TRACE("Restore tail, restoreFullData# " << restoreFullData << " restoreParts# " << restoreParts << Endl); 
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {}; 
+            TRACE("Restore tail, restoreFullData# " << restoreFullData << " restoreParts# " << restoreParts << Endl);
+            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 

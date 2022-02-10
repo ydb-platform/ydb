@@ -134,7 +134,7 @@ public:
     }
 
     TKey()
-        : TKey(TypeNone, 0, 0, 0, 0, 0) 
+        : TKey(TypeNone, 0, 0, 0, 0, 0)
     {}
 
     virtual ~TKey()

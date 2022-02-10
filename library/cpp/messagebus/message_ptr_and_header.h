@@ -18,8 +18,8 @@ namespace NBus {
             {
             }
 
-            explicit TBusMessagePtrAndHeader(TBusMessage* messagePtr) 
-                : MessagePtr(messagePtr) 
+            explicit TBusMessagePtrAndHeader(TBusMessage* messagePtr)
+                : MessagePtr(messagePtr)
                 , Header(*MessagePtr->GetHeader())
                 , LocalFlags(MessagePtr->LocalFlags)
             {

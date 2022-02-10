@@ -984,7 +984,7 @@ namespace NSQLTranslationV0 {
     };
     TSourcePtr BuildReduce(TPosition pos, ReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
         TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings);
-    TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, TVector<TNodePtr>&& terms, bool listCall, bool stream, const TWriteSettings& settings); 
+    TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, TVector<TNodePtr>&& terms, bool listCall, bool stream, const TWriteSettings& settings);
 
     TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, bool inSubquery);
 

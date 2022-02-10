@@ -35,20 +35,20 @@ public:
     NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> props;
 
-        auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster); 
-        if (!clusterConfiguration) { 
+        auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
+        if (!clusterConfiguration) {
             ythrow yexception() << "Unknown pq cluster \"" << cluster << "\"";
         }
 
-        Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx); 
-        if (clusterConfiguration->UseSsl) { 
+        Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
+        if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);
         }
 
-        if (clusterConfiguration->AddBearerToToken) { 
-            Add(props, AddBearerToTokenSetting, "1", pos, ctx); 
-        } 
- 
+        if (clusterConfiguration->AddBearerToToken) {
+            Add(props, AddBearerToTokenSetting, "1", pos, ctx);
+        }
+
         return Build<TCoNameValueTupleList>(ctx, pos)
             .Add(props)
             .Done();
@@ -69,11 +69,11 @@ public:
             return node;
         }
 
-        const auto* topicMeta = State_->FindTopicMeta(topicNode); 
-        if (!topicMeta) { 
-            ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), TStringBuilder() << "Unknown topic `" << topicNode.Cluster().StringValue() << "`.`" 
-                                << topicNode.Path().StringValue() << "`")); 
-            return nullptr; 
+        const auto* topicMeta = State_->FindTopicMeta(topicNode);
+        if (!topicMeta) {
+            ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), TStringBuilder() << "Unknown topic `" << topicNode.Cluster().StringValue() << "`.`"
+                                << topicNode.Path().StringValue() << "`"));
+            return nullptr;
         }
 
         YQL_CLOG(INFO, ProviderPq) << "Optimize PqWriteTopic `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`";

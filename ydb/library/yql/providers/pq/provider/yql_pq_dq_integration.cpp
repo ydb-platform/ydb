@@ -1,5 +1,5 @@
 #include "yql_pq_dq_integration.h"
-#include "yql_pq_helpers.h" 
+#include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
 
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -23,7 +23,7 @@ namespace {
 
 class TPqDqIntegration: public TDqIntegrationBase {
 public:
-    explicit TPqDqIntegration(const TPqState::TPtr& state) 
+    explicit TPqDqIntegration(const TPqState::TPtr& state)
         : State_(state.Get())
     {
     }
@@ -56,9 +56,9 @@ public:
     }
 
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
-        if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) { 
-            return PartitionTopicRead(maybePqRead.Cast().Topic(), maxPartitions, partitions); 
-        } 
+        if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
+            return PartitionTopicRead(maybePqRead.Cast().Topic(), maxPartitions, partitions);
+        }
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto settings = maybeDqSource.Cast().Settings();
             if (auto topicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
@@ -69,52 +69,52 @@ public:
     }
 
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
-        if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) { 
-            const auto& pqReadTopic = maybePqReadTopic.Cast(); 
- 
-            const auto rowType = pqReadTopic.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType(); 
-            const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue(); 
-            const auto settings = Build<TCoNameValueTupleList>(ctx, pqReadTopic.Topic().Pos()) 
-                .Add() 
-                    .Name().Value("format").Build() 
-                    .Value(pqReadTopic.Format()) 
-                    .Build() 
-                .Done(); 
- 
-            const auto token = "cluster:default_" + clusterName; 
-            auto columns = pqReadTopic.Columns().Ptr(); 
-            if (!columns->IsList()) { 
-                const auto pos = columns->Pos(); 
-                const auto& items = rowType->Cast<TStructExprType>()->GetItems(); 
-                TExprNode::TListType cols; 
-                cols.reserve(items.size()); 
-                std::transform(items.cbegin(), items.cend(), std::back_inserter(cols), [&](const TItemExprType* item) { return ctx.NewAtom(pos, item->GetName()); }); 
-                columns = ctx.NewList(pos, std::move(cols)); 
-            } 
- 
-            return Build<TDqSourceWrap>(ctx, read->Pos()) 
-                .Input<TDqPqTopicSource>() 
-                    .Topic(pqReadTopic.Topic()) 
-                    .Columns(std::move(columns)) 
-                    .Settings(BuildTopicReadSettings(clusterName, read->Pos(), ctx)) 
-                    .Token<TCoSecureParam>() 
-                        .Name().Build(token) 
-                        .Build() 
-                    .Build() 
-                .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx)) 
-                .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>()) 
-                .Settings(settings) 
-                .Done().Ptr(); 
-        } 
+        if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
+            const auto& pqReadTopic = maybePqReadTopic.Cast();
+
+            const auto rowType = pqReadTopic.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
+            const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
+            const auto settings = Build<TCoNameValueTupleList>(ctx, pqReadTopic.Topic().Pos())
+                .Add()
+                    .Name().Value("format").Build()
+                    .Value(pqReadTopic.Format())
+                    .Build()
+                .Done();
+
+            const auto token = "cluster:default_" + clusterName;
+            auto columns = pqReadTopic.Columns().Ptr();
+            if (!columns->IsList()) {
+                const auto pos = columns->Pos();
+                const auto& items = rowType->Cast<TStructExprType>()->GetItems();
+                TExprNode::TListType cols;
+                cols.reserve(items.size());
+                std::transform(items.cbegin(), items.cend(), std::back_inserter(cols), [&](const TItemExprType* item) { return ctx.NewAtom(pos, item->GetName()); });
+                columns = ctx.NewList(pos, std::move(cols));
+            }
+
+            return Build<TDqSourceWrap>(ctx, read->Pos())
+                .Input<TDqPqTopicSource>()
+                    .Topic(pqReadTopic.Topic())
+                    .Columns(std::move(columns))
+                    .Settings(BuildTopicReadSettings(clusterName, read->Pos(), ctx))
+                    .Token<TCoSecureParam>()
+                        .Name().Build(token)
+                        .Build()
+                    .Build()
+                .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
+                .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
+                .Settings(settings)
+                .Done().Ptr();
+        }
         return read;
     }
 
     TMaybe<bool> CanWrite(const TDqSettings&, const TExprNode&, TExprContext&) override {
-        YQL_ENSURE(false, "Unimplemented"); 
+        YQL_ENSURE(false, "Unimplemented");
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
-        RegisterDqPqMkqlCompilers(compiler); 
+        RegisterDqPqMkqlCompilers(compiler);
     }
 
     static TStringBuf Name(const TCoNameValueTuple& nameValue) {
@@ -127,17 +127,17 @@ public:
             YQL_ENSURE(value.IsAtom());
             return value.Content();
         }
- 
-        return {}; 
+
+        return {};
     }
 
     static NPq::NProto::EClusterType ToClusterType(NYql::TPqClusterConfig::EClusterType t) {
         switch (t) {
-        case NYql::TPqClusterConfig::CT_UNSPECIFIED: 
+        case NYql::TPqClusterConfig::CT_UNSPECIFIED:
             return NPq::NProto::Unspecified;
-        case NYql::TPqClusterConfig::CT_PERS_QUEUE: 
+        case NYql::TPqClusterConfig::CT_PERS_QUEUE:
             return NPq::NProto::PersQueue;
-        case NYql::TPqClusterConfig::CT_DATA_STREAMS: 
+        case NYql::TPqClusterConfig::CT_DATA_STREAMS:
             return NPq::NProto::DataStreams;
         }
     }
@@ -168,12 +168,12 @@ public:
                         srcDesc.SetEndpoint(TString(Value(setting)));
                     } else if (name == UseSslSetting) {
                         srcDesc.SetUseSsl(FromString<bool>(Value(setting)));
-                    } else if (name == AddBearerToTokenSetting) { 
-                        srcDesc.SetAddBearerToToken(FromString<bool>(Value(setting))); 
+                    } else if (name == AddBearerToTokenSetting) {
+                        srcDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
                     }
                 }
 
-                if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) { 
+                if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) {
                     srcDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
                 }
 
@@ -210,12 +210,12 @@ public:
                         sinkDesc.SetEndpoint(TString(Value(setting)));
                     } else if (name == UseSslSetting) {
                         sinkDesc.SetUseSsl(FromString<bool>(Value(setting)));
-                    } else if (name == AddBearerToTokenSetting) { 
-                        sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting))); 
+                    } else if (name == AddBearerToTokenSetting) {
+                        sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
                     }
                 }
 
-                if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSink.Token().Raw())) { 
+                if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSink.Token().Raw())) {
                     sinkDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
                 }
 
@@ -225,35 +225,35 @@ public:
         }
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicReadSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const { 
-        TVector<TCoNameValueTuple> props; 
- 
-        { 
-            TMaybe<TString> consumer = State_->Configuration->Consumer.Get(); 
+    NNodes::TCoNameValueTupleList BuildTopicReadSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
+        TVector<TCoNameValueTuple> props;
+
+        {
+            TMaybe<TString> consumer = State_->Configuration->Consumer.Get();
             if (consumer) {
                 Add(props, ConsumerSetting, *consumer, pos, ctx);
-            } 
-        } 
- 
-        auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster); 
-        if (!clusterConfiguration) { 
-            ythrow yexception() << "Unknown pq cluster \"" << cluster << "\""; 
-        } 
- 
-        Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx); 
-        if (clusterConfiguration->UseSsl) { 
-            Add(props, UseSslSetting, "1", pos, ctx); 
-        } 
- 
-        if (clusterConfiguration->AddBearerToToken) { 
-            Add(props, AddBearerToTokenSetting, "1", pos, ctx); 
-        } 
- 
-        return Build<TCoNameValueTupleList>(ctx, pos) 
-            .Add(props) 
-            .Done(); 
-    } 
- 
+            }
+        }
+
+        auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
+        if (!clusterConfiguration) {
+            ythrow yexception() << "Unknown pq cluster \"" << cluster << "\"";
+        }
+
+        Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
+        if (clusterConfiguration->UseSsl) {
+            Add(props, UseSslSetting, "1", pos, ctx);
+        }
+
+        if (clusterConfiguration->AddBearerToToken) {
+            Add(props, AddBearerToTokenSetting, "1", pos, ctx);
+        }
+
+        return Build<TCoNameValueTupleList>(ctx, pos)
+            .Add(props)
+            .Done();
+    }
+
 private:
     TPqState* State_; // State owns dq integration, so back reference must be not smart.
 };

@@ -43,7 +43,7 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
 
     THashMap<TString, TStoragePoolInfo> StoragePoolInfo;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
+    ui32 Timeout = 0;
     TString FilterTenant;
     THashSet<TString> FilterStoragePools;
     TVector<TString> FilterGroupIds;

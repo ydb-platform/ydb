@@ -798,7 +798,7 @@ keyword_expr_uncompat:
   | JSON_EXISTS
   | JSON_VALUE
   | JSON_QUERY
-  | LOCAL 
+  | LOCAL
   | NOT
   | NULL
   | PROCESS
@@ -811,12 +811,12 @@ keyword_expr_uncompat:
   | WHERE
 ;
 
-keyword_table_uncompat: 
+keyword_table_uncompat:
     ANY
   | ERASE
   | STREAM
-; 
- 
+;
+
 keyword_select_uncompat:
     ALL
   | AS

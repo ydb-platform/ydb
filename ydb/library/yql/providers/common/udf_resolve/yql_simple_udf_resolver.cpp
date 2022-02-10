@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/core/yql_holding_file_storage.h>
- 
+
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -31,16 +31,16 @@ public:
         , UseFakeMD5_(useFakeMD5)
     {}
 
-    TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override { 
+    TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
         with_lock(Lock_) {
-            auto path = FunctionRegistry_->FindUdfPath(moduleName); 
+            auto path = FunctionRegistry_->FindUdfPath(moduleName);
             return path ? MakeMaybe<TFilePathWithMd5>(*path, UseFakeMD5_ ? *path : TString()) : Nothing();
         }
     }
 
-    bool LoadMetadata(const TVector<TImport*>& imports, 
-        const TVector<TFunction*>& functions, TExprContext& ctx) const override { 
- 
+    bool LoadMetadata(const TVector<TImport*>& imports,
+        const TVector<TFunction*>& functions, TExprContext& ctx) const override {
+
         with_lock(Lock_) {
             bool hasErrors = false;
             THashSet<TString> requiredModules;
@@ -56,7 +56,7 @@ public:
                 }
             }
 
-            THoldingFileStorage holdingFileStorage(FileStorage_); 
+            THoldingFileStorage holdingFileStorage(FileStorage_);
             auto newRegistry = FunctionRegistry_->Clone();
             THashMap<TString, TImport*> path2import;
             for (auto import: imports) {
@@ -78,10 +78,10 @@ public:
 
                 try {
                     if (FileStorage_) {
-                        auto link = holdingFileStorage.FreezeFile(*import->Block); 
-                        auto path = link->GetPath().GetPath(); 
-                        newRegistry->LoadUdfs(path, {}, NUdf::IRegistrator::TFlags::TypesOnly); 
-                        path2import[path] = import; 
+                        auto link = holdingFileStorage.FreezeFile(*import->Block);
+                        auto path = link->GetPath().GetPath();
+                        newRegistry->LoadUdfs(path, {}, NUdf::IRegistrator::TFlags::TypesOnly);
+                        path2import[path] = import;
                     } else {
                         if (import->Block->Type != EUserDataType::PATH) {
                             ctx.AddError(TIssue(import->Pos, TStringBuilder() <<
@@ -110,16 +110,16 @@ public:
                 }
             }
 
-            hasErrors = !LoadFunctionsMetadata(functions, *newRegistry, TypeInfoHelper_, ctx) || hasErrors; 
+            hasErrors = !LoadFunctionsMetadata(functions, *newRegistry, TypeInfoHelper_, ctx) || hasErrors;
             return !hasErrors;
         }
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const override { 
-        Y_UNUSED(imports); 
-        ythrow yexception() << "LoadRichMetadata is not supported in SimpleUdfResolver"; 
-    } 
- 
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const override {
+        Y_UNUSED(imports);
+        ythrow yexception() << "LoadRichMetadata is not supported in SimpleUdfResolver";
+    }
+
 private:
     mutable TAdaptiveLock Lock_;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
@@ -136,64 +136,64 @@ IUdfResolver::TPtr CreateSimpleUdfResolver(
     return new TSimpleUdfResolver(functionRegistry, fileStorage, useFakeMD5);
 }
 
-bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions, 
-    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, 
-    NUdf::ITypeInfoHelper::TPtr typeInfoHelper, 
-    TExprContext& ctx) { 
- 
-    bool hasErrors = false; 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
- 
-    for (auto udfPtr : functions) { 
-        auto& udf = *udfPtr; 
-        try { 
-            TProgramBuilder pgmBuilder(env, functionRegistry); 
-            TType* mkqlUserType = nullptr; 
-            if (udf.UserType) { 
-                TStringStream err; 
+bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
+    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
+    NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+    TExprContext& ctx) {
+
+    bool hasErrors = false;
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+
+    for (auto udfPtr : functions) {
+        auto& udf = *udfPtr;
+        try {
+            TProgramBuilder pgmBuilder(env, functionRegistry);
+            TType* mkqlUserType = nullptr;
+            if (udf.UserType) {
+                TStringStream err;
                 mkqlUserType = BuildType(*udf.UserType, pgmBuilder, err, true);
-                if (!mkqlUserType) { 
-                    ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: " 
-                        << udf.Name << ", error: " << err.Str())); 
-                    hasErrors = true; 
-                    continue; 
-                } 
-            } 
- 
+                if (!mkqlUserType) {
+                    ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: "
+                        << udf.Name << ", error: " << err.Str()));
+                    hasErrors = true;
+                    continue;
+                }
+            }
+
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(udf.SecureParams);
 
-            TFunctionTypeInfo funcInfo; 
-            auto status = functionRegistry.FindFunctionTypeInfo(env, typeInfoHelper, nullptr, 
+            TFunctionTypeInfo funcInfo;
+            auto status = functionRegistry.FindFunctionTypeInfo(env, typeInfoHelper, nullptr,
                 udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, {}, secureParamsProvider.get(), &funcInfo);
-            if (!status.IsOk()) { 
-                ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Failed to find UDF function: " << udf.Name 
-                    << ", reason: " << status.GetError())); 
-                hasErrors = true; 
-                continue; 
-            } 
- 
-            udf.CallableType = ConvertMiniKQLType(udf.Pos, funcInfo.FunctionType, ctx); 
-            YQL_ENSURE(udf.CallableType); 
-            if (funcInfo.RunConfigType) { 
-                udf.RunConfigType = ConvertMiniKQLType(udf.Pos, const_cast<TType*>(funcInfo.RunConfigType), ctx); 
-                YQL_ENSURE(udf.RunConfigType); 
-            } 
- 
-            if (funcInfo.UserType) { 
-                udf.NormalizedUserType = ConvertMiniKQLType(udf.Pos, const_cast<TType*>(funcInfo.UserType), ctx); 
-                YQL_ENSURE(udf.NormalizedUserType); 
-            } 
-        } catch (const std::exception& e) { 
-            ctx.AddError(TIssue(udf.Pos, TStringBuilder() 
-                << "Internal error was found when udf metadata is loading for function: " << udf.Name 
-                << ", reason: " << e.what())); 
-            hasErrors = true; 
-        } 
-    } 
- 
-    return !hasErrors; 
-} 
- 
+            if (!status.IsOk()) {
+                ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Failed to find UDF function: " << udf.Name
+                    << ", reason: " << status.GetError()));
+                hasErrors = true;
+                continue;
+            }
+
+            udf.CallableType = ConvertMiniKQLType(udf.Pos, funcInfo.FunctionType, ctx);
+            YQL_ENSURE(udf.CallableType);
+            if (funcInfo.RunConfigType) {
+                udf.RunConfigType = ConvertMiniKQLType(udf.Pos, const_cast<TType*>(funcInfo.RunConfigType), ctx);
+                YQL_ENSURE(udf.RunConfigType);
+            }
+
+            if (funcInfo.UserType) {
+                udf.NormalizedUserType = ConvertMiniKQLType(udf.Pos, const_cast<TType*>(funcInfo.UserType), ctx);
+                YQL_ENSURE(udf.NormalizedUserType);
+            }
+        } catch (const std::exception& e) {
+            ctx.AddError(TIssue(udf.Pos, TStringBuilder()
+                << "Internal error was found when udf metadata is loading for function: " << udf.Name
+                << ", reason: " << e.what()));
+            hasErrors = true;
+        }
+    }
+
+    return !hasErrors;
+}
+
 } // namespace NCommon
 } // namespace NYql

@@ -28,7 +28,7 @@ void WriteYsonValue(
     NYson::TYsonConsumerBase& writer,
     const NKikimr::NUdf::TUnboxedValuePod& value,
     NKikimr::NMiniKQL::TType* type,
-    const TVector<ui32>* structPositions = nullptr 
+    const TVector<ui32>* structPositions = nullptr
 );
 
 TString WriteYsonValue(
@@ -62,16 +62,16 @@ struct TCodecContext {
 void SkipYson(char cmd, TInputBuf& buf);
 void CopyYson(char cmd, TInputBuf& buf, TVector<char>& yson);
 void CopyYsonWithAttrs(char cmd, TInputBuf& buf, TVector<char>& yson);
-NKikimr::NUdf::TUnboxedValue ReadYsonValue(NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, TInputBuf& buf, bool isTableFormat); 
+NKikimr::NUdf::TUnboxedValue ReadYsonValue(NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, TInputBuf& buf, bool isTableFormat);
 
 TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonValue(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const TStringBuf& yson, NKikimr::NMiniKQL::TType* type, IOutputStream* err, bool isTableFormat); 
+    const TStringBuf& yson, NKikimr::NMiniKQL::TType* type, IOutputStream* err, bool isTableFormat);
 TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNode(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, IOutputStream* err);
 
-TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNodeInResultFormat(const NKikimr::NMiniKQL::THolderFactory& holderFactory, 
-    const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, IOutputStream* err); 
- 
+TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNodeInResultFormat(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, IOutputStream* err);
+
 extern "C" void ReadYsonContainerValue(NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
     bool wrapOptional);
@@ -95,7 +95,7 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
 extern "C" void WriteContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
 
-void WriteYsonValueInTableFormat(TOutputBuf& buf, NKikimr::NMiniKQL::TType* type, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel); 
+void WriteYsonValueInTableFormat(TOutputBuf& buf, NKikimr::NMiniKQL::TType* type, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel);
 
 TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikimr::NUdf::TUnboxedValuePod& value, TExprContext& ctx,
     TPositionHandle pos = {});

@@ -19,17 +19,17 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TPqDataSourceProvider : public TDataProviderBase { 
+class TPqDataSourceProvider : public TDataProviderBase {
 public:
-    TPqDataSourceProvider(TPqState::TPtr state, IPqGateway::TPtr gateway) 
+    TPqDataSourceProvider(TPqState::TPtr state, IPqGateway::TPtr gateway)
         : State_(state)
-        , Gateway_(gateway) 
+        , Gateway_(gateway)
         , ConfigurationTransformer_([this]() {
-        return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName }); 
-    }) 
+        return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
+    })
         , LoadMetaDataTransformer_(CreatePqLoadTopicMetadataTransformer(State_))
         , TypeAnnotationTransformer_(CreatePqDataSourceTypeAnnotationTransformer(State_))
-        , IODiscoveryTransformer_(CreatePqIODiscoveryTransformer(State_)) { 
+        , IODiscoveryTransformer_(CreatePqIODiscoveryTransformer(State_)) {
     }
 
     TStringBuf GetName() const override {
@@ -43,7 +43,7 @@ public:
                 const auto& clusterSettings = State_->Configuration->ClustersConfigurationSettings;
                 if (clusterName != NCommon::ALL_CLUSTERS && !clusterSettings.FindPtr(clusterName)) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
-                        "Unknown cluster name: " << clusterName)); 
+                        "Unknown cluster name: " << clusterName));
                     return false;
                 }
                 cluster = clusterName;
@@ -61,10 +61,10 @@ public:
         return TypeAnnotationTransformer_->CanParse(node);
     }
 
-    IGraphTransformer& GetIODiscoveryTransformer() override { 
-        return *IODiscoveryTransformer_; 
-    } 
- 
+    IGraphTransformer& GetIODiscoveryTransformer() override {
+        return *IODiscoveryTransformer_;
+    }
+
     IGraphTransformer& GetConfigurationTransformer() override {
         return *ConfigurationTransformer_;
     }
@@ -83,7 +83,7 @@ public:
     }
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         YQL_CLOG(INFO, ProviderPq) << "RewriteIO";
         if (auto left = TMaybeNode<TCoLeft>(node)) {
             return left.Input().Maybe<TPqRead>().World().Cast().Ptr();
@@ -94,7 +94,7 @@ public:
             return MakeIntrusive<TIssue>(ctx.GetPosition(read.Pos()), TStringBuilder() << "At function: " << TCoRead::CallableName());
         });
 
-        TTopicKeyParser topicKeyParser(read.FreeArgs().Get(2).Ref(), read.Ref().Child(4), ctx); 
+        TTopicKeyParser topicKeyParser(read.FreeArgs().Get(2).Ref(), read.Ref().Child(4), ctx);
         const TString cluster(read.DataSource().Cluster().Value());
         const auto* topicMeta = State_->FindTopicMeta(cluster, topicKeyParser.GetTopicPath());
         if (!topicMeta) {
@@ -106,27 +106,27 @@ public:
             .Cluster().Value(cluster).Build()
             .Database().Value(State_->Configuration->GetDatabaseForTopic(cluster)).Build()
             .Path().Value(topicKeyParser.GetTopicPath()).Build()
-            .RowSpec(topicMeta->RowSpec) 
+            .RowSpec(topicMeta->RowSpec)
             .Props(BuildTopicPropsList(*topicMeta, read.Pos(), ctx))
             .Metadata().Build()
             .Done();
 
-        auto builder = Build<TPqReadTopic>(ctx, read.Pos()) 
-            .World(read.World()) 
-            .DataSource(read.DataSource()) 
-            .Topic(std::move(topicNode)) 
-            .Format().Value(topicKeyParser.GetFormat()).Build() 
-            .Compression().Value(topicKeyParser.GetCompression()).Build(); 
+        auto builder = Build<TPqReadTopic>(ctx, read.Pos())
+            .World(read.World())
+            .DataSource(read.DataSource())
+            .Topic(std::move(topicNode))
+            .Format().Value(topicKeyParser.GetFormat()).Build()
+            .Compression().Value(topicKeyParser.GetCompression()).Build();
 
-        if (topicKeyParser.GetColumnOrder()) { 
-            builder.Columns(topicKeyParser.GetColumnOrder()); 
+        if (topicKeyParser.GetColumnOrder()) {
+            builder.Columns(topicKeyParser.GetColumnOrder());
         } else {
-            builder.Columns<TCoVoid>().Build(); 
-        } 
+            builder.Columns<TCoVoid>().Build();
+        }
 
-        return Build<TCoRight>(ctx, read.Pos()) 
-            .Input(builder.Done()) 
-            .Done().Ptr(); 
+        return Build<TCoRight>(ctx, read.Pos())
+            .Input(builder.Done())
+            .Done().Ptr();
     }
 
     const THashMap<TString, TString>* GetClusterTokens() override {
@@ -149,12 +149,12 @@ public:
     void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
         if (auto maybeRead = TMaybeNode<TPqReadTopic>(&node)) {
             if (auto maybeTopic = maybeRead.Topic()) {
-                TStringBuf cluster; 
+                TStringBuf cluster;
                 if (auto dataSource = maybeRead.DataSource().Maybe<TPqDataSource>()) {
-                    cluster = dataSource.Cast().Cluster().Value(); 
+                    cluster = dataSource.Cast().Cluster().Value();
                 }
-                auto topicDisplayName = MakeTopicDisplayName(cluster, maybeTopic.Cast().Path().Value()); 
-                inputs.push_back(TPinInfo(maybeRead.DataSource().Raw(), nullptr, maybeTopic.Cast().Raw(), topicDisplayName, false)); 
+                auto topicDisplayName = MakeTopicDisplayName(cluster, maybeTopic.Cast().Path().Value());
+                inputs.push_back(TPinInfo(maybeRead.DataSource().Raw(), nullptr, maybeTopic.Cast().Raw(), topicDisplayName, false));
             }
         }
     }
@@ -165,15 +165,15 @@ public:
 
 private:
     TPqState::TPtr State_;
-    IPqGateway::TPtr Gateway_; 
+    IPqGateway::TPtr Gateway_;
     TLazyInitHolder<IGraphTransformer> ConfigurationTransformer_;
     THolder<IGraphTransformer> LoadMetaDataTransformer_;
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-    THolder<IGraphTransformer> IODiscoveryTransformer_; 
+    THolder<IGraphTransformer> IODiscoveryTransformer_;
 };
 
-TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway) { 
-    return new TPqDataSourceProvider(state, gateway); 
+TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway) {
+    return new TPqDataSourceProvider(state, gateway);
 }
 
 } // namespace NYql

@@ -24,11 +24,11 @@ PEERDIR(
     ydb/core/yq/libs/common
     ydb/core/yq/libs/config
     ydb/core/yq/libs/config/protos
-    ydb/core/yq/libs/control_plane_storage/events 
+    ydb/core/yq/libs/control_plane_storage/events
     ydb/core/yq/libs/control_plane_storage/internal
     ydb/core/yq/libs/control_plane_storage/proto
     ydb/core/yq/libs/db_schema
-    ydb/core/yq/libs/graph_params/proto 
+    ydb/core/yq/libs/graph_params/proto
     ydb/core/yq/libs/shared_resources
     ydb/core/yq/libs/ydb
     ydb/library/security
@@ -44,6 +44,6 @@ END()
 
 RECURSE(
     events
-    internal 
+    internal
     proto
 )

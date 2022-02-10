@@ -229,9 +229,9 @@ public:
         };
     }
 
-    TAsyncDescribePathResult DescribePath(const TString& path) const override { 
+    TAsyncDescribePathResult DescribePath(const TString& path) const override {
         NLogBroker::DescribePathRequest describeRequest;
-        describeRequest.set_token(Options.GetCredentialsProviderFactory()->CreateProvider()->GetAuthInfo()); 
+        describeRequest.set_token(Options.GetCredentialsProviderFactory()->CreateProvider()->GetAuthInfo());
         describeRequest.mutable_path()->set_path(path);
 
         NThreading::TPromise<TDescribePathResult> promise = NThreading::NewPromise<TDescribePathResult>();

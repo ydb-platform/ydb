@@ -378,7 +378,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(TEvLocal::TEvBootTablet::TPtr &ev, const TActorContext &ctx) {
         NKikimrLocal::TEvBootTablet &record = ev->Get()->Record;
-        TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(record.GetInfo())); 
+        TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(record.GetInfo()));
         info->HiveId = HiveId;
         TTabletId tabletId(info->TabletID, record.GetFollowerId());
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet tabletId:"

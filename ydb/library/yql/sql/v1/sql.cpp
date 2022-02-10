@@ -77,8 +77,8 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
             return GetIdentifier(ctx, node.GetAlt_keyword1().GetRule_keyword_compat1());
         case TRule_keyword::kAltKeyword2:
             return GetIdentifier(ctx, node.GetAlt_keyword2().GetRule_keyword_expr_uncompat1());
-        case TRule_keyword::kAltKeyword3: 
-            return GetIdentifier(ctx, node.GetAlt_keyword3().GetRule_keyword_table_uncompat1()); 
+        case TRule_keyword::kAltKeyword3:
+            return GetIdentifier(ctx, node.GetAlt_keyword3().GetRule_keyword_table_uncompat1());
         case TRule_keyword::kAltKeyword4:
             return GetIdentifier(ctx, node.GetAlt_keyword4().GetRule_keyword_select_uncompat1());
         case TRule_keyword::kAltKeyword5:
@@ -183,7 +183,7 @@ static std::pair<bool, TString> Id(const TRule_id_or_at& node, TTranslation& ctx
     return std::make_pair(hasAt, Id(node.GetRule_an_id_or_type2(), ctx) );
 }
 
-static TString Id(const TRule_id_table& node, TTranslation& ctx) { 
+static TString Id(const TRule_id_table& node, TTranslation& ctx) {
     //id_table:
     //    identifier
     //  | keyword_compat
@@ -196,7 +196,7 @@ static TString Id(const TRule_id_table& node, TTranslation& ctx) {
     //  | keyword_hint_uncompat
     //  | keyword_schema_uncompat
     //;
-    switch (node.Alt_case()) { 
+    switch (node.Alt_case()) {
         case TRule_id_table::kAltIdTable1:
             return Id(node.GetAlt_id_table1().GetRule_identifier1(), ctx);
         case TRule_id_table::kAltIdTable2:
@@ -215,9 +215,9 @@ static TString Id(const TRule_id_table& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_table8().GetRule_keyword_schema_uncompat1());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
-    } 
-} 
- 
+    }
+}
+
 static TString Id(const TRule_an_id_table& node, TTranslation& ctx) {
     // an_id_table: id_table | STRING_VALUE;
     switch (node.Alt_case()) {
@@ -782,18 +782,18 @@ static bool IsColumnsOnly(const TVector<TSortSpecificationPtr>& container) {
     return true;
 }
 
-static bool PackageVersionFromString(const TString& s, ui32& version) { 
-    if (s == "release") { 
-        version = 0; 
-        return true; 
-    } 
-    if (s == "draft") { 
-        version = 1; 
-        return true; 
-    } 
-    return TryFromString(s, version); 
-} 
- 
+static bool PackageVersionFromString(const TString& s, ui32& version) {
+    if (s == "release") {
+        version = 0;
+        return true;
+    }
+    if (s == "draft") {
+        version = 1;
+        return true;
+    }
+    return TryFromString(s, version);
+}
+
 class TSqlQuery;
 
 struct TSymbolNameWithPos {
@@ -1412,20 +1412,20 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
         }
 
         if (value.GetLiteral()) {
-            TString clusterName = *value.GetLiteral(); 
+            TString clusterName = *value.GetLiteral();
             if (allowBinding && to_lower(clusterName) == "bindings") {
                 isBinding = true;
                 return true;
             }
-            TString normalizedClusterName; 
-            auto foundProvider = Ctx.GetClusterProvider(clusterName, normalizedClusterName); 
+            TString normalizedClusterName;
+            auto foundProvider = Ctx.GetClusterProvider(clusterName, normalizedClusterName);
             if (!foundProvider) {
-                Ctx.Error() << "Unknown cluster: " << clusterName; 
+                Ctx.Error() << "Unknown cluster: " << clusterName;
                 return false;
             }
 
             if (service && *foundProvider != service) {
-                Ctx.Error() << "Mismatch of cluster " << clusterName << " service, expected: " 
+                Ctx.Error() << "Mismatch of cluster " << clusterName << " service, expected: "
                     << *foundProvider << ", got: " << service;
                 return false;
             }
@@ -1434,7 +1434,7 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
                 service = *foundProvider;
             }
 
-            value = TDeferredAtom(Ctx.Pos(), normalizedClusterName); 
+            value = TDeferredAtom(Ctx.Pos(), normalizedClusterName);
         } else {
             if (!service) {
                 Ctx.Error() << "Cluster service is not set";
@@ -1478,7 +1478,7 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
 
     const auto& bindSettings = (pit != settings.PrivateBindings.end()) ? pit->second : sit->second;
 
-    if (!IsIn({S3ProviderName, PqProviderName}, bindSettings.ClusterType)) { 
+    if (!IsIn({S3ProviderName, PqProviderName}, bindSettings.ClusterType)) {
         Ctx.Error() << "Cluster type " << bindSettings.ClusterType << " is not supported for table bindings";
         return false;
     }
@@ -1522,13 +1522,13 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
     TVector<TTableArg> args;
     for (auto& arg : { path, format }) {
         args.emplace_back();
-        args.back().Expr = BuildLiteralRawString(Ctx.Pos(), arg); 
+        args.back().Expr = BuildLiteralRawString(Ctx.Pos(), arg);
     }
 
     for (auto& [key, value] : kvs) {
         YQL_ENSURE(!key.empty());
         args.emplace_back();
-        args.back().Expr = BuildLiteralRawString(Ctx.Pos(), value); 
+        args.back().Expr = BuildLiteralRawString(Ctx.Pos(), value);
         args.back().Expr->SetLabel(key);
     }
 
@@ -6000,7 +6000,7 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
 
                 TPosition pos(Ctx.Pos());
                 Ctx.IncrementMonCounter("sql_select_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
-                return BuildTableSource(pos, table); 
+                return BuildTableSource(pos, table);
             }
         }
         case TRule_single_source::kAltSingleSource2: {
@@ -6323,10 +6323,10 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     // PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
     // (WITH external_call_settings)?
     // (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?)?
- 
+
     Token(node.GetToken1());
     TPosition startPos(Ctx.Pos());
- 
+
     if (!selectPos) {
         selectPos = startPos;
     }
@@ -6349,8 +6349,8 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
         source = BuildMuxSource(pos, std::move(sources));
     }
 
-    const bool processStream = node.HasBlock2(); 
- 
+    const bool processStream = node.HasBlock2();
+
     if (!hasUsing) {
         return BuildProcess(startPos, std::move(source), nullptr, false, {}, false, processStream, settings, {});
     }
@@ -6365,7 +6365,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
         }
         Ctx.IncrementMonCounter("sql_features", "ProcessWhere");
     } else {
-        Ctx.IncrementMonCounter("sql_features", processStream ? "ProcessStream" : "Process"); 
+        Ctx.IncrementMonCounter("sql_features", processStream ? "ProcessStream" : "Process");
     }
 
     if (block5.HasBlock6()) {
@@ -6583,7 +6583,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         return nullptr;
     }
 
-    const bool selectStream = node.HasBlock3(); 
+    const bool selectStream = node.HasBlock3();
     TVector<TNodePtr> without;
     if (node.HasBlock8()) {
         if (!ColumnList(without, node.GetBlock8().GetRule_without_column_list2())) {
@@ -6617,7 +6617,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     bool compactGroupBy = false;
     if (node.HasBlock11()) {
         TGroupByClause clause(Ctx, Mode);
-        if (!clause.Build(node.GetBlock11().GetRule_group_by_clause1(), source->IsStream())) { 
+        if (!clause.Build(node.GetBlock11().GetRule_group_by_clause1(), source->IsStream())) {
             return nullptr;
         }
         for (const auto& exprAlias: clause.Aliases()) {
@@ -6643,7 +6643,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
 
     TWinSpecs windowSpec;
     if (node.HasBlock13()) {
-        if (source->IsStream()) { 
+        if (source->IsStream()) {
             Ctx.Error() << "WINDOW is not allowed in streaming queries";
             return nullptr;
         }
@@ -6661,7 +6661,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
 
         Token(orderBlock.GetRule_order_by_clause2().GetToken1());
 
-        if (source->IsStream()) { 
+        if (source->IsStream()) {
             Ctx.Error() << "ORDER BY is not allowed in streaming queries";
             return nullptr;
         }
@@ -6716,7 +6716,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         return nullptr;
     }
     return BuildSelectCore(Ctx, startPos, std::move(source), groupByExpr, groupBy, compactGroupBy, assumeSorted, orderBy, having,
-        std::move(windowSpec), hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings); 
+        std::move(windowSpec), hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
 }
 
 TString TSqlTranslation::FrameSettingsToString(EFrameSettings settings, bool isUnbounded) {
@@ -9222,14 +9222,14 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.IncrementMonCounter("sql_pragma", "udf");
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "ImportUdfs", values, false);
-        } else if (normalizedPragma == "packageversion") { 
-            if (values.size() != 2 || pragmaValueDefault) { 
-                Error() << "Expected package name and version"; 
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
-                return {}; 
-            } 
- 
-            ui32 version = 0; 
+        } else if (normalizedPragma == "packageversion") {
+            if (values.size() != 2 || pragmaValueDefault) {
+                Error() << "Expected package name and version";
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            ui32 version = 0;
             TString versionString;
             TString packageName;
             if (!values[0].GetLiteral(packageName, Ctx) || !values[1].GetLiteral(versionString, Ctx)) {
@@ -9238,15 +9238,15 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
 
             if (!PackageVersionFromString(versionString, version)) {
-                Error() << "Unable to parse package version, possible values 0, 1, draft, release"; 
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
-                return {}; 
-            } 
- 
+                Error() << "Unable to parse package version, possible values 0, 1, draft, release";
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
             Ctx.SetPackageVersion(packageName, version);
-            Ctx.IncrementMonCounter("sql_pragma", "PackageVersion"); 
-            success = true; 
-            return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "SetPackageVersion", TVector<TDeferredAtom>{ values[0], TDeferredAtom(values[1].Build()->GetPos(), ToString(version)) }, false); 
+            Ctx.IncrementMonCounter("sql_pragma", "PackageVersion");
+            success = true;
+            return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "SetPackageVersion", TVector<TDeferredAtom>{ values[0], TDeferredAtom(values[1].Build()->GetPos(), ToString(version)) }, false);
         } else if (normalizedPragma == "file") {
             if (values.size() != 2U || pragmaValueDefault) {
                 Error() << "Expected file alias and url as pragma values";
@@ -9540,28 +9540,28 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             // PositionalUnionAll implies OrderedColumns
             Ctx.OrderedColumns = true;
             Ctx.IncrementMonCounter("sql_pragma", "PositionalUnionAll");
-        } else if (normalizedPragma == "pqreadby") { 
+        } else if (normalizedPragma == "pqreadby") {
             if (values.size() != 1 || !values[0].GetLiteral()) {
                 Error() << "Expected string literal as a single argument for: " << pragma;
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
-                return {}; 
-            } 
- 
-            // special guard to raise error on situation: 
-            // use cluster1; 
-            // pragma PqReadPqBy="cluster2"; 
-            const TString* currentClusterLiteral = Ctx.Scoped->CurrCluster.GetLiteral(); 
-            if (currentClusterLiteral && *values[0].GetLiteral() != "dq" && *currentClusterLiteral != *values[0].GetLiteral()) { 
-                Error() << "Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: " << *values[0].GetLiteral() << " != " << *currentClusterLiteral; 
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
-                return {}; 
-            } 
- 
-            Ctx.PqReadByRtmrCluster = *values[0].GetLiteral(); 
-            Ctx.IncrementMonCounter("sql_pragma", "PqReadBy"); 
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            // special guard to raise error on situation:
+            // use cluster1;
+            // pragma PqReadPqBy="cluster2";
+            const TString* currentClusterLiteral = Ctx.Scoped->CurrCluster.GetLiteral();
+            if (currentClusterLiteral && *values[0].GetLiteral() != "dq" && *currentClusterLiteral != *values[0].GetLiteral()) {
+                Error() << "Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: " << *values[0].GetLiteral() << " != " << *currentClusterLiteral;
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            Ctx.PqReadByRtmrCluster = *values[0].GetLiteral();
+            Ctx.IncrementMonCounter("sql_pragma", "PqReadBy");
         } else if (normalizedPragma == "bogousstaringroupbyoverjoin") {
             Ctx.BogousStarInGroupByOverJoin = true;
-            Ctx.IncrementMonCounter("sql_pragma", "BogousStarInGroupByOverJoin"); 
+            Ctx.IncrementMonCounter("sql_pragma", "BogousStarInGroupByOverJoin");
         } else if (normalizedPragma == "strictjoinkeytypes") {
             Ctx.Scoped->StrictJoinKeyTypes = true;
             Ctx.IncrementMonCounter("sql_pragma", "StrictJoinKeyTypes");
@@ -9650,7 +9650,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
 
         } else if (std::find(Providers.cbegin(), Providers.cend(), lowerPrefix) == Providers.cend()) {
-            if (!Ctx.HasCluster(prefix)) { 
+            if (!Ctx.HasCluster(prefix)) {
                 Error() << "Unknown pragma prefix: " << prefix << ", please use cluster name or one of provider " <<
                     JoinRange(", ", Providers.cbegin(), Providers.cend());
                 Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");
@@ -9658,7 +9658,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
         }
 
-        if (normalizedPragma != "flags" && normalizedPragma != "packageversion") { 
+        if (normalizedPragma != "flags" && normalizedPragma != "packageversion") {
             if (values.size() > 1) {
                 Error() << "Expected at most one value in the pragma";
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
@@ -9692,7 +9692,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
         return nullptr;
     }
 
-    TSourcePtr source = BuildTableSource(Ctx.Pos(), table); 
+    TSourcePtr source = BuildTableSource(Ctx.Pos(), table);
 
     if (stmt.HasBlock4()) {
         switch (stmt.GetBlock4().Alt_case()) {
@@ -9745,7 +9745,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         case TRule_update_stmt_TBlock3::kAlt1: {
             const auto& alt = stmt.GetBlock3().GetAlt1();
             TSourcePtr values = Build(alt.GetRule_set_clause_choice2());
-            auto source = BuildTableSource(Ctx.Pos(), table); 
+            auto source = BuildTableSource(Ctx.Pos(), table);
 
             if (alt.HasBlock3()) {
                 TColumnRefScope scope(Ctx, EColumnRefState::Allow);
@@ -10079,15 +10079,15 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
     }
     TSqlQuery query(ctx, ctx.Settings.Mode, true);
     TNodePtr node(query.Build(static_cast<const TSQLv1ParserAST&>(protoAst)));
-    try { 
-        if (node && node->Init(ctx, nullptr)) { 
-            return node->Translate(ctx); 
-        } 
-    } catch (const NProtoAST::TTooManyErrors&) { 
-        // do not add error issue, no room for it 
+    try {
+        if (node && node->Init(ctx, nullptr)) {
+            return node->Translate(ctx);
+        }
+    } catch (const NProtoAST::TTooManyErrors&) {
+        // do not add error issue, no room for it
     }
- 
-    return nullptr; 
+
+    return nullptr;
 }
 
 void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message& protoAst,
@@ -10100,7 +10100,7 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
-            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" << 
+            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" <<
                 ", please send this request over bug report into YQL interface or write on yql@ maillist";
         }
     }

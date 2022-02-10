@@ -112,9 +112,9 @@ public:
         case YandexQuery::ConnectionSetting::kMonitoring: {
             return GetServiceAccountId(c.content().setting().monitoring().auth());
         }
-        case YandexQuery::ConnectionSetting::kClickhouseCluster: { 
-            return GetServiceAccountId(c.content().setting().clickhouse_cluster().auth()); 
-        } 
+        case YandexQuery::ConnectionSetting::kClickhouseCluster: {
+            return GetServiceAccountId(c.content().setting().clickhouse_cluster().auth());
+        }
         // Do not replace with default. Adding a new connection should cause a compilation error
         case YandexQuery::ConnectionSetting::CONNECTION_NOT_SET:
         break;

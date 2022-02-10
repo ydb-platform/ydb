@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "defs.h"
 
@@ -73,7 +73,7 @@ namespace NKikimr::NBsController {
                 i64 requiredSpace) const {
             TString error;
             for (const bool requireOperational : {true, false}) {
-                if (mapper.AllocateGroup(groupId, group, replacedDiskIds, numReplacedDisks, forbid, 
+                if (mapper.AllocateGroup(groupId, group, replacedDiskIds, numReplacedDisks, forbid,
                         requiredSpace, requireOperational, error)) {
                     return;
                 }

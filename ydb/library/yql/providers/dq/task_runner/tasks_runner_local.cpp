@@ -175,10 +175,10 @@ public:
         return Runner->GetTypeEnv();
     }
 
-    const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override { 
-        return Runner->GetHolderFactory(); 
-    } 
- 
+    const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
+        return Runner->GetHolderFactory();
+    }
+
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
         return Runner->BindAllocator(memoryLimit);
     }

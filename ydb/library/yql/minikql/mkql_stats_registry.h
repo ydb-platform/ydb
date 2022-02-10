@@ -24,25 +24,25 @@ class TStatKey: public TIntrusiveSListItem<TStatKey> {
 
 // -- instance part --
 public:
-    TStatKey(TStringBuf name, bool deriv); 
+    TStatKey(TStringBuf name, bool deriv);
 
     TStringBuf GetName() const noexcept { return Name_; }
-    bool IsDeriv() const noexcept { return Deriv_; } 
+    bool IsDeriv() const noexcept { return Deriv_; }
     ui32 GetId() const noexcept { return Id_; }
-    static ui32 GetMaxId() { return IdSequence_; } 
+    static ui32 GetMaxId() { return IdSequence_; }
 
-    template <typename F> 
-    static void ForEach(F f) { 
-        for (TStatKey* p = KeysChain_; p;) { 
-            f(*p); 
-            auto n = p->Next(); 
-            p = n ? n->Node() : nullptr; 
-        } 
-    } 
- 
+    template <typename F>
+    static void ForEach(F f) {
+        for (TStatKey* p = KeysChain_; p;) {
+            f(*p);
+            auto n = p->Next();
+            p = n ? n->Node() : nullptr;
+        }
+    }
+
 private:
     TStringBuf Name_;
-    bool Deriv_; 
+    bool Deriv_;
     ui32 Id_;
 };
 
@@ -71,9 +71,9 @@ struct IStatsRegistry {
     // TConsumer = void(const TStatKey& key, i64 value)
     template <typename TConsumer>
     void ForEachStat(TConsumer c) const {
-        TStatKey::ForEach([this, &c](const auto& key) { 
-            c(key, GetStat(key)); 
-        }); 
+        TStatKey::ForEach([this, &c](const auto& key) {
+            c(key, GetStat(key));
+        });
     }
 };
 

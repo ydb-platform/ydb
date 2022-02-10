@@ -82,8 +82,8 @@ public:
         ui64 outputIndex,
         TDqSolomonWriteParams&& writeParams,
         NYql::NDq::IDqSinkActor::ICallbacks* callbacks,
-        const NMonitoring::TDynamicCounterPtr& counters, 
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, 
+        const NMonitoring::TDynamicCounterPtr& counters,
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
         i64 freeSpace)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
@@ -95,7 +95,7 @@ public:
         , UserMetricsEncoder(
             WriteParams.Shard.GetScheme(),
             WriteParams.Shard.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING)
-        , CredentialsProvider(credentialsProvider) 
+        , CredentialsProvider(credentialsProvider)
     {
         SINK_LOG_D("Init");
     }
@@ -246,7 +246,7 @@ private:
 
     TString GetUrl() const {
         TStringBuilder builder;
-        builder << (WriteParams.Shard.GetUseSsl() ? "https://" : "http://"); 
+        builder << (WriteParams.Shard.GetUseSsl() ? "https://" : "http://");
         builder << WriteParams.Shard.GetEndpoint();
 
         switch (WriteParams.Shard.GetClusterType()) {
@@ -295,14 +295,14 @@ private:
 
     void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
         const TString authorizationHeader = "Authorization";
-        const TString authToken = CredentialsProvider->GetAuthInfo(); 
+        const TString authToken = CredentialsProvider->GetAuthInfo();
 
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
-                httpRequest->Set(authorizationHeader, "OAuth " + authToken); 
+                httpRequest->Set(authorizationHeader, "OAuth " + authToken);
                 break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
-                httpRequest->Set(authorizationHeader, "Bearer " + authToken); 
+                httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
             default:
                 Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(WriteParams.Shard.GetClusterType()));
@@ -430,7 +430,7 @@ private:
     THashMap<NHttp::THttpOutgoingRequestPtr, TMetricsInflight> InflightBuffer;
 
     TMetricsEncoder UserMetricsEncoder;
-    std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider; 
+    std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 };
 
 std::pair<NYql::NDq::IDqSinkActor*, NActors::IActor*> CreateDqSolomonWriteActor(
@@ -438,33 +438,33 @@ std::pair<NYql::NDq::IDqSinkActor*, NActors::IActor*> CreateDqSolomonWriteActor(
     ui64 outputIndex,
     const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqSinkActor::ICallbacks* callbacks,
-    const NMonitoring::TDynamicCounterPtr& counters, 
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
+    const NMonitoring::TDynamicCounterPtr& counters,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace)
 {
-    const TString& tokenName = settings.GetToken().GetName(); 
-    const TString token = secureParams.Value(tokenName, TString()); 
+    const TString& tokenName = settings.GetToken().GetName();
+    const TString token = secureParams.Value(tokenName, TString());
 
     TDqSolomonWriteParams params {
         .Shard = std::move(settings),
     };
 
-    auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token); 
-    auto credentialsProvider = credentialsProviderFactory->CreateProvider(); 
- 
+    auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    auto credentialsProvider = credentialsProviderFactory->CreateProvider();
+
     TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(
         outputIndex,
         std::move(params),
         callbacks,
         counters,
-        credentialsProvider, 
+        credentialsProvider,
         freeSpace);
     return {actor, actor};
 }
 
-void RegisterDQSolomonWriteActorFactory(TDqSinkFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { 
+void RegisterDQSolomonWriteActorFactory(TDqSinkFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
     factory.Register<NSo::NProto::TDqSolomonShard>("SolomonSink",
-        [credentialsFactory]( 
+        [credentialsFactory](
             NYql::NSo::NProto::TDqSolomonShard&& settings,
             IDqSinkActorFactory::TArguments&& args)
         {
@@ -475,8 +475,8 @@ void RegisterDQSolomonWriteActorFactory(TDqSinkFactory& factory, ISecuredService
                 args.OutputIndex,
                 args.SecureParams,
                 args.Callback,
-                counters, 
-                credentialsFactory); 
+                counters,
+                credentialsFactory);
         });
 }
 

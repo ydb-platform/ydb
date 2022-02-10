@@ -21,48 +21,48 @@ namespace NConsoleClient {
 TCommandTable::TCommandTable()
     : TClientCommandTree("table", {}, "Table service operations")
 {
-    //AddCommand(std::make_unique<TCommandCreateTable>()); 
-    AddCommand(std::make_unique<TCommandDropTable>()); 
-    AddCommand(std::make_unique<TCommandQuery>()); 
-    AddCommand(std::make_unique<TCommandReadTable>()); 
-    AddCommand(std::make_unique<TCommandIndex>()); 
-    AddCommand(std::make_unique<TCommandAttribute>()); 
-    AddCommand(std::make_unique<TCommandTtl>()); 
+    //AddCommand(std::make_unique<TCommandCreateTable>());
+    AddCommand(std::make_unique<TCommandDropTable>());
+    AddCommand(std::make_unique<TCommandQuery>());
+    AddCommand(std::make_unique<TCommandReadTable>());
+    AddCommand(std::make_unique<TCommandIndex>());
+    AddCommand(std::make_unique<TCommandAttribute>());
+    AddCommand(std::make_unique<TCommandTtl>());
 }
 
 TCommandQuery::TCommandQuery()
     : TClientCommandTree("query", {}, "Query operations")
 {
-    AddCommand(std::make_unique<TCommandExecuteQuery>()); 
-    AddCommand(std::make_unique<TCommandExplain>()); 
+    AddCommand(std::make_unique<TCommandExecuteQuery>());
+    AddCommand(std::make_unique<TCommandExplain>());
 }
 
 TCommandIndex::TCommandIndex()
     : TClientCommandTree("index", {}, "Index operations")
 {
-    AddCommand(std::make_unique<TCommandIndexAdd>()); 
-    AddCommand(std::make_unique<TCommandIndexDrop>()); 
+    AddCommand(std::make_unique<TCommandIndexAdd>());
+    AddCommand(std::make_unique<TCommandIndexDrop>());
 }
 
 TCommandAttribute::TCommandAttribute()
     : TClientCommandTree("attribute", {"attr"}, "Attribute operations")
 {
-    AddCommand(std::make_unique<TCommandAttributeAdd>()); 
-    AddCommand(std::make_unique<TCommandAttributeDrop>()); 
+    AddCommand(std::make_unique<TCommandAttributeAdd>());
+    AddCommand(std::make_unique<TCommandAttributeDrop>());
 }
 
 TCommandTtl::TCommandTtl()
     : TClientCommandTree("ttl", {}, "Ttl operations")
 {
-    AddCommand(std::make_unique<TCommandTtlSet>()); 
-    AddCommand(std::make_unique<TCommandTtlDrop>()); 
+    AddCommand(std::make_unique<TCommandTtlSet>());
+    AddCommand(std::make_unique<TCommandTtlDrop>());
 }
 
 TCommandIndexAdd::TCommandIndexAdd()
     : TClientCommandTree("add", {}, "Add index in to the specified table")
 {
-    AddCommand(std::make_unique<TCommandIndexAddGlobalSync>()); 
-    AddCommand(std::make_unique<TCommandIndexAddGlobalAsync>()); 
+    AddCommand(std::make_unique<TCommandIndexAddGlobalSync>());
+    AddCommand(std::make_unique<TCommandIndexAddGlobalAsync>());
 }
 
 TTableCommand::TTableCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)

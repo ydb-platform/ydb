@@ -92,7 +92,7 @@ struct TRequestInfo {
 
     TString RequestId;
     TString Owner;
-    ui64 Order = 0; 
+    ui64 Order = 0;
     NKikimrCms::TPermissionRequest Request;
 };
 
@@ -403,7 +403,7 @@ public:
         , VDiskId(id)
         , PDiskId(pdiskId)
         , NodeId(nodeId)
-        , SlotId(0) 
+        , SlotId(0)
     {
     }
 

@@ -35,8 +35,8 @@ class TJsonBrowse : public TActorBootstrapped<TJsonBrowse> {
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
-    bool Recursive = false; 
+    ui32 Timeout = 0;
+    bool Recursive = false;
 
     struct TPathStateInfo {
         TString Name;

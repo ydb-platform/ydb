@@ -4776,10 +4776,10 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [["1"];["11"];"mapped_11";"Ok"]; 
-            [["5"];["15"];"mapped_15";"Ok"]; 
-            [["4"];["14"];"mapped_14";"Ok"]; 
-            [["6"];["16"];"mapped_16";"Ok"] 
+            [["1"];["11"];"mapped_11";"Ok"];
+            [["5"];["15"];"mapped_15";"Ok"];
+            [["4"];["14"];"mapped_14";"Ok"];
+            [["6"];["16"];"mapped_16";"Ok"]
         ]]])___", res);
     }
 
@@ -4839,14 +4839,14 @@ Value {
 
         NKqp::CompareYson(R"___([
             [[
-                [["1"];["11"];["Ok"]]; 
-                [["3"];["13"];["Bad"]]; 
-                [["5"];["15"];["Ok"]] 
+                [["1"];["11"];["Ok"]];
+                [["3"];["13"];["Bad"]];
+                [["5"];["15"];["Ok"]]
             ]];
             [[
-                [["1"];["Ok"]]; 
-                [["3"];["Bad"]]; 
-                [["5"];["Ok"]] 
+                [["1"];["Ok"]];
+                [["3"];["Bad"]];
+                [["5"];["Ok"]]
             ]]
         ])___", res);
     }
@@ -4906,9 +4906,9 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [[[["3"];["Bad"]]];["1"];["Ok"]]; 
-            [[[["3"];["Bad"]]];["3"];["Bad"]]; 
-            [[[["3"];["Bad"]]];["5"];["Ok"]] 
+            [[[["3"];["Bad"]]];["1"];["Ok"]];
+            [[[["3"];["Bad"]]];["3"];["Bad"]];
+            [[[["3"];["Bad"]]];["5"];["Ok"]]
         ]]])___", res);
     }
 
@@ -4983,8 +4983,8 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [["1"];["11"];"mapped_11";["Ok"]]; 
-            [["5"];["15"];"mapped_15";["Ok"]] 
+            [["1"];["11"];"mapped_11";["Ok"]];
+            [["5"];["15"];"mapped_15";["Ok"]]
         ]]])___", res);
     }
 
@@ -5083,10 +5083,10 @@ Value {
             UNIT_ASSERT_EQUAL(driver.Run(checkpgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
 
             NKqp::CompareYson(R"___([[[[
-                [["0"];["0"]]; 
-                [["1"];["1"]]; 
-                [["3"];["3"]]; 
-                [["5"];["5"]]]; 
+                [["0"];["0"]];
+                [["1"];["1"]];
+                [["3"];["3"]];
+                [["5"];["5"]]];
                 %false]]])___", res);
         }
     }
@@ -5174,10 +5174,10 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [[["1"];["Ok"]];[["2"];["20"]]]; 
-            [[["1"];["Ok"]];[["4"];["40"]]]; 
-            [[["3"];["Bad"]];[["2"];["20"]]]; 
-            [[["3"];["Bad"]];[["4"];["40"]]] 
+            [[["1"];["Ok"]];[["2"];["20"]]];
+            [[["1"];["Ok"]];[["4"];["40"]]];
+            [[["3"];["Bad"]];[["2"];["20"]]];
+            [[["3"];["Bad"]];[["4"];["40"]]]
         ]]])___", res);
     }
 
@@ -5272,10 +5272,10 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [["1"];[["20"];["40"]]]; 
-            [["Ok"];[["20"];["40"]]]; 
-            [["3"];[["20"];["40"]]]; 
-            [["Bad"];[["20"];["40"]]] 
+            [["1"];[["20"];["40"]]];
+            [["Ok"];[["20"];["40"]]];
+            [["3"];[["20"];["40"]]];
+            [["Bad"];[["20"];["40"]]]
         ]]])___", res);
     }
 
@@ -5386,10 +5386,10 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [["Value1"];["6"]]; 
-            [["Value2"];["3"]]; 
-            [["Value2"];["8"]]; 
-            [["Value3"];["4"]] 
+            [["Value1"];["6"]];
+            [["Value2"];["3"]];
+            [["Value2"];["8"]];
+            [["Value3"];["4"]]
         ]]])___", res);
     }
 
@@ -5496,9 +5496,9 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [["Value1"];["6"]]; 
-            [["Value2"];["11"]]; 
-            [["Value3"];["4"]] 
+            [["Value1"];["6"]];
+            [["Value2"];["11"]];
+            [["Value3"];["4"]]
         ]]])___", res);
     }
 
@@ -5579,8 +5579,8 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [["3"];["Value2"]]; 
-            [["2"];["Value2"]] 
+            [["3"];["Value2"]];
+            [["2"];["Value2"]]
         ]]])___", res);
     }
 
@@ -5653,10 +5653,10 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([[[
-            [["1"];["Value1"]]; 
-            [["2"];["Value2"]]; 
-            [["3"];["Value1"]]; 
-            [["4"];["Value2"]] 
+            [["1"];["Value1"]];
+            [["2"];["Value2"]];
+            [["3"];["Value1"]];
+            [["4"];["Value2"]]
         ]]])___", res);
     }
 
@@ -6347,8 +6347,8 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
 
         NKqp::CompareYson(R"___([
-            [[[[["1"];["Value1"]];[["3"];["Value3"]]]; 
-            [[["2"];["12"];["20"]];[["4"];["14"];["40"]]]]] 
+            [[[[["1"];["Value1"]];[["3"];["Value3"]]];
+            [[["2"];["12"];["20"]];[["4"];["14"];["40"]]]]]
         ])___", res);
     }
 

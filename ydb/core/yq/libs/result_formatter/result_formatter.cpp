@@ -70,7 +70,7 @@ const NYql::TTypeAnnotationNode* MakeStructType(
     NYql::TExprContext& ctx)
 {
     TVector<const NYql::TItemExprType*> items;
-    items.reserve(i.size()); 
+    items.reserve(i.size());
     for (const auto& [k, v] : i) {
         items.push_back(ctx.MakeType<NYql::TItemExprType>(k, v));
     }
@@ -282,17 +282,17 @@ TType MakeType(NYdb::TTypeParser& parser, TContext& env)
 }
 
 struct TTypePair {
-    NKikimr::NMiniKQL::TType* MiniKQLType = nullptr; 
-    const NYql::TTypeAnnotationNode* TypeAnnotation = nullptr; 
+    NKikimr::NMiniKQL::TType* MiniKQLType = nullptr;
+    const NYql::TTypeAnnotationNode* TypeAnnotation = nullptr;
 };
 
-TTypePair FormatColumnType( 
+TTypePair FormatColumnType(
     NJson::TJsonValue& root,
     NYdb::TType type,
     NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     NYql::TExprContext& ctx)
 {
-    TTypePair result; 
+    TTypePair result;
     NYdb::TTypeParser parser(type);
     result.MiniKQLType = MakeType<NKikimr::NMiniKQL::TType*>(parser, typeEnv);
     result.TypeAnnotation = MakeType<const NYql::TTypeAnnotationNode*>(parser, ctx);
@@ -335,20 +335,20 @@ void FormatColumnValue(
 
 } // namespace
 
-TString FormatSchema(const YandexQuery::Schema& schema) 
-{ 
-    NYql::TExprContext ctx; 
-    TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>> typedColumns; 
-    typedColumns.reserve(schema.column().size()); 
-    for (const auto& c : schema.column()) { 
-        NYdb::TTypeParser parser(NYdb::TType(c.type())); 
-        auto typeAnnotation = MakeType<const NYql::TTypeAnnotationNode*>(parser, ctx); 
-        typedColumns.emplace_back(c.name(), typeAnnotation); 
-    } 
- 
+TString FormatSchema(const YandexQuery::Schema& schema)
+{
+    NYql::TExprContext ctx;
+    TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>> typedColumns;
+    typedColumns.reserve(schema.column().size());
+    for (const auto& c : schema.column()) {
+        NYdb::TTypeParser parser(NYdb::TType(c.type()));
+        auto typeAnnotation = MakeType<const NYql::TTypeAnnotationNode*>(parser, ctx);
+        typedColumns.emplace_back(c.name(), typeAnnotation);
+    }
+
     return NYql::NCommon::WriteTypeToYson(MakeStructType(typedColumns, ctx), NYson::EYsonFormat::Text);
-} 
- 
+}
+
 void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet)
 {
     NYql::TExprContext ctx;

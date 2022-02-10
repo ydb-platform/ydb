@@ -67,10 +67,10 @@ namespace NKikimr {
 #define SETUP_VECTORS(data, gtype) \
     ui32 totalParts = (gtype).TotalPartCount(); \
     ui32 start = 2; \
-    ui8* const dataPtr = (ui8*)(&(data));\ 
-    TShiftedMainBitVec main(dataPtr, start, (start + totalParts)); \ 
+    ui8* const dataPtr = (ui8*)(&(data));\
+    TShiftedMainBitVec main(dataPtr, start, (start + totalParts)); \
     start += totalParts;    \
-    TShiftedMainBitVec local(dataPtr, start, (start + totalParts)); \ 
+    TShiftedMainBitVec local(dataPtr, start, (start + totalParts)); \
     start += totalParts;    \
     ui32 handoffNum = (gtype).Handoff(); \
     Y_VERIFY_DEBUG(handoffNum <= MaxHandoffNodes); \
@@ -79,7 +79,7 @@ namespace NKikimr {
     TShiftedHandoffBitVec handoff[MaxHandoffNodes]; \
     { \
         for (unsigned i = 0; i < handoffNum; i++) { \
-            handoff[i] = TShiftedHandoffBitVec(dataPtr, start, start + handoffVectorBits); \ 
+            handoff[i] = TShiftedHandoffBitVec(dataPtr, start, start + handoffVectorBits); \
             start += handoffVectorBits; \
         } \
     }

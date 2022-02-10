@@ -905,8 +905,8 @@ public:
         using Table = Schema::BoxStoragePool;
 
         struct TPDiskFilter {
-            Schema::BoxStoragePoolPDiskFilter::BoxId::Type BoxId{}; 
-            Schema::BoxStoragePoolPDiskFilter::StoragePoolId::Type StoragePoolId{}; 
+            Schema::BoxStoragePoolPDiskFilter::BoxId::Type BoxId{};
+            Schema::BoxStoragePoolPDiskFilter::StoragePoolId::Type StoragePoolId{};
             TMaybe<Schema::BoxStoragePoolPDiskFilter::TypeCol::Type> Type;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;

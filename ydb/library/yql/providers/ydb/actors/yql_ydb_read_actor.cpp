@@ -74,7 +74,7 @@ public:
         ui64 inputIndex,
         const TString& database,
         const TString& endpoint,
-        std::shared_ptr<::NYdb::ICredentialsProviderFactory> credentialsProviderFactory, 
+        std::shared_ptr<::NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         bool secure,
         const TString& path,
         ::NYdb::TDriver driver,
@@ -88,7 +88,7 @@ public:
         , Path(path), Columns(columns), KeyColumnTypes(keyColumnTypes)
         , MaxRows(maxRowsInRequest), MaxBytes(maxBytesInRequest)
         , EndKey(keyTo)
-        , Connection(driver, ::NYdb::TCommonClientSettings().Database(database).DiscoveryEndpoint(endpoint).CredentialsProviderFactory(credentialsProviderFactory).DiscoveryMode(::NYdb::EDiscoveryMode::Async).EnableSsl(secure)) 
+        , Connection(driver, ::NYdb::TCommonClientSettings().Database(database).DiscoveryEndpoint(endpoint).CredentialsProviderFactory(credentialsProviderFactory).DiscoveryMode(::NYdb::EDiscoveryMode::Async).EnableSsl(secure))
         , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom)
         , LastReadKeyInclusive(false)
         , Retried(0U)
@@ -235,8 +235,8 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateYdbReadActor(
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     NYql::NDq::IDqSourceActor::ICallbacks* callback,
-    ::NYdb::TDriver driver, 
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) 
+    ::NYdb::TDriver driver,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
     TString keyFrom, keyTo;
     if (const auto taskParamsIt = taskParams.find("ydb"); taskParamsIt != taskParams.cend()) {
@@ -247,8 +247,8 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateYdbReadActor(
         keyTo = range.Getto_key();
     }
 
-    auto token = secureParams.Value(params.GetToken(), TString{}); 
-    auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, params.GetAddBearerToToken()); 
+    auto token = secureParams.Value(params.GetToken(), TString{});
+    auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, params.GetAddBearerToToken());
     TVector<TString> columns;
     columns.reserve(params.GetColumns().size());
     for (auto i = 0; i < params.GetColumns().size(); ++i)
@@ -261,7 +261,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateYdbReadActor(
 
     ui64 maxRowsInRequest = 0ULL;
     ui64 maxBytesInRequest = 0ULL;
-    const auto actor = new TYdbReadActor(inputIndex, params.GetDatabase(), params.GetEndpoint(), credentialsProviderFactory, params.GetSecure(), params.GetTable(), std::move(driver), callback, columns, keyColumnTypes, maxRowsInRequest, maxBytesInRequest, keyFrom, keyTo); 
+    const auto actor = new TYdbReadActor(inputIndex, params.GetDatabase(), params.GetEndpoint(), credentialsProviderFactory, params.GetSecure(), params.GetTable(), std::move(driver), callback, columns, keyColumnTypes, maxRowsInRequest, maxBytesInRequest, keyFrom, keyTo);
     return {actor, actor};
 }
 

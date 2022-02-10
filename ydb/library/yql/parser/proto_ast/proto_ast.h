@@ -32,15 +32,15 @@ namespace NProtoAST {
         }
     }
 
-    class TTooManyErrors : public yexception { 
-    }; 
- 
+    class TTooManyErrors : public yexception {
+    };
+
     class IErrorCollector {
     public:
-        explicit IErrorCollector(size_t maxErrors); 
+        explicit IErrorCollector(size_t maxErrors);
         virtual ~IErrorCollector();
 
-        // throws TTooManyErrors 
+        // throws TTooManyErrors
         void Error(ui32 line, ui32 col, const TString& message);
 
     private:
@@ -57,7 +57,7 @@ namespace NProtoAST {
         virtual ~TErrorOutput();
 
     private:
-        void AddError(ui32 line, ui32 col, const TString& message) override; 
+        void AddError(ui32 line, ui32 col, const TString& message) override;
 
     public:
         IOutputStream& Err;
@@ -83,9 +83,9 @@ namespace NProtoAST {
             try {
                 Lexer.ReportErrors(&errors);
                 return Parser.Parse(Lexer, &errors);
-            } catch (const TTooManyErrors&) { 
-                return nullptr; 
-            } catch (const yexception& e) { 
+            } catch (const TTooManyErrors&) {
+                return nullptr;
+            } catch (const yexception& e) {
                 errors.Error(0, 0, e.what());
                 return nullptr;
             }

@@ -32,7 +32,7 @@ public:
         const NActors::TActorId& aggregatorId)
         : NActors::TActor<TFullResultWriterActor>(&TFullResultWriterActor::Handler)
         , TraceID(traceId)
-        , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, TVector<TString>())) 
+        , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, TVector<TString>()))
         , FullResultWriter(std::move(writer))
         , AggregatorID(aggregatorId)
     {

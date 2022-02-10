@@ -56,10 +56,10 @@ Y_UNIT_TEST_SUITE(Network) {
 
         UNIT_ASSERT_VALUES_EQUAL(r.at(0).Addr.GetPort(), r.at(1).Addr.GetPort());
     }
- 
+
     Y_UNIT_TEST(BindOnBusyPort) {
         auto r = BindOnPort(0, false);
- 
+
         UNIT_ASSERT_EXCEPTION_CONTAINS(BindOnPort(r.first, false), TSystemError, "failed to bind on port " + ToString(r.first));
-    } 
+    }
 }

@@ -223,10 +223,10 @@ struct TDataProviderInfo {
     std::function<bool()> HasActiveProcesses;
 
     std::function<void(const TString& sessionId)> CloseSession;
- 
+
     std::function<void(const TString& sessionId)> CleanupSession;
 
-    std::function<TMaybe<TString>(const TString& url)> TokenResolver; 
+    std::function<TMaybe<TString>(const TString& url)> TokenResolver;
 };
 
 using TDataProviderInitializer = std::function<TDataProviderInfo(

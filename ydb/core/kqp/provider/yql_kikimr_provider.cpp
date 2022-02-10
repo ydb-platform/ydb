@@ -422,7 +422,7 @@ NNodes::TCoAtomList BuildColumnsList(
         .Done();
 }
 
-NNodes::TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) { 
+NNodes::TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
     TVector<TExprBase> columnsToSelect;
     columnsToSelect.reserve(table.Metadata->KeyColumnNames.size());
     for (auto key : table.Metadata->KeyColumnNames) {
@@ -741,9 +741,9 @@ bool AddDmlIssue(const TIssue& issue, bool strictDml, TExprContext& ctx) {
         ctx.AddError(newIssue);
         return false;
     } else {
-        if (!ctx.AddWarning(issue)) { 
-            return false; 
-        } 
+        if (!ctx.AddWarning(issue)) {
+            return false;
+        }
         return true;
     }
 }

@@ -1,5 +1,5 @@
 OWNER(
-    g:yq 
+    g:yq
 )
 
 LIBRARY()

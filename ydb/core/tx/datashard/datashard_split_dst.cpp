@@ -53,7 +53,7 @@ public:
             }
         }
 
-        Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription()); 
+        Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
 
         for (ui32 i = 0; i < Self->DstSplitDescription->SourceRangesSize(); ++i) {
             ui64 srcTabletId = Self->DstSplitDescription->GetSourceRanges(i).GetTabletID();

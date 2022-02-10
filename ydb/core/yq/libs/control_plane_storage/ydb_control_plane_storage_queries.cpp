@@ -331,7 +331,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         TVector<TString> filters;
         if (request.filter().name()) {
             queryBuilder.AddString("filter_name", request.filter().name());
-            filters.push_back("`" NAME_COLUMN_NAME "` ILIKE '%' || $filter_name || '%'"); 
+            filters.push_back("`" NAME_COLUMN_NAME "` ILIKE '%' || $filter_name || '%'");
         }
 
         if (request.filter().query_type() != YandexQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {

@@ -25,8 +25,8 @@ class TJsonTabletCounters : public TActorBootstrapped<TJsonTabletCounters> {
     TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> Results;
     THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
-    bool Aggregate = false; 
+    ui32 Timeout = 0;
+    bool Aggregate = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

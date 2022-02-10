@@ -24,24 +24,24 @@ namespace NYql {
 using namespace NActors;
 using NDqs::MakeWorkerManagerActorID;
 
-namespace { 
+namespace {
     // TODO: Use the only driver for both sources.
     NDq::IDqSourceActorFactory::TPtr CreateSourceActorFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
-        auto factory = MakeIntrusive<NYql::NDq::TDqSourceFactory>(); 
+        auto factory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
         RegisterDqPqReadActorFactory(*factory, driver, nullptr);
-        RegisterYdbReadActorFactory(*factory, driver, nullptr); 
+        RegisterYdbReadActorFactory(*factory, driver, nullptr);
         RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
         RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-        return factory; 
-    } 
+        return factory;
+    }
 
     NDq::IDqSinkActorFactory::TPtr CreateSinkActorFactory(const NYdb::TDriver& driver) {
         auto factory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
         RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
         return factory;
     }
-} 
- 
+}
+
 class TLocalServiceHolder {
 public:
     TLocalServiceHolder(NYdb::TDriver driver, IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory,

@@ -82,12 +82,12 @@ public:
     TClientCommandGet()
         : TClientCommandTree("get", {}, "Various storage low-level queries")
     {
-        AddCommand(std::make_unique<TClientCommandGetBlob>()); 
+        AddCommand(std::make_unique<TClientCommandGetBlob>());
     }
 };
 
-std::unique_ptr<TClientCommand> CreateClientCommandGet() { 
-    return std::make_unique<TClientCommandGet>(); 
+std::unique_ptr<TClientCommand> CreateClientCommandGet() {
+    return std::make_unique<TClientCommandGet>();
 }
 
 } // NDriverClient

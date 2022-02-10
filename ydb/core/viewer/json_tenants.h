@@ -21,7 +21,7 @@ class TJsonTenants : public TViewerPipeClient<TJsonTenants> {
     NKikimrViewer::TTenants Result;
     NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
+    ui32 Timeout = 0;
     bool State = true;
     THashMap<TString, NKikimrViewer::TTenant*> TenantIndex;
 

@@ -53,9 +53,9 @@ protected:
     TString FilterFields;
     TString MergeFields;
     TJsonSettings JsonSettings;
-    bool AllEnums = false; 
-    ui32 Timeout = 0; 
-    ui32 Retries = 0; 
+    bool AllEnums = false;
+    ui32 Timeout = 0;
+    ui32 Retries = 0;
     std::unordered_map<TNodeId, ui32> NodeRetries;
     bool StaticNodesOnly = TWhiteboardInfo<ResponseType>::StaticNodesOnly;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);

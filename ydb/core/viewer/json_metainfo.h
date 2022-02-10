@@ -29,8 +29,8 @@ class TJsonMetaInfo : public TActorBootstrapped<TJsonMetaInfo> {
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0; 
-    bool Counters = false; 
+    ui32 Timeout = 0;
+    bool Counters = false;
     NKikimrViewer::TMetaInfo MetaInfo;
     TActorId BrowseActorID;
     using TBrowseRequestKey = std::tuple<TActorId, TTabletId, ui32>;

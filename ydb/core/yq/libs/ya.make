@@ -21,7 +21,7 @@ RECURSE(
     mock
     pretty_printers
     private_client
-    read_rule 
+    read_rule
     result_formatter
     shared_resources
     signer

@@ -217,8 +217,8 @@ PEERDIR(
     ydb/library/yql/utils
 )
 
-NO_COMPILER_WARNINGS() 
- 
+NO_COMPILER_WARNINGS()
+
 IF (NOT MKQL_DISABLE_CODEGEN)
     PEERDIR(
         ydb/library/yql/minikql/codegen

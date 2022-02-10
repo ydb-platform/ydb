@@ -9,21 +9,21 @@ using namespace NActors;
 enum {
     EvMessageWithPayload = EventSpaceBegin(TEvents::ES_PRIVATE),
     EvArenaMessage,
-    EvArenaMessageBig, 
-    EvMessageWithPayloadPreSerialized 
+    EvArenaMessageBig,
+    EvMessageWithPayloadPreSerialized
 };
 
 struct TEvMessageWithPayload : TEventPB<TEvMessageWithPayload, TMessageWithPayload, EvMessageWithPayload> {
-    TEvMessageWithPayload() = default; 
-    explicit TEvMessageWithPayload(const TMessageWithPayload& p) 
-        : TEventPB<TEvMessageWithPayload, TMessageWithPayload, EvMessageWithPayload>(p) 
-    {} 
+    TEvMessageWithPayload() = default;
+    explicit TEvMessageWithPayload(const TMessageWithPayload& p)
+        : TEventPB<TEvMessageWithPayload, TMessageWithPayload, EvMessageWithPayload>(p)
+    {}
 };
 
-struct TEvMessageWithPayloadPreSerialized : TEventPreSerializedPB<TEvMessageWithPayloadPreSerialized, TMessageWithPayload, EvMessageWithPayloadPreSerialized> { 
-}; 
- 
- 
+struct TEvMessageWithPayloadPreSerialized : TEventPreSerializedPB<TEvMessageWithPayloadPreSerialized, TMessageWithPayload, EvMessageWithPayloadPreSerialized> {
+};
+
+
 TRope MakeStringRope(const TString& message) {
     return message ? TRope(message) : TRope();
 }
@@ -113,42 +113,42 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         TestSerializeDeserialize<TEvArenaMessage, TEvArenaMessageWithoutArena>(200, 14010);
         TestSerializeDeserialize<TEvArenaMessageWithoutArena, TEvArenaMessage>(2000, 4010);
     }
- 
-    Y_UNIT_TEST(PreSerializedCompatibility) { 
-        // ensure TEventPreSerializedPB and TEventPB are interchangable with no compatibility issues 
-        TMessageWithPayload msg; 
-        msg.SetMeta("hello, world!"); 
-        msg.AddPayloadId(123); 
-        msg.AddPayloadId(999); 
-        msg.AddSomeData("abc"); 
-        msg.AddSomeData("xyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"); 
- 
-        TEvMessageWithPayloadPreSerialized e1; 
+
+    Y_UNIT_TEST(PreSerializedCompatibility) {
+        // ensure TEventPreSerializedPB and TEventPB are interchangable with no compatibility issues
+        TMessageWithPayload msg;
+        msg.SetMeta("hello, world!");
+        msg.AddPayloadId(123);
+        msg.AddPayloadId(999);
+        msg.AddSomeData("abc");
+        msg.AddSomeData("xyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
+
+        TEvMessageWithPayloadPreSerialized e1;
         Y_PROTOBUF_SUPPRESS_NODISCARD msg.SerializeToString(&e1.PreSerializedData);
- 
-        auto serializer1 = MakeHolder<TAllocChunkSerializer>(); 
+
+        auto serializer1 = MakeHolder<TAllocChunkSerializer>();
         e1.SerializeToArcadiaStream(serializer1.Get());
-        auto buffers1 = serializer1->Release(e1.IsExtendedFormat()); 
-        UNIT_ASSERT_VALUES_EQUAL(buffers1->GetSize(), e1.CalculateSerializedSize()); 
-        TString ser1 = buffers1->GetString(); 
- 
-        TEvMessageWithPayload e2(msg); 
-        auto serializer2 = MakeHolder<TAllocChunkSerializer>(); 
+        auto buffers1 = serializer1->Release(e1.IsExtendedFormat());
+        UNIT_ASSERT_VALUES_EQUAL(buffers1->GetSize(), e1.CalculateSerializedSize());
+        TString ser1 = buffers1->GetString();
+
+        TEvMessageWithPayload e2(msg);
+        auto serializer2 = MakeHolder<TAllocChunkSerializer>();
         e2.SerializeToArcadiaStream(serializer2.Get());
-        auto buffers2 = serializer2->Release(e2.IsExtendedFormat()); 
-        UNIT_ASSERT_VALUES_EQUAL(buffers2->GetSize(), e2.CalculateSerializedSize()); 
-        TString ser2 = buffers2->GetString(); 
-        UNIT_ASSERT_VALUES_EQUAL(ser1, ser2); 
- 
-        // deserialize 
-        auto data = MakeIntrusive<TEventSerializedData>(ser1, false); 
-        THolder<TEvMessageWithPayloadPreSerialized> parsedEvent(static_cast<TEvMessageWithPayloadPreSerialized*>(TEvMessageWithPayloadPreSerialized::Load(data))); 
-        UNIT_ASSERT_VALUES_EQUAL(parsedEvent->PreSerializedData, ""); // this field is empty after deserialization 
-        auto& record = parsedEvent->GetRecord(); 
-        UNIT_ASSERT_VALUES_EQUAL(record.GetMeta(), msg.GetMeta()); 
-        UNIT_ASSERT_VALUES_EQUAL(record.PayloadIdSize(), msg.PayloadIdSize()); 
-        UNIT_ASSERT_VALUES_EQUAL(record.PayloadIdSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPayloadId(0), msg.GetPayloadId(0)); 
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPayloadId(1), msg.GetPayloadId(1)); 
-    } 
+        auto buffers2 = serializer2->Release(e2.IsExtendedFormat());
+        UNIT_ASSERT_VALUES_EQUAL(buffers2->GetSize(), e2.CalculateSerializedSize());
+        TString ser2 = buffers2->GetString();
+        UNIT_ASSERT_VALUES_EQUAL(ser1, ser2);
+
+        // deserialize
+        auto data = MakeIntrusive<TEventSerializedData>(ser1, false);
+        THolder<TEvMessageWithPayloadPreSerialized> parsedEvent(static_cast<TEvMessageWithPayloadPreSerialized*>(TEvMessageWithPayloadPreSerialized::Load(data)));
+        UNIT_ASSERT_VALUES_EQUAL(parsedEvent->PreSerializedData, ""); // this field is empty after deserialization
+        auto& record = parsedEvent->GetRecord();
+        UNIT_ASSERT_VALUES_EQUAL(record.GetMeta(), msg.GetMeta());
+        UNIT_ASSERT_VALUES_EQUAL(record.PayloadIdSize(), msg.PayloadIdSize());
+        UNIT_ASSERT_VALUES_EQUAL(record.PayloadIdSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPayloadId(0), msg.GetPayloadId(0));
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPayloadId(1), msg.GetPayloadId(1));
+    }
 }

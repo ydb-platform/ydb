@@ -428,35 +428,35 @@ namespace NTypeAnnImpl {
         : TContext(expr)
         , Types(types) {}
 
-    bool TExtContext::LoadUdfMetadata(const TVector<IUdfResolver::TFunction*>& functions) { 
-        TVector<IUdfResolver::TImport*> imports; 
-        imports.reserve(Types.UdfImports.size()); 
-        for (auto& x : Types.UdfImports) { 
-            imports.push_back(&x.second); 
-        } 
- 
-        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr)) { 
-            return false; 
-        } 
- 
-        for (auto& import : imports) { 
-            RegisterResolvedImport(*import); 
-        } 
- 
-        return true; 
-    } 
- 
-    void TExtContext::RegisterResolvedImport(const IUdfResolver::TImport& import) { 
-        YQL_ENSURE(import.Modules); 
-        for (auto& m : *import.Modules) { 
-            auto p = Types.UdfModules.emplace(m, import.FileAlias); 
-            // rework this place when user tries to override another module 
-            if (!p.second && p.first->second != import.FileAlias) { 
-                ythrow yexception() << "Module name duplicated : module = " << m << ", existing alias = " << p.first->second << ", new alis = " << import.FileAlias; 
-            } 
-        } 
-    } 
- 
+    bool TExtContext::LoadUdfMetadata(const TVector<IUdfResolver::TFunction*>& functions) {
+        TVector<IUdfResolver::TImport*> imports;
+        imports.reserve(Types.UdfImports.size());
+        for (auto& x : Types.UdfImports) {
+            imports.push_back(&x.second);
+        }
+
+        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr)) {
+            return false;
+        }
+
+        for (auto& import : imports) {
+            RegisterResolvedImport(*import);
+        }
+
+        return true;
+    }
+
+    void TExtContext::RegisterResolvedImport(const IUdfResolver::TImport& import) {
+        YQL_ENSURE(import.Modules);
+        for (auto& m : *import.Modules) {
+            auto p = Types.UdfModules.emplace(m, import.FileAlias);
+            // rework this place when user tries to override another module
+            if (!p.second && p.first->second != import.FileAlias) {
+                ythrow yexception() << "Module name duplicated : module = " << m << ", existing alias = " << p.first->second << ", new alis = " << import.FileAlias;
+            }
+        }
+    }
+
     bool EnsureJsonQueryFunction(const NNodes::TCoJsonQueryBase& function, TContext& ctx) {
         // first argument must be "Json", "Json?", "JsonDocument" or "JsonDocument?" type
         const auto& jsonArg = function.Json().Ref();
@@ -6579,31 +6579,31 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    bool ValidateFileAlias(const TExprNode& aliasNode, TExtContext& ctx) { 
+    bool ValidateFileAlias(const TExprNode& aliasNode, TExtContext& ctx) {
         if (!EnsureAtom(aliasNode, ctx.Expr)) {
-            return false; 
+            return false;
         }
 
         const auto content = aliasNode.Content();
-        if (!ctx.Types.UserDataStorage->ContainsUserDataBlock(content)) { 
+        if (!ctx.Types.UserDataStorage->ContainsUserDataBlock(content)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(aliasNode.Pos()), TStringBuilder() << "File not found: " << content));
-            return false; 
+            return false;
         }
-        return true; 
+        return true;
     }
 
-    bool ValidateFolderAlias(const TExprNode& aliasNode, TExtContext& ctx) { 
+    bool ValidateFolderAlias(const TExprNode& aliasNode, TExtContext& ctx) {
         if (!EnsureAtom(aliasNode, ctx.Expr)) {
-            return false; 
+            return false;
         }
 
         const auto content = aliasNode.Content();
-        if (!ctx.Types.UserDataStorage->ContainsUserDataFolder(content)) { 
+        if (!ctx.Types.UserDataStorage->ContainsUserDataFolder(content)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(aliasNode.Pos()), TStringBuilder() << "Folder not found: " << content));
-            return false; 
+            return false;
         }
 
-        return true; 
+        return true;
     }
 
     IGraphTransformer::TStatus FilePathWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
@@ -7041,11 +7041,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         auto type = input->Head().GetTypeAnn()->Cast<TCallableExprType>();
         auto autoMapFunction = type->GetReturnType()->GetKind() == ETypeAnnotationKind::Optional ? "FlatMap" : "Map";
         auto tmpArg = ctx.Expr.NewArgument(input->Pos(), "tmp");
-        if (!EnsureCallableMaxArgsCount(input->Pos(), input->ChildrenSize() - 1, type->GetArgumentsSize(), ctx.Expr)) { 
+        if (!EnsureCallableMaxArgsCount(input->Pos(), input->ChildrenSize() - 1, type->GetArgumentsSize(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureCallableMinArgsCount(input->Pos(), input->ChildrenSize() - 1, type->GetArgumentsSize() - type->GetOptionalArgumentsCount(), ctx.Expr)) { 
+        if (!EnsureCallableMinArgsCount(input->Pos(), input->ChildrenSize() - 1, type->GetArgumentsSize() - type->GetOptionalArgumentsCount(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

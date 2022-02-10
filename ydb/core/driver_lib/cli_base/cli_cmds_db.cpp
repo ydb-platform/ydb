@@ -796,10 +796,10 @@ public:
     TClientCommandSchemaAccess()
         : TClientCommandTree("access", { "acl" }, "Access operations")
     {
-        AddCommand(std::make_unique<TClientCommandSchemaAccessAdd>()); 
-        AddCommand(std::make_unique<TClientCommandSchemaAccessRemove>()); 
-        //AddCommand(std::make_unique<TClientCommandSchemaAccessGrant>()); 
-        //AddCommand(std::make_unique<TClientCommandSchemaAccessRevoke>()); 
+        AddCommand(std::make_unique<TClientCommandSchemaAccessAdd>());
+        AddCommand(std::make_unique<TClientCommandSchemaAccessRemove>());
+        //AddCommand(std::make_unique<TClientCommandSchemaAccessGrant>());
+        //AddCommand(std::make_unique<TClientCommandSchemaAccessRevoke>());
     }
 };
 
@@ -1014,8 +1014,8 @@ public:
     TClientCommandSchemaTable()
         : TClientCommandTree("table", {}, "Table operations")
     {
-        AddCommand(std::make_unique<TClientCommandSchemaTableOptions>()); 
-        AddCommand(std::make_unique<TClientCommandSchemaTableCopy>()); 
+        AddCommand(std::make_unique<TClientCommandSchemaTableOptions>());
+        AddCommand(std::make_unique<TClientCommandSchemaTableCopy>());
     }
 };
 
@@ -1250,31 +1250,31 @@ public:
     TClientCommandSchemaUserAttribute()
         : TClientCommandTree("user-attribute", { "ua" }, "User attribute operations")
     {
-        AddCommand(std::make_unique<TClientCommandSchemaUserAttributeGet>()); 
-        AddCommand(std::make_unique<TClientCommandSchemaUserAttributeSet>()); 
-        AddCommand(std::make_unique<TClientCommandSchemaUserAttributeDel>()); 
+        AddCommand(std::make_unique<TClientCommandSchemaUserAttributeGet>());
+        AddCommand(std::make_unique<TClientCommandSchemaUserAttributeSet>());
+        AddCommand(std::make_unique<TClientCommandSchemaUserAttributeDel>());
     }
 };
 
 TClientCommandSchemaLite::TClientCommandSchemaLite()
     : TClientCommandTree("schema", {}, "Schema operations")
 {
-    AddCommand(std::make_unique<TClientCommandSchemaExec>()); 
-    AddCommand(std::make_unique<TClientCommandSchemaDescribe>()); 
-    AddCommand(std::make_unique<TClientCommandSchemaLs>()); 
-    AddCommand(std::make_unique<TClientCommandSchemaMkdir>()); 
-    AddCommand(std::make_unique<TClientCommandSchemaDrop>()); 
-    AddCommand(std::make_unique<TClientCommandSchemaChown>()); 
-    AddCommand(std::make_unique<TClientCommandSchemaAccess>()); 
-    AddCommand(std::make_unique<TClientCommandSchemaTable>()); 
-    AddCommand(std::make_unique<TClientCommandSchemaUserAttribute>()); 
+    AddCommand(std::make_unique<TClientCommandSchemaExec>());
+    AddCommand(std::make_unique<TClientCommandSchemaDescribe>());
+    AddCommand(std::make_unique<TClientCommandSchemaLs>());
+    AddCommand(std::make_unique<TClientCommandSchemaMkdir>());
+    AddCommand(std::make_unique<TClientCommandSchemaDrop>());
+    AddCommand(std::make_unique<TClientCommandSchemaChown>());
+    AddCommand(std::make_unique<TClientCommandSchemaAccess>());
+    AddCommand(std::make_unique<TClientCommandSchemaTable>());
+    AddCommand(std::make_unique<TClientCommandSchemaUserAttribute>());
 }
 
 class TClientCommandSchema : public TClientCommandSchemaLite {
 public:
     TClientCommandSchema()
     {
-        AddCommand(std::make_unique<TClientCommandSchemaInit>()); 
+        AddCommand(std::make_unique<TClientCommandSchemaInit>());
     }
 };
 
@@ -1451,9 +1451,9 @@ public:
 TClientCommandDb::TClientCommandDb()
     : TClientCommandTree("db", {}, "KiKiMR DB operations")
 {
-    AddCommand(std::make_unique<TClientCommandSchema>()); 
-    AddCommand(std::make_unique<TClientCommandDbExec>()); 
-    AddCommand(std::make_unique<TClientCommandS3Listing>()); 
+    AddCommand(std::make_unique<TClientCommandSchema>());
+    AddCommand(std::make_unique<TClientCommandDbExec>());
+    AddCommand(std::make_unique<TClientCommandS3Listing>());
 }
 
 }

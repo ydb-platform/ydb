@@ -161,7 +161,7 @@ using TAsyncDescribePathResult = NThreading::TFuture<TDescribePathResult>;
 struct IClient : public TThrRefBase {
     using TPtr = TIntrusivePtr<IClient>;
 
-    virtual TAsyncDescribePathResult DescribePath(const TString& path) const = 0; 
+    virtual TAsyncDescribePathResult DescribePath(const TString& path) const = 0;
 
     // TODO: If you need other methods, add them.
 };

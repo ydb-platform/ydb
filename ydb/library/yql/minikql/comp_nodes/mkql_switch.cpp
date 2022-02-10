@@ -13,8 +13,8 @@ using NYql::EnsureDynamicCast;
 
 namespace {
 
-static const TStatKey Switch_FlushesCount("Switch_FlushesCount", true); 
-static const TStatKey Switch_MaxRowsCount("Switch_MaxRowsCount", false); 
+static const TStatKey Switch_FlushesCount("Switch_FlushesCount", true);
+static const TStatKey Switch_MaxRowsCount("Switch_MaxRowsCount", false);
 
 using TPagedUnboxedValueList = TPagedList<NUdf::TUnboxedValue>;
 

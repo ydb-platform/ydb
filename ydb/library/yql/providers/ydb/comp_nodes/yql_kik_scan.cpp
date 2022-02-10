@@ -258,13 +258,13 @@ public:
             UdfTerminate((TString("Unable to get token ") += Token).c_str());
         }
 
-        auto parser = CreateStructuredTokenParser(token); 
-        if (!parser.HasIAMToken()) { 
-            UdfTerminate("Structured token does not contan YDB token"); 
-        } 
- 
-        token = parser.GetIAMToken(); 
- 
+        auto parser = CreateStructuredTokenParser(token);
+        if (!parser.HasIAMToken()) {
+            UdfTerminate("Structured token does not contan YDB token");
+        }
+
+        token = parser.GetIAMToken();
+
         const auto settings = NYdb::NClickhouseInternal::TScanSettings().SnapshotId(Snapshot);
         const auto rows = Rows->GetValue(ctx).GetOrDefault<ui64>(0ULL);
 

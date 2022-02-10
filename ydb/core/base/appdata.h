@@ -180,19 +180,19 @@ struct TAppData {
             TProgramShouldContinue *kikimrShouldContinue);
 };
 
-inline TAppData* AppData(TActorSystem* actorSystem) { 
-    Y_VERIFY_DEBUG(actorSystem); 
-    TAppData * const x = actorSystem->AppData<TAppData>(); 
+inline TAppData* AppData(TActorSystem* actorSystem) {
+    Y_VERIFY_DEBUG(actorSystem);
+    TAppData * const x = actorSystem->AppData<TAppData>();
     Y_VERIFY_DEBUG(x && x->Magic == TAppData::MagicTag);
     return x;
 }
 
-inline TAppData* AppData() { 
-    return AppData(TlsActivationContext->ExecutorThread.ActorSystem); 
-} 
- 
+inline TAppData* AppData() {
+    return AppData(TlsActivationContext->ExecutorThread.ActorSystem);
+}
+
 inline TAppData* AppData(const TActorContext &ctx) {
-    return AppData(ctx.ActorSystem()); 
+    return AppData(ctx.ActorSystem());
 }
 
 } // NKikimr

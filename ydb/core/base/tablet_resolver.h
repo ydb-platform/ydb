@@ -181,7 +181,7 @@ struct TEvTabletResolver {
         TEvForwardResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
             : Status(status)
             , TabletID(tabletId)
-            , CacheEpoch(0) 
+            , CacheEpoch(0)
         {}
 
         TEvForwardResult(ui64 tabletId, const TActorId &tabletActor, const TActorId &tablet, ui64 cacheEpoch)

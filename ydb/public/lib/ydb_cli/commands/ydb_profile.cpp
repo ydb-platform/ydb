@@ -25,17 +25,17 @@ std::shared_ptr<IProfileManager> CreateYdbProfileManager(const TString& ydbDir) 
 TCommandConfig::TCommandConfig()
     : TClientCommandTree("config", {}, "Manage YDB CLI configuration")
 {
-    AddCommand(std::make_unique<TCommandProfile>()); 
+    AddCommand(std::make_unique<TCommandProfile>());
 }
 
 TCommandProfile::TCommandProfile()
     : TClientCommandTree("profile", {}, "Manage configuration profiles")
 {
-    AddCommand(std::make_unique<TCommandCreateProfile>()); 
-    AddCommand(std::make_unique<TCommandDeleteProfile>()); 
-    AddCommand(std::make_unique<TCommandActivateProfile>()); 
-    AddCommand(std::make_unique<TCommandListProfiles>()); 
-    AddCommand(std::make_unique<TCommandGetProfile>()); 
+    AddCommand(std::make_unique<TCommandCreateProfile>());
+    AddCommand(std::make_unique<TCommandDeleteProfile>());
+    AddCommand(std::make_unique<TCommandActivateProfile>());
+    AddCommand(std::make_unique<TCommandListProfiles>());
+    AddCommand(std::make_unique<TCommandGetProfile>());
 }
 
 namespace {

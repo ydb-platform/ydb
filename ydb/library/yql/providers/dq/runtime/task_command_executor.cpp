@@ -38,7 +38,7 @@ namespace NTaskRunnerProxy {
 
 // static const int CurrentProtocolVersion = 1;
 // static const int CurrentProtocolVersion = 2; // GetFreeSpace
-// static const int CurrentProtocolVersion = 3; // Calls for ComputeActor 
+// static const int CurrentProtocolVersion = 3; // Calls for ComputeActor
 // static const int CurrentProtocolVersion = 4; // Calls for Sources
 static const int CurrentProtocolVersion = 5; // Calls for Sinks
 
@@ -55,17 +55,17 @@ void ToProto(T* s1, const NDq::TDqInputChannelStats* ss)
 }
 
 template<typename T>
-void ToProto(T* s1, const NDq::TDqSourceStats* ss) 
-{ 
-    s1->SetChunks(ss->Chunks); 
-    s1->SetBytes(ss->Bytes); 
-    s1->SetRowsIn(ss->RowsIn); 
-    s1->SetRowsOut(ss->RowsOut); 
-    s1->SetMaxMemoryUsage(ss->MaxMemoryUsage); 
-    s1->SetInputIndex(ss->InputIndex); 
-} 
- 
-template<typename T> 
+void ToProto(T* s1, const NDq::TDqSourceStats* ss)
+{
+    s1->SetChunks(ss->Chunks);
+    s1->SetBytes(ss->Bytes);
+    s1->SetRowsIn(ss->RowsIn);
+    s1->SetRowsOut(ss->RowsOut);
+    s1->SetMaxMemoryUsage(ss->MaxMemoryUsage);
+    s1->SetInputIndex(ss->InputIndex);
+}
+
+template<typename T>
 void ToProto(T* s1, const NDq::TDqOutputChannelStats* ss)
 {
     s1->SetChannelId(ss->ChannelId);
@@ -173,16 +173,16 @@ public:
             Runner->GetTaskId(), channelId);
     }
 
-    void UpdateSourceStats(ui64 inputIndex) 
-    { 
-        if (!Runner) { 
-            return; 
-        } 
-        auto s = Runner->GetStats(); 
-        auto maybeSourceStats = s->Sources.find(inputIndex); 
+    void UpdateSourceStats(ui64 inputIndex)
+    {
+        if (!Runner) {
+            return;
+        }
+        auto s = Runner->GetStats();
+        auto maybeSourceStats = s->Sources.find(inputIndex);
         if (maybeSourceStats == s->Sources.end() || !maybeSourceStats->second) {
-            return; 
-        } 
+            return;
+        }
         auto maybeSourceOldStats = CurrentSourcesStats.find(inputIndex);
         if (maybeSourceOldStats == CurrentSourcesStats.end()) {
             maybeSourceOldStats = CurrentSourcesStats.emplace_hint(
@@ -192,8 +192,8 @@ public:
             *maybeSourceStats->second,
             maybeSourceOldStats->second,
             Runner->GetTaskId(), inputIndex);
-    } 
- 
+    }
+
     template<typename T>
     void UpdateStats(T& t) {
         UpdateStats();
@@ -299,14 +299,14 @@ public:
                 UpdateInputChannelStats(channelId);
                 break;
             }
-            case NDqProto::TCommandHeader::PUSH_SOURCE: { 
-                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion); 
+            case NDqProto::TCommandHeader::PUSH_SOURCE: {
+                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto source = Runner->GetSource(channelId); 
- 
-                NDqProto::TSourcePushRequest request; 
-                request.Load(&input); 
- 
+                auto source = Runner->GetSource(channelId);
+
+                NDqProto::TSourcePushRequest request;
+                request.Load(&input);
+
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
                 auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
                 switch (request.GetData().GetTransportVersion()) {
@@ -326,8 +326,8 @@ public:
                         transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
                 }
                 NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(), transportVersion);
-                NKikimr::NMiniKQL::TUnboxedValueVector buffer; 
-                buffer.reserve(request.GetData().GetRows()); 
+                NKikimr::NMiniKQL::TUnboxedValueVector buffer;
+                buffer.reserve(request.GetData().GetRows());
                 if (request.GetString().empty() && request.GetChunks() == 0) {
                     dataSerializer.Deserialize(request.GetData(), source->GetInputType(), buffer);
                 } else if (!request.GetString().empty()) {
@@ -356,11 +356,11 @@ public:
                         }
                     }
                 }
- 
-                source->Push(std::move(buffer), request.GetSpace()); 
+
+                source->Push(std::move(buffer), request.GetSpace());
                 UpdateSourceStats(channelId);
-                break; 
-            } 
+                break;
+            }
             case NDqProto::TCommandHeader::FINISH: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
@@ -375,13 +375,13 @@ public:
                 UpdateOutputChannelStats(channelId);
                 break;
             }
-            case NDqProto::TCommandHeader::FINISH_SOURCE: { 
-                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion); 
+            case NDqProto::TCommandHeader::FINISH_SOURCE: {
+                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                Runner->GetSource(channelId)->Finish(); 
-                UpdateSourceStats(channelId); 
-                break; 
-            } 
+                Runner->GetSource(channelId)->Finish();
+                UpdateSourceStats(channelId);
+                break;
+            }
             case NDqProto::TCommandHeader::DROP_OUTPUT: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
@@ -409,16 +409,16 @@ public:
                 response.Save(&output);
                 break;
             }
-            case NDqProto::TCommandHeader::GET_STORED_BYTES_SOURCE: { 
-                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion); 
+            case NDqProto::TCommandHeader::GET_STORED_BYTES_SOURCE: {
+                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto res = Runner->GetSource(channelId)->GetStoredBytes(); 
- 
-                NDqProto::TGetStoredBytesResponse response; 
-                response.SetResult(res); 
-                response.Save(&output); 
-                break; 
-            } 
+                auto res = Runner->GetSource(channelId)->GetStoredBytes();
+
+                NDqProto::TGetStoredBytesResponse response;
+                response.SetResult(res);
+                response.Save(&output);
+                break;
+            }
             case NDqProto::TCommandHeader::POP: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
@@ -488,26 +488,26 @@ public:
                 auto channel = Runner->GetInputChannel(channelId);
                 auto inputType = channel->GetInputType();
 
-                NDqProto::TGetTypeResponse response; 
+                NDqProto::TGetTypeResponse response;
                 response.SetResult(NKikimr::NMiniKQL::SerializeNode(inputType, Runner->GetTypeEnv()));
                 response.Save(&output);
 
                 break;
             }
-            case NDqProto::TCommandHeader::GET_SOURCE_TYPE: { 
-                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion); 
+            case NDqProto::TCommandHeader::GET_SOURCE_TYPE: {
+                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
- 
+
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto source = Runner->GetSource(channelId); 
-                auto inputType = source->GetInputType(); 
- 
-                NDqProto::TGetTypeResponse response; 
-                response.SetResult(NKikimr::NMiniKQL::SerializeNode(inputType, Runner->GetTypeEnv())); 
-                response.Save(&output); 
- 
-                break; 
-            } 
+                auto source = Runner->GetSource(channelId);
+                auto inputType = source->GetInputType();
+
+                NDqProto::TGetTypeResponse response;
+                response.SetResult(NKikimr::NMiniKQL::SerializeNode(inputType, Runner->GetTypeEnv()));
+                response.Save(&output);
+
+                break;
+            }
             case NDqProto::TCommandHeader::GET_FREE_SPACE: {
                 Y_ENSURE(header.GetVersion() >= 2);
 
@@ -519,17 +519,17 @@ public:
 
                 break;
             }
-            case NDqProto::TCommandHeader::GET_FREE_SPACE_SOURCE: { 
+            case NDqProto::TCommandHeader::GET_FREE_SPACE_SOURCE: {
                 Y_ENSURE(header.GetVersion() >= 4);
- 
+
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto source = Runner->GetSource(channelId); 
-                NDqProto::TGetFreeSpaceResponse response; 
-                response.SetFreeSpace(source->GetFreeSpace()); 
-                response.Save(&output); 
- 
-                break; 
-            } 
+                auto source = Runner->GetSource(channelId);
+                NDqProto::TGetFreeSpaceResponse response;
+                response.SetFreeSpace(source->GetFreeSpace());
+                response.Save(&output);
+
+                break;
+            }
             case NDqProto::TCommandHeader::GET_STATS: {
                 Y_ENSURE(header.GetVersion() >= 3);
                 Y_ENSURE(taskId == Runner->GetTaskId());
@@ -568,11 +568,11 @@ public:
                 for (const auto& [id, ss] : stats->InputChannels) {
                     ToProto(s->AddInputChannels(), ss);
                 }
- 
-                for (const auto& [id, ss] : stats->Sources) { 
-                    ToProto(s->AddSources(), ss); 
-                } 
- 
+
+                for (const auto& [id, ss] : stats->Sources) {
+                    ToProto(s->AddSources(), ss);
+                }
+
                 response.Save(&output);
 
                 break;
@@ -586,15 +586,15 @@ public:
                 response.Save(&output);
                 break;
             }
-            case NDqProto::TCommandHeader::GET_STATS_SOURCE: { 
+            case NDqProto::TCommandHeader::GET_STATS_SOURCE: {
                 Y_ENSURE(header.GetVersion() >= 4);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto ss = Runner->GetSource(channelId)->GetStats(); 
-                NDqProto::TGetStatsSourceResponse response; 
-                ToProto(response.MutableStats(), ss); 
-                response.Save(&output); 
-                break; 
-            } 
+                auto ss = Runner->GetSource(channelId)->GetStats();
+                NDqProto::TGetStatsSourceResponse response;
+                ToProto(response.MutableStats(), ss);
+                response.Save(&output);
+                break;
+            }
             case NDqProto::TCommandHeader::GET_STATS_OUTPUT: {
                 Y_ENSURE(header.GetVersion() >= 3);
                 Y_ENSURE(taskId == Runner->GetTaskId());

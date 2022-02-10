@@ -7,7 +7,7 @@
 #include <ydb/core/yq/libs/private_client/utils.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
-#include <ydb/core/yq/libs/control_plane_storage/message_builders.h> 
+#include <ydb/core/yq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/yq/libs/actors/database_resolver.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>

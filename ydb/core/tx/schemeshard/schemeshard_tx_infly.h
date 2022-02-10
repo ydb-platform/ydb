@@ -237,7 +237,7 @@ struct TTxState {
     THashSet<TShardIdx> ShardsInProgress; // indexes of datashards or pqs that operation waits for
     THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;
     bool ReadyForNotifications = false;
-    std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SplitDescription; 
+    std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SplitDescription;
     bool TxShardsListFinalized = false;
     TTxId BuildIndexId;
     // fields below used for backup/restore

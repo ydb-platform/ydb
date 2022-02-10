@@ -1262,7 +1262,7 @@ namespace NSQLTranslationV1 {
     TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
     TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false);
     TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false);
-    TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString& label = TString()); 
+    TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString& label = TString());
     TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label = TString());
     TSourcePtr BuildRefColumnSource(TPosition pos, const TString& partExpression);
     TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings);
@@ -1287,7 +1287,7 @@ namespace NSQLTranslationV1 {
         TVector<TNodePtr>&& terms,
         bool distinct,
         TVector<TNodePtr>&& without,
-        bool selectStream, 
+        bool selectStream,
         const TWriteSettings& settings
     );
     TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
@@ -1301,7 +1301,7 @@ namespace NSQLTranslationV1 {
         TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings,
         const TVector<TSortSpecificationPtr>& assumeOrderBy, bool listCall);
     TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall,
-        bool prcessStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy); 
+        bool prcessStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);
 
     TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, bool inSubquery, TScopedStatePtr scoped);
 

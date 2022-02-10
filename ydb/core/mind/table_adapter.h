@@ -279,7 +279,7 @@ namespace NKikimr {
 
             template<typename TCallback>
             void ForEachInlineTable(TCallback &&callback) const {
-                Value.ForEachInlineTable(std::forward<TCallback>(callback)); 
+                Value.ForEachInlineTable(std::forward<TCallback>(callback));
             }
         };
 
@@ -318,8 +318,8 @@ namespace NKikimr {
 
             template<typename TCallback>
             void ForEachInlineTable(TCallback &&callback) const {
-                Value.ForEachInlineTable(callback); 
-                Rest.ForEachInlineTable(callback); 
+                Value.ForEachInlineTable(callback);
+                Rest.ForEachInlineTable(callback);
             }
         };
 
@@ -483,7 +483,7 @@ namespace NKikimr {
                     }
                 };
                 try {
-                    TBase::Apply(param, [&](auto *adapter) { adapter->ForEachInlineTable(processInlineTable); }); 
+                    TBase::Apply(param, [&](auto *adapter) { adapter->ForEachInlineTable(processInlineTable); });
                 } catch (const TNotReady&) {
                     return false;
                 }
@@ -554,7 +554,7 @@ namespace NKikimr {
 
         template<typename TCallback>
         void ForEachInlineTable(TCallback &&callback) const {
-            Cells.ForEachInlineTable(std::forward<TCallback>(callback)); 
+            Cells.ForEachInlineTable(std::forward<TCallback>(callback));
         }
     };
 

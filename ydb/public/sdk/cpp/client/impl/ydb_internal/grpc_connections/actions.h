@@ -99,7 +99,7 @@ private:
     }
 
 protected:
-    gpr_timespec Deadline_ = {}; 
+    gpr_timespec Deadline_ = {};
 
 private:
     std::mutex Mutex_;

@@ -51,8 +51,8 @@ public:
         : Storage_(storage)
     {}
 
-    TString Load(const TString& url, const TString& token) override { 
-        auto file = Storage_->PutUrl(url, token); 
+    TString Load(const TString& url, const TString& token) override {
+        auto file = Storage_->PutUrl(url, token);
         return TFileInput(file->GetPath()).ReadAll();
     }
 
@@ -86,26 +86,26 @@ TProgram::TStatus SyncExecution(
     return status;
 }
 
-std::function<TMaybe<TString>(const TString&)> BuildCompositeTokenResolver(TVector<std::function<TMaybe<TString>(const TString&)>>&& children) { 
-    if (children.empty()) { 
-        return {}; 
-    } 
- 
-    if (children.size() == 1) { 
-        return std::move(children[0]); 
-    } 
- 
-    return[children = std::move(children)](const TString& url)->TMaybe<TString> { 
-        for (auto& c : children) { 
-            if (auto r = c(url)) { 
-                return r; 
-            } 
-        } 
- 
-        return Nothing(); 
-    }; 
-} 
- 
+std::function<TMaybe<TString>(const TString&)> BuildCompositeTokenResolver(TVector<std::function<TMaybe<TString>(const TString&)>>&& children) {
+    if (children.empty()) {
+        return {};
+    }
+
+    if (children.size() == 1) {
+        return std::move(children[0]);
+    }
+
+    return[children = std::move(children)](const TString& url)->TMaybe<TString> {
+        for (auto& c : children) {
+            if (auto r = c(url)) {
+                return r;
+            }
+        }
+
+        return Nothing();
+    };
+}
+
 } // namspace
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -135,12 +135,12 @@ void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
 }
 
-void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) { 
-    for (auto& p : userDataTable) { 
-        if (!UserDataTable_.emplace(p).second) { 
-            ythrow yexception() << "UserDataTable already has user data block with key " << p.first; 
-        } 
-    } 
+void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) {
+    for (auto& p : userDataTable) {
+        if (!UserDataTable_.emplace(p).second) {
+            ythrow yexception() << "UserDataTable already has user data block with key " << p.first;
+        }
+    }
 }
 
 void TProgramFactory::AddCredentialsTable(TCredentialTablePtr credentialTable) {
@@ -163,11 +163,11 @@ void TProgramFactory::SetUdfResolver(IUdfResolver::TPtr udfResolver) {
     UdfResolver_ = udfResolver;
 }
 
-void TProgramFactory::SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet) { 
-    UdfIndex_ = std::move(udfIndex); 
-    UdfIndexPackageSet_ = std::move(udfIndexPackageSet); 
-} 
- 
+void TProgramFactory::SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet) {
+    UdfIndex_ = std::move(udfIndex);
+    UdfIndexPackageSet_ = std::move(udfIndexPackageSet);
+}
+
 void TProgramFactory::SetFileStorage(TFileStoragePtr fileStorage) {
     FileStorage_ = fileStorage;
 }
@@ -189,15 +189,15 @@ TProgramPtr TProgramFactory::Create(
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
     auto timeProvider = UseRepeatableRandomAndTimeProviders_ ?
         CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
- 
-    TUdfIndex::TPtr udfIndex = UdfIndex_ ? UdfIndex_->Clone() : nullptr; 
-    TUdfIndexPackageSet::TPtr udfIndexPackageSet = UdfIndexPackageSet_ ? UdfIndexPackageSet_->Clone() : nullptr; 
-    IModuleResolver::TPtr moduleResolver = Modules_ ? Modules_->CreateMutableChild() : nullptr; 
-    auto udfResolver = udfIndex ? NCommon::CreateUdfResolverWithIndex(udfIndex, UdfResolver_, FileStorage_) : UdfResolver_; 
- 
-    // make UserDataTable_ copy here 
+
+    TUdfIndex::TPtr udfIndex = UdfIndex_ ? UdfIndex_->Clone() : nullptr;
+    TUdfIndexPackageSet::TPtr udfIndexPackageSet = UdfIndexPackageSet_ ? UdfIndexPackageSet_->Clone() : nullptr;
+    IModuleResolver::TPtr moduleResolver = Modules_ ? Modules_->CreateMutableChild() : nullptr;
+    auto udfResolver = udfIndex ? NCommon::CreateUdfResolverWithIndex(udfIndex, UdfResolver_, FileStorage_) : UdfResolver_;
+
+    // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-        UserDataTable_, CredentialTables_, UserCredentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, 
+        UserDataTable_, CredentialTables_, UserCredentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_,
         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_);
 }
 
@@ -210,13 +210,13 @@ TProgram::TProgram(
         const TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
-        const TUserDataTable& userDataTable, 
+        const TUserDataTable& userDataTable,
         const TVector<TCredentialTablePtr>& credentialTables,
         const TUserCredentials& userCredentials,
         const IModuleResolver::TPtr& modules,
         const IUdfResolver::TPtr& udfResolver,
-        const TUdfIndex::TPtr& udfIndex, 
-        const TUdfIndexPackageSet::TPtr& udfIndexPackageSet, 
+        const TUdfIndex::TPtr& udfIndex,
+        const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const TGatewaysConfig* gatewaysConfig,
         const TString& filename,
@@ -233,10 +233,10 @@ TProgram::TProgram(
     , CredentialTables_(credentialTables)
     , UserCredentials_(userCredentials)
     , UdfResolver_(udfResolver)
-    , UdfIndex_(udfIndex) 
-    , UdfIndexPackageSet_(udfIndexPackageSet) 
+    , UdfIndex_(udfIndex)
+    , UdfIndexPackageSet_(udfIndexPackageSet)
     , FileStorage_(fileStorage)
-    , UserDataStorage_(MakeIntrusive<TUserDataStorage>(fileStorage, userDataTable, udfResolver, udfIndex)) 
+    , UserDataStorage_(MakeIntrusive<TUserDataStorage>(fileStorage, userDataTable, udfResolver, udfIndex))
     , GatewaysConfig_(gatewaysConfig)
     , Filename_(filename)
     , SourceCode_(sourceCode)
@@ -251,11 +251,11 @@ TProgram::TProgram(
     , EnableRangeComputeFor_(enableRangeComputeFor)
 {
     if (SessionId_.empty()) {
-        SessionId_ = CreateGuidAsString(); 
-    } 
- 
+        SessionId_ = CreateGuidAsString();
+    }
+
     if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
-        modules->AttachUserData(UserDataStorage_); 
+        modules->AttachUserData(UserDataStorage_);
         modules->SetUrlLoader(new TUrlLoader(FileStorage_));
     }
     OperationOptions_.Runner = runner;
@@ -277,31 +277,31 @@ void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) {
 }
 
 void TProgram::SetValidateOptions(NUdf::EValidateMode validateMode) {
-    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     ValidateMode_ = validateMode;
 }
 
-void TProgram::SetDisableNativeUdfSupport(bool disable) { 
-    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
-    DisableNativeUdfSupport_ = disable; 
-} 
- 
+void TProgram::SetDisableNativeUdfSupport(bool disable) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    DisableNativeUdfSupport_ = disable;
+}
+
 void TProgram::SetUseTableMetaFromGraph(bool use) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     UseTableMetaFromGraph_ = use;
 }
 
-TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const { 
-    Y_ENSURE(TypeCtx_, "TypeCtx_ is not created"); 
-    return TypeCtx_; 
-} 
- 
-TTypeAnnotationContextPtr TProgram::ProvideAnnotationContext(const TString& username) { 
+TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const {
+    Y_ENSURE(TypeCtx_, "TypeCtx_ is not created");
+    return TypeCtx_;
+}
+
+TTypeAnnotationContextPtr TProgram::ProvideAnnotationContext(const TString& username) {
     if (!TypeCtx_) {
-        TypeCtx_ = BuildTypeAnnotationContext(username); 
+        TypeCtx_ = BuildTypeAnnotationContext(username);
         TypeCtx_->OperationOptions = OperationOptions_;
         TypeCtx_->ValidateMode = ValidateMode_;
-        TypeCtx_->DisableNativeUdfSupport = DisableNativeUdfSupport_; 
+        TypeCtx_->DisableNativeUdfSupport = DisableNativeUdfSupport_;
         TypeCtx_->UseTableMetaFromGraph = UseTableMetaFromGraph_;
     }
 
@@ -316,14 +316,14 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
     return *PlanBuilder_;
 }
 
-void TProgram::SetParametersYson(const TString& parameters) { 
-    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
-    auto node = NYT::NodeFromYsonString(parameters); 
+void TProgram::SetParametersYson(const TString& parameters) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    auto node = NYT::NodeFromYsonString(parameters);
     YQL_ENSURE(node.IsMap());
     for (const auto& x : node.AsMap()) {
         YQL_ENSURE(x.second.IsMap());
         YQL_ENSURE(x.second.HasKey("Data"));
-        YQL_ENSURE(x.second.Size() == 1); 
+        YQL_ENSURE(x.second.Size() == 1);
     }
 
     OperationOptions_.ParametersYson = node;
@@ -332,18 +332,18 @@ void TProgram::SetParametersYson(const TString& parameters) {
     }
 }
 
-bool TProgram::ExtractQueryParametersMetadata() { 
-    auto& types = *GetAnnotationContext(); 
-    NYT::TNode params = NYT::TNode::CreateMap(); 
-    Y_ENSURE(ExprCtx_); 
-    if (!ExtractParametersMetaAsYson(ExprRoot_, types, *ExprCtx_, params)) { 
-        return false; 
-    } 
- 
-    ExtractedQueryParametersMetadataYson_ = NYT::NodeToYsonString(params, ResultFormat_); 
-    return true; 
-} 
- 
+bool TProgram::ExtractQueryParametersMetadata() {
+    auto& types = *GetAnnotationContext();
+    NYT::TNode params = NYT::TNode::CreateMap();
+    Y_ENSURE(ExprCtx_);
+    if (!ExtractParametersMetaAsYson(ExprRoot_, types, *ExprCtx_, params)) {
+        return false;
+    }
+
+    ExtractedQueryParametersMetadataYson_ = NYT::NodeToYsonString(params, ResultFormat_);
+    return true;
+}
+
 bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules) {
     if (!astRes.Issues.Empty()) {
         if (!ExprCtx_) {
@@ -374,19 +374,19 @@ bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRul
     return true;
 }
 
-TString TProgram::GetSessionId() const { 
-    with_lock(SessionIdLock_) { 
-        return SessionId_; 
-    } 
-} 
- 
-TString TProgram::TakeSessionId() { 
-    // post-condition: SessionId_ will be empty 
-    with_lock(SessionIdLock_) { 
-        return std::move(SessionId_); 
-    } 
-} 
- 
+TString TProgram::GetSessionId() const {
+    with_lock(SessionIdLock_) {
+        return SessionId_;
+    }
+}
+
+TString TProgram::TakeSessionId() {
+    // post-condition: SessionId_ will be empty
+    with_lock(SessionIdLock_) {
+        return std::move(SessionId_);
+    }
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
@@ -417,18 +417,18 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     return FillParseResult(SqlToYql(SourceCode_, settings, &warningRules), &warningRules);
 }
 
-bool TProgram::Compile(const TString& username) { 
+bool TProgram::Compile(const TString& username) {
     YQL_PROFILE_FUNC(TRACE);
 
     Y_ENSURE(AstRoot_, "Program not parsed yet");
     if (!ExprCtx_) {
         ExprCtx_.Reset(new TExprContext(NextUniqueId_));
     }
- 
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) { 
-        return false; 
-    } 
-    TypeCtx_->IsReadOnly = true; 
+
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
+        return false;
+    }
+    TypeCtx_->IsReadOnly = true;
     if (Modules_.get()) {
         auto libs = UserDataStorage_->GetLibraries();
         for (auto lib : libs) {
@@ -437,7 +437,7 @@ bool TProgram::Compile(const TString& username) {
             }
         }
     }
- 
+
     if (!CompileExpr(*AstRoot_, ExprRoot_, *ExprCtx_, Modules_.get(), 0, SyntaxVersion_)) {
         return false;
     }
@@ -551,7 +551,7 @@ TProgram::TStatus TProgram::Validate(const TString& username, IOutputStream* exp
 }
 
 TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutputStream* exprOut, bool withTypes) {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) { 
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
@@ -585,7 +585,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
     }
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
+        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -616,7 +616,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         IOutputStream* exprOut,
         bool withTypes)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) { 
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
@@ -657,7 +657,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
+        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -680,7 +680,7 @@ TProgram::TStatus TProgram::OptimizeWithConfig(
 TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
         const TString& username, const IPipelineConfigurator& pipelineConf)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) { 
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
@@ -726,7 +726,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
+        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -757,7 +757,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
         IOutputStream* exprOut,
         bool withTypes)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) { 
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = false;
@@ -808,7 +808,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     SavedExprRoot_ = ExprRoot_;
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
+        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -831,7 +831,7 @@ TProgram::TStatus TProgram::RunWithConfig(
 TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         const TString& username, const IPipelineConfigurator& pipelineConf)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) { 
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = false;
@@ -880,7 +880,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     SavedExprRoot_ = ExprRoot_;
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
+        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -1190,7 +1190,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
 }
 
 TProgram::TFutureStatus TProgram::ContinueAsync() {
-    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
+    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
     return AsyncTransformWithFallback(true);
 }
 
@@ -1215,9 +1215,9 @@ void TProgram::CleanupLastSession() {
 }
 
 void TProgram::CloseLastSession() {
-    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
+    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
 
-    TString sessionId = TakeSessionId(); 
+    TString sessionId = TakeSessionId();
     if (sessionId.empty()) {
         return;
     }
@@ -1244,35 +1244,35 @@ TString TProgram::ResultsAsString() const {
     return resultOut.Str();
 }
 
-TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& username) { 
+TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& username) {
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
- 
-    typeAnnotationContext->UserDataStorage = UserDataStorage_; 
+
+    typeAnnotationContext->UserDataStorage = UserDataStorage_;
     typeAnnotationContext->Credentials = CredentialTables_;
     typeAnnotationContext->UserCredentials = UserCredentials_;
     typeAnnotationContext->Modules = Modules_;
     typeAnnotationContext->UdfResolver = UdfResolver_;
-    typeAnnotationContext->UdfIndex = UdfIndex_; 
-    typeAnnotationContext->UdfIndexPackageSet = UdfIndexPackageSet_; 
+    typeAnnotationContext->UdfIndex = UdfIndex_;
+    typeAnnotationContext->UdfIndexPackageSet = UdfIndexPackageSet_;
     typeAnnotationContext->RandomProvider = RandomProvider_;
     typeAnnotationContext->TimeProvider = TimeProvider_;
     if (DiagnosticFormat_) {
         typeAnnotationContext->Diagnostics = true;
     }
 
-    if (UdfIndex_ && UdfIndexPackageSet_) { 
-        // setup default versions at the beginning 
-        // could be overridden by pragma later 
-        UdfIndexPackageSet_->AddResourcesTo(UdfIndex_); 
-    } 
- 
+    if (UdfIndex_ && UdfIndexPackageSet_) {
+        // setup default versions at the beginning
+        // could be overridden by pragma later
+        UdfIndexPackageSet_->AddResourcesTo(UdfIndex_);
+    }
+
     PlanBuilder_ = CreatePlanBuilder(*typeAnnotationContext);
     THashSet<TString> providerNames;
     TVector<TString> fullResultDataSinks;
-    TVector<std::function<TMaybe<TString>(const TString& url)>> tokenResolvers; 
+    TVector<std::function<TMaybe<TString>(const TString& url)>> tokenResolvers;
     for (const auto& dpi : DataProvidersInit_) {
         auto dp = dpi(
-            username, 
+            username,
             SessionId_,
             GatewaysConfig_,
             FunctionRegistry_,
@@ -1291,10 +1291,10 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         if (dp.Sink) {
             typeAnnotationContext->AddDataSink(dp.Names, dp.Sink);
         }
- 
-        if (dp.TokenResolver) { 
-            tokenResolvers.push_back(dp.TokenResolver); 
-        } 
+
+        if (dp.TokenResolver) {
+            tokenResolvers.push_back(dp.TokenResolver);
+        }
 
         if (dp.SupportFullResultDataSink) {
             fullResultDataSinks.insert(fullResultDataSinks.end(), dp.Names.begin(), dp.Names.end());
@@ -1343,7 +1343,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider);
     }
 
-    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers))); 
+    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
     return typeAnnotationContext;
 }
 

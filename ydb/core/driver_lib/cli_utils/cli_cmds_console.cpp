@@ -316,8 +316,8 @@ public:
     TClientCommandConsoleConfigs()
         : TClientCommandTree("configs", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandConsoleConfigsLoad>()); 
-        AddCommand(std::make_unique<TClientCommandConsoleConfigsUpdate>()); 
+        AddCommand(std::make_unique<TClientCommandConsoleConfigsLoad>());
+        AddCommand(std::make_unique<TClientCommandConsoleConfigsUpdate>());
     }
 };
 
@@ -417,8 +417,8 @@ public:
     TClientCommandConsoleConfig()
         : TClientCommandTree("config", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandConsoleConfigGet>()); 
-        AddCommand(std::make_unique<TClientCommandConsoleConfigSet>()); 
+        AddCommand(std::make_unique<TClientCommandConsoleConfigGet>());
+        AddCommand(std::make_unique<TClientCommandConsoleConfigSet>());
     }
 };
 
@@ -522,19 +522,19 @@ public:
     TClientCommandConsoleValidator()
         : TClientCommandTree("validator", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandConsoleValidatorDisable>()); 
-        AddCommand(std::make_unique<TClientCommandConsoleValidatorEnable>()); 
-        AddCommand(std::make_unique<TClientCommandConsoleValidatorList>()); 
+        AddCommand(std::make_unique<TClientCommandConsoleValidatorDisable>());
+        AddCommand(std::make_unique<TClientCommandConsoleValidatorEnable>());
+        AddCommand(std::make_unique<TClientCommandConsoleValidatorList>());
     }
 };
 
 TClientCommandConsole::TClientCommandConsole()
     : TClientCommandTree("console", {}, "Console commands")
 {
-    AddCommand(std::make_unique<TClientCommandConsoleConfig>()); 
-    AddCommand(std::make_unique<TClientCommandConsoleConfigs>()); 
-    AddCommand(std::make_unique<TClientCommandConsoleExecute>()); 
-    AddCommand(std::make_unique<TClientCommandConsoleValidator>()); 
+    AddCommand(std::make_unique<TClientCommandConsoleConfig>());
+    AddCommand(std::make_unique<TClientCommandConsoleConfigs>());
+    AddCommand(std::make_unique<TClientCommandConsoleExecute>());
+    AddCommand(std::make_unique<TClientCommandConsoleValidator>());
 }
 
 }

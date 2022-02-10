@@ -9,22 +9,22 @@ import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
-message TCheckpoint { 
-    optional uint64 Id = 1; 
+message TCheckpoint {
+    optional uint64 Id = 1;
     optional uint64 Generation = 2;
-}; 
- 
-/* 
-    Data and control messages will be processed in the following order: 
-    1) Data 
-    2) Checkpoint 
-    3) Finished 
+};
+
+/*
+    Data and control messages will be processed in the following order:
+    1) Data
+    2) Checkpoint
+    3) Finished
 */
 message TChannelData {
     optional uint64 ChannelId = 1;
     optional NYql.NDqProto.TData Data = 2;
     optional bool Finished = 3;
-    optional TCheckpoint Checkpoint = 4; 
+    optional TCheckpoint Checkpoint = 4;
 };
 
 message TEvRun {

@@ -34,27 +34,27 @@ public:
     }
 };
 
-class TPqDataSink : public NGenerated::TPqDataSinkStub<TExprBase, TCallable, TCoAtom> { 
-public: 
-    explicit TPqDataSink(const TExprNode* node) 
-        : TPqDataSinkStub(node) {} 
- 
-    explicit TPqDataSink(const TExprNode::TPtr& node) 
-        : TPqDataSinkStub(node) {} 
- 
-    static bool Match(const TExprNode* node) { 
-        if (!TPqDataSinkStub::Match(node)) { 
-            return false; 
-        } 
- 
-        if (node->Head().Content() != PqProviderName) { 
-            return false; 
-        } 
- 
-        return true; 
-    } 
-}; 
- 
+class TPqDataSink : public NGenerated::TPqDataSinkStub<TExprBase, TCallable, TCoAtom> {
+public:
+    explicit TPqDataSink(const TExprNode* node)
+        : TPqDataSinkStub(node) {}
+
+    explicit TPqDataSink(const TExprNode::TPtr& node)
+        : TPqDataSinkStub(node) {}
+
+    static bool Match(const TExprNode* node) {
+        if (!TPqDataSinkStub::Match(node)) {
+            return false;
+        }
+
+        if (node->Head().Content() != PqProviderName) {
+            return false;
+        }
+
+        return true;
+    }
+};
+
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.defs.inl.h>
 
 } // namespace NNodes

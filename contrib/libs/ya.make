@@ -143,7 +143,7 @@ RECURSE(
     libde265
     libdivide
     libdivsufsort2
-    libeatmydata/dynamic 
+    libeatmydata/dynamic
     libev
     libevent
     libexslt

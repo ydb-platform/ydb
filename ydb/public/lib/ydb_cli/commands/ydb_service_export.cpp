@@ -72,9 +72,9 @@ TCommandExport::TCommandExport(bool useExportToYt)
     : TClientCommandTree("export", {}, "Export service operations")
 {
     if (useExportToYt) {
-        AddCommand(std::make_unique<TCommandExportToYt>()); 
+        AddCommand(std::make_unique<TCommandExportToYt>());
     }
-    AddCommand(std::make_unique<TCommandExportToS3>()); 
+    AddCommand(std::make_unique<TCommandExportToS3>());
 }
 
 /// YT

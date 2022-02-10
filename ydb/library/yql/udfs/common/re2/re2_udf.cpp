@@ -412,10 +412,10 @@ namespace {
         void GetAllFunctions(IFunctionsSink& sink) const final {
             sink.Add(TRe2Udf::Name(TRe2Udf::EMode::MATCH));
             sink.Add(TRe2Udf::Name(TRe2Udf::EMode::GREP));
-            sink.Add(TRe2Udf::Name(TRe2Udf::EMode::CAPTURE))->SetTypeAwareness(); 
+            sink.Add(TRe2Udf::Name(TRe2Udf::EMode::CAPTURE))->SetTypeAwareness();
             sink.Add(TRe2Udf::Name(TRe2Udf::EMode::REPLACE));
             sink.Add(TRe2Udf::Name(TRe2Udf::EMode::COUNT));
-            sink.Add(TRe2Udf::Name(TRe2Udf::EMode::FIND_AND_CONSUME)); 
+            sink.Add(TRe2Udf::Name(TRe2Udf::EMode::FIND_AND_CONSUME));
             sink.Add(TEscape::Name());
             sink.Add(TPatternFromLike::Name());
             sink.Add(TOptions::Name());

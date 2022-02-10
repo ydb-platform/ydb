@@ -8,9 +8,9 @@ namespace NKikimr {
     template<typename T>
     using TStdLayout = std::enable_if_t<std::is_standard_layout<T>::value, T>;
 
-    template<typename T> 
-    using TStdLayoutOrVoid = std::enable_if_t<std::is_standard_layout<T>::value || std::is_void<T>::value, T>; 
- 
+    template<typename T>
+    using TStdLayoutOrVoid = std::enable_if_t<std::is_standard_layout<T>::value || std::is_void<T>::value, T>;
+
     template<typename T, typename = TStdLayout<T>>
     struct TDeref {
         static constexpr const T* At(const void *ptr, size_t off = 0) noexcept {

@@ -26,17 +26,17 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TClientSettings& settin
     , Settings (settings)
 {
     ValidateSettings();
-    AddCommand(std::make_unique<TCommandDiscovery>()); 
-    AddCommand(std::make_unique<TCommandScheme>()); 
-    AddCommand(std::make_unique<TCommandScripting>()); 
-    AddCommand(std::make_unique<TCommandTable>()); 
-    AddCommand(std::make_unique<TCommandTools>()); 
-    AddCommand(std::make_unique<TCommandExport>(Settings.UseExportToYt.GetRef())); 
-    AddCommand(std::make_unique<TCommandImport>()); 
-    AddCommand(std::make_unique<TCommandOperation>()); 
-    AddCommand(std::make_unique<TCommandConfig>()); 
-    AddCommand(std::make_unique<TCommandInit>()); 
-    AddCommand(std::make_unique<TCommandYql>()); 
+    AddCommand(std::make_unique<TCommandDiscovery>());
+    AddCommand(std::make_unique<TCommandScheme>());
+    AddCommand(std::make_unique<TCommandScripting>());
+    AddCommand(std::make_unique<TCommandTable>());
+    AddCommand(std::make_unique<TCommandTools>());
+    AddCommand(std::make_unique<TCommandExport>(Settings.UseExportToYt.GetRef()));
+    AddCommand(std::make_unique<TCommandImport>());
+    AddCommand(std::make_unique<TCommandOperation>());
+    AddCommand(std::make_unique<TCommandConfig>());
+    AddCommand(std::make_unique<TCommandInit>());
+    AddCommand(std::make_unique<TCommandYql>());
     AddCommand(std::make_unique<TCommandStream>());
     AddCommand(std::make_unique<TCommandWorkload>());
 }

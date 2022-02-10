@@ -2246,7 +2246,7 @@ struct TExprContext : private TNonCopyable {
     TSingletonTypeCache SingletonTypeCache;
     std::unordered_set<const TTypeAnnotationNode*, TTypeAnnotationNode::THash, TTypeAnnotationNode::TEqual> TypeSet;
     std::unordered_set<const TConstraintNode*, TConstraintNode::THash, TConstraintNode::TEqual> ConstraintSet;
-    std::unordered_map<const TTypeAnnotationNode*, TExprNode::TPtr> TypeAsNodeCache; 
+    std::unordered_map<const TTypeAnnotationNode*, TExprNode::TPtr> TypeAsNodeCache;
     std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints;
 
     ui64 NextUniqueId = 0;
@@ -2264,7 +2264,7 @@ struct TExprContext : private TNonCopyable {
 
     bool Frozen;
 
-    explicit TExprContext(ui64 nextUniqueId = 0ULL); 
+    explicit TExprContext(ui64 nextUniqueId = 0ULL);
     ~TExprContext();
 
     ui64 AllocateNextUniqueId() {

@@ -112,7 +112,7 @@ class TTablet : public TActor<TTablet> {
     };
 
     struct TGraph {
-        typedef TDeque<std::unique_ptr<TLogEntry>> TQueueType; 
+        typedef TDeque<std::unique_ptr<TLogEntry>> TQueueType;
         typedef THashMap<ui32, TLogEntry *> TIndex;
 
         TQueueType Queue;

@@ -324,7 +324,7 @@ ids {
   code: YQL_MISSING_IS_BEFORE_NOT_NULL
   severity: S_WARNING
 }
-ids { 
+ids {
   code: YQL_DEPRECATED_TINY_INT_LITERAL_SUFFIX
   severity: S_WARNING
 }
@@ -365,17 +365,17 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: YT_VIEW_NOT_FOUND 
-  severity: S_ERROR 
-} 
-ids { 
-  code: YT_SCHEMELESS_TABLE 
-  severity: S_ERROR 
-} 
-ids { 
-  code: YT_ENTRY_NOT_TABLE_OR_VIEW 
-  severity: S_ERROR 
-} 
+  code: YT_VIEW_NOT_FOUND
+  severity: S_ERROR
+}
+ids {
+  code: YT_SCHEMELESS_TABLE
+  severity: S_ERROR
+}
+ids {
+  code: YT_ENTRY_NOT_TABLE_OR_VIEW
+  severity: S_ERROR
+}
 ids {
   code: YT_CONCURRENT_TABLE_MODIF
   severity: S_ERROR

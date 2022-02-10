@@ -607,7 +607,7 @@ message DataStreamsBinding {
     string format = 2 [(Ydb.length).le = 1024];
     string compression = 3 [(Ydb.length).le = 1024];
     Schema schema = 4;
-    map<string, string> format_setting = 5 [(Ydb.size).le = 100]; 
+    map<string, string> format_setting = 5 [(Ydb.size).le = 100];
 }
 
 message ObjectStorageBinding {

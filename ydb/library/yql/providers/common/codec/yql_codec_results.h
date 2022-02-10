@@ -1,21 +1,21 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/yson/writer.h>
-#include <util/generic/strbuf.h> 
-#include <util/string/cast.h> 
- 
-namespace NYql { 
-namespace NCommon { 
- 
-// we should not write numbers as numbers ever 
-// write numbers as strings except Yson value where we use restricted dialect 
+#include <util/generic/strbuf.h>
+#include <util/string/cast.h>
+
+namespace NYql {
+namespace NCommon {
+
+// we should not write numbers as numbers ever
+// write numbers as strings except Yson value where we use restricted dialect
 // write bool as bool
-// write null as entity 
-class TYsonResultWriter { 
-public: 
+// write null as entity
+class TYsonResultWriter {
+public:
     static constexpr TStringBuf VoidString = "Void";
- 
-public: 
+
+public:
     explicit TYsonResultWriter(NYson::TYsonConsumerBase& writer)
         : Writer(writer)
     {
@@ -37,7 +37,7 @@ public:
     void OnEntity() {
         Writer.OnEntity();
     }
-    // numbers 
+    // numbers
     void OnInt64Scalar(i64 value) {
         WriteNumberAsString(value);
     }
@@ -53,12 +53,12 @@ public:
     void OnBooleanScalar(bool value) {
         Writer.OnBooleanScalar(value);
     }
-    // strings 
-    void OnStringScalar(TStringBuf value); 
+    // strings
+    void OnStringScalar(TStringBuf value);
     void OnUtf8StringScalar(TStringBuf value) {
         Writer.OnStringScalar(value);
     }
-    // list construction 
+    // list construction
     void OnBeginList() {
         Writer.OnBeginList();
     }
@@ -83,15 +83,15 @@ public:
     void OnEndAttributes() {
         Writer.OnEndAttributes();
     }
- 
-private: 
-    template <typename T> 
-    void WriteNumberAsString(T value) { 
-        Writer.OnStringScalar(::ToString(value)); 
-    } 
- 
-private: 
+
+private:
+    template <typename T>
+    void WriteNumberAsString(T value) {
+        Writer.OnStringScalar(::ToString(value));
+    }
+
+private:
     NYson::TYsonConsumerBase& Writer;
-}; 
-} 
-} 
+};
+}
+}

@@ -54,8 +54,8 @@ namespace {
                 ythrow yexception() << "Error in FullSplitDate";
             }
 
-            TimezoneId = timezoneId; 
- 
+            TimezoneId = timezoneId;
+
             Year = year;
             Month = month;
             Day = day;
@@ -70,14 +70,14 @@ namespace {
             if (!IsUniversal(TimezoneId)) {
                 ui32 datetime;
                 if (!builder.MakeDatetime(Year, Month, Day, local ? 0 : Hour, local ? 0 : Minute, local ? 0 : Second, datetime, TimezoneId)) {
-                    ythrow yexception() << "Error in MakeDatetime"; 
-                } 
+                    ythrow yexception() << "Error in MakeDatetime";
+                }
                 return datetime / 86400u;
             } else {
                 ui16 date;
-                if (!builder.MakeDate(Year, Month, Day, date)) { 
-                    ythrow yexception() << "Error in MakeDate"; 
-                } 
+                if (!builder.MakeDate(Year, Month, Day, date)) {
+                    ythrow yexception() << "Error in MakeDate";
+                }
                 return date;
             }
         }
@@ -87,9 +87,9 @@ namespace {
 
             if (!builder.FullSplitDatetime2(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
                 ythrow yexception() << "Error in FullSplitDatetime";
-            } 
+            }
 
-            TimezoneId = timezoneId; 
+            TimezoneId = timezoneId;
             Year = year;
             Month = month;
             Day = day;
@@ -104,10 +104,10 @@ namespace {
         }
 
         inline ui32 ToDatetime(const IDateBuilder& builder) const {
-            ui32 datetime = 0; 
-            if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) { 
-                ythrow yexception() << "Error in MakeDatetime"; 
-            } 
+            ui32 datetime = 0;
+            if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
+                ythrow yexception() << "Error in MakeDatetime";
+            }
             return datetime;
         }
 
@@ -130,7 +130,7 @@ namespace {
             ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             if (!builder.FullSplitDatetime2(datetime, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, TimezoneId)) {
                 ythrow yexception() << "Error in FullSplitDatetime.";
-            } 
+            }
 
             DayOfYear = dayOfYear;
             WeekOfYear = weekOfYear;
@@ -294,13 +294,13 @@ namespace {
 
     template <typename TUserDataType>
     class TSplit : public TBoxedValue {
-        const TSourcePosition Pos_; 
- 
+        const TSourcePosition Pos_;
+
     public:
-        explicit TSplit(TSourcePosition pos) 
-            : Pos_(pos) 
-        {} 
- 
+        explicit TSplit(TSourcePosition pos)
+            : Pos_(pos)
+        {}
+
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override;
@@ -315,7 +315,7 @@ namespace {
             builder.Returns(builder.Resource(TMResourceName));
 
             if (!typesOnly) {
-                builder.Implementation(new TSplit<TUserDataType>(builder.GetSourcePosition())); 
+                builder.Implementation(new TSplit<TUserDataType>(builder.GetSourcePosition()));
             }
         }
     };
@@ -325,17 +325,17 @@ namespace {
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
     {
-        try { 
-            EMPTY_RESULT_ON_EMPTY_ARG(0); 
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
 
-            auto& builder = valueBuilder->GetDateBuilder(); 
-            TUnboxedValuePod result(0); 
-            auto& storage = TTMStorage::Reference(result); 
-            storage.FromDate(builder, args[0].Get<ui16>()); 
-            return result; 
-        } catch (const std::exception& e) { 
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
-        } 
+            auto& builder = valueBuilder->GetDateBuilder();
+            TUnboxedValuePod result(0);
+            auto& storage = TTMStorage::Reference(result);
+            storage.FromDate(builder, args[0].Get<ui16>());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
     }
 
     template <>
@@ -343,17 +343,17 @@ namespace {
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
     {
-        try { 
-            EMPTY_RESULT_ON_EMPTY_ARG(0); 
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
 
-            auto& builder = valueBuilder->GetDateBuilder(); 
-            TUnboxedValuePod result(0); 
-            auto& storage = TTMStorage::Reference(result); 
-            storage.FromDatetime(builder, args[0].Get<ui32>()); 
-            return result; 
-        } catch (const std::exception& e) { 
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
-        } 
+            auto& builder = valueBuilder->GetDateBuilder();
+            TUnboxedValuePod result(0);
+            auto& storage = TTMStorage::Reference(result);
+            storage.FromDatetime(builder, args[0].Get<ui32>());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
     }
 
     template <>
@@ -361,17 +361,17 @@ namespace {
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
     {
-        try { 
-            EMPTY_RESULT_ON_EMPTY_ARG(0); 
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
 
-            auto& builder = valueBuilder->GetDateBuilder(); 
-            TUnboxedValuePod result(0); 
-            auto& storage = TTMStorage::Reference(result); 
-            storage.FromTimestamp(builder, args[0].Get<ui64>()); 
-            return result; 
-        } catch (const std::exception& e) { 
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
-        } 
+            auto& builder = valueBuilder->GetDateBuilder();
+            TUnboxedValuePod result(0);
+            auto& storage = TTMStorage::Reference(result);
+            storage.FromTimestamp(builder, args[0].Get<ui64>());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
     }
 
     template <>
@@ -379,17 +379,17 @@ namespace {
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
     {
-        try { 
-            EMPTY_RESULT_ON_EMPTY_ARG(0); 
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
 
-            auto& builder = valueBuilder->GetDateBuilder(); 
-            TUnboxedValuePod result(0); 
-            auto& storage = TTMStorage::Reference(result); 
-            storage.FromDate(builder, args[0].Get<ui16>(), args[0].GetTimezoneId()); 
-            return result; 
-        } catch (const std::exception& e) { 
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
-        } 
+            auto& builder = valueBuilder->GetDateBuilder();
+            TUnboxedValuePod result(0);
+            auto& storage = TTMStorage::Reference(result);
+            storage.FromDate(builder, args[0].Get<ui16>(), args[0].GetTimezoneId());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
     }
 
     template <>
@@ -397,17 +397,17 @@ namespace {
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
     {
-        try { 
-            EMPTY_RESULT_ON_EMPTY_ARG(0); 
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
 
-            auto& builder = valueBuilder->GetDateBuilder(); 
-            TUnboxedValuePod result(0); 
-            auto& storage = TTMStorage::Reference(result); 
-            storage.FromDatetime(builder, args[0].Get<ui32>(), args[0].GetTimezoneId()); 
-            return result; 
-        } catch (const std::exception& e) { 
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
-        } 
+            auto& builder = valueBuilder->GetDateBuilder();
+            TUnboxedValuePod result(0);
+            auto& storage = TTMStorage::Reference(result);
+            storage.FromDatetime(builder, args[0].Get<ui32>(), args[0].GetTimezoneId());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
     }
 
     template <>
@@ -415,17 +415,17 @@ namespace {
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
     {
-        try { 
-            EMPTY_RESULT_ON_EMPTY_ARG(0); 
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
 
-            auto& builder = valueBuilder->GetDateBuilder(); 
-            TUnboxedValuePod result(0); 
-            auto& storage = TTMStorage::Reference(result); 
-            storage.FromTimestamp(builder, args[0].Get<ui64>(), args[0].GetTimezoneId()); 
-            return result; 
-        } catch (const std::exception& e) { 
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
-        } 
+            auto& builder = valueBuilder->GetDateBuilder();
+            TUnboxedValuePod result(0);
+            auto& storage = TTMStorage::Reference(result);
+            storage.FromTimestamp(builder, args[0].Get<ui64>(), args[0].GetTimezoneId());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
     }
 
     // Make*
@@ -554,85 +554,85 @@ namespace {
     // Update
 
     class TUpdate : public TBoxedValue {
-        const TSourcePosition Pos_; 
-    public: 
-        explicit TUpdate(TSourcePosition pos) 
-            : Pos_(pos) 
-        {} 
- 
+        const TSourcePosition Pos_;
+    public:
+        explicit TUpdate(TSourcePosition pos)
+            : Pos_(pos)
+        {}
+
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override
         {
-            try { 
-                EMPTY_RESULT_ON_EMPTY_ARG(0); 
-                auto result = args[0]; 
+            try {
+                EMPTY_RESULT_ON_EMPTY_ARG(0);
+                auto result = args[0];
 
-                if (args[1]) { 
-                    auto year = args[1].Get<ui16>(); 
-                    if (!ValidateYear(year)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                    SetYear(result, year); 
+                if (args[1]) {
+                    auto year = args[1].Get<ui16>();
+                    if (!ValidateYear(year)) {
+                        return TUnboxedValuePod();
+                    }
+                    SetYear(result, year);
                 }
-                if (args[2]) { 
-                    auto month = args[2].Get<ui8>(); 
-                    if (!ValidateMonth(month)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                    SetMonth(result, month); 
+                if (args[2]) {
+                    auto month = args[2].Get<ui8>();
+                    if (!ValidateMonth(month)) {
+                        return TUnboxedValuePod();
+                    }
+                    SetMonth(result, month);
                 }
-                if (args[3]) { 
-                    auto day = args[3].Get<ui8>(); 
-                    if (!ValidateDay(day)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                    SetDay(result, day); 
+                if (args[3]) {
+                    auto day = args[3].Get<ui8>();
+                    if (!ValidateDay(day)) {
+                        return TUnboxedValuePod();
+                    }
+                    SetDay(result, day);
                 }
-                if (args[4]) { 
-                    auto hour = args[4].Get<ui8>(); 
-                    if (!ValidateHour(hour)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                    SetHour(result, hour); 
+                if (args[4]) {
+                    auto hour = args[4].Get<ui8>();
+                    if (!ValidateHour(hour)) {
+                        return TUnboxedValuePod();
+                    }
+                    SetHour(result, hour);
                 }
-                if (args[5]) { 
-                    auto minute = args[5].Get<ui8>(); 
-                    if (!ValidateMinute(minute)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                    SetMinute(result, minute); 
+                if (args[5]) {
+                    auto minute = args[5].Get<ui8>();
+                    if (!ValidateMinute(minute)) {
+                        return TUnboxedValuePod();
+                    }
+                    SetMinute(result, minute);
                 }
-                if (args[6]) { 
-                    auto second = args[6].Get<ui8>(); 
-                    if (!ValidateSecond(second)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                    SetSecond(result, second); 
+                if (args[6]) {
+                    auto second = args[6].Get<ui8>();
+                    if (!ValidateSecond(second)) {
+                        return TUnboxedValuePod();
+                    }
+                    SetSecond(result, second);
                 }
-                if (args[7]) { 
-                    auto microsecond = args[7].Get<ui32>(); 
-                    if (!ValidateMicrosecond(microsecond)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                    SetMicrosecond(result, microsecond); 
+                if (args[7]) {
+                    auto microsecond = args[7].Get<ui32>();
+                    if (!ValidateMicrosecond(microsecond)) {
+                        return TUnboxedValuePod();
+                    }
+                    SetMicrosecond(result, microsecond);
                 }
-                if (args[8]) { 
-                    auto timezoneId = args[8].Get<ui16>(); 
-                    if (!ValidateTimezoneId(timezoneId)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                    SetTimezoneId(result, timezoneId); 
-                } 
- 
-                auto& builder = valueBuilder->GetDateBuilder(); 
-                auto& storage = TTMStorage::Reference(result); 
-                if (!storage.Validate(builder)) { 
+                if (args[8]) {
+                    auto timezoneId = args[8].Get<ui16>();
+                    if (!ValidateTimezoneId(timezoneId)) {
+                        return TUnboxedValuePod();
+                    }
+                    SetTimezoneId(result, timezoneId);
+                }
+
+                auto& builder = valueBuilder->GetDateBuilder();
+                auto& storage = TTMStorage::Reference(result);
+                if (!storage.Validate(builder)) {
                     return TUnboxedValuePod();
                 }
-                return result; 
-            } catch (const std::exception& e) { 
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                return result;
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
@@ -667,7 +667,7 @@ namespace {
             builder.Returns(optionalResourceType);
 
             if (!typesOnly) {
-                builder.Implementation(new TUpdate(builder.GetSourcePosition())); 
+                builder.Implementation(new TUpdate(builder.GetSourcePosition()));
             }
 
             return true;
@@ -1028,11 +1028,11 @@ namespace {
 
         private:
             TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
-                return TUnboxedValuePod(new TFormat(args[0], Pos_)); 
+                return TUnboxedValuePod(new TFormat(args[0], Pos_));
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
-            const TSourcePosition Pos_; 
+            const TSourcePosition Pos_;
         };
 
         static const TStringRef& Name() {
@@ -1063,7 +1063,7 @@ namespace {
         }
 
     private:
-        const TSourcePosition Pos_; 
+        const TSourcePosition Pos_;
         const TUnboxedValue Format_;
         std::vector<std::function<size_t(char*, const TUnboxedValuePod&, const IDateBuilder&)>> Printers_;
 
@@ -1083,36 +1083,36 @@ namespace {
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override
         {
-            try { 
-                EMPTY_RESULT_ON_EMPTY_ARG(0); 
-                const auto value = args[0]; 
+            try {
+                EMPTY_RESULT_ON_EMPTY_ARG(0);
+                const auto value = args[0];
 
-                auto& builder = valueBuilder->GetDateBuilder(); 
+                auto& builder = valueBuilder->GetDateBuilder();
 
-                auto result = valueBuilder->NewStringNotFilled(ReservedSize_); 
-                auto pos = result.AsStringRef().Data(); 
-                ui32 size = 0U; 
+                auto result = valueBuilder->NewStringNotFilled(ReservedSize_);
+                auto pos = result.AsStringRef().Data();
+                ui32 size = 0U;
 
-                for (const auto& printer : Printers_) { 
-                    if (const auto plus = printer(pos, value, builder)) { 
-                        size += plus; 
-                        pos += plus; 
-                    } 
+                for (const auto& printer : Printers_) {
+                    if (const auto plus = printer(pos, value, builder)) {
+                        size += plus;
+                        pos += plus;
+                    }
                 }
 
-                if (size < ReservedSize_) { 
-                    result = valueBuilder->SubString(result.Release(), 0U, size); 
-                } 
- 
-                return result; 
-            } catch (const std::exception& e) { 
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                if (size < ReservedSize_) {
+                    result = valueBuilder->SubString(result.Release(), 0U, size);
+                }
+
+                return result;
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
-        TFormat(const TUnboxedValuePod& runConfig, TSourcePosition pos) 
-            : Pos_(pos) 
-            , Format_(runConfig) 
+        TFormat(const TUnboxedValuePod& runConfig, TSourcePosition pos)
+            : Pos_(pos)
+            , Format_(runConfig)
         {
             const std::string_view formatView(Format_.AsStringRef());
             auto dataStart = formatView.begin();
@@ -1334,12 +1334,12 @@ namespace {
 
         private:
             TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
-                return TUnboxedValuePod(new TParse(args[0], Pos_)); 
+                return TUnboxedValuePod(new TParse(args[0], Pos_));
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
 
-            const TSourcePosition Pos_; 
+            const TSourcePosition Pos_;
         };
 
         static const TStringRef& Name() {
@@ -1374,7 +1374,7 @@ namespace {
         }
 
     private:
-        const TSourcePosition Pos_; 
+        const TSourcePosition Pos_;
         const TUnboxedValue Format_;
 
         std::vector<std::function<bool(std::string_view::const_iterator& it, size_t, TUnboxedValuePod&, const IDateBuilder&)>> Scanners_;
@@ -1395,36 +1395,36 @@ namespace {
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override
         {
-            try { 
-                EMPTY_RESULT_ON_EMPTY_ARG(0); 
+            try {
+                EMPTY_RESULT_ON_EMPTY_ARG(0);
 
-                const std::string_view buffer = args[0].AsStringRef(); 
+                const std::string_view buffer = args[0].AsStringRef();
 
-                TUnboxedValuePod result(0); 
-                auto& storage = TTMStorage::Reference(result); 
-                storage.MakeDefault(); 
+                TUnboxedValuePod result(0);
+                auto& storage = TTMStorage::Reference(result);
+                storage.MakeDefault();
 
-                auto& builder = valueBuilder->GetDateBuilder(); 
+                auto& builder = valueBuilder->GetDateBuilder();
 
-                auto it = buffer.begin(); 
-                for (const auto& scanner : Scanners_) { 
-                    if (!scanner(it, std::distance(it, buffer.end()), result, builder)) { 
-                        return TUnboxedValuePod(); 
-                    } 
-                } 
- 
-                if (buffer.end() != it || !storage.Validate(builder)) { 
+                auto it = buffer.begin();
+                for (const auto& scanner : Scanners_) {
+                    if (!scanner(it, std::distance(it, buffer.end()), result, builder)) {
+                        return TUnboxedValuePod();
+                    }
+                }
+
+                if (buffer.end() != it || !storage.Validate(builder)) {
                     return TUnboxedValuePod();
                 }
-                return result; 
-            } catch (const std::exception& e) { 
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                return result;
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
-        TParse(const TUnboxedValuePod& runConfig, TSourcePosition pos) 
-            : Pos_(pos) 
-            , Format_(runConfig) 
+        TParse(const TUnboxedValuePod& runConfig, TSourcePosition pos)
+            : Pos_(pos)
+            , Format_(runConfig)
         {
             const std::string_view formatView(Format_.AsStringRef());
             auto dataStart = formatView.begin();

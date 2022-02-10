@@ -297,7 +297,7 @@ class TCountersArray : TNonCopyable {
     friend class TTabletCountersBase;
     friend class TTabletLabeledCountersBase;
 public:
-    typedef std::shared_ptr<T> TCountersHolder; 
+    typedef std::shared_ptr<T> TCountersHolder;
     //
     TCountersArray(ui32 countersQnt)
         : CountersQnt(countersQnt)
@@ -305,8 +305,8 @@ public:
         , Counters(nullptr)
     {
         if (CountersQnt) {
-            CountersHolder.reset(new T[CountersQnt](), &CheckedArrayDelete<T>); 
-            Counters = CountersHolder.get(); 
+            CountersHolder.reset(new T[CountersQnt](), &CheckedArrayDelete<T>);
+            Counters = CountersHolder.get();
         }
     }
 
@@ -348,13 +348,13 @@ private:
     //
     void Reset(const TCountersArray<T>& rp) {
         Y_VERIFY(!CountersQnt);
-        CountersHolder.reset(); 
+        CountersHolder.reset();
         Counters = nullptr;
 
         CountersQnt = rp.CountersQnt;
         if (CountersQnt) {
-            CountersHolder.reset(new T[CountersQnt](), &CheckedArrayDelete<T>); 
-            Counters = CountersHolder.get(); 
+            CountersHolder.reset(new T[CountersQnt](), &CheckedArrayDelete<T>);
+            Counters = CountersHolder.get();
         }
 
         for (ui32 i = 0, e = CountersQnt; i < e; ++i) {

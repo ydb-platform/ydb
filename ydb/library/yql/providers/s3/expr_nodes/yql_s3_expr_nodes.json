@@ -44,7 +44,7 @@
             "Match": {"Type": "Callable", "Name": "S3SourceSettings"},
             "Children": [
                 {"Index": 0, "Name": "Paths", "Type": "TS3Paths"},
-                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam"} 
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam"}
             ]
         },
         {

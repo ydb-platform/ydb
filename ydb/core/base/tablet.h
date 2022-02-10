@@ -20,7 +20,7 @@
 
 namespace NKikimr {
 
-TIntrusivePtr<TTabletStorageInfo> TabletStorageInfoFromProto(const NKikimrTabletBase::TTabletStorageInfo &proto); 
+TIntrusivePtr<TTabletStorageInfo> TabletStorageInfoFromProto(const NKikimrTabletBase::TTabletStorageInfo &proto);
 void TabletStorageInfoToProto(const TTabletStorageInfo &info, NKikimrTabletBase::TTabletStorageInfo *proto);
 
 inline ui64 MakeGenStepPair(ui32 gen, ui32 step) {

@@ -101,14 +101,14 @@ public:
                 );
             }
 
-            const auto token = "cluster:default_" + clusterName; 
-            YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token; 
+            const auto token = "cluster:default_" + clusterName;
+            YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TS3SourceSettings>()
                     .Paths(s3ReadObject.Object().Paths())
                     .Token<TCoSecureParam>()
-                        .Name().Build(token) 
+                        .Name().Build(token)
                         .Build()
                     .Build()
                 .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
@@ -124,7 +124,7 @@ public:
         if (const auto maySettings = source.Settings().Maybe<TS3SourceSettings>()) {
             const auto settings = maySettings.Cast();
             const auto& cluster = source.DataSource().Cast<TS3DataSource>().Cluster().StringValue();
-            const auto& connect = State_->Configuration->Clusters.at(cluster); 
+            const auto& connect = State_->Configuration->Clusters.at(cluster);
 
             NS3::TSource srcDesc;
             srcDesc.SetUrl(connect.Url);

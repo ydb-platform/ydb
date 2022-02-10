@@ -39,8 +39,8 @@ public:
     TResponseProcessor(
         const TActorId sender,
         TCache& cache,
-        const THashMap<std::pair<TString, DatabaseType>, TEndpoint>& ready, 
-        const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>>& requests, 
+        const THashMap<std::pair<TString, DatabaseType>, TEndpoint>& ready,
+        const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>>& requests,
         const TString& traceId,
         bool mdbTransformHost,
         const TParsers& parsers)
@@ -106,8 +106,8 @@ private:
         TString status;
         TString errorMessage;
         TString databaseId;
-        DatabaseType databaseType = DatabaseType::Ydb; 
-        TEvents::TDatabaseAuth info; 
+        DatabaseType databaseType = DatabaseType::Ydb;
+        TEvents::TDatabaseAuth info;
         TMaybe<TEndpoint> result;
         HandledIds++;
         if (ev->Get()->Error.empty() && (ev->Get()->Response && ((status = ev->Get()->Response->Status) == "200"))) {
@@ -119,26 +119,26 @@ private:
             if (it == Requests.end()) {
                 errorMessage = "Unknown databaseId";
             } else {
-                std::tie(databaseId, databaseType, info) = it->second; 
-                const bool parseJsonOk = NJson::ReadJsonTree(ev->Get()->Response->Body, &jsonConfig, &databaseInfo); 
-                TParsers::const_iterator parserIt; 
-                if (parseJsonOk && (parserIt = Parsers.find(databaseType)) != Parsers.end()) { 
+                std::tie(databaseId, databaseType, info) = it->second;
+                const bool parseJsonOk = NJson::ReadJsonTree(ev->Get()->Response->Body, &jsonConfig, &databaseInfo);
+                TParsers::const_iterator parserIt;
+                if (parseJsonOk && (parserIt = Parsers.find(databaseType)) != Parsers.end()) {
                     try {
-                        auto res = parserIt->second(databaseInfo, MdbTransformHost); 
+                        auto res = parserIt->second(databaseInfo, MdbTransformHost);
                         LOG_D("Got " << databaseId << " " << databaseType << " endpoint " << res.Endpoint << " " << res.Database);
-                        DatabaseId2Endpoint[std::make_pair(databaseId, databaseType)] = res; 
+                        DatabaseId2Endpoint[std::make_pair(databaseId, databaseType)] = res;
                         result.ConstructInPlace(res);
                     } catch (...) {
                         errorMessage = TStringBuilder()
                             << " Couldn't resolve "
-                            << databaseType << " Id: " 
+                            << databaseType << " Id: "
                             << databaseId << "\n"
                             << CurrentExceptionMessage();
                     }
                 } else {
                     errorMessage = TStringBuilder() << "Unable to parse database information."
                         << "Database Id: " << databaseId
-                        << ", Database Type: " << databaseType; 
+                        << ", Database Type: " << databaseType;
                 }
             }
         } else {
@@ -152,17 +152,17 @@ private:
 
         if (errorMessage) {
             LOG_E("Error on response parsing: " << errorMessage);
-            Success = false; 
+            Success = false;
         }
 
-        if (databaseId) { 
-            auto key = std::make_tuple(databaseId, databaseType, info); 
+        if (databaseId) {
+            auto key = std::make_tuple(databaseId, databaseType, info);
             if (errorMessage) {
                 Cache.Put(key, errorMessage);
             } else {
                 Cache.Put(key, result);
             }
-        } 
+        }
 
         if (HandledIds == Requests.size()) {
             SendResolvedEndpointsAndDie();
@@ -171,15 +171,15 @@ private:
         LOG_D(DatabaseId2Endpoint.size() << " of " << Requests.size() << " done");
     }
 
-private: 
+private:
     const TActorId Sender;
     TCache& Cache;
-    const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>> Requests; 
+    const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>> Requests;
     const TString TraceId;
     const bool MdbTransformHost;
-    THashMap<std::pair<TString, DatabaseType>, TEvents::TEvEndpointResponse::TEndpoint> DatabaseId2Endpoint; 
+    THashMap<std::pair<TString, DatabaseType>, TEvents::TEvEndpointResponse::TEndpoint> DatabaseId2Endpoint;
     size_t HandledIds = 0;
-    bool Success = true; 
+    bool Success = true;
     const TParsers& Parsers;
     TDuration ResolvingTtl = TDuration::Seconds(30); //TODO: Use cfg
 };
@@ -187,10 +187,10 @@ private:
 class TDatabaseResolver: public TActor<TDatabaseResolver>
 {
 public:
-    TDatabaseResolver(TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) 
+    TDatabaseResolver(TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
         : TActor<TDatabaseResolver>(&TDatabaseResolver::State)
         , HttpProxy(httpProxy)
-        , CredentialsFactory(credentialsFactory) 
+        , CredentialsFactory(credentialsFactory)
         , Cache(
             TTtlCacheSettings()
             .SetTtl(TDuration::Minutes(10))
@@ -199,7 +199,7 @@ public:
     {
         auto ydbParser = [](NJson::TJsonValue& databaseInfo, bool) {
             bool secure = false;
-            TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust(); 
+            TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust();
             TString prefix("/?database=");
             TString database;
             auto pos = endpoint.rfind(prefix);
@@ -215,7 +215,7 @@ public:
                 endpoint = endpoint.substr(pos+3);
             }
 
-            Y_ENSURE(endpoint); 
+            Y_ENSURE(endpoint);
             return TEvents::TEvEndpointResponse::TEndpoint{endpoint, database, secure};
         };
         Parsers[DatabaseType::Ydb] = ydbParser;
@@ -232,7 +232,7 @@ public:
         Parsers[DatabaseType::ClickHouse] = [](NJson::TJsonValue& databaseInfo, bool mdbTransformHost) {
             TString endpoint;
             TVector<TString> aliveHosts;
-            for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) { 
+            for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
                 if (host["health"].GetString() == "ALIVE" && host["type"].GetString() == "CLICKHOUSE") {
                     aliveHosts.push_back(host["name"].GetString());
                 }
@@ -260,12 +260,12 @@ private:
     {
         TraceId = ev->Get()->TraceId;
         LOG_D("Start databaseId resolver for " << ev->Get()->DatabaseIds.size() << " ids");
-        THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>> requests; // request, (dbId, type, info) 
-        THashMap<std::pair<TString, DatabaseType>, TEndpoint> ready; 
-        for (const auto& [p, info] : ev->Get()->DatabaseIds) { 
-            const auto& [databaseId, type] = p; 
+        THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>> requests; // request, (dbId, type, info)
+        THashMap<std::pair<TString, DatabaseType>, TEndpoint> ready;
+        for (const auto& [p, info] : ev->Get()->DatabaseIds) {
+            const auto& [databaseId, type] = p;
             TMaybe<std::variant<TEndpoint, TString>> endpoint;
-            auto key = std::make_tuple(databaseId, type, info); 
+            auto key = std::make_tuple(databaseId, type, info);
             if (Cache.Get(key, &endpoint)) {
                 if (endpoint) {
                     ready.insert(std::make_pair(p,
@@ -275,25 +275,25 @@ private:
                 continue;
             }
 
-            try { 
-                TString url = IsIn({ DatabaseType::Ydb, DatabaseType::DataStreams }, type) ? 
-                    ev->Get()->YdbMvpEndpoint + "/database?databaseId=" + databaseId : 
-                    ev->Get()->MdbGateway + "/managed-clickhouse/v1/clusters/" + databaseId + "/hosts"; 
-                LOG_D("Get '" << url << "'"); 
+            try {
+                TString url = IsIn({ DatabaseType::Ydb, DatabaseType::DataStreams }, type) ?
+                    ev->Get()->YdbMvpEndpoint + "/database?databaseId=" + databaseId :
+                    ev->Get()->MdbGateway + "/managed-clickhouse/v1/clusters/" + databaseId + "/hosts";
+                LOG_D("Get '" << url << "'");
 
-                NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url); 
- 
-                auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, info.StructuredToken, info.AddBearerToToken); 
-                auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo(); 
-                if (token) { 
-                    httpRequest->Set("Authorization", token); 
-                } 
- 
-                requests[httpRequest] = key; 
-            } catch (const std::exception& e) { 
+                NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
+
+                auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, info.StructuredToken, info.AddBearerToToken);
+                auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+                if (token) {
+                    httpRequest->Set("Authorization", token);
+                }
+
+                requests[httpRequest] = key;
+            } catch (const std::exception& e) {
                 const TString msg = TStringBuilder() << " Error while preparing to resolve databaseId " << databaseId << ", details: " << e.what();
-                LOG_E(msg); 
-                Cache.Put(key, endpoint); 
+                LOG_E(msg);
+                Cache.Put(key, endpoint);
             }
         }
 
@@ -305,20 +305,20 @@ private:
                 ctx.Send(new IEventHandle(HttpProxy, helper, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request)));
             }
         } else {
-            Send(ev->Sender, new TEvents::TEvEndpointResponse(std::move(ready), /*success=*/true)); 
+            Send(ev->Sender, new TEvents::TEvEndpointResponse(std::move(ready), /*success=*/true));
         }
     }
 
-private: 
+private:
     TParsers Parsers;
     const TActorId HttpProxy;
-    const ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory; 
+    const ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     TString TraceId;
     TCache Cache;
 };
 
-NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { 
-    return new TDatabaseResolver(httpProxy, credentialsFactory); 
+NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+    return new TDatabaseResolver(httpProxy, credentialsFactory);
 }
 
 } /* namespace NYq */

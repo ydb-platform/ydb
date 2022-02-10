@@ -32,17 +32,17 @@ NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonC
     }
 }
 
-const TTypeAnnotationNode* GetItemType(const TExprNode& node) { 
+const TTypeAnnotationNode* GetItemType(const TExprNode& node) {
     const TTypeAnnotationNode* typeAnn = node.GetTypeAnn();
     switch (typeAnn->GetKind()) {
         case ETypeAnnotationKind::Flow:
-            return typeAnn->Cast<TFlowExprType>()->GetItemType(); 
+            return typeAnn->Cast<TFlowExprType>()->GetItemType();
         case ETypeAnnotationKind::Stream:
-            return typeAnn->Cast<TStreamExprType>()->GetItemType(); 
+            return typeAnn->Cast<TStreamExprType>()->GetItemType();
         default: break;
     }
     YQL_ENSURE(false, "Invalid solomon sink type " << typeAnn->GetKind());
-    return nullptr; 
+    return nullptr;
 }
 
 void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShardScheme& scheme) {
@@ -132,13 +132,13 @@ public:
         shardDesc.SetService(shard.Service().StringValue());
 
         shardDesc.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
-        shardDesc.SetUseSsl(clusterDesc->GetUseSsl()); 
+        shardDesc.SetUseSsl(clusterDesc->GetUseSsl());
 
-        const TTypeAnnotationNode* itemType = GetItemType(node); 
+        const TTypeAnnotationNode* itemType = GetItemType(node);
         FillScheme(*itemType, *shardDesc.MutableScheme());
 
-        if (auto maybeToken = shard.Token()) { 
-            shardDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value())); 
+        if (auto maybeToken = shard.Token()) {
+            shardDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
         }
 
         protoSettings.PackFrom(shardDesc);

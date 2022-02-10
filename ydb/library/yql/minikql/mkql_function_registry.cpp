@@ -99,7 +99,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
     };
 
 public:
-    TMutableFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins) 
+    TMutableFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
         : Builtins_(std::move(builtins))
     {
     }
@@ -127,7 +127,7 @@ public:
 
         auto libIt = LoadedLibraries_.find(libraryPath);
         if (libIt != LoadedLibraries_.end()) {
-            return; 
+            return;
         } else {
             lib = MakeIntrusive<TUdfLibrary>();
 #ifdef _win32_
@@ -352,7 +352,7 @@ public:
         return new TMutableFunctionRegistry(*this);
     }
 
-    void SetBackTraceCallback(NUdf::TBackTraceCallback callback) override { 
+    void SetBackTraceCallback(NUdf::TBackTraceCallback callback) override {
         BackTraceCallback_ = callback;
     }
 
@@ -440,7 +440,7 @@ public:
     }
 
     TIntrusivePtr<IMutableFunctionRegistry> Clone() const override {
-        return new TMutableFunctionRegistry(Builtins_); 
+        return new TMutableFunctionRegistry(Builtins_);
     }
 
 private:
@@ -514,11 +514,11 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(IBuiltinFunctionRegistry
 }
 
 TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
-    NKikimr::NUdf::TBackTraceCallback backtraceCallback, 
-    IBuiltinFunctionRegistry::TPtr&& builtins, 
-    bool allowUdfPatch, 
-    const TVector<TString>& udfsPaths, 
-    ui32 flags /* = 0 */) 
+    NKikimr::NUdf::TBackTraceCallback backtraceCallback,
+    IBuiltinFunctionRegistry::TPtr&& builtins,
+    bool allowUdfPatch,
+    const TVector<TString>& udfsPaths,
+    ui32 flags /* = 0 */)
 {
     auto registry = MakeHolder<TMutableFunctionRegistry>(std::move(builtins));
     if (allowUdfPatch) {

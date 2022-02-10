@@ -68,10 +68,10 @@ namespace NYdb::NConsoleClient {
 
     TCommandStream::TCommandStream()
         : TClientCommandTree("stream", {}, "DataStreams service operations") {
-        AddCommand(std::make_unique<TCommandStreamCreate>()); 
-        AddCommand(std::make_unique<TCommandStreamAlter>()); 
-        AddCommand(std::make_unique<TCommandStreamDrop>()); 
-        AddCommand(std::make_unique<TCommandStreamConsumer>()); 
+        AddCommand(std::make_unique<TCommandStreamCreate>());
+        AddCommand(std::make_unique<TCommandStreamAlter>());
+        AddCommand(std::make_unique<TCommandStreamDrop>());
+        AddCommand(std::make_unique<TCommandStreamConsumer>());
     }
 
     TCommandStreamCreate::TCommandStreamCreate()
@@ -198,8 +198,8 @@ namespace NYdb::NConsoleClient {
     }
 
     TCommandStreamConsumer::TCommandStreamConsumer() : TClientCommandTree("consumer", {}, "Consumer operations") {
-        AddCommand(std::make_unique<TCommandStreamConsumerAdd>()); 
-        AddCommand(std::make_unique<TCommandStreamConsumerDrop>()); 
+        AddCommand(std::make_unique<TCommandStreamConsumerAdd>());
+        AddCommand(std::make_unique<TCommandStreamConsumerDrop>());
     }
 
     TCommandStreamConsumerAdd::TCommandStreamConsumerAdd() : TYdbCommand("add", {}, "Consumer add operation") {}

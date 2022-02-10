@@ -309,11 +309,11 @@ public:
         Triple_ = llvm::Triple::normalize(triple);
         Module_->setTargetTriple(Triple_);
 
-        llvm::TargetOptions targetOptions; 
+        llvm::TargetOptions targetOptions;
         targetOptions.EnableFastISel = true;
-        // init manually, this field was lost in llvm::TargetOptions ctor :/ 
-        // make coverity happy 
-        targetOptions.StackProtectorGuardOffset = 0; 
+        // init manually, this field was lost in llvm::TargetOptions ctor :/
+        // make coverity happy
+        targetOptions.StackProtectorGuardOffset = 0;
 
         std::string what;
         auto&& engineBuilder = llvm::EngineBuilder(std::move(module));

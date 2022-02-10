@@ -26,12 +26,12 @@ TRunActorParams::TRunActorParams(
     const TString& userId,
     const TString& owner,
     const int64_t previousQueryRevision,
-    TVector<YandexQuery::Connection> connections, 
-    TVector<YandexQuery::Binding> bindings, 
+    TVector<YandexQuery::Connection> connections,
+    TVector<YandexQuery::Binding> bindings,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     THashMap<TString, TString> accountIdSignatures,
     YandexQuery::QueryContent::QueryType queryType,
-    YandexQuery::ExecuteMode executeMode, 
+    YandexQuery::ExecuteMode executeMode,
     const TString& resultId,
     const YandexQuery::StateLoadMode stateLoadMode,
     const YandexQuery::StreamingDisposition& streamingDisposition,
@@ -67,12 +67,12 @@ TRunActorParams::TRunActorParams(
     , UserId(userId)
     , Owner(owner)
     , PreviousQueryRevision(previousQueryRevision)
-    , Connections(std::move(connections)) 
-    , Bindings(std::move(bindings)) 
-    , CredentialsFactory(std::move(credentialsFactory)) 
-    , AccountIdSignatures(std::move(accountIdSignatures)) 
+    , Connections(std::move(connections))
+    , Bindings(std::move(bindings))
+    , CredentialsFactory(std::move(credentialsFactory))
+    , AccountIdSignatures(std::move(accountIdSignatures))
     , QueryType(queryType)
-    , ExecuteMode(executeMode) 
+    , ExecuteMode(executeMode)
     , ResultId(resultId)
     , StateLoadMode(stateLoadMode)
     , StreamingDisposition(streamingDisposition)

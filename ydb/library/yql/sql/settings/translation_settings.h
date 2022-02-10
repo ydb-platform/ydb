@@ -56,7 +56,7 @@ namespace NSQLTranslation {
 
         THashMap<TString, TString> ClusterMapping;
         TString PathPrefix;
-        // keys (cluster name) should be normalized 
+        // keys (cluster name) should be normalized
         THashMap<TString, TString> ClusterPathPrefixes;
         THashMap<TString, TString> ModuleMapping;
         THashSet<TString> Libraries;

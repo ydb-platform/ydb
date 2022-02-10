@@ -37,8 +37,8 @@ public:
     TClientCommandNodeN()
         : TClientCommandTree("*", {}, "<node id or hostname>")
     {
-        AddCommand(std::make_unique<TClientCommandDrain>()); 
-        AddCommand(std::make_unique<TClientCommandFill>()); 
+        AddCommand(std::make_unique<TClientCommandDrain>());
+        AddCommand(std::make_unique<TClientCommandFill>());
     }
 
     virtual void Config(TConfig& config) override {
@@ -94,7 +94,7 @@ public:
 TClientCommandNode::TClientCommandNode()
     : TClientCommandTree("node", {}, "Nodes infrastructure administration")
 {
-    AddCommand(std::make_unique<TClientCommandNodeN>()); 
+    AddCommand(std::make_unique<TClientCommandNodeN>());
 }
 
 }

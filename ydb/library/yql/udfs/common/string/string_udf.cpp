@@ -482,30 +482,30 @@ namespace {
         return result;
     }
 
-    SIMPLE_UDF(TFromByteList, char*(TListType<ui8>)) { 
-        auto input = args[0]; 
- 
-        if (auto elems = input.GetElements()) { 
-            const auto elemCount = input.GetListLength(); 
-            TUnboxedValue result = valueBuilder->NewStringNotFilled(input.GetListLength()); 
-            auto bufferPtr = result.AsStringRef().Data(); 
-            for (ui64 i = 0; i != elemCount; ++i) { 
-                *(bufferPtr++) = elems[i].Get<ui8>(); 
-            } 
-            return result; 
-        } 
- 
-        std::vector<char, NKikimr::NUdf::TStdAllocatorForUdf<char>> buffer; 
-        buffer.reserve(TUnboxedValuePod::InternalBufferSize); 
- 
-        const auto& iter = input.GetListIterator(); 
-        for (NUdf::TUnboxedValue item; iter.Next(item); ) { 
-            buffer.push_back(item.Get<ui8>()); 
-        } 
- 
-        return valueBuilder->NewString(TStringRef(buffer.data(), buffer.size())); 
-    } 
- 
+    SIMPLE_UDF(TFromByteList, char*(TListType<ui8>)) {
+        auto input = args[0];
+
+        if (auto elems = input.GetElements()) {
+            const auto elemCount = input.GetListLength();
+            TUnboxedValue result = valueBuilder->NewStringNotFilled(input.GetListLength());
+            auto bufferPtr = result.AsStringRef().Data();
+            for (ui64 i = 0; i != elemCount; ++i) {
+                *(bufferPtr++) = elems[i].Get<ui8>();
+            }
+            return result;
+        }
+
+        std::vector<char, NKikimr::NUdf::TStdAllocatorForUdf<char>> buffer;
+        buffer.reserve(TUnboxedValuePod::InternalBufferSize);
+
+        const auto& iter = input.GetListIterator();
+        for (NUdf::TUnboxedValue item; iter.Next(item); ) {
+            buffer.push_back(item.Get<ui8>());
+        }
+
+        return valueBuilder->NewString(TStringRef(buffer.data(), buffer.size()));
+    }
+
 #define STRING_REGISTER_UDF(udfName, ...) T##udfName,
 
     STRING_UDF_MAP(STRING_UDF)
@@ -552,8 +552,8 @@ namespace {
         THumanReadableQuantity,
         THumanReadableBytes,
         TPrec,
-        TToByteList, 
-        TFromByteList) 
+        TToByteList,
+        TFromByteList)
 }
 
 REGISTER_MODULES(TStringModule)

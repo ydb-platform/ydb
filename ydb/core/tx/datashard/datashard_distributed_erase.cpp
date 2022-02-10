@@ -953,7 +953,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
         case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: retry
             CancelProposal();
-            [[fallthrough]]; 
+            [[fallthrough]];
         default:
             Mon->ClientTxStatusCoordinatorDeclined->Inc();
             return CoordinatorDeclined(TStringBuilder() << "Tx failed to plan"

@@ -42,7 +42,7 @@ namespace NUdf {
 }
 }
 
-#define UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, create_impl)            \ 
+#define UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, create_impl)            \
     class udfName: public ::NYql::NUdf::TBoxedValue {                                    \
     public:                                                                                 \
         explicit udfName(::NYql::NUdf::IFunctionTypeInfoBuilder& builder)                \
@@ -78,7 +78,7 @@ namespace NUdf {
             Y_UNUSED(userType);                                                             \
             if (Name() == name) {                                                           \
                 typeBody if (!typesOnly) {                                                  \
-                    create_impl                                                             \ 
+                    create_impl                                                             \
                     SetIRImplementation(builder, irResourceId, irFunctionName);             \
                 }                                                                           \
                 return true;                                                                \
@@ -94,9 +94,9 @@ namespace NUdf {
         const ::NYql::NUdf::IValueBuilder* valueBuilder,                                 \
         const ::NYql::NUdf::TUnboxedValuePod* args) const
 
-#define UDF_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName) \ 
-        UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, builder.Implementation(new udfName(builder));) 
- 
+#define UDF_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName) \
+        UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, builder.Implementation(new udfName(builder));)
+
 #define UDF(udfName, typeBody) UDF_IMPL(udfName, typeBody, ;, ;, "", "")
 
 #define UDF_RUN_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName)        \
@@ -182,9 +182,9 @@ namespace NUdf {
 #define SIMPLE_UDF_WITH_IR(udfName, signature, irResourceId, irFunctionName) \
     UDF_IMPL(udfName, builder.SimpleSignature<signature>();, ;, ;, irResourceId, irFunctionName)
 
-#define SIMPLE_UDF_WITH_CREATE_IMPL(udfName, signature, create_impl) \ 
-    UDF_IMPL_EX(udfName, builder.SimpleSignature<signature>();, ;, ;, "", "", create_impl) 
- 
+#define SIMPLE_UDF_WITH_CREATE_IMPL(udfName, signature, create_impl) \
+    UDF_IMPL_EX(udfName, builder.SimpleSignature<signature>();, ;, ;, "", "", create_impl)
+
 #define SIMPLE_UDF_OPTIONS(udfName, signature, options) \
     UDF(udfName, builder.SimpleSignature<signature>(); options;)
 
@@ -214,9 +214,9 @@ namespace NUdf {
 template<bool CheckOptional, const char* TFuncName, template<class> class TFunc, typename... TUserTypes>
 class TUserDataTypeFuncFactory : public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker; 
- 
-public: 
+    typedef bool TTypeAwareMarker;
+
+public:
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto name = ::NYql::NUdf::TStringRef(TFuncName, std::strlen(TFuncName));
         return name;
@@ -255,23 +255,23 @@ public:
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
         bool typesOnly)
     {
-        if (Name() != name) { 
-            // the only case when we return false 
+        if (Name() != name) {
+            // the only case when we return false
             return false;
         }
- 
-        if (!userType) { 
-            builder.SetError("User type is not specified"); 
-            return true; 
-        } 
- 
+
+        if (!userType) {
+            builder.SetError("User type is not specified");
+            return true;
+        }
+
         auto typeHelper = builder.TypeInfoHelper();
         auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
         if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
             builder.SetError("Missing or invalid user type");
-            return true; 
+            return true;
         }
- 
+
         auto argsTypeInspector = TTupleTypeInspector(*typeHelper, userTypeInspector.GetElementType(0));
         if (!argsTypeInspector || argsTypeInspector.GetElementsCount() < 1) {
             builder.SetError("Missing or invalid user type arguments");
@@ -296,30 +296,30 @@ public:
 
         auto typeId = dataTypeInspector.GetTypeId();
         if (!DeclareSignatureImpl<TUserTypes...>(typeId, userType, builder, typesOnly)) {
-            TStringBuilder sb; 
+            TStringBuilder sb;
             sb << "User type " << NYql::NUdf::GetDataTypeInfo(NYql::NUdf::GetDataSlot(typeId)).Name << " is not supported";
-            builder.SetError(sb); 
-        } 
- 
-        return true; 
+            builder.SetError(sb);
+        }
+
+        return true;
     }
 };
 
 template<typename... TUdfs>
 class TSimpleUdfModuleHelper : public IUdfModule
 {
-    Y_HAS_SUBTYPE(TTypeAwareMarker); 
- 
+    Y_HAS_SUBTYPE(TTypeAwareMarker);
+
 public:
     void CleanupOnTerminate() const override {
     }
 
     template<typename TUdfType>
     void GetAllFunctionsImpl(IFunctionNamesSink& names) const {
-        auto r = names.Add(TUdfType::Name()); 
+        auto r = names.Add(TUdfType::Name());
         if (THasTTypeAwareMarker<TUdfType>::value) {
-            r->SetTypeAwareness(); 
-        } 
+            r->SetTypeAwareness();
+        }
     }
 
     template<typename THead1, typename THead2, typename... TTail>

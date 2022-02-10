@@ -885,39 +885,39 @@ namespace {
         return {lambda};
     }
 
-    bool CompileSetPackageVersion(const TAstNode& node, TContext& ctx) { 
-        if (node.GetChildrenCount() != 3) { 
-            ctx.AddError(node, "Expected list of size 3"); 
-            return false; 
-        } 
- 
-        const auto name = node.GetChild(1); 
-        if (name->IsAtom() || name->GetChildrenCount() != 2 || !name->GetChild(0)->IsAtom() || !name->GetChild(1)->IsAtom() || 
+    bool CompileSetPackageVersion(const TAstNode& node, TContext& ctx) {
+        if (node.GetChildrenCount() != 3) {
+            ctx.AddError(node, "Expected list of size 3");
+            return false;
+        }
+
+        const auto name = node.GetChild(1);
+        if (name->IsAtom() || name->GetChildrenCount() != 2 || !name->GetChild(0)->IsAtom() || !name->GetChild(1)->IsAtom() ||
             name->GetChild(0)->GetContent() != TStringBuf("quote")) {
-            ctx.AddError(*name, "Expected quoted atom for package name"); 
-            return false; 
-        } 
- 
-        const auto versionNode = node.GetChild(2); 
-        if (versionNode->IsAtom() || versionNode->GetChildrenCount() != 2 || !versionNode->GetChild(0)->IsAtom() || !versionNode->GetChild(1)->IsAtom() || 
+            ctx.AddError(*name, "Expected quoted atom for package name");
+            return false;
+        }
+
+        const auto versionNode = node.GetChild(2);
+        if (versionNode->IsAtom() || versionNode->GetChildrenCount() != 2 || !versionNode->GetChild(0)->IsAtom() || !versionNode->GetChild(1)->IsAtom() ||
             versionNode->GetChild(0)->GetContent() != TStringBuf("quote")) {
             ctx.AddError(*versionNode, "Expected quoted atom for package version");
-            return false; 
-        } 
- 
-        ui32 version = 0; 
-        if (!versionNode->GetChild(1)->IsAtom() || !TryFromString(versionNode->GetChild(1)->GetContent(), version)) { 
-            ctx.AddError(*versionNode, TString("Expected package version as number, bad content ") + versionNode->GetChild(1)->GetContent()); 
-            return false; 
-        } 
- 
-        if (ctx.ModuleResolver && !ctx.ModuleResolver->SetPackageDefaultVersion(TString(name->GetChild(1)->GetContent()), version)) { 
-            ctx.AddError(*versionNode, TStringBuilder() << "Unable to specify version " << version << " for package " << name->GetChild(1)->GetContent()); 
-            return false; 
-        } 
-        return true; 
-    } 
- 
+            return false;
+        }
+
+        ui32 version = 0;
+        if (!versionNode->GetChild(1)->IsAtom() || !TryFromString(versionNode->GetChild(1)->GetContent(), version)) {
+            ctx.AddError(*versionNode, TString("Expected package version as number, bad content ") + versionNode->GetChild(1)->GetContent());
+            return false;
+        }
+
+        if (ctx.ModuleResolver && !ctx.ModuleResolver->SetPackageDefaultVersion(TString(name->GetChild(1)->GetContent()), version)) {
+            ctx.AddError(*versionNode, TStringBuilder() << "Unable to specify version " << version << " for package " << name->GetChild(1)->GetContent());
+            return false;
+        }
+        return true;
+    }
+
     TExprNode::TPtr CompileBind(const TAstNode& node, TContext& ctx) {
         if (node.GetChildrenCount() != 3) {
             ctx.AddError(node, "Expected list of size 3");
@@ -1177,7 +1177,7 @@ namespace {
                     if (!CompileLibraryDef(*node, ctx))
                         return {};
                 } else if (firstChild->GetContent() == TStringBuf("set_package_version")) {
-                    if (!CompileSetPackageVersion(*node, ctx)) 
+                    if (!CompileSetPackageVersion(*node, ctx))
                         return {};
                 }
             }
@@ -1240,14 +1240,14 @@ namespace {
 
                 continue;
             } else if (firstChild->GetContent() == TStringBuf("set_package_version")) {
-                if (!topLevel) { 
-                    ctx.AddError(*firstChild, "set_package_version statements are only allowed on top level block"); 
+                if (!topLevel) {
+                    ctx.AddError(*firstChild, "set_package_version statements are only allowed on top level block");
                     return {};
-                } 
- 
-                continue; 
+                }
+
+                continue;
             } else {
-                ctx.AddError(*firstChild, ToString("expected either let, return or import, but have ") + firstChild->GetContent()); 
+                ctx.AddError(*firstChild, ToString("expected either let, return or import, but have ") + firstChild->GetContent());
                 return {};
             }
         }

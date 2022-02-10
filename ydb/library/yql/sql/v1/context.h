@@ -21,10 +21,10 @@ namespace NSQLTranslationV1 {
         return name == "$_";
     }
 
-    inline bool IsStreamingService(const TString& service) { 
-        return service == NYql::RtmrProviderName || service == NYql::PqProviderName; 
-    } 
- 
+    inline bool IsStreamingService(const TString& service) {
+        return service == NYql::RtmrProviderName || service == NYql::PqProviderName;
+    }
+
     struct TNodeWithUsageInfo : public TThrRefBase {
         explicit TNodeWithUsageInfo(const TNodePtr& node, TPosition namePos, int level)
             : Node(node)
@@ -76,7 +76,7 @@ namespace NSQLTranslationV1 {
         AsStringLiteral,
     };
 
-    class TContext { 
+    class TContext {
     public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
                  NYql::TIssues& issues);
@@ -116,26 +116,26 @@ namespace NSQLTranslationV1 {
             }
         }
 
-        bool HasCluster(const TString& cluster) const { 
-            return GetClusterProvider(cluster).Defined(); 
-        } 
- 
+        bool HasCluster(const TString& cluster) const {
+            return GetClusterProvider(cluster).Defined();
+        }
+
         TMaybe<TString> GetClusterProvider(const TString& cluster) const {
-            TString unusedNormalizedClusterName; 
-            return GetClusterProvider(cluster, unusedNormalizedClusterName); 
-        } 
- 
-        TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const { 
-            auto provider = ClusterMapping.GetClusterProvider(cluster, normalizedClusterName); 
+            TString unusedNormalizedClusterName;
+            return GetClusterProvider(cluster, unusedNormalizedClusterName);
+        }
+
+        TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const {
+            auto provider = ClusterMapping.GetClusterProvider(cluster, normalizedClusterName);
             if (!provider) {
                 if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) {
-                    normalizedClusterName = cluster; 
+                    normalizedClusterName = cluster;
                     return TString(NYql::KikimrProviderName);
                 }
                 return Nothing();
             }
 
-            return provider; 
+            return provider;
         }
 
         bool HasNonYtProvider(const ISource& source) const;
@@ -161,9 +161,9 @@ namespace NSQLTranslationV1 {
         bool AddExport(TPosition symbolPos, const TString& symbolName);
         TString AddImport(const TVector<TString>& modulePath);
         TString AddSimpleUdf(const TString& udf);
-        void SetPackageVersion(const TString& packageName, ui32 version); 
+        void SetPackageVersion(const TString& packageName, ui32 version);
 
-        bool IsStreamingService(const TStringBuf service) const; 
+        bool IsStreamingService(const TStringBuf service) const;
 
         bool CheckColumnReference(TPosition pos, const TString& name) {
             const bool allowed = GetColumnReferenceState() != EColumnRefState::Deny;
@@ -188,7 +188,7 @@ namespace NSQLTranslationV1 {
     private:
         NYql::TPosition Position;
         THolder<TStringOutput> IssueMsgHolder;
-        NSQLTranslation::TClusterMapping ClusterMapping; 
+        NSQLTranslation::TClusterMapping ClusterMapping;
         TString PathPrefix;
         THashMap<TString, TString> ProviderPathPrefixes;
         THashMap<TString, TString> ClusterPathPrefixes;
@@ -255,9 +255,9 @@ namespace NSQLTranslationV1 {
         // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
         bool FlexibleTypes = false;
         THashMap<TString, TMaybe<TString>> Libraries; // alias -> optional file
-        THashMap<TString, ui32> PackageVersions; 
+        THashMap<TString, ui32> PackageVersions;
         NYql::TWarningPolicy WarningPolicy;
-        TString PqReadByRtmrCluster; 
+        TString PqReadByRtmrCluster;
     };
 
     class TColumnRefScope {

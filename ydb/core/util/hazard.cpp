@@ -62,7 +62,7 @@ THazardPointer* THazardDomain::Acquire() {
     }
 
     while (index < head->Offset) {
-        // coverity[overwrite_var : FALSE]: false positive, reported to coverity 
+        // coverity[overwrite_var : FALSE]: false positive, reported to coverity
         head = head->Next;
         Y_VERIFY(head, "Unexpected failure to find index %" PRISZT " in chunk list", index);
     }

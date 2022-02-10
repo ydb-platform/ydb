@@ -15,7 +15,7 @@ using namespace NYql;
 using namespace NThreading;
 
 static TString DATA = "1234567890";
-static TString DATA_MD5 = "e807f1fcf82d132f9bb018ca6738a19f"; 
+static TString DATA_MD5 = "e807f1fcf82d132f9bb018ca6738a19f";
 
 Y_UNIT_TEST_SUITE(TStorageTests) {
 
@@ -43,17 +43,17 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         }
     };
 
-    TFileLinkPtr PutFile(const TString& name, TStorage& storage, const TString& tmpOutName = {}, int sleepSeconds = 0) { 
-        return storage.Put(name, tmpOutName, DATA_MD5, [&](const TFsPath& storagePath) { 
-            Sleep(TDuration::Seconds(sleepSeconds)); 
+    TFileLinkPtr PutFile(const TString& name, TStorage& storage, const TString& tmpOutName = {}, int sleepSeconds = 0) {
+        return storage.Put(name, tmpOutName, DATA_MD5, [&](const TFsPath& storagePath) {
+            Sleep(TDuration::Seconds(sleepSeconds));
             TStringInput in(DATA);
-            TUnbufferedFileOutput out(storagePath); 
-            return std::make_pair(TransferData(&in, &out), DATA_MD5); 
+            TUnbufferedFileOutput out(storagePath);
+            return std::make_pair(TransferData(&in, &out), DATA_MD5);
         });
     }
 
     TFileLinkPtr PutFileWithSleep(const TString& name, TStorage& storage) {
-        return PutFile(name, storage, {}, 1); 
+        return PutFile(name, storage, {}, 1);
     }
 
     Y_UNIT_TEST(Put) {

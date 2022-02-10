@@ -21,8 +21,8 @@ RECURSE(
     bloom
     boost_test
     bstr
-    build_info 
-    build_info/ut 
+    build_info
+    build_info/ut
     capabilities
     celery_dashboard
     certifi

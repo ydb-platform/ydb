@@ -18,9 +18,9 @@ namespace {
 
 const ui64 DEFAULT_STACK_ITEMS = 16;
 
-static const TStatKey Join_Spill_Count("Join_Spill_Count", true); 
-static const TStatKey Join_Spill_MaxFileSize("Join_Spill_MaxFileSize", false); 
-static const TStatKey Join_Spill_MaxRowsCount("Join_Spill_MaxRowsCount", false); 
+static const TStatKey Join_Spill_Count("Join_Spill_Count", true);
+static const TStatKey Join_Spill_MaxFileSize("Join_Spill_MaxFileSize", false);
+static const TStatKey Join_Spill_MaxRowsCount("Join_Spill_MaxRowsCount", false);
 
 enum class EOutputMode {
     Unknown,

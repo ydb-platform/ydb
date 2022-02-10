@@ -282,7 +282,7 @@ protected:
 
     // Template for visitor implementation.
     struct TBaseHandlersVisitor {
-        TBaseHandlersVisitor(const TSettings& settings, TEventInfo& eventInfo) 
+        TBaseHandlersVisitor(const TSettings& settings, TEventInfo& eventInfo)
             : Settings(settings)
             , EventInfo(eventInfo)
         {}

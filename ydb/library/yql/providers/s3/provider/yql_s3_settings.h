@@ -23,7 +23,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     TS3Configuration();
     TS3Configuration(const TS3Configuration&) = delete;
 
-    void Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx); 
+    void Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx);
 
     bool HasCluster(TStringBuf cluster) const;
 

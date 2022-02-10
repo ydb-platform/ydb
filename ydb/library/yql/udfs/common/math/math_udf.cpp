@@ -43,8 +43,8 @@
     XX(IsNaN, bool(TAutoMap<double>), ;)                                                            \
     XX(Sigmoid, double(TAutoMap<double>), ;)                                                        \
     XX(FuzzyEquals, bool(TAutoMap<double>, TAutoMap<double>, TEpsilon), builder.OptionalArgs(1))    \
-    XX(Mod, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                             \ 
-    XX(Rem, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                             \ 
+    XX(Mod, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                             \
+    XX(Rem, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                             \
     XXL(Round, double(TAutoMap<double>, TPrecision), builder.OptionalArgs(1))
 
 #define MATH_UDF_IMPL(name, signature, options)                                                             \

@@ -56,8 +56,8 @@ LLVM_BC(
     SigmoidIR
     FuzzyEqualsIR
     RoundIR
-    ModIR 
-    RemIR 
+    ModIR
+    RemIR
 )
 
 PEERDIR(

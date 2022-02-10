@@ -4,7 +4,7 @@
 #include "backtrace.h"
 
 #include <util/stream/output.h>
-#include <util/stream/format.h>
+#include <util/stream/format.h> 
 #include <util/generic/array_ref.h>
 #include <util/generic/string.h>
 

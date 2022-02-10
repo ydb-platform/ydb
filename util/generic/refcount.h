@@ -151,12 +151,12 @@ private:
 };
 
 template <>
-struct TCommonLockOps<TAtomicCounter> {
+struct TCommonLockOps<TAtomicCounter> { 
     static inline void Acquire(TAtomicCounter* t) noexcept {
-        t->Inc();
-    }
+        t->Inc(); 
+    } 
 
     static inline void Release(TAtomicCounter* t) noexcept {
-        t->Dec();
-    }
-};
+        t->Dec(); 
+    } 
+}; 

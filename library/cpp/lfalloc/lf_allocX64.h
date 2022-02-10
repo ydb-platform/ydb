@@ -9,7 +9,7 @@
 #include <util/system/compat.h>
 #include <util/system/compiler.h>
 #include <util/system/types.h>
-
+ 
 #ifdef _MSC_VER
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
@@ -454,7 +454,7 @@ static void* LargeBlockAlloc(size_t _nSize, ELFAllocCounter counter) {
     char* pRes = (char*)VirtualAlloc(0, (pgCount + 1) * 4096ll, MEM_COMMIT, PAGE_READWRITE);
     if (Y_UNLIKELY(pRes == 0)) {
         NMalloc::AbortFromCorruptedAllocator("out of memory");
-    }
+    } 
 #else
 
     IncrementCounter(counter, pgCount * 4096ll);

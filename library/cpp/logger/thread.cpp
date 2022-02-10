@@ -81,9 +81,9 @@ public:
             QueueOverflowCallback_();
         } else {
             ythrow yexception() << "log queue exhausted";
-        }
+        } 
     }
-
+ 
     // Write an emergency message when the memory allocator is corrupted.
     // The TThreadedLogBackend object can't be used after this method is called.
     inline void WriteEmergencyData(const TLogRecord& rec) noexcept {
@@ -136,14 +136,14 @@ void TThreadedLogBackend::WriteData(const TLogRecord& rec) {
 void TThreadedLogBackend::ReopenLog() {
     Impl_->ReopenLog();
 }
-
+ 
 void TThreadedLogBackend::ReopenLogNoFlush() {
     Impl_->ReopenLogNoFlush();
 }
 
-void TThreadedLogBackend::WriteEmergencyData(const TLogRecord& rec) {
-    Impl_->WriteEmergencyData(rec);
-}
+void TThreadedLogBackend::WriteEmergencyData(const TLogRecord& rec) { 
+    Impl_->WriteEmergencyData(rec); 
+} 
 
 size_t TThreadedLogBackend::QueueSize() const {
     return Impl_->QueueSize();

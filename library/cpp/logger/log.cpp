@@ -150,7 +150,7 @@ bool TLog::IsOpen() const noexcept {
     return Impl_->IsOpen();
 }
 
-void TLog::AddLog(const char* format, ...) const {
+void TLog::AddLog(const char* format, ...) const { 
     va_list args;
     va_start(args, format);
 
@@ -239,7 +239,7 @@ void TLog::Write(ELogPriority priority, const TStringBuf data) const {
     Write(priority, data.data(), data.size());
 }
 
-void TLog::Write(const char* data, size_t len) const {
+void TLog::Write(const char* data, size_t len) const { 
     Write(Impl_->DefaultPriority(), data, len);
 }
 

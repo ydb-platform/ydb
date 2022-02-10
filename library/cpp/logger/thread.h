@@ -20,7 +20,7 @@ public:
     // Write an emergency message when the memory allocator is corrupted.
     // The TThreadedLogBackend object can't be used after this method is called.
     void WriteEmergencyData(const TLogRecord& rec);
-
+ 
 private:
     class TImpl;
     THolder<TImpl> Impl_;

@@ -1,58 +1,58 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
 import enum
-
-
+ 
+ 
 @enum.unique
 class MessageBusStatus(enum.IntEnum):
-    """
-    Message Bus response statuses.
-
-    See /arcadia/kikimr/core/client/base/msgbus.h
-
+    """ 
+    Message Bus response statuses. 
+ 
+    See /arcadia/kikimr/core/client/base/msgbus.h 
+ 
     See /arcadia/ydb/core/protos/msgbus.proto
-    """
-
-    # These are from /arcadia/kikimr/core/client/base/msgbus.h
-    MSTATUS_UNKNOWN = 0
-    MSTATUS_OK = 1
-    MSTATUS_ERROR = 128
-    MSTATUS_INPROGRESS = 129
-    MSTATUS_TIMEOUT = 130
-    MSTATUS_NOTREADY = 131
-    MSTATUS_ABORTED = 132
-    MSTATUS_INTERNALERROR = 133
-    MSTATUS_REJECTED = 134
-
+    """ 
+ 
+    # These are from /arcadia/kikimr/core/client/base/msgbus.h 
+    MSTATUS_UNKNOWN = 0 
+    MSTATUS_OK = 1 
+    MSTATUS_ERROR = 128 
+    MSTATUS_INPROGRESS = 129 
+    MSTATUS_TIMEOUT = 130 
+    MSTATUS_NOTREADY = 131 
+    MSTATUS_ABORTED = 132 
+    MSTATUS_INTERNALERROR = 133 
+    MSTATUS_REJECTED = 134 
+ 
     @staticmethod
     def is_ok_status(status):
         return status in (
             MessageBusStatus.MSTATUS_OK,
             MessageBusStatus.MSTATUS_INPROGRESS
         )
-
+ 
 
 @enum.unique
 class EMessageStatus(enum.IntEnum):
-    """
+    """ 
     See /arcadia/library/cpp/messagebus/message_status.h
-    """
-    MESSAGE_OK = 0
-    MESSAGE_CONNECT_FAILED = 1
-    MESSAGE_TIMEOUT = 2
-    MESSAGE_SERVICE_UNKNOWN = 3
-    MESSAGE_BUSY = 4
-    MESSAGE_UNKNOWN = 5
-    MESSAGE_DESERIALIZE_ERROR = 6
-    MESSAGE_HEADER_CORRUPTED = 7
-    MESSAGE_DECOMPRESS_ERROR = 8
-    MESSAGE_MESSAGE_TOO_LARGE = 9
-    MESSAGE_REPLY_FAILED = 10
-    MESSAGE_DELIVERY_FAILED = 11
-    MESSAGE_INVALID_VERSION = 12
-    MESSAGE_SERVICE_TOOMANY = 13
-    MESSAGE_SHUTDOWN = 14
-    MESSAGE_DONT_ASK = 15
+    """ 
+    MESSAGE_OK = 0 
+    MESSAGE_CONNECT_FAILED = 1 
+    MESSAGE_TIMEOUT = 2 
+    MESSAGE_SERVICE_UNKNOWN = 3 
+    MESSAGE_BUSY = 4 
+    MESSAGE_UNKNOWN = 5 
+    MESSAGE_DESERIALIZE_ERROR = 6 
+    MESSAGE_HEADER_CORRUPTED = 7 
+    MESSAGE_DECOMPRESS_ERROR = 8 
+    MESSAGE_MESSAGE_TOO_LARGE = 9 
+    MESSAGE_REPLY_FAILED = 10 
+    MESSAGE_DELIVERY_FAILED = 11 
+    MESSAGE_INVALID_VERSION = 12 
+    MESSAGE_SERVICE_TOOMANY = 13 
+    MESSAGE_SHUTDOWN = 14 
+    MESSAGE_DONT_ASK = 15 
 
 
 @enum.unique

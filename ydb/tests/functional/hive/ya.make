@@ -1,5 +1,5 @@
 OWNER(g:kikimr)
-
+ 
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
@@ -8,7 +8,7 @@ TEST_SRCS(
     test_kill_tablets.py
     test_drain.py
 )
-
+ 
 
 REQUIREMENTS(
     cpu:4

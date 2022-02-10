@@ -1,11 +1,11 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
 import time
 import os
 
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.protobuf_ss import TSchemeOperationStatus
-
+ 
 import grpc
 import six
 
@@ -34,8 +34,8 @@ def kikimr_client_factory(server, port, cluster=None, retry_count=1):
         server, port, cluster=cluster,
         retry_count=retry_count
     )
-
-
+ 
+ 
 def channels_list():
     return os.getenv('CHANNELS_LIST', '')
 
@@ -54,9 +54,9 @@ def to_bytes(v):
 
 class KiKiMRMessageBusClient(object):
     def __init__(self, server, port, cluster=None, retry_count=1):
-        self.server = server
-        self.port = port
-        self._cluster = cluster
+        self.server = server 
+        self.port = port 
+        self._cluster = cluster 
         self.__domain_id = 1
         self.__retry_count = retry_count
         self.__retry_sleep_seconds = 10
@@ -66,7 +66,7 @@ class KiKiMRMessageBusClient(object):
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.TGRpcServerStub(self._channel)
-
+ 
     def describe(self, path, token):
         request = msgbus.TSchemeDescribe()
         request.Path = path
@@ -165,13 +165,13 @@ class KiKiMRMessageBusClient(object):
         request.FlatTxId.SchemeShardTabletId = tablet_id
         request.PollOptions.Timeout = timeout * 1000
         return self.invoke(request, 'SchemeOperationStatus')
-
+ 
     def send(self, request, method):
         return self.invoke(request, method)
-
+ 
     def ddl_exec_status(self, flat_tx_id):
         return self.flat_transaction_status(flat_tx_id.tx_id, flat_tx_id.schemeshard_tablet_id)
-
+ 
     def add_attr(self, working_dir, name, attributes, token=None):
         request = msgbus.TSchemeOperation()
         request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpAlterUserAttributes
@@ -242,7 +242,7 @@ class KiKiMRMessageBusClient(object):
             request,
             'HiveCreateTablet'
         )
-
+ 
     def local_enumerate_tablets(self, tablet_type, node_id=1):
         request = msgbus.TLocalEnumerateTablets()
         request.DomainUid = self.__domain_id
@@ -379,7 +379,7 @@ class KiKiMRMessageBusClient(object):
             request.DeadlineInstantMs = deadline_ms
         return self.invoke(request, 'KeyValue')
 
-    def tablet_kill(self, tablet_id):
+    def tablet_kill(self, tablet_id): 
         request = msgbus.TTabletKillRequest(TabletID=tablet_id)
         return self.invoke(request, 'TabletKillRequest')
 
@@ -391,6 +391,6 @@ class KiKiMRMessageBusClient(object):
             request.TabletIDs.extend(tablet_ids)
         request.Alive = True
         return self.invoke(request, 'TabletStateRequest')
-
+ 
     def __del__(self):
         self.close()

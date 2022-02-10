@@ -22,17 +22,17 @@ DEFAULT_INTERCONNECT_PORT = 19001
 DEFAULT_MBUS_PORT = 2134
 DEFAULT_MON_PORT = 8765
 DEFAULT_GRPC_PORT = 2135
-
-
+ 
+ 
 def kikimr_cluster_factory(configurator=None, config_path=None):
     logger.info("All test params = {}".format(pprint.pformat(yatest_common.get_param_dict_copy())))
     logger.info("Starting standalone YDB cluster")
     if config_path is not None:
         return ExternalKiKiMRCluster(config_path)
-    else:
+    else: 
         return KiKiMR(configurator)
-
-
+ 
+ 
 def load_yaml(path):
     with open(path, 'r') as r:
         data = yaml.safe_load(r.read())
@@ -54,11 +54,11 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             self.__slot_count = max(self.__slot_count, domain['dynamic_slots'])
 
         super(ExternalKiKiMRCluster, self).__init__()
-
-    @property
-    def config(self):
-        return self.__config
-
+ 
+    @property 
+    def config(self): 
+        return self.__config 
+ 
     def add_storage_pool(self, erasure=None):
         raise NotImplementedError()
 

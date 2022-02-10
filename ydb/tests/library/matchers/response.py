@@ -10,7 +10,7 @@ from ydb.tests.library.common.msgbus_types import EReplyStatus, TStorageStatusFl
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.matchers.collection import contains
 from ydb.tests.library.matchers.response_matchers import ProtobufWithStatusMatcher
-
+ 
 
 def to_bytes(v):
     if v is None:
@@ -218,10 +218,10 @@ def is_response_with_status(status):
     return ProtobufWithStatusMatcher(status)
 
 
-def is_ok_response():
+def is_ok_response(): 
     return is_response_with_status(MessageBusStatus.MSTATUS_OK)
 
-
+ 
 def is_valid_response_with_field(field_name, field_matcher):
     return all_of(
         has_property('Status', MessageBusStatus.MSTATUS_OK),

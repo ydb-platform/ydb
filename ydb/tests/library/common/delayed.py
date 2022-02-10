@@ -2,12 +2,12 @@
 from hamcrest import has_properties, contains_inanyorder, is_not
 import logging
 import time
-
+ 
 from ydb.tests.library.common.wait_for import wait_for_and_assert, wait_for
 from ydb.tests.library.matchers.response_matchers import DynamicFieldsProtobufMatcher
 from ydb.tests.library.common.types import TabletStates
 from ydb.tests.library.wardens import hive
-
+ 
 logger = logging.getLogger(__name__)
 
 
@@ -21,7 +21,7 @@ def wait_tablets_state_by_id(
 
     def query_tablet_state():
         return client.tablet_state(tablet_ids=tablet_ids)
-
+ 
     wait_for_and_assert(
         query_tablet_state,
         DynamicFieldsProtobufMatcher().TabletStateInfo(

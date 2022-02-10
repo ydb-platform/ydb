@@ -7,7 +7,7 @@ from enum import unique, Enum, IntEnum
 from ydb.tests.library.common.generators import int_between, one_of, float_in, string_with_length, actor_id
 
 
-@unique
+@unique 
 class DeltaTypes(IntEnum):
     AddTable = 1,
     DropTable = 2,
@@ -66,35 +66,35 @@ class Erasure(Enum):
     MIRROR_3_2 = _erasure_type(id_=8, min_fail_domains=5, min_alive_replicas=3)
     MIRROR_3_DC = _erasure_type(id_=9, min_fail_domains=3, min_alive_replicas=3)
     MIRROR_3OF4 = _erasure_type(id_=18, min_fail_domains=8, min_alive_replicas=6)
-
-    def __init__(self, id_, min_fail_domains, min_alive_replicas):
+ 
+    def __init__(self, id_, min_fail_domains, min_alive_replicas): 
         self.__id = id_
         self.__min_fail_domains = min_fail_domains
-        self.__min_alive_replicas = min_alive_replicas
+        self.__min_alive_replicas = min_alive_replicas 
 
-    def __str__(self):
+    def __str__(self): 
         return self.name.replace("_", "-").lower()
-
-    def __repr__(self):
-        return self.__str__()
-
+ 
+    def __repr__(self): 
+        return self.__str__() 
+ 
     def __int__(self):
         return self.__id
-
+ 
     @property
     def min_fail_domains(self):
         return self.__min_fail_domains
 
-    @property
-    def min_alive_replicas(self):
-        return self.__min_alive_replicas
+    @property 
+    def min_alive_replicas(self): 
+        return self.__min_alive_replicas 
 
-    @staticmethod
-    def from_string(string_):
-        string_ = string_.upper()
-        string_ = string_.replace("-", "_")
-        return Erasure[string_]
-
+    @staticmethod 
+    def from_string(string_): 
+        string_ = string_.upper() 
+        string_ = string_.replace("-", "_") 
+        return Erasure[string_] 
+ 
     @staticmethod
     def from_int(species):
         for candidate in list(Erasure):
@@ -111,19 +111,19 @@ class Erasure(Enum):
 
 
 @unique
-class TabletStates(IntEnum):
-    Created = 0,
-    ResolveStateStorage = 1,
-    Candidate = 2,
-    BlockBlobStorage = 3,
-    RebuildGraph = 4,
-    WriteZeroEntry = 5,
-    Restored = 6,
-    Discover = 7,
-    Lock = 8,
-    Dead = 9,
+class TabletStates(IntEnum): 
+    Created = 0, 
+    ResolveStateStorage = 1, 
+    Candidate = 2, 
+    BlockBlobStorage = 3, 
+    RebuildGraph = 4, 
+    WriteZeroEntry = 5, 
+    Restored = 6, 
+    Discover = 7, 
+    Lock = 8, 
+    Dead = 9, 
     Active = 10
-
+ 
     @staticmethod
     def from_int(val):
         for tablet_state in list(TabletStates):
@@ -141,7 +141,7 @@ def _tablet_type(id_, magic, is_unique=False, service_name=None):
     return id_, magic, is_unique, service_name
 
 
-@unique
+@unique 
 class TabletTypes(Enum):
     TX_DUMMY = _tablet_type(8, 999)
     RTMR_PARTITION = _tablet_type(10, 999)
@@ -229,9 +229,9 @@ class AbstractTypeEnum(Enum):
     def as_obj(self, value):
         return self.to_obj_converter(value)
 
-    @property
-    def idn(self):
-        return self._idn_
+    @property 
+    def idn(self): 
+        return self._idn_ 
 
     @classmethod
     def from_int(cls, idn):
@@ -239,7 +239,7 @@ class AbstractTypeEnum(Enum):
             if idn == v._idn_:
                 return v
         raise AssertionError('There is no PType with value = ' + str(idn))
-
+ 
 
 def from_bytes(val):
     try:
@@ -264,20 +264,20 @@ class PType(AbstractTypeEnum):
 
     Double = _ptype_from(32, float_in(-100, 100), float, proto_field='Double')
     Float = _ptype_from(33, float_in(-100, 100), float, proto_field='Float')
-
+ 
     # Rework Pair later
     PairUi64Ui64 = _ptype_from(257, int_between(0, 2 ** 64 - 1), int)
 
     String = _ptype_from(4097, string_with_length(4), str)
     SmallBoundedString = _ptype_from(4113, string_with_length(4), str)
     LargeBoundedString = _ptype_from(4114, string_with_length(500), str)
-
+ 
     Utf8 = _ptype_from(4608, string_with_length(500), from_bytes)
 
     ActorID = _ptype_from(8193, actor_id(), str)
 
     def __init__(self, idn, generator, to_obj_converter, proto_field, min_value, max_value):
-        self._idn_ = idn
+        self._idn_ = idn 
         self.generator = generator
         self.to_obj_converter = to_obj_converter
         self._proto_field = proto_field

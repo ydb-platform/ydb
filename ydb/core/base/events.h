@@ -86,9 +86,9 @@ struct TKikimrEvents : TEvents {
         ES_BLOCKSTORE, //4162
         ES_RTMR_ICBUS,
         ES_TENANT_POOL,
-        ES_USER_REGISTRY,
-        ES_TVM_SETTINGS_UPDATER,
-        ES_PQ_CLUSTERS_UPDATER,
+        ES_USER_REGISTRY, 
+        ES_TVM_SETTINGS_UPDATER, 
+        ES_PQ_CLUSTERS_UPDATER, 
         ES_TENANT_SLOT_BROKER,
         ES_GRPC_CALLS,
         ES_CONSOLE,

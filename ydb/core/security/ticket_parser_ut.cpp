@@ -4,13 +4,13 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-
-#include "ticket_parser.h"
-
-namespace NKikimr {
-
+ 
+#include "ticket_parser.h" 
+ 
+namespace NKikimr { 
+ 
 Y_UNIT_TEST_SUITE(TTicketParserTest) {
-
+ 
     Y_UNIT_TEST(LoginGood) {
         using namespace Tests;
         TPortManager tp;
@@ -133,5 +133,5 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT_EQUAL(result->Error.Message, "Token is not in correct format");
     }
-}
-}
+} 
+} 

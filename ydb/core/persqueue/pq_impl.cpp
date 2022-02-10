@@ -1499,7 +1499,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this
         Y_VERIFY(mSize > 204800);
         ui64 receiveTimestampMs = TAppData::TimeProvider->Now().MilliSeconds();
-        bool disableDeduplication = cmd.GetDisableDeduplication();
+        bool disableDeduplication = cmd.GetDisableDeduplication(); 
         if (cmd.GetData().size() > mSize) {
             if (cmd.HasPartNo()) {
                 ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -1650,7 +1650,7 @@ void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& pa
     } else if (cmd.HasPartNo() && cmd.GetPartNo() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid partNo in read request: " << ToString(req).data());
-    } else if (cmd.HasMaxTimeLagMs() && cmd.GetMaxTimeLagMs() < 0) {
+    } else if (cmd.HasMaxTimeLagMs() && cmd.GetMaxTimeLagMs() < 0) { 
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid maxTimeLagMs in read request: " << ToString(req).data());
     } else {

@@ -875,9 +875,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasPQConfig()) {
-        AppData->PQConfig.CopyFrom(runConfig.AppConfig.GetPQConfig());
+        AppData->PQConfig.CopyFrom(runConfig.AppConfig.GetPQConfig()); 
     }
-
+ 
     if (runConfig.AppConfig.HasPQClusterDiscoveryConfig()) {
         AppData->PQClusterDiscoveryConfig.CopyFrom(runConfig.AppConfig.GetPQClusterDiscoveryConfig());
     }
@@ -891,9 +891,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasAuthConfig()) {
-        AppData->AuthConfig.CopyFrom(runConfig.AppConfig.GetAuthConfig());
+        AppData->AuthConfig.CopyFrom(runConfig.AppConfig.GetAuthConfig()); 
     }
-
+ 
     if (runConfig.AppConfig.HasKeyConfig()) {
         AppData->KeyConfig.CopyFrom(runConfig.AppConfig.GetKeyConfig());
     }

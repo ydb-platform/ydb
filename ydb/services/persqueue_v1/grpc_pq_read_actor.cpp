@@ -783,8 +783,8 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     SLITotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsTotal"}, true, "sensor", false);
     SLITotal.Inc();
 
-}
-
+} 
+ 
 
 void TReadSessionActor::RegisterSession(const TActorId& pipe, const TString& topic, const TVector<ui32>& groups, const TActorContext& ctx)
 {
@@ -808,8 +808,8 @@ void TReadSessionActor::RegisterSession(const TActorId& pipe, const TString& top
 void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
     InitDone = true;
 
-    for (auto& t : Topics) {
-        auto& topic = t.first;
+    for (auto& t : Topics) { 
+        auto& topic = t.first; 
         RegisterSession(t.second.PipeClient, topic, t.second.Groups, ctx);
         NumPartitionsFromTopic[t.second.TopicNameConverter->GetClientsideName()] = 0;
     }
@@ -1647,7 +1647,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionReady::TPtr& ev, const TA
 
 
 void TReadSessionActor::HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const TActorContext& ctx) {
-    CloseSession(ev->Get()->Reason, ev->Get()->ErrorCode, ctx);
+    CloseSession(ev->Get()->Reason, ev->Get()->ErrorCode, ctx); 
 }
 
 
@@ -2455,7 +2455,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     }
     if (req->MaxTimeLagMs) {
         read->SetMaxTimeLagMs(req->MaxTimeLagMs);
-    }
+    } 
     if (req->ReadTimestampMs) {
         read->SetReadTimestampMs(req->ReadTimestampMs);
     }

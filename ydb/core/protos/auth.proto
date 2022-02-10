@@ -1,9 +1,9 @@
 package NKikimrProto;
-option java_package = "ru.yandex.kikimr.proto";
-
-message TAuthConfig {
-    optional TUserRegistryConfig UserRegistryConfig = 1;
-    optional TTVMConfig TVMConfig = 2;
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
+message TAuthConfig { 
+    optional TUserRegistryConfig UserRegistryConfig = 1; 
+    optional TTVMConfig TVMConfig = 2; 
     optional string StaffApiUserToken = 3;
     optional string BlackBoxEndpoint = 4 [default = "blackbox.yandex-team.ru"];
     optional string AccessServiceEndpoint = 5 [default = "as.private-api.cloud.yandex.net:4286"];
@@ -42,17 +42,17 @@ message TAuthConfig {
     optional string PathToRootCA = 60 [default = "/etc/ssl/certs/YandexInternalRootCA.pem"]; // root CA certificate PEM/x509
     optional uint32 AccessServiceGrpcKeepAliveTimeMs = 70 [default = 10000]; // CLOUD-27573
     optional uint32 AccessServiceGrpcKeepAliveTimeoutMs = 71 [default = 1000]; // CLOUD-27573
-}
-
-message TUserRegistryConfig {
-    optional string Query = 1; // Must take uid (ui64) as parameter and return user (utf8)
-}
-
-message TTVMConfig {
-    optional bool Enabled = 1;
-    optional uint32 ServiceTVMId = 2;
-    optional string PublicKeys = 3;
-    optional bool UpdatePublicKeys = 4 [default = true];
-    optional uint64 UpdatePublicKeysSuccessTimeout = 5 [default = 82800];
-    optional uint64 UpdatePublicKeysFailureTimeout = 6 [default = 10];
-}
+} 
+ 
+message TUserRegistryConfig { 
+    optional string Query = 1; // Must take uid (ui64) as parameter and return user (utf8) 
+} 
+ 
+message TTVMConfig { 
+    optional bool Enabled = 1; 
+    optional uint32 ServiceTVMId = 2; 
+    optional string PublicKeys = 3; 
+    optional bool UpdatePublicKeys = 4 [default = true]; 
+    optional uint64 UpdatePublicKeysSuccessTimeout = 5 [default = 82800]; 
+    optional uint64 UpdatePublicKeysFailureTimeout = 6 [default = 10]; 
+} 

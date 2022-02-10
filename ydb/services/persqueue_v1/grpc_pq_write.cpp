@@ -49,7 +49,7 @@ void TPQWriteService::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 }
 
-
+ 
 ui64 TPQWriteService::NextCookie() {
     return ++LastCookie;
 }
@@ -214,20 +214,20 @@ bool TPQWriteService::TooMuchSessions() {
 
 TString TPQWriteService::AvailableLocalCluster(const TActorContext&) const {
     return HaveClusters && Enabled ? *LocalCluster : "";
-}
+} 
+ 
 
-
-
-
-
+ 
+ 
+ 
 ///////////////////////////////////////////////////////////////////////////////
 
+} 
 }
 }
-}
-
-
+ 
+ 
 void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) {
 
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQWriteServiceActorID(), ev->Release().Release());
-}
+} 

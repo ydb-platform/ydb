@@ -1,24 +1,24 @@
 UNITTEST_FOR(ydb/core/security)
-
+ 
 OWNER(
     g:kikimr
     g:logbroker
 )
 
-FORK_SUBTESTS()
-
+FORK_SUBTESTS() 
+ 
 TIMEOUT(600)
 
 SIZE(MEDIUM)
 
-PEERDIR(
+PEERDIR( 
     ydb/core/testlib
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-SRCS(
-    ticket_parser_ut.cpp
-)
-
-END()
+SRCS( 
+    ticket_parser_ut.cpp 
+) 
+ 
+END() 

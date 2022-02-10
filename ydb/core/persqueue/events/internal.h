@@ -125,7 +125,7 @@ struct TEvPQ {
             ui32 TotalSize;
             ui64 CreateTimestamp;
             ui64 ReceiveTimestamp;
-            bool DisableDeduplication;
+            bool DisableDeduplication; 
             ui64 WriteTimestamp;
             TString Data;
             ui32 UncompressedSize;
@@ -173,7 +173,7 @@ struct TEvPQ {
         , ClientId(clientId)
         , Timeout(timeout)
         , Size(size)
-        , MaxTimeLagMs(maxTimeLagMs)
+        , MaxTimeLagMs(maxTimeLagMs) 
         , ReadTimestampMs(readTimestampMs)
         , ClientDC(clientDC)
         , ExternalOperation(externalOperation)
@@ -187,7 +187,7 @@ struct TEvPQ {
         TString ClientId;
         ui32 Timeout;
         ui32 Size;
-        ui32 MaxTimeLagMs;
+        ui32 MaxTimeLagMs; 
         ui64 ReadTimestampMs;
         TString ClientDC;
         bool ExternalOperation;

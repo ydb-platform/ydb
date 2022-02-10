@@ -163,7 +163,7 @@ struct TUserInfo {
     i64 ReadOffset = -1;
     TInstant ReadWriteTimestamp;
     TInstant ReadCreateTimestamp;
-    ui64 ReadOffsetRewindSum = 0;
+    ui64 ReadOffsetRewindSum = 0; 
 
     bool ReadScheduled = false;
 
@@ -304,7 +304,7 @@ struct TUserInfo {
         , ReadOffset(-1)
         , ReadWriteTimestamp(TAppData::TimeProvider->Now())
         , ReadCreateTimestamp(TAppData::TimeProvider->Now())
-        , ReadOffsetRewindSum(readOffsetRewindSum)
+        , ReadOffsetRewindSum(readOffsetRewindSum) 
         , ReadScheduled(false)
         , Important(important)
         , ReadFromTimestamp(readFromTimestamp)

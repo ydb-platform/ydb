@@ -588,7 +588,7 @@ namespace Tests {
         {
             IActor* ticketParser = Settings->CreateTicketParser(Settings->AuthConfig);
             TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx);
-            Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx);
+            Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx); 
         }
 
         {
@@ -610,7 +610,7 @@ namespace Tests {
                                                                   nullptr);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
-        }
+        } 
 
         {
             IActor* txProxy = CreateTxProxy(Runtime->GetTxAllocatorTabletIds());

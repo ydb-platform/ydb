@@ -183,17 +183,17 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
                     .AuthType = record.GetAuthType()
                 }), ctx);
                 CounterTicketsBuiltin->Inc();
-                return;
-            }
+                return; 
+            } 
 
             if(record.Ticket.EndsWith("@" BUILTIN_ERROR_DOMAIN)) {
                 record.TokenType = ETokenType::Builtin;
                 SetError(key, record, {"Builtin error simulation"}, ctx);
                 CounterTicketsBuiltin->Inc();
-                return;
-            }
-        }
-
+                return; 
+            } 
+        } 
+ 
         if (UseLoginProvider && (record.TokenType == ETokenType::Unknown || record.TokenType == ETokenType::Login)) {
             TString database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
             auto itLoginProvider = LoginProviders.find(database);

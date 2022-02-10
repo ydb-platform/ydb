@@ -1357,7 +1357,7 @@ message TAppConfig {
     optional NKikimrCms.TCmsConfig CmsConfig = 25;
     optional TFeatureFlags FeatureFlags = 26;
     optional TSqsConfig SqsConfig = 27;
-    optional NKikimrPQ.TPQConfig PQConfig = 28;
+    optional NKikimrPQ.TPQConfig PQConfig = 28; 
     optional NKikimrTenantPool.TTenantPoolConfig TenantPoolConfig = 29;
     optional NKikimrProto.TAuthConfig AuthConfig = 30;
     optional NKikimrTenantSlotBroker.TConfig TenantSlotBrokerConfig = 32;

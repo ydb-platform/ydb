@@ -214,20 +214,20 @@ IOutputStream& operator <<(IOutputStream& out, const TKeyLevel& value) {
     return out;
 }
 
-
+ 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 offset) {
-    if (container.empty()) {
+    if (container.empty()) { 
         return offset;
-    }
-    auto it = std::lower_bound(container.begin(), container.end(), timestamp,
+    } 
+    auto it = std::lower_bound(container.begin(), container.end(), timestamp, 
                     [](const TDataKey& p, const TInstant timestamp) { return timestamp > p.Timestamp; });
-    if (it == container.end()) {
+    if (it == container.end()) { 
         return offset;
-    } else {
-        return it->Key.GetOffset();
-    }
-}
-
+    } else { 
+        return it->Key.GetOffset(); 
+    } 
+} 
+ 
 struct TMirrorerInfo {
     TMirrorerInfo(const TActorId& actor, const TTabletCountersBase& baseline)
         : Actor(actor)
@@ -686,7 +686,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         TABLEH() {out << "ReadOffset";}
                         TABLEH() {out << "ReadWriteTimestamp";}
                         TABLEH() {out << "ReadCreateTimestamp";}
-                        TABLEH() {out << "ReadOffsetRewindSum";}
+                        TABLEH() {out << "ReadOffsetRewindSum";} 
                         TABLEH() {out << "ActiveReads";}
                         TABLEH() {out << "Subscriptions";}
                     }
@@ -703,7 +703,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                             TABLED() {out << (d.second.GetReadOffset());}
                             TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadWriteTimestamp());}
                             TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.GetReadCreateTimestamp());}
-                            TABLED() {out << (d.second.ReadOffsetRewindSum);}
+                            TABLED() {out << (d.second.ReadOffsetRewindSum);} 
                             TABLED() {out << d.second.ActiveReads;}
                             TABLED() {out << d.second.Subscriptions;}
                         }
@@ -1400,7 +1400,7 @@ void TPartition::HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TRe
                     SourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), ctx.Now());
                 } else if ((*key)[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUser) {
                     UsersInfoStorage.Parse(*key, pair.GetValue(), ctx);
-                } else if ((*key)[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated) {
+                } else if ((*key)[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated) { 
                     UsersInfoStorage.ParseDeprecated(*key, pair.GetValue(), ctx);
                 }
             }
@@ -2633,29 +2633,29 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
     const TString& user = read->ClientId;
     auto& userInfo = UsersInfoStorage.GetOrCreate(user, ctx);
 
-    ui64 offset = read->Offset;
+    ui64 offset = read->Offset; 
     if (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo.ReadFromTimestamp > TInstant::MilliSeconds(1)) {
         TInstant timestamp = read->MaxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(read->MaxTimeLagMs) : TInstant::Zero();
         timestamp = Max(timestamp, TInstant::MilliSeconds(read->ReadTimestampMs));
         timestamp = Max(timestamp, userInfo.ReadFromTimestamp);
         offset = Max(GetOffsetEstimate(DataKeysBody, timestamp, Min(Head.Offset, EndOffset - 1)), offset);
         userInfo.ReadOffsetRewindSum += offset - read->Offset;
-    }
+    } 
 
     TReadInfo info(user, read->ClientDC, offset, read->PartNo, read->Count, read->Size, read->Cookie, read->ReadTimestampMs, waitQuotaTime);
 
     ui64 cookie = Cookie++;
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "read cookie " << cookie << " Topic '" << TopicName << "' partition " << Partition << " user " << user
-                << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << EndOffset
-                << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
+                << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << EndOffset 
+                << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset); 
 
 
-    if (offset == EndOffset) {
+    if (offset == EndOffset) { 
         if (read->Timeout > 30000) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "too big read timeout " << " Topic '" << TopicName << "' partition " << Partition << " user " << read->ClientId
-                << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << EndOffset
-                << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
+                << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << EndOffset 
+                << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset); 
             read->Timeout = 30000;
         }
         Subscriber.AddSubscription(std::move(info), read->Timeout, cookie, ctx);
@@ -2665,7 +2665,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
         return;
     }
 
-    Y_VERIFY(offset < EndOffset);
+    Y_VERIFY(offset < EndOffset); 
 
     ProcessRead(ctx, std::move(info), cookie, false);
 }
@@ -2708,7 +2708,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
             if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
                 maxSeqNo = it->second.SeqNo;
                 maxOffset = it->second.Offset;
-                if (it->second.SeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
+                if (it->second.SeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) { 
                     already = true;
                 }
             }
@@ -3172,14 +3172,14 @@ void TPartition::ReportLabeledCounters(const TActorContext& ctx)
 
         ui64 readOffsetRewindSum = userInfo.ReadOffsetRewindSum;
         if (readOffsetRewindSum != userInfo.LabeledCounters.GetCounters()[METRIC_READ_OFFSET_REWIND_SUM].Get()) {
-            haveChanges = true;
+            haveChanges = true; 
             userInfo.LabeledCounters.GetCounters()[METRIC_READ_OFFSET_REWIND_SUM].Set(readOffsetRewindSum);
-        }
+        } 
         if (readOffsetRewindSum != userInfo.LabeledCounters.GetCounters()[METRIC_READ_OFFSET_REWIND_TOTAL].Get()) {
             haveChanges = true;
             userInfo.LabeledCounters.GetCounters()[METRIC_READ_OFFSET_REWIND_TOTAL].Set(readOffsetRewindSum);
         }
-
+ 
         ui32 id = METRIC_TOTAL_READ_SPEED_1;
         for (ui32 i = 0; i < userInfo.AvgReadBytes.size(); ++i) {
             ui64 avg = userInfo.AvgReadBytes[i].GetValue();
@@ -3893,7 +3893,7 @@ void TPartition::WriteClientInfo(const ui64 cookie, TUserInfo& userInfo, const T
             continue;*/
         }
 
-        TBuffer idata;
+        TBuffer idata; 
         {
             NKikimrPQ::TUserInfo userData;
             userData.SetOffset(offset);
@@ -3904,11 +3904,11 @@ void TPartition::WriteClientInfo(const ui64 cookie, TUserInfo& userInfo, const T
             userData.SetReadRuleGeneration(readRuleGeneration);
             TString out;
             Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out);
-
+ 
             idata.Append(out.c_str(), out.size());
         }
         TBuffer idataDeprecated = NDeprecatedUserData::Serialize(offset, gen, step, session);
-
+ 
         auto write = request->Record.AddCmdWrite();
         write->SetKey(ikey.Data(), ikey.Size());
         write->SetValue(idata.Data(), idata.Size());
@@ -3917,7 +3917,7 @@ void TPartition::WriteClientInfo(const ui64 cookie, TUserInfo& userInfo, const T
         write2->SetKey(ikeyDeprecated.Data(), ikeyDeprecated.Size());
         write2->SetValue(idataDeprecated.Data(), idataDeprecated.Size());
         write2->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-
+ 
         request->Record.SetCookie(cookie);
 
         ctx.Send(Tablet, request.Release());
@@ -3945,7 +3945,7 @@ void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue:
 
 
 void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TSourceIdWriter& sourceIdWriter, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST) {
-    ReplyError(ctx, p.Cookie, errorCode, errorStr);
+    ReplyError(ctx, p.Cookie, errorCode, errorStr); 
     Counters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
     Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(p.Msg.Data.size() + p.Msg.SourceId.size());
     FailBadClient(ctx);

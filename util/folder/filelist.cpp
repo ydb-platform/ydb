@@ -10,7 +10,7 @@ void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringB
     if (sort) {
         opts.SetSortByName();
     }
- 
+
     TDirIterator dir(dirname, opts);
     Clear();
 

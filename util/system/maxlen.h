@@ -12,7 +12,7 @@
     #define URL_MAX 1024
 #endif
 #define FULLURL_MAX (URL_MAX + HOST_MAX)
- 
+
 #define LINKTEXT_MAX 1024
 
 #ifdef WIN32

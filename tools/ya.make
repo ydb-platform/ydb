@@ -107,7 +107,7 @@ RECURSE(
     printxref
     prngrp_index_print
     prog_rule
-    protobin2mr 
+    protobin2mr
     prwordsfr
     pure_compiler
     pure_fingerprints

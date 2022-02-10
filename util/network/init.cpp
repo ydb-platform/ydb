@@ -12,9 +12,9 @@ namespace {
     class TNetworkInit {
     public:
         inline TNetworkInit() {
-#ifndef ROBOT_SIGPIPE 
+#ifndef ROBOT_SIGPIPE
             signal(SIGPIPE, SIG_IGN);
-#endif 
+#endif
 
 #if defined(_win_)
     #pragma comment(lib, "ws2_32.lib")

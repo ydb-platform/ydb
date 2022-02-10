@@ -284,14 +284,14 @@ TBlob TBlob::LockedFromFile(const TFile& file) {
     return ConstructAsMap<TAtomicCounter>(file, EMappingMode::Locked);
 }
 
-TBlob TBlob::LockedFromMemoryMapSingleThreaded(const TMemoryMap& map, ui64 offset, size_t length) {
+TBlob TBlob::LockedFromMemoryMapSingleThreaded(const TMemoryMap& map, ui64 offset, size_t length) { 
     return ConstructFromMap<TSimpleCounter>(map, offset, length, EMappingMode::Locked);
-}
-
-TBlob TBlob::LockedFromMemoryMap(const TMemoryMap& map, ui64 offset, size_t length) {
+} 
+ 
+TBlob TBlob::LockedFromMemoryMap(const TMemoryMap& map, ui64 offset, size_t length) { 
     return ConstructFromMap<TAtomicCounter>(map, offset, length, EMappingMode::Locked);
-}
-
+} 
+ 
 TBlob TBlob::FromMemoryMapSingleThreaded(const TMemoryMap& map, ui64 offset, size_t length) {
     return ConstructFromMap<TSimpleCounter>(map, offset, length, EMappingMode::Standard);
 }

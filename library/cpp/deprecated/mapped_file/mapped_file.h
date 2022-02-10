@@ -32,10 +32,10 @@ public:
 
     explicit TMappedFile(const TString& name) {
         Map_ = nullptr;
-        init(name, TFileMap::oRdOnly);
+        init(name, TFileMap::oRdOnly); 
     }
 
-    TMappedFile(const TFile& file, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown");
+    TMappedFile(const TFile& file, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown"); 
 
     void init(const TString& name);
 
@@ -43,8 +43,8 @@ public:
 
     void init(const TString& name, size_t length, TFileMap::EOpenMode om);
 
-    void init(const TFile&, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown");
-
+    void init(const TFile&, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown"); 
+ 
     void flush();
 
     void term() {

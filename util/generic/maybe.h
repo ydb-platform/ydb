@@ -708,15 +708,15 @@ template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<
 constexpr bool operator>=(const U& value, const TMaybe<T, TPolicy>& maybe) {
     return !(value < maybe);
 }
-
+ 
 class IOutputStream;
-
-template <class T, class TPolicy>
+ 
+template <class T, class TPolicy> 
 inline IOutputStream& operator<<(IOutputStream& out, const TMaybe<T, TPolicy>& maybe) {
-    if (maybe.Defined()) {
-        out << *maybe;
-    } else {
+    if (maybe.Defined()) { 
+        out << *maybe; 
+    } else { 
         out << TStringBuf("(empty maybe)");
-    }
-    return out;
-}
+    } 
+    return out; 
+} 

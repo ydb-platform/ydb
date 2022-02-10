@@ -23,14 +23,14 @@ public:
     inline void clear() {
         this->c.clear();
     }
-
-    inline S& Container() {
-        return this->c;
-    }
-
-    inline const S& Container() const {
-        return this->c;
-    }
+ 
+    inline S& Container() { 
+        return this->c; 
+    } 
+ 
+    inline const S& Container() const { 
+        return this->c; 
+    } 
 };
 
 template <class T, class S, class C>
@@ -48,11 +48,11 @@ public:
         this->c.clear();
     }
 
-    inline S& Container() {
-        return this->c;
-    }
-
-    inline const S& Container() const {
-        return this->c;
-    }
+    inline S& Container() { 
+        return this->c; 
+    } 
+ 
+    inline const S& Container() const { 
+        return this->c; 
+    } 
 };

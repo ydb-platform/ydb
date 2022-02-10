@@ -182,28 +182,28 @@ namespace NXml {
         return TNode(DocPointer, child);
     }
 
-    template <class T>
+    template <class T> 
     typename std::enable_if<!std::is_convertible_v<T, TStringBuf>, TNode>::type
     TNode::AddText(const T& value) {
-        TStringStream ss;
-        ss << value;
-        return AddText(ss.Str());
-    }
-
+        TStringStream ss; 
+        ss << value; 
+        return AddText(ss.Str()); 
+    } 
+ 
     inline TNode TNode::AddText(TStringBuf value) {
         if (IsNull()) {
             THROW(XmlException, "addChild [value=" << value
                                                    << "]: can't add child to null node");
-        }
-
-        xmlNode* child = xmlNewTextLen((xmlChar*)value.data(), value.size());
-        child = xmlAddChild(NodePointer, child);
-
+        } 
+ 
+        xmlNode* child = xmlNewTextLen((xmlChar*)value.data(), value.size()); 
+        child = xmlAddChild(NodePointer, child); 
+ 
         if (!child) {
             THROW(XmlException, "addChild [value=" << value
                                                    << "]: xmlNewTextChild returned NULL");
-        }
-
-        return TNode(DocPointer, child);
-    }
+        } 
+ 
+        return TNode(DocPointer, child); 
+    } 
 }

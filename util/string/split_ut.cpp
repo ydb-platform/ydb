@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         UNIT_ASSERT_VALUES_EQUAL(num1, 22);
         UNIT_ASSERT_VALUES_EQUAL(num2, 33.5);
         UNIT_ASSERT_VALUES_EQUAL(strBuf, "xyz");
-    }
+    } 
 
     Y_UNIT_TEST(ConvenientSplitTestWithMaybe) {
         TString data("abc 42");
@@ -280,11 +280,11 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
     Y_UNIT_TEST(ConvenientSplitTestExceptions) {
         TString data("abc 22 33");
         TString s1, s2, s3, s4;
-
-        UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2), yexception);
-        UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, s3));
-        UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2, s3, s4), yexception);
-    }
+ 
+        UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2), yexception); 
+        UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, s3)); 
+        UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2, s3, s4), yexception); 
+    } 
 
     Y_UNIT_TEST(ConvenientSplitTestMaybeExceptions) {
         TString data("abc 22 33");

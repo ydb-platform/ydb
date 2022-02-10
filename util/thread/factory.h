@@ -49,7 +49,7 @@ public:
     // XXX: rename to Start
     inline THolder<IThread> Run(IThreadAble* func) {
         THolder<IThread> ret(DoCreate());
-
+ 
         ret->Run(func);
 
         return ret;

@@ -209,15 +209,15 @@ namespace NXml {
 
     TNode TNode::Parent() {
         if (nullptr == NodePointer->parent)
-            THROW(XmlException, "Parent node not exists");
+            THROW(XmlException, "Parent node not exists"); 
 
-        return TNode(DocPointer, NodePointer->parent);
-    }
-
+        return TNode(DocPointer, NodePointer->parent); 
+    } 
+ 
     TConstNode TNode::Parent() const {
-        return const_cast<TNode*>(this)->Parent();
-    }
-
+        return const_cast<TNode*>(this)->Parent(); 
+    } 
+ 
     TNode TNode::NextSibling(TZtStringBuf name) {
         if (IsNull())
             THROW(XmlException, "Node is null");
@@ -255,13 +255,13 @@ namespace NXml {
     }
 
     void TNode::SetPrivate(void* priv) {
-        NodePointer->_private = priv;
-    }
+        NodePointer->_private = priv; 
+    } 
 
     void* TNode::GetPrivate() const {
-        return NodePointer->_private;
-    }
-
+        return NodePointer->_private; 
+    } 
+ 
     TNode TNode::Find(xmlNode* start, TZtStringBuf name) {
         for (; start; start = start->next)
             if (start->type == XML_ELEMENT_NODE && (name.empty() || !xmlStrcmp(start->name, XMLCHAR(name.c_str()))))
@@ -286,20 +286,20 @@ namespace NXml {
     }
 
     xmlNode* TNode::GetPtr() {
-        return NodePointer;
-    }
-
+        return NodePointer; 
+    } 
+ 
     const xmlNode* TNode::GetPtr() const {
-        return NodePointer;
-    }
-
+        return NodePointer; 
+    } 
+ 
     bool TNode::IsText() const {
         if (IsNull())
             THROW(XmlException, "Node is null");
 
-        return NodePointer->type == XML_TEXT_NODE;
-    }
-
+        return NodePointer->type == XML_TEXT_NODE; 
+    } 
+ 
     void TNode::Remove() {
         xmlNode* nodePtr = GetPtr();
         xmlUnlinkNode(nodePtr);

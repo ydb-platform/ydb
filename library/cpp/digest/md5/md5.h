@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/array_ref.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 
 class IInputStream;
 
@@ -58,7 +58,7 @@ public:
     static TString Calc(const TArrayRef<const ui8>& data);    // 32-byte hex-encoded
     static TString CalcRaw(TStringBuf data);                  // 16-byte raw
     static TString CalcRaw(const TArrayRef<const ui8>& data); // 16-byte raw
-
+ 
     static ui64 CalcHalfMix(TStringBuf data);
     static ui64 CalcHalfMix(const TArrayRef<const ui8>& data);
     static ui64 CalcHalfMix(const char* data, size_t len);

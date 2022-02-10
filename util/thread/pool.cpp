@@ -641,7 +641,7 @@ size_t TSimpleThreadPool::Size() const noexcept {
     return 0;
 }
 
-namespace {
+namespace { 
     class TOwnedObjectInQueue: public IObjectInQueue {
     private:
         THolder<IObjectInQueue> Owned;
@@ -657,8 +657,8 @@ namespace {
             Owned->Process(data);
         }
     };
-}
-
+} 
+ 
 void IThreadPool::SafeAdd(IObjectInQueue* obj) {
     Y_ENSURE_EX(Add(obj), TThreadPoolException() << TStringBuf("can not add object to queue"));
 }

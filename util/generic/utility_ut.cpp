@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
         TTest j(1);
 
         DoSwap(i, j);
-
+ 
         UNIT_ASSERT_EQUAL(i.Val, 1);
         UNIT_ASSERT_EQUAL(j.Val, 0);
     }

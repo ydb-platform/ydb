@@ -263,13 +263,13 @@ namespace NXml {
         TConstNode FirstChild() const;
 
         /**
-        * get parent node
-        * throws exception if has no parent
-        */
-        TNode Parent();
-        TConstNode Parent() const;
-
-        /**
+        * get parent node 
+        * throws exception if has no parent 
+        */ 
+        TNode Parent(); 
+        TConstNode Parent() const; 
+ 
+        /** 
         * get node neighbour
         * @param name: neighbour name
         * @note if name is empty, returns the next sibling node of type "element"
@@ -307,17 +307,17 @@ namespace NXml {
         TNode AddChild(const TConstNode& node);
 
         /**
-        * create text child node
-        * @param name: child name
-        * @param value: node value
-        */
-        template <class T>
+        * create text child node 
+        * @param name: child name 
+        * @param value: node value 
+        */ 
+        template <class T> 
         typename std::enable_if<!std::is_convertible_v<T, TStringBuf>, TNode>::type
         AddText(const T& value);
-
+ 
         TNode AddText(TStringBuf value);
 
-        /**
+        /** 
         * get node attribute
         * @param name: attribute name
         * throws exception if attribute not found
@@ -398,17 +398,17 @@ namespace NXml {
         void DelAttr(TZtStringBuf name);
 
         /**
-        * set node application data
-        * @param priv: new application data pointer
-        */
-        void SetPrivate(void* priv);
-
-        /**
-        * @return application data pointer, passed by SetPrivate
-        */
-        void* GetPrivate() const;
-
-        /**
+        * set node application data 
+        * @param priv: new application data pointer 
+        */ 
+        void SetPrivate(void* priv); 
+ 
+        /** 
+        * @return application data pointer, passed by SetPrivate 
+        */ 
+        void* GetPrivate() const; 
+ 
+        /** 
         * get node name
         */
         TString Name() const;
@@ -418,7 +418,7 @@ namespace NXml {
         */
         TString Path() const;
 
-        /**
+        /** 
         * get node xml representation
         */
         TString ToString(TZtStringBuf enc = "") const {
@@ -430,16 +430,16 @@ namespace NXml {
         void SaveAsHtml(IOutputStream& stream, TZtStringBuf enc = "", bool shouldFormat = false) const;
 
         /**
-        * get pointer to internal node
-        */
-        xmlNode* GetPtr();
-        const xmlNode* GetPtr() const;
-
-        /**
-        * check if node is text-only node
-        */
-        bool IsText() const;
-
+        * get pointer to internal node 
+        */ 
+        xmlNode* GetPtr(); 
+        const xmlNode* GetPtr() const; 
+ 
+        /** 
+        * check if node is text-only node 
+        */ 
+        bool IsText() const; 
+ 
         /**
         * unlink node from parent and free
         */
@@ -667,27 +667,27 @@ namespace NXml {
         }
 
         /**
-        * @return application data pointer, passed by SetPrivate
-        */
+        * @return application data pointer, passed by SetPrivate 
+        */ 
         void* GetPrivate() const {
-            return ActualNode.GetPrivate();
-        }
-
-        /**
-        * get pointer to internal node
-        */
+            return ActualNode.GetPrivate(); 
+        } 
+ 
+        /** 
+        * get pointer to internal node 
+        */ 
         const xmlNode* GetPtr() const {
-            return ActualNode.GetPtr();
-        }
-
-        /**
-        * check if node is text-only node
-        */
+            return ActualNode.GetPtr(); 
+        } 
+ 
+        /** 
+        * check if node is text-only node 
+        */ 
         bool IsText() const {
-            return ActualNode.IsText();
-        }
-
-        /**
+            return ActualNode.IsText(); 
+        } 
+ 
+        /** 
         * get node xpath
         */
         TString Path() const {

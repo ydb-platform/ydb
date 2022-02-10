@@ -49,7 +49,7 @@ namespace {
             return new TPoolThread;
         }
     };
-
+ 
     class TThreadFactoryFuncObj: public IThreadFactory::IThreadAble {
     public:
         TThreadFactoryFuncObj(const std::function<void()>& func)
@@ -63,17 +63,17 @@ namespace {
 
     private:
         std::function<void()> Func;
-    };
+    }; 
 }
 
 THolder<IThread> IThreadFactory::Run(std::function<void()> func) {
     THolder<IThread> ret(DoCreate());
-
+ 
     ret->Run(new ::TThreadFactoryFuncObj(func));
-
-    return ret;
-}
-
+ 
+    return ret; 
+} 
+ 
 static IThreadFactory* SystemThreadPoolImpl() {
     return Singleton<TSystemThreadFactory>();
 }

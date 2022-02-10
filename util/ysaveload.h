@@ -617,28 +617,28 @@ template <class T1, class T2, class T3, class T4>
 class TSerializer<THashSet<T1, T2, T3, T4>>: public TSetSerializer<THashSet<T1, T2, T3, T4>, false> {
 };
 
-template <class T1, class T2>
+template <class T1, class T2> 
 class TSerializer<TQueue<T1, T2>> {
-public:
+public: 
     static inline void Save(IOutputStream* rh, const TQueue<T1, T2>& v) {
-        ::Save(rh, v.Container());
-    }
+        ::Save(rh, v.Container()); 
+    } 
     static inline void Load(IInputStream* in, TQueue<T1, T2>& t) {
-        ::Load(in, t.Container());
-    }
-};
-
-template <class T1, class T2, class T3>
+        ::Load(in, t.Container()); 
+    } 
+}; 
+ 
+template <class T1, class T2, class T3> 
 class TSerializer<TPriorityQueue<T1, T2, T3>> {
-public:
+public: 
     static inline void Save(IOutputStream* rh, const TPriorityQueue<T1, T2, T3>& v) {
-        ::Save(rh, v.Container());
-    }
+        ::Save(rh, v.Container()); 
+    } 
     static inline void Load(IInputStream* in, TPriorityQueue<T1, T2, T3>& t) {
-        ::Load(in, t.Container());
-    }
-};
-
+        ::Load(in, t.Container()); 
+    } 
+}; 
+ 
 #ifndef __NVCC__
 
 namespace NPrivate {

@@ -15,7 +15,7 @@ def blobstorage_controller_has_started_on_some_node(monitors):
             counters='tablets', sensor='Tx(all)', type='BSController',
             category='executor'
         )
-        predicates.append(tx_all_counter is not None)
+        predicates.append(tx_all_counter is not None) 
     return any(predicates)
 
 

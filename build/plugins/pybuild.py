@@ -152,9 +152,9 @@ def on_py_program(unit, *args):
 
 
 def py_program(unit, py3):
-    """
-    Documentation: https://wiki.yandex-team.ru/devtools/commandsandvars/py_srcs/#modulpyprogramimakrospymain
-    """
+    """ 
+    Documentation: https://wiki.yandex-team.ru/devtools/commandsandvars/py_srcs/#modulpyprogramimakrospymain 
+    """ 
     if py3:
         peers = ['library/python/runtime_py3/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
@@ -169,25 +169,25 @@ def py_program(unit, py3):
 
 
 def onpy_srcs(unit, *args):
-    """
+    """ 
         @usage PY_SRCS({| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
 
-        PY_SRCS() - is rule to build extended versions of Python interpreters and containing all application code in its executable file. It can be used to collect only the executables but not shared libraries, and, in particular, not to collect the modules that are imported using import directive.
-        The main disadvantage is the lack of IDE support; There is also no readline yet.
-        The application can be collect from any of the sources from which the C library, and with the help of PY_SRCS .py , .pyx,.proto and .swg files.
-        At the same time extensions for Python on C language generating from .pyx and .swg, will be registered in Python's as built-in modules, and sources on .py are stored as static data: when the interpreter starts, the initialization code will add a custom loader of these modules to sys.meta_path.
-        By default .pyx files are collected as C++-extensions. To collect them as C (similar to BUILDWITH_CYTHON_C, but with the ability to specify namespace), you must specify the Directive CYTHON_C.
-        Building with pyx automatically registers modules, you do not need to call PY_REGISTER for them
-        __init__.py never required, but if present (and specified in PY_SRCS), it will be imported when you import package modules with __init__.py Oh.
-
-        Example of library declaration with PY_SRCS():
+        PY_SRCS() - is rule to build extended versions of Python interpreters and containing all application code in its executable file. It can be used to collect only the executables but not shared libraries, and, in particular, not to collect the modules that are imported using import directive. 
+        The main disadvantage is the lack of IDE support; There is also no readline yet. 
+        The application can be collect from any of the sources from which the C library, and with the help of PY_SRCS .py , .pyx,.proto and .swg files. 
+        At the same time extensions for Python on C language generating from .pyx and .swg, will be registered in Python's as built-in modules, and sources on .py are stored as static data: when the interpreter starts, the initialization code will add a custom loader of these modules to sys.meta_path. 
+        By default .pyx files are collected as C++-extensions. To collect them as C (similar to BUILDWITH_CYTHON_C, but with the ability to specify namespace), you must specify the Directive CYTHON_C. 
+        Building with pyx automatically registers modules, you do not need to call PY_REGISTER for them 
+        __init__.py never required, but if present (and specified in PY_SRCS), it will be imported when you import package modules with __init__.py Oh. 
+ 
+        Example of library declaration with PY_SRCS(): 
         PY2_LIBRARY(mymodule)
         PY_SRCS(a.py sub/dir/b.py e.proto sub/dir/f.proto c.pyx sub/dir/d.pyx g.swg sub/dir/h.swg)
-        END()
-
+        END() 
+ 
         PY_REGISTER honors Python2 and Python3 differences and adjusts itself to Python version of a current module
         Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipylibrarypy3libraryimakrospysrcs
-    """
+    """ 
     # Each file arg must either be a path, or "${...}/buildpath=modname", where
     # "${...}/buildpath" part will be used as a file source in a future macro,
     # and "modname" will be used as a module name.
@@ -554,12 +554,12 @@ def py_register(unit, func, py3):
 
 
 def onpy_register(unit, *args):
-    """
+    """ 
     @usage: PY_REGISTER([package.]module_name)
 
-    Python knows about which built-ins can be imported, due to their registration in the Assembly or at the start of the interpreter.
-    All modules from the sources listed in PY_SRCS() are registered automatically.
-    To register the modules from the sources in the SRCS(), you need to use PY_REGISTER().
+    Python knows about which built-ins can be imported, due to their registration in the Assembly or at the start of the interpreter. 
+    All modules from the sources listed in PY_SRCS() are registered automatically. 
+    To register the modules from the sources in the SRCS(), you need to use PY_REGISTER(). 
 
     PY_REGISTER(module_name) initializes module globally via call to initmodule_name()
     PY_REGISTER(package.module_name) initializes module in the specified package
@@ -567,7 +567,7 @@ def onpy_register(unit, *args):
     or CFLAGS(-DPyInit_module_name=PyInit_7package11module_name)
 
     Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#makrospyregister
-    """
+    """ 
 
     py3 = is_py3(unit)
 
@@ -592,13 +592,13 @@ def py_main(unit, arg):
 
 
 def onpy_main(unit, arg):
-    """
+    """ 
         @usage: PY_MAIN(package.module[:func])
-
+ 
         Specifies the module or function from which to start executing a python program
-
+ 
         Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipyprogrampy3programimakrospymain
-    """
+    """ 
 
     arg = arg.replace('/', '.')
 

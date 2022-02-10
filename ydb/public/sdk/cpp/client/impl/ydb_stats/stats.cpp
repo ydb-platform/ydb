@@ -8,46 +8,46 @@ const NMonitoring::TLabel TRANSPORT_ERRORS_BY_HOST_LABEL = NMonitoring::TLabel {
 const NMonitoring::TLabel GRPC_INFLIGHT_BY_HOST_LABEL = NMonitoring::TLabel {"sensor", "Grpc/InFlightByYdbHost"};
 
 void TStatCollector::IncSessionsOnHost(const TStringType& host) {
-    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) { 
+    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
         ptr->IntGauge({ DatabaseLabel_, SESSIONS_ON_KQP_HOST_LABEL, {"YdbHost", host} })->Inc();
     }
 }
 
 void TStatCollector::DecSessionsOnHost(const TStringType& host) {
-    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) { 
+    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
         ptr->IntGauge({ DatabaseLabel_, SESSIONS_ON_KQP_HOST_LABEL, {"YdbHost", host} })->Dec();
     }
 }
 
 void TStatCollector::IncTransportErrorsByHost(const TStringType& host) {
-    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) { 
+    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
         ptr->Rate({ DatabaseLabel_, TRANSPORT_ERRORS_BY_HOST_LABEL, {"YdbHost", host} })->Inc();
     }
 }
 
 void TStatCollector::IncGRpcInFlightByHost(const TStringType& host) {
-    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) { 
+    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
         ptr->IntGauge({ DatabaseLabel_, GRPC_INFLIGHT_BY_HOST_LABEL, {"YdbHost", host} })->Inc();
     }
 }
 
 void TStatCollector::DecGRpcInFlightByHost(const TStringType& host) {
-    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) { 
+    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
         ptr->IntGauge({ DatabaseLabel_, GRPC_INFLIGHT_BY_HOST_LABEL, {"YdbHost", host} })->Dec();
     }
 }
 
 void TStatCollector::DeleteHost(const TStringType& host) {
-    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) { 
+    if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
         const NMonitoring::TLabel hostLabel = NMonitoring::TLabel {"YdbHost", host};
 
         {
             NMonitoring::TLabels label({ DatabaseLabel_, SESSIONS_ON_KQP_HOST_LABEL, hostLabel });
-            ptr->RemoveMetric(label); 
+            ptr->RemoveMetric(label);
         }
         {
             NMonitoring::TLabels label({ DatabaseLabel_, TRANSPORT_ERRORS_BY_HOST_LABEL, hostLabel });
-            ptr->RemoveMetric(label); 
+            ptr->RemoveMetric(label);
         }
     }
 }

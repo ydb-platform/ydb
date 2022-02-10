@@ -46,7 +46,7 @@ constexpr std::string_view DocumentApiRequestType = "_document_api_request"sv;
 using TQueryResult = IKqpHost::TQueryResult;
 
 struct TKqpQueryState {
-    TActorId Sender; 
+    TActorId Sender;
     ui64 ProxyRequestId = 0;
     NKikimrKqp::TQueryRequest Request;
     TIntrusivePtr<IKqpHost::IAsyncQueryResult> AsyncQueryResult;
@@ -56,7 +56,7 @@ struct TKqpQueryState {
     TString RequestType;
     ui64 ParametersSize = 0;
     TString UserToken;
-    TActorId RequestActorId; 
+    TActorId RequestActorId;
     TInstant StartTime;
     TDuration CpuTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
@@ -144,7 +144,7 @@ public:
         return NKikimrServices::TActivity::KQP_WORKER_ACTOR;
     }
 
-    TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings, 
+    TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
         const TKqpWorkerSettings& workerSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
         TIntrusivePtr<TKqpCounters> counters)
         : Owner(owner)
@@ -281,7 +281,7 @@ public:
         QueryState->StartTime = now;
         QueryState->ReplyFlags = queryRequest.GetReplyFlags();
         QueryState->UserToken = event.GetUserToken();
-        QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId()); 
+        QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId());
 
         if (GetStatsMode(queryRequest, EKikimrStatsMode::None) > EKikimrStatsMode::Basic) {
             QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_AST;
@@ -1271,7 +1271,7 @@ private:
     }
 
     bool ExecuteQuery(NKikimrKqp::TQueryRequest& queryRequest, NKikimrKqp::EQueryType type, bool commit,
-        const TActorId& requestActorId) 
+        const TActorId& requestActorId)
     {
         const auto& query = queryRequest.GetQuery();
         auto* parameters = queryRequest.MutableParameters();
@@ -1470,7 +1470,7 @@ private:
         Y_VERIFY(QueryState);
 
         TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
-        TActorId selfId = ctx.SelfID; 
+        TActorId selfId = ctx.SelfID;
         ui32 queryId = QueryId;
 
         auto callback = [actorSystem, selfId, queryId](const TFuture<bool>& future) {
@@ -1486,7 +1486,7 @@ private:
         Y_VERIFY(CleanupState);
 
         TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
-        TActorId selfId = ctx.SelfID; 
+        TActorId selfId = ctx.SelfID;
         ui32 queryId = QueryId;
 
         auto callback = [actorSystem, selfId, queryId](const TFuture<bool>& future) {
@@ -1744,7 +1744,7 @@ private:
         }
     }
 
-    bool ReplyPingStatus(const TActorId& sender, ui64 proxyRequestId, bool ready, const TActorContext& ctx) { 
+    bool ReplyPingStatus(const TActorId& sender, ui64 proxyRequestId, bool ready, const TActorContext& ctx) {
         auto ev = MakeHolder<TEvKqp::TEvPingSessionResponse>();
         auto& record = ev->Record;
         record.SetStatus(Ydb::StatusIds::SUCCESS);
@@ -1756,7 +1756,7 @@ private:
         return ctx.Send(sender, ev.Release(), 0, proxyRequestId);
     }
 
-    bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId, const TKqpRequestInfo& requestInfo, 
+    bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId, const TKqpRequestInfo& requestInfo,
         Ydb::StatusIds::StatusCode ydbStatus, const TString& message, const TActorContext& ctx)
     {
         LOG_WARN_S(ctx, NKikimrServices::KQP_WORKER, requestInfo << message);
@@ -1767,7 +1767,7 @@ private:
         return ctx.Send(sender, response.Release(), 0, proxyRequestId);
     }
 
-    bool CheckRequest(const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 proxyRequestId, 
+    bool CheckRequest(const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 proxyRequestId,
         const TActorContext& ctx)
     {
         if (requestInfo.GetSessionId() != SessionId) {
@@ -2106,7 +2106,7 @@ private:
                 << IdleTimerActorId);
             ctx.Send(IdleTimerActorId, new TEvents::TEvPoisonPill());
         }
-        IdleTimerActorId = TActorId(); 
+        IdleTimerActorId = TActorId();
     }
 
     IKikimrQueryExecutor::TExecuteSettings CreateRollbackSettings() {
@@ -2162,7 +2162,7 @@ private:
     }
 
 private:
-    TActorId Owner; 
+    TActorId Owner;
     TString SessionId;
     TKqpWorkerSettings Settings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
@@ -2176,13 +2176,13 @@ private:
     THolder<TKqpQueryState> QueryState;
     THolder<TKqpCleanupState> CleanupState;
     ui32 IdleTimerId;
-    TActorId IdleTimerActorId; 
+    TActorId IdleTimerActorId;
     std::optional<TSessionShutdownState> ShutdownState;
 };
 
 } // namespace
 
-IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId, 
+IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
 {

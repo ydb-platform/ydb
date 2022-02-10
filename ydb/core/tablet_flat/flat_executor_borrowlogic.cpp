@@ -1,7 +1,7 @@
 #include "flat_executor_borrowlogic.h"
 #include "flat_bio_eggs.h"
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
 

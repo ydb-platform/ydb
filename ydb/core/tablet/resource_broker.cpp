@@ -51,7 +51,7 @@ void TResourceLimit::ReleaseResources(const TResourceValues &values)
 }
 
 TTask::TTask(const TEvResourceBroker::TTask &task,
-             const TActorId &client, 
+             const TActorId &client,
              TInstant timestamp,
              TTaskCountersPtr counters)
     : TEvResourceBroker::TTask(task)
@@ -380,7 +380,7 @@ const TTask* TScheduler::FindTask(ui64 taskId, const TActorId &client) const {
 }
 
 bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
-                            const TActorId &client, 
+                            const TActorId &client,
                             const TActorSystem &as)
 {
     auto &config = TaskConfig(task.Type);
@@ -418,7 +418,7 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
 }
 
 bool TScheduler::UpdateTask(ui64 taskId,
-                            const TActorId &client, 
+                            const TActorId &client,
                             const TResourceValues &requiredResources,
                             ui64 priority,
                             const TString &type,
@@ -454,7 +454,7 @@ bool TScheduler::UpdateTask(ui64 taskId,
 }
 
 bool TScheduler::UpdateTaskCookie(ui64 taskId,
-                                  const TActorId &client, 
+                                  const TActorId &client,
                                   TIntrusivePtr<TThrRefBase> cookie,
                                   const TActorSystem &as)
 {

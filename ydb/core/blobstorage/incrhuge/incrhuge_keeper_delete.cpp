@@ -14,7 +14,7 @@ namespace NKikimr {
         };
 
         struct TDeleter::TDeleteQueueItem {
-            const TActorId Sender; 
+            const TActorId Sender;
             const ui64 Cookie;
             const ui8 Owner;
             const ui64 SeqNo;

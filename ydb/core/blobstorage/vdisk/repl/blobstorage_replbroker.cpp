@@ -8,15 +8,15 @@ namespace NKikimr {
 
     class TReplBroker : public TActor<TReplBroker> {
         // queue of senders waiting for token per PDisk; the first one in queue always has a token
-        THashMap<ui32, TDeque<TActorId>> VDiskQ; 
-        THashMap<TActorId, ui32> SenderToPDisk; 
+        THashMap<ui32, TDeque<TActorId>> VDiskQ;
+        THashMap<TActorId, ui32> SenderToPDisk;
 
         struct TMemQueueItem {
-            TActorId Sender; 
+            TActorId Sender;
             ui64 Cookie;
             ui64 Bytes;
 
-            TMemQueueItem(const TActorId& sender, ui64 cookie, ui64 bytes) 
+            TMemQueueItem(const TActorId& sender, ui64 cookie, ui64 bytes)
                 : Sender(sender)
                 , Cookie(cookie)
                 , Bytes(bytes)
@@ -26,10 +26,10 @@ namespace NKikimr {
         i64 MemFree;
 
         struct TMemToken {
-            TActorId Sender; 
+            TActorId Sender;
             ui64 Bytes;
 
-            TMemToken(const TActorId& sender, ui64 bytes) 
+            TMemToken(const TActorId& sender, ui64 bytes)
                 : Sender(sender)
                 , Bytes(bytes)
             {}

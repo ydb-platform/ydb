@@ -39,17 +39,17 @@ namespace NActors {
             : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
         {}
 
-        TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(), 
-                               const TActorId& parentId = TActorId()); 
-        TActorId RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId = TActorId()); 
+        TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(),
+                               const TActorId& parentId = TActorId());
+        TActorId RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId = TActorId());
         void UnregisterActor(TMailboxHeader* mailbox, ui64 localActorId);
         void DropUnregistered();
         const std::vector<THolder<IActor>>& GetUnregistered() const { return DyingActors; }
 
-        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr); 
+        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
-        void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr); 
- 
+        void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
+
         bool Send(TAutoPtr<IEventHandle> ev) {
 #ifdef USE_ACTOR_CALLSTACK
             ev->Callstack = TCallstack::GetTlsCallstack();
@@ -81,7 +81,7 @@ namespace NActors {
 
         // Event-specific (currently executing)
         TVector<THolder<IActor>> DyingActors;
-        TActorId CurrentRecipient; 
+        TActorId CurrentRecipient;
         ui64 CurrentActorScheduledEventsCounter = 0;
 
         // Thread-specific

@@ -5,7 +5,7 @@
 #include <ydb/core/mon/mon.h>
 #include <library/cpp/actors/core/mon.h>
 #include <ydb/core/base/appdata.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <util/generic/algorithm.h>
 #include <ydb/core/base/tablet_types.h>
@@ -24,12 +24,12 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TNodeList(const TActorId &sender) 
+    TNodeList(const TActorId &sender)
         : Sender(sender)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
         Become(&TThis::StateRequestedBrowse);
@@ -126,7 +126,7 @@ public:
     }
 
 protected:
-    TActorId Sender; 
+    TActorId Sender;
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
 };
 
@@ -136,7 +136,7 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TTabletList(const TActorId &sender, ui32 filterNodeId, 
+    TTabletList(const TActorId &sender, ui32 filterNodeId,
                 const TIntrusivePtr<ITabletStateClassifier>& stateClassifier,
                 const TIntrusivePtr<ITabletListRenderer>& renderer)
         : Sender(sender)
@@ -148,7 +148,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
         Become(&TThis::StateRequestedBrowse);
@@ -173,12 +173,12 @@ public:
         NodesInfo = ev->Release();
         if (!NodesInfo->Nodes.empty()) {
             if (FilterNodeId) {
-                TActorId tabletStateActorId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(FilterNodeId); 
+                TActorId tabletStateActorId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(FilterNodeId);
                 ctx.Send(tabletStateActorId, new TEvWhiteboard::TEvTabletStateRequest(), IEventHandle::FlagTrackDelivery, FilterNodeId);
                 ++NodesRequested;
             } else {
                 for (const auto& ni : NodesInfo->Nodes) {
-                    TActorId tabletStateActorId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ni.NodeId); 
+                    TActorId tabletStateActorId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ni.NodeId);
                     ctx.Send(tabletStateActorId, new TEvWhiteboard::TEvTabletStateRequest(), IEventHandle::FlagTrackDelivery, ni.NodeId);
                     ++NodesRequested;
                 }
@@ -284,7 +284,7 @@ public:
     }
 
 protected:
-    TActorId Sender; 
+    TActorId Sender;
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<ui64, TAutoPtr<TEvWhiteboard::TEvTabletStateResponse>> PerNodeTabletInfo;
     size_t NodesRequested;
@@ -301,13 +301,13 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TStateStorageTabletList(const TActorId &sender, ui32 stateStorageId) 
+    TStateStorageTabletList(const TActorId &sender, ui32 stateStorageId)
         : Sender(sender)
         , StateStorageId(stateStorageId)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
         Become(&TThis::StateRequestedBrowse);
@@ -323,7 +323,7 @@ public:
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         NodesInfo = ev->Release();
-        const TActorId proxyActorID = MakeStateStorageProxyID(StateStorageId); 
+        const TActorId proxyActorID = MakeStateStorageProxyID(StateStorageId);
         ctx.Send(proxyActorID, new TEvStateStorage::TEvRequestReplicasDumps());
     }
 
@@ -404,7 +404,7 @@ public:
     }
 
 protected:
-    TActorId Sender; 
+    TActorId Sender;
     ui32 StateStorageId;
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
 };

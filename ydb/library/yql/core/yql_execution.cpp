@@ -1,15 +1,15 @@
 #include "yql_execution.h"
 #include "yql_expr_optimize.h"
 #include "yql_opt_proposed_by_data.h"
- 
+
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
- 
+
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/generic/queue.h>
 
- 
+
 namespace NYql {
 
 namespace {
@@ -48,7 +48,7 @@ public:
         if (FinalizingTransformer) {
             YQL_CLOG(INFO, CoreExecution) << "FinalizingTransformer, root #" << input->UniqueId();
             auto status = FinalizingTransformer->Transform(input, output, ctx);
-            YQL_CLOG(INFO, CoreExecution) << "FinalizingTransformer done, output #" << output->UniqueId() << ", status: " << status; 
+            YQL_CLOG(INFO, CoreExecution) << "FinalizingTransformer done, output #" << output->UniqueId() << ", status: " << status;
             return status;
         }
 
@@ -124,7 +124,7 @@ public:
                 continue;
             }
 
-            YQL_CLOG(INFO, CoreExecution) << "Completed async execution for node #" << item.Node->UniqueId(); 
+            YQL_CLOG(INFO, CoreExecution) << "Completed async execution for node #" << item.Node->UniqueId();
             TExprNode::TPtr callableOutput;
             auto status = item.DataProvider->GetCallableExecutionTransformer().ApplyAsyncChanges(item.Node, callableOutput, ctx);
             Y_VERIFY(callableOutput);
@@ -148,7 +148,7 @@ public:
 
             if (item.Node->GetState() == TExprNode::EState::ExecutionComplete ||
                 item.Node->GetState() == TExprNode::EState::Error)
-            { 
+            {
                 FinishNode(item.DataProvider->GetName(), *item.Node, *callableOutput);
             }
         }
@@ -393,7 +393,7 @@ public:
             } else {
                 if (output->GetState() == TExprNode::EState::ExecutionComplete ||
                     output->GetState() == TExprNode::EState::Error)
-                { 
+                {
                     StartNode(category, *node);
                     FinishNode(category, *node, *output);
                 }
@@ -441,7 +441,7 @@ public:
         } else {
             if (output->GetState() == TExprNode::EState::ExecutionComplete ||
                 output->GetState() == TExprNode::EState::Error)
-            { 
+            {
                 StartNode(dataProvider->GetName(), *node);
                 FinishNode(dataProvider->GetName(), *node, *output);
             }
@@ -451,8 +451,8 @@ public:
     }
 
     void AddCallable(const TExprNode::TPtr& node, IDataProvider* dataProvider, TExprContext& ctx) {
-        Y_UNUSED(ctx); 
-        YQL_CLOG(INFO, CoreExecution) << "Register async execution for node #" << node->UniqueId(); 
+        Y_UNUSED(ctx);
+        YQL_CLOG(INFO, CoreExecution) << "Register async execution for node #" << node->UniqueId();
         auto future = dataProvider->GetCallableExecutionTransformer().GetAsyncFuture(*node);
         SubscribeAsyncFuture(node, dataProvider, future);
     }
@@ -499,14 +499,14 @@ public:
             if (newNode.UniqueId() != node.UniqueId()) {
                 Types.NodeToOperationId[newNode.UniqueId()] = *publicId;
             }
- 
+
             auto progIt = Progresses.find(*publicId);
             YQL_ENSURE(progIt != Progresses.end());
 
             auto newState = (node.GetState() == TExprNode::EState::ExecutionComplete)
-                    ? TOperationProgress::EState::Finished 
-                    : TOperationProgress::EState::Failed; 
- 
+                    ? TOperationProgress::EState::Finished
+                    : TOperationProgress::EState::Failed;
+
             if (progIt->second.State != newState) {
                 TString stage = progIt->second.Stage.first;
                 progIt->second = TOperationProgress(TString(category), *publicId, newState, stage);

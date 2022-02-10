@@ -6,7 +6,7 @@
 #include "executor_pool_base.h"
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/actors/util/threadparkpad.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/system/mutex.h>
 
@@ -87,7 +87,7 @@ namespace NActors {
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
- 
+
         void ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) override;
 
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;

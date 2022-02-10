@@ -90,9 +90,9 @@ struct TEvConfigsDispatcher {
  */
 IActor *CreateConfigsDispatcher(const NKikimrConfig::TAppConfig &config);
 
-inline TActorId MakeConfigsDispatcherID(ui32 node = 0) { 
+inline TActorId MakeConfigsDispatcherID(ui32 node = 0) {
     char x[12] = { 'c', 'o', 'n', 'f', 'i', 'g', 's', 'd', 'i', 's', 'p' };
-    return TActorId(node, TStringBuf(x, 12)); 
+    return TActorId(node, TStringBuf(x, 12));
 }
 
 } // namespace NConsole

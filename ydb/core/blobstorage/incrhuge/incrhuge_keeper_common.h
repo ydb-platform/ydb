@@ -23,7 +23,7 @@ namespace NKikimr {
         // initial incremental huge keeper settings
         struct TKeeperSettings {
             ui32                PDiskId;            // PDisk id
-            TActorId            PDiskActorId;       // PDisk actor id 
+            TActorId            PDiskActorId;       // PDisk actor id
             ui64                PDiskGuid;          // PDisk GUID
             ui32                MinHugeBlobInBytes; // minimal blob size we will receive
             ui32                MinCleanChunks;     // minimal number of clean chunks we will hold
@@ -186,7 +186,7 @@ namespace NKikimr {
             THashMap<TIncrHugeBlobId, bool> DefragWriteInProgress;
 
             // set of spawned children actors
-            THashSet<TActorId> ChildActors; 
+            THashSet<TActorId> ChildActors;
 
             TKeeperCommonState(const TKeeperSettings& settings)
                 : Settings(settings)

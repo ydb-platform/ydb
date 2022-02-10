@@ -10,7 +10,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/tx/tx.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/builder.h>
 
 ////////////////////////////////////////////
@@ -113,9 +113,9 @@ private:
     const TTabletMonitoringProxyConfig Config;
     const ui64 TargetTablet;
     const bool ForceFollower;
-    const TActorId Sender; 
+    const TActorId Sender;
     const TString Query;
-    TActorId PipeClient; 
+    TActorId PipeClient;
     const HTTP_METHOD Method;
 };
 

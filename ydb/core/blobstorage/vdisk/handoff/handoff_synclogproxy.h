@@ -46,7 +46,7 @@ namespace NKikimr {
         {}
     };
 
-    IActor* CreateHandoffSyncLogProxy(const TActorId &skeletonId, const TActorId &notifyId); 
+    IActor* CreateHandoffSyncLogProxy(const TActorId &skeletonId, const TActorId &notifyId);
 
 } // NKikimr
 

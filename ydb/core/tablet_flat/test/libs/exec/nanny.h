@@ -17,7 +17,7 @@ namespace NFake {
         using TContext = NTabletFlatExecutor::TTransactionContext;
         using TCall = std::function<bool(NTable::ITestDb&, TContext&)>;
 
-        TFuncTx(NTable::ITestDb &fake, const TActorId& owner, TCall func) 
+        TFuncTx(NTable::ITestDb &fake, const TActorId& owner, TCall func)
             : Owner(owner)
             , Func(std::move(func))
             , Fake(fake)
@@ -57,7 +57,7 @@ namespace NFake {
         }
 
     private:
-        const TActorId Owner; 
+        const TActorId Owner;
         TCall Func;
         bool Completed = false;
         NTable::ITestDb &Fake;
@@ -109,7 +109,7 @@ namespace NFake {
     private:
         virtual EDo Run() = 0;
 
-        void Registered(TActorSystem *sys, const TActorId &owner) override 
+        void Registered(TActorSystem *sys, const TActorId &owner) override
         {
             Logger = new NUtil::TLogger(sys, NKikimrServices::FAKE_ENV);
 
@@ -176,7 +176,7 @@ namespace NFake {
                 logl << "TNanny initiates TDummy tablet " << MyId << " birth";
             }
 
-            auto make = [this](const TActorId &tablet, TStorageInfo *info) { 
+            auto make = [this](const TActorId &tablet, TStorageInfo *info) {
                 return new NFake::TDummy(tablet, info, SelfId());
             };
 
@@ -196,8 +196,8 @@ namespace NFake {
     private:
         const ui64 MyId = MakeTabletID(0, 0, 1);
         TAutoPtr<NUtil::ILogger> Logger;
-        TActorId Owner; 
-        TActorId Tablet; 
+        TActorId Owner;
+        TActorId Tablet;
         ui64 TxInFlight = 0;
         EDo State = EDo::Born;
         TAutoPtr<NTable::ITestDb> Fake;

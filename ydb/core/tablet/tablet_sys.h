@@ -16,7 +16,7 @@ class TTablet : public TActor<TTablet> {
     using ETabletState = TTabletStateInfo::ETabletState;
 
     struct TStateStorageInfo {
-        TActorId ProxyID; 
+        TActorId ProxyID;
 
         ui32 KnownGeneration;
         ui32 KnownStep;
@@ -80,8 +80,8 @@ class TTablet : public TActor<TTablet> {
         bool WaitFollowerGcAck;
         TInstant CommitedMoment;
 
-        TActorId Source; 
-        TActorId Task; 
+        TActorId Source;
+        TActorId Task;
 
         ui64 SourceCookie;
 
@@ -204,9 +204,9 @@ class TTablet : public TActor<TTablet> {
     TDeque<std::pair<ui32, TInstant>> WaitingForGcAck; // step, commitMoment
     bool InitialFollowerSyncDone;
 
-    const TActorId Launcher; 
-    TActorId UserTablet; 
-    TActorId StateStorageGuardian; 
+    const TActorId Launcher;
+    TActorId UserTablet;
+    TActorId StateStorageGuardian;
     TActorId FollowerStStGuardian;
     TIntrusivePtr<TTabletStorageInfo> Info;
     TIntrusivePtr<TTabletSetupInfo> SetupInfo;
@@ -225,7 +225,7 @@ class TTablet : public TActor<TTablet> {
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
     THolder<NTracing::ITrace> IntrospectionTrace;
-    TActorId RebuildGraphRequest; 
+    TActorId RebuildGraphRequest;
 
     // Delayed cancellation reason
     struct TDelayedCancelTablet {
@@ -598,7 +598,7 @@ public:
     }
 
     TTablet(
-            const TActorId &launcher, 
+            const TActorId &launcher,
             TTabletStorageInfo *info,
             TTabletSetupInfo *setupInfo,
             bool leader,
@@ -608,7 +608,7 @@ public:
             TSharedQuotaPtr txCacheQuota = nullptr
             );
 
-    TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId &parentId) override; 
+    TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId &parentId) override;
     static void ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner);
 };
 

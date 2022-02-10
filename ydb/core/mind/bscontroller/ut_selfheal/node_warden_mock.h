@@ -24,10 +24,10 @@ struct TEvUpdateDriveStatus : TEventLocal<TEvUpdateDriveStatus, EvUpdateDriveSta
 class TNodeWardenMock : public TActorBootstrapped<TNodeWardenMock> {
     const ui32 NodeId;
     const ui64 TabletId;
-    TActorId PipeClient; 
+    TActorId PipeClient;
     bool Connected = false;
     EState CurrentState = EState::INITIAL;
-    std::multimap<EState, TActorId> Queue; 
+    std::multimap<EState, TActorId> Queue;
     std::map<ui32, ui32> Groups;
     std::map<std::tuple<ui32, ui32>, std::unique_ptr<TVDisk>> VDisks;
 
@@ -145,7 +145,7 @@ public:
                 } else {
                     VDisks.emplace_hint(it, id, std::make_unique<TVDisk>(vdiskId, location.GetNodeID(),
                         location.GetPDiskID(), location.GetVDiskSlotID(), location.GetPDiskGuid()));
-                } 
+                }
             } else if (const auto it = VDisks.find(id); it != VDisks.end()) {
                 it->second->StopActor();
                 VDisks.erase(it);

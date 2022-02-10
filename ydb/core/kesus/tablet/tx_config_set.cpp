@@ -7,13 +7,13 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxConfigSet : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     const NKikimrKesus::TEvSetConfig Record;
 
     THolder<TEvKesus::TEvSetConfigResult> Reply;
 
-    TTxConfigSet(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvSetConfig& record) 
+    TTxConfigSet(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvSetConfig& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

@@ -1,18 +1,18 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:solomon)
- 
-SRCS( 
-    monservice.cpp 
-    mon_service_http_request.cpp 
-    service.cpp 
+
+SRCS(
+    monservice.cpp
+    mon_service_http_request.cpp
+    service.cpp
     format.cpp
     auth.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/string_utils/base64
-    contrib/libs/protobuf 
+    contrib/libs/protobuf
     library/cpp/coroutine/engine
     library/cpp/coroutine/listener
     library/cpp/http/fetch
@@ -23,6 +23,6 @@ PEERDIR(
     library/cpp/svnversion
     library/cpp/uri
     library/cpp/cgiparam
-) 
- 
-END() 
+)
+
+END()

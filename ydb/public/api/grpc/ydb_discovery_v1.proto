@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package Ydb.Discovery.V1;
-option java_package = "com.yandex.ydb.discovery.v1"; 
+option java_package = "com.yandex.ydb.discovery.v1";
 
 import "ydb/public/api/protos/ydb_discovery.proto";
 

@@ -29,8 +29,8 @@ public:
     ui64 DiskSize;
     ui64 PDiskGuid;
     ui64 PDiskKey;
-    TActorId PDiskId; 
-    TActorId KeeperId; 
+    TActorId PDiskId;
+    TActorId KeeperId;
     std::unique_ptr<TActorSystem> ActorSystem;
     TTempDir TempDir;
     std::unique_ptr<TAppData> AppData;
@@ -66,10 +66,10 @@ public:
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), PDiskKey, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.emplace_back(PDiskId, pDiskSetup);
 
-        TActorId pdiskActorId; 
+        TActorId pdiskActorId;
         if (counter) {
             char x[12] = {'f', 'a', 'u', 'l', 't', 'y', 'p', 'd', 'i', 's', 'k'};
-            pdiskActorId = TActorId(0, x); 
+            pdiskActorId = TActorId(0, x);
             setup->LocalServices.emplace_back(pdiskActorId, TActorSetupCmd(new TFaultyPDiskActor(PDiskId, counter, event),
                     TMailboxType::Simple, 0));
         } else {
@@ -93,7 +93,7 @@ public:
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // LOGGER
-        NActors::TActorId loggerActorId{1, "logger"}; 
+        NActors::TActorId loggerActorId{1, "logger"};
         TIntrusivePtr<NActors::NLog::TSettings> logSettings{new NActors::NLog::TSettings{loggerActorId,
             NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0}};
         logSettings->Append(

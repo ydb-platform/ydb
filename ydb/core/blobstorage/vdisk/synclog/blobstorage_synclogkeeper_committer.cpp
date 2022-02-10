@@ -18,7 +18,7 @@ namespace NKikimr {
         class TSyncLogCommitterActor : public TActorBootstrapped<TSyncLogCommitterActor> {
             TIntrusivePtr<TSyncLogCtx> SlCtx;
             TSyncLogSnapshotPtr SyncLogSnap;
-            const TActorId NotifyID; 
+            const TActorId NotifyID;
             NPDisk::TCommitRecord CommitRecord;
             TEntryPointSerializer EntryPointSerializer;
             TMemRecLogSnapshotPtr SwapSnap;
@@ -179,7 +179,7 @@ namespace NKikimr {
 
             TSyncLogCommitterActor(
                     TIntrusivePtr<TSyncLogCtx> slCtx,
-                    const TActorId &notifyID, 
+                    const TActorId &notifyID,
                     TSyncLogKeeperCommitData &&commitData)
                 : TActorBootstrapped<TSyncLogCommitterActor>()
                 , SlCtx(std::move(slCtx))
@@ -207,7 +207,7 @@ namespace NKikimr {
 
         IActor *CreateSyncLogCommitter(
                 TIntrusivePtr<TSyncLogCtx> slCtx,
-                const TActorId &notifyID, 
+                const TActorId &notifyID,
                 TSyncLogKeeperCommitData &&commitData)
         {
             return new TSyncLogCommitterActor(std::move(slCtx), notifyID, std::move(commitData));

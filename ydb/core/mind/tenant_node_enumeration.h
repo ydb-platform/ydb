@@ -35,5 +35,5 @@ namespace NKikimr {
     };
 
     IActor* CreateTenantNodeEnumerationPublisher();
-    IActor* CreateTenantNodeEnumerationLookup(TActorId replyTo, const TString &tenantName); 
+    IActor* CreateTenantNodeEnumerationLookup(TActorId replyTo, const TString &tenantName);
 } // namespace NKikimr

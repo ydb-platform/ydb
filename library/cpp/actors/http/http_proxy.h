@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
 #include <library/cpp/dns/cache.h>
-#include <library/cpp/monlib/metrics/metric_registry.h> 
+#include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/variant.h>
 #include "http.h"
 #include "http_proxy_ssl.h"
@@ -25,7 +25,7 @@ struct TSocketDescriptor : NActors::TSharedDescriptor, THttpConfig {
 
 struct TEvHttpProxy {
     enum EEv {
-        EvAddListeningPort = EventSpaceBegin(NActors::TEvents::ES_HTTP), 
+        EvAddListeningPort = EventSpaceBegin(NActors::TEvents::ES_HTTP),
         EvConfirmListen,
         EvRegisterHandler,
         EvHttpIncomingRequest,
@@ -41,7 +41,7 @@ struct TEvHttpProxy {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_HTTP), "ES_HTTP event space is too small."); 
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_HTTP), "ES_HTTP event space is too small.");
 
     struct TEvAddListeningPort : NActors::TEventLocal<TEvAddListeningPort, EvAddListeningPort> {
         TIpPort Port;
@@ -71,9 +71,9 @@ struct TEvHttpProxy {
 
     struct TEvRegisterHandler : NActors::TEventLocal<TEvRegisterHandler, EvRegisterHandler> {
         TString Path;
-        TActorId Handler; 
+        TActorId Handler;
 
-        TEvRegisterHandler(const TString& path, const TActorId& handler) 
+        TEvRegisterHandler(const TString& path, const TActorId& handler)
             : Path(path)
             , Handler(handler)
         {}
@@ -142,32 +142,32 @@ struct TEvHttpProxy {
 
     struct TEvHttpConnectionOpened : NActors::TEventLocal<TEvHttpConnectionOpened, EvHttpConnectionOpened> {
         TString PeerAddress;
-        TActorId ConnectionID; 
+        TActorId ConnectionID;
 
-        TEvHttpConnectionOpened(const TString& peerAddress, const TActorId& connectionID) 
+        TEvHttpConnectionOpened(const TString& peerAddress, const TActorId& connectionID)
             : PeerAddress(peerAddress)
             , ConnectionID(connectionID)
         {}
     };
 
     struct TEvHttpConnectionClosed : NActors::TEventLocal<TEvHttpConnectionClosed, EvHttpConnectionClosed> {
-        TActorId ConnectionID; 
+        TActorId ConnectionID;
         TDeque<THttpIncomingRequestPtr> RecycledRequests;
 
-        TEvHttpConnectionClosed(const TActorId& connectionID) 
+        TEvHttpConnectionClosed(const TActorId& connectionID)
             : ConnectionID(connectionID)
         {}
 
-        TEvHttpConnectionClosed(const TActorId& connectionID, TDeque<THttpIncomingRequestPtr> recycledRequests) 
+        TEvHttpConnectionClosed(const TActorId& connectionID, TDeque<THttpIncomingRequestPtr> recycledRequests)
             : ConnectionID(connectionID)
             , RecycledRequests(std::move(recycledRequests))
         {}
     };
 
     struct TEvHttpAcceptorClosed : NActors::TEventLocal<TEvHttpAcceptorClosed, EvHttpAcceptorClosed> {
-        TActorId ConnectionID; 
+        TActorId ConnectionID;
 
-        TEvHttpAcceptorClosed(const TActorId& connectionID) 
+        TEvHttpAcceptorClosed(const TActorId& connectionID)
             : ConnectionID(connectionID)
         {}
     };
@@ -218,16 +218,16 @@ struct TEvHttpProxy {
 };
 
 struct TEndpointInfo {
-    TActorId Proxy; 
-    TActorId Owner; 
+    TActorId Proxy;
+    TActorId Owner;
     TString WorkerName;
     bool Secure;
     TSslHelpers::TSslHolder<SSL_CTX> SecureContext;
 };
 
-NActors::IActor* CreateHttpProxy(NMonitoring::TMetricRegistry& sensors); 
-NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner, const TActorId& poller); 
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, const TString& host, bool secure, const TActorId& poller); 
+NActors::IActor* CreateHttpProxy(NMonitoring::TMetricRegistry& sensors);
+NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner, const TActorId& poller);
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, const TString& host, bool secure, const TActorId& poller);
 NActors::IActor* CreateIncomingConnectionActor(
         const TEndpointInfo& endpoint,
         TIntrusivePtr<TSocketDescriptor> socket,

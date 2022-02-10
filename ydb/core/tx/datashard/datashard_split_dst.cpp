@@ -96,7 +96,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         // Send Ack
-        TActorId ackTo = Ev->Sender; 
+        TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack init split/merge destination OpId " << opId);
@@ -279,7 +279,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        TActorId ackTo = Ev->Sender; 
+        TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack snapshot OpId " << opId);

@@ -12,11 +12,11 @@ class TLoaderActor : public TActorBootstrapped<TLoaderActor> {
 
     const NBackpressure::TQueueClientId ClientId;
     const TVDiskID VDiskId;
-    const TActorId VDiskActorId; 
+    const TActorId VDiskActorId;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TBSProxyContextPtr BSProxyCtx;
     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
-    TActorId QueueId; 
+    TActorId QueueId;
     ui32 InFlightRemain = 16;
     bool Ready = false;
     ui32 BlobIdx = 1;
@@ -24,7 +24,7 @@ class TLoaderActor : public TActorBootstrapped<TLoaderActor> {
     std::deque<TLogoBlobID> RequestQ;
 
 public:
-    TLoaderActor(NBackpressure::TQueueClientId clientId, TVDiskID vdiskId, TActorId vdiskActorId) 
+    TLoaderActor(NBackpressure::TQueueClientId clientId, TVDiskID vdiskId, TActorId vdiskActorId)
         : ClientId(std::move(clientId))
         , VDiskId(std::move(vdiskId))
         , VDiskActorId(std::move(vdiskActorId))

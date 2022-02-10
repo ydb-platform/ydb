@@ -313,7 +313,7 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         CrackTicket(ev->Get()->Ticket, ticket, ticketType);
 
         TString key = GetKey(ev->Get());
-        TActorId sender = ev->Sender; 
+        TActorId sender = ev->Sender;
         ui64 cookie = ev->Cookie;
 
         CounterTicketsReceived->Inc();

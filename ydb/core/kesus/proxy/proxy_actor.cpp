@@ -32,7 +32,7 @@ class TKesusProxyActor : public TActorBootstrapped<TKesusProxyActor> {
     };
 
     struct TDirectRequest {
-        TActorId Sender; 
+        TActorId Sender;
         ui64 Cookie;
         THolder<IEventBase> Event;
     };
@@ -47,7 +47,7 @@ class TKesusProxyActor : public TActorBootstrapped<TKesusProxyActor> {
         ui64 SeqNo;
         ui64 SessionId;
         ui64 ClientSeqNo;
-        TActorId Owner; 
+        TActorId Owner;
         ui64 OwnerCookie;
         ESessionState State = ESessionState::ATTACHING;
         THolder<TEvKesus::TEvAttachSession> AttachEvent;
@@ -58,30 +58,30 @@ class TKesusProxyActor : public TActorBootstrapped<TKesusProxyActor> {
     };
 
 private:
-    const TActorId MetaProxy; 
+    const TActorId MetaProxy;
     const ui64 TabletId;
     const TString KesusPath;
     EState State = STATE_IDLE;
-    TActorId TabletPipe; 
+    TActorId TabletPipe;
     ui64 ProxyGeneration = 0;
 
     ui64 SeqNo = 0;
 
     // SeqNo -> direct request
     THashMap<ui64, TDirectRequest> DirectRequests;
-    THashMap<TActorId, ui64> DirectRequestBySender; 
+    THashMap<TActorId, ui64> DirectRequestBySender;
 
     // SeqNo -> session data
     THashMap<ui64, TSessionData> Sessions;
     // SessionId -> SeqNo
     THashMap<ui64, TSessionData*> SessionById;
     // Owner -> SeqNo
-    THashMap<TActorId, TSessionData*> SessionByOwner; 
+    THashMap<TActorId, TSessionData*> SessionByOwner;
     // Request SeqNo -> Session SeqNo
     THashMap<ui64, TSessionData*> SessionByRequest;
 
 public:
-    TKesusProxyActor(const TActorId& meta, ui64 tabletId, const TString& kesusPath) 
+    TKesusProxyActor(const TActorId& meta, ui64 tabletId, const TString& kesusPath)
         : MetaProxy(meta)
         , TabletId(tabletId)
         , KesusPath(kesusPath)
@@ -106,7 +106,7 @@ private:
         return SessionById.Value(sessionId, nullptr);
     }
 
-    TSessionData* FindSessionByOwner(const TActorId& owner) { 
+    TSessionData* FindSessionByOwner(const TActorId& owner) {
         return SessionByOwner.Value(owner, nullptr);
     }
 
@@ -221,7 +221,7 @@ private:
         CancelSessionRequest(ev->Sender);
     }
 
-    void CancelDirectRequest(const TActorId& owner) { 
+    void CancelDirectRequest(const TActorId& owner) {
         auto it = DirectRequestBySender.find(owner);
         if (it != DirectRequestBySender.end()) {
             DirectRequests.erase(it->second);
@@ -229,7 +229,7 @@ private:
         }
     }
 
-    void CancelSessionRequest(const TActorId& owner) { 
+    void CancelSessionRequest(const TActorId& owner) {
         if (auto* data = FindSessionByOwner(owner)) {
             ClearSessionOwner(data);
 
@@ -423,7 +423,7 @@ private:
         }
     }
 
-    void HandleDirectRequest(const TActorId& sender, ui64 cookie, THolder<IEventBase> event) { 
+    void HandleDirectRequest(const TActorId& sender, ui64 cookie, THolder<IEventBase> event) {
         KPROXY_LOG_TRACE_S("Received " << event->ToStringHeader() << " from " << sender);
         Y_VERIFY(!DirectRequestBySender.contains(sender), "Only one outgoing request per sender is allowed");
         const ui64 seqNo = ++SeqNo;
@@ -748,7 +748,7 @@ private:
     }
 
     template<class TRequest>
-    void HandleSessionRequest(const TActorId& sender, ui64 cookie, TAutoPtr<TRequest> event) { 
+    void HandleSessionRequest(const TActorId& sender, ui64 cookie, TAutoPtr<TRequest> event) {
         KPROXY_LOG_TRACE_S("Received " << event->ToStringHeader() << " from " << sender);
         Y_VERIFY(sender);
         auto& record = event->Record;
@@ -842,7 +842,7 @@ private:
     }
 };
 
-IActor* CreateKesusProxyActor(const TActorId& meta, ui64 tabletId, const TString& kesusPath) { 
+IActor* CreateKesusProxyActor(const TActorId& meta, ui64 tabletId, const TString& kesusPath) {
     return new TKesusProxyActor(meta, tabletId, kesusPath);
 }
 

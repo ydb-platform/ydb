@@ -89,7 +89,7 @@ public:
         : TBase(request, promise, callback) {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TActorId txproxy = MakeTxProxyID(); 
+        TActorId txproxy = MakeTxProxyID();
         ctx.Send(txproxy, this->Request.Release());
 
         this->Become(&TProxyRequestHandler::AwaitState);
@@ -125,7 +125,7 @@ public:
         : TBase(request, promise, callback) {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TActorId kqpProxy = MakeKqpProxyID(ctx.SelfID.NodeId()); 
+        TActorId kqpProxy = MakeKqpProxyID(ctx.SelfID.NodeId());
         ctx.Send(kqpProxy, this->Request.Release());
 
         this->Become(&TKqpRequestHandler::AwaitState);
@@ -173,9 +173,9 @@ public:
         , RowsLimit(rowsLimit) {}
 
     void Bootstrap(const TActorContext& ctx) {
-        ActorIdToProto(SelfId(), this->Request->Record.MutableRequestActorId()); 
+        ActorIdToProto(SelfId(), this->Request->Record.MutableRequestActorId());
 
-        TActorId kqpProxy = MakeKqpProxyID(ctx.SelfID.NodeId()); 
+        TActorId kqpProxy = MakeKqpProxyID(ctx.SelfID.NodeId());
         ctx.Send(kqpProxy, this->Request.Release());
 
         this->Become(&TKqpScanQueryRequestHandler::AwaitState);
@@ -220,7 +220,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
-        ExecuterActorId = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId()); 
+        ExecuterActorId = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId());
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
             << "Received executer progress for scan query, id: " << ExecuterActorId);
     }
@@ -271,7 +271,7 @@ public:
 
 private:
     ui64 RowsLimit = 0;
-    TActorId ExecuterActorId; 
+    TActorId ExecuterActorId;
     bool HasMeta = false;
     Ydb::ResultSet ResultSet;
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
@@ -642,7 +642,7 @@ private:
             TAutoPtr<TRequest> ev = new TRequest();
             ev->Record.CopyFrom(this->Request->Record);
 
-            TActorId txproxy = MakeTxProxyID(); 
+            TActorId txproxy = MakeTxProxyID();
             ctx.Send(txproxy, ev.Release());
         }
     }
@@ -673,7 +673,7 @@ public:
         : TBase(request, promise, {}) {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TActorId txproxy = MakeTxProxyID(); 
+        TActorId txproxy = MakeTxProxyID();
         ctx.Send(txproxy, this->Request.Release());
 
         this->Become(&TSchemeOpRequestHandler::AwaitState);
@@ -819,7 +819,7 @@ public:
     }
 
 private:
-    TActorId ShemePipeActorId; 
+    TActorId ShemePipeActorId;
 };
 
 class TKqpExecPhysicalRequestHandler: public TActorBootstrapped<TKqpExecPhysicalRequestHandler> {
@@ -831,7 +831,7 @@ public:
         return NKikimrServices::TActivity::KQP_EXEC_PHYSICAL_REQUEST_HANDLER;
     }
 
-    TKqpExecPhysicalRequestHandler(TRequest* request, bool streaming, const TActorId& target, TPromise<TResult> promise) 
+    TKqpExecPhysicalRequestHandler(TRequest* request, bool streaming, const TActorId& target, TPromise<TResult> promise)
         : Request(request)
         , Streaming(streaming)
         , Executer(request->ExecuterId)
@@ -929,8 +929,8 @@ private:
 private:
     THolder<TRequest> Request;
     bool Streaming;
-    TActorId Executer; 
-    TActorId Target; 
+    TActorId Executer;
+    TActorId Target;
     TPromise<TResult> Promise;
 };
 
@@ -1610,7 +1610,7 @@ public:
         return RunInternal(cluster, program, TKqpParamsMap(), true, false, TMkqlSettings());
     }
 
-    TFuture<TExecPhysicalResult> ExecutePhysical(TExecPhysicalRequest&& request, const NActors::TActorId& target) override { 
+    TFuture<TExecPhysicalResult> ExecutePhysical(TExecPhysicalRequest&& request, const NActors::TActorId& target) override {
         return ExecutePhysicalQueryInternal(std::move(request), target, false);
     }
 
@@ -1846,7 +1846,7 @@ public:
             });
     }
 
-    TFuture<TExecPhysicalResult> ExecuteScanQuery(TExecPhysicalRequest&& request, const TActorId& target) override { 
+    TFuture<TExecPhysicalResult> ExecuteScanQuery(TExecPhysicalRequest&& request, const TActorId& target) override {
         return ExecutePhysicalQueryInternal(std::move(request), target, true);
     }
 
@@ -1915,7 +1915,7 @@ private:
     using TTransactionResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
 
 private:
-    TActorId RegisterActor(IActor* actor) { 
+    TActorId RegisterActor(IActor* actor) {
         return ActorSystem->Register(actor, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
     }
 
@@ -1976,7 +1976,7 @@ private:
     }
 
     template<typename TRequest, typename TResponse, typename TResult>
-    TFuture<TResult> SendActorRequest(const TActorId& actorId, TRequest* request, 
+    TFuture<TResult> SendActorRequest(const TActorId& actorId, TRequest* request,
         typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback)
     {
         auto promise = NewPromise<TResult>();
@@ -2120,7 +2120,7 @@ private:
         }
     }
 
-    TFuture<TExecPhysicalResult> ExecutePhysicalQueryInternal(TExecPhysicalRequest&& request, const TActorId& target, 
+    TFuture<TExecPhysicalResult> ExecutePhysicalQueryInternal(TExecPhysicalRequest&& request, const TActorId& target,
         bool streaming)
     {
         auto executerActor = CreateKqpExecuter(std::move(request), Database,

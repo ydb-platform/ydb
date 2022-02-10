@@ -26,7 +26,7 @@ namespace NFake {
     struct TEvTerm : public TEventLocal<TEvTerm, EvTerm> { };
 
     struct TEvFire : public TEventLocal<TEvFire, EvFire> {
-        TEvFire(ui32 level, const TActorId &alias, TActorSetupCmd cmd) 
+        TEvFire(ui32 level, const TActorId &alias, TActorSetupCmd cmd)
             : Level(level)
             , Alias(alias)
             , Cmd(cmd)
@@ -35,17 +35,17 @@ namespace NFake {
         }
 
         const ui32 Level = Max<ui32>();
-        const TActorId Alias; 
+        const TActorId Alias;
         TActorSetupCmd Cmd;
     };
 
     struct TEvReady : public TEventLocal<TEvReady, EvReady> {
-        TEvReady(ui64 tabletId, const TActorId& tabletActorID) 
+        TEvReady(ui64 tabletId, const TActorId& tabletActorID)
             : TabletID(tabletId)
             , ActorId(tabletActorID)
         {}
         ui64 TabletID;
-        TActorId ActorId; 
+        TActorId ActorId;
     };
 
     struct TEvExecute : public TEventLocal<TEvExecute, EvExecute> {

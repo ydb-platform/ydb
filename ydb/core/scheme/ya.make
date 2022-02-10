@@ -1,19 +1,19 @@
-LIBRARY() 
- 
-OWNER( 
-    ddoarn 
-    vvvv 
+LIBRARY()
+
+OWNER(
+    ddoarn
+    vvvv
     g:kikimr
-) 
- 
-SRCS( 
+)
+
+SRCS(
     scheme_borders.cpp
     scheme_tablecell.cpp
     scheme_tabledefs.cpp
-    scheme_types_defs.cpp 
-) 
- 
-PEERDIR( 
+    scheme_types_defs.cpp
+)
+
+PEERDIR(
     library/cpp/actors/core
     library/cpp/charset
     library/cpp/containers/bitseq
@@ -24,9 +24,9 @@ PEERDIR(
     ydb/core/util
     ydb/library/aclib
     ydb/public/lib/scheme_types
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

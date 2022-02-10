@@ -32,8 +32,8 @@ class TJsonMetaInfo : public TActorBootstrapped<TJsonMetaInfo> {
     ui32 Timeout = 0;
     bool Counters = false;
     NKikimrViewer::TMetaInfo MetaInfo;
-    TActorId BrowseActorID; 
-    using TBrowseRequestKey = std::tuple<TActorId, TTabletId, ui32>; 
+    TActorId BrowseActorID;
+    using TBrowseRequestKey = std::tuple<TActorId, TTabletId, ui32>;
     std::unordered_multiset<TBrowseRequestKey> BrowseRequestsInFlight;
 
 public:

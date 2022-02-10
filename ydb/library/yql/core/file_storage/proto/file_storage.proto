@@ -5,7 +5,7 @@ message TSchemeTranslate {
     required string TargetUrl = 2; // replacement string for target URL
 }
 
-message TFileStorageConfig { 
+message TFileStorageConfig {
     optional string Path = 1; // Path to file storage. An auto-cleaned temp directory is used for empty value
     optional uint32 MaxFiles = 2 [default = 1000]; // Maximum number of files in the storage
     optional uint32 MaxSizeMb = 3 [default = 100]; // Maximum total size of all files in the storage

@@ -17,7 +17,7 @@ static const ui32 PQ_METACACHE_REFRESH_INTERVAL_SECONDS = 10;
 
 
 inline TActorId CreatePersQueueMetaCacheV2Id() {
-    return TActorId(0, "PQMetaCache"); 
+    return TActorId(0, "PQMetaCache");
 }
 
 namespace NPqMetaCacheV2 {

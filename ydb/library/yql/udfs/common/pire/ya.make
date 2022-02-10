@@ -1,5 +1,5 @@
 YQL_UDF(pire_udf)
- 
+
 YQL_ABI_VERSION(
     2
     23
@@ -7,13 +7,13 @@ YQL_ABI_VERSION(
 )
 
 OWNER(g:yql g:yql_ydb_core)
- 
-SRCS( 
+
+SRCS(
     pire_udf.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/regex/pire
-) 
- 
-END() 
+)
+
+END()

@@ -9,7 +9,7 @@ public:
                         const TString &path,
                         ui64 schemeShardId,
                         ui64 pathId,
-                        TActorId worker) 
+                        TActorId worker)
         : TBase(self)
         , Path(path)
         , SchemeShardId(schemeShardId)
@@ -76,7 +76,7 @@ public:
             Self->TenantIdToName[Tenant->DomainId] = Tenant->Path;
 
             if (Tenant->Worker == Worker)
-                Tenant->Worker = TActorId(); 
+                Tenant->Worker = TActorId();
 
             for (auto &pr : Tenant->StoragePools) {
                 pr.second->SetScopeId(SchemeShardId, PathId);
@@ -98,13 +98,13 @@ private:
     TString Path;
     ui64 SchemeShardId;
     ui64 PathId;
-    TActorId Worker; 
+    TActorId Worker;
 };
 
 ITransaction *TTenantsManager::CreateTxUpdateSubDomainKey(const TString &path,
                                                         ui64 schemeShardId,
                                                         ui64 pathId,
-                                                        TActorId worker) 
+                                                        TActorId worker)
 {
     return new TTxUpdateSubDomainKey(this, path, schemeShardId, pathId, worker);
 }

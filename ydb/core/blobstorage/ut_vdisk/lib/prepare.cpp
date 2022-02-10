@@ -158,7 +158,7 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
                     NPDisk::YdbDefaultPDiskSequence, counters), TMailboxType::Revolving, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(inst.PDiskActorID, pDiskSetup)); 
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(inst.PDiskActorID, pDiskSetup));
     }
 }
 
@@ -209,7 +209,7 @@ void TAllVDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, NKikimr::TBlob
         TVDiskInstance &vdisk = VDisks[i];
         if (vdisk.Initialized) {
             TActorSetupCmd vdiskSetup(CreateVDisk(vdisk.Cfg.Get(), groupInfo, counters), TMailboxType::Revolving, 0);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(vdisk.ActorID, vdiskSetup)); 
+            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(vdisk.ActorID, vdiskSetup));
         }
     }
 }
@@ -294,9 +294,9 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     setup1->Executors[3].Reset(new TBasicExecutorPool(3, 8, 20));
     setup1->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
 
-    const TActorId nameserviceId = GetNameserviceActorId(); 
+    const TActorId nameserviceId = GetNameserviceActorId();
     TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup)); 
+    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
 
     ui64 initOwnerRound = 1;
     // setup pdisks
@@ -315,7 +315,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     VDisks->ActorSetupCmd(setup1.Get(), GroupInfo.Get(), Counters);
 
     ///////////////////////// LOGGER ///////////////////////////////////////////////
-    NActors::TActorId loggerActorId = NActors::TActorId(1, "logger"); 
+    NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
     TIntrusivePtr<NActors::NLog::TSettings> logSettings;
     logSettings.Reset(new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR,
                                                    NActors::NLog::PRI_DEBUG, 0)); // NOTICE
@@ -354,7 +354,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
                                                                    NActors::CreateStderrBackend(),
                                                                    Counters->GetSubgroup("logger", "counters"));
     NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 0);
-    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd); 
+    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
     setup1->LocalServices.push_back(loggerActorPair);
     //////////////////////////////////////////////////////////////////////////////
 
@@ -369,7 +369,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Monitoring settings set up");
     //////////////////////////////////////////////////////////////////////////////
 
-    TIntrusivePtr<NScheme::TTypeRegistry> typeRegistry(new NScheme::TKikimrTypeRegistry()); 
+    TIntrusivePtr<NScheme::TTypeRegistry> typeRegistry(new NScheme::TKikimrTypeRegistry());
     AppData.reset(new NKikimr::TAppData(0, 1, 2, 3, TMap<TString, ui32>(), typeRegistry.Get(),
                                         nullptr, nullptr, &KikimrShouldContinue));
     AppData->Counters = Counters;

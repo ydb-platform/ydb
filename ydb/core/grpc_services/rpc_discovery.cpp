@@ -48,7 +48,7 @@ namespace NDiscoveryPrivate {
         THashMap<TString, THolder<TEvStateStorage::TEvBoardInfo>> NewInfo;
 
         struct TWaiter {
-            TActorId ActorId; 
+            TActorId ActorId;
             ui64 Cookie;
         };
 
@@ -128,7 +128,7 @@ namespace NDiscoveryPrivate {
 
 class TListEndpointsRPC : public TActorBootstrapped<TListEndpointsRPC> {
     THolder<TEvListEndpointsRequest> Request;
-    const TActorId CacheId; 
+    const TActorId CacheId;
 
     const bool RequestScheme = true;
 
@@ -144,7 +144,7 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TListEndpointsRPC(TEvListEndpointsRequest::TPtr &msg, TActorId cacheId) 
+    TListEndpointsRPC(TEvListEndpointsRequest::TPtr &msg, TActorId cacheId)
         : Request(msg->Release().Release())
         , CacheId(cacheId)
     {}
@@ -154,7 +154,7 @@ public:
         Lookup(Request->GetProtoRequest()->database());
 
         // request self node info
-        Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId())); 
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
 
         // request path info
         if (RequestScheme) {

@@ -1,9 +1,9 @@
-RECURSE( 
+RECURSE(
     adaptive
-    hdr 
-    hdr/ut 
+    hdr
+    hdr/ut
     simple
     simple/ut
     rt
     rt/ut
-) 
+)

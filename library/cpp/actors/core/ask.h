@@ -11,7 +11,7 @@ namespace NActors {
      */
     THolder<IActor> MakeAskActor(
         TMaybe<ui32> expectedEventType,
-        TActorId recipient, 
+        TActorId recipient,
         THolder<IEventBase> event,
         TDuration timeout,
         const NThreading::TPromise<THolder<IEventBase>>& promise);

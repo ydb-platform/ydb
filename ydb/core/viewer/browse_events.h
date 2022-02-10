@@ -40,17 +40,17 @@ namespace NViewerEvents {
     };
 
     struct TEvBrowseRequestSent : TEventLocal<TEvBrowseRequestSent, EvBrowseRequestSent> {
-        TActorId Actor; 
+        TActorId Actor;
         TTabletId Tablet;
         ui32 Event;
 
-        TEvBrowseRequestSent(const TActorId& actor, TTabletId tablet, ui32 event) 
+        TEvBrowseRequestSent(const TActorId& actor, TTabletId tablet, ui32 event)
             : Actor(actor)
             , Tablet(tablet)
             , Event(event)
         {}
 
-        TEvBrowseRequestSent(const TActorId& actor, ui32 event) 
+        TEvBrowseRequestSent(const TActorId& actor, ui32 event)
             : Actor(actor)
             , Tablet(0)
             , Event(event)
@@ -58,17 +58,17 @@ namespace NViewerEvents {
     };
 
     struct TEvBrowseRequestCompleted : TEventLocal<TEvBrowseRequestCompleted, EvBrowseRequestCompleted> {
-        TActorId Actor; 
+        TActorId Actor;
         TTabletId Tablet;
         ui32 Event;
 
-        TEvBrowseRequestCompleted(const TActorId& actor, TTabletId tablet, ui32 event) 
+        TEvBrowseRequestCompleted(const TActorId& actor, TTabletId tablet, ui32 event)
             : Actor(actor)
             , Tablet(tablet)
             , Event(event)
         {}
 
-        TEvBrowseRequestCompleted(const TActorId& actor, ui32 event) 
+        TEvBrowseRequestCompleted(const TActorId& actor, ui32 event)
             : Actor(actor)
             , Tablet(0)
             , Event(event)

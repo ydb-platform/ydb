@@ -214,7 +214,7 @@ void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const 
     }
 }
 
-ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ownerId) { 
+ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ownerId) {
     Y_VERIFY(!CompletionQueue.empty(), "t: %" PRIu64
         " non-expected confirmation %" PRIu32
         ", prev %" PRIu32, Cookies->Tablet, step, PrevConfirmedStep);

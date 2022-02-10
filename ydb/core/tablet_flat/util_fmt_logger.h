@@ -15,7 +15,7 @@ namespace NUtil {
         using TSys = ::NActors::TActorSystem;
         using EComp = ::NActors::NLog::EComponent;
         using EPrio = ::NActors::NLog::EPrio;
-        using TPath = ::NActors::TActorId; 
+        using TPath = ::NActors::TActorId;
 
         TLogger(TSys *sys, EComp comp)
             : Time(TAppData::TimeProvider.Get())

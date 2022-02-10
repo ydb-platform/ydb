@@ -39,9 +39,9 @@ namespace NKikimr {
         };
     };
 
-    inline NActors::TActorId MakeUserRegistryID() { 
+    inline NActors::TActorId MakeUserRegistryID() {
         const char name[12] = "userregistr";
-        return NActors::TActorId(0, TStringBuf(name, 12)); 
+        return NActors::TActorId(0, TStringBuf(name, 12));
     }
 
     IActor* CreateUserRegistry(const TString& query);

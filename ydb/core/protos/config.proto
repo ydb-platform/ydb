@@ -1346,8 +1346,8 @@ message TAppConfig {
     optional NKikimrBlobStorage.TAllVDiskKinds VDiskConfig = 14;
     optional NKikimrBlobStorage.TDriveModelList DriveModelConfig = 31;
     optional NKikimrBlobStorage.TIncrHugeConfig IncrHugeConfig = 18;
-    optional string UDFsDir = 15; 
-    repeated string UDFsPaths = 16; 
+    optional string UDFsDir = 15;
+    repeated string UDFsPaths = 16;
     optional TKQPConfig KQPConfig = 17;
     optional TMemoryLogConfig MemoryLogConfig = 19;
     optional TGRpcConfig GRpcConfig = 20;

@@ -6,13 +6,13 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     NKikimrKesus::TEvAddQuoterResource Record;
 
     THolder<TEvKesus::TEvAddQuoterResourceResult> Reply;
 
-    TTxQuoterResourceAdd(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvAddQuoterResource& record) 
+    TTxQuoterResourceAdd(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvAddQuoterResource& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

@@ -224,9 +224,9 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TestBadArbitraryAtom("(\"\\U0000d800\")", "Invalid unicode value");
         TestBadArbitraryAtom("(\"\\U0000dfff\")", "Invalid unicode value");
 
-        TestBadArbitraryAtom("(x\"ag\")", "Invalid binary value"); 
-        TestBadArbitraryAtom("(x\"abc\")", "Invalid binary value"); 
-        TestBadArbitraryAtom("(x\"abcd)", "Invalid binary value"); 
+        TestBadArbitraryAtom("(x\"ag\")", "Invalid binary value");
+        TestBadArbitraryAtom("(x\"abc\")", "Invalid binary value");
+        TestBadArbitraryAtom("(x\"abcd)", "Invalid binary value");
         TestBadArbitraryAtom("(x\"abcd", "Unexpected end of atom");
     }
 
@@ -376,10 +376,10 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TString printResult = ast.Root->ToString();
         UNIT_ASSERT_STRINGS_EQUAL(s5, printResult);
     }
- 
+
     Y_UNIT_TEST(UnicodePrettyPrint) {
         ParseAndAdaptPrint("(\"абв αβγ ﬡ\")", "(\"\\u0430\\u0431\\u0432 \\u03B1\\u03B2\\u03B3 \\uFB21\")");
-    } 
+    }
 
     Y_UNIT_TEST(SerializeQuotedEmptyAtom) {
         TMemoryPool pool(1024);

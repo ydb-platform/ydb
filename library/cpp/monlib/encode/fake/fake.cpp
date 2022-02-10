@@ -3,7 +3,7 @@
 #include <util/datetime/base.h>
 
 namespace NMonitoring {
-    class TFakeEncoder: public IMetricEncoder { 
+    class TFakeEncoder: public IMetricEncoder {
     public:
         void OnStreamBegin() override {
         }
@@ -13,9 +13,9 @@ namespace NMonitoring {
         void OnCommonTime(TInstant) override {
         }
 
-        void OnMetricBegin(EMetricType) override { 
+        void OnMetricBegin(EMetricType) override {
         }
-        void OnMetricEnd() override { 
+        void OnMetricEnd() override {
         }
 
         void OnLabelsBegin() override {
@@ -45,7 +45,7 @@ namespace NMonitoring {
         }
     };
 
-    IMetricEncoderPtr EncoderFake() { 
+    IMetricEncoderPtr EncoderFake() {
         return MakeHolder<TFakeEncoder>();
     }
 }

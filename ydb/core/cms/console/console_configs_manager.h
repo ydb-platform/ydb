@@ -194,7 +194,7 @@ private:
     TSubscriptionModifications PendingSubscriptionModifications;
     TSchedulerCookieHolder SubscriptionsCleanupTimerCookieHolder;
 
-    TActorId ConfigsProvider; 
+    TActorId ConfigsProvider;
     TTxProcessor::TPtr TxProcessor;
 };
 

@@ -44,7 +44,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     };
 
     struct TTablet {
-        TActorId Tablet; 
+        TActorId Tablet;
         ui32 Generation;
         TTabletTypes::EType TabletType;
         NKikimrLocal::EBootMode BootMode;
@@ -76,16 +76,16 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         {}
     };
 
-    const TActorId Owner; 
+    const TActorId Owner;
     const ui64 HiveId;
     TVector<TSubDomainKey> ServicedDomains;
 
-    TActorId HivePipeClient; 
+    TActorId HivePipeClient;
     bool Connected;
 
     TIntrusivePtr<TLocalConfig> Config;
 
-    TActorId BootQueue; 
+    TActorId BootQueue;
     ui32 HiveGeneration;
 
     TActorId KnownHiveLeader;
@@ -142,7 +142,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
             NTabletPipe::CloseClient(ctx, HivePipeClient);
         }
-        HivePipeClient = TActorId(); 
+        HivePipeClient = TActorId();
 
         for (const auto &xpair : OnlineTablets) {
             ctx.Send(xpair.second.Tablet, new TEvents::TEvPoisonPill());
@@ -201,7 +201,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void HandlePipeDestroyed(const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar HandlePipeDestroyed - DISCONNECTED");
-        HivePipeClient = TActorId(); 
+        HivePipeClient = TActorId();
         Connected = false;
         TryToRegister(ctx);
         if (SentDrainNode && !DrainResultReceived) {
@@ -291,7 +291,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(TEvLocal::TEvReconnect::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvReconnect");
-        const TActorId& sender = ev->Sender; 
+        const TActorId& sender = ev->Sender;
         const NKikimrLocal::TEvReconnect& record = ev->Get()->Record;
         Y_VERIFY(HiveId == record.GetHiveId());
         const ui32 hiveGen = record.GetHiveGeneration();
@@ -309,7 +309,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(TEvLocal::TEvPing::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing");
-        const TActorId &sender = ev->Sender; 
+        const TActorId &sender = ev->Sender;
         const NKikimrLocal::TEvPing &record = ev->Get()->Record;
         Y_VERIFY(HiveId == record.GetHiveId());
 
@@ -861,7 +861,7 @@ public:
         return NKikimrServices::TActivity::LOCAL_ACTOR;
     }
 
-    TLocalNodeRegistrar(const TActorId &owner, ui64 hiveId, TVector<TSubDomainKey> servicedDomains, 
+    TLocalNodeRegistrar(const TActorId &owner, ui64 hiveId, TVector<TSubDomainKey> servicedDomains,
                         const NKikimrTabletBase::TMetrics &resourceLimit, TIntrusivePtr<TLocalConfig> config,
                         NMonitoring::TDynamicCounterPtr counters)
         : Owner(owner)
@@ -941,7 +941,7 @@ public:
 class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     struct TResolveTask {
         TRegistrationInfo Info;
-        TVector<TActorId> Senders; 
+        TVector<TActorId> Senders;
     };
 
     struct TTenantInfo {
@@ -954,8 +954,8 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         TTenantInfo(TTenantInfo &&other) = default;
 
         TRegistrationInfo Info;
-        TVector<TActorId> Locals; 
-        TActorId Subscriber; 
+        TVector<TActorId> Locals;
+        TActorId Subscriber;
         TVector<TTabletId> HiveIds;
         THashMap<TString, TString> Attributes;
         TSubDomainKey DomainKey;
@@ -964,7 +964,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     TString Domain;
     ui64 SchemeRoot;
     TVector<ui64> HiveIds;
-    TActorId SchemeShardPipe; 
+    TActorId SchemeShardPipe;
     NTabletPipe::TClientConfig PipeConfig;
     THashMap<TString, TResolveTask> ResolveTasks;
     TIntrusivePtr<TLocalConfig> Config;
@@ -981,7 +981,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         if (SchemeShardPipe) {
             NTabletPipe::CloseClient(ctx, SchemeShardPipe);
-            SchemeShardPipe = TActorId(); 
+            SchemeShardPipe = TActorId();
         }
     }
 
@@ -996,7 +996,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     }
 
     void SendStatus(const TString &tenant,
-                    TActorId recipient, 
+                    TActorId recipient,
                     const TActorContext &ctx)
     {
         TAutoPtr<TEvLocal::TEvTenantStatus> ev;
@@ -1019,7 +1019,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     void SendStatus(const TString &tenant,
                     TEvLocal::TEvTenantStatus::EStatus status,
                     const TString &msg,
-                    TActorId recipient, 
+                    TActorId recipient,
                     const TActorContext &ctx)
     {
         TAutoPtr<TEvLocal::TEvTenantStatus> ev = new TEvLocal::TEvTenantStatus(tenant, status, msg);
@@ -1027,7 +1027,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     }
 
     void SendStatus(const TString &tenant,
-                    const TVector<TActorId> &recipients, 
+                    const TVector<TActorId> &recipients,
                     const TActorContext &ctx)
     {
         for (auto &r : recipients)
@@ -1037,7 +1037,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     void SendStatus(const TString &tenant,
                     TEvLocal::TEvTenantStatus::EStatus status,
                     const TString &msg,
-                    const TVector<TActorId> &recipients, 
+                    const TVector<TActorId> &recipients,
                     const TActorContext &ctx)
     {
         for (auto &r : recipients)
@@ -1052,11 +1052,11 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         auto counters = GetServiceCounters(AppData(ctx)->Counters, "tablets");
         auto actor = new TLocalNodeRegistrar(SelfId(), hiveId, servicedDomains, resourceLimit, Config, counters);
-        TActorId actorId = ctx.Register(actor); 
+        TActorId actorId = ctx.Register(actor);
 
         RunningTenants.at(tenant).Locals.push_back(actorId);
 
-        TActorId localRegistrarServiceId = MakeLocalRegistrarID(ctx.SelfID.NodeId(), hiveId); 
+        TActorId localRegistrarServiceId = MakeLocalRegistrarID(ctx.SelfID.NodeId(), hiveId);
         ctx.ExecutorThread.ActorSystem->RegisterLocalService(localRegistrarServiceId, actorId);
     }
 
@@ -1089,7 +1089,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         for (auto &attr : rec.GetPathDescription().GetUserAttributes())
             info.Attributes.emplace(std::make_pair(attr.GetKey(), attr.GetValue()));
         RunningTenants.emplace(std::make_pair(task.Info.TenantName, info));
-        const TActorId whiteboardServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId())); 
+        const TActorId whiteboardServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()));
         Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Tenant"));
         Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateSetTenant(task.Info.TenantName));
         for (TTabletId hId : hiveIds) {
@@ -1115,7 +1115,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                 LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
                             LogPrefix << "Send poison pill to scheme subscriber of " << pr.second.Info.TenantName);
                 ctx.Send(pr.second.Subscriber, new TEvents::TEvPoisonPill);
-                pr.second.Subscriber = TActorId(); 
+                pr.second.Subscriber = TActorId();
             }
             ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()),
                      new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRemoveTenant(pr.first));
@@ -1306,7 +1306,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                     ctx.Send(aid, new TEvents::TEvPoisonPill());
                 if (it->second.Subscriber) {
                     ctx.Send(it->second.Subscriber, new TEvents::TEvPoisonPill());
-                    it->second.Subscriber = TActorId(); 
+                    it->second.Subscriber = TActorId();
                 }
                 ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()),
                          new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRemoveTenant(it->first));
@@ -1395,7 +1395,7 @@ public:
 
 class TLocal : public TActorBootstrapped<TLocal> {
     TIntrusivePtr<TLocalConfig> Config;
-    THashMap<TString, TActorId> DomainLocals; 
+    THashMap<TString, TActorId> DomainLocals;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1436,7 +1436,7 @@ public:
         return true;
     }
 
-    void SendUnknownDomain(const TString &tenant, TActorId sender, const TActorContext &ctx) 
+    void SendUnknownDomain(const TString &tenant, TActorId sender, const TActorContext &ctx)
     {
         TAutoPtr<TEvLocal::TEvTenantStatus> ev
             = new TEvLocal::TEvTenantStatus(tenant, TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,

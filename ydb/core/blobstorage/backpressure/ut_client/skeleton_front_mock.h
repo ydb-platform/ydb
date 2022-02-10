@@ -11,7 +11,7 @@ class TSkeletonFrontMockActor : public TActorBootstrapped<TSkeletonFrontMockActo
     struct TEvProcessQueue : TEventLocal<TEvProcessQueue, EvProcessQueue> {};
 
     bool Ready = false;
-    std::set<TActorId> Notify; 
+    std::set<TActorId> Notify;
     std::optional<TCostModel> CostModel;
     NBackpressure::TQueueBackpressure<NBackpressure::TQueueClientId> Server;
 
@@ -20,7 +20,7 @@ class TSkeletonFrontMockActor : public TActorBootstrapped<TSkeletonFrontMockActo
         NBackpressure::TMessageId MessageId;
         ui64 Cost;
         std::unique_ptr<IEventHandle> Result;
-        TActorId Sender; 
+        TActorId Sender;
     };
 
     std::deque<TOperation> Operations;
@@ -41,7 +41,7 @@ public:
     void HandleWakeup() {
         LOG_DEBUG(*TlsActivationContext, NActorsServices::TEST, "HandleWakeup");
         Ready = true;
-        for (const TActorId& id : std::exchange(Notify, {})) { 
+        for (const TActorId& id : std::exchange(Notify, {})) {
             Send(id, new TEvBlobStorage::TEvVReadyNotify);
         }
     }

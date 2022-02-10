@@ -526,7 +526,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         UNIT_ASSERT(2 > NSc::TValue(1));
         UNIT_ASSERT(NSc::TValue(1) < 2);
 
-        UNIT_ASSERT(TString("test") == NSc::TValue("test")); 
+        UNIT_ASSERT(TString("test") == NSc::TValue("test"));
     }
 
     Y_UNIT_TEST(TestDestructor) {

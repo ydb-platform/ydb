@@ -4,14 +4,14 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     const NKikimrKesus::TEvUpdateSemaphore Record;
 
     TVector<TDelayedEvent> Events;
     THolder<TEvKesus::TEvUpdateSemaphoreResult> Reply;
 
-    TTxSemaphoreUpdate(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvUpdateSemaphore& record) 
+    TTxSemaphoreUpdate(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvUpdateSemaphore& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

@@ -82,7 +82,7 @@ namespace NTabletFlatExecutor {
             TScanOptions Options;
             THolder<TScanSnapshot> Snapshot;
             EState State = EState::None;
-            TActorId Actor;     /* Valid just after EState::Scan*/ 
+            TActorId Actor;     /* Valid just after EState::Scan*/
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
             ui64 Cookie = Max<ui64>();
             ui64 TaskId = 0;    /* Task number in res. broker   */

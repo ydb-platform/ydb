@@ -159,8 +159,8 @@ TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IB
     } catch (...) {
         Y_FAIL("create destination failure: %s", CurrentExceptionMessage().c_str());
     }
-} 
- 
+}
+
 void TBusMessageQueue::Add(TIntrusivePtr<TBusSessionImpl> session) {
     TGuard<TMutex> scope(Lock);
     Sessions.push_back(session);

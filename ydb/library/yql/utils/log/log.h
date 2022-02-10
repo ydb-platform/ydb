@@ -1,43 +1,43 @@
 #pragma once
 
-#include "log_component.h" 
-#include "log_level.h" 
-#include "context.h" 
-#include "profile.h" 
+#include "log_component.h"
+#include "log_level.h"
+#include "context.h"
+#include "profile.h"
 
 #include <library/cpp/logger/global/common.h>
- 
+
 #include <util/system/atomic.h>
 #include <util/stream/output.h>
 #include <util/generic/strbuf.h>
 
-#include <array> 
- 
- 
-#define YQL_LOG_IMPL(logger, component, level, preprocessor, file, line) \ 
-    logger.NeedToLog(component, level) && NPrivateGlobalLogger::TEatStream() | \ 
-        (*preprocessor::Preprocess(logger.CreateLogElement(component, level, file, line))) 
- 
-#define YQL_LOG_IF_IMPL(logger, component, level, preprocessor, condition, file, line) \ 
-    logger.NeedToLog(component, level) && (condition) && NPrivateGlobalLogger::TEatStream() | \ 
-        (*preprocessor::Preprocess(logger.CreateLogElement(component, level, file, line))) 
- 
-// with component logger 
- 
-#define YQL_CLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL(\ 
-    ::NYql::NLog::YqlLogger(), \ 
-    ::NYql::NLog::EComponent::component, \ 
-    ::NYql::NLog::ELevel::level, \ 
-    preprocessor, \ 
-    __FILE__, __LINE__) 
- 
-#define YQL_CLOG(level, component) \ 
-    YQL_CLOG_PREP(level, component, ::NYql::NLog::TContextPreprocessor) 
- 
-#define YQL_CLOG_ACTIVE(level, component) ::NYql::NLog::YqlLogger().NeedToLog( \ 
-    ::NYql::NLog::EComponent::component, \ 
-    ::NYql::NLog::ELevel::level) 
- 
+#include <array>
+
+
+#define YQL_LOG_IMPL(logger, component, level, preprocessor, file, line) \
+    logger.NeedToLog(component, level) && NPrivateGlobalLogger::TEatStream() | \
+        (*preprocessor::Preprocess(logger.CreateLogElement(component, level, file, line)))
+
+#define YQL_LOG_IF_IMPL(logger, component, level, preprocessor, condition, file, line) \
+    logger.NeedToLog(component, level) && (condition) && NPrivateGlobalLogger::TEatStream() | \
+        (*preprocessor::Preprocess(logger.CreateLogElement(component, level, file, line)))
+
+// with component logger
+
+#define YQL_CLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL(\
+    ::NYql::NLog::YqlLogger(), \
+    ::NYql::NLog::EComponent::component, \
+    ::NYql::NLog::ELevel::level, \
+    preprocessor, \
+    __FILE__, __LINE__)
+
+#define YQL_CLOG(level, component) \
+    YQL_CLOG_PREP(level, component, ::NYql::NLog::TContextPreprocessor)
+
+#define YQL_CLOG_ACTIVE(level, component) ::NYql::NLog::YqlLogger().NeedToLog( \
+    ::NYql::NLog::EComponent::component, \
+    ::NYql::NLog::ELevel::level)
+
 // with component/level values logger
 
 #define YQL_CVLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL(\
@@ -54,115 +54,115 @@
     component, \
     level)
 
-// default logger 
- 
-#define YQL_LOG_PREP(level, preprocessor) \ 
-    YQL_CLOG_PREP(level, Default, preprocessor) 
- 
-#define YQL_LOG(level) \ 
-    YQL_LOG_PREP(level, ::NYql::NLog::TContextPreprocessor) 
- 
-#define YQL_LOG_ACTIVE(level) YQL_CLOG_ACTIVE(level, Default) 
- 
-// conditional logger 
- 
-#define YQL_CLOG_PREP_IF(level, component, preprocessor, condition) YQL_LOG_IF_IMPL(\ 
-    ::NYql::NLog::YqlLogger(), \ 
-    ::NYql::NLog::EComponent::component, \ 
-    ::NYql::NLog::ELevel::level, \ 
-    preprocessor, \ 
-    condition, \ 
-    __FILE__, __LINE__) 
- 
-#define YQL_CLOG_IF(level, component, condition) \ 
-    YQL_CLOG_PREP_IF(level, component, ::NYql::NLog::TContextPreprocessor, condition) 
- 
-#define YQL_LOG_PREP_IF(level, preprocessor, condition) \ 
-    YQL_CLOG_PREP_IF(level, Default, preprocessor, condition) 
- 
-#define YQL_LOG_IF(level, condition) \ 
-    YQL_LOG_PREP_IF(level, ::NYql::NLog::TContextPreprocessor, condition) 
- 
- 
+// default logger
+
+#define YQL_LOG_PREP(level, preprocessor) \
+    YQL_CLOG_PREP(level, Default, preprocessor)
+
+#define YQL_LOG(level) \
+    YQL_LOG_PREP(level, ::NYql::NLog::TContextPreprocessor)
+
+#define YQL_LOG_ACTIVE(level) YQL_CLOG_ACTIVE(level, Default)
+
+// conditional logger
+
+#define YQL_CLOG_PREP_IF(level, component, preprocessor, condition) YQL_LOG_IF_IMPL(\
+    ::NYql::NLog::YqlLogger(), \
+    ::NYql::NLog::EComponent::component, \
+    ::NYql::NLog::ELevel::level, \
+    preprocessor, \
+    condition, \
+    __FILE__, __LINE__)
+
+#define YQL_CLOG_IF(level, component, condition) \
+    YQL_CLOG_PREP_IF(level, component, ::NYql::NLog::TContextPreprocessor, condition)
+
+#define YQL_LOG_PREP_IF(level, preprocessor, condition) \
+    YQL_CLOG_PREP_IF(level, Default, preprocessor, condition)
+
+#define YQL_LOG_IF(level, condition) \
+    YQL_LOG_PREP_IF(level, ::NYql::NLog::TContextPreprocessor, condition)
+
+
 namespace NYql {
-namespace NLog { 
+namespace NLog {
 
-using TComponentLevels = 
-        std::array<ELevel, EComponentHelpers::ToInt(EComponent::MaxValue)>; 
+using TComponentLevels =
+        std::array<ELevel, EComponentHelpers::ToInt(EComponent::MaxValue)>;
 
-/** 
- * @brief Component based logger frontend. 
- */ 
-class TYqlLog: public TLog { 
-public: 
+/**
+ * @brief Component based logger frontend.
+ */
+class TYqlLog: public TLog {
+public:
     TYqlLog();
     TYqlLog(const TString& logType, const TComponentLevels& levels);
-    TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels); 
- 
-    // XXX: not thread-safe 
+    TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels);
+
+    // XXX: not thread-safe
     void UpdateProcInfo(const TString& procName);
- 
-    ELevel GetComponentLevel(EComponent component) const { 
+
+    ELevel GetComponentLevel(EComponent component) const {
         return ELevelHelpers::FromInt(AtomicGet(ComponentLevels_[EComponentHelpers::ToInt(component)]));
-    } 
- 
-    void SetComponentLevel(EComponent component, ELevel level) { 
+    }
+
+    void SetComponentLevel(EComponent component, ELevel level) {
         AtomicSet(ComponentLevels_[EComponentHelpers::ToInt(component)], ELevelHelpers::ToInt(level));
-    } 
- 
-    bool NeedToLog(EComponent component, ELevel level) const { 
-        return ELevelHelpers::Lte(level, GetComponentLevel(component)); 
-    } 
- 
+    }
+
+    bool NeedToLog(EComponent component, ELevel level) const {
+        return ELevelHelpers::Lte(level, GetComponentLevel(component));
+    }
+
     void SetMaxLogLimit(ui64 limit);
- 
+
     TAutoPtr<TLogElement> CreateLogElement(EComponent component, ELevel level, TStringBuf file, int line) const;
 
     void WriteLogPrefix(IOutputStream* out, EComponent component, ELevel level, TStringBuf file, int line) const;
 
 private:
     TString ProcName_;
-    pid_t ProcId_; 
+    pid_t ProcId_;
     std::array<TAtomic, EComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0};
     mutable TAtomic WriteTruncMsg_;
-}; 
- 
-/** 
- * @brief returns reference to YQL logger instance. 
- */ 
-inline TYqlLog& YqlLogger() { 
-    return static_cast<TYqlLog&>(TLoggerOperator<TYqlLog>::Log()); 
-} 
- 
-/** 
- * @brief returns true it YQL logger already initialized. 
- */ 
-inline bool IsYqlLoggerInitialized() { 
-    return TLoggerOperator<TYqlLog>::Usage(); 
-} 
- 
-/** 
- * @brief Initialize logger with selected backend type. 
- * 
- * @param log - one of { syslog, console, cout, cerr, null, /path/to/file } 
- * @param startAsDaemon - true if process is demonized 
- */ 
+};
+
+/**
+ * @brief returns reference to YQL logger instance.
+ */
+inline TYqlLog& YqlLogger() {
+    return static_cast<TYqlLog&>(TLoggerOperator<TYqlLog>::Log());
+}
+
+/**
+ * @brief returns true it YQL logger already initialized.
+ */
+inline bool IsYqlLoggerInitialized() {
+    return TLoggerOperator<TYqlLog>::Usage();
+}
+
+/**
+ * @brief Initialize logger with selected backend type.
+ *
+ * @param log - one of { syslog, console, cout, cerr, null, /path/to/file }
+ * @param startAsDaemon - true if process is demonized
+ */
 void InitLogger(const TString& log, bool startAsDaemon = false);
- 
-/** 
- * @brief Initialize logger with concrete backend. 
- * 
- * @param backend - logger backend 
- */ 
-void InitLogger(TAutoPtr<TLogBackend> backend); 
- 
-/** 
- * @brief Initialize logger with concrete output stream. 
- * 
- * @param out - output stream 
- */ 
+
+/**
+ * @brief Initialize logger with concrete backend.
+ *
+ * @param backend - logger backend
+ */
+void InitLogger(TAutoPtr<TLogBackend> backend);
+
+/**
+ * @brief Initialize logger with concrete output stream.
+ *
+ * @param out - output stream
+ */
 void InitLogger(IOutputStream* out);
- 
+
 void CleanupLogger();
 
 class YqlLoggerScope {
@@ -174,8 +174,8 @@ public:
     ~YqlLoggerScope() { CleanupLogger(); }
 };
 
-} // namespace NLog 
+} // namespace NLog
 } // namespace NYql
- 
-template <> 
-NYql::NLog::TYqlLog* CreateDefaultLogger<NYql::NLog::TYqlLog>(); 
+
+template <>
+NYql::NLog::TYqlLog* CreateDefaultLogger<NYql::NLog::TYqlLog>();

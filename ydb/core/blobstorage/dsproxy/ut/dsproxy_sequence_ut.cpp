@@ -89,8 +89,8 @@ struct TGetRangeQuery {
 struct TGetRequest {
     TVector<TGetQuery> Queries;
     TVector<TGetRangeQuery> RangeQueries;
-    TActorId Sender; 
-    TActorId ActorId; 
+    TActorId Sender;
+    TActorId ActorId;
     TVDiskID VDiskId;
     ui64 Cookie;
     ui64 RecordCookie;
@@ -136,8 +136,8 @@ struct TGetRequest {
 };
 
 struct TVDiskState {
-    TActorId Sender; 
-    TActorId ActorId; 
+    TActorId Sender;
+    TActorId ActorId;
     TLogoBlobID LogoBlobId;
     TVDiskID VDiskId;
     ui64 LastCookie;
@@ -276,7 +276,7 @@ void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partI
 
 void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus status,
         TVector<TVector<TVDiskState>> &blobSubgroups,
-        TMap<TActorId, TGetRequest> &lastRequest, TTestActorRuntime &runtime) { 
+        TMap<TActorId, TGetRequest> &lastRequest, TTestActorRuntime &runtime) {
     TGetRequest &request = lastRequest[blobSubgroups[blobIdx][vDiskIdx].ActorId];
     if (!request.IsValid) {
         return;
@@ -375,8 +375,8 @@ void SendVPutResultEvent(TTestActorRuntime &runtime, TVDiskState &vdisk, NKikimr
 
 void PrepareBlobSubgroup(TLogoBlobID logoblobid, TString data, TVector<TVDiskState> &subgroup,
         TTestActorRuntime &runtime, TBlobStorageGroupType type) {
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID); 
-    TActorId sender = runtime.AllocateEdgeActor(0); 
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
 
     runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvPut(logoblobid, data, TInstant::Max())));
     subgroup.resize(type.BlobSubgroupSize());
@@ -751,8 +751,8 @@ Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID); 
-    TActorId sender = runtime.AllocateEdgeActor(0); 
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
     TLogoBlobID logoblobid(1, 0, 0, 0, (ui32)data.size(), 0);
@@ -835,8 +835,8 @@ void MakeTestProtobufSizeWithMultiGet(const TVector<TBlobPack> &packs, TVector<u
     TBlobStorageGroupType type(TErasureType::ErasureNone);
     Setup(runtime, type);
 
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID); 
-    TActorId sender = runtime.AllocateEdgeActor(0); 
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
 
     TVector<TString> datas(packs.size());
     for (ui32 idx = 0; idx < packs.size(); ++idx) {
@@ -918,7 +918,7 @@ void MakeTestProtobufSizeWithMultiGet(const TVector<TBlobPack> &packs, TVector<u
     }
 
     for (ui64 idx = 0; idx < vGetInformations.size(); ++idx) {
-        TMap<TActorId, TGetRequest> lastRequest; 
+        TMap<TActorId, TGetRequest> lastRequest;
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
         UNIT_ASSERT_C(vget->Record.ExtremeQueriesSize(), "vget without queries vGet# " << vget->ToString());
@@ -979,8 +979,8 @@ Y_UNIT_TEST(TestGivenStripe42GetThenVGetResponsePartsNodata263451ThenGetOk) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Stripe};
     Setup(runtime, type);
 
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID); 
-    TActorId sender = runtime.AllocateEdgeActor(0); 
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data;
     data.resize(1209816, 'x');
@@ -1025,8 +1025,8 @@ Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Stripe};
     Setup(runtime, type);
 
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID); 
-    TActorId sender = runtime.AllocateEdgeActor(0); 
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data;
     data.resize(1209816, 'x');
@@ -1044,7 +1044,7 @@ Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
 
     TVector<TVector<TVDiskState>> blobSubgroups;
     blobSubgroups.resize(logoblobids.size());
-    TMap<TActorId, TGetRequest> lastRequest; 
+    TMap<TActorId, TGetRequest> lastRequest;
 
     for (ui32 i = 0; i < logoblobids.size(); ++i) {
         PrepareBlobSubgroup(logoblobids[i], data, blobSubgroups[i], runtime, type);
@@ -1090,8 +1090,8 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID); 
-    TActorId sender = runtime.AllocateEdgeActor(0); 
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data;
     data.resize(1000, 'x');
@@ -1105,7 +1105,7 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
     }
     TVector<TVector<TVDiskState>> blobSubgroups;
     blobSubgroups.resize(logoblobids.size());
-    TMap<TActorId, TGetRequest> lastRequest; 
+    TMap<TActorId, TGetRequest> lastRequest;
 
     for (ui32 i = 0; i < logoblobids.size(); ++i) {
         PrepareBlobSubgroup(logoblobids[i], data, blobSubgroups[i], runtime, type);
@@ -1150,8 +1150,8 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID); 
-    TActorId sender = runtime.AllocateEdgeActor(0); 
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data;
     data.resize(400 << 10);
@@ -1165,7 +1165,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
     for (ui32 step = 0; step < 32; ++step) {
         for (ui32 part = 0; part < 4; ++part) {
             for (ui32 disk = 0; disk < 3; ++disk) {
-                TMap<TActorId, TGetRequest> lastRequest; 
+                TMap<TActorId, TGetRequest> lastRequest;
                 // Send Get
                 ui32 shift = ((25 + part * 100) << 10) + step;
                 ui32 size = 50 << 10;
@@ -1259,8 +1259,8 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID); 
-    TActorId sender = runtime.AllocateEdgeActor(0); 
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data;
     data.resize(400 << 10);
@@ -1280,7 +1280,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         proxy, sender, new TEvBlobStorage::TEvDiscover(tabletId, minGeneration, true, false, TInstant::Max(), 0)));
 
     // Receive VGet
-    TMap<TActorId, TGetRequest> lastRequest; 
+    TMap<TActorId, TGetRequest> lastRequest;
     for (ui32 i = 0; i < 8; ++i) {
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
@@ -1293,7 +1293,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     }
     runtime.EnableScheduleForActor(lastRequest.begin()->second.Sender, true);
 
-    TActorId firstHandoffActorId = blobSubgroups[0][6].ActorId; 
+    TActorId firstHandoffActorId = blobSubgroups[0][6].ActorId;
 
     {
         // Send 6 part VGetResult from the first handoff vDiskIdx# 6

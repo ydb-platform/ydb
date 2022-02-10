@@ -13,7 +13,7 @@
 #define DECLARE_ACTOR_EVENT(EVENT_TYPE, ...) \
     DECLARE_WILSON_EVENT(EVENT_TYPE, \
         (::NKikimrServices::TActivity::EType, ActivityType), \
-        (::NActors::TActorId, ActorId), \ 
+        (::NActors::TActorId, ActorId), \
         ##__VA_ARGS__ \
     )
 

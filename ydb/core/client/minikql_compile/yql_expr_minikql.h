@@ -17,7 +17,7 @@ namespace NKikimr {
 
 namespace NMiniKQL {
 class TProgramBuilder;
-class IFunctionRegistry; 
+class IFunctionRegistry;
 } // namespace NMiniKQL
 
 } // namespace NKikimr
@@ -33,7 +33,7 @@ struct TExprContainer : public TAtomicRefCount<TExprContainer> {
 
 NThreading::TFuture<TConvertResult>
 ConvertToMiniKQL(TExprContainer::TPtr expr,
-                 const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
+                 const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
                  const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                  IDbSchemeResolver* dbSchemeResolver);
 
@@ -56,7 +56,7 @@ NActors::IActor*
 CreateCompileActor(const TString& program,
                    const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                    IDbSchemeResolver* dbSchemeResolver,
-                   NActors::TActorId responseTo, 
+                   NActors::TActorId responseTo,
                    THashMap<TString, ui64> &&resolveRefreshCookies,
                    bool forceCacheRefresh); // TEvCompileResult.
 

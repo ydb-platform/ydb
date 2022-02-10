@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NKesus {
 
-IActor* CreateKesusTablet(const TActorId& tablet, TTabletStorageInfo* info) { 
+IActor* CreateKesusTablet(const TActorId& tablet, TTabletStorageInfo* info) {
     return new TKesusTablet(tablet, info);
 }
 

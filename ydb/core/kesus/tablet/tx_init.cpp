@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxInit : public TTxBase {
-    TActorId PreviousTabletActorID; 
+    TActorId PreviousTabletActorID;
 
     explicit TTxInit(TSelf* self)
         : TTxBase(self)

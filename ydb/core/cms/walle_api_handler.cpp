@@ -372,7 +372,7 @@ private:
     }
 
     NMon::TEvHttpInfo::TPtr RequestEvent;
-    TActorId CmsPipe; 
+    TActorId CmsPipe;
 };
 
 

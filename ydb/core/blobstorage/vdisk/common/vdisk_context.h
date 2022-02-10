@@ -31,7 +31,7 @@ namespace NKikimr {
     class TVDiskContext : public TBSProxyContext {
     public:
         // ActorId of the main VDisk actor (currently ActorId of SkeletonFront)
-        const TActorId VDiskActorId; 
+        const TActorId VDiskActorId;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskCounters;
         const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskMemCounters;
@@ -78,7 +78,7 @@ namespace NKikimr {
 
     public:
         TVDiskContext(
-                const TActorId &vdiskActorId, 
+                const TActorId &vdiskActorId,
                 std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& vdiskCounters,
                 const TVDiskID &selfVDisk,

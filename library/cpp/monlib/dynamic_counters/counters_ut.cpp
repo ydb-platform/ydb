@@ -1,101 +1,101 @@
-#include "counters.h" 
- 
+#include "counters.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-using namespace NMonitoring; 
- 
-class TCountersPrinter: public ICountableConsumer { 
-public: 
+
+using namespace NMonitoring;
+
+class TCountersPrinter: public ICountableConsumer {
+public:
     TCountersPrinter(IOutputStream* out)
-        : Out_(out) 
-        , Level_(0) 
-    { 
-    } 
- 
-private: 
-    void OnCounter( 
-        const TString& labelName, const TString& labelValue, 
-        const TCounterForPtr* counter) override { 
-        Indent(Out_, Level_) 
-            << labelName << ':' << labelValue 
-            << " = " << counter->Val() << '\n'; 
-    } 
- 
-    void OnHistogram( 
-        const TString& labelName, const TString& labelValue, 
+        : Out_(out)
+        , Level_(0)
+    {
+    }
+
+private:
+    void OnCounter(
+        const TString& labelName, const TString& labelValue,
+        const TCounterForPtr* counter) override {
+        Indent(Out_, Level_)
+            << labelName << ':' << labelValue
+            << " = " << counter->Val() << '\n';
+    }
+
+    void OnHistogram(
+        const TString& labelName, const TString& labelValue,
         IHistogramSnapshotPtr snapshot, bool /*derivative*/) override {
-        Indent(Out_, Level_) 
-            << labelName << ':' << labelValue 
-            << " = " << *snapshot << '\n'; 
-    } 
- 
-    void OnGroupBegin( 
-        const TString& labelName, const TString& labelValue, 
-        const TDynamicCounters*) override { 
-        Indent(Out_, Level_++) << labelName << ':' << labelValue << " {\n"; 
-    } 
- 
-    void OnGroupEnd( 
-        const TString&, const TString&, 
-        const TDynamicCounters*) override { 
-        Indent(Out_, --Level_) << "}\n"; 
-    } 
- 
+        Indent(Out_, Level_)
+            << labelName << ':' << labelValue
+            << " = " << *snapshot << '\n';
+    }
+
+    void OnGroupBegin(
+        const TString& labelName, const TString& labelValue,
+        const TDynamicCounters*) override {
+        Indent(Out_, Level_++) << labelName << ':' << labelValue << " {\n";
+    }
+
+    void OnGroupEnd(
+        const TString&, const TString&,
+        const TDynamicCounters*) override {
+        Indent(Out_, --Level_) << "}\n";
+    }
+
     static IOutputStream& Indent(IOutputStream* out, int level) {
-        for (int i = 0; i < level; i++) { 
-            out->Write("  "); 
-        } 
-        return *out; 
-    } 
- 
-private: 
+        for (int i = 0; i < level; i++) {
+            out->Write("  ");
+        }
+        return *out;
+    }
+
+private:
     IOutputStream* Out_;
-    int Level_ = 0; 
-}; 
- 
+    int Level_ = 0;
+};
+
 Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
     Y_UNIT_TEST(CountersConsumer) {
-        TDynamicCounterPtr rootGroup(new TDynamicCounters()); 
- 
-        auto usersCounter = rootGroup->GetNamedCounter("users", "count"); 
-        *usersCounter = 7; 
- 
-        auto hostGroup = rootGroup->GetSubgroup("counters", "resources"); 
-        auto cpuCounter = hostGroup->GetNamedCounter("resource", "cpu"); 
-        *cpuCounter = 30; 
- 
-        auto memGroup = hostGroup->GetSubgroup("resource", "mem"); 
-        auto usedCounter = memGroup->GetCounter("used"); 
-        auto freeCounter = memGroup->GetCounter("free"); 
-        *usedCounter = 100; 
-        *freeCounter = 28; 
- 
-        auto netGroup = hostGroup->GetSubgroup("resource", "net"); 
-        auto rxCounter = netGroup->GetCounter("rx", true); 
-        auto txCounter = netGroup->GetCounter("tx", true); 
-        *rxCounter = 8; 
-        *txCounter = 9; 
- 
-        TStringStream ss; 
-        TCountersPrinter printer(&ss); 
-        rootGroup->Accept("root", "counters", printer); 
- 
-        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(), 
-                                  "root:counters {\n" 
-                                  "  counters:resources {\n" 
-                                  "    resource:cpu = 30\n" 
-                                  "    resource:mem {\n" 
-                                  "      sensor:free = 28\n" 
-                                  "      sensor:used = 100\n" 
-                                  "    }\n" 
-                                  "    resource:net {\n" 
-                                  "      sensor:rx = 8\n" 
-                                  "      sensor:tx = 9\n" 
-                                  "    }\n" 
-                                  "  }\n" 
-                                  "  users:count = 7\n" 
-                                  "}\n"); 
-    } 
+        TDynamicCounterPtr rootGroup(new TDynamicCounters());
+
+        auto usersCounter = rootGroup->GetNamedCounter("users", "count");
+        *usersCounter = 7;
+
+        auto hostGroup = rootGroup->GetSubgroup("counters", "resources");
+        auto cpuCounter = hostGroup->GetNamedCounter("resource", "cpu");
+        *cpuCounter = 30;
+
+        auto memGroup = hostGroup->GetSubgroup("resource", "mem");
+        auto usedCounter = memGroup->GetCounter("used");
+        auto freeCounter = memGroup->GetCounter("free");
+        *usedCounter = 100;
+        *freeCounter = 28;
+
+        auto netGroup = hostGroup->GetSubgroup("resource", "net");
+        auto rxCounter = netGroup->GetCounter("rx", true);
+        auto txCounter = netGroup->GetCounter("tx", true);
+        *rxCounter = 8;
+        *txCounter = 9;
+
+        TStringStream ss;
+        TCountersPrinter printer(&ss);
+        rootGroup->Accept("root", "counters", printer);
+
+        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(),
+                                  "root:counters {\n"
+                                  "  counters:resources {\n"
+                                  "    resource:cpu = 30\n"
+                                  "    resource:mem {\n"
+                                  "      sensor:free = 28\n"
+                                  "      sensor:used = 100\n"
+                                  "    }\n"
+                                  "    resource:net {\n"
+                                  "      sensor:rx = 8\n"
+                                  "      sensor:tx = 9\n"
+                                  "    }\n"
+                                  "  }\n"
+                                  "  users:count = 7\n"
+                                  "}\n");
+    }
 
     Y_UNIT_TEST(MergeSubgroup) {
         TDynamicCounterPtr rootGroup(new TDynamicCounters());
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
         UNIT_ASSERT_STRINGS_EQUAL(ss.Str(),
                                   "root:counters {\n"
                                   "}\n");
-    } 
+    }
 
     Y_UNIT_TEST(ExpiringCountersDiesAfterRegistry) {
         TDynamicCounters::TCounterPtr ptr;
@@ -266,24 +266,24 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
                                       "  sensor:foo = 0\n"
                                       "}\n");
         }
-    } 
- 
-    Y_UNIT_TEST(HistogramCounter) { 
-        TDynamicCounterPtr rootGroup(new TDynamicCounters()); 
- 
-        auto h = rootGroup->GetHistogram("timeMillis", ExponentialHistogram(4, 2)); 
-        for (i64 i = 1; i < 100; i++) { 
-            h->Collect(i); 
-        } 
- 
-        TStringStream ss; 
-        TCountersPrinter printer(&ss); 
-        rootGroup->Accept("root", "counters", printer); 
-        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(), 
-                                  "root:counters {\n" 
-                                  "  sensor:timeMillis = {1: 1, 2: 1, 4: 2, inf: 95}\n" 
-                                  "}\n"); 
-    } 
+    }
+
+    Y_UNIT_TEST(HistogramCounter) {
+        TDynamicCounterPtr rootGroup(new TDynamicCounters());
+
+        auto h = rootGroup->GetHistogram("timeMillis", ExponentialHistogram(4, 2));
+        for (i64 i = 1; i < 100; i++) {
+            h->Collect(i);
+        }
+
+        TStringStream ss;
+        TCountersPrinter printer(&ss);
+        rootGroup->Accept("root", "counters", printer);
+        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(),
+                                  "root:counters {\n"
+                                  "  sensor:timeMillis = {1: 1, 2: 1, 4: 2, inf: 95}\n"
+                                  "}\n");
+    }
 
     Y_UNIT_TEST(CounterLookupCounter) {
         TDynamicCounterPtr rootGroup(new TDynamicCounters());
@@ -339,4 +339,4 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
         histogram = rootGroup->FindNamedHistogram("name", "histogram2");
         UNIT_ASSERT(histogram);
     }
-} 
+}

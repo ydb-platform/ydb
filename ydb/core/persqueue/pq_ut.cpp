@@ -42,36 +42,36 @@ Y_UNIT_TEST(TestGroupsBalancer) {
 
     BalancerPrepare("topic", {{0,{1, 1}}, {11,{1, 1}}, {1,{1, 2}}, {2,{1, 2}}}, ssId, tc);
 
-    TActorId pipe = RegisterReadSession("session1", tc); 
+    TActorId pipe = RegisterReadSession("session1", tc);
     Y_UNUSED(pipe);
-    WaitPartition("session1", tc, 0, "", "", TActorId()); 
-    WaitPartition("session1", tc, 0, "", "", TActorId()); 
-    WaitPartition("session1", tc, 0, "", "", TActorId()); 
-    WaitPartition("session1", tc, 0, "", "", TActorId()); 
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error 
+    WaitPartition("session1", tc, 0, "", "", TActorId());
+    WaitPartition("session1", tc, 0, "", "", TActorId());
+    WaitPartition("session1", tc, 0, "", "", TActorId());
+    WaitPartition("session1", tc, 0, "", "", TActorId());
+    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
 
-    TActorId pipe2 = RegisterReadSession("session2", tc, {1}); 
+    TActorId pipe2 = RegisterReadSession("session2", tc, {1});
 
-    WaitPartition("session2", tc, 0, "", "", TActorId()); 
-    WaitPartition("session2", tc, 0, "", "", TActorId()); 
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance 
+    WaitPartition("session2", tc, 0, "", "", TActorId());
+    WaitPartition("session2", tc, 0, "", "", TActorId());
+    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
 
-    TActorId pipe4 = RegisterReadSession("session8", tc, {1}); 
+    TActorId pipe4 = RegisterReadSession("session8", tc, {1});
     Y_UNUSED(pipe4);
 
     WaitPartition("session8", tc, 0, "session2", "topic1", pipe2);
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance 
+    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
 
     tc.Runtime->Send(new IEventHandle(pipe2, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
 
-    WaitPartition("session8", tc, 0, "", "", TActorId()); 
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance 
+    WaitPartition("session8", tc, 0, "", "", TActorId());
+    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
 
     RegisterReadSession("session3", tc);
-    WaitPartition("session3", tc, 0, "", "", TActorId()); 
-    WaitPartition("session3", tc, 0, "", "", TActorId()); 
+    WaitPartition("session3", tc, 0, "", "", TActorId());
+    WaitPartition("session3", tc, 0, "", "", TActorId());
     WaitPartition("session3", tc, 0, "session8", "topic1", pipe4);
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance 
+    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
 
 
 }
@@ -90,18 +90,18 @@ Y_UNIT_TEST(TestGroupsBalancer2) {
 
     BalancerPrepare("topic", {{0, {1, 1}}, {1, {1, 2}}, {2, {1, 3}}, {3, {1, 4}}}, ssId, tc);
 
-    TActorId pipe = RegisterReadSession("session1", tc, {1,2}); 
+    TActorId pipe = RegisterReadSession("session1", tc, {1,2});
     Y_UNUSED(pipe);
 
-    WaitPartition("session1", tc, 0, "", "", TActorId()); 
-    WaitPartition("session1", tc, 0, "", "", TActorId()); 
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error 
-    TActorId pipe2 = RegisterReadSession("session2", tc, {3,4}); 
+    WaitPartition("session1", tc, 0, "", "", TActorId());
+    WaitPartition("session1", tc, 0, "", "", TActorId());
+    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
+    TActorId pipe2 = RegisterReadSession("session2", tc, {3,4});
     Y_UNUSED(pipe2);
 
-    WaitPartition("session2", tc, 0, "", "", TActorId()); 
-    WaitPartition("session2", tc, 0, "", "", TActorId()); 
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error 
+    WaitPartition("session2", tc, 0, "", "", TActorId());
+    WaitPartition("session2", tc, 0, "", "", TActorId());
+    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
 }
 
 Y_UNIT_TEST(TestGroupsBalancer3) {
@@ -240,7 +240,7 @@ Y_UNIT_TEST(TestCreateBalancer) {
 
         BalancerPrepare("topic", {{1,{1,2}}}, ssId, tc);
 
-        TActorId pipe1 = RegisterReadSession("session0", tc, {1}); 
+        TActorId pipe1 = RegisterReadSession("session0", tc, {1});
 
         BalancerPrepare("topic", {{1,{1,2}}, {2,{1,3}}}, ssId, tc);
 
@@ -252,23 +252,23 @@ Y_UNIT_TEST(TestCreateBalancer) {
         BalancerPrepare("topic", {{1,{1, 2}}, {2,{1, 3}}, {3,{1, 4}}}, ssId, tc);
         activeZone = false;
 
-        TActorId pipe = RegisterReadSession("session1", tc); 
-        WaitPartition("session1", tc, 0, "", "", TActorId()); 
-        WaitPartition("session1", tc, 0, "", "", TActorId()); 
-        WaitPartition("session1", tc, 0, "", "", TActorId()); 
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error 
-        TActorId pipe2 = RegisterReadSession("session2", tc); 
+        TActorId pipe = RegisterReadSession("session1", tc);
+        WaitPartition("session1", tc, 0, "", "", TActorId());
+        WaitPartition("session1", tc, 0, "", "", TActorId());
+        WaitPartition("session1", tc, 0, "", "", TActorId());
+        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
+        TActorId pipe2 = RegisterReadSession("session2", tc);
         Y_UNUSED(pipe2);
         WaitPartition("session2", tc, 1, "session1", "topic1", pipe);
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance 
+        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
         tc.Runtime->Send(new IEventHandle(pipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvServerDisconnected));
         tc.Runtime->DispatchEvents(options);
-        WaitPartition("session2", tc, 0, "", "", TActorId()); 
-        WaitPartition("session2", tc, 0, "", "", TActorId()); 
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance 
+        WaitPartition("session2", tc, 0, "", "", TActorId());
+        WaitPartition("session2", tc, 0, "", "", TActorId());
+        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
     });
 }
 
@@ -314,7 +314,7 @@ Y_UNIT_TEST(TestCheckACL) {
         ui64 ssId = 9876;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);
         IActor* ticketParser = NKikimr::CreateTicketParser(tc.Runtime->GetAppData().AuthConfig);
-        TActorId ticketParserId = tc.Runtime->Register(ticketParser); 
+        TActorId ticketParserId = tc.Runtime->Register(ticketParser);
         tc.Runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserId);
 
         TAutoPtr<IEventHandle> handle;
@@ -605,7 +605,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
         CmdSetOwner(0, tc, "owner", false);
         CmdSetOwner(0, tc, "owner", true); //will break last owner
 
-        TActorId newPipe = SetOwner(0, tc, "owner", false); //this owner will wait 
+        TActorId newPipe = SetOwner(0, tc, "owner", false); //this owner will wait
 
         auto p = CmdSetOwner(0, tc, "owner", true); //will break last owner
 

@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NKesus {
 
-TActorId MakeKesusProxyServiceId(); 
+TActorId MakeKesusProxyServiceId();
 
 IActor* CreateKesusProxyService();
 

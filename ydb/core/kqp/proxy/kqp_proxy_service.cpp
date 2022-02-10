@@ -576,9 +576,9 @@ public:
             }
         }
 
-        TActorId targetId; 
+        TActorId targetId;
         if (!request.GetSessionId().empty()) {
-            TProcessResult<TActorId> result; 
+            TProcessResult<TActorId> result;
             if (!TryGetSessionTargetActor(request.GetSessionId(), requestInfo, result)) {
                 if (!dbCounters) {
                     dbCounters = Counters->GetDbCounters(request.GetDatabase());
@@ -638,7 +638,7 @@ public:
         LogRequest(request, requestInfo, ev->Sender, dbCounters);
 
         if (!sessionId.empty()) {
-            TProcessResult<TActorId> result; 
+            TProcessResult<TActorId> result;
             if (TryGetSessionTargetActor(sessionId, requestInfo, result)) {
                 Send(result.Value, ev->Release().Release());
             }
@@ -658,7 +658,7 @@ public:
 
         LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
 
-        TProcessResult<TActorId> result; 
+        TProcessResult<TActorId> result;
         if (!TryGetSessionTargetActor(sessionId, requestInfo, result)) {
             ReplyProcessError(result.YdbStatus, result.Error, requestId);
             return;
@@ -954,7 +954,7 @@ public:
         const auto &event = ev->Get()->Record;
         if (event.GetStatus() == Ydb::StatusIds::SUCCESS && event.GetResponse().GetClosed()) {
             auto sessionId = event.GetResponse().GetSessionId();
-            TActorId workerId = ev->Sender; 
+            TActorId workerId = ev->Sender;
 
             RemoveSession(sessionId, workerId);
 
@@ -1290,9 +1290,9 @@ private:
     std::optional<TInstant> LastPublishResourcesAt;
     TActorId BoardLookupActor;
     TActorId BoardPublishActor;
-    TActorId CompileService; 
+    TActorId CompileService;
     TActorId KqpNodeService;
-    TActorId SpillingService; 
+    TActorId SpillingService;
     TActorId WhiteBoardService;
     NKikimrKqp::TKqpProxyNodeResources NodeResources;
 };

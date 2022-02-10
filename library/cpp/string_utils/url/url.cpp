@@ -206,35 +206,35 @@ void SeparateUrlFromQueryAndFragment(const TStringBuf url, TStringBuf& sanitized
     }
 }
 
-bool TryGetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBuf& host, ui16& port) { 
-    const size_t schemeSize = GetSchemePrefixSize(url); 
-    if (schemeSize != 0) { 
-        scheme = url.Head(schemeSize); 
-    } 
- 
-    TStringBuf portStr; 
-    TStringBuf hostAndPort = GetHostAndPort(url.Tail(schemeSize)); 
+bool TryGetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBuf& host, ui16& port) {
+    const size_t schemeSize = GetSchemePrefixSize(url);
+    if (schemeSize != 0) {
+        scheme = url.Head(schemeSize);
+    }
+
+    TStringBuf portStr;
+    TStringBuf hostAndPort = GetHostAndPort(url.Tail(schemeSize));
     if (hostAndPort && hostAndPort.back() != ']' && hostAndPort.TryRSplit(':', host, portStr)) {
-        // URL has port 
-        if (!TryFromString(portStr, port)) { 
-            return false; 
-        } 
-    } else { 
-        host = hostAndPort; 
+        // URL has port
+        if (!TryFromString(portStr, port)) {
+            return false;
+        }
+    } else {
+        host = hostAndPort;
         if (scheme == TStringBuf("https://")) {
-            port = 443; 
+            port = 443;
         } else if (scheme == TStringBuf("http://")) {
-            port = 80; 
-        } 
-    } 
-    return true; 
-} 
- 
-void GetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBuf& host, ui16& port) { 
-    bool isOk = TryGetSchemeHostAndPort(url, scheme, host, port); 
-    Y_ENSURE(isOk, "cannot parse port number from URL: " << url); 
-} 
- 
+            port = 80;
+        }
+    }
+    return true;
+}
+
+void GetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBuf& host, ui16& port) {
+    bool isOk = TryGetSchemeHostAndPort(url, scheme, host, port);
+    Y_ENSURE(isOk, "cannot parse port number from URL: " << url);
+}
+
 TStringBuf GetOnlyHost(const TStringBuf url) noexcept {
     return GetHost(CutSchemePrefix(url));
 }

@@ -17,8 +17,8 @@ namespace NActors {
             IActor::EActivityType activityType,
             ui32 channel = 0,
             ui64 cookie = 0,
-            const TActorId& reportCompletionTo = TActorId(), 
-            const TActorId& reportExceptionTo = TActorId()) noexcept 
+            const TActorId& reportCompletionTo = TActorId(),
+            const TActorId& reportExceptionTo = TActorId()) noexcept
             : Callback(std::move(callback))
             , Channel(channel)
             , Cookie(cookie)
@@ -65,8 +65,8 @@ namespace NActors {
         TCallback Callback;
         const ui32 Channel;
         const ui64 Cookie;
-        const TActorId ReportCompletionTo; 
-        const TActorId ReportExceptionTo; 
+        const TActorId ReportCompletionTo;
+        const TActorId ReportExceptionTo;
     };
 
     template <typename T>
@@ -75,8 +75,8 @@ namespace NActors {
         IActor::EActivityType activityType,
         ui32 channel = 0,
         ui64 cookie = 0,
-        const TActorId& reportCompletionTo = TActorId(), 
-        const TActorId& reportExceptionTo = TActorId()) noexcept { 
+        const TActorId& reportCompletionTo = TActorId(),
+        const TActorId& reportExceptionTo = TActorId()) noexcept {
         return new TExecuteLater<T>(std::forward<T>(func),
                                     activityType,
                                     channel,

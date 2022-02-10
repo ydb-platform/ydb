@@ -6,7 +6,7 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket, 
+    TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                                        TIntrusivePtr<TReceiveContext> context, TInterconnectProxyCommon::TPtr common,
                                        std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId, ui64 lastConfirmed,
                                        TDuration deadPeerTimeout, TSessionParams params)

@@ -24,12 +24,12 @@ static ui32 ExtractDefaultGroupForPath(const TString &path) {
 }
 
 class TTenantNodeEnumerationPublisher : public TActorBootstrapped<TTenantNodeEnumerationPublisher> {
-    TMap<TString, TActorId> PublishActors; 
+    TMap<TString, TActorId> PublishActors;
 
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev) {
         const auto &record = ev->Get()->Record;
 
-        TMap<TString, TActorId> toRemove; 
+        TMap<TString, TActorId> toRemove;
         toRemove.swap(PublishActors);
 
         for (auto &x : record.GetSlots()) {
@@ -44,7 +44,7 @@ class TTenantNodeEnumerationPublisher : public TActorBootstrapped<TTenantNodeEnu
                     if (statestorageGroupId == Max<ui32>())
                         continue;
 
-                    const TActorId publishActor = Register(CreateBoardPublishActor(assignedPath, TString(), SelfId(), statestorageGroupId, 0, true)); 
+                    const TActorId publishActor = Register(CreateBoardPublishActor(assignedPath, TString(), SelfId(), statestorageGroupId, 0, true));
 
                     PublishActors.emplace(assigned, publishActor);
                 }
@@ -76,14 +76,14 @@ public:
 };
 
 class TTenantNodeEnumerationLookup : public TActorBootstrapped<TTenantNodeEnumerationLookup> {
-    const TActorId ReplyTo; 
+    const TActorId ReplyTo;
     const TString TenantName;
-    TActorId LookupActor; 
+    TActorId LookupActor;
 
     void PassAway() override {
         if (LookupActor) {
             Send(LookupActor, new TEvents::TEvPoisonPill());
-            LookupActor = TActorId(); 
+            LookupActor = TActorId();
         }
 
         IActor::PassAway();
@@ -95,7 +95,7 @@ class TTenantNodeEnumerationLookup : public TActorBootstrapped<TTenantNodeEnumer
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr &ev) {
-        LookupActor = TActorId(); 
+        LookupActor = TActorId();
 
         auto *msg = ev->Get();
 
@@ -116,7 +116,7 @@ public:
         return NKikimrServices::TActivity::TENANT_NODES_ENUMERATION;
     }
 
-    TTenantNodeEnumerationLookup(TActorId replyTo, const TString &tenantName) 
+    TTenantNodeEnumerationLookup(TActorId replyTo, const TString &tenantName)
         : ReplyTo(replyTo)
         , TenantName(tenantName)
     {}
@@ -143,7 +143,7 @@ IActor* CreateTenantNodeEnumerationPublisher() {
     return new TTenantNodeEnumerationPublisher();
 }
 
-IActor* CreateTenantNodeEnumerationLookup(TActorId replyTo, const TString &tenantName) { 
+IActor* CreateTenantNodeEnumerationLookup(TActorId replyTo, const TString &tenantName) {
     return new TTenantNodeEnumerationLookup(replyTo, tenantName);
 }
 

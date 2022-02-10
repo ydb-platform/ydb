@@ -32,7 +32,7 @@ namespace NFake {
         }
 
     private:
-        void Registered(TActorSystem *sys, const TActorId&) override 
+        void Registered(TActorSystem *sys, const TActorId&) override
         {
             Sys = sys, Start = Time->Now();
 
@@ -74,7 +74,7 @@ namespace NFake {
             }
         }
 
-        void HandleGone(const TActorId &actor) noexcept 
+        void HandleGone(const TActorId &actor) noexcept
         {
             auto it = Childs.find(actor);
 
@@ -94,7 +94,7 @@ namespace NFake {
             }
         }
 
-        void DoFire(ui32 level, const TActorId &alias, TActorSetupCmd &cmd) 
+        void DoFire(ui32 level, const TActorId &alias, TActorSetupCmd &cmd)
         {
             if (level <= Edge && Levels[level].Alive) {
                 auto actor = Register(cmd.Actor, cmd.MailboxType, 0);
@@ -180,7 +180,7 @@ namespace NFake {
         ui32 Head = 0;
         ui64 Total = 0;
         TAtomic &Stopped;
-        std::map<TActorId, ui32> Childs; 
+        std::map<TActorId, ui32> Childs;
         std::array<TLevel, 9> Levels;
      };
 }

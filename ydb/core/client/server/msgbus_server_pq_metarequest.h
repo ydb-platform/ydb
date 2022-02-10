@@ -10,7 +10,7 @@ namespace NMsgBusProxy {
 //
 class TPersQueueGetTopicMetadataProcessor : public TPersQueueBaseRequestProcessor {
 public:
-    TPersQueueGetTopicMetadataProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache); 
+    TPersQueueGetTopicMetadataProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
@@ -42,7 +42,7 @@ private:
 
 class TPersQueueGetPartitionOffsetsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> {
 public:
-    TPersQueueGetPartitionOffsetsTopicWorker(const TActorId& parent, 
+    TPersQueueGetPartitionOffsetsTopicWorker(const TActorId& parent,
                                              const TSchemeEntry& topicEntry, const TString& name,
                                              const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
                                              const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto);
@@ -63,7 +63,7 @@ private:
 
 class TPersQueueGetPartitionStatusProcessor : public TPersQueueBaseRequestProcessor {
 public:
-    TPersQueueGetPartitionStatusProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache); 
+    TPersQueueGetPartitionStatusProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
@@ -74,7 +74,7 @@ private:
 
 class TPersQueueGetPartitionStatusTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvStatusResponse>> {
 public:
-    TPersQueueGetPartitionStatusTopicWorker(const TActorId& parent, 
+    TPersQueueGetPartitionStatusTopicWorker(const TActorId& parent,
                                             const TTopicInfoBasedActor::TSchemeEntry& topicEntry,
                                             const TString& name,
                                             const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
@@ -96,7 +96,7 @@ private:
 
 class TPersQueueGetPartitionLocationsProcessor : public TPersQueueBaseRequestProcessor {
 public:
-    TPersQueueGetPartitionLocationsProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache); 
+    TPersQueueGetPartitionLocationsProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
@@ -107,7 +107,7 @@ private:
 
 class TPersQueueGetPartitionLocationsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvTabletPipe::TEvClientConnected>> {
 public:
-    TPersQueueGetPartitionLocationsTopicWorker(const TActorId& parent, 
+    TPersQueueGetPartitionLocationsTopicWorker(const TActorId& parent,
                                                const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name,
                                                const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
                                                const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
@@ -152,7 +152,7 @@ public:
     void Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext&) {
         for (auto & s : ev->Get()->Record.GetReadSessions()) {
             if (!s.GetSession().empty()) {
-                TActorId actor = ActorIdFromProto(s.GetSessionActor()); 
+                TActorId actor = ActorIdFromProto(s.GetSessionActor());
                 ReadSessions.insert(std::make_pair(s.GetSession(), actor));
             }
         }
@@ -170,17 +170,17 @@ public:
 private:
 
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
-    THolder<IActor> CreateSessionsSubactor(const THashMap<TString, TActorId>&& readSessions); 
+    THolder<IActor> CreateSessionsSubactor(const THashMap<TString, TActorId>&& readSessions);
 
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
     mutable bool HasSessionsRequest = false;
-    THashMap<TString, TActorId> ReadSessions; 
+    THashMap<TString, TActorId> ReadSessions;
 };
 
 
 class TPersQueueGetReadSessionsInfoTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> {
 public:
-    TPersQueueGetReadSessionsInfoTopicWorker(const TActorId& parent, 
+    TPersQueueGetReadSessionsInfoTopicWorker(const TActorId& parent,
                                              const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name,
                                              const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
                                              std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo);
@@ -206,7 +206,7 @@ public:
 
 private:
     std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto;
-    TActorId BalancerPipe; 
+    TActorId BalancerPipe;
     TEvPersQueue::TEvReadSessionsInfoResponse::TPtr BalancerResponse;
     bool BalancerReplied = false;
     bool PipeEventsAreReady = false;

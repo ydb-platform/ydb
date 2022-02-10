@@ -8,7 +8,7 @@ public:
     TTxUpdatePoolState(TTenantsManager *self,
                        TTenant::TPtr tenant,
                        TStoragePool::TPtr pool,
-                       TActorId worker, 
+                       TActorId worker,
                        TStoragePool::EState state)
         : TBase(self)
         , Tenant(tenant)
@@ -77,7 +77,7 @@ public:
             Self->Counters.Inc(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,
                                AllocatedNumGroups - Pool->AllocatedNumGroups);
 
-            Pool->Worker = TActorId(); 
+            Pool->Worker = TActorId();
             Pool->State = State;
             Pool->AllocatedNumGroups = AllocatedNumGroups;
             Tenant->SubdomainVersion = SubdomainVersion;
@@ -96,7 +96,7 @@ public:
 private:
     TTenant::TPtr Tenant;
     TStoragePool::TPtr Pool;
-    TActorId Worker; 
+    TActorId Worker;
     TStoragePool::EState State;
     ui64 SubdomainVersion;
     ui64 AllocatedNumGroups;
@@ -105,7 +105,7 @@ private:
 
 ITransaction *TTenantsManager::CreateTxUpdatePoolState(TTenant::TPtr tenant,
                                                        TStoragePool::TPtr pool,
-                                                       TActorId worker, 
+                                                       TActorId worker,
                                                        TStoragePool::EState state)
 {
     return new TTxUpdatePoolState(this, tenant, pool, worker, state);

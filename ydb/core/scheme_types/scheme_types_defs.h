@@ -11,18 +11,18 @@
 #define DECLARE_TYPED_TYPE_NAME(x)\
     const char x[] = #x;
 
-namespace NKikimr { 
-namespace NScheme { 
+namespace NKikimr {
+namespace NScheme {
 
 const ui32 MaxKeyValueSize = 4096;
 
 ////////////////////////////////////////////////////////
 template<typename T, typename TDerived, TTypeId TypeId_, const char* Name_>
-class TTypedType : public IType { 
+class TTypedType : public IType {
 public:
     //
     typedef T TValueType;
-    static constexpr TTypeId TypeId = TypeId_; 
+    static constexpr TTypeId TypeId = TypeId_;
 
     //
     class TInstance {
@@ -37,9 +37,9 @@ public:
         }
     };
 
-    TTypedType() = default; 
+    TTypedType() = default;
 
-    // IType interface 
+    // IType interface
     const char* GetName() const override {
         return Name_;
     }
@@ -47,7 +47,7 @@ public:
     static constexpr ui32 GetFixedSize() {
         return sizeof(T);
     }
-    TTypeId GetTypeId() const override { return TypeId; } 
+    TTypeId GetTypeId() const override { return TypeId; }
     static TRawTypeValue ToRawTypeValue(const T& value) {
         return TRawTypeValue((void*)&value, sizeof(T), TypeId);
     }
@@ -76,10 +76,10 @@ namespace NNames {
     extern const char Uint64[7];
 }
 
-class TInt32 : public IIntegerTypeWithKeyString<i32, NTypeIds::Int32, NNames::Int32> {}; 
-class TUint32 : public IIntegerTypeWithKeyString<ui32, NTypeIds::Uint32, NNames::Uint32> {}; 
-class TInt64 : public IIntegerTypeWithKeyString<i64, NTypeIds::Int64, NNames::Int64> {}; 
-class TUint64 : public IIntegerTypeWithKeyString<ui64, NTypeIds::Uint64, NNames::Uint64> {}; 
+class TInt32 : public IIntegerTypeWithKeyString<i32, NTypeIds::Int32, NNames::Int32> {};
+class TUint32 : public IIntegerTypeWithKeyString<ui32, NTypeIds::Uint32, NNames::Uint32> {};
+class TInt64 : public IIntegerTypeWithKeyString<i64, NTypeIds::Int64, NNames::Int64> {};
+class TUint64 : public IIntegerTypeWithKeyString<ui64, NTypeIds::Uint64, NNames::Uint64> {};
 
 // upyachka to get around undefined tryfromstring for chars
 
@@ -109,8 +109,8 @@ class TRealBase : public TTypedType<T, TDerived, TypeId, Name> {
 public:
 };
 
-class TDouble : public TRealBase<double, TDouble, NTypeIds::Double, NNames::Double> {}; 
-class TFloat : public TRealBase<float, TFloat, NTypeIds::Float, NNames::Float> {}; 
+class TDouble : public TRealBase<double, TDouble, NTypeIds::Double, NNames::Double> {};
+class TFloat : public TRealBase<float, TFloat, NTypeIds::Float, NNames::Float> {};
 
 ////////////////////////////////////////////////////////
 template<typename TFirst, typename TSecond, ui32 TypeId, const char* Name>
@@ -130,7 +130,7 @@ namespace NNames {
     extern const char PairUi64Ui64[13];
 }
 
-class TPairUi64Ui64 : public IIntegerPair<ui64, ui64, NTypeIds::PairUi64Ui64, NNames::PairUi64Ui64> {}; 
+class TPairUi64Ui64 : public IIntegerPair<ui64, ui64, NTypeIds::PairUi64Ui64, NNames::PairUi64Ui64> {};
 
 
 ////////////////////////////////////////////////////////
@@ -142,7 +142,7 @@ class TStringImpl {
 public:
 };
 
-template <typename TDerived, TTypeId TypeId, const char* Name> 
+template <typename TDerived, TTypeId TypeId, const char* Name>
 class TStringBase : public TTypedType<::TString, TDerived, TypeId, Name>
 {
 public:
@@ -165,7 +165,7 @@ namespace NNames {
 }
 
 void WriteEscapedValue(IOutputStream &out, const char *data, size_t size);
- 
+
 class TString : public TStringBase<TString, NTypeIds::String, NNames::String> {};
 
 class TUtf8 : public TStringBase<TUtf8, NTypeIds::Utf8, NNames::Utf8> {
@@ -188,7 +188,7 @@ class TDyNumber : public TStringBase<TDyNumber, NTypeIds::DyNumber, NNames::DyNu
 public:
 };
 
-template <ui32 TMaxSize, TTypeId TypeId, const char* Name> 
+template <ui32 TMaxSize, TTypeId TypeId, const char* Name>
 class TBoundedString : public TStringBase<TBoundedString<TMaxSize, TypeId, Name>, TypeId, Name> {
 public:
     static constexpr ui32 MaxSize = TMaxSize;
@@ -279,5 +279,5 @@ static inline bool TryGetTypeName(TTypeId typeId, ::TString& typeName) {
     return false;
 }
 
-} // namespace NScheme 
-} // namespace NKikimr 
+} // namespace NScheme
+} // namespace NKikimr

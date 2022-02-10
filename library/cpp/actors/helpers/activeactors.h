@@ -10,9 +10,9 @@ namespace NActors {
     // TActiveActors
     // This class helps manage created actors and kill them all on PoisonPill.
     ////////////////////////////////////////////////////////////////////////////
-    class TActiveActors : public THashSet<TActorId> { 
+    class TActiveActors : public THashSet<TActorId> {
     public:
-        void Insert(const TActorId &aid) { 
+        void Insert(const TActorId &aid) {
             bool inserted = insert(aid).second;
             Y_VERIFY(inserted);
         }
@@ -23,7 +23,7 @@ namespace NActors {
             }
         }
 
-        void Erase(const TActorId &aid) { 
+        void Erase(const TActorId &aid) {
             auto num = erase(aid);
             Y_VERIFY(num == 1);
         }

@@ -40,7 +40,7 @@ namespace NKikimr {
         std::unique_ptr<TRecoveryMachine> RecoveryMachine;
         std::shared_ptr<TReplCtx> ReplCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
-        TActorId Recipient; 
+        TActorId Recipient;
         TLogoBlobID StartKey;
         TEvReplFinished::TInfoPtr ReplInfo;
         TBlobIdQueuePtr BlobsToReplicatePtr;
@@ -210,7 +210,7 @@ namespace NKikimr {
 
         std::shared_ptr<TReplCtx> ReplCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
-        const TActorId ParentId; 
+        const TActorId ParentId;
         const TLogoBlobID StartKey;
         TVector<TVDiskProxyPtr> MergeHeap;
         TEvReplFinished::TInfoPtr ReplInfo;
@@ -791,7 +791,7 @@ namespace NKikimr {
 
         THullReplJobActor(
                 std::shared_ptr<TReplCtx> replCtx,
-                const TActorId &parentId, 
+                const TActorId &parentId,
                 const TLogoBlobID &startKey,
                 TQueueActorMapPtr&& queueActorMapPtr,
                 TBlobIdQueuePtr&& blobsToReplicatePtr,
@@ -825,7 +825,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateReplJobActor(
             std::shared_ptr<TReplCtx> replCtx,
-            const TActorId &parentId, 
+            const TActorId &parentId,
             const TLogoBlobID &startKey,
             TQueueActorMapPtr queueActorMapPtr,
             TBlobIdQueuePtr blobsToReplicatePtr,

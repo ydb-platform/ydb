@@ -5,7 +5,7 @@
         "kind":"LOGHIST",
         "labels":
           {
-            "metric":"ms" 
+            "metric":"ms"
           },
         "timeseries":
           [

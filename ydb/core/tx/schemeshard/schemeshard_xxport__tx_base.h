@@ -19,12 +19,12 @@ protected:
 
     virtual ~TTxBase() = default;
 
-    void Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) { 
+    void Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
         SendOnComplete.emplace_back(new IEventHandle(recipient, Self->SelfId(), ev, flags, cookie));
     }
 
     template <typename TEvent>
-    void Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) { 
+    void Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) {
         return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie);
     }
 
@@ -62,7 +62,7 @@ protected:
                 << ": id# " << info->Id
                 << ", subscribers count# " << info->Subscribers.size());
 
-        TSet<TActorId> toAnswer; 
+        TSet<TActorId> toAnswer;
         toAnswer.swap(info->Subscribers);
         for (auto& actorId: toAnswer) {
             Send(actorId, new TEvSchemeShard::TEvNotifyTxCompletionResult(info->Id));

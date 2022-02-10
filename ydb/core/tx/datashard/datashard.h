@@ -308,13 +308,13 @@ struct TEvDataShard {
         {
         }
 
-        TEvGetShardState(const TActorId& source) 
+        TEvGetShardState(const TActorId& source)
         {
-            ActorIdToProto(source, Record.MutableSource()); 
+            ActorIdToProto(source, Record.MutableSource());
         }
 
-        TActorId GetSource() const { 
-            return ActorIdFromProto(Record.GetSource()); 
+        TActorId GetSource() const {
+            return ActorIdFromProto(Record.GetSource());
         }
     };
 
@@ -344,8 +344,8 @@ struct TEvDataShard {
         TEvSchemaChanged()
         {}
 
-        TEvSchemaChanged(const TActorId& source, ui64 origin, ui32 state, ui64 txId, ui64 step, ui32 generation) { 
-            ActorIdToProto(source, Record.MutableSource()); 
+        TEvSchemaChanged(const TActorId& source, ui64 origin, ui32 state, ui64 txId, ui64 step, ui32 generation) {
+            ActorIdToProto(source, Record.MutableSource());
             Record.SetOrigin(origin);
             Record.SetState(state);
             Record.SetTxId(txId);
@@ -353,8 +353,8 @@ struct TEvDataShard {
             Record.SetGeneration(generation);
         }
 
-        TActorId GetSource() const { 
-            return ActorIdFromProto(Record.GetSource()); 
+        TActorId GetSource() const {
+            return ActorIdFromProto(Record.GetSource());
         }
 
         ui32 GetGeneration() const {
@@ -377,14 +377,14 @@ struct TEvDataShard {
         TEvStateChanged()
         {}
 
-        TEvStateChanged(const TActorId& source, ui64 tabletId, ui32 state) { 
-            ActorIdToProto(source, Record.MutableSource()); 
+        TEvStateChanged(const TActorId& source, ui64 tabletId, ui32 state) {
+            ActorIdToProto(source, Record.MutableSource());
             Record.SetTabletId(tabletId);
             Record.SetState(state);
         }
 
-        TActorId GetSource() const { 
-            return ActorIdFromProto(Record.GetSource()); 
+        TActorId GetSource() const {
+            return ActorIdFromProto(Record.GetSource());
         }
     };
 
@@ -405,11 +405,11 @@ struct TEvDataShard {
         {
         }
 
-        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId, 
+        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, ui32 flags = NDataShard::TTxFlags::Default)
         {
             Record.SetTxKind(txKind);
-            ActorIdToProto(source, Record.MutableSource()); 
+            ActorIdToProto(source, Record.MutableSource());
             Record.SetTxId(txId);
             Record.SetExecLevel(0);
             Record.SetTxBody(txBody.data(), txBody.size());
@@ -431,7 +431,7 @@ struct TEvDataShard {
         {
         }
 
-        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId, 
+        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
@@ -453,8 +453,8 @@ struct TEvDataShard {
             return Record.GetTxKind();
         }
 
-        TActorId GetSource() const { 
-            return ActorIdFromProto(Record.GetSource()); 
+        TActorId GetSource() const {
+            return ActorIdFromProto(Record.GetSource());
         }
 
         ui64 GetTxId() const {
@@ -1152,7 +1152,7 @@ struct TEvDataShard {
     struct TEvGetS3Upload
         : public TEventLocal<TEvGetS3Upload, TEvDataShard::EvGetS3Upload>
     {
-        TActorId ReplyTo; 
+        TActorId ReplyTo;
         ui64 TxId;
 
         explicit TEvGetS3Upload(const TActorId& replyTo, ui64 txId)
@@ -1165,11 +1165,11 @@ struct TEvDataShard {
     struct TEvStoreS3UploadId
         : public TEventLocal<TEvStoreS3UploadId, TEvDataShard::EvStoreS3UploadId>
     {
-        TActorId ReplyTo; 
+        TActorId ReplyTo;
         ui64 TxId;
         TString UploadId;
 
-        explicit TEvStoreS3UploadId(const TActorId& replyTo, ui64 txId, const TString& uploadId) 
+        explicit TEvStoreS3UploadId(const TActorId& replyTo, ui64 txId, const TString& uploadId)
             : ReplyTo(replyTo)
             , TxId(txId)
             , UploadId(uploadId)

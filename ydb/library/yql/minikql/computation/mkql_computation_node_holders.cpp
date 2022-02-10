@@ -1,8 +1,8 @@
-#include "mkql_computation_node_holders.h" 
+#include "mkql_computation_node_holders.h"
 #include "mkql_computation_node_codegen.h"
 #include "mkql_computation_node_pack.h"
 #include "mkql_custom_list.h"
-#include "mkql_value_builder.h" 
+#include "mkql_value_builder.h"
 #include "presort.h"
 
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
@@ -12,26 +12,26 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <ydb/library/yql/public/udf/udf_value.h>
- 
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-class TValueDataHolder: public TComputationValue<TValueDataHolder> { 
-public: 
-    TValueDataHolder(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value) 
-        : TComputationValue(memInfo) 
+class TValueDataHolder: public TComputationValue<TValueDataHolder> {
+public:
+    TValueDataHolder(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value)
+        : TComputationValue(memInfo)
         , Value(std::move(value))
     {}
- 
-private: 
+
+private:
     const NUdf::TUnboxedValue Value;
-}; 
- 
-class TDirectListHolder: public TComputationValue<TDirectListHolder> { 
+};
+
+class TDirectListHolder: public TComputationValue<TDirectListHolder> {
 public:
     class TIterator: public TComputationValue<TIterator> {
     public:
@@ -111,7 +111,7 @@ public:
     };
 
     TDirectListHolder(TMemoryUsageInfo* memInfo, TDefaultListRepresentation&& items)
-        : TComputationValue(memInfo) 
+        : TComputationValue(memInfo)
         , Items(std::move(items))
     {}
 
@@ -203,7 +203,7 @@ private:
         return new TDirectListHolder(GetMemInfo(), std::move(result));
     }
 
-    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override { 
+    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
         Y_UNUSED(builder);
         return const_cast<TDirectListHolder*>(this);
     }
@@ -728,8 +728,8 @@ private:
         Y_UNUSED(builder);
         Y_UNUSED(count);
         return const_cast<TEmptyContainerHolder*>(this);
-    } 
- 
+    }
+
     NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
         Y_UNUSED(builder);
         return const_cast<TEmptyContainerHolder*>(this);
@@ -951,7 +951,7 @@ private:
     mutable std::optional<TGenericPresortEncoder> Packer;
 };
 
-class TSortedDictHolder: public TComputationValue<TSortedDictHolder> { 
+class TSortedDictHolder: public TComputationValue<TSortedDictHolder> {
 public:
     typedef TKeyPayloadPairVector TItems;
 
@@ -1013,17 +1013,17 @@ public:
         bool AtStart;
     };
 
-    TSortedDictHolder( 
-            TMemoryUsageInfo* memInfo, 
-            TSortedDictFiller filler, 
+    TSortedDictHolder(
+            TMemoryUsageInfo* memInfo,
+            TSortedDictFiller filler,
             const TKeyTypes& types,
             bool isTuple,
-            EDictSortMode mode, 
+            EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
             const THolderFactory& holderFactory)
-        : TComputationValue(memInfo) 
-        , Filler(filler) 
+        : TComputationValue(memInfo)
+        , Filler(filler)
         , Types(types)
         , IsTuple(isTuple)
         , Mode(mode)
@@ -1116,9 +1116,9 @@ private:
 
         Y_VERIFY_DEBUG(IsSortedUnique());
         IsBuilt = true;
- 
+
         if (!Items.empty()) {
-            MKQL_MEM_TAKE(GetMemInfo(), &Items, Items.capacity() * sizeof(TItems::value_type)); 
+            MKQL_MEM_TAKE(GetMemInfo(), &Items, Items.capacity() * sizeof(TItems::value_type));
         }
     }
 
@@ -1892,7 +1892,7 @@ private:
     TComputationContext& CompCtx;
 };
 
-class THashedDictHolder: public TComputationValue<THashedDictHolder> { 
+class THashedDictHolder: public TComputationValue<THashedDictHolder> {
 public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
@@ -1956,8 +1956,8 @@ public:
 
     THashedDictHolder(TMemoryUsageInfo* memInfo, THashedDictFiller filler,
         const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType, const THolderFactory& holderFactory)
-        : TComputationValue(memInfo) 
-        , Filler(filler) 
+        : TComputationValue(memInfo)
+        , Filler(filler)
         , Types(types)
         , Map(0, TValueHasher(Types, isTuple), TValueEqual(Types, isTuple))
         , IsBuilt(false)
@@ -2422,7 +2422,7 @@ private:
     TComputationContext* Ctx;
 };
 
-class TDictNode: public TMutableComputationNode<TDictNode> { 
+class TDictNode: public TMutableComputationNode<TDictNode> {
     typedef TMutableComputationNode<TDictNode> TBaseComputation;
 public:
     TDictNode(TComputationMutables& mutables,
@@ -2458,7 +2458,7 @@ public:
                         map.emplace(std::move(key), std::move(value.second));
                     }
                 };
- 
+
         return ctx.HolderFactory.CreateDirectHashedDictHolder(
                 filler, Types, IsTuple, true, EncodedType);
     }
@@ -2546,7 +2546,7 @@ private:
     const NUdf::TUnboxedValue Iter;
 };
 
-class TLimitedList: public TComputationValue<TLimitedList> { 
+class TLimitedList: public TComputationValue<TLimitedList> {
 public:
     class TIterator: public TComputationValue<TIterator> {
     public:
@@ -2627,8 +2627,8 @@ public:
     };
 
     TLimitedList(TMemoryUsageInfo* memInfo, NUdf::TRefCountedPtr<NUdf::IBoxedValue> parent, TMaybe<ui64> skip, TMaybe<ui64> take)
-        : TComputationValue(memInfo) 
-        , Parent(parent) 
+        : TComputationValue(memInfo)
+        , Parent(parent)
         , Skip(skip)
         , Take(take)
     {
@@ -2682,7 +2682,7 @@ private:
         return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), NUdf::TBoxedValueAccessor::GetListIterator(*Parent), Skip, Take));
     }
 
-    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override { 
+    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
         if (!count) {
             return const_cast<TLimitedList*>(this);
         }
@@ -2711,7 +2711,7 @@ private:
         return new TLimitedList(GetMemInfo(), Parent, newSkip, newTake);
     }
 
-    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override { 
+    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
         if (!count) {
             return builder.NewEmptyList().Release().AsBoxed();
         }
@@ -2825,7 +2825,7 @@ private:
     const NUdf::IBoxedValuePtr List;
 };
 
-} // namespace 
+} // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // TDictValueBuilder
@@ -2847,7 +2847,7 @@ public:
     {
         Items_.reserve(10);
     }
- 
+
     NUdf::IDictValueBuilder& Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& value) override
     {
         Items_.emplace_back(std::move(key), std::move(value));
@@ -2990,9 +2990,9 @@ private:
 };
 
 
-////////////////////////////////////////////////////////////////////////////// 
-// THolderFactory 
-////////////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////////////
+// THolderFactory
+//////////////////////////////////////////////////////////////////////////////
 THolderFactory::THolderFactory(
     TAllocState& allocState,
     TMemoryUsageInfo& memInfo,
@@ -3004,7 +3004,7 @@ THolderFactory::THolderFactory(
 {}
 
 NUdf::TUnboxedValuePod THolderFactory::CreateTypeHolder(TType* type) const
-{ 
+{
     return NUdf::TUnboxedValuePod(AllocateOn<TTypeHolder>(CurrentAllocState, &MemInfo, type));
 }
 
@@ -3104,9 +3104,9 @@ NUdf::TUnboxedValuePod THolderFactory::Reversed(const NUdf::TUnboxedValuePod& it
 
 NUdf::TUnboxedValuePod THolderFactory::CreateLimitedList(
         NUdf::IBoxedValuePtr&& parent,
-        TMaybe<ui64> skip, TMaybe<ui64> take, 
-        TMaybe<ui64> knownLength) const 
-{ 
+        TMaybe<ui64> skip, TMaybe<ui64> take,
+        TMaybe<ui64> knownLength) const
+{
     if (take && !take.GetRef()) {
         return GetEmptyContainer();
     }
@@ -3370,27 +3370,27 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedSetHolder(
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedDictHolder(
-        TSortedDictFiller filler, 
+        TSortedDictFiller filler,
         const TKeyTypes& types,
         bool isTuple,
-        EDictSortMode mode, 
+        EDictSortMode mode,
         bool eagerFill,
         TType* encodedType) const
-{ 
+{
     return NUdf::TUnboxedValuePod(AllocateOn<TSortedDictHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, mode, eagerFill, encodedType, *this));
-} 
+}
 
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedDictHolder(
-        THashedDictFiller filler, 
+        THashedDictFiller filler,
         const TKeyTypes& types,
         bool isTuple,
         bool eagerFill,
         TType* encodedType) const
-{ 
+{
     return NUdf::TUnboxedValuePod(AllocateOn<THashedDictHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, eagerFill, encodedType, *this));
-} 
+}
 
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSetHolder(
     THashedSetFiller filler,
@@ -3501,9 +3501,9 @@ KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP)
 KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP)
 #undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP
 
-////////////////////////////////////////////////////////////////////////////// 
-// TNodeFactory 
-////////////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////////////
+// TNodeFactory
+//////////////////////////////////////////////////////////////////////////////
 TNodeFactory::TNodeFactory(TMemoryUsageInfo& memInfo, TComputationMutables& mutables)
     : MemInfo(memInfo)
     , Mutables(mutables)
@@ -3511,35 +3511,35 @@ TNodeFactory::TNodeFactory(TMemoryUsageInfo& memInfo, TComputationMutables& muta
 }
 
 IComputationNode* TNodeFactory::CreateEmptyNode() const
-{ 
+{
     return new TEmptyNode(Mutables);
 }
 
-IComputationNode* TNodeFactory::CreateOptionalNode(IComputationNode* item) const 
-{ 
+IComputationNode* TNodeFactory::CreateOptionalNode(IComputationNode* item) const
+{
     return item ? new TOptionalNode(item) : CreateImmutableNode(NUdf::TUnboxedValuePod());
 }
 
 IComputationNode* TNodeFactory::CreateArrayNode(TComputationNodePtrVector&& values) const
-{ 
+{
     if (values.empty()) {
         return new TEmptyNode(Mutables);
     }
 
     return new TArrayNode(Mutables, std::move(values));
 }
- 
-IComputationNode* TNodeFactory::CreateDictNode( 
+
+IComputationNode* TNodeFactory::CreateDictNode(
         std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
         const TKeyTypes& types, bool isTuple, TType* encodedType) const
-{ 
+{
     if (items.empty()) {
         return new TEmptyNode(Mutables);
     }
 
     return new TDictNode(Mutables, std::move(items), types, isTuple, encodedType);
-} 
- 
+}
+
 IComputationNode* TNodeFactory::CreateVariantNode(IComputationNode* item, ui32 index) const {
     return new TVariantNode(Mutables, item, index);
 }
@@ -3778,5 +3778,5 @@ NUdf::TUnboxedValuePod TPlainContainerCache::NewArray(const THolderFactory& fact
     return static_cast<const NUdf::TUnboxedValuePod&>(Cached[CacheIndex]);
 }
 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+} // namespace NMiniKQL
+} // namespace NKikimr

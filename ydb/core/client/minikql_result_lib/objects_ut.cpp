@@ -17,7 +17,7 @@ Y_UNIT_TEST(TOptionalTest) {
         TType type;
         type.SetKind(ETypeKind::Optional);
         type.MutableOptional()->MutableItem()->SetKind(ETypeKind::Data);
-        type.MutableOptional()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Bool); 
+        type.MutableOptional()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Bool);
         TValue value;
         value.MutableOptional()->SetBool(true);
         TOptional opt(value, type);
@@ -27,7 +27,7 @@ Y_UNIT_TEST(TOptionalTest) {
         TType type;
         type.SetKind(ETypeKind::Optional);
         type.MutableOptional()->MutableItem()->SetKind(ETypeKind::Data);
-        type.MutableOptional()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64); 
+        type.MutableOptional()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
         TValue value;
         value.MutableOptional()->SetUint64(200100);
         TOptional opt(value, type);
@@ -40,7 +40,7 @@ Y_UNIT_TEST(TListTest) {
         TType type;
         type.SetKind(ETypeKind::List);
         type.MutableList()->MutableItem()->SetKind(ETypeKind::Data);
-        type.MutableList()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Int32); 
+        type.MutableList()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Int32);
         TValue value;
         value.AddList()->SetInt32(-100);
         value.AddList()->SetInt32(0);
@@ -67,7 +67,7 @@ Y_UNIT_TEST(TListTest) {
         type.SetKind(ETypeKind::List);
         type.MutableList()->MutableItem()->SetKind(ETypeKind::Optional);
         type.MutableList()->MutableItem()->MutableOptional()->MutableItem()->SetKind(ETypeKind::Data);
-        type.MutableList()->MutableItem()->MutableOptional()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Int32); 
+        type.MutableList()->MutableItem()->MutableOptional()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Int32);
         TValue value;
         value.AddList()->MutableOptional()->SetInt32(-100);
         value.AddList()->MutableOptional()->SetInt32(0);
@@ -93,12 +93,12 @@ Y_UNIT_TEST(TTupleTest) {
         auto el0Type = type.MutableTuple()->AddElement();
         el0Type->SetKind(ETypeKind::Optional);
         el0Type->MutableOptional()->MutableItem()->SetKind(ETypeKind::Data);
-        el0Type->MutableOptional()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Int32); 
+        el0Type->MutableOptional()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Int32);
 
         auto el1Type = type.MutableTuple()->AddElement();
         el1Type->SetKind(ETypeKind::List);
         el1Type->MutableList()->MutableItem()->SetKind(ETypeKind::Data);
-        el1Type->MutableList()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64); 
+        el1Type->MutableList()->MutableItem()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
 
         TValue value;
         value.AddTuple()->MutableOptional()->SetInt32(911);
@@ -131,11 +131,11 @@ Y_UNIT_TEST(TStructTest) {
         auto mem1Type = type.MutableStruct()->AddMember();
         mem1Type->SetName("a");
         mem1Type->MutableType()->SetKind(ETypeKind::Data);
-        mem1Type->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Int64); 
+        mem1Type->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Int64);
         auto mem2Type = type.MutableStruct()->AddMember();
         mem2Type->SetName("b");
         mem2Type->MutableType()->SetKind(ETypeKind::Data);
-        mem2Type->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Int32); 
+        mem2Type->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Int32);
 
         TValue value;
         value.AddStruct()->SetInt64(-1000);

@@ -249,6 +249,6 @@ struct TEvQuota {
 };
 
 //
-TActorId MakeQuoterServiceID(); 
+TActorId MakeQuoterServiceID();
 
 }

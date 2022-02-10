@@ -132,15 +132,15 @@ IActor* CreateTabletCountersAggregator(bool follower);
 
 ////////////////////////////////////////////
 //will create actor that aggregate LabeledCounters from all nodes and reports them as TEvTabletLabeledCountersResponse to parentActor
-TActorId CreateClusterLabeledCountersAggregator( 
-        const TActorId& parentActor, 
+TActorId CreateClusterLabeledCountersAggregator(
+        const TActorId& parentActor,
         TTabletTypes::EType tabletType,
         const TActorContext& ctx,
         ui32 version = 1,
         const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT);
 
 IActor* CreateClusterLabeledCountersAggregatorActor(
-        const TActorId& parentActor, 
+        const TActorId& parentActor,
         TTabletTypes::EType tabletType,
         ui32 version = 1,
         const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT);

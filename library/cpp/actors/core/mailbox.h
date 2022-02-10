@@ -305,14 +305,14 @@ namespace NActors {
         static const ui32 LineIndexShift = 12;
         static const ui32 LineIndexMask = 0x1FFFFu << LineIndexShift;
         static const ui32 LineHintMask = 0xFFFu;
-        static const ui32 PoolIndexShift = TActorId::PoolIndexShift; 
-        static const ui32 PoolIndexMask = TActorId::PoolIndexMask; 
+        static const ui32 PoolIndexShift = TActorId::PoolIndexShift;
+        static const ui32 PoolIndexMask = TActorId::PoolIndexMask;
 
         static ui32 LineIndex(ui32 hint) {
             return ((hint & LineIndexMask) >> LineIndexShift);
         }
         static ui32 PoolIndex(ui32 hint) {
-            return TActorId::PoolIndex(hint); 
+            return TActorId::PoolIndex(hint);
         }
 
         TMailboxHeader* Get(ui32 hint);

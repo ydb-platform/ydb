@@ -6,8 +6,8 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/monlib/encode/json 
-    library/cpp/monlib/encode/fake 
+    library/cpp/monlib/encode/json
+    library/cpp/monlib/encode/fake
 )
 
 SIZE(MEDIUM)

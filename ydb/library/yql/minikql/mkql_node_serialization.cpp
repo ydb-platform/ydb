@@ -8,9 +8,9 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/packedtypes/zigzag.h>
 
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/system/unaligned_mem.h>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -1258,16 +1258,16 @@ namespace {
 
         TNode* ReadStructType() {
             const ui32 membersCount = ReadVar32();
-            TStackVec<TStructMember> members(membersCount); 
+            TStackVec<TStructMember> members(membersCount);
             for (ui32 i = 0; i < membersCount; ++i) {
                 auto memberTypeNode = PopNode();
                 if (memberTypeNode->GetType()->GetKind() != TType::EKind::Type)
                     ThrowCorrupted();
-                members[i].Type = static_cast<TType*>(memberTypeNode); 
+                members[i].Type = static_cast<TType*>(memberTypeNode);
             }
 
             for (ui32 i = 0; i < membersCount; ++i) {
-                members[i].Name = ReadName(); 
+                members[i].Name = ReadName();
             }
 
             auto node = TStructType::Create(membersCount, members.data(), Env);

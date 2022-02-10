@@ -22,7 +22,7 @@
 #include <library/cpp/actors/core/scheduler_actor.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/interconnect/poller_tcp.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/vector.h>
 

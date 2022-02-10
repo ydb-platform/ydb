@@ -1,24 +1,24 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
- 
+
 #include <util/datetime/base.h>
 #include <util/draft/datetime.h>
 #include <util/string/cast.h>
- 
+
 #include <library/cpp/timezone_conversion/convert.h>
 
 #include <unordered_map>
 
-using namespace NKikimr; 
-using namespace NUdf; 
+using namespace NKikimr;
+using namespace NUdf;
 using namespace NDatetime;
- 
+
 namespace {
     SIMPLE_UDF(TToString, char*(TAutoMap<TTimestamp>)) {
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
         return valueBuilder->NewString(instant.ToString());
     }
- 
+
     SIMPLE_UDF(TToStringUpToSeconds, char*(TAutoMap<TTimestamp>)) {
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
@@ -107,7 +107,7 @@ namespace {
     if (!success) {                                   \
         success = TryStrptime(input, format, result); \
     }
- 
+
     TUnboxedValue FromStringImpl(const TUnboxedValuePod* args) {
         EMPTY_RESULT_ON_EMPTY_ARG(0);
         TString input(args[0].AsStringRef());
@@ -226,7 +226,7 @@ namespace {
         const auto input = args[0].Get<ui64>();                        \
         return TUnboxedValuePod(TInstant::unit(input).MicroSeconds()); \
     }
- 
+
 #define DATETIME_TIMESTAMP_FROM_UDF(unit)                                      \
     SIMPLE_UDF(TTimestampFrom##unit, TOptional<TTimestamp>(TOptional<ui64>)) { \
         Y_UNUSED(valueBuilder);                                                \
@@ -317,7 +317,7 @@ namespace {
 #define DATETIME_GET_REGISTER_UDF(udfName, ...) udfName,
 #define DATETIME_GET_REGISTER_STRING_UDF(udfName, ...) udfName,
 #define DATETIME_START_REGISTER_UDF(udfName, ...) udfName,
- 
+
 #define DATETIME_FROM_UDF_MAP(XX) \
     XX(MicroSeconds)              \
     XX(MilliSeconds)              \
@@ -360,7 +360,7 @@ namespace {
        instant.MilliSecondsOfSecond())                          \
     XX(TGetMicrosecondOfSecond, ui32,                           \
        instant.MicroSecondsOfSecond())
- 
+
 #define DATETIME_GET_UDF_STRING_MAP(XX)  \
     XX(TGetMonthName, tm.ToString("%B")) \
     XX(TGetDayOfWeekName, tm.ToString("%A"))
@@ -401,7 +401,7 @@ namespace {
     DATETIME_GET_UDF_MAP(DATETIME_GET_UDF)
     DATETIME_GET_UDF_STRING_MAP(DATETIME_GET_STRING_UDF)
     DATETIME_START_UDF_MAP(DATETIME_START_UDF)
- 
+
     SIMPLE_MODULE(TDateTimeModule,
                   DATETIME_TO_UDF_MAP(DATETIME_TO_REGISTER_UDF)
                       DATETIME_INTERVAL_TO_UDF_MAP(DATETIME_TO_INTERVAL_REGISTER_UDF)
@@ -420,5 +420,5 @@ namespace {
                   TIsWeekend, TDateStartOfDay, TDatetimeStartOfDay, TTimestampStartOfDay,
                   TGetTimeOfDay)
 }
- 
+
 REGISTER_MODULES(TDateTimeModule)

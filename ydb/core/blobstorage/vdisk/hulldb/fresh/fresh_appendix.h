@@ -9,7 +9,7 @@
 // FIXME
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullrecmerger.h>
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <ydb/core/blobstorage/base/ptr.h>
 
 namespace NKikimr {

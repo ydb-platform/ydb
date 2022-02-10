@@ -19,8 +19,8 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
     using TTableResult = NYql::IDbSchemeResolver::TTableResult;
     using TTableResults = NYql::IDbSchemeResolver::TTableResults;
 
-    const TActorId SchemeCache; 
-    const TActorId ResponseTo; 
+    const TActorId SchemeCache;
+    const TActorId ResponseTo;
     TVector<TTable> Tables;
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
@@ -101,7 +101,7 @@ public:
         return NKikimrServices::TActivity::TABLE_SCHEME_RESOLVER;
     }
 
-    TTableProxyActor(TActorId schemeCache, TActorId responseTo, const TVector<TTable> &tables) 
+    TTableProxyActor(TActorId schemeCache, TActorId responseTo, const TVector<TTable> &tables)
         : SchemeCache(schemeCache)
         , ResponseTo(responseTo)
         , Tables(tables)
@@ -139,7 +139,7 @@ public:
     {
     }
 
-    TDbSchemeResolver(TActorSystem *actorSystem, const TActorId &schemeCacheActor) 
+    TDbSchemeResolver(TActorSystem *actorSystem, const TActorId &schemeCacheActor)
         : HostActorSystem(actorSystem)
         , SchemeCacheActor(schemeCacheActor)
     {}
@@ -157,17 +157,17 @@ public:
         return NThreading::MakeFuture(results);
     }
 
-    virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override { 
+    virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override {
         TAutoPtr<NActors::IActor> proxyActor(new TTableProxyActor(SchemeCacheActor, responseTo, tables));
         HostActorSystem->Register(proxyActor.Release(), TMailboxType::HTSwap, HostActorSystem->AppData<TAppData>()->UserPoolId);
     }
 
 private:
     TActorSystem *HostActorSystem;
-    TActorId SchemeCacheActor; 
+    TActorId SchemeCacheActor;
 };
 
-NYql::IDbSchemeResolver* CreateDbSchemeResolver(TActorSystem *actorSystem, const TActorId &schemeCacheActor) { 
+NYql::IDbSchemeResolver* CreateDbSchemeResolver(TActorSystem *actorSystem, const TActorId &schemeCacheActor) {
     TAutoPtr<NYql::IDbSchemeResolver> resolver(new TDbSchemeResolver(actorSystem, schemeCacheActor));
     return resolver.Release();
 }

@@ -41,7 +41,7 @@ namespace NKikimr {
                 TIntrusivePtr<TLsnMngr> &&lsnMngr,
                 TPDiskCtxPtr &&pdiskCtx,
                 TIntrusivePtr<THandoffDelegate> &&handoffDelegate,
-                const TActorId skeletonId, 
+                const TActorId skeletonId,
                 bool runHandoff,
                 TActorSystem *as,
                 bool barrierValidation)
@@ -62,7 +62,7 @@ namespace NKikimr {
             BarriersRunTimeCtx->CutRecoveryLog(ctx, std::unique_ptr<NPDisk::TEvCutLog>(msg->Clone()));
         }
 
-        void SetLogNotifierActorId(const TActorId &aid) { 
+        void SetLogNotifierActorId(const TActorId &aid) {
             LogoBlobsRunTimeCtx->SetLogNotifierActorId(aid);
             BlocksRunTimeCtx->SetLogNotifierActorId(aid);
             BarriersRunTimeCtx->SetLogNotifierActorId(aid);
@@ -76,7 +76,7 @@ namespace NKikimr {
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
             TIntrusivePtr<THandoffDelegate> handoffDelegate,
-            const TActorId skeletonId, 
+            const TActorId skeletonId,
             bool runHandoff,
             THullDbRecovery &&uncond,
             TActorSystem *as,
@@ -108,8 +108,8 @@ namespace NKikimr {
             TIntrusivePtr<TVDiskConfig> config,
             std::shared_ptr<THullLogCtx> hullLogCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
-            TActorId loggerId, 
-            TActorId logCutterId, 
+            TActorId loggerId,
+            TActorId logCutterId,
             const TActorContext &ctx)
     {
         TActiveActors activeActors;
@@ -148,7 +148,7 @@ namespace NKikimr {
 
     void THull::PostponeReplyUntilCommitted(
             IEventBase *msg,
-            const TActorId &recipient, 
+            const TActorId &recipient,
             ui64 recipientCookie,
             ui64 lsn)
     {

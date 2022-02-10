@@ -1,6 +1,6 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
- 
+
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>
 #include <util/digest/numeric.h>
@@ -12,7 +12,7 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/digest/old_crc/crc.h>
 #include <library/cpp/digest/sfh/sfh.h>
- 
+
 #include <contrib/libs/highwayhash/highwayhash/c_bindings.h>
 #include <contrib/libs/highwayhash/highwayhash/sip_hash.h>
 
@@ -21,9 +21,9 @@
 
 #include <contrib/libs/openssl/include/openssl/sha.h>
 
-using namespace NKikimr; 
-using namespace NUdf; 
- 
+using namespace NKikimr;
+using namespace NUdf;
+
 namespace {
     SIMPLE_UDF(TCrc32c, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
@@ -31,7 +31,7 @@ namespace {
         ui32 hash = Crc32c(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
- 
+
     SIMPLE_UDF(TCrc64, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
@@ -136,7 +136,7 @@ namespace {
         const TString& hash = md5.CalcRaw(inputRef);
         return valueBuilder->NewString(hash);
     }
- 
+
     SIMPLE_UDF(TMd5HalfMix, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(MD5::CalcHalfMix(args[0].AsStringRef()));
@@ -381,5 +381,5 @@ namespace {
     )
 
 }
- 
+
 REGISTER_MODULES(TDigestModule)

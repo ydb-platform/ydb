@@ -12,7 +12,7 @@ namespace NKikimr {
 
     IActor* CreateVDiskSkeleton(const TIntrusivePtr<TVDiskConfig> &cfg,
                                 const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                const TActorId &skeletonFrontID, 
+                                const TActorId &skeletonFrontID,
                                 const TVDiskContextPtr &vctx);
 
 } // NKikimr

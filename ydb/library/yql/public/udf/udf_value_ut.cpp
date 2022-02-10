@@ -1,51 +1,51 @@
-#include "udf_value.h" 
+#include "udf_value.h"
 #include "udf_ut_helpers.h"
- 
+
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 using namespace NYql::NUdf;
- 
+
 Y_UNIT_TEST_SUITE(TUdfValue) {
- 
+
     Y_UNIT_TEST(TestOptional) {
         TUnboxedValuePod foo((ui32) 42);
         UNIT_ASSERT(foo);
-        UNIT_ASSERT(42 == foo.Get<ui32>()); 
- 
+        UNIT_ASSERT(42 == foo.Get<ui32>());
+
         auto optFoo = foo.MakeOptional();
         UNIT_ASSERT(optFoo);
         UNIT_ASSERT(optFoo.HasValue());
- 
+
         auto bar = optFoo.GetOptionalValue();
-        UNIT_ASSERT(42 == bar.Get<ui32>()); 
-    } 
- 
+        UNIT_ASSERT(42 == bar.Get<ui32>());
+    }
+
     Y_UNIT_TEST(TestOptional2) {
         auto valueOpt = TUnboxedValuePod((ui32) 42);
         UNIT_ASSERT(valueOpt);
         UNIT_ASSERT(valueOpt.HasValue());
- 
+
         auto value = valueOpt.GetOptionalValue();
-        UNIT_ASSERT(42 == value.Get<ui32>()); 
-    } 
- 
+        UNIT_ASSERT(42 == value.Get<ui32>());
+    }
+
     Y_UNIT_TEST(TestEmptyOptional) {
         auto optEmpty = TUnboxedValuePod();
         UNIT_ASSERT(!optEmpty);
         UNIT_ASSERT(!optEmpty.HasValue());
- 
+
         auto optOptEmpty = optEmpty.MakeOptional();
         UNIT_ASSERT(optOptEmpty);
         UNIT_ASSERT(!optOptEmpty.HasValue());
- 
+
         auto optOptOptEmpty = optOptEmpty.MakeOptional();
         UNIT_ASSERT(optOptOptEmpty);
         UNIT_ASSERT(!optOptOptEmpty.HasValue());
 
         auto v = optOptEmpty.GetOptionalValue();
         UNIT_ASSERT(!v);
-    } 
+    }
 
     Y_UNIT_TEST(TestVariant) {
         TUnboxedValuePod foo((ui64) 42);
@@ -152,4 +152,4 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
 #endif
 #undef METHOD_INDEX
     }
-} 
+}

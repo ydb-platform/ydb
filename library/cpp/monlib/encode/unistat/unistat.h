@@ -6,8 +6,8 @@
 namespace NMonitoring {
     /// Decodes unistat-style metrics
     /// https://wiki.yandex-team.ru/golovan/stat-handle
-    void DecodeUnistat(TStringBuf data, class IMetricConsumer* c, TInstant ts = TInstant::Zero()); 
+    void DecodeUnistat(TStringBuf data, class IMetricConsumer* c, TInstant ts = TInstant::Zero());
 
     /// Assumes consumer's stream is open by the caller
-    void DecodeUnistatToStream(TStringBuf data, class IMetricConsumer* c, TInstant = TInstant::Zero()); 
+    void DecodeUnistatToStream(TStringBuf data, class IMetricConsumer* c, TInstant = TInstant::Zero());
 }

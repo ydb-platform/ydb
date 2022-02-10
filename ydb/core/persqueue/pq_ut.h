@@ -94,7 +94,7 @@ struct TTestContext {
     TInitialEventsFilter InitialEventsFilter;
     TVector<ui64> TabletIds;
     THolder<TTestActorRuntime> Runtime;
-    TActorId Edge; 
+    TActorId Edge;
     THashMap<ui32, ui32> MsgSeqNoMap;
 
 
@@ -109,7 +109,7 @@ struct TTestContext {
 
     static bool RequestTimeoutFilter(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration duration, TInstant& deadline) {
         if (event->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
-            TActorId actorId = event->GetRecipientRewrite(); 
+            TActorId actorId = event->GetRecipientRewrite();
             IActor *actor = runtime.FindActor(actorId);
             if (actor && actor->GetActivityType() == NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR) {
                 return true;
@@ -382,8 +382,8 @@ void RestartTablet(TTestContext& tc) {
 }
 
 
-TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) { 
-    TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.TabletId, tc.Edge, 0, GetPipeConfigWithRetries()); 
+TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
+    TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.TabletId, tc.Edge, 0, GetPipeConfigWithRetries());
 
     THolder<TEvPersQueue::TEvRequest> request;
 
@@ -392,21 +392,21 @@ TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, 
     req->SetPartition(partition);
     req->MutableCmdGetOwnership()->SetOwner(owner);
     req->MutableCmdGetOwnership()->SetForce(force);
-    ActorIdToProto(pipeClient, req->MutablePipeClient()); 
+    ActorIdToProto(pipeClient, req->MutablePipeClient());
 
     tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
     return pipeClient;
 }
 
-TActorId RegisterReadSession(const TString& session, TTestContext& tc, const TVector<ui32>& groups = {}) { 
-    TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries()); 
+TActorId RegisterReadSession(const TString& session, TTestContext& tc, const TVector<ui32>& groups = {}) {
+    TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
 
     THolder<TEvPersQueue::TEvRegisterReadSession> request;
 
     request.Reset(new TEvPersQueue::TEvRegisterReadSession);
     auto& req = request->Record;
     req.SetSession(session);
-    ActorIdToProto(pipeClient, req.MutablePipeClient()); 
+    ActorIdToProto(pipeClient, req.MutablePipeClient());
     req.SetClientId("user");
     for (const auto& g : groups) {
         req.AddGroups(g);
@@ -429,7 +429,7 @@ void WaitSessionKill(TTestContext& tc) {
 }
 
 
-void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, const TString& sessionToRelease, const TString& topic, const TActorId& pipe, bool ok = true) { 
+void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, const TString& sessionToRelease, const TString& topic, const TActorId& pipe, bool ok = true) {
     TAutoPtr<IEventHandle> handle;
 
     tc.Runtime->ResetScheduledCount();
@@ -465,7 +465,7 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
                 req.SetPartition(partition);
                 req.SetTopic(topic);
                 req.SetClientId("user");
-                ActorIdToProto(pipe, req.MutablePipeClient()); 
+                ActorIdToProto(pipe, req.MutablePipeClient());
 
                 tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), pipe);
             }
@@ -478,11 +478,11 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
 }
 
 
-std::pair<TString, TActorId> CmdSetOwner(const ui32 partition, TTestContext& tc, const TString& owner = "default", bool force = true) { 
+std::pair<TString, TActorId> CmdSetOwner(const ui32 partition, TTestContext& tc, const TString& owner = "default", bool force = true) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
     TString cookie;
-    TActorId pipeClient; 
+    TActorId pipeClient;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             tc.Runtime->ResetScheduledCount();
@@ -681,7 +681,7 @@ void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::
 
 
 void ReserveBytes(const ui32 partition, TTestContext& tc,
-               const TString& cookie, i32 msgSeqNo, i64 size, const TActorId& pipeClient, bool lastRequest) 
+               const TString& cookie, i32 msgSeqNo, i64 size, const TActorId& pipeClient, bool lastRequest)
 {
     THolder<TEvPersQueue::TEvRequest> request;
     tc.Runtime->ResetScheduledCount();
@@ -690,7 +690,7 @@ void ReserveBytes(const ui32 partition, TTestContext& tc,
     req->SetPartition(partition);
     req->SetOwnerCookie(cookie);
     req->SetMessageNo(msgSeqNo);
-    ActorIdToProto(pipeClient, req->MutablePipeClient()); 
+    ActorIdToProto(pipeClient, req->MutablePipeClient());
     req->MutableCmdReserveBytes()->SetSize(size);
     req->MutableCmdReserveBytes()->SetLastRequest(lastRequest);
     tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
@@ -699,7 +699,7 @@ void ReserveBytes(const ui32 partition, TTestContext& tc,
 }
 
 
-void CmdReserveBytes(const ui32 partition, TTestContext& tc, const TString& ownerCookie, i32 msn, i64 size, TActorId pipeClient, bool noAnswer = false, bool lastRequest = false) { 
+void CmdReserveBytes(const ui32 partition, TTestContext& tc, const TString& ownerCookie, i32 msn, i64 size, TActorId pipeClient, bool noAnswer = false, bool lastRequest = false) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 

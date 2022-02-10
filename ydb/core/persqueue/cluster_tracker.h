@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/event_local.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -17,11 +17,11 @@
 
 namespace NKikimr::NPQ::NClusterTracker {
 
-using NActors::TActorId; 
+using NActors::TActorId;
 
-inline TActorId MakeClusterTrackerID() { 
+inline TActorId MakeClusterTrackerID() {
     static const char x[12] = "clstr_trckr";
-    return TActorId(0, TStringBuf(x, 12)); 
+    return TActorId(0, TStringBuf(x, 12));
 }
 
 NActors::IActor* CreateClusterTracker();

@@ -186,11 +186,11 @@ public:
     THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
     THashMap<TShardIdx, TVector<TActorId>> ShardDeletionSubscribers; // for tests
 
-    TActorId SchemeBoardPopulator; 
+    TActorId SchemeBoardPopulator;
 
     static constexpr ui32 InitiateCachedTxIdsCount = 100;
     TDeque<TTxId> CachedTxIds;
-    TActorId TxAllocatorClient; 
+    TActorId TxAllocatorClient;
 
     TAutoPtr<NTabletPipe::IClientCache> PipeClientCache;
     TPipeTracker PipeTracker;
@@ -209,7 +209,7 @@ public:
 
     TAutoPtr<TSelfPinger> SelfPinger;
 
-    TActorId SysPartitionStatsCollector; 
+    TActorId SysPartitionStatsCollector;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
@@ -689,7 +689,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxOperationPlanStep(TEvTxProcessing::TEvPlanStep::TPtr& ev);
 
     struct TTxUpgradeAccessDatabaseRights;
-    NTabletFlatExecutor::ITransaction* CreateTxUpgradeAccessDatabaseRights(const TActorId& answerTo, bool isDryRun, std::function< NActors::IEventBase* (const TMap<TPathId, TSet<TString>>&) >); 
+    NTabletFlatExecutor::ITransaction* CreateTxUpgradeAccessDatabaseRights(const TActorId& answerTo, bool isDryRun, std::function< NActors::IEventBase* (const TMap<TPathId, TSet<TString>>&) >);
 
     struct TTxMakeAccessDatabaseNoInheritable;
     NTabletFlatExecutor::ITransaction* CreateTxMakeAccessDatabaseNoInheritable(const TActorId& answerTo, bool isDryRun, std::function< NActors::IEventBase* (const TMap<TPathId, TSet<TString>>&) >);
@@ -962,7 +962,7 @@ public:
         NTabletPipe::TClientConfig PipeCfg;
 
         TMap<TIndexBuildId, TMap<TTabletId, TActorId>> Pipes;
-        TMap<TActorId, TOwnerRec> Owners; 
+        TMap<TActorId, TOwnerRec> Owners;
 
         TDedicatedPipePool();
 
@@ -970,7 +970,7 @@ public:
         void Close(TIndexBuildId ownerTxId, TTabletId dst, const TActorContext& ctx);
         ui64 CloseAll(TIndexBuildId ownerTxId, const TActorContext& ctx);
 
-        bool Has(TActorId actorId) const; 
+        bool Has(TActorId actorId) const;
         TTabletId GetTabletId(TActorId actorId) const;
         TIndexBuildId GetOwnerId(TActorId actorId) const;
     };

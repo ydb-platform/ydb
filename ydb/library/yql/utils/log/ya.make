@@ -6,10 +6,10 @@ OWNER(
 )
 
 SRCS(
-    context.cpp 
+    context.cpp
     log.cpp
-    profile.cpp 
-    tls_backend.cpp 
+    profile.cpp
+    tls_backend.cpp
 )
 
 PEERDIR(

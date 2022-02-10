@@ -75,8 +75,8 @@
 #include <ydb/core/client/server/msgbus_server_tracer.h>
 #include <ydb/core/client/server/http_ping.h>
 
-#include <library/cpp/grpc/server/actors/logger.h> 
- 
+#include <library/cpp/grpc/server/actors/logger.h>
+
 #include <ydb/services/yq/private_grpc.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
@@ -104,7 +104,7 @@
 #include <ydb/core/yq/libs/init/init.h>
 
 #include <library/cpp/logger/global/global.h>
-#include <library/cpp/monlib/messagebus/mon_messagebus.h> 
+#include <library/cpp/monlib/messagebus/mon_messagebus.h>
 #include <library/cpp/sighandler/async_signals_handler.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/malloc/api/malloc.h>
@@ -113,7 +113,7 @@
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
- 
+
 #include <library/cpp/actors/core/memory_track.h>
 #include <library/cpp/actors/prof/tag.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -733,15 +733,15 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         const auto& grpcConfig = appConfig.GetGRpcConfig();
 
         EnabledGrpcService = true;
-        NGrpc::TServerOptions opts; 
+        NGrpc::TServerOptions opts;
         opts.SetHost(grpcConfig.GetHost());
         opts.SetPort(grpcConfig.GetPort());
         opts.SetWorkerThreads(grpcConfig.GetWorkerThreads());
         opts.SetGRpcMemoryQuotaBytes(grpcConfig.GetGRpcMemoryQuotaBytes());
         opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
-        opts.SetLogger(NGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER)); 
- 
+        opts.SetLogger(NGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
+
         if (appConfig.HasDomainsConfig() &&
             appConfig.GetDomainsConfig().HasSecurityConfig() &&
             appConfig.GetDomainsConfig().GetSecurityConfig().HasEnforceUserTokenRequirement()) {
@@ -763,25 +763,25 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             }
         }
 
-        NGrpc::TServerOptions sslOpts = opts; 
+        NGrpc::TServerOptions sslOpts = opts;
         if (grpcConfig.HasSslPort() && grpcConfig.GetSslPort()) {
             Y_VERIFY(grpcConfig.HasCA(), "CA not set");
             Y_VERIFY(grpcConfig.HasCert(), "Cert not set");
             Y_VERIFY(grpcConfig.HasKey(), "Key not set");
             sslOpts.SetPort(grpcConfig.GetSslPort());
-            NGrpc::TSslData sslData; 
+            NGrpc::TSslData sslData;
             sslData.Root = ReadFile(grpcConfig.GetCA());
             sslData.Cert = ReadFile(grpcConfig.GetCert());
             sslData.Key = ReadFile(grpcConfig.GetKey());
             sslOpts.SetSslData(sslData);
 
-            GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(sslOpts) }); 
+            GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(sslOpts) });
 
             fillFn(grpcConfig, *GRpcServers.back().second, sslOpts);
         }
 
         if (grpcConfig.GetPort()) {
-            GRpcServers.push_back({ "grpc", new NGrpc::TGRpcServer(opts) }); 
+            GRpcServers.push_back({ "grpc", new NGrpc::TGRpcServer(opts) });
 
             fillFn(grpcConfig, *GRpcServers.back().second, opts);
         }
@@ -789,22 +789,22 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         for (auto &ex : grpcConfig.GetExtEndpoints()) {
             // todo: check uniq
             if (ex.GetPort()) {
-                NGrpc::TServerOptions xopts = opts; 
+                NGrpc::TServerOptions xopts = opts;
                 xopts.SetPort(ex.GetPort());
 
                 if (ex.GetHost())
                     xopts.SetHost(ex.GetHost());
 
-                GRpcServers.push_back({ "grpc", new NGrpc::TGRpcServer(xopts) }); 
+                GRpcServers.push_back({ "grpc", new NGrpc::TGRpcServer(xopts) });
                 fillFn(ex, *GRpcServers.back().second, xopts);
             }
 
             if (ex.HasSslPort() && ex.GetSslPort()) {
-                NGrpc::TServerOptions xopts = opts; 
+                NGrpc::TServerOptions xopts = opts;
                 xopts.SetPort(ex.GetSslPort());
 
 
-                NGrpc::TSslData sslData; 
+                NGrpc::TSslData sslData;
                 sslData.Root = ex.HasCA() ? ReadFile(ex.GetCA()) : ReadFile(grpcConfig.GetCA());
                 sslData.Cert = ex.HasCert() ? ReadFile(ex.GetCert()) : ReadFile(grpcConfig.GetCert());
                 sslData.Key = ex.HasKey() ? ReadFile(ex.GetKey()) : ReadFile(grpcConfig.GetKey());
@@ -814,7 +814,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 Y_VERIFY(xopts.SslData->Cert, "Cert not set");
                 Y_VERIFY(xopts.SslData->Key, "Key not set");
 
-                GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(xopts) }); 
+                GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(xopts) });
                 fillFn(ex, *GRpcServers.back().second, xopts);
             }
         }
@@ -951,7 +951,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         return;
 
     auto logConfig = runConfig.AppConfig.GetLogConfig();
-    LogSettings.Reset(new NActors::NLog::TSettings(NActors::TActorId(runConfig.NodeId, "logger"), 
+    LogSettings.Reset(new NActors::NLog::TSettings(NActors::TActorId(runConfig.NodeId, "logger"),
         NKikimrServices::LOGGER,
         (NActors::NLog::EPriority)logConfig.GetDefaultLevel(),
         (NActors::NLog::EPriority)logConfig.GetDefaultSamplingLevel(),
@@ -1426,7 +1426,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     }
 
     if (ActorSystem) {
-        ActorSystem->BroadcastToProxies([](const TActorId& proxyId) { 
+        ActorSystem->BroadcastToProxies([](const TActorId& proxyId) {
             return new IEventHandle(proxyId, {}, new TEvInterconnect::TEvTerminate);
         });
         ActorSystem->Send(new IEventHandle(MakeInterconnectListenerActorId(false), {}, new TEvents::TEvPoisonPill));
@@ -1466,8 +1466,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     if (ActorSystem) {
         ActorSystem->Stop();
-    } 
- 
+    }
+
     for (auto& server : GRpcServers) {
         server.second.Destroy();
     }
@@ -1523,7 +1523,7 @@ void TKikimrRunner::SetSignalHandlers() {
 }
 
 void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
-    TypeRegistry.Reset(new NScheme::TKikimrTypeRegistry()); 
+    TypeRegistry.Reset(new NScheme::TKikimrTypeRegistry());
     TypeRegistry->CalculateMetadataEtag();
 
     FunctionRegistry.Reset(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone());
@@ -1531,7 +1531,7 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
 
 #ifdef KIKIMR_UDF_DYNAMIC_LINK
     const TString& udfsDir = runConfig.AppConfig.GetUDFsDir();
- 
+
     TVector<TString> udfsPaths;
     if (!udfsDir.empty()) {
         if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {

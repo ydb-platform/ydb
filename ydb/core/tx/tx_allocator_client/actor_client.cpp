@@ -12,7 +12,7 @@ namespace NKikimr {
 
 class TTxAllocatorClientActor: public TActorBootstrapped<TTxAllocatorClientActor> {
     struct TDelayedRequest {
-        TActorId Sender; 
+        TActorId Sender;
         ui64 Cookie;
         ui64 Count;
     };

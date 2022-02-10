@@ -189,7 +189,7 @@ namespace NKikimr {
 
         // when slice is destroyed we notify CommitterId about this event (i.e. ChunksToDelete are not used anymore)
         TActorSystem * /*const*/ ActorSystem;
-        TActorId CommitterId; 
+        TActorId CommitterId;
         // In ChunksToDelete we store chunks that are old and subject for deletion,
         // but previous snapshot can still use them
         TVector<ui32> ChunksToDelete;
@@ -242,7 +242,7 @@ namespace NKikimr {
             }
         }
 
-        void SetUpCommitter(TActorSystem * /*const*/ system, const TActorId &id) { 
+        void SetUpCommitter(TActorSystem * /*const*/ system, const TActorId &id) {
             ActorSystem = system;
             CommitterId = id;
         }

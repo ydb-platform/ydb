@@ -53,11 +53,11 @@ struct TSchemeBoardEvents {
     // populator events
     struct TEvRequestDescribe: public TEventLocal<TEvRequestDescribe, EvRequestDescribe> {
         const TPathId PathId;
-        const TActorId Replica; 
+        const TActorId Replica;
 
         TEvRequestDescribe() = default;
 
-        explicit TEvRequestDescribe(const TPathId pathId, const TActorId& replica) 
+        explicit TEvRequestDescribe(const TPathId pathId, const TActorId& replica)
             : PathId(pathId)
             , Replica(replica)
         {

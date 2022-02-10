@@ -21,7 +21,7 @@ const ui64 DEFAULT_STACK_ITEMS = 16;
 static const TStatKey Join_Spill_Count("Join_Spill_Count", true);
 static const TStatKey Join_Spill_MaxFileSize("Join_Spill_MaxFileSize", false);
 static const TStatKey Join_Spill_MaxRowsCount("Join_Spill_MaxRowsCount", false);
- 
+
 enum class EOutputMode {
     Unknown,
     LeftNull,
@@ -1455,10 +1455,10 @@ public:
             Cerr << "Spill finished at " << Count << " items" << Endl;
             FileState->Output.reset();
             Cerr << "File size: " << GetFileLength(FileState->File.GetName()) << ", expected: " << FileState->TotalSize << Endl;
- 
-            MKQL_INC_STAT(Ctx->Stats, Join_Spill_Count); 
-            MKQL_SET_MAX_STAT(Ctx->Stats, Join_Spill_MaxFileSize, static_cast<i64>(FileState->TotalSize)); 
-            MKQL_SET_MAX_STAT(Ctx->Stats, Join_Spill_MaxRowsCount, static_cast<i64>(Count)); 
+
+            MKQL_INC_STAT(Ctx->Stats, Join_Spill_Count);
+            MKQL_SET_MAX_STAT(Ctx->Stats, Join_Spill_MaxFileSize, static_cast<i64>(FileState->TotalSize));
+            MKQL_SET_MAX_STAT(Ctx->Stats, Join_Spill_MaxRowsCount, static_cast<i64>(Count));
         }
     }
 

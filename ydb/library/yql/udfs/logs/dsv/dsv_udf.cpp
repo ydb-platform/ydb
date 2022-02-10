@@ -96,7 +96,7 @@ private:
         auto keyData = args[0].GetElement(KsvIndexes_.key);
         auto subkeyData = args[0].GetElement(KsvIndexes_.subkey);
         auto valueData = args[0].GetElement(KsvIndexes_.value);
- 
+
 
         auto dict = valueBuilder->NewDict(ResultIndexes_.DictType, 0);
 
@@ -213,13 +213,13 @@ public:
             const TStringRef& name,
             TType* userType,
             const TStringRef& typeConfig,
-            ui32 flags, 
+            ui32 flags,
             IFunctionTypeInfoBuilder& builder) const final try
     {
         Y_UNUSED(typeConfig);
 
         bool typesOnly = (flags & TFlags::TypesOnly);
- 
+
         if (TStringRef::Of("ReadRecord") == name) {
             TKsvIndexes ksvIndexes;
             auto recordType = builder.Struct(3U)->
@@ -235,11 +235,11 @@ public:
                     .AddField<char*>("subkey", &resultIndexes.subkey)
                     .AddField("dict", resultIndexes.DictType, &resultIndexes.dict)
                     .Build();
- 
+
             builder.Returns(structType)
                     .Args()->Add(recordType).Done()
                     .RunConfig<TOptional<char*>>();
- 
+
             if (!typesOnly) {
                 builder.Implementation(new TDsvReadRecord::TFactory(
                         resultIndexes, ksvIndexes));

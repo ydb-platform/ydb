@@ -1043,7 +1043,7 @@ private:
                                  TCollocationGroup::TPtr group,
                                  TTransactionContext &txc,
                                  const TActorContext &ctx);
-    void OnClientDisconnected(TActorId clientId, 
+    void OnClientDisconnected(TActorId clientId,
                               const TActorContext &ctx);
     void DisconnectNodeSlots(ui32 nodeId,
                              const TActorContext &ctx);
@@ -1131,7 +1131,7 @@ private:
     }
 
 public:
-    TTenantSlotBroker(const TActorId &tablet, TTabletStorageInfo *info) 
+    TTenantSlotBroker(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , PendingAssignFreeSlots(false)
@@ -1172,7 +1172,7 @@ private:
     TSet<TTenant::TPtr, TTenantMoreMisplaced> MisplacedTenants;
     TSet<TTenant::TPtr, TTenantMoreSplit> SplitTenants;
     bool PendingAssignFreeSlots;
-    THashSet<TActorId> KnownPoolPipes; 
+    THashSet<TActorId> KnownPoolPipes;
     TCounters::TPtr Counters;
     ITransaction *ActiveTx = nullptr;
     TDeque<THolder<ITransaction>> TxQueue;

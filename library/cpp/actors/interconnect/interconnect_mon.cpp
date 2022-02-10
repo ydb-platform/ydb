@@ -1,9 +1,9 @@
 #include "interconnect_mon.h"
 #include "interconnect_tcp_proxy.h"
- 
-#include <library/cpp/json/json_value.h> 
-#include <library/cpp/json/json_writer.h> 
-#include <library/cpp/monlib/service/pages/templates.h> 
+
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <openssl/ssl.h>
 #include <openssl/pem.h>
@@ -14,7 +14,7 @@ namespace NInterconnect {
 
     class TInterconnectMonActor : public TActor<TInterconnectMonActor> {
         class TQueryProcessor : public TActorBootstrapped<TQueryProcessor> {
-            const TActorId Sender; 
+            const TActorId Sender;
             const bool Json;
             TMap<ui32, TInterconnectProxyTCP::TProxyStats> Stats;
             ui32 PendingReplies = 0;
@@ -24,7 +24,7 @@ namespace NInterconnect {
                 return INTERCONNECT_MONACTOR;
             }
 
-            TQueryProcessor(const TActorId& sender, bool json) 
+            TQueryProcessor(const TActorId& sender, bool json)
                 : Sender(sender)
                 , Json(json)
             {}

@@ -15,7 +15,7 @@ namespace {
     }
 
     TIntrusivePtr<TSettings> DefaultSettings() {
-        auto loggerId = TActorId{0, "Logger"}; 
+        auto loggerId = TActorId{0, "Logger"};
         auto s = MakeIntrusive<TSettings>(loggerId, 0, EPriority::PRI_TRACE);
         s->SetAllowDrop(false);
         s->Append(0, 1, ServiceToString);
@@ -98,7 +98,7 @@ namespace {
 
         TIntrusivePtr<TDynamicCounters> Counters{MakeIntrusive<TDynamicCounters>()};
         std::shared_ptr<TMockBackend> LogBackend;
-        TActorId LoggerActor; 
+        TActorId LoggerActor;
         TTestActorRuntimeBase Runtime;
     };
 }

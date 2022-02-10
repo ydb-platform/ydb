@@ -113,8 +113,8 @@ private:
     const ui64 TxId;
     const ui64 ChannelId;
     TQueryExecutionStats* Stats; // owned by KqpExecuter
-    const NActors::TActorId Executer; 
-    NActors::TActorId ComputeActor; 
+    const NActors::TActorId Executer;
+    NActors::TActorId ComputeActor;
 };
 
 class TResultStreamChannelProxy : public TResultCommonChannelProxy {

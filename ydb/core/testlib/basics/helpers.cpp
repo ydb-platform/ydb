@@ -25,7 +25,7 @@ namespace NKikimr {
     }
 
     TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
-            std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex) 
+            std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex)
     {
         TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0)));
         return runtime.Register(CreateBootstrapper(info, bi.Get()), nodeIndex);
@@ -73,16 +73,16 @@ namespace NKikimr {
         Y_VERIFY(!Runtime.IsRealThreads());
         Y_VERIFY(nodeId >= Runtime.GetNodeId(0) && nodeId < Runtime.GetNodeId(0) + Runtime.GetNodeCount());
         ui32 nodeIndex = nodeId - Runtime.GetNodeId(0);
-        Runtime.BlockOutputForActor(TActorId(nodeId, "actorsystem")); 
+        Runtime.BlockOutputForActor(TActorId(nodeId, "actorsystem"));
 
         TActorId actorId = Runtime.Register(CreatePDisk(cfg, mainKey, Runtime.GetAppData(0).Counters), nodeIndex, poolId, TMailboxType::Revolving);
-        TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID); 
+        TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);
 
         Runtime.BlockOutputForActor(pDiskServiceId);
         Runtime.BlockOutputForActor(actorId);
         auto factory = CreateStrandingDecoratorFactory(&Runtime, []{ return MakeHolder<TPDiskReplyChecker>(); });
-        IActor* wrappedActor = factory->Wrap(actorId, true, TVector<TActorId>()); 
-        TActorId wrappedActorId = Runtime.Register(wrappedActor, nodeIndex, poolId, TMailboxType::Revolving); 
+        IActor* wrappedActor = factory->Wrap(actorId, true, TVector<TActorId>());
+        TActorId wrappedActorId = Runtime.Register(wrappedActor, nodeIndex, poolId, TMailboxType::Revolving);
         Runtime.RegisterService(pDiskServiceId, wrappedActorId, nodeIndex);
     }
 }

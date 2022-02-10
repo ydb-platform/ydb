@@ -50,7 +50,7 @@ namespace NKikimr {
         TSyncerJobTask::TSyncerJobTask(
                          EJobType type,
                          const TVDiskID &vdisk,
-                         const TActorId &service, 
+                         const TActorId &service,
                          const NSyncer::TPeerSyncState &peerState,
                          const std::shared_ptr<TSjCtx> &ctx)
             : VDiskId(vdisk)

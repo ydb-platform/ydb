@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-TActorId GrpcMonServiceId(); 
+TActorId GrpcMonServiceId();
 IActor* CreateGrpcMonService();
 
 void ReportGrpcReqToMon(NActors::TActorSystem&, const TString& fromAddress);

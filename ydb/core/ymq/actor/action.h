@@ -761,7 +761,7 @@ protected:
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
     NKikimrClient::TSqsResponse Response_;
-    TActorId SchemeCache_; 
+    TActorId SchemeCache_;
     TActorId QueueLeader_;
     bool StartRequestWasCalled_ = false;
     bool FinishRequestWasCalled_ = false;

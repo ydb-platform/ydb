@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/util/datetime.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
@@ -63,7 +63,7 @@ namespace NActors {
     typedef TMap<ui16, TChannelSettings> TChannelsConfig;
 
     using TRegisterMonPageCallback = std::function<void(const TString& path, const TString& title,
-                                                        TActorSystem* actorSystem, const TActorId& actorId)>; 
+                                                        TActorSystem* actorSystem, const TActorId& actorId)>;
 
     using TInitWhiteboardCallback = std::function<void(ui16 icPort, TActorSystem* actorSystem)>;
 
@@ -71,13 +71,13 @@ namespace NActors {
                                                          bool orange, bool red, TActorSystem* actorSystem)>;
 
     struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon> {
-        TActorId NameserviceId; 
+        TActorId NameserviceId;
         NMonitoring::TDynamicCounterPtr MonCounters;
         std::shared_ptr<NMonitoring::IMetricRegistry> Metrics;
         TChannelsConfig ChannelsConfig;
         TInterconnectSettings Settings;
         TRegisterMonPageCallback RegisterMonPage;
-        TActorId DestructorId; 
+        TActorId DestructorId;
         std::shared_ptr<std::atomic<TAtomicBase>> DestructorQueueSize;
         TAtomicBase MaxDestructorQueueSize = 1024 * 1024 * 1024;
         TString ClusterUUID;

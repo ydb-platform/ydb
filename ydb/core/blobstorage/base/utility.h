@@ -14,9 +14,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // RunInBatchPool
     ////////////////////////////////////////////////////////////////////////////
-    inline TActorId RunInBatchPool(const TActorContext &ctx, IActor *actor) { 
+    inline TActorId RunInBatchPool(const TActorContext &ctx, IActor *actor) {
         ui32 poolId = AppData(ctx)->BatchPoolId;
-        TActorId actorID = ctx.Register(actor, TMailboxType::HTSwap, poolId); 
+        TActorId actorID = ctx.Register(actor, TMailboxType::HTSwap, poolId);
         return actorID;
     }
 
@@ -79,9 +79,9 @@ namespace NKikimr {
     class TChildrenSweeper {
     protected:
         unsigned UndertakerCounter;
-        TActorId UndertakerNotifyId; 
+        TActorId UndertakerNotifyId;
 
-        void SetupUndertakerCounter(const TActorContext &ctx, const TActorId notifyId, unsigned eventsToWait) { 
+        void SetupUndertakerCounter(const TActorContext &ctx, const TActorId notifyId, unsigned eventsToWait) {
             UndertakerCounter = eventsToWait;
             UndertakerNotifyId = notifyId;
             UndertakerCheckToDie(ctx);
@@ -131,7 +131,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TActorNotify : public IActorNotify {
     public:
-        TActorNotify(TActorSystem *as, TActorId notifyId) 
+        TActorNotify(TActorSystem *as, TActorId notifyId)
             : ActorSystem(as)
             , NotifyId(notifyId)
         {}
@@ -144,7 +144,7 @@ namespace NKikimr {
 
     private:
         TActorSystem *ActorSystem = nullptr;
-        TActorId NotifyId; 
+        TActorId NotifyId;
     };
 
 } // NKikimr

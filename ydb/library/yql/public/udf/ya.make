@@ -1,11 +1,11 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     g:yql
     g:yql_ydb_core
 )
- 
-SRCS( 
+
+SRCS(
     udf_allocator.cpp
     udf_allocator.h
     udf_counter.cpp
@@ -19,10 +19,10 @@ SRCS(
     udf_registrator.h
     udf_static_registry.cpp
     udf_static_registry.h
-    udf_string.cpp 
+    udf_string.cpp
     udf_string.h
     udf_type_builder.h
-    udf_type_inspection.cpp 
+    udf_type_inspection.cpp
     udf_type_inspection.h
     udf_type_ops.h
     udf_type_printer.cpp
@@ -36,10 +36,10 @@ SRCS(
     udf_value.h
     udf_value_builder.h
     udf_value_inl.h
-    udf_version.cpp 
+    udf_version.cpp
     udf_version.h
-) 
- 
+)
+
 PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/resource
@@ -49,7 +49,7 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     ut

@@ -129,7 +129,7 @@ message TEvTabletCreationResult {
 
 message TEvStopTablet {
     optional fixed64 TabletID = 1;
-    optional NActorsProto.TActorId ActorToNotify = 2; 
+    optional NActorsProto.TActorId ActorToNotify = 2;
 }
 
 message TEvStopTabletResult {
@@ -372,7 +372,7 @@ message TEvGetTabletStorageInfoRegistered {
 
 message TEvLockTabletExecution {
     optional fixed64 TabletID = 1;
-    optional NActorsProto.TActorId OwnerActor = 2; 
+    optional NActorsProto.TActorId OwnerActor = 2;
     optional bool Reconnect = 3;
     optional uint64 MaxReconnectTimeout = 4; // ms
 }
@@ -389,7 +389,7 @@ message TEvLockTabletExecutionResult {
 
 message TEvUnlockTabletExecution {
     optional fixed64 TabletID = 1;
-    optional NActorsProto.TActorId OwnerActor = 2; 
+    optional NActorsProto.TActorId OwnerActor = 2;
 }
 
 message TEvUnlockTabletExecutionResult {

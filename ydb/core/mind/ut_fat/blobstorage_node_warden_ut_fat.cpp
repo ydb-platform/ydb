@@ -216,7 +216,7 @@ void SetupServices(TTestActorRuntime &runtime) {
     runtime.Initialize(app.Unwrap());
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-        TActorId localActor = runtime.GetLocalServiceId( 
+        TActorId localActor = runtime.GetLocalServiceId(
             MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)), nodeIndex);
         runtime.EnableScheduleForActor(localActor, true);
     }
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return bsController;
     }
 
-    void CreatePDiskInBox(TTestActorRuntime& runtime, const TActorId& sender, ui32 nodeId, ui64 boxId, TString pdiskPath, 
+    void CreatePDiskInBox(TTestActorRuntime& runtime, const TActorId& sender, ui32 nodeId, ui64 boxId, TString pdiskPath,
             std::optional<ui64> size) {
         if (size) {
             TFile file(pdiskPath, CreateAlways | RdWr | ARW);
@@ -311,11 +311,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return 0;
     }
 
-    void Put(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, TLogoBlobID logoBlobId, TString data) { 
+    void Put(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, TLogoBlobID logoBlobId, TString data) {
         VERBOSE_COUT(" Sending TEvPut");
-        TActorId proxy = MakeBlobStorageProxyID(groupId); 
+        TActorId proxy = MakeBlobStorageProxyID(groupId);
         ui32 nodeId = sender.NodeId();
-        TActorId nodeWarden = MakeBlobStorageNodeWardenID(nodeId); 
+        TActorId nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
         ui64 cookie = 6543210;
         runtime.Send(new IEventHandle(proxy, sender,
             new TEvBlobStorage::TEvPut(logoBlobId, data, TInstant::Max()),
@@ -389,8 +389,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TTempDir tempDir;
         TTestBasicRuntime runtime(2, false);
         Setup(runtime);
-        TActorId sender0 = runtime.AllocateEdgeActor(0); 
-        TActorId sender1 = runtime.AllocateEdgeActor(1); 
+        TActorId sender0 = runtime.AllocateEdgeActor(0);
+        TActorId sender1 = runtime.AllocateEdgeActor(1);
 
         CreatePDiskInBox(runtime, sender0, runtime.GetNodeId(0), 1, TFsPath(tempDir()) / "new_pdisk.dat", 16ULL << 30);
         const ui32 groupId = CreateGroupInBox(runtime, sender0, 1, 1, 0);
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         VGet(runtime, sender0, groupId, runtime.GetNodeId(0), TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx", EExpectedEqualData);
 
         // TODO: the proxy just should not be there, check that instead!
-        TActorId proxy = MakeBlobStorageProxyID(groupId); 
+        TActorId proxy = MakeBlobStorageProxyID(groupId);
         runtime.Send(new IEventHandle(proxy, sender1, new TEvents::TEvPoisonPill()), 1);
 
         Put(runtime, sender1, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");

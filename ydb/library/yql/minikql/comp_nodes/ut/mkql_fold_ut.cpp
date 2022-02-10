@@ -3,7 +3,7 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
- 
+
 #include <random>
 #include <ctime>
 #include <algorithm>
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             });
 
         auto graph = setup.BuildGraph(pgmReturn);
-        auto value = graph->GetValue(); 
+        auto value = graph->GetValue();
         UNIT_ASSERT(!value);
     }
 
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             });
 
         auto graph = setup.BuildGraph(pgmReturn);
-        auto value = graph->GetValue(); 
+        auto value = graph->GetValue();
         UNIT_ASSERT(value);
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 2);
     }
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             });
 
         auto graph = setup.BuildGraph(pgmReturn);
-        auto value = graph->GetValue(); 
+        auto value = graph->GetValue();
         UNIT_ASSERT(value);
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 4);
     }
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         });
 
         auto graph = setup.BuildGraph(pgmReturn);
-        auto res = graph->GetValue(); 
+        auto res = graph->GetValue();
         UNBOXED_VALUE_STR_EQUAL(res, "Xaabbbzzzz");
     }
 
@@ -811,7 +811,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<double>::Id));
         const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
- 
+
         const auto pgmReturn = pb.Fold1(pb.Collect(TRuntimeNode(list, false)),
             [&](TRuntimeNode item) { return item; },
             [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, item); }

@@ -10,7 +10,7 @@ namespace NKikimr {
     // must be run on the same mailbox with TSkeleton
     class THullLogCutterNotifier : public TActor<THullLogCutterNotifier> {
         const TVDiskContextPtr VCtx;
-        const TActorId LogCutterId; 
+        const TActorId LogCutterId;
         TIntrusivePtr<THullDs> HullDs;
         TMaybe<ui64> PreviousCutLsn;
 
@@ -55,7 +55,7 @@ namespace NKikimr {
 
         THullLogCutterNotifier(
                 const TVDiskContextPtr &vctx,
-                const TActorId &logCutterId, 
+                const TActorId &logCutterId,
                 TIntrusivePtr<THullDs> hullDs)
             : TActor<THullLogCutterNotifier>(&TThis::StateFunc)
             , VCtx(vctx)
@@ -70,7 +70,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateHullLogCutterNotifier(
             const TVDiskContextPtr &vctx,
-            const TActorId &logCutterId, 
+            const TActorId &logCutterId,
             TIntrusivePtr<THullDs> hullDs) {
         Y_VERIFY(logCutterId);
         return new THullLogCutterNotifier(vctx, logCutterId, hullDs);

@@ -247,7 +247,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             ui64 cookie = ev->Cookie;
             const TString userRequestId = tx.GetUserRequestId();
             TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request = new TEvTxProxyReq::TEvSchemeRequest(ev);
-            const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyFlatSchemeReq(Services, txid, request, TxProxyMon)); 
+            const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyFlatSchemeReq(Services, txid, request, TxProxyMon));
             TxProxyMon->SchemeRequest->Inc();
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                          "actor# " << SelfId() <<
@@ -278,7 +278,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         if (ev->Get()->HasSnapshotProposal()) {
             auto cookie = ev->Cookie;
             auto userReqId = tx.GetUserRequestId();
-            const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxySnapshotReq(Services, txid, std::move(ev), TxProxyMon)); 
+            const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxySnapshotReq(Services, txid, std::move(ev), TxProxyMon));
             TxProxyMon->SnapshotRequest->Inc();
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                          "actor# " << SelfId() <<
@@ -342,7 +342,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                     " ProcessProposeKqpTransaction");
 
         auto executerEv = MakeHolder<NKqp::TEvKqpExecuter::TEvTxRequest>();
-        ActorIdToProto(ev->Sender, executerEv->Record.MutableTarget()); 
+        ActorIdToProto(ev->Sender, executerEv->Record.MutableTarget());
         executerEv->Record.MutableRequest()->SetTxId(txid);
         ctx.Send(ev->Get()->ExecuterId, executerEv.Release());
     }
@@ -403,7 +403,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                      " describe path " << path);
 
         TxProxyMon->Navigate->Inc();
-        TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyDescribeFlatSchemeReq(Services, TxProxyMon)); 
+        TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyDescribeFlatSchemeReq(Services, TxProxyMon));
         ctx.Send(reqId, new TEvTxProxyReq::TEvNavigateScheme(ev));
     }
 

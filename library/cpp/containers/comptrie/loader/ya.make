@@ -4,7 +4,7 @@ OWNER(my34)
 
 SRCS(
     loader.h
-    loader.cpp 
+    loader.cpp
 )
 
 PEERDIR(

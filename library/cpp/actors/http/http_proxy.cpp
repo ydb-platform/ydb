@@ -1,5 +1,5 @@
 #include <library/cpp/actors/core/events.h>
-#include <library/cpp/monlib/metrics/metric_registry.h> 
+#include <library/cpp/monlib/metrics/metric_registry.h>
 #include "http_proxy.h"
 
 namespace NHttp {
@@ -8,7 +8,7 @@ class THttpProxy : public NActors::TActorBootstrapped<THttpProxy>, public THttpC
 public:
     IActor* AddListeningPort(TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
         IActor* listeningSocket = CreateHttpAcceptorActor(ctx.SelfID, Poller);
-        TActorId acceptorId = ctx.Register(listeningSocket); 
+        TActorId acceptorId = ctx.Register(listeningSocket);
         ctx.Send(event->Forward(acceptorId));
         Acceptors.emplace_back(acceptorId);
         return listeningSocket;
@@ -16,7 +16,7 @@ public:
 
     IActor* AddOutgoingConnection(const TString& address, bool secure, const NActors::TActorContext& ctx) {
         IActor* connectionSocket = CreateOutgoingConnectionActor(ctx.SelfID, address, secure, Poller);
-        TActorId connectionId = ctx.Register(connectionSocket); 
+        TActorId connectionId = ctx.Register(connectionSocket);
         Connections.emplace(connectionId);
         return connectionSocket;
     }
@@ -26,7 +26,7 @@ public:
         Become(&THttpProxy::StateWork);
     }
 
-    THttpProxy(NMonitoring::TMetricRegistry& sensors) 
+    THttpProxy(NMonitoring::TMetricRegistry& sensors)
         : Sensors(sensors)
     {}
 
@@ -49,10 +49,10 @@ protected:
 
     void PassAway() override {
         Send(Poller, new NActors::TEvents::TEvPoisonPill());
-        for (const NActors::TActorId& connection : Connections) { 
+        for (const NActors::TActorId& connection : Connections) {
             Send(connection, new NActors::TEvents::TEvPoisonPill());
         }
-        for (const NActors::TActorId& acceptor : Acceptors) { 
+        for (const NActors::TActorId& acceptor : Acceptors) {
             Send(acceptor, new NActors::TEvents::TEvPoisonPill());
         }
         NActors::TActorBootstrapped<THttpProxy>::PassAway();
@@ -60,7 +60,7 @@ protected:
 
     void Handle(TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
         TStringBuf url = event->Get()->Request->URL.Before('?');
-        THashMap<TString, TActorId>::iterator it; 
+        THashMap<TString, TActorId>::iterator it;
         while (!url.empty()) {
             it = Handlers.find(url);
             if (it != Handlers.end()) {
@@ -204,8 +204,8 @@ protected:
         PassAway();
     }
 
-    NActors::TActorId Poller; 
-    TVector<TActorId> Acceptors; 
+    NActors::TActorId Poller;
+    TVector<TActorId> Acceptors;
 
     struct THostEntry {
         TSockAddrInet6 Address;
@@ -215,9 +215,9 @@ protected:
     static constexpr TDuration HostsTimeToLive = TDuration::Seconds(60);
 
     THashMap<TString, THostEntry> Hosts;
-    THashMap<TString, TActorId> Handlers; 
-    THashSet<TActorId> Connections; // outgoing 
-    NMonitoring::TMetricRegistry& Sensors; 
+    THashMap<TString, TActorId> Handlers;
+    THashSet<TActorId> Connections; // outgoing
+    NMonitoring::TMetricRegistry& Sensors;
 };
 
 TEvHttpProxy::TEvReportSensors* BuildOutgoingRequestSensors(const THttpOutgoingRequestPtr& request, const THttpIncomingResponsePtr& response) {
@@ -240,7 +240,7 @@ TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingR
     );
 }
 
-NActors::IActor* CreateHttpProxy(NMonitoring::TMetricRegistry& sensors) { 
+NActors::IActor* CreateHttpProxy(NMonitoring::TMetricRegistry& sensors) {
     return new THttpProxy(sensors);
 }
 

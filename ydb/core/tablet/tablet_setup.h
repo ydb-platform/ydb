@@ -11,7 +11,7 @@ class TTabletStorageInfo;
 
 class TTabletSetupInfo : public TThrRefBase {
 public:
-    typedef std::function<IActor* (const TActorId &, TTabletStorageInfo*)> TTabletCreationFunc; 
+    typedef std::function<IActor* (const TActorId &, TTabletStorageInfo*)> TTabletCreationFunc;
     using TPtr = TIntrusivePtr<TTabletSetupInfo>;
 
 private:
@@ -30,9 +30,9 @@ public:
         , TabletPoolId(tabletPoolId)
     {}
 
-    TActorId Apply(TTabletStorageInfo *info, TActorIdentity owner); 
-    TActorId Apply(TTabletStorageInfo *info, const TActorContext &ctx); 
-    TActorId Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx, 
+    TActorId Apply(TTabletStorageInfo *info, TActorIdentity owner);
+    TActorId Apply(TTabletStorageInfo *info, const TActorContext &ctx);
+    TActorId Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                     ui32 suggestedGeneration, TResourceProfilesPtr profiles = nullptr,
                     TSharedQuotaPtr txCacheQuota = nullptr);
     TActorId Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
@@ -40,7 +40,7 @@ public:
                    TSharedQuotaPtr txCacheQuota = nullptr);
 };
 
-IActor* CreateTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo, 
+IActor* CreateTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,
                      ui32 suggestedGeneration, TResourceProfilesPtr profiles = nullptr,
                      TSharedQuotaPtr txCacheQuota = nullptr);
 IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,

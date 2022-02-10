@@ -244,20 +244,20 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
         UNIT_ASSERT(IsInf(FromString("+INf", MaxPrecision, 6)));
         UNIT_ASSERT(IsInf(FromString("-inF", 4, 2)));
     }
- 
-    Y_UNIT_TEST(TestToStringOfNonNormal) { 
-        // above Inf 
-        for (TInt128 i = Inf() + 2, end = Inf() + 100; i < end; i++) { 
-            UNIT_ASSERT(!IsNormal(i)); 
-            UNIT_ASSERT(ToString(i, MaxPrecision, 0) == nullptr); 
-        } 
- 
-        // below -Inf 
-        for (TInt128 i = -Inf() - 2, end = -Inf() - 100; i < end; i--) { 
-            UNIT_ASSERT(!IsNormal(i)); 
-            UNIT_ASSERT(ToString(i, MaxPrecision, 0) == nullptr); 
-        } 
-    } 
+
+    Y_UNIT_TEST(TestToStringOfNonNormal) {
+        // above Inf
+        for (TInt128 i = Inf() + 2, end = Inf() + 100; i < end; i++) {
+            UNIT_ASSERT(!IsNormal(i));
+            UNIT_ASSERT(ToString(i, MaxPrecision, 0) == nullptr);
+        }
+
+        // below -Inf
+        for (TInt128 i = -Inf() - 2, end = -Inf() - 100; i < end; i--) {
+            UNIT_ASSERT(!IsNormal(i));
+            UNIT_ASSERT(ToString(i, MaxPrecision, 0) == nullptr);
+        }
+    }
 
     Y_UNIT_TEST(TestSerializeAndDeserialize) {
         SimpleSerializeAndDeserialize(-Nan(), 1U);

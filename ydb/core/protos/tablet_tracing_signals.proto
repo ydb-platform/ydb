@@ -19,7 +19,7 @@ message TOnTabletBootstrap {
     optional fixed64 TimeStamp = 1;
     optional bool Leader = 2;
     optional uint32 SuggestedGeneration = 3;
-    optional NActorsProto.TActorId StateStorageProxyID = 4; 
+    optional NActorsProto.TActorId StateStorageProxyID = 4;
 }
 
 message TOnHandleStateStorageInfoResolve {
@@ -50,13 +50,13 @@ message TOnPromoteToCandidate {
 
 message TOnTabletBlockBlobStorage {
     optional fixed64 TimeStamp = 1;
-    optional NActorsProto.TActorId ReqBlockBlobStorageID = 2; 
+    optional NActorsProto.TActorId ReqBlockBlobStorageID = 2;
     optional uint32 KnownGeneration = 3;
 }
 
 message TOnTabletRebuildGraph {
     optional fixed64 TimeStamp = 1;
-    optional NActorsProto.TActorId TabletReqRebuildGraphID = 2; 
+    optional NActorsProto.TActorId TabletReqRebuildGraphID = 2;
     optional TTraceID RebuildGraphTraceID = 3;
 }
 

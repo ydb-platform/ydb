@@ -4,13 +4,13 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     NKikimrKesus::TEvDeleteQuoterResource Record;
 
     THolder<TEvKesus::TEvDeleteQuoterResourceResult> Reply;
 
-    TTxQuoterResourceDelete(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDeleteQuoterResource& record) 
+    TTxQuoterResourceDelete(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDeleteQuoterResource& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

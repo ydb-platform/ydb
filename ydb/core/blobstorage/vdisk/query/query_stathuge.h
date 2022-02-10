@@ -13,7 +13,7 @@ namespace NKikimr {
     IActor *CreateHugeStatActor(
             TIntrusivePtr<THullCtx> hullCtx,
             const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
-            const TActorId &parentId, 
+            const TActorId &parentId,
             THullDsSnap &&fullSnap,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result);

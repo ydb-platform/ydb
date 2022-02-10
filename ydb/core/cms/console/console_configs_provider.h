@@ -186,7 +186,7 @@ private:
     }
 
 public:
-    TConfigsProvider(TActorId ownerId) 
+    TConfigsProvider(TActorId ownerId)
         : ConfigsManager(ownerId)
     {
     }
@@ -205,7 +205,7 @@ public:
     void Die(const TActorContext &ctx) override;
 
 private:
-    TActorId ConfigsManager; 
+    TActorId ConfigsManager;
     TConfigsConfig Config;
     TConfigIndex ConfigIndex;
     TSubscriptionIndex SubscriptionIndex;

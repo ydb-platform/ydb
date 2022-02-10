@@ -89,7 +89,7 @@ public:
         return NKikimrServices::TActivity::TABLET_LOOKUP_ACTOR;
     }
 
-    TTabletLookupActor(ui32 nodeId, const TActorId& sender, ui32 timeout) 
+    TTabletLookupActor(ui32 nodeId, const TActorId& sender, ui32 timeout)
         : NodeId(nodeId)
         , Sender(sender)
         , Timeout(timeout)
@@ -102,7 +102,7 @@ public:
             Become(&TThis::StateTabletLookupRequested);
         } else {
             // Broadcast request
-            const TActorId nameserviceId = NActors::GetNameserviceActorId(); 
+            const TActorId nameserviceId = NActors::GetNameserviceActorId();
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             Become(&TThis::StateNodeListRequested);
         }
@@ -133,7 +133,7 @@ public:
     }
 
     void SendRequest(ui32 nodeId, const TActorContext& ctx) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId); 
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         ctx.Send(whiteboardServiceId
             , new TEvWhiteboard::TEvTabletLookupRequest()
             , IEventHandle::FlagTrackDelivery, nodeId);
@@ -260,7 +260,7 @@ public:
 
 private:
     const ui32 NodeId;
-    const TActorId Sender; 
+    const TActorId Sender;
     ui32 Timeout;
     ui32 Requested = 0;
     ui32 Received = 0;
@@ -275,7 +275,7 @@ public:
         return NKikimrServices::TActivity::TRACE_LOOKUP_ACTOR;
     }
 
-    TTraceLookupActor(ui32 nodeId, ui64 tabletId, const TActorId& sender, ui32 timeout) 
+    TTraceLookupActor(ui32 nodeId, ui64 tabletId, const TActorId& sender, ui32 timeout)
         : NodeId(nodeId)
         , TabletId(tabletId)
         , Sender(sender)
@@ -289,7 +289,7 @@ public:
             Become(&TThis::StateTraceLookupRequested);
         } else {
             // Broadcast request
-            const TActorId nameserviceId = NActors::GetNameserviceActorId(); 
+            const TActorId nameserviceId = NActors::GetNameserviceActorId();
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             Become(&TThis::StateNodeListRequested);
             ctx.Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
@@ -315,7 +315,7 @@ public:
     }
 
     void SendRequest(ui32 nodeId, const TActorContext& ctx) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId); 
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         THolder<TEvWhiteboard::TEvTraceLookupRequest> request = MakeHolder<TEvWhiteboard::TEvTraceLookupRequest>();
         auto& record = request->Record;
         record.SetTabletID(TabletId);
@@ -471,7 +471,7 @@ public:
 private:
     const ui32 NodeId;
     const ui64 TabletId;
-    const TActorId Sender; 
+    const TActorId Sender;
     ui32 Timeout;
     ui32 Requested = 0;
     ui32 Received = 0;
@@ -484,13 +484,13 @@ public:
         return NKikimrServices::TActivity::TRACE_REQUEST_ACTOR;
     }
 
-    TTraceRequestActor(const NTracing::TTraceInfo& traceInfo, const TActorId& sender) 
+    TTraceRequestActor(const NTracing::TTraceInfo& traceInfo, const TActorId& sender)
         : TraceInfo(traceInfo)
         , Sender(sender)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TraceInfo.NodeId); 
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TraceInfo.NodeId);
         THolder<TEvWhiteboard::TEvTraceRequest> request = MakeHolder<TEvWhiteboard::TEvTraceRequest>();
         auto& record = request->Record;
         record.SetTabletID(TraceInfo.TabletId);
@@ -551,7 +551,7 @@ public:
 
 private:
     const NTracing::TTraceInfo TraceInfo;
-    const TActorId Sender; 
+    const TActorId Sender;
 };
 
 class TSignalBodyRequestActor : public TActorBootstrapped<TSignalBodyRequestActor> {
@@ -560,14 +560,14 @@ public:
         return NKikimrServices::TActivity::SIGNAL_BODY_REQUEST_ACTOR;
     }
 
-    TSignalBodyRequestActor(const NTracing::TTraceInfo& traceInfo, const TString& signalId, const TActorId& sender) 
+    TSignalBodyRequestActor(const NTracing::TTraceInfo& traceInfo, const TString& signalId, const TActorId& sender)
         : TraceInfo(traceInfo)
         , SignalId(signalId)
         , Sender(sender)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TraceInfo.NodeId); 
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TraceInfo.NodeId);
         THolder<TEvWhiteboard::TEvSignalBodyRequest> request = MakeHolder<TEvWhiteboard::TEvSignalBodyRequest>();
         auto& record = request->Record;
         record.SetTabletID(TraceInfo.TabletId);
@@ -618,7 +618,7 @@ public:
 private:
     const NTracing::TTraceInfo TraceInfo;
     const TString SignalId;
-    const TActorId Sender; 
+    const TActorId Sender;
 };
 
 ui64 TryParseTabletId(TStringBuf tabletIdParam) {

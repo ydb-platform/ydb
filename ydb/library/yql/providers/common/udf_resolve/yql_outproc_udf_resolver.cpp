@@ -23,7 +23,7 @@
 #include <util/string/split.h>
 
 #include <regex>
- 
+
 namespace NYql {
 namespace NCommon {
 
@@ -105,14 +105,14 @@ TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
 
 class TOutProcUdfResolver : public IUdfResolver {
 public:
-    TOutProcUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
+    TOutProcUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TFileStoragePtr& fileStorage, const TString& resolverPath,
         const TString& user, const TString& group, bool filterSyscalls,
         const TString& udfDependencyStubPath, const TMap<TString, TString>& path2md5)
-        : FunctionRegistry_(functionRegistry) 
+        : FunctionRegistry_(functionRegistry)
         , TypeInfoHelper_(new TTypeInfoHelper)
         , FileStorage_(fileStorage)
-        , ResolverPath_(resolverPath) 
+        , ResolverPath_(resolverPath)
         , UdfDependencyStubPath_(udfDependencyStubPath)
         , Path2Md5_(path2md5)
     {
@@ -198,7 +198,7 @@ public:
         }
 
         for (auto& module : requiredExternalModules) {
-            if (auto path = FunctionRegistry_->FindUdfPath(module)) { 
+            if (auto path = FunctionRegistry_->FindUdfPath(module)) {
                 auto importRequest = request.AddImports();
                 const TString hiddenPath = filesBox->MakeLinkFrom(*path);
                 importRequest->SetFileAlias(hiddenPath);
@@ -370,7 +370,7 @@ private:
     }
 
 private:
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_; 
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
     TFileStoragePtr FileStorage_;
     const TString ResolverPath_;
@@ -379,16 +379,16 @@ private:
     const TMap<TString, TString> Path2Md5_;
 };
 
-void LoadSystemModulePaths( 
+void LoadSystemModulePaths(
         const TString& resolverPath,
         const TString& dir,
-        TUdfModulePathsMap* paths) 
-{ 
+        TUdfModulePathsMap* paths)
+{
     const TList<TString> args = { TString("--list"), dir };
     RunResolver(resolverPath, args, nullptr, [&](const TString& output) {
         // output format is:
         // {{module_name}}\t{{module_path}}\n
- 
+
         for (const auto& it : StringSplitter(output).Split('\n')) {
             TStringBuf moduleName, modulePath;
             const TStringBuf& line = it.Token();
@@ -396,13 +396,13 @@ void LoadSystemModulePaths(
                 line.Split('\t', moduleName, modulePath);
                 paths->emplace(moduleName, modulePath);
             }
-        } 
+        }
     });
-} 
- 
+}
+
 IUdfResolver::TPtr CreateOutProcUdfResolver(
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
-    const TFileStoragePtr& fileStorage, 
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    const TFileStoragePtr& fileStorage,
     const TString& resolverPath,
     const TString& user,
     const TString& group,

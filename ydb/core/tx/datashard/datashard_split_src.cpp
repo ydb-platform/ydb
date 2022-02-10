@@ -82,7 +82,7 @@ public:
     void Complete(const TActorContext &ctx) override {
         if (SplitAlreadyFinished) {
             // Send the Ack
-            for (const TActorId& ackTo : Self->SrcAckSplitTo) { 
+            for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << Self->SrcSplitOpId);
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID()));
             }
@@ -440,7 +440,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         if (AllDstAcksReceived) {
-            for (const TActorId& ackTo : Self->SrcAckSplitTo) { 
+            for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 ui64 opId = Self->SrcSplitOpId;
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << opId);
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(opId, Self->TabletID()));
@@ -504,7 +504,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        TActorId ackTo = Ev->Sender; 
+        TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
         if (DelayPartitioningChangedAck) {

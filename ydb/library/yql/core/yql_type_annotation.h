@@ -136,7 +136,7 @@ bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName)
 
 using TUdfModulesTable = THashMap<TString, TString>; // external module name -> alias of file
 
-struct TYqlOperationOptions { 
+struct TYqlOperationOptions {
     TString Runner;
     TMaybe<TString> AuthenticatedUser;
     TMaybe<TString> Id;
@@ -146,8 +146,8 @@ struct TYqlOperationOptions {
     TMaybe<TString> Url;
     TMaybe<TString> AttrsYson;
     TMaybe<NYT::TNode> ParametersYson;
-}; 
- 
+};
+
 using TColumnOrder = TVector<TString>;
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder);
 ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash);
@@ -189,7 +189,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TString FullResultDataSink;
     TUserDataStorage::TPtr UserDataStorage;
     TUserDataTable UserDataStorageCrutches;
-    TYqlOperationOptions OperationOptions; 
+    TYqlOperationOptions OperationOptions;
     TVector<TCredentialTablePtr> Credentials;
     TUserCredentials UserCredentials;
     IModuleResolver::TPtr Modules;

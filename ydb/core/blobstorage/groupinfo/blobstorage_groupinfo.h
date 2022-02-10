@@ -76,7 +76,7 @@ public:
     // TYPES
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     using TVDiskIds = TStackVec<TVDiskID, 16>;
-    using TServiceIds = TStackVec<TActorId, 16>; 
+    using TServiceIds = TStackVec<TActorId, 16>;
     using TOrderNums = TStackVec<ui32, 16>;
 
     enum EBlobStateFlags {
@@ -273,8 +273,8 @@ public:
         const ui32 GroupId;
         // blobstorage group generation
         const ui32 GroupGeneration;
-        // map to quickly get Service id (TActorId) from its order number inside TTopology 
-        TVector<TActorId> ServiceIdForOrderNumber; 
+        // map to quickly get Service id (TActorId) from its order number inside TTopology
+        TVector<TActorId> ServiceIdForOrderNumber;
 
         TDynamicInfo(ui32 groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
@@ -282,7 +282,7 @@ public:
         TDynamicInfo &operator =(TDynamicInfo&&) = default;
         ~TDynamicInfo() = default;
 
-        void PushBackActorId(const TActorId &aid) { 
+        void PushBackActorId(const TActorId &aid) {
             ServiceIdForOrderNumber.push_back(aid);
         }
     };
@@ -299,7 +299,7 @@ public:
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
-            ui32 numFailDomains = 0, ui32 numFailRealms = 1, const TVector<TActorId> *vdiskIds = nullptr, 
+            ui32 numFailDomains = 0, ui32 numFailRealms = 1, const TVector<TActorId> *vdiskIds = nullptr,
             EEncryptionMode encryptionMode = EEM_ENC_V1, ELifeCyclePhase lifeCyclePhase = ELCP_IN_USE,
             TCypherKey key = TCypherKey((const ui8*)"TestKey", 8));
 
@@ -351,9 +351,9 @@ public:
     // obtain full vdisk id having just short vdisk id
     TVDiskID GetVDiskId(const TVDiskIdShort &vd) const;
     // get ActorID by specified orderNumber (in range 0...TotalVDisks)
-    TActorId GetActorId(ui32 orderNumber) const; 
+    TActorId GetActorId(ui32 orderNumber) const;
     // get ActorID having just short vdisk id
-    TActorId GetActorId(const TVDiskIdShort &vdisk) const; 
+    TActorId GetActorId(const TVDiskIdShort &vdisk) const;
     // get the total number of VDisks in this group
     ui32 GetTotalVDisksNum() const;
     // get the total number of fail domains in this group

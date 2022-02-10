@@ -13,10 +13,10 @@ namespace NKikimr {
     struct TEvGroupStatReport : TEventPB<TEvGroupStatReport, NKikimrBlobStorage::TEvGroupStatReport, TEvBlobStorage::EvGroupStatReport> {
         TEvGroupStatReport() = default;
 
-        TEvGroupStatReport(const TActorId& vdiskServiceId, ui32 groupId, const TGroupStat& stat) 
+        TEvGroupStatReport(const TActorId& vdiskServiceId, ui32 groupId, const TGroupStat& stat)
         {
             Record.SetGroupId(groupId);
-            ActorIdToProto(vdiskServiceId, Record.MutableVDiskServiceId()); 
+            ActorIdToProto(vdiskServiceId, Record.MutableVDiskServiceId());
             stat.Serialize(&Record);
         }
 
@@ -28,8 +28,8 @@ namespace NKikimr {
             return Record.GetGroupId();
         }
 
-        TActorId GetVDiskServiceId() const { 
-            return ActorIdFromProto(Record.GetVDiskServiceId()); 
+        TActorId GetVDiskServiceId() const {
+            return ActorIdFromProto(Record.GetVDiskServiceId());
         }
     };
 
@@ -59,6 +59,6 @@ namespace NKikimr {
         return TActorId(vdiskServiceId.NodeId(), TStringBuf(x, 12));
     }
 
-    NActors::IActor *CreateGroupStatAggregatorActor(ui32 groupId, const TActorId& vdiskServiceId); 
+    NActors::IActor *CreateGroupStatAggregatorActor(ui32 groupId, const TActorId& vdiskServiceId);
 
 } // NKikimr

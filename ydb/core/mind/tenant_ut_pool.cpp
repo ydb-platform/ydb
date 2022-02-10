@@ -17,7 +17,7 @@ struct TAction {
 };
 
 class TActionChecker : public TActorBootstrapped<TActionChecker> {
-    TActorId EdgeActor; 
+    TActorId EdgeActor;
     ui32 NodeId;
     ui32 Domain;
     TVector<TAction> Actions;
@@ -25,7 +25,7 @@ class TActionChecker : public TActorBootstrapped<TActionChecker> {
     bool Finished;
 
 public:
-    TActionChecker(TActorId edge, ui32 nodeId, ui32 domain, TVector<TAction> actions) 
+    TActionChecker(TActorId edge, ui32 nodeId, ui32 domain, TVector<TAction> actions)
         : EdgeActor(edge)
         , NodeId(nodeId)
         , Domain(domain)
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
         TAutoPtr<IEventHandle> handle;
 
-        TActorId sender2 = runtime.AllocateEdgeActor(); 
+        TActorId sender2 = runtime.AllocateEdgeActor();
 
         // sender cannot configure slot because he is not owner
         runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
@@ -1221,9 +1221,9 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         TTenantTestRuntime runtime(config, {}, false);
 
-        const TActorId& sender = runtime.Sender; 
-        const TActorId tenantPoolRoot = MakeTenantPoolRootID(); 
-        const TActorId tenantPool = MakeTenantPoolID(runtime.GetNodeId(0), 0); 
+        const TActorId& sender = runtime.Sender;
+        const TActorId tenantPoolRoot = MakeTenantPoolRootID();
+        const TActorId tenantPool = MakeTenantPoolID(runtime.GetNodeId(0), 0);
 
         using TEvStatus = TEvTenantPool::TEvTenantPoolStatus;
         using EState = NKikimrTenantPool::EState;

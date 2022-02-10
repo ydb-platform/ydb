@@ -2,7 +2,7 @@
 #include "counters.h"
 
 namespace NMonitoring {
-    char* PrettyNumShort(i64 val, char* buf, size_t size) { 
+    char* PrettyNumShort(i64 val, char* buf, size_t size) {
         static const char shorts[] = {' ', 'K', 'M', 'G', 'T', 'P', 'E'};
         unsigned i = 0;
         i64 major = val;
@@ -26,7 +26,7 @@ namespace NMonitoring {
         return buf;
     }
 
-    char* PrettyNum(i64 val, char* buf, size_t size) { 
+    char* PrettyNum(i64 val, char* buf, size_t size) {
         Y_ASSERT(buf);
         if (size < 4) {
             buf[0] = 0;
@@ -46,4 +46,4 @@ namespace NMonitoring {
 
         return buf;
     }
-} 
+}

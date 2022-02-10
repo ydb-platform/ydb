@@ -13,7 +13,7 @@ using TEvGet = TEvBlobStorage::TEvGet;
 
 struct TBlockIO::TLoaded : public TEvBlobStorage::TEvGetResult::TResponse{ };
 
-TBlockIO::TBlockIO(TActorId service, ui64 cookie) 
+TBlockIO::TBlockIO(TActorId service, ui64 cookie)
     : ::NActors::IActor(static_cast<TReceiveFunc>(&TBlockIO::Inbox), NKikimrServices::TActivity::SAUSAGE_BIO_A)
     , Service(service)
     , Cookie(cookie)
@@ -25,7 +25,7 @@ TBlockIO::~TBlockIO()
 
 }
 
-void TBlockIO::Registered(TActorSystem *sys, const TActorId&) 
+void TBlockIO::Registered(TActorSystem *sys, const TActorId&)
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::SAUSAGE_BIO);
 }

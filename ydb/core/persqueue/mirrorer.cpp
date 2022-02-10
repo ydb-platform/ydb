@@ -25,7 +25,7 @@ constexpr NKikimrServices::TActivity::EType TMirrorer::ActorActivityType() {
 
 TMirrorer::TMirrorer(
     TActorId tabletActor,
-    TActorId partitionActor, 
+    TActorId partitionActor,
     const TString& topicName,
     ui32 partition,
     bool localDC,

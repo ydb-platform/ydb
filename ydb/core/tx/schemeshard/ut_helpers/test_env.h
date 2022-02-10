@@ -16,8 +16,8 @@ namespace NSchemeShardUT_Private {
     using namespace NKikimr;
     using namespace NSchemeShard;
 
-    void TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, TActorId subscriberActorId); 
-    NActors::TActorId CreateNotificationSubscriber(NActors::TTestActorRuntime &runtime, ui64 schemeshardId); 
+    void TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, TActorId subscriberActorId);
+    NActors::TActorId CreateNotificationSubscriber(NActors::TTestActorRuntime &runtime, ui64 schemeshardId);
     NActors::TActorId CreateFakeMetering(NActors::TTestActorRuntime &runtime);
 
     struct TTestEnvOptions {
@@ -49,15 +49,15 @@ namespace NSchemeShardUT_Private {
 
     class TTestEnv {
     public:
-        using TSchemeShardFactory = std::function<IActor* (const TActorId &, TTabletStorageInfo *)>; 
+        using TSchemeShardFactory = std::function<IActor* (const TActorId &, TTabletStorageInfo *)>;
 
     private:
         TSchemeShardFactory SchemeShardFactory;
         TFakeHiveState::TPtr HiveState;
         TFakeCoordinator::TState::TPtr CoordinatorState;
         TAutoPtr<ITabletScheduledEventsGuard> EnableSchemeshardPipeRetriesGuard;
-        TMap<ui64, TActorId> TxNotificationSubcribers; 
-        TActorId TxReliablePropose; 
+        TMap<ui64, TActorId> TxNotificationSubcribers;
+        TActorId TxReliablePropose;
         ui32 ChannelsCount;
         TActorId MeteringFake;
 
@@ -103,7 +103,7 @@ namespace NSchemeShardUT_Private {
         void SetupLogging(TTestActorRuntime& runtime);
 
     private:
-        static std::function<IActor*(const TActorId&, TTabletStorageInfo*)> GetTabletCreationFunc(ui32 type); 
+        static std::function<IActor*(const TActorId&, TTabletStorageInfo*)> GetTabletCreationFunc(ui32 type);
         void AddDomain(TTestActorRuntime& runtime, TAppPrepare& app, ui32 domainUid, ui32 ssId, ui64 hive, ui64 schemeRoot);
 
         void BootSchemeShard(TTestActorRuntime& runtime, ui64 schemeRoot);

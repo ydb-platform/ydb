@@ -10,7 +10,7 @@ const ui32 TTxMediator::Schema::CurrentVersion = 0;
 void TTxMediator::Die(const TActorContext &ctx) {
     if (!!ExecQueue) {
         ctx.Send(ExecQueue, new TEvents::TEvPoisonPill());
-        ExecQueue = TActorId(); 
+        ExecQueue = TActorId();
     }
 
     return TActor::Die(ctx);
@@ -75,7 +75,7 @@ void TTxMediator::ReplyEnqueuedWatch(const TActorContext &ctx) {
     WatchEnqueued.clear();
 }
 
-void TTxMediator::ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordinatorSync &record, const TActorContext &ctx) { 
+void TTxMediator::ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordinatorSync &record, const TActorContext &ctx) {
     Y_VERIFY(record.GetMediatorID() == TabletID());
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID()
@@ -106,7 +106,7 @@ void TTxMediator::HandleEnqueue(TEvMediatorTimecast::TEvWatch::TPtr &ev, const T
     WatchEnqueued.push_back(ev);
 }
 
-void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) { 
+void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
     if (0 == record.CoordinatorsSize() || 0 == record.GetTimeCastBucketsPerMediator()) {
         LOG_ERROR_S(ctx, NKikimrServices::TX_MEDIATOR
@@ -143,7 +143,7 @@ void TTxMediator::Handle(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const T
     ReplySync(ev->Sender, record, ctx);
 }
 
-void TTxMediator::ReplyStep(const TActorId &sender, NKikimrTx::TEvCoordinatorStepResult::EStatus status, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx) { 
+void TTxMediator::ReplyStep(const TActorId &sender, NKikimrTx::TEvCoordinatorStepResult::EStatus status, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx) {
 //    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " SEND EvCoordinatorStepResult"
 //        << " to# " << sender.ToString() << " sender status# " << status << " step# " << request.GetStep()
 //        << " CompleteStep# " << VolatileState.CompleteStep
@@ -219,14 +219,14 @@ void TTxMediator::CheckProgress(const TActorContext &ctx) {
     }
 }
 
-void TTxMediator::RequestLostAcks(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx) { 
+void TTxMediator::RequestLostAcks(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx) {
     TAutoPtr<TCoordinatorStep> step(new TCoordinatorStep(request));
     LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " SEND EvRequestLostAcks to# "
         << ExecQueue.ToString() << " ExecQueue step " << step->ToString());
     ctx.Send(ExecQueue, new TEvTxMediator::TEvRequestLostAcks(step, sender));
 }
 
-void TTxMediator::ProcessDomainStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx) { 
+void TTxMediator::ProcessDomainStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx) {
     Y_UNUSED(coordinator);
     if (request.GetActiveCoordinatorGeneration() != info.ActiveCoordinatorGeneration) {
         if (request.GetActiveCoordinatorGeneration() < info.ActiveCoordinatorGeneration) // outdated request
@@ -259,7 +259,7 @@ void TTxMediator::ProcessDomainStep(const TActorId &sender, const NKikimrTx::TEv
     CheckProgress(ctx);
 }
 
-void TTxMediator::ProcessForeignStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx) { 
+void TTxMediator::ProcessForeignStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx) {
     Y_UNUSED(sender);
     Y_UNUSED(request);
     Y_UNUSED(coordinator);
@@ -312,7 +312,7 @@ void TTxMediator::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &
     ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
 }
 
-TTxMediator::TTxMediator(TTabletStorageInfo *info, const TActorId &tablet) 
+TTxMediator::TTxMediator(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {}

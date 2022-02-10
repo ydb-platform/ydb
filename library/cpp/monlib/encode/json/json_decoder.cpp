@@ -1,24 +1,24 @@
-#include "json.h" 
-#include "typed_point.h" 
- 
+#include "json.h"
+#include "typed_point.h"
+
 
 #include <library/cpp/monlib/exception/exception.h>
-#include <library/cpp/monlib/metrics/labels.h> 
-#include <library/cpp/monlib/metrics/metric_value.h> 
- 
+#include <library/cpp/monlib/metrics/labels.h>
+#include <library/cpp/monlib/metrics/metric_value.h>
+
 #include <library/cpp/json/json_reader.h>
- 
-#include <util/datetime/base.h> 
-#include <util/string/cast.h> 
- 
-#include <limits> 
- 
-namespace NMonitoring { 
+
+#include <util/datetime/base.h>
+#include <util/string/cast.h>
+
+#include <limits>
+
+namespace NMonitoring {
 
 #define DECODE_ENSURE(COND, ...) MONLIB_ENSURE_EX(COND, TJsonDecodeError() << __VA_ARGS__)
 
 namespace {
- 
+
 ///////////////////////////////////////////////////////////////////////
 // THistogramBuilder
 ///////////////////////////////////////////////////////////////////////
@@ -32,11 +32,11 @@ public:
         }
         Bounds_.push_back(bound);
     }
- 
+
     void AddValue(TBucketValue value) {
         Values_.push_back(value);
     }
- 
+
     void AddInf(TBucketValue value) {
         InfPresented_ = true;
         InfValue_ = value;
@@ -53,14 +53,14 @@ public:
         Bounds_.clear();
         Values_.clear();
         InfPresented_ = false;
- 
+
         return snapshot;
     }
- 
+
     bool Empty() const noexcept {
         return Bounds_.empty() && Values_.empty();
     }
- 
+
     void Clear() {
         Bounds_.clear();
         Values_.clear();
@@ -69,7 +69,7 @@ public:
 private:
     TBucketBounds Bounds_;
     TBucketValues Values_;
- 
+
     bool InfPresented_ = false;
     TBucketValue InfValue_;
 };
@@ -182,7 +182,7 @@ std::pair<double, bool> ParseSpecDouble(TStringBuf string) {
         return {0, false};
     }
 }
- 
+
 ///////////////////////////////////////////////////////////////////////
 // TMetricCollector
 ///////////////////////////////////////////////////////////////////////
@@ -194,10 +194,10 @@ struct TMetricCollector {
     TLogHistogramBuilder LogHistBuilder;
     TTypedPoint LastPoint;
     TVector<TTypedPoint> TimeSeries;
- 
+
     bool SeenTsOrValue = false;
     bool SeenTimeseries = false;
- 
+
     void Clear() {
         Type = EMetricType::UNKNOWN;
         Labels.Clear();
@@ -209,20 +209,20 @@ struct TMetricCollector {
         SummaryBuilder.Clear();
         LogHistBuilder.Clear();
     }
- 
+
     void AddLabel(const TLabel& label) {
         Labels.Add(label.Name(), label.Value());
     }
- 
+
     void SetLastTime(TInstant time) {
         LastPoint.SetTime(time);
     }
- 
+
     template <typename T>
     void SetLastValue(T value) {
         LastPoint.SetValue(value);
     }
- 
+
     void SaveLastPoint() {
         DECODE_ENSURE(LastPoint.GetTime() != TInstant::Zero(),
                  "cannot add point without or zero timestamp");
@@ -248,21 +248,21 @@ struct TMetricCollector {
         } else {
             for (const auto& p: TimeSeries) {
                 consumer(p.GetTime(), p.GetValueType(), p.GetValue());
-            } 
+            }
         }
     }
 };
- 
+
 struct TCommonParts {
     TInstant CommonTime;
     TLabels CommonLabels;
 };
- 
+
 class IHaltableMetricConsumer: public IMetricConsumer {
 public:
     virtual bool NeedToStop() const = 0;
 };
- 
+
 // TODO(ivanzhukov@): check all states for cases when a json document is invalid
 //  e.g. "metrics" or "commonLabels" keys are specified multiple times
 class TCommonPartsCollector: public IHaltableMetricConsumer {
@@ -433,11 +433,11 @@ class TDecoderJson final: public NJson::TJsonCallbacks {
     struct TState {
         enum EState {
             ROOT_OBJECT = 0x01,
- 
+
             COMMON_LABELS,
             COMMON_TS,
             METRICS_ARRAY,
- 
+
             METRIC_OBJECT,
             METRIC_NAME,
             METRIC_LABELS,
@@ -462,21 +462,21 @@ class TDecoderJson final: public NJson::TJsonCallbacks {
             METRIC_LOG_HIST_START_POWER,
             METRIC_LOG_HIST_BUCKETS,
         };
- 
+
         constexpr EState Current() const noexcept {
             return static_cast<EState>(State_ & 0xFF);
         }
- 
+
         void ToNext(EState state) noexcept {
             constexpr auto bitSize = 8 * sizeof(ui8);
             State_ = (State_ << bitSize) | static_cast<ui8>(state);
         }
- 
+
         void ToPrev() noexcept {
             constexpr auto bitSize = 8 * sizeof(ui8);
             State_ = State_ >> bitSize;
         }
- 
+
     private:
         ui64 State_ = static_cast<ui64>(ROOT_OBJECT);
     };
@@ -522,16 +522,16 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 LastMetric_.SetLastValue(static_cast<i64>(value));
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_HIST_BOUNDS:
                 LastMetric_.HistogramBuilder.AddBound(static_cast<double>(value));
                 break;
- 
+
             case TState::METRIC_HIST_BUCKETS:
                 PARSE_ENSURE(value >= 0 && static_cast<ui64>(value) <= Max<TBucketValues::value_type>(), "value is out of bounds " << value);
                 LastMetric_.HistogramBuilder.AddValue(value);
                 break;
- 
+
             case TState::METRIC_HIST_INF:
                 PARSE_ENSURE(value >= 0, "unexpected negative number in histogram inf: " << value);
                 LastMetric_.HistogramBuilder.AddInf(value);
@@ -584,7 +584,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
         }
         return true;
     }
- 
+
     bool OnUInteger(unsigned long long value) override {
         switch (State_.Current()) {
             case TState::COMMON_TS:
@@ -597,32 +597,32 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 }
 
                 break;
- 
+
             case TState::METRIC_TS:
                 LastMetric_.SetLastTime(TInstant::Seconds(value));
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_VALUE:
                 PARSE_ENSURE(value <= Max<ui64>(), "Metric value is out of bounds: " << value);
                 LastMetric_.SetLastValue(static_cast<ui64>(value));
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_HIST_BOUNDS:
                 LastMetric_.HistogramBuilder.AddBound(static_cast<double>(value));
                 break;
- 
+
             case TState::METRIC_HIST_BUCKETS:
                 PARSE_ENSURE(value <= Max<TBucketValues::value_type>(), "Histogram bucket value is out of bounds: " << value);
                 LastMetric_.HistogramBuilder.AddValue(value);
                 break;
- 
+
             case TState::METRIC_HIST_INF:
                 LastMetric_.HistogramBuilder.AddInf(value);
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_DSUMMARY_COUNT:
                 LastMetric_.SummaryBuilder.SetCount(value);
                 State_.ToPrev();
@@ -669,18 +669,18 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
         }
         return true;
     }
- 
+
     bool OnDouble(double value) override {
         switch (State_.Current()) {
             case TState::METRIC_VALUE:
                 LastMetric_.SetLastValue(value);
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_HIST_BOUNDS:
                 LastMetric_.HistogramBuilder.AddBound(value);
                 break;
- 
+
             case TState::METRIC_DSUMMARY_SUM:
                 LastMetric_.SummaryBuilder.SetSum(value);
                 State_.ToPrev();
@@ -752,22 +752,22 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     LastMetric_.SetLastValue(doubleValue);
                 } else {
                     return false;
-                } 
+                }
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_TYPE:
                 LastMetric_.Type = MetricTypeFromStr(value);
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_MODE:
                 if (value == TStringBuf("deriv")) {
                     LastMetric_.Type = EMetricType::RATE;
                 }
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_DSUMMARY_SUM:
                 if (auto [doubleValue, ok] = ParseSpecDouble(value); ok) {
                     LastMetric_.SummaryBuilder.SetSum(doubleValue);
@@ -776,7 +776,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 }
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_DSUMMARY_MIN:
                 if (auto [doubleValue, ok] = ParseSpecDouble(value); ok) {
                     LastMetric_.SummaryBuilder.SetMin(doubleValue);
@@ -785,7 +785,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 }
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_DSUMMARY_MAX:
                 if (auto [doubleValue, ok] = ParseSpecDouble(value); ok) {
                     LastMetric_.SummaryBuilder.SetMax(doubleValue);
@@ -794,7 +794,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 }
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_DSUMMARY_LAST:
                 if (auto [doubleValue, ok] = ParseSpecDouble(value); ok) {
                     LastMetric_.SummaryBuilder.SetLast(doubleValue);
@@ -803,11 +803,11 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 }
                 State_.ToPrev();
                 break;
- 
+
             default:
                 return false;
         }
- 
+
         return true;
     }
 
@@ -877,7 +877,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     State_.ToNext(TState::METRIC_DSUMMARY);
                 } else if (key == TStringBuf("log_hist")) {
                     State_.ToNext(TState::METRIC_LOG_HIST);
-                } 
+                }
                 break;
 
             case TState::METRIC_HIST:
@@ -889,7 +889,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     State_.ToNext(TState::METRIC_HIST_INF);
                 }
                 break;
- 
+
             case TState::METRIC_LOG_HIST:
                 if (key == TStringBuf("base")) {
                     State_.ToNext(TState::METRIC_LOG_HIST_BASE);
@@ -901,7 +901,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     State_.ToNext(TState::METRIC_LOG_HIST_BUCKETS);
                 }
                 break;
- 
+
             case TState::METRIC_DSUMMARY:
                 if (key == TStringBuf("sum")) {
                     State_.ToNext(TState::METRIC_DSUMMARY_SUM);
@@ -914,14 +914,14 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 } else if (key == TStringBuf("count")) {
                     State_.ToNext(TState::METRIC_DSUMMARY_COUNT);
                 }
- 
+
                 break;
- 
- 
+
+
             default:
                 return false;
         }
- 
+
         return true;
     }
 
@@ -945,17 +945,17 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
         }
         return true;
     }
- 
+
     bool OnCloseMap() override {
         switch (State_.Current()) {
             case TState::ROOT_OBJECT:
                 MetricConsumer_->OnStreamEnd();
                 break;
- 
+
             case TState::METRIC_LABELS:
                 State_.ToPrev();
                 break;
- 
+
             case TState::COMMON_LABELS:
                 MetricConsumer_->OnLabelsEnd();
                 State_.ToPrev();
@@ -966,22 +966,22 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 }
 
                 break;
- 
+
             case TState::METRIC_OBJECT:
                 ConsumeMetric();
                 State_.ToPrev();
                 break;
- 
+
             case TState::METRIC_TIMESERIES:
                 LastMetric_.SaveLastPoint();
                 break;
- 
+
             case TState::METRIC_HIST:
             case TState::METRIC_DSUMMARY:
             case TState::METRIC_LOG_HIST:
                 State_.ToPrev();
                 break;
- 
+
             default:
                 break;
         }
@@ -999,7 +999,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
             "unexpected array begin");
         return true;
     }
- 
+
     bool OnCloseArray() override {
         switch (State_.Current()) {
             case TState::METRICS_ARRAY:
@@ -1009,13 +1009,13 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
             case TState::METRIC_LOG_HIST_BUCKETS:
                 State_.ToPrev();
                 break;
- 
+
             default:
                 return false;
         }
         return true;
     }
- 
+
     void OnError(size_t off, TStringBuf reason) override {
         if (IsIntentionallyHalted_) {
             return;
@@ -1023,13 +1023,13 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
 
         size_t snippetBeg = (off < 20) ? 0 : (off - 20);
         TStringBuf snippet = Data_.SubStr(snippetBeg, 40);
- 
+
         throw TJsonDecodeError()
             << "cannot parse JSON, error at: " << off
             << ", reason: " << (ErrorMsg_.empty() ? reason : TStringBuf{ErrorMsg_})
             << "\nsnippet: ..." << snippet << "...";
     }
- 
+
     bool OnEnd() override {
         return true;
     }
@@ -1041,21 +1041,21 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 LastMetric_.Type = EMetricType::GAUGE;
             } else {
                 LastMetric_.Type = EMetricType::HIST;
-            } 
+            }
         }
- 
+
         // (1) begin metric
         MetricConsumer_->OnMetricBegin(LastMetric_.Type);
- 
+
         // (2) labels
         if (!LastMetric_.Labels.empty()) {
             MetricConsumer_->OnLabelsBegin();
             for (auto&& label : LastMetric_.Labels) {
                 MetricConsumer_->OnLabel(label.Name(), label.Value());
-            } 
+            }
             MetricConsumer_->OnLabelsEnd();
         }
- 
+
         // (3) values
         switch (LastMetric_.Type) {
             case EMetricType::GAUGE:
@@ -1069,14 +1069,14 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     MetricConsumer_->OnInt64(time, value.AsInt64(valueType));
                 });
                 break;
- 
+
             case EMetricType::COUNTER:
             case EMetricType::RATE:
                 LastMetric_.Consume([this](TInstant time, EMetricValueType valueType, TMetricValue value) {
                     MetricConsumer_->OnUint64(time, value.AsUint64(valueType));
                 });
                 break;
- 
+
             case EMetricType::HIST:
             case EMetricType::HIST_RATE:
                 if (LastMetric_.TimeSeries.empty()) {
@@ -1087,10 +1087,10 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     for (const auto& p : LastMetric_.TimeSeries) {
                         DECODE_ENSURE(p.GetValueType() == EMetricValueType::HISTOGRAM, "Value is not a histogram");
                         MetricConsumer_->OnHistogram(p.GetTime(), p.GetValue().AsHistogram());
-                    } 
-                } 
+                    }
+                }
                 break;
- 
+
             case EMetricType::DSUMMARY:
                 if (LastMetric_.TimeSeries.empty()) {
                     auto time = LastMetric_.LastPoint.GetTime();
@@ -1103,7 +1103,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     }
                 }
                 break;
- 
+
             case EMetricType::LOGHIST:
                 if (LastMetric_.TimeSeries.empty()) {
                     auto time = LastMetric_.LastPoint.GetTime();
@@ -1113,19 +1113,19 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     for (const auto& p : LastMetric_.TimeSeries) {
                         DECODE_ENSURE(p.GetValueType() == EMetricValueType::LOGHISTOGRAM, "Value is not a log_histogram");
                         MetricConsumer_->OnLogHistogram(p.GetTime(), p.GetValue().AsLogHistogram());
-                    } 
-                } 
+                    }
+                }
                 break;
- 
+
             case EMetricType::UNKNOWN:
                 // TODO: output metric labels
                 ythrow yexception() << "unknown metric type";
         }
- 
+
         // (4) end metric
         MetricConsumer_->OnMetricEnd();
     }
- 
+
 private:
     TStringBuf Data_;
     IHaltableMetricConsumer* MetricConsumer_;
@@ -1136,9 +1136,9 @@ private:
     TString ErrorMsg_;
     bool IsIntentionallyHalted_{false};
 };
- 
+
 } // namespace
- 
+
 void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel) {
     TCommonPartsCollector commonPartsCollector;
     {
@@ -1159,4 +1159,4 @@ void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel)
 
 #undef DECODE_ENSURE
 
-} 
+}

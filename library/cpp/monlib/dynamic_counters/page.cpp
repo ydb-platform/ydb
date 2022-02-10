@@ -1,31 +1,31 @@
-#include "page.h" 
-#include "encode.h" 
+#include "page.h"
+#include "encode.h"
 
-#include <library/cpp/monlib/service/pages/templates.h> 
-#include <library/cpp/string_utils/quote/quote.h> 
- 
+#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/string_utils/quote/quote.h>
+
 #include <util/string/split.h>
 #include <util/system/tls.h>
 
 using namespace NMonitoring;
 
-namespace { 
-    Y_POD_STATIC_THREAD(TDynamicCounters*) 
-    currentCounters(nullptr); 
+namespace {
+    Y_POD_STATIC_THREAD(TDynamicCounters*)
+    currentCounters(nullptr);
 }
 
 TMaybe<EFormat> ParseFormat(TStringBuf str) {
     if (str == TStringBuf("json")) {
-        return EFormat::JSON; 
+        return EFormat::JSON;
     } else if (str == TStringBuf("spack")) {
-        return EFormat::SPACK; 
+        return EFormat::SPACK;
     } else if (str == TStringBuf("prometheus")) {
         return EFormat::PROMETHEUS;
-    } else { 
-        return Nothing(); 
-    } 
-} 
- 
+    } else {
+        return Nothing();
+    }
+}
+
 void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     if (OutputCallback) {
         OutputCallback();
@@ -41,10 +41,10 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
         .SkipEmpty()
         .Collect(&parts);
 
-    TMaybe<EFormat> format = !parts.empty() ? ParseFormat(parts.back()) : Nothing(); 
-    if (format) { 
+    TMaybe<EFormat> format = !parts.empty() ? ParseFormat(parts.back()) : Nothing();
+    if (format) {
         parts.pop_back();
-    } 
+    }
 
     if (!parts.empty() && parts.back() == TStringBuf("private")) {
         visibility = TCountableBase::EVisibility::Private;
@@ -72,27 +72,27 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
         }
     }
 
-    if (!format) { 
-        currentCounters = counters.Get(); 
+    if (!format) {
+        currentCounters = counters.Get();
         THtmlMonPage::Output(request);
-        currentCounters = nullptr; 
-        return; 
+        currentCounters = nullptr;
+        return;
     }
- 
-    IOutputStream& out = request.Output(); 
-    if (*format == EFormat::JSON) { 
-        out << HTTPOKJSON; 
-    } else if (*format == EFormat::SPACK) { 
-        out << HTTPOKSPACK; 
+
+    IOutputStream& out = request.Output();
+    if (*format == EFormat::JSON) {
+        out << HTTPOKJSON;
+    } else if (*format == EFormat::SPACK) {
+        out << HTTPOKSPACK;
     } else if (*format == EFormat::PROMETHEUS) {
         out << HTTPOKPROMETHEUS;
-    } else { 
-        ythrow yexception() << "unsupported metric encoding format: " << *format; 
-    } 
- 
-    auto encoder = CreateEncoder(&out, *format, visibility); 
-    counters->Accept(TString(), TString(), *encoder); 
-    out.Flush(); 
+    } else {
+        ythrow yexception() << "unsupported metric encoding format: " << *format;
+    }
+
+    auto encoder = CreateEncoder(&out, *format, visibility);
+    counters->Accept(TString(), TString(), *encoder);
+    out.Flush();
 }
 
 void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
@@ -113,10 +113,10 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
             out << " for <a href='https://wiki.yandex-team.ru/solomon/'>Solomon</a>";
         }
 
-        H5() { 
-            out << "Counters subgroups"; 
+        H5() {
+            out << "Counters subgroups";
         }
-        UL() { 
+        UL() {
             currentCounters->EnumerateSubgroups([&](const TString& name, const TString& value) {
                 LI() {
                     TString pathPart = name + "=" + value;
@@ -124,11 +124,11 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                     out << "\n<a href='" << request.GetPath() << "/" << pathPart << "'>" << name << " " << value << "</a>";
                 }
             });
-        } 
+        }
 
-        H4() { 
-            out << "Counters as text"; 
-        } 
+        H4() {
+            out << "Counters as text";
+        }
     }
 }
 

@@ -13,6 +13,6 @@ namespace NKikimr {
     IActor* CreateSyncerSchedulerActor(const TIntrusivePtr<TSyncerContext> &sc,
                                        const TIntrusivePtr<TBlobStorageGroupInfo> &info,
                                        const TIntrusivePtr<TSyncerData> &syncerData,
-                                       const TActorId &committerId); 
+                                       const TActorId &committerId);
 
 } // NKikimr

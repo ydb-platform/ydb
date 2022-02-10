@@ -43,7 +43,7 @@ enum EDatashardState {
 }
 
 message TEvGetShardState {
-   optional NActorsProto.TActorId Source = 1; 
+   optional NActorsProto.TActorId Source = 1;
 }
 
 message TEvGetShardStateResult {
@@ -60,7 +60,7 @@ message TShardOpResult {
 }
 
 message TEvSchemaChanged {
-    optional NActorsProto.TActorId Source = 1; 
+    optional NActorsProto.TActorId Source = 1;
     optional uint64 Origin = 2;
     optional uint32 State = 3;  // EDatashardState
     optional uint64 TxId = 4;
@@ -76,7 +76,7 @@ message TEvSchemaChangedResult {
 }
 
 message TEvStateChanged {
-    optional NActorsProto.TActorId Source = 1; 
+    optional NActorsProto.TActorId Source = 1;
     optional uint64 TabletId = 2;
     optional uint32 State = 3;  // EDatashardState
 }
@@ -227,7 +227,7 @@ message TKqpTransaction {
 
 message TKqpTaskInfo {
     optional uint64 TaskId = 1;
-    optional NActorsProto.TActorId ComputeActor = 2; 
+    optional NActorsProto.TActorId ComputeActor = 2;
 }
 
 message TKqpReply {
@@ -250,7 +250,7 @@ message TDataTransaction {
     optional bool ReadOnly = 7;
     optional TReadTableTransaction ReadTableTransaction = 8;
     optional bool StreamResponse = 9;
-    optional NActorsProto.TActorId Sink = 10; 
+    optional NActorsProto.TActorId Sink = 10;
     optional bool LlvmRuntime = 11;
     optional uint64 PerShardKeysSizeLimitBytes = 12;
     optional TKqpTransaction KqpTransaction = 13;
@@ -471,7 +471,7 @@ message TMvccSnapshot {
 
 message TEvProposeTransaction {
     optional ETransactionKind TxKind = 1;
-    optional NActorsProto.TActorId Source = 2; 
+    optional NActorsProto.TActorId Source = 2;
     optional bytes TxBody = 3;
     optional uint64 TxId = 4;
     optional uint32 ExecLevel = 5;
@@ -528,7 +528,7 @@ message TTabletInfo {
     optional fixed64 TabletId = 1;
     optional uint32 Generation = 2;
     optional uint64 Step = 3;
-    optional NActorsProto.TActorId ActorId = 4; 
+    optional NActorsProto.TActorId ActorId = 4;
     optional bool IsFollower = 5;
 }
 
@@ -698,7 +698,7 @@ message TEvSplitTransferSnapshotAck {
 
 // Schemeshard -> Src datashard
 message TEvSplitPartitioningChanged {
-    optional NActorsProto.TActorId Sender = 2; 
+    optional NActorsProto.TActorId Sender = 2;
     optional uint64 OperationCookie = 1;
 }
 

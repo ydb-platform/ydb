@@ -40,7 +40,7 @@ message TDqUri {
 
 message TEndpoint {
     oneof EndpointType {
-        NActorsProto.TActorId ActorId = 1; 
+        NActorsProto.TActorId ActorId = 1;
         fixed64 TabletId = 2;
         TDqUri Uri = 3;
     }

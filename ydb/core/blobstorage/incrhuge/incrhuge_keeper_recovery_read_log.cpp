@@ -6,10 +6,10 @@ namespace NKikimr {
     namespace NIncrHuge {
 
         class TReadLogActor : public TActor<TReadLogActor> {
-            const TActorId PDiskActorId; 
+            const TActorId PDiskActorId;
             const ui8 Owner;
             const NPDisk::TOwnerRound OwnerRound;
-            TActorId KeeperActorId; 
+            TActorId KeeperActorId;
             TMaybe<ui64> ChunksEntrypointLsn;
             TChunkRecordMerger ChunkMerger;
             TMaybe<ui64> DeletesEntrypointLsn;
@@ -20,7 +20,7 @@ namespace NKikimr {
                 return NKikimrServices::TActivity::BS_INCR_HUGE_KEEPER_RECOVERY_READ_LOG;
             }
 
-            TReadLogActor(const TActorId& pdiskActorId, ui8 owner, NPDisk::TOwnerRound ownerRound, 
+            TReadLogActor(const TActorId& pdiskActorId, ui8 owner, NPDisk::TOwnerRound ownerRound,
                     TMaybe<ui64> chunksEntrypointLsn, TMaybe<ui64> deletesEntrypointLsn)
                 : TActor<TReadLogActor>(&TReadLogActor::StateFunc)
                 , PDiskActorId(pdiskActorId)
@@ -31,7 +31,7 @@ namespace NKikimr {
             {}
 
         private:
-            TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override { 
+            TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
                 return new IEventHandle(self, parentId, new TEvents::TEvBootstrap);
             }
 
@@ -132,7 +132,7 @@ namespace NKikimr {
             )
         };
 
-        IActor *CreateRecoveryReadLogActor(const TActorId& pdiskActorId, ui8 owner, NPDisk::TOwnerRound ownerRound, 
+        IActor *CreateRecoveryReadLogActor(const TActorId& pdiskActorId, ui8 owner, NPDisk::TOwnerRound ownerRound,
                 TMaybe<ui64> chunksEntrypointLsn, TMaybe<ui64> deletesEntrypointLsn)  {
             return new TReadLogActor(pdiskActorId, owner, ownerRound, chunksEntrypointLsn, deletesEntrypointLsn);
         }

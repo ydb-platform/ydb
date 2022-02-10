@@ -17,7 +17,7 @@ namespace NKikimr {
                 TIncrHugeBlobId Id;
                 ui32 Offset;
                 ui32 Size;
-                TActorId Sender; 
+                TActorId Sender;
                 ui64 Cookie;
             };
             using TReadQueue = TQueue<TReadQueueItem>;

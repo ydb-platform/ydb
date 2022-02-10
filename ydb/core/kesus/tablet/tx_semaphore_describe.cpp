@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     const NKikimrKesus::TEvDescribeSemaphore Record;
 
@@ -12,7 +12,7 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
     THolder<TEvKesus::TEvDescribeSemaphoreResult> Reply;
     ui64 NotificationCookie = 0;
 
-    TTxSemaphoreDescribe(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDescribeSemaphore& record) 
+    TTxSemaphoreDescribe(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDescribeSemaphore& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

@@ -1,21 +1,21 @@
 #include "monservice.h"
- 
+
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/svnversion/svnversion.h>
- 
+
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/system/hostname.h>
- 
+
 #include <google/protobuf/text_format.h>
 
 using namespace NMonitoring;
 
 TMonService2::TMonService2(ui16 port, const TString& host, ui32 threads, const TString& title, THolder<IAuthProvider> auth)
     : TMonService2(HttpServerOptions(port, host, threads), title, std::move(auth))
-{ 
-} 
+{
+}
 
 TMonService2::TMonService2(const THttpServerOptions& options, const TString& title, THolder<IAuthProvider> auth)
     : NMonitoring::TMtHttpServer(options, std::bind(&TMonService2::ServeRequest, this, std::placeholders::_1, std::placeholders::_2))
@@ -46,14 +46,14 @@ TMonService2::TMonService2(ui16 port, ui32 threads, const TString& title, THolde
 
 TMonService2::TMonService2(ui16 port, const TString& title, THolder<IAuthProvider> auth)
     : TMonService2(port, TString(), 0, title, std::move(auth))
-{ 
-} 
+{
+}
 
-void TMonService2::OutputIndex(IOutputStream& out) { 
+void TMonService2::OutputIndex(IOutputStream& out) {
     IndexMonPage->OutputIndex(out, true);
 }
 
-void TMonService2::OutputIndexPage(IOutputStream& out) { 
+void TMonService2::OutputIndexPage(IOutputStream& out) {
     out << HTTPOKHTML;
     out << "<html>\n";
     IndexMonPage->OutputHead(out);
@@ -61,7 +61,7 @@ void TMonService2::OutputIndexPage(IOutputStream& out) {
     out << "</html>\n";
 }
 
-void TMonService2::OutputIndexBody(IOutputStream& out) { 
+void TMonService2::OutputIndexBody(IOutputStream& out) {
     out << "<body>\n";
 
     // part of common navbar
@@ -77,7 +77,7 @@ void TMonService2::OutputIndexBody(IOutputStream& out) {
         << "</body>\n";
 }
 
-void TMonService2::ServeRequest(IOutputStream& out, const NMonitoring::IHttpRequest& request) { 
+void TMonService2::ServeRequest(IOutputStream& out, const NMonitoring::IHttpRequest& request) {
     TString path = request.GetPath();
     Y_VERIFY(path.StartsWith('/'));
 
@@ -99,12 +99,12 @@ void TMonService2::ServeRequest(IOutputStream& out, const NMonitoring::IHttpRequ
         OutputIndexPage(out);
     } else {
         TMonService2HttpRequest monService2HttpRequest(
-            &out, &request, this, IndexMonPage.Get(), path, nullptr); 
+            &out, &request, this, IndexMonPage.Get(), path, nullptr);
         IndexMonPage->Output(monService2HttpRequest);
     }
 }
 
-void TMonService2::Register(IMonPage* page) { 
+void TMonService2::Register(IMonPage* page) {
     IndexMonPage->Register(page);
 }
 

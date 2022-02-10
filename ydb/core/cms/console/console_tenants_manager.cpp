@@ -38,11 +38,11 @@ public:
 private:
     using TBase = TActorBootstrapped<TPoolManip>;
 
-    TActorId OwnerId; 
+    TActorId OwnerId;
     TDomainsInfo::TDomain::TPtr Domain;
     TTenantsManager::TTenant::TPtr Tenant;
     TTenantsManager::TStoragePool::TPtr Pool;
-    TActorId BSControllerPipe; 
+    TActorId BSControllerPipe;
     bool PoolStateAcquired;
     EAction Action;
     ui64 PoolId;
@@ -54,7 +54,7 @@ public:
         return NKikimrServices::TActivity::CMS_TENANTS_MANAGER;
     }
 
-    TPoolManip(TActorId ownerId, TDomainsInfo::TDomain::TPtr domain, 
+    TPoolManip(TActorId ownerId, TDomainsInfo::TDomain::TPtr domain,
                TTenantsManager::TTenant::TPtr tenant, TTenantsManager::TStoragePool::TPtr pool,
                EAction action)
         : OwnerId(ownerId)
@@ -83,7 +83,7 @@ public:
 
         if (BSControllerPipe) {
             NTabletPipe::CloseClient(ctx, BSControllerPipe);
-            BSControllerPipe = TActorId(); 
+            BSControllerPipe = TActorId();
         }
 
         DoWork(ctx);
@@ -383,7 +383,7 @@ public:
 private:
     using TBase = TActorBootstrapped<TSubDomainManip>;
 
-    TActorId OwnerId; 
+    TActorId OwnerId;
     TTenantsManager::TTenant::TPtr Tenant;
     TTenantsManager::TTenant::TPtr SharedTenant;
     EAction Action;
@@ -392,7 +392,7 @@ private:
     ui64 TxId;
     ui64 TabletId;
     ui64 Version;
-    TActorId Pipe; 
+    TActorId Pipe;
     // For CREATE/GET_KEY action SchemeshardId and PathId will hold subdomain key.
     ui64 SchemeshardId;
     ui64 PathId;
@@ -405,7 +405,7 @@ public:
         return NKikimrServices::TActivity::CMS_TENANTS_MANAGER;
     }
 
-    TSubDomainManip(TActorId ownerId, TTenantsManager::TTenant::TPtr tenant, EAction action, 
+    TSubDomainManip(TActorId ownerId, TTenantsManager::TTenant::TPtr tenant, EAction action,
             TTenantsManager::TTenant::TPtr sharedTenant = nullptr)
         : OwnerId(ownerId)
         , Tenant(tenant)
@@ -671,7 +671,7 @@ public:
     {
         if (Pipe) {
             NTabletPipe::CloseClient(ctx, Pipe);
-            Pipe = TActorId(); 
+            Pipe = TActorId();
         }
 
         SendNotifyRequest(ctx);
@@ -1739,7 +1739,7 @@ void TTenantsManager::OnTenantSlotBrokerPipeDestroyed(const TActorContext &ctx)
 {
     if (TenantSlotBrokerPipe) {
         NTabletPipe::CloseClient(ctx, TenantSlotBrokerPipe);
-        TenantSlotBrokerPipe = TActorId(); 
+        TenantSlotBrokerPipe = TActorId();
     }
 
     RetryResourcesRequests(ctx);
@@ -3122,13 +3122,13 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorCo
                    << " for tenant " << tenant->Path << ": " << issue);
         Counters.Inc(COUNTER_REMOVE_POOL_FAILED);
 
-        pool->Worker = TActorId(); 
+        pool->Worker = TActorId();
         pool->GroupFitErrors = 0;
         ctx.Schedule(TDuration::Seconds(10),
                      new TEvPrivate::TEvRetryAllocateResources(tenant->Path));
     } else if (tenant->IsCreating()) {
         Counters.Inc(COUNTER_ALLOC_POOL_FAILED);
-        pool->Worker = TActorId(); 
+        pool->Worker = TActorId();
         pool->GroupFitErrors = 0;
         tenant->Issue = issue;
         TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::REMOVING_POOLS), ctx);
@@ -3148,7 +3148,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorCo
         }
 
         Counters.Inc(COUNTER_ALLOC_POOL_FAILED);
-        pool->Worker = TActorId(); 
+        pool->Worker = TActorId();
         ctx.Schedule(TDuration::Seconds(10),
                      new TEvPrivate::TEvRetryAllocateResources(tenant->Path));
     }
@@ -3229,7 +3229,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainFailed::TPtr &ev, const TAc
                     << ": " << code << ": " << issue);
 
         tenant->Issue = issue;
-        tenant->Worker = TActorId(); 
+        tenant->Worker = TActorId();
         ctx.Schedule(TDuration::Seconds(10),
                      new TEvPrivate::TEvRetryAllocateResources(tenant->Path));
     }

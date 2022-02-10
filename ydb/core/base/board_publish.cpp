@@ -22,8 +22,8 @@ namespace NKikimr {
 class TBoardReplicaPublishActor : public TActorBootstrapped<TBoardReplicaPublishActor> {
     const TString Path;
     TString Payload;
-    const TActorId Replica; 
-    const TActorId PublishActor; 
+    const TActorId Replica;
+    const TActorId PublishActor;
 
     ui64 Round;
 
@@ -51,7 +51,7 @@ public:
         return NKikimrServices::TActivity::BOARD_REPLICA_PUBLISH_ACTOR;
     }
 
-    TBoardReplicaPublishActor(const TString &path, const TString &payload, TActorId replica, TActorId publishActor) 
+    TBoardReplicaPublishActor(const TString &path, const TString &payload, TActorId replica, TActorId publishActor)
         : Path(path)
         , Payload(payload)
         , Replica(replica)
@@ -78,12 +78,12 @@ public:
 class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     const TString Path;
     const TString Payload;
-    const TActorId Owner; 
+    const TActorId Owner;
     const ui32 StateStorageGroupId;
     const ui32 TtlMs;
     const bool Register;
 
-    TMap<TActorId, TActorId> ReplicaPublishActors; // replica -> publish actor 
+    TMap<TActorId, TActorId> ReplicaPublishActors; // replica -> publish actor
 
     void PassAway() override {
         for (auto &xpair : ReplicaPublishActors) {
@@ -105,10 +105,10 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
         if (msg->Replicas.empty()) {
             BLOG_ERROR("publish on unconfigured statestorage board service " << StateStorageGroupId);
         } else {
-            TMap<TActorId, TActorId> updated; 
+            TMap<TActorId, TActorId> updated;
 
             for (auto &replicaId : msg->Replicas) {
-                const TActorId *known = ReplicaPublishActors.FindPtr(replicaId); 
+                const TActorId *known = ReplicaPublishActors.FindPtr(replicaId);
                 if (known && *known)
                     updated[replicaId] = *known;
                 else
@@ -122,11 +122,11 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     }
 
     bool ResolveGone(TEvents::TEvGone::TPtr &ev) {
-        const TActorId sender = ev->Sender; 
+        const TActorId sender = ev->Sender;
 
         for (auto &xpair : ReplicaPublishActors) {
             if (xpair.second == sender) {
-                xpair.second = TActorId(); 
+                xpair.second = TActorId();
                 return true;
             }
         }
@@ -136,7 +136,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
 
     void CalmGone(TEvents::TEvGone::TPtr &ev) {
         if (ResolveGone(ev)) {
-            const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId); 
+            const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId);
             const ui32 flags = IEventHandle::FlagTrackDelivery;
             TAutoPtr<IEventHandle> x = new IEventHandle(proxyId, SelfId(), new TEvStateStorage::TEvResolveBoard(Path), flags);
             TActivationContext::Schedule(TDuration::MilliSeconds(50), x);
@@ -150,7 +150,7 @@ public:
         return NKikimrServices::TActivity::BOARD_PUBLISH_ACTOR;
     }
 
-    TBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg) 
+    TBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg)
         : Path(path)
         , Payload(payload)
         , Owner(owner)
@@ -163,7 +163,7 @@ public:
     }
 
     void Bootstrap() {
-        const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId); 
+        const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId);
         Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path), IEventHandle::FlagTrackDelivery);
         Become(&TThis::StateResolve);
     }
@@ -185,7 +185,7 @@ public:
     }
 };
 
-IActor* CreateBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg) { 
+IActor* CreateBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg) {
     return new TBoardPublishActor(path, payload, owner, groupId, ttlMs, reg);
 }
 

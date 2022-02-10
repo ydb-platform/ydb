@@ -1,5 +1,5 @@
 #include "ewma.h"
-#include "metric.h" 
+#include "metric.h"
 
 #include <atomic>
 #include <cmath>
@@ -14,12 +14,12 @@ namespace {
 
     class TExpMovingAverage final: public IExpMovingAverage {
     public:
-        explicit TExpMovingAverage(IGauge* metric, double alpha, TDuration interval) 
-            : Metric_{metric} 
+        explicit TExpMovingAverage(IGauge* metric, double alpha, TDuration interval)
+            : Metric_{metric}
             , Alpha_{alpha}
             , Interval_{interval.Seconds()}
         {
-            Y_VERIFY(metric != nullptr, "Passing nullptr metric is not allowed"); 
+            Y_VERIFY(metric != nullptr, "Passing nullptr metric is not allowed");
         }
 
         ~TExpMovingAverage() override = default;
@@ -30,11 +30,11 @@ namespace {
             const double instantRate = double(current) / Interval_;
 
             if (Y_UNLIKELY(!IsInitialized())) {
-                Metric_->Set(instantRate); 
+                Metric_->Set(instantRate);
                 Init_ = true;
             } else {
-                const double currentRate = Metric_->Get(); 
-                Metric_->Set(Alpha_ * (instantRate - currentRate) + currentRate); 
+                const double currentRate = Metric_->Get();
+                Metric_->Set(Alpha_ * (instantRate - currentRate) + currentRate);
             }
 
         }
@@ -44,7 +44,7 @@ namespace {
         }
 
         double Rate() const override {
-            return Metric_->Get(); 
+            return Metric_->Get();
         }
 
         void Reset() override {
@@ -61,7 +61,7 @@ namespace {
         std::atomic<i64> Uncounted_{0};
         std::atomic<bool> Init_{false};
 
-        IGauge* Metric_{nullptr}; 
+        IGauge* Metric_{nullptr};
         double Alpha_;
         ui64 Interval_;
     };
@@ -132,19 +132,19 @@ namespace {
         return Ewma_->Rate();
     }
 
-    IExpMovingAveragePtr OneMinuteEwma(IGauge* metric) { 
-        return MakeHolder<TExpMovingAverage>(metric, ALPHA1, DEFAULT_INTERVAL); 
+    IExpMovingAveragePtr OneMinuteEwma(IGauge* metric) {
+        return MakeHolder<TExpMovingAverage>(metric, ALPHA1, DEFAULT_INTERVAL);
     }
 
-    IExpMovingAveragePtr FiveMinuteEwma(IGauge* metric) { 
-        return MakeHolder<TExpMovingAverage>(metric, ALPHA5, DEFAULT_INTERVAL); 
+    IExpMovingAveragePtr FiveMinuteEwma(IGauge* metric) {
+        return MakeHolder<TExpMovingAverage>(metric, ALPHA5, DEFAULT_INTERVAL);
     }
 
-    IExpMovingAveragePtr FiveteenMinuteEwma(IGauge* metric) { 
-        return MakeHolder<TExpMovingAverage>(metric, ALPHA15, DEFAULT_INTERVAL); 
+    IExpMovingAveragePtr FiveteenMinuteEwma(IGauge* metric) {
+        return MakeHolder<TExpMovingAverage>(metric, ALPHA15, DEFAULT_INTERVAL);
     }
 
-    IExpMovingAveragePtr CreateEwma(IGauge* metric, double alpha, TDuration interval) { 
-        return MakeHolder<TExpMovingAverage>(metric, alpha, interval); 
+    IExpMovingAveragePtr CreateEwma(IGauge* metric, double alpha, TDuration interval) {
+        return MakeHolder<TExpMovingAverage>(metric, alpha, interval);
     }
 } // namespace NMonitoring

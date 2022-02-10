@@ -59,7 +59,7 @@ private:
 }; // TPDiskStatus
 
 struct TPDiskInfo: public TPDiskStatus {
-    TActorId StatusChanger; 
+    TActorId StatusChanger;
 
     explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
 

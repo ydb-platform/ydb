@@ -30,7 +30,7 @@ namespace NYql {
 
 using NUdf::EDataSlot;
 
-class TKikimrGatewayConfig; 
+class TKikimrGatewayConfig;
 class TKikimrClusterConfig;
 
 using TKikimrParamsMap = TMap<TString, NKikimrMiniKQL::TParams>;

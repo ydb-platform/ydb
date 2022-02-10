@@ -97,14 +97,14 @@ public:
         ui64 Index;
     };
 
-    TVectorListAdapter( 
-            TMemoryUsageInfo* memInfo, 
+    TVectorListAdapter(
+            TMemoryUsageInfo* memInfo,
             const TVectorType& list,
-            TItemFactory itemFactory, 
-            ui64 start, ui64 finish, 
-            bool reversed) 
-        : TBase(memInfo) 
-        , List(list) 
+            TItemFactory itemFactory,
+            ui64 start, ui64 finish,
+            bool reversed)
+        : TBase(memInfo)
+        , List(list)
         , ItemFactory(itemFactory)
         , Start(start)
         , Finish(finish)
@@ -130,12 +130,12 @@ private:
         return Finish != Start;
     }
 
-    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override { 
+    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override {
         Y_UNUSED(builder);
         return new TSelf(this->GetMemInfo(), List, ItemFactory, Start, Finish, !Reversed);
     }
 
-    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override { 
+    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
         Y_UNUSED(builder);
         const ui64 newStart = Min(Start + count, Finish);
         if (newStart == Start) {
@@ -145,7 +145,7 @@ private:
         return new TSelf(this->GetMemInfo(), List, ItemFactory, newStart, Finish, Reversed);
     }
 
-    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override { 
+    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
         Y_UNUSED(builder);
         const ui64 newFinish = Min(Start + count, Finish);
         if (newFinish == Finish) {
@@ -155,7 +155,7 @@ private:
         return new TSelf(this->GetMemInfo(), List, ItemFactory, Start, newFinish, Reversed);
     }
 
-    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override { 
+    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
         Y_UNUSED(builder);
         return const_cast<TVectorListAdapter*>(this);
     }
@@ -243,5 +243,5 @@ NUdf::TUnboxedValue CreateOwningVectorListAdapter(
         &memInfo, std::forward<TVectorType>(list), itemFactory, start, finish, reversed));
 }
 
-} 
+}
 }

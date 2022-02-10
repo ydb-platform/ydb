@@ -136,7 +136,7 @@ public:
             }
         }
         for (TNodeId nodeId : NodeIds) {
-            TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId); 
+            TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
             SendRequest(
                 whiteboardServiceId,
                 new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest(),

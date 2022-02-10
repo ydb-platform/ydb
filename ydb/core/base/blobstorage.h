@@ -2,9 +2,9 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk_category.h"
-#include "events.h" 
-#include "tablet_types.h" 
-#include "logoblob.h" 
+#include "events.h"
+#include "tablet_types.h"
+#include "logoblob.h"
 #include "pathid.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
@@ -362,7 +362,7 @@ public:
         return str.Str();
     }
 
-    TActorId BSProxyIDForChannel(ui32 channel, ui32 generation) const; 
+    TActorId BSProxyIDForChannel(ui32 channel, ui32 generation) const;
 
     bool operator<(const TTabletStorageInfo &other) const noexcept {
         if (Version != 0 && other.Version != 0) {
@@ -392,14 +392,14 @@ public:
     ui64 HiveId = 0;
 };
 
-inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const { 
+inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const {
     const ui32 group = GroupFor(channel, generation);
     Y_VERIFY(group != Max<ui32>());
-    const TActorId proxy = MakeBlobStorageProxyID(group); 
+    const TActorId proxy = MakeBlobStorageProxyID(group);
     return proxy;
 }
 
-inline ui32 GroupIDFromBlobStorageProxyID(TActorId actorId) { 
+inline ui32 GroupIDFromBlobStorageProxyID(TActorId actorId) {
     ui32 blobStorageGroup = ui32(
         ((actorId.RawX1() >> (7 * 8)) & 0xff) |
         (((actorId.RawX2() >> (0 * 8)) & 0xff) << 8) |
@@ -427,12 +427,12 @@ inline bool SendToBSProxy(TActorId sender, TActorId recipient, IEventBase *ev, u
     return TActivationContext::Send(CreateEventForBSProxy(sender, recipient, ev, cookie, std::move(traceId)));
 }
 
-inline bool SendToBSProxy(const TActorContext &ctx, TActorId recipient, IEventBase *ev, ui64 cookie = 0, 
+inline bool SendToBSProxy(const TActorContext &ctx, TActorId recipient, IEventBase *ev, ui64 cookie = 0,
         NWilson::TTraceId traceId = {}) {
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, recipient, ev, cookie, std::move(traceId)));
 }
 
-inline bool SendToBSProxy(TActorId sender, ui32 groupId, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) { 
+inline bool SendToBSProxy(TActorId sender, ui32 groupId, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     return TActivationContext::Send(CreateEventForBSProxy(sender, groupId, ev, cookie, std::move(traceId)));
 }
 

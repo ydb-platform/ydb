@@ -56,7 +56,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
 
 class TShardDeleter {
     struct TPerHiveDeletions {
-        TActorId PipeToHive; 
+        TActorId PipeToHive;
         THashSet<TShardIdx> ShardsToDelete;
     };
 
@@ -86,7 +86,7 @@ public:
     void RedirectDeleteRequest(TTabletId hiveFromTabletId, TTabletId hiveToTabletId, TShardIdx shardIdx,
                                const THashMap<TShardIdx, TShardInfo>& shardsInfos, const TActorContext& ctx);
     void ShardDeleted(TShardIdx shardIdx, const TActorContext& ctx);
-    bool Has(TTabletId hiveTabletId, TActorId pipeClientActorId) const; 
+    bool Has(TTabletId hiveTabletId, TActorId pipeClientActorId) const;
     bool Has(TShardIdx shardIdx) const;
     bool Empty() const;
 };

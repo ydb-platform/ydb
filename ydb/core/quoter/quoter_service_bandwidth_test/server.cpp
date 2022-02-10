@@ -77,7 +77,7 @@ void TTestServer::RegisterQuoterService() {
     const ui32 systemPoolId = runtime->GetAppData().SystemPoolId;
     //Cerr << "System pool: " << systemPoolId << Endl;
     const ui32 nodeIndex = 0;
-    const TActorId quoterServiceActorId = runtime->Register(CreateQuoterService(), nodeIndex, systemPoolId); 
+    const TActorId quoterServiceActorId = runtime->Register(CreateQuoterService(), nodeIndex, systemPoolId);
     runtime->RegisterService(MakeQuoterServiceID(), quoterServiceActorId);
 }
 
@@ -116,7 +116,7 @@ void TTestServer::CreateKesusResource(ui64 kesusTabletId, const TString& resourc
         hdrrConfig->SetMaxUnitsPerSecond(*maxUnitsPerSecond);
     }
 
-    TActorId sender = GetEdgeActor(); 
+    TActorId sender = GetEdgeActor();
     ForwardToTablet(*runtime, kesusTabletId, sender, request.Release(), 0);
 
     TAutoPtr<IEventHandle> handle;
@@ -129,7 +129,7 @@ void TTestServer::CreateKesusResource(const TString& kesusPath, const TString& r
     CreateKesusResource(GetKesusTabletId(kesusPath), resourcePath, maxUnitsPerSecond);
 }
 
-TActorId TTestServer::GetEdgeActor() { 
+TActorId TTestServer::GetEdgeActor() {
     if (!EdgeActor) {
         EdgeActor = Server->GetRuntime()->AllocateEdgeActor(0);
     }

@@ -4,17 +4,17 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxSessionAttach : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     const NKikimrKesus::TEvAttachSession Record;
     ui64 SessionId;
 
-    TActorId PreviousOwner; 
+    TActorId PreviousOwner;
     ui64 PreviousGeneration = 0;
     ui64 PreviousCookie = 0;
     THolder<TEvKesus::TEvAttachSessionResult> Reply;
 
-    explicit TTxSessionAttach(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvAttachSession& record) 
+    explicit TTxSessionAttach(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvAttachSession& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

@@ -1,11 +1,11 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/generic/fwd.h>
-#include <util/system/types.h> 
- 
+#include <util/system/types.h>
+
 namespace NYql {
-namespace NUdf { 
- 
+namespace NUdf {
+
 #define CURRENT_UDF_ABI_VERSION_MAJOR 2
 #define CURRENT_UDF_ABI_VERSION_MINOR 24
 #define CURRENT_UDF_ABI_VERSION_PATCH 0
@@ -19,20 +19,20 @@ namespace NUdf {
 #error Please use UDF_ABI_VERSION macro to define ABI version
 #endif
 #endif
- 
-inline const char* CurrentAbiVersionStr() 
-{ 
-#define str(s) #s 
-#define xstr(s) str(s) 
- 
-    return xstr(UDF_ABI_VERSION_MAJOR) "." 
-            xstr(UDF_ABI_VERSION_MINOR) "." 
-            xstr(UDF_ABI_VERSION_PATCH); 
- 
-#undef str 
-#undef xstr 
-} 
- 
+
+inline const char* CurrentAbiVersionStr()
+{
+#define str(s) #s
+#define xstr(s) str(s)
+
+    return xstr(UDF_ABI_VERSION_MAJOR) "."
+            xstr(UDF_ABI_VERSION_MINOR) "."
+            xstr(UDF_ABI_VERSION_PATCH);
+
+#undef str
+#undef xstr
+}
+
 #define UDF_ABI_COMPATIBILITY_VERSION(MAJOR, MINOR) ((MAJOR) * 100 + (MINOR))
 #define UDF_ABI_COMPATIBILITY_VERSION_CURRENT UDF_ABI_COMPATIBILITY_VERSION(UDF_ABI_VERSION_MAJOR, UDF_ABI_VERSION_MINOR)
 
@@ -42,12 +42,12 @@ static_assert(UDF_ABI_COMPATIBILITY_VERSION_CURRENT <=
     " is above " Y_STRINGIZE(CURRENT_UDF_ABI_VERSION_MAJOR) "." Y_STRINGIZE(CURRENT_UDF_ABI_VERSION_MINOR));
 
 constexpr ui32 MakeAbiVersion(ui8 major, ui8 minor, ui8 patch)
-{ 
+{
     return major * 10000 + minor * 100 + patch;
-} 
- 
+}
+
 constexpr ui16 MakeAbiCompatibilityVersion(ui8 major, ui8 minor)
-{ 
+{
     return major * 100 + minor;
 }
 
@@ -63,14 +63,14 @@ constexpr ui32 CurrentCompatibilityAbiVersion()
 
 constexpr bool IsAbiCompatible(ui32 version)
 {
-    // backward compatibility in greater minor versions of host 
-    return version / 10000 == UDF_ABI_VERSION_MAJOR && 
-            (version / 100) % 100 <= UDF_ABI_VERSION_MINOR; 
-} 
- 
+    // backward compatibility in greater minor versions of host
+    return version / 10000 == UDF_ABI_VERSION_MAJOR &&
+            (version / 100) % 100 <= UDF_ABI_VERSION_MINOR;
+}
+
 TString AbiVersionToStr(ui32 version);
- 
-} // namspace NUdf 
+
+} // namspace NUdf
 } // namspace NYql
 
 namespace NKikimr { namespace NUdf = ::NYql::NUdf; }

@@ -15,7 +15,7 @@ namespace {
         };
 
         const ui32 GroupId;
-        const TActorId VDiskServiceId; 
+        const TActorId VDiskServiceId;
         const TDuration ReportPeriod;
         TGroupStat Accum;
         THashMap<ui32, TNodeStat> PerNodeStat;
@@ -25,7 +25,7 @@ namespace {
             return NKikimrServices::TActivity::NODE_WARDEN_STATAGGR_ACTOR;
         }
 
-        TGroupStatAggregatorActor(ui32 groupId, const TActorId& vdiskServiceId, TDuration reportPeriod = TDuration::Seconds(10)) 
+        TGroupStatAggregatorActor(ui32 groupId, const TActorId& vdiskServiceId, TDuration reportPeriod = TDuration::Seconds(10))
             : GroupId(groupId)
             , VDiskServiceId(vdiskServiceId)
             , ReportPeriod(reportPeriod)
@@ -39,7 +39,7 @@ namespace {
             TEvGroupStatReport *msg = ev->Get();
             TGroupStat stat;
             if (msg->GetGroupId() == GroupId && msg->GetStat(stat)) {
-                const TActorId& sender = ev->Sender; 
+                const TActorId& sender = ev->Sender;
                 const ui32 nodeId = sender.NodeId();
                 auto it = PerNodeStat.find(nodeId);
                 if (it != PerNodeStat.end()) {
@@ -88,7 +88,7 @@ namespace {
 
 namespace NKikimr {
 
-    IActor *CreateGroupStatAggregatorActor(ui32 groupId, const TActorId& vdiskServiceId) { 
+    IActor *CreateGroupStatAggregatorActor(ui32 groupId, const TActorId& vdiskServiceId) {
         return new TGroupStatAggregatorActor(groupId, vdiskServiceId);
     }
 

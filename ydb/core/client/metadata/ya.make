@@ -1,18 +1,18 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:kikimr)
- 
-SRCS( 
-    types_metadata.cpp 
-    functions_metadata.cpp 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    types_metadata.cpp
+    functions_metadata.cpp
+)
+
+PEERDIR(
     ydb/core/protos
     ydb/core/scheme_types
     ydb/library/yql/minikql/invoke_builtins
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

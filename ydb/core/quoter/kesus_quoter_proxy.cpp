@@ -241,13 +241,13 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         };
     };
 
-    const TActorId QuoterServiceId; 
+    const TActorId QuoterServiceId;
     const ui64 QuoterId;
     const TVector<TString> Path;
     const TString LogPrefix;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TKesusInfo> KesusInfo;
     THolder<ITabletPipeFactory> TabletPipeFactory;
-    TActorId KesusPipeClient; 
+    TActorId KesusPipeClient;
 
     bool Connected = false;
     TInstant DisconnectTime;
@@ -396,7 +396,7 @@ private:
         if (Connected) {
             KESUS_PROXY_LOG_DEBUG("Subscribe on resource \"" << resourcePath << "\"");
             NKikimrKesus::TEvSubscribeOnResources req;
-            ActorIdToProto(SelfId(), req.MutableActorID()); 
+            ActorIdToProto(SelfId(), req.MutableActorID());
             auto* res = req.AddResources();
             res->SetResourcePath(resourcePath);
             NTabletPipe::SendData(SelfId(), KesusPipeClient, new TEvKesus::TEvSubscribeOnResources(std::move(req)), NewCookieForRequest(resourcePath));
@@ -411,7 +411,7 @@ private:
         std::vector<TString> resourcePaths;
         resourcePaths.reserve(Resources.size());
         NKikimrKesus::TEvSubscribeOnResources req;
-        ActorIdToProto(SelfId(), req.MutableActorID()); 
+        ActorIdToProto(SelfId(), req.MutableActorID());
         for (auto&& [resourcePath, resInfo] : Resources) {
             auto* res = req.AddResources();
             res->SetResourcePath(resourcePath);
@@ -434,7 +434,7 @@ private:
     void InitUpdateEv() {
         if (!UpdateEv) {
             UpdateEv = MakeHolder<NKesus::TEvKesus::TEvUpdateConsumptionState>();
-            ActorIdToProto(SelfId(), UpdateEv->Record.MutableActorID()); 
+            ActorIdToProto(SelfId(), UpdateEv->Record.MutableActorID());
         }
     }
 
@@ -860,7 +860,7 @@ public:
         return NKikimrServices::TActivity::QUOTER_PROXY_ACTOR;
     }
 
-    TKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory) 
+    TKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory)
         : QuoterServiceId(quoterServiceId)
         , QuoterId(quoterId)
         , Path(navEntry.Path)
@@ -961,7 +961,7 @@ public:
 };
 
 struct TDefaultTabletPipeFactory : public ITabletPipeFactory {
-    IActor* CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig& config) override { 
+    IActor* CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig& config) override {
         return NTabletPipe::CreateClient(owner, tabletId, config);
     }
 };
@@ -970,7 +970,7 @@ THolder<ITabletPipeFactory> ITabletPipeFactory::GetDefaultFactory() {
     return MakeHolder<TDefaultTabletPipeFactory>();
 }
 
-IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory) { 
+IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory) {
     return new TKesusQuoterProxy(quoterId, navEntry, quoterServiceId, std::move(tabletPipeFactory));
 }
 

@@ -3,9 +3,9 @@
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <library/cpp/grpc/server/grpc_request.h> 
-#include <library/cpp/grpc/server/grpc_counters.h> 
-#include <library/cpp/grpc/server/grpc_async_ctx_base.h> 
+#include <library/cpp/grpc/server/grpc_request.h>
+#include <library/cpp/grpc/server/grpc_counters.h>
+#include <library/cpp/grpc/server/grpc_async_ctx_base.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -31,7 +31,7 @@ using grpc::CompletionQueue;
 using NKikimrClient::TResponse;
 using NKikimrClient::TPersQueueRequest;
 
-using NGrpc::IQueueEvent; 
+using NGrpc::IQueueEvent;
 
 using namespace NActors;
 using namespace NThreading;
@@ -40,7 +40,7 @@ namespace NKikimr {
 namespace NGRpcProxy {
 namespace {
 
-using TGrpcBaseAsyncContext = NGrpc::TBaseAsyncContext<NGRpcProxy::TGRpcService>; 
+using TGrpcBaseAsyncContext = NGrpc::TBaseAsyncContext<NGRpcProxy::TGRpcService>;
 
 template <typename TIn, typename TOut = TResponse>
 class TSimpleRequest
@@ -62,7 +62,7 @@ public:
                    TRequestCallback requestCallback,
                    TActorSystem& as,
                    const char* name,
-                   NGrpc::ICounterBlockPtr counters) 
+                   NGrpc::ICounterBlockPtr counters)
         : TGrpcBaseAsyncContext(service, cq)
         , Server(server)
         , Cb(cb)
@@ -351,7 +351,7 @@ private:
     TRequestCallback RequestCallback;
     TActorSystem& ActorSystem;
     const char* const Name;
-    NGrpc::ICounterBlockPtr Counters; 
+    NGrpc::ICounterBlockPtr Counters;
 
     THolder<ServerAsyncResponseWriter<TOut>> Writer;
 
@@ -373,13 +373,13 @@ TGRpcService::TGRpcService()
     : ActorSystem(nullptr)
 {}
 
-void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr) { 
+void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr) {
     CQ = cq;
     Y_ASSERT(InitCb_);
     InitCb_();
 }
 
-TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta, const TActorId& msgBusProxy, 
+TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta, const TActorId& msgBusProxy,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
     auto promise = NewPromise<void>();
     InitCb_ = [=]() mutable {
@@ -397,7 +397,7 @@ TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta
     return promise.GetFuture();
 }
 
-void TGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) { 
+void TGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
     Limiter_ = limiter;
 }
 

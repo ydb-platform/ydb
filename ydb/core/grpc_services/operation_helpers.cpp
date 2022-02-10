@@ -44,7 +44,7 @@ IEventBase* CreateNavigateForPath(const TString& path) {
     return new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release());
 }
 
-TActorId CreatePipeClient(ui64 id, const TActorContext& ctx) { 
+TActorId CreatePipeClient(ui64 id, const TActorContext& ctx) {
     NTabletPipe::TClientConfig clientConfig;
     clientConfig.RetryPolicy = {.RetryLimitCount = 3};
     return ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, id, clientConfig));

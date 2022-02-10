@@ -47,7 +47,7 @@ static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
 struct TPartition::THasDataReq {
     ui64 Num;
     ui64 Offset;
-    TActorId Sender; 
+    TActorId Sender;
     TMaybe<ui64> Cookie;
     TString ClientId;
 
@@ -322,7 +322,7 @@ void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst
 }
 
 
-static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, 
+static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 partition,
                          TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false)
 {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
@@ -369,7 +369,7 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
 }
 
 
-static void RequestDiskStatus(const TActorContext& ctx, const TActorId& dst, ui32 numChannels) 
+static void RequestDiskStatus(const TActorContext& ctx, const TActorId& dst, ui32 numChannels)
 {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
@@ -379,7 +379,7 @@ static void RequestDiskStatus(const TActorContext& ctx, const TActorId& dst, ui3
 }
 
 
-void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key) 
+void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key)
 {
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeInfo, true, key, key == "");
 }
@@ -393,7 +393,7 @@ void RequestMetaRead(const TActorContext& ctx, const TActorId& dst, ui32 partiti
     ctx.Send(dst, request.Release());
 }
 
-void RequestData(const TActorContext& ctx, const TActorId& dst, const TVector<TString>& keys) 
+void RequestData(const TActorContext& ctx, const TActorId& dst, const TVector<TString>& keys)
 {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     for (auto& key: keys) {
@@ -403,7 +403,7 @@ void RequestData(const TActorContext& ctx, const TActorId& dst, const TVector<TS
     ctx.Send(dst, request.Release());
 }
 
-void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key) 
+void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key)
 {
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeData, false, key);
 }
@@ -452,7 +452,7 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
     }
 }
 
-TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache, 
+TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                        const TString& topicName, const TString& topicPath, const bool localDC, TString dcId,
                        const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
                        const TActorContext &ctx, bool newPartition)
@@ -1179,7 +1179,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto& record = ev->Get()->Record;
     Y_VERIFY(record.HasSender());
 
-    TActorId sender = ActorIdFromProto(record.GetSender()); 
+    TActorId sender = ActorIdFromProto(record.GetSender());
     if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
         TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
         res->Record.SetEndOffset(EndOffset);
@@ -1833,7 +1833,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
 void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContext& ctx) {
 
     const TString& owner = ev->Get()->Owner;
-    const TActorId& pipeClient = ev->Get()->PipeClient; 
+    const TActorId& pipeClient = ev->Get()->PipeClient;
 
     OwnerPipes.erase(pipeClient);
 

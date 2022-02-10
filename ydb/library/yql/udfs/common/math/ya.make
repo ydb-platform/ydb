@@ -1,17 +1,17 @@
 YQL_UDF(math_udf)
- 
+
 YQL_ABI_VERSION(
     2
     16
     0
 )
- 
+
 OWNER(g:yql g:yql_ydb_core)
 
-SRCS( 
+SRCS(
     math_udf.cpp
-) 
- 
+)
+
 LLVM_BC(
     math_ir.cpp
     NAME Math
@@ -64,4 +64,4 @@ PEERDIR(
     ydb/library/yql/udfs/common/math/lib
 )
 
-END() 
+END()

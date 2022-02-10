@@ -2,7 +2,7 @@ syntax = "proto3";
 option cc_enable_arenas = true;
 
 package Ydb.Discovery;
-option java_package = "com.yandex.ydb.discovery"; 
+option java_package = "com.yandex.ydb.discovery";
 option java_outer_classname = "DiscoveryProtos";
 
 import "ydb/public/api/protos/ydb_operation.proto";

@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(Backpressure) {
         const TVDiskID vdiskId(0, 1, 0, 0, 0);
         TActorId vdiskActorId = runtime.Register(new TSkeletonFrontMockActor, TActorId(), 0, std::nullopt, 1);
 
-        std::vector<TActorId> clients; 
+        std::vector<TActorId> clients;
         ui64 clientId = 1;
 
         const TInstant simDuration = TInstant::Hours(6);
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(Backpressure) {
         }
 
         // terminate loader actors and the disk
-        for (const TActorId& actorId : std::exchange(clients, {})) { 
+        for (const TActorId& actorId : std::exchange(clients, {})) {
             runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, {}, 0), 1);
         }
         runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdiskActorId, {}, {}, 0), 1);

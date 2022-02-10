@@ -35,7 +35,7 @@ namespace NFake {
         }
 
     private:
-        void Registered(TActorSystem *sys, const TActorId &owner) override 
+        void Registered(TActorSystem *sys, const TActorId &owner) override
         {
             Owner = owner;
             Logger = new NUtil::TLogger(sys, NKikimrServices::FAKE_ENV);
@@ -117,9 +117,9 @@ namespace NFake {
         TIntrusivePtr<TSetup> Setup;
         TAutoPtr<NUtil::ILogger> Logger;
 
-        TActorId Owner; 
-        TActorId Agent; 
-        TActorId User; 
+        TActorId Owner;
+        TActorId Agent;
+        TActorId User;
         ui32 Borns = 0;
         ui32 Limit = 1;
         const ui32 FollowerId;

@@ -1255,13 +1255,13 @@ namespace NActors {
     inline bool TUnitedWorkers::NextExecution(TPoolId pool, ui32& activation, ui64 revolvingCounter) {
         return Pools[pool].NextExecution(activation, revolvingCounter);
     }
- 
+
     inline void TUnitedWorkers::StopExecution(TPoolId pool) {
         if (Pools[pool].StopExecution()) { // pending token
             TryWake(pool);
         }
-    } 
- 
+    }
+
     inline void TUnitedWorkers::Balance() {
         ui64 ts = GetCycleCountFast();
         if (Balancer->TryLock(ts)) {

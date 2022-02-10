@@ -4,7 +4,7 @@ option cc_enable_arenas = true;
 import "google/protobuf/struct.proto";
 
 package Ydb;
-option java_package = "com.yandex.ydb"; 
+option java_package = "com.yandex.ydb";
 option java_outer_classname = "ValueProtos";
 
 message DecimalType {

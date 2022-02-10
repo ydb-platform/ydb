@@ -3,7 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/location.h>
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/set.h>
 

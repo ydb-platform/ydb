@@ -13,24 +13,24 @@ namespace NConsole {
  * Courier forwards TEvConsole::TEvGetNodeConfigResponse event to the
  * owner.
  */
-IActor *CreateNodeConfigCourier(TActorId owner, 
+IActor *CreateNodeConfigCourier(TActorId owner,
                                 ui64 cookie = 0);
 IActor *CreateNodeConfigCourier(ui32 configItemKind,
-                                TActorId owner, 
+                                TActorId owner,
                                 ui64 cookie = 0);
 IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
-                                TActorId owner, 
+                                TActorId owner,
                                 ui64 cookie = 0);
 IActor *CreateNodeConfigCourier(const TString &tenant,
-                                TActorId owner, 
+                                TActorId owner,
                                 ui64 cookie = 0);
 IActor *CreateNodeConfigCourier(ui32 configItemKind,
                                 const TString &tenant,
-                                TActorId owner, 
+                                TActorId owner,
                                 ui64 cookie = 0);
 IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
                                 const TString &tenant,
-                                TActorId owner, 
+                                TActorId owner,
                                 ui64 cookie = 0);
 
 /*
@@ -50,24 +50,24 @@ IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
  */
 IActor *CreateConfigSubscriber(ui64 tabletId,
                                const TVector<ui32> &configItemKinds,
-                               TActorId owner, 
+                               TActorId owner,
                                bool replace = true,
                                ui64 cookie = 0);
 IActor *CreateConfigSubscriber(ui64 tabletId,
                                const TVector<ui32> &configItemKinds,
                                const TString &tenant,
-                               TActorId owner, 
+                               TActorId owner,
                                bool replace = true,
                                ui64 cookie = 0);
-IActor *CreateConfigSubscriber(TActorId serviceId, 
+IActor *CreateConfigSubscriber(TActorId serviceId,
                                const TVector<ui32> &configItemKinds,
-                               TActorId owner, 
+                               TActorId owner,
                                bool replace = true,
                                ui64 cookie = 0);
-IActor *CreateConfigSubscriber(TActorId serviceId, 
+IActor *CreateConfigSubscriber(TActorId serviceId,
                                const TVector<ui32> &configItemKinds,
                                const TString &tenant,
-                               TActorId owner, 
+                               TActorId owner,
                                bool replace = true,
                                ui64 cookie = 0);
 
@@ -77,7 +77,7 @@ IActor *CreateConfigSubscriber(TActorId serviceId,
  * forwared to it.
  */
 IActor *CreateSubscriptionEraser(ui64 subscriptionId,
-                                 TActorId owner = TActorId(), 
+                                 TActorId owner = TActorId(),
                                  ui64 cookie = 0);
 
 } // namespace NConsole

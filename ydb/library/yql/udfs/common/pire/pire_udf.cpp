@@ -3,16 +3,16 @@
 #include <ydb/library/yql/public/udf/udf_registrator.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_terminator.h>
- 
+
 #include <library/cpp/regex/pire/regexp.h>
 #include <library/cpp/regex/pire/pcre2pire.h>
- 
+
 #include <util/string/builder.h>
 
-using namespace NRegExp; 
-using namespace NKikimr; 
-using namespace NUdf; 
- 
+using namespace NRegExp;
+using namespace NKikimr;
+using namespace NUdf;
+
 namespace {
     class TPireUdfBase: public TBoxedValue {
     protected:
@@ -67,7 +67,7 @@ namespace {
             bool MultiMode;
             size_t RegexpsCount;
         };
- 
+
         static const TStringRef& Name(bool surroundMode, bool multiMode) {
             static auto match = TStringRef::Of("Match");
             static auto grep = TStringRef::Of("Grep");
@@ -79,7 +79,7 @@ namespace {
                 return multiMode ? multiMatch : match;
             }
         }
- 
+
         TPireMatch(
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod& runConfig,
@@ -119,10 +119,10 @@ namespace {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
- 
+
     private:
         TUnboxedValue Run(
-            const IValueBuilder* valueBuilder, 
+            const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try {
             TUnboxedValue* items = nullptr;
             TUnboxedValue tuple;
@@ -161,14 +161,14 @@ namespace {
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
- 
+
     private:
         TUniquePtr<TFsm> Fsm_;
         bool MultiMode;
         size_t RegexpsCount;
         bool SurroundMode;
     };
- 
+
     class TPireCapture: public TPireUdfBase {
     public:
         class TFactory: public TPireUdfBase {
@@ -188,8 +188,8 @@ namespace {
         static const TStringRef& Name() {
             static auto name = TStringRef::Of("Capture");
             return name;
-        } 
- 
+        }
+
         TPireCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos)
             : TPireUdfBase(pos)
         {
@@ -201,14 +201,14 @@ namespace {
 
     private:
         TUnboxedValue Run(
-            const IValueBuilder* valueBuilder, 
+            const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try {
             if (args[0]) {
                 const std::string_view input = args[0].AsStringRef();
- 
+
                 TSlowSearcher searcher(*Fsm_);
                 searcher.Search(input.data(), input.size());
- 
+
                 if (searcher.Captured()) {
                     const auto& captured = searcher.GetCaptured();
                     return valueBuilder->SubString(args[0], std::distance(input.begin(), captured.begin()), captured.length());
@@ -218,11 +218,11 @@ namespace {
             return TUnboxedValue();
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-        } 
- 
+        }
+
         TUniquePtr<TSlowCapturingFsm> Fsm_;
     };
- 
+
     class TPireReplace: public TPireUdfBase {
     public:
         class TFactory: public TPireUdfBase {
@@ -298,23 +298,23 @@ namespace {
             sink.Add(TPireCapture::Name());
             sink.Add(TPireReplace::Name());
         }
- 
+
         void BuildFunctionTypeInfo(
-            const TStringRef& name, 
+            const TStringRef& name,
             TType*,
-            const TStringRef& typeConfig, 
-            ui32 flags, 
+            const TStringRef& typeConfig,
+            ui32 flags,
             IFunctionTypeInfoBuilder& builder) const final try {
             const bool typesOnly = (flags & TFlags::TypesOnly);
             const bool isMatch = (TPireMatch::Name(false, false) == name);
             const bool isGrep = (TPireMatch::Name(true, false) == name);
             const bool isMultiMatch = (TPireMatch::Name(false, true) == name);
             const bool isMultiGrep = (TPireMatch::Name(true, true) == name);
- 
+
             if (isMatch || isGrep) {
                 builder.SimpleSignature<bool(TOptional<char*>)>()
                     .RunConfig<const char*>();
- 
+
                 if (!typesOnly) {
                     builder.Implementation(new TPireMatch::TFactory(isGrep, false, builder.GetSourcePosition()));
                 }
@@ -329,7 +329,7 @@ namespace {
                 }
                 const auto tupleType = tuple->Build();
                 builder.Args(1)->Add(optionalStringType).Done().Returns(tupleType).RunConfig<char*>();
- 
+
                 if (!typesOnly) {
                     builder.Implementation(new TPireMatch::TFactory(isMultiGrep, true, builder.GetSourcePosition(), regexpCount));
                 }
@@ -343,16 +343,16 @@ namespace {
             } else if (TPireReplace::Name() == name) {
                 builder.SimpleSignature<TOptional<char*>(TOptional<char*>, char*)>()
                     .RunConfig<char*>();
- 
+
                 if (!typesOnly) {
                     builder.Implementation(new TPireReplace::TFactory(builder.GetSourcePosition()));
                 }
             }
         } catch (const std::exception& e) {
             builder.SetError(CurrentExceptionMessage());
-        } 
+        }
     };
- 
+
 }
- 
+
 REGISTER_MODULES(TPireModule)

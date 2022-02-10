@@ -5,7 +5,7 @@
 namespace NInterconnect {
     // load responder -- lives on every node as a service actor
     NActors::IActor* CreateLoadResponderActor();
-    NActors::TActorId MakeLoadResponderActorId(ui32 node); 
+    NActors::TActorId MakeLoadResponderActorId(ui32 node);
 
     // load actor -- generates load with specific parameters
     struct TLoadParams {

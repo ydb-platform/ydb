@@ -52,9 +52,9 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
 
     // Static info.
     ui64 CmsTabletId = 0;
-    TActorId CmsActorId; 
-    TActorId BSControllerPipe; 
-    TActorId Sentinel; 
+    TActorId CmsActorId;
+    TActorId BSControllerPipe;
+    TActorId Sentinel;
 };
 
 using TCmsStatePtr = TIntrusivePtr<TCmsState>;

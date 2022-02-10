@@ -203,7 +203,7 @@ void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
         "Name: \"table1\"\n"
         "Id_Deprecated: 13\n"
         "Path: \"/Root/table1\"\n"
-        "Columns { Id: 34 Name: \"key\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n" 
+        "Columns { Id: 34 Name: \"key\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
         "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
         "Columns { Id: 57 Name: \"uint\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
         "KeyColumnIds: [ 34 ]\n"
@@ -214,7 +214,7 @@ void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
         "PathId { OwnerId: " + ToString(FAKE_SCHEMESHARD_TABLET_ID) + " LocalId: 14 }\n"
 
         "Path: \"/Root/table2\"\n"
-        "Columns { Id: 34 Name: \"key1\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n" 
+        "Columns { Id: 34 Name: \"key1\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
         "Columns { Id: 35 Name: \"key2\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
         "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
         "KeyColumnIds: [ 34, 35 ]\n"
@@ -422,7 +422,7 @@ NKikimrMiniKQL::TResult TFakeProxyTx::GetResult() const {
 ui32 TFakeScanTx::SetProgram(TTester& tester) {
     NKikimrTxDataShard::TDataTransaction dataTransaction;
     Y_PROTOBUF_SUPPRESS_NODISCARD dataTransaction.ParseFromArray(TxBody_.data(), TxBody_.size());
-    ActorIdToProto(tester.Sender, dataTransaction.MutableSink()); 
+    ActorIdToProto(tester.Sender, dataTransaction.MutableSink());
     TxBody_ = dataTransaction.SerializeAsString();
 
     const char * rangePattern = R"(
@@ -728,7 +728,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
             if (!tx->Immediate()) {
                 auto plannedTx = planStep->Record.MutableTransactions()->Add();
                 plannedTx->SetTxId(txId);
-                ActorIdToProto(Tester.Sender, plannedTx->MutableAckTo()); 
+                ActorIdToProto(Tester.Sender, plannedTx->MutableAckTo());
             }
         }
         Tester.Runtime.SendToPipe(shard, Tester.Sender, planStep);
@@ -924,7 +924,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
             results.insert(std::make_pair(shard, txId));
             auto plannedTx = planStep->Record.MutableTransactions()->Add();
             plannedTx->SetTxId(txId);
-            ActorIdToProto(Tester.Sender, plannedTx->MutableAckTo()); 
+            ActorIdToProto(Tester.Sender, plannedTx->MutableAckTo());
         }
         Tester.Runtime.SendToPipe(shard, Tester.Sender, planStep);
     }
@@ -1043,7 +1043,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
 }
 
 void InitRoot(Tests::TServer::TPtr server,
-              TActorId sender) 
+              TActorId sender)
 {
     if (server->GetSettings().StoragePoolTypes.empty()) {
         return;
@@ -1088,7 +1088,7 @@ void InitRoot(Tests::TServer::TPtr server,
 }
 
 void CreateShardedTable(Tests::TServer::TPtr server,
-                        TActorId sender, 
+                        TActorId sender,
                         const TString &root,
                         const TString &name,
                         const TShardedTableOptions &opts)
@@ -1183,7 +1183,7 @@ void CreateShardedTable(Tests::TServer::TPtr server,
 }
 
 void CreateShardedTable(Tests::TServer::TPtr server,
-                        TActorId sender, 
+                        TActorId sender,
                         const TString &root,
                         const TString &name,
                         ui64 shards,
@@ -1253,7 +1253,7 @@ std::pair<TTableInfoMap, ui64> GetTables(
 
 TTableId ResolveTableId(
         Tests::TServer::TPtr server,
-        TActorId sender, 
+        TActorId sender,
         const TString& path)
 {
     auto& runtime = *server->GetRuntime();
@@ -1298,7 +1298,7 @@ TRowVersion CreateVolatileSnapshot(
 {
     auto& runtime = *server->GetRuntime();
 
-    TActorId sender = runtime.AllocateEdgeActor(); 
+    TActorId sender = runtime.AllocateEdgeActor();
 
     {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
@@ -1331,7 +1331,7 @@ bool RefreshVolatileSnapshot(
 {
     auto& runtime = *server->GetRuntime();
 
-    TActorId sender = runtime.AllocateEdgeActor(); 
+    TActorId sender = runtime.AllocateEdgeActor();
 
     {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
@@ -1357,7 +1357,7 @@ bool DiscardVolatileSnapshot(
 {
     auto& runtime = *server->GetRuntime();
 
-    TActorId sender = runtime.AllocateEdgeActor(); 
+    TActorId sender = runtime.AllocateEdgeActor();
 
     {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
@@ -1445,7 +1445,7 @@ TRowVersion CommitWrites(
 
 ui64 AsyncSplitTable(
         Tests::TServer::TPtr server,
-        TActorId sender, 
+        TActorId sender,
         const TString& path,
         ui64 sourceTablet,
         ui32 splitKey)
@@ -1470,7 +1470,7 @@ ui64 AsyncSplitTable(
 
 ui64 AsyncMergeTable(
         Tests::TServer::TPtr server,
-        TActorId sender, 
+        TActorId sender,
         const TString& path,
         const TVector<ui64>& sourceTabletIds)
 {
@@ -1688,7 +1688,7 @@ ui64 AsyncAlterDropStream(
     return ev->Get()->Record.GetTxId();
 }
 
-void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId) { 
+void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId) {
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();
 
@@ -1713,7 +1713,7 @@ void SimulateSleep(Tests::TServer::TPtr server, TDuration duration) {
 }
 
 void SendSQL(Tests::TServer::TPtr server,
-             TActorId sender, 
+             TActorId sender,
              const TString &sql,
              bool dml)
 {
@@ -1723,7 +1723,7 @@ void SendSQL(Tests::TServer::TPtr server,
 }
 
 void ExecSQL(Tests::TServer::TPtr server,
-             TActorId sender, 
+             TActorId sender,
              const TString &sql,
              bool dml,
              Ydb::StatusIds::StatusCode code)
@@ -1954,13 +1954,13 @@ namespace {
 
     private:
         struct TPendingRequest {
-            TActorId Sender; 
+            TActorId Sender;
             ui64 Cookie;
             ui64 TxId;
         };
 
     private:
-        const TActorId Owner; 
+        const TActorId Owner;
         const TString Path;
         const TRowVersion Snapshot;
         const bool Ordered;
@@ -1995,7 +1995,7 @@ void ResumeReadShardedTable(
         TReadShardedTableState& state)
 {
     auto& runtime = *server->GetRuntime();
-    runtime.Send(new IEventHandle(state.Worker, TActorId(), new TReadTableImpl::TEvResume()), 0, true); 
+    runtime.Send(new IEventHandle(state.Worker, TActorId(), new TReadTableImpl::TEvResume()), 0, true);
     auto ev = runtime.GrabEdgeEventRethrow<TReadTableImpl::TEvResult>(state.Sender);
     state.Result = ev->Get()->Result;
 }

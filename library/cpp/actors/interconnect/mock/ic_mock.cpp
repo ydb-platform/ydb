@@ -42,7 +42,7 @@ namespace NActors {
                 : Key(key)
             {}
 
-            void Attach(ui32 nodeId, TActorSystem *as, const TActorId& actorId) { 
+            void Attach(ui32 nodeId, TActorSystem *as, const TActorId& actorId) {
                 TPeerInfo *peer = GetPeer(nodeId);
                 auto guard = TWriteGuard(peer->Mutex);
                 Y_VERIFY(!peer->ActorSystem);
@@ -188,7 +188,7 @@ namespace NActors {
                 , Common(std::move(common))
             {}
 
-            void Registered(TActorSystem *as, const TActorId& parent) override { 
+            void Registered(TActorSystem *as, const TActorId& parent) override {
                 TActor::Registered(as, parent);
                 State.Attach(NodeId, as, SelfId());
             }

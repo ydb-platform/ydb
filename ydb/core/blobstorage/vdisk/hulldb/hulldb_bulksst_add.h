@@ -122,7 +122,7 @@ namespace NKikimr {
         // SSTables to add
         TAddBulkSstEssence Essence;
         // actor ID to notify after commit
-        TActorId NotifyId; 
+        TActorId NotifyId;
 
         TEvAddBulkSst() = default;
 

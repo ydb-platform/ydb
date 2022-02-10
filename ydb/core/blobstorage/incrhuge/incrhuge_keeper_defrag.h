@@ -44,7 +44,7 @@ namespace NKikimr {
             // cleaned
             void UpdateChunkState(TChunkIdx chunkIdx, const TActorContext& ctx);
 
-            void ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx); 
+            void ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx);
 
             void HandleControlDefrag(TEvIncrHugeControlDefrag::TPtr& ev, const TActorContext& ctx);
 

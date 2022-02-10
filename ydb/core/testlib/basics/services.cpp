@@ -151,7 +151,7 @@ namespace NPDisk {
     }
 
     template<size_t N>
-    static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TActorId (&replicas)[N], ui64 stateStorageGroup) 
+    static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TActorId (&replicas)[N], ui64 stateStorageGroup)
     {
         TIntrusivePtr<TStateStorageInfo> info(new TStateStorageInfo());
         info->StateStorageGroup = stateStorageGroup;
@@ -164,7 +164,7 @@ namespace NPDisk {
         return info;
     }
 
-    static TActorId MakeBoardReplicaID( 
+    static TActorId MakeBoardReplicaID(
         const ui32 node,
         const ui64 stateStorageGroup,
         const ui32 replicaIndex
@@ -172,30 +172,30 @@ namespace NPDisk {
         char x[12] = { 's', 's', 'b' };
         x[3] = (char)stateStorageGroup;
         memcpy(x + 5, &replicaIndex, sizeof(ui32));
-        return TActorId(node, TStringBuf(x, 12)); 
+        return TActorId(node, TStringBuf(x, 12));
     }
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex, ui64 stateStorageGroup, bool firstNode)
     {
-        const TActorId ssreplicas[3] = { 
+        const TActorId ssreplicas[3] = {
             MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0),
             MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1),
             MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2),
         };
 
-        const TActorId breplicas[3] = { 
+        const TActorId breplicas[3] = {
             MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0),
             MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1),
             MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2),
         };
 
-        const TActorId sbreplicas[3] = { 
+        const TActorId sbreplicas[3] = {
             MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0),
             MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1),
             MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2),
         };
 
-        const TActorId ssproxy = MakeStateStorageProxyID(stateStorageGroup); 
+        const TActorId ssproxy = MakeStateStorageProxyID(stateStorageGroup);
 
         auto ssInfo = GenerateStateStorageInfo(ssreplicas, stateStorageGroup);
         auto sbInfo = GenerateStateStorageInfo(sbreplicas, stateStorageGroup);

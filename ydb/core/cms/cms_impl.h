@@ -427,7 +427,7 @@ private:
     TSchedulerCookieHolder LogCleanupTimerCookieHolder;
 
 public:
-    TCms(const TActorId &tablet, TTabletStorageInfo *info) 
+    TCms(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , State(new TCmsState)

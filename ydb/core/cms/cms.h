@@ -287,7 +287,7 @@ struct TEvCms {
     };
 };
 
-IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info); 
+IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info);
 
 } // NCms
 } // NKikimr

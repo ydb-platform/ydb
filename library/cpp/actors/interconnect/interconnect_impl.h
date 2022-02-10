@@ -4,7 +4,7 @@
 #include <library/cpp/actors/protos/interconnect.pb.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/helpers/mon_histogram_helper.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NActors {
     // resolve node info

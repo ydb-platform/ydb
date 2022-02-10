@@ -269,7 +269,7 @@ struct TEvConsole {
     struct TEvToggleConfigValidatorResponse : public TEventShortDebugPB<TEvToggleConfigValidatorResponse, NKikimrConsole::TToggleConfigValidatorResponse, EvToggleConfigValidatorResponse> {};
 };
 
-IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info); 
+IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info);
 
 } // namespace NConsole
 } // namespace NKikimr

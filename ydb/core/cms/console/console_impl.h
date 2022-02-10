@@ -123,7 +123,7 @@ private:
     }
 
 public:
-    TConsole(const TActorId &tablet, TTabletStorageInfo *info) 
+    TConsole(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , TxProcessor(new TTxProcessor(*this, "console", NKikimrServices::CMS))
@@ -165,7 +165,7 @@ private:
     TConfigsManager* ConfigsManager;
     TTenantsManager* TenantsManager;
 
-    TActorId NetClassifierUpdaterId; 
+    TActorId NetClassifierUpdaterId;
 };
 
 } // namespace NConsole

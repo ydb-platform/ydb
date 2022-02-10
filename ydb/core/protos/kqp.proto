@@ -148,7 +148,7 @@ message TEvQueryRequest {
     optional TQueryRequest Request = 1;
     optional string TraceId = 2;
     optional string UserToken = 3;
-    optional NActorsProto.TActorId RequestActorId = 4; 
+    optional NActorsProto.TActorId RequestActorId = 4;
     optional string RequestType = 5;
     optional TRlPath RlPath = 6;
 }
@@ -356,7 +356,7 @@ message TExecuterTxRequest {
 
 message TEvExecuterTxRequest {
     optional TExecuterTxRequest Request = 1;
-    optional NActorsProto.TActorId Target = 2; 
+    optional NActorsProto.TActorId Target = 2;
     optional string TraceId = 3;
     optional string UserToken = 4;
 };
@@ -395,7 +395,7 @@ message TEvExecuterStreamProfile {
 };
 
 message TEvExecuterProgress {
-    optional NActorsProto.TActorId ExecuterActorId = 1; 
+    optional NActorsProto.TActorId ExecuterActorId = 1;
 };
 
 message TKqpProxyNodeResources {

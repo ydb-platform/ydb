@@ -32,7 +32,7 @@ namespace NTabletPipe {
             return NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
         }
 
-        TClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config) 
+        TClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config)
             : Owner(owner)
             , TabletId(tabletId)
             , Config(config)
@@ -281,7 +281,7 @@ namespace NTabletPipe {
             const auto &record = ev->Get()->Record;
             Y_VERIFY(record.GetTabletId() == TabletId);
 
-            ServerId = ActorIdFromProto(record.GetServerId()); 
+            ServerId = ActorIdFromProto(record.GetServerId());
             Leader = record.GetLeader();
 
             Y_VERIFY(!ServerId || record.GetStatus() == NKikimrProto::OK);
@@ -662,7 +662,7 @@ namespace NTabletPipe {
         }
 
     private:
-        const TActorId Owner; 
+        const TActorId Owner;
         const ui64 TabletId;
         const TClientConfig Config;
         bool IsShutdown;
@@ -673,22 +673,22 @@ namespace NTabletPipe {
         ui64 InterconnectCookie = 0;
         ui64 ConnectCookie = 0;
         TActorId InterconnectProxyId;
-        TActorId InterconnectSessionId; 
-        TActorId ServerId; 
+        TActorId InterconnectSessionId;
+        TActorId ServerId;
         typedef TOneOneQueueInplace<IEventHandle*, 32> TPayloadQueue;
         TAutoPtr<TPayloadQueue, TPayloadQueue::TPtrCleanDestructor> PayloadQueue;
         TClientRetryState RetryState;
         bool Leader;
-        TActorId HiveClient; 
+        TActorId HiveClient;
         ui32 CurrentHiveForwards = 0;
         static constexpr ui32 MAX_HIVE_FORWARDS = 10;
     };
 
-    IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config) { 
+    IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config) {
         return new TClient(owner, tabletId, config);
     }
 
-    void SendData(TActorId self, TActorId clientId, IEventBase *payload, ui64 cookie) { 
+    void SendData(TActorId self, TActorId clientId, IEventBase *payload, ui64 cookie) {
         auto ev = new IEventHandle(clientId, self, payload, 0, cookie);
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         TActivationContext::Send(ev);
@@ -705,40 +705,40 @@ namespace NTabletPipe {
         TActivationContext::Send(ev.Release());
     }
 
-    void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) { 
+    void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) {
         auto ev = new IEventHandle(eventType, 0, clientId, self, buffer, cookie);
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         TActivationContext::Send(ev);
     }
 
-    void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie) { 
+    void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie) {
         auto ev = new IEventHandle(clientId, ctx.SelfID, payload, 0, cookie);
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         ctx.ExecutorThread.Send(ev);
     }
 
-    void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) { 
+    void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) {
         auto ev = new IEventHandle(eventType, 0, clientId, ctx.SelfID, buffer, cookie);
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         ctx.ExecutorThread.Send(ev);
     }
 
-    void ShutdownClient(const TActorContext& ctx, const TActorId& clientId) { 
+    void ShutdownClient(const TActorContext& ctx, const TActorId& clientId) {
         ctx.Send(clientId, new TEvTabletPipe::TEvShutdown);
     }
 
-    void CloseClient(const TActorContext& ctx, const TActorId& clientId) { 
+    void CloseClient(const TActorContext& ctx, const TActorId& clientId) {
         ctx.Send(clientId, new TEvents::TEvPoisonPill);
     }
 
-    void CloseClient(TActorIdentity self, TActorId clientId) { 
+    void CloseClient(TActorIdentity self, TActorId clientId) {
         self.Send(clientId, new TEvents::TEvPoisonPill());
     }
 
-    void CloseAndForgetClient(TActorIdentity self, TActorId &clientId) { 
+    void CloseAndForgetClient(TActorIdentity self, TActorId &clientId) {
         if (clientId) {
             CloseClient(self, clientId);
-            clientId = TActorId(); 
+            clientId = TActorId();
         }
     }
 

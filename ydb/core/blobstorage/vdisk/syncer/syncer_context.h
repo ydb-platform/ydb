@@ -13,22 +13,22 @@ namespace NKikimr {
         const TIntrusivePtr<TVDiskContext> VCtx;
         const TIntrusivePtr<TLsnMngr> LsnMngr;
         const TPDiskCtxPtr PDiskCtx;
-        const TActorId SkeletonId; 
-        const TActorId AnubisRunnerId; 
-        const TActorId LoggerId; 
-        const TActorId LogCutterId; 
-        const TActorId SyncLogId; 
+        const TActorId SkeletonId;
+        const TActorId AnubisRunnerId;
+        const TActorId LoggerId;
+        const TActorId LogCutterId;
+        const TActorId SyncLogId;
         const TIntrusivePtr<TVDiskConfig> Config;
         NMonGroup::TSyncerGroup MonGroup;
 
         TSyncerContext(TIntrusivePtr<TVDiskContext> vctx,
                 TIntrusivePtr<TLsnMngr> lsnMngr,
                 TPDiskCtxPtr pdiskCtx,
-                const TActorId &skeletonId, 
-                const TActorId &anubisRunnerId, 
-                const TActorId &loggerId, 
-                const TActorId &logCutterId, 
-                const TActorId &syncLogId, 
+                const TActorId &skeletonId,
+                const TActorId &anubisRunnerId,
+                const TActorId &loggerId,
+                const TActorId &logCutterId,
+                const TActorId &syncLogId,
                 TIntrusivePtr<TVDiskConfig> config)
             : VCtx(std::move(vctx))
             , LsnMngr(std::move(lsnMngr))

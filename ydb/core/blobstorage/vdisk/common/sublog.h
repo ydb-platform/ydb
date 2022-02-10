@@ -69,7 +69,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////
     class TSublogLineHolder {
     public:
-        TSublogLineHolder(const TActorId &aid, const TActorContext &ctx) 
+        TSublogLineHolder(const TActorId &aid, const TActorContext &ctx)
             : Aid(aid)
             , Ctx(ctx)
             , Ev(std::make_unique<TEvSublogLine>())
@@ -83,7 +83,7 @@ namespace NKikimr {
             return Ev->Stream;
         }
     private:
-        TActorId Aid; 
+        TActorId Aid;
         const TActorContext &Ctx;
         std::unique_ptr<TEvSublogLine> Ev;
     };

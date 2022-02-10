@@ -70,7 +70,7 @@ public:
     ~TTestICCluster() {
     }
 
-    TActorId RegisterActor(NActors::IActor* actor, ui32 nodeId) { 
+    TActorId RegisterActor(NActors::IActor* actor, ui32 nodeId) {
         return Nodes[nodeId]->RegisterActor(actor);
     }
 
@@ -78,7 +78,7 @@ public:
         return Nodes[nodeId]->InterconnectProxy(peerNodeId);
     }
 
-    void KillActor(ui32 nodeId, const TActorId& id) { 
+    void KillActor(ui32 nodeId, const TActorId& id) {
         Nodes[nodeId]->Send(id, new NActors::TEvents::TEvPoisonPill);
     }
 };

@@ -172,7 +172,7 @@ private:
     }
 
     void HandleExecute(TEvDqCompute::TEvState::TPtr& ev) {
-        TActorId computeActor = ev->Sender; 
+        TActorId computeActor = ev->Sender;
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
 
@@ -206,7 +206,7 @@ private:
                     auto& task = TasksGraph.GetTask(taskId);
                     task.ComputeActorId = computeActor;
 
-                    THashMap<TActorId, THashSet<ui64>> updates; 
+                    THashMap<TActorId, THashSet<ui64>> updates;
                     CollectTaskChannelsUpdates(task, updates);
                     PropagateChannelsUpdates(updates);
                 } else {
@@ -768,7 +768,7 @@ private:
 
             NYql::NDqProto::TDqTask taskDesc;
             taskDesc.SetId(task.Id);
-            ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId()); 
+            ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId());
 
             for (auto& input : task.Inputs) {
                 FillInputDesc(*taskDesc.AddInputs(), input);
@@ -1032,7 +1032,7 @@ private:
 public:
     void FillEndpointDesc(NYql::NDqProto::TEndpoint& endpoint, const TTask& task) {
         if (task.ComputeActorId) {
-            ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId()); 
+            ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
         }
     }
 

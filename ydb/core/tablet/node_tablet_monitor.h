@@ -13,9 +13,9 @@
 namespace NKikimr {
 namespace NNodeTabletMonitor {
 
-inline TActorId MakeNodeTabletMonitorID(ui32 node = 0) { 
+inline TActorId MakeNodeTabletMonitorID(ui32 node = 0) {
     char x[12] = {'n','o','d','e','t','a','b','l','e','t','m','o'};
-    return TActorId(node, TStringBuf(x, 12)); 
+    return TActorId(node, TStringBuf(x, 12));
 }
 
 

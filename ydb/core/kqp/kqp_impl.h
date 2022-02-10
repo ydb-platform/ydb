@@ -49,7 +49,7 @@ IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& servic
     const TKqpSettings::TConstPtr& kqpSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory);
 
-IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings, 
+IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const NKikimrConfig::TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
     TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine);
@@ -74,7 +74,7 @@ struct TKqpWorkerSettings {
         , DbCounters(dbCounters) {}
 };
 
-IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId, 
+IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters);
 

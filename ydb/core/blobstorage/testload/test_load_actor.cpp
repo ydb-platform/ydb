@@ -6,7 +6,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 
 #include <google/protobuf/text_format.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
 
@@ -21,9 +21,9 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
 
     // per-request info
     struct THttpInfoRequest {
-        TActorId Origin; // who asked for status 
+        TActorId Origin; // who asked for status
         int SubRequestId; // origin subrequest id
-        THashMap<TActorId, TActorInfo> ActorMap; // per-actor status 
+        THashMap<TActorId, TActorInfo> ActorMap; // per-actor status
         ui32 HttpInfoResPending; // number of requests pending
         TString ErrorMessage;
     };
@@ -38,7 +38,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     TVector<TFinishedTestInfo> FinishedTests;
 
     // currently running load actors
-    TMap<ui64, TActorId> LoadActors; 
+    TMap<ui64, TActorId> LoadActors;
 
     // next HTTP request identifier
     ui32 NextRequestId;

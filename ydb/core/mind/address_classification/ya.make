@@ -14,7 +14,7 @@ GENERATE_ENUM_SERIALIZATION(net_classifier.h)
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/monlib/dynamic_counters 
+    library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/cms/console
     ydb/core/mon

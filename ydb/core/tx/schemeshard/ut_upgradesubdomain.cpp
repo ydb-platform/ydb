@@ -882,7 +882,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
 
         env.TestWaitTabletDeletion(runtime, { TTestTxConfig::FakeHiveTablets + 2, TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 4});
 
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),

@@ -66,8 +66,8 @@ namespace NKikimr {
     struct THullCtx;
     IActor* CreateAnubis(const TIntrusivePtr<THullCtx> &hullCtx,
                          const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
-                         const TActorId &parentId, 
-                         const TActorId &skeletonId, 
+                         const TActorId &parentId,
+                         const TActorId &skeletonId,
                          ui32 replInterconnectChannel,
                          ui64 anubisOsirisMaxInFly);
 

@@ -106,7 +106,7 @@ namespace NTracing {
         NKikimrTracing::TOnTabletBlockBlobStorage,
         NSignalTypes::TypeOnTabletBlockBlobStorage> {
     public:
-        TOnTabletBlockBlobStorage(const TActorId& reqBlockBlobStorageID, ui32 knownGeneration); 
+        TOnTabletBlockBlobStorage(const TActorId& reqBlockBlobStorageID, ui32 knownGeneration);
         TOnTabletBlockBlobStorage(const TString& serializedSignal);
         void OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const override;
     };
@@ -115,7 +115,7 @@ namespace NTracing {
         NKikimrTracing::TOnTabletRebuildGraph,
         NSignalTypes::TypeOnTabletRebuildGraph> {
     public:
-        TOnTabletRebuildGraph(const TActorId& tabletReqRebuildGraphID, const TTraceID& rebuildGraphTraceID); 
+        TOnTabletRebuildGraph(const TActorId& tabletReqRebuildGraphID, const TTraceID& rebuildGraphTraceID);
         TOnTabletRebuildGraph(const TString& serializedSignal);
         void OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const override;
     };

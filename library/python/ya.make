@@ -119,7 +119,7 @@ RECURSE(
     metrics_framework
     mime_types
     monitoring
-    monlib 
+    monlib
     monlib/examples
     monlib/so
     murmurhash
@@ -169,14 +169,14 @@ RECURSE(
     selenium_ui_test
     sendmsg
     stubmaker
-    solomon 
+    solomon
     spack
     spyt
     ssh_client
     ssh_sign
     startrek_python_client
     startrek_python_client/tests_int
-    statface_client 
+    statface_client
     step
     strings
     strings/ut

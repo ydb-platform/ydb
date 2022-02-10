@@ -15,7 +15,7 @@ namespace NKikimr {
     class TLevelIndexQueryBase {
     protected:
         std::shared_ptr<TQueryCtx> QueryCtx;
-        const TActorId ParentId; 
+        const TActorId ParentId;
         TLogoBlobsSnapshot LogoBlobsSnapshot;
         TBarriersSnapshot BarriersSnapshot;
         TReadBatcherCtxPtr BatcherCtx;
@@ -27,7 +27,7 @@ namespace NKikimr {
 
         TLevelIndexQueryBase(
                 std::shared_ptr<TQueryCtx> &queryCtx,
-                const TActorId &parentId, 
+                const TActorId &parentId,
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,

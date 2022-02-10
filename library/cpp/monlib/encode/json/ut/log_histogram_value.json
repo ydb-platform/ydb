@@ -5,7 +5,7 @@
         "kind":"LOGHIST",
         "labels":
           {
-            "metric":"ms" 
+            "metric":"ms"
           },
         "ts":1509843723,
         "log_hist":

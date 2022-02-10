@@ -18,7 +18,7 @@ class TJsonContent : public TActorBootstrapped<TJsonContent> {
     using TBase = TActorBootstrapped<TJsonContent>;
 
     IViewer* Viewer;
-    TActorId Initiator; 
+    TActorId Initiator;
     NMon::TEvHttpInfo::TPtr Event;
 
     IViewer::TContentRequestContext ContentRequestContext;

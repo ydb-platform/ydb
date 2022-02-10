@@ -179,7 +179,7 @@ namespace NKikimr {
         TLevelSlicePtr CurSlice;
         TList<TIntrusivePtr<TLevelSegment>> UncommittedReplSegments;
 
-        TActorId LIActor; 
+        TActorId LIActor;
         ui64 CurEntryPointLsn = ui64(-1);
         ui64 PrevEntryPointLsn = ui64(-1);
 

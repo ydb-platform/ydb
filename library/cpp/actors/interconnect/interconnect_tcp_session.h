@@ -10,7 +10,7 @@
 #include <library/cpp/actors/util/rope.h>
 #include <library/cpp/actors/util/funnel_queue.h>
 #include <library/cpp/actors/util/recentwnd.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
 #include <util/generic/queue.h>
@@ -179,7 +179,7 @@ namespace NActors {
             return INTERCONNECT_SESSION_TCP;
         }
 
-        TInputSessionTCP(const TActorId& sessionId, 
+        TInputSessionTCP(const TActorId& sessionId,
                          TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                          TIntrusivePtr<TReceiveContext> context,
                          TInterconnectProxyCommon::TPtr common,
@@ -495,7 +495,7 @@ namespace NActors {
         void GenerateHttpInfo(TStringStream& str);
 
         TIntrusivePtr<TReceiveContext> ReceiveContext;
-        TActorId ReceiverId; 
+        TActorId ReceiverId;
         TDuration Ping;
 
         ui64 ConfirmPacketsForcedBySize = 0;
@@ -513,7 +513,7 @@ namespace NActors {
        : public TActorBootstrapped<TInterconnectSessionKiller> {
         ui32 RepliesReceived = 0;
         ui32 RepliesNumber = 0;
-        TActorId LargestSession = TActorId(); 
+        TActorId LargestSession = TActorId();
         ui64 MaxBufferSize = 0;
         TInterconnectProxyCommon::TPtr Common;
 
@@ -529,7 +529,7 @@ namespace NActors {
 
         void Bootstrap() {
             auto sender = SelfId();
-            const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* { 
+            const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
                 auto ev = new TEvSessionBufferSizeRequest();
                 return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
             };

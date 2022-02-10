@@ -69,7 +69,7 @@ namespace NActors {
 
         struct TSettings: public TThrRefBase {
         public:
-            TActorId LoggerActorId; 
+            TActorId LoggerActorId;
             EComponent LoggerComponent;
             ui64 TimeThresholdMs;
             bool AllowDrop;
@@ -98,12 +98,12 @@ namespace NActors {
             // protobuf enumeration of components. In this case protoc
             // automatically generates YOURTYPE_MIN, YOURTYPE_MAX and
             // YOURTYPE_Name for you.
-            TSettings(const TActorId& loggerActorId, const EComponent loggerComponent, 
+            TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                       EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
                       EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
                       ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
 
-            TSettings(const TActorId& loggerActorId, const EComponent loggerComponent, 
+            TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                       EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
                       ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
 

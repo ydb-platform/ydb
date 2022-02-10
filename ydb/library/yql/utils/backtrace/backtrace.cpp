@@ -1,5 +1,5 @@
 #include "backtrace.h"
- 
+
 #include <llvm/DebugInfo/Symbolize/Symbolize.h>
 #include <llvm/DebugInfo/Symbolize/DIPrinter.h>
 #include <llvm/Support/raw_ostream.h>
@@ -10,22 +10,22 @@
 #include <util/generic/xrange.h>
 #include <util/generic/yexception.h>
 #include <util/stream/format.h>
-#include <util/stream/output.h> 
-#include <util/system/backtrace.h> 
+#include <util/stream/output.h>
+#include <util/system/backtrace.h>
 #include <util/system/type_name.h>
 #include <util/system/execpath.h>
 #include <util/system/platform.h>
 #include <util/system/mlock.h>
- 
+
 #ifdef _linux_
 #include <dlfcn.h>
 #include <link.h>
 #endif
 
 #ifndef _win_
- 
-namespace { 
- 
+
+namespace {
+
 bool SetSignalHandler(int signo, void (*handler)(int)) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -34,11 +34,11 @@ bool SetSignalHandler(int signo, void (*handler)(int)) {
     sigfillset(&sa.sa_mask);
     return sigaction(signo, &sa, nullptr) != -1;
 }
- 
-} // namespace 
- 
+
+} // namespace
+
 #endif // _win_
- 
+
 void KikimrBackTrace() {
     KikimrBacktraceFormatImpl(&Cerr);
 }
@@ -146,31 +146,31 @@ void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t st
 }
 
 void PrintBacktraceToStderr(int signum)
-{ 
+{
     if (!NMalloc::IsAllocatorCorrupted) {
         /* we want memory allocation for backtrace printing */
         KikimrBacktraceFormatImpl(&Cerr);
     }
-    /* Now reraise the signal. We reactivate the signal’s default handling, 
-       which is to terminate the process. We could just call exit or abort, 
-       but reraising the signal sets the return status from the process 
-       correctly. */ 
-    raise(signum); 
-} 
- 
-void EnableKikimrBacktraceFormat() 
-{ 
+    /* Now reraise the signal. We reactivate the signal’s default handling,
+       which is to terminate the process. We could just call exit or abort,
+       but reraising the signal sets the return status from the process
+       correctly. */
+    raise(signum);
+}
+
+void EnableKikimrBacktraceFormat()
+{
     SetFormatBackTraceFn(KikimrBacktraceFormatImpl);
-} 
- 
+}
+
 void SetFatalSignalHandler(void (*handler)(int))
-{ 
+{
     Y_UNUSED(handler);
-#ifndef _win_ 
+#ifndef _win_
     for (int signo: {SIGSEGV, SIGILL, SIGABRT, SIGFPE}) {
         if (!SetSignalHandler(signo, handler)) {
             ythrow TSystemError() << "Cannot set handler for signal " << strsignal(signo);
         }
-    } 
-#endif 
-} 
+    }
+#endif
+}

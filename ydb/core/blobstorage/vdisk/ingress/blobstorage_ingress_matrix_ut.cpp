@@ -254,7 +254,7 @@ namespace NKikimr {
             UNIT_ASSERT(m.GetColumn(2) == TVectorType(0x01, 8));
         }
 
-        void DebugPrint(const TVector<std::pair<TVDiskID, TActorId> > &vec) { 
+        void DebugPrint(const TVector<std::pair<TVDiskID, TActorId> > &vec) {
             for (unsigned i = 0; i < vec.size(); i++) {
                 fprintf(stderr, "%s\n", vec[i].first.ToString().data());
             }

@@ -1,5 +1,5 @@
 #include "mkql_computation_node_impl.h"
- 
+
 #include "ydb/library/yql/minikql/mkql_string_util.h"
 
 namespace NKikimr {
@@ -30,14 +30,14 @@ TUnboxedImmutableComputationNode::TUnboxedImmutableComputationNode(TMemoryUsageI
     : MemInfo(memInfo)
     , UnboxedValue(std::move(value))
     , RepresentationKind(UnboxedValue.HasValue() ? (UnboxedValue.IsBoxed() ? EValueRepresentation::Boxed : (UnboxedValue.IsString() ? EValueRepresentation::String : EValueRepresentation::Embedded)) : EValueRepresentation::Embedded)
-{ 
+{
     MKQL_MEM_TAKE(MemInfo, this, sizeof(*this), "TOwnerType: " << DebugString());
 }
 
 TUnboxedImmutableComputationNode::~TUnboxedImmutableComputationNode() {
     MKQL_MEM_RETURN(MemInfo, this, sizeof(*this));
 }
- 
+
 NUdf::TUnboxedValue TUnboxedImmutableComputationNode::GetValue(TComputationContext& compCtx) const {
     Y_UNUSED(compCtx);
     if (RepresentationKind == EValueRepresentation::String) {

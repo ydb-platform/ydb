@@ -98,7 +98,7 @@ private:
 
 private:
     template<class TEvent>
-    void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx) { 
+    void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx) {
         ctx.ExecutorThread.ActorSystem->Schedule(timeout, new IEventHandle(recipient, SelfId(), new TEvent()));
         timeout = Min(timeout * 2, maxTimeout);
     }
@@ -158,7 +158,7 @@ public:
 
 private:
     TActorId TabletActor;
-    TActorId PartitionActor; 
+    TActorId PartitionActor;
     TString TopicName;
     ui32 Partition;
     bool LocalDC;

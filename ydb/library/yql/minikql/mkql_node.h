@@ -1,17 +1,17 @@
 #pragma once
 #include "defs.h"
-#include "mkql_mem_info.h" 
+#include "mkql_mem_info.h"
 #include "mkql_alloc.h"
- 
+
 #include <ydb/library/yql/public/udf/udf_value.h>
- 
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 #include <stack>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -128,17 +128,17 @@ class TTypeType;
 class TTypeEnvironment;
 
 // if kind is above 0xf, it must ends with 0x02 pattern (like Void)
-#define MKQL_TYPE_KINDS(XX) \ 
-    XX(Type, 0)             \ 
+#define MKQL_TYPE_KINDS(XX) \
+    XX(Type, 0)             \
     XX(Variant, 1)          \
-    XX(Void, 2)             \ 
-    XX(Data, 3)             \ 
+    XX(Void, 2)             \
+    XX(Data, 3)             \
     XX(Stream, 4)           \
-    XX(Struct, 5)           \ 
-    XX(List, 6)             \ 
-    XX(Optional, 7)         \ 
-    XX(Dict, 8)             \ 
-    XX(Callable, 9)         \ 
+    XX(Struct, 5)           \
+    XX(List, 6)             \
+    XX(Optional, 7)         \
+    XX(Dict, 8)             \
+    XX(Callable, 9)         \
     XX(Any, 10)             \
     XX(Tuple, 11)           \
     XX(Resource, 12)        \
@@ -149,27 +149,27 @@ class TTypeEnvironment;
     XX(EmptyDict, 32 + 2)   \
     XX(Tagged, 48 + 7)      \
     XX(Block, 16 + 13)
- 
+
 class TType : public TNode {
 public:
     enum class EKind : ui8 {
-        MKQL_TYPE_KINDS(ENUM_VALUE_GEN) 
+        MKQL_TYPE_KINDS(ENUM_VALUE_GEN)
     };
 
-    inline EKind GetKind() const { 
+    inline EKind GetKind() const {
         return Kind;
     }
 
     static TStringBuf KindAsStr(EKind kind);
-    TStringBuf GetKindAsStr() const; 
- 
-#define MKQL_KIND_ACCESSOR(name, value) \ 
-    inline bool Is##name() const { return Kind == EKind::name; } 
- 
-    MKQL_TYPE_KINDS(MKQL_KIND_ACCESSOR) 
- 
-#undef MKQL_KIND_ACCESSOR 
- 
+    TStringBuf GetKindAsStr() const;
+
+#define MKQL_KIND_ACCESSOR(name, value) \
+    inline bool Is##name() const { return Kind == EKind::name; }
+
+    MKQL_TYPE_KINDS(MKQL_KIND_ACCESSOR)
+
+#undef MKQL_KIND_ACCESSOR
+
     bool IsSameType(const TType& typeToCompare) const;
     bool IsConvertableTo(const TType& typeToCompare, bool ignoreTagged = false) const;
     void Accept(INodeVisitor& visitor);
@@ -196,9 +196,9 @@ public:
     using TType::IsSameType;
     bool IsSameType(const TTypeType& typeToCompare) const;
 
-    using TType::IsConvertableTo; 
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TTypeType& typeToCompare, bool ignoreTagged = false) const;
- 
+
 private:
     TTypeType()
         : TType()
@@ -220,9 +220,9 @@ public:
     using TType::IsSameType;
     bool IsSameType(const TSingularType<SingularKind>& typeToCompare) const;
 
-    using TType::IsConvertableTo; 
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TSingularType<SingularKind>& typeToCompare, bool ignoreTagged = false) const;
- 
+
 private:
     TSingularType(TTypeType* type)
         : TType(SingularKind, type)
@@ -486,10 +486,10 @@ private:
     TEmptyDictType* TypeOfEmptyDict;
     TEmptyDict* EmptyDict;
     TDataType* Ui32;
-    TDataType* Ui64; 
+    TDataType* Ui64;
     TAnyType* AnyType;
     TStructLiteral* EmptyStruct;
-    TTupleLiteral* EmptyTuple; 
+    TTupleLiteral* EmptyTuple;
     TListLiteral* ListOfVoid;
 };
 
@@ -517,13 +517,13 @@ class TDataType : public TType {
 friend class TType;
 public:
     static TDataType* Create(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env);
- 
+
     using TType::IsSameType;
     bool IsSameType(const TDataType& typeToCompare) const;
- 
-    using TType::IsConvertableTo; 
+
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TDataType& typeToCompare, bool ignoreTagged = false) const;
- 
+
     NUdf::TDataTypeId GetSchemeType() const {
         return SchemeType;
     }
@@ -565,7 +565,7 @@ class TDataLiteral : public TNode, private NUdf::TUnboxedValuePod {
 friend class TNode;
 public:
     static TDataLiteral* Create(const NUdf::TUnboxedValuePod& value, TDataType* type, const TTypeEnvironment& env);
- 
+
     TDataType* GetType() const {
         return static_cast<TDataType*>(GetGenericType());
     }
@@ -584,41 +584,41 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 };
 
-struct TStructMember { 
-    TStructMember() 
-        : Type(nullptr) 
-        , Index(nullptr) 
-    { 
-    } 
- 
-    TStructMember(const TStringBuf& name, TType* type, ui32* index = nullptr) 
-        : Name(name) 
-        , Type(type) 
-        , Index(index) 
-    { 
-    } 
- 
-    bool operator<(const TStructMember& rhs) const { 
-        return Name < rhs.Name; 
-    } 
- 
-    TStringBuf Name; 
-    TType* Type; 
-    ui32* Index; 
-}; 
- 
+struct TStructMember {
+    TStructMember()
+        : Type(nullptr)
+        , Index(nullptr)
+    {
+    }
+
+    TStructMember(const TStringBuf& name, TType* type, ui32* index = nullptr)
+        : Name(name)
+        , Type(type)
+        , Index(index)
+    {
+    }
+
+    bool operator<(const TStructMember& rhs) const {
+        return Name < rhs.Name;
+    }
+
+    TStringBuf Name;
+    TType* Type;
+    ui32* Index;
+};
+
 class TStructType : public TType {
 friend class TType;
 public:
     static TStructType* Create(const std::pair<TString, TType*>* members, ui32 membersCount, const TTypeEnvironment& env);
     static TStructType* Create(ui32 membersCount, const TStructMember* members, const TTypeEnvironment& env);
- 
-    using TType::IsSameType; 
+
+    using TType::IsSameType;
     bool IsSameType(const TStructType& typeToCompare) const;
- 
-    using TType::IsConvertableTo; 
+
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TStructType& typeToCompare, bool ignoreTagged = false) const;
- 
+
     ui32 GetMembersCount() const {
         return MembersCount;
     }
@@ -687,13 +687,13 @@ class TListType : public TType {
 friend class TType;
 public:
     static TListType* Create(TType* itemType, const TTypeEnvironment& env);
- 
+
     using TType::IsSameType;
     bool IsSameType(const TListType& typeToCompare) const;
- 
-    using TType::IsConvertableTo; 
+
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TListType& typeToCompare, bool ignoreTagged = false) const;
- 
+
     TType* GetItemType() const {
         return Data;
     }
@@ -801,13 +801,13 @@ class TOptionalType : public TType {
 friend class TType;
 public:
     static TOptionalType* Create(TType* itemType, const TTypeEnvironment& env);
- 
+
     using TType::IsSameType;
     bool IsSameType(const TOptionalType& typeToCompare) const;
- 
-    using TType::IsConvertableTo; 
+
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TOptionalType& typeToCompare, bool ignoreTagged = false) const;
- 
+
     TType* GetItemType() const {
         return Data;
     }
@@ -828,7 +828,7 @@ friend class TNode;
 public:
     static TOptionalLiteral* Create(TRuntimeNode item, TOptionalType* type, const TTypeEnvironment& env);
     static TOptionalLiteral* Create(TOptionalType* type, const TTypeEnvironment& env);
- 
+
     TOptionalType* GetType() const {
         return static_cast<TOptionalType*>(GetGenericType());
     }
@@ -860,13 +860,13 @@ class TDictType : public TType {
 friend class TType;
 public:
     static TDictType* Create(TType* keyType, TType* payloadType, const TTypeEnvironment& env);
- 
+
     using TType::IsSameType;
     bool IsSameType(const TDictType& typeToCompare) const;
- 
-    using TType::IsConvertableTo; 
+
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TDictType& typeToCompare, bool ignoreTagged = false) const;
- 
+
     TType* GetKeyType() const {
         return KeyType;
     }
@@ -932,12 +932,12 @@ public:
         return OptionalArgs;
     }
 
-    using TType::IsSameType; 
+    using TType::IsSameType;
     bool IsSameType(const TCallableType& typeToCompare) const;
- 
-    using TType::IsConvertableTo; 
+
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TCallableType& typeToCompare, bool ignoreTagged = false) const;
- 
+
     TStringBuf GetName() const {
         return Name.Str();
     }
@@ -1054,7 +1054,7 @@ inline TType* TRuntimeNode::GetStaticType() const {
     if (IsImmediate()) {
         return GetNode()->GetGenericType();
     } else {
-        MKQL_ENSURE(GetNode()->GetType()->IsCallable(), "Wrong type"); 
+        MKQL_ENSURE(GetNode()->GetType()->IsCallable(), "Wrong type");
 
         const auto& callable = static_cast<const TCallable&>(*GetNode());
         return callable.GetType()->GetReturnType();
@@ -1120,13 +1120,13 @@ class TTupleType : public TType {
 friend class TType;
 public:
     static TTupleType* Create(ui32 elementsCount, TType* const* elements, const TTypeEnvironment& env);
- 
+
     using TType::IsSameType;
     bool IsSameType(const TTupleType& typeToCompare) const;
- 
-    using TType::IsConvertableTo; 
+
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TTupleType& typeToCompare, bool ignoreTagged = false) const;
- 
+
     ui32 GetElementsCount() const {
         return ElementsCount;
     }
@@ -1185,9 +1185,9 @@ public:
     using TType::IsSameType;
     bool IsSameType(const TResourceType& typeToCompare) const;
 
-    using TType::IsConvertableTo; 
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TResourceType& typeToCompare, bool ignoreTagged = false) const;
- 
+
     TStringBuf GetTag() const {
         return Tag.Str();
     }

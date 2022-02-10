@@ -36,7 +36,7 @@ TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
     Ui64 = TDataType::Create(NUdf::TDataType<ui64>::Id, *this);
     AnyType = TAnyType::Create(TypeOfType, *this);
     EmptyStruct = TStructLiteral::Create(0, nullptr, TStructType::Create(0, nullptr, *this), *this);
-    EmptyTuple = TTupleLiteral::Create(0, nullptr, TTupleType::Create(0, nullptr, *this), *this); 
+    EmptyTuple = TTupleLiteral::Create(0, nullptr, TTupleType::Create(0, nullptr, *this), *this);
     ListOfVoid = TListLiteral::Create(nullptr, 0, TListType::Create(Void->GetGenericType(), *this), *this);
 }
 
@@ -181,11 +181,11 @@ bool TNode::IsMergeable() const {
 TStringBuf TType::KindAsStr(EKind kind) {
     switch (static_cast<int>(kind)) {
         MKQL_TYPE_KINDS(MKQL_SWITCH_ENUM_TYPE_TO_STR)
-    } 
- 
+    }
+
     return TStringBuf("unknown");
-} 
- 
+}
+
 TStringBuf TType::GetKindAsStr() const {
     return KindAsStr(Kind);
 }
@@ -307,18 +307,18 @@ bool TType::IsConvertableTo(const TType& typeToCompare, bool ignoreTagged) const
     }
 
     switch (self->Kind) {
-#define APPLY(kind, type) \ 
-    case EKind::kind: \ 
+#define APPLY(kind, type) \
+    case EKind::kind: \
         return static_cast<const type&>(*self).IsConvertableTo(static_cast<const type&>(*other), ignoreTagged);
- 
-    TYPES_LIST(APPLY) 
- 
-#undef APPLY 
-    default: 
+
+    TYPES_LIST(APPLY)
+
+#undef APPLY
+    default:
         Y_FAIL();
-    } 
-} 
- 
+    }
+}
+
 TTypeType* TTypeType::Create(const TTypeEnvironment& env) {
     return ::new(env.Allocate<TTypeType>()) TTypeType();
 }
@@ -330,9 +330,9 @@ bool TTypeType::IsSameType(const TTypeType& typeToCompare) const {
 
 bool TTypeType::IsConvertableTo(const TTypeType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
-    return IsSameType(typeToCompare); 
-} 
- 
+    return IsSameType(typeToCompare);
+}
+
 void TTypeType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     Y_UNUSED(links);
 }
@@ -369,9 +369,9 @@ bool TDataType::IsSameType(const TDataType& typeToCompare) const {
 
 bool TDataType::IsConvertableTo(const TDataType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
-    return IsSameType(typeToCompare); 
-} 
- 
+    return IsSameType(typeToCompare);
+}
+
 void TDataType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     Y_UNUSED(links);
 }
@@ -525,22 +525,22 @@ bool TStructType::IsSameType(const TStructType& typeToCompare) const {
 }
 
 bool TStructType::IsConvertableTo(const TStructType& typeToCompare, bool ignoreTagged) const {
-    if (this == &typeToCompare) 
-        return true; 
- 
+    if (this == &typeToCompare)
+        return true;
+
     if (MembersCount != typeToCompare.MembersCount)
-        return false; 
- 
-    for (size_t index = 0; index < MembersCount; ++index) { 
-        if (Members[index].first != typeToCompare.Members[index].first) 
-            return false; 
+        return false;
+
+    for (size_t index = 0; index < MembersCount; ++index) {
+        if (Members[index].first != typeToCompare.Members[index].first)
+            return false;
         if (!Members[index].second->IsConvertableTo(*typeToCompare.Members[index].second, ignoreTagged))
-            return false; 
-    } 
- 
-    return true; 
-} 
- 
+            return false;
+    }
+
+    return true;
+}
+
 void TStructType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     for (ui32 i = 0; i < MembersCount; ++i) {
         auto& member = Members[i];
@@ -626,7 +626,7 @@ TStructLiteral::TStructLiteral(TRuntimeNode* values, TStructType* type, bool val
         MKQL_ENSURE(!type->GetMemberName(index).empty(), "Empty struct member name is not allowed");
 
         auto& value = Values[index];
-        MKQL_ENSURE(value.GetStaticType()->IsSameType(*type->GetMemberType(index)), "Wrong type of member"); 
+        MKQL_ENSURE(value.GetStaticType()->IsSameType(*type->GetMemberType(index)), "Wrong type of member");
 
         value.Freeze();
     }
@@ -737,8 +737,8 @@ bool TListType::IsSameType(const TListType& typeToCompare) const {
 
 bool TListType::IsConvertableTo(const TListType& typeToCompare, bool ignoreTagged) const {
     return GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged);
-} 
- 
+}
+
 void TListType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto itemTypeIt = links.find(GetItemType());
     if (itemTypeIt != links.end()) {
@@ -776,7 +776,7 @@ TListLiteral::TListLiteral(TRuntimeNode* items, ui32 count, TListType* type, con
 
     for (ui32 i = 0; i < Count; ++i) {
         auto& item = Items[i];
-        MKQL_ENSURE(item.GetStaticType()->IsSameType(*type->GetItemType()), "Wrong type of item"); 
+        MKQL_ENSURE(item.GetStaticType()->IsSameType(*type->GetItemType()), "Wrong type of item");
     }
 
     TListLiteral::DoFreeze(env);
@@ -988,8 +988,8 @@ bool TOptionalType::IsSameType(const TOptionalType& typeToCompare) const {
 
 bool TOptionalType::IsConvertableTo(const TOptionalType& typeToCompare, bool ignoreTagged) const {
     return GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged);
-} 
- 
+}
+
 void TOptionalType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto itemTypeIt = links.find(GetItemType());
     if (itemTypeIt != links.end()) {
@@ -1068,7 +1068,7 @@ TOptionalLiteral::TOptionalLiteral(TRuntimeNode item, TOptionalType* type, bool 
 
     Y_VERIFY_DEBUG(Item.GetNode());
 
-    MKQL_ENSURE(Item.GetStaticType()->IsSameType(*type->GetItemType()), "Wrong type of item"); 
+    MKQL_ENSURE(Item.GetStaticType()->IsSameType(*type->GetItemType()), "Wrong type of item");
 
     Item.Freeze();
 }
@@ -1142,8 +1142,8 @@ bool TDictType::IsSameType(const TDictType& typeToCompare) const {
 bool TDictType::IsConvertableTo(const TDictType& typeToCompare, bool ignoreTagged) const {
     return KeyType->IsConvertableTo(*typeToCompare.KeyType, ignoreTagged)
         && PayloadType->IsConvertableTo(*typeToCompare.PayloadType, ignoreTagged);
-} 
- 
+}
+
 void TDictType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto keyTypeIt = links.find(KeyType);
     if (keyTypeIt != links.end()) {
@@ -1392,35 +1392,35 @@ bool TCallableType::IsSameType(const TCallableType& typeToCompare) const {
 }
 
 bool TCallableType::IsConvertableTo(const TCallableType& typeToCompare, bool ignoreTagged) const {
-    // do not check callable name here 
- 
-    if (this == &typeToCompare) 
-        return true; 
- 
+    // do not check callable name here
+
+    if (this == &typeToCompare)
+        return true;
+
     if (IsMergeDisabled0 != typeToCompare.IsMergeDisabled0)
-        return false; 
- 
-    if (ArgumentsCount != typeToCompare.ArgumentsCount) 
-        return false; 
- 
-    // function with fewer optional args can't be converted to function 
-    // with more optional args 
-    if (OptionalArgs < typeToCompare.OptionalArgs) 
-        return false; 
- 
-    for (size_t index = 0; index < ArgumentsCount; ++index) { 
+        return false;
+
+    if (ArgumentsCount != typeToCompare.ArgumentsCount)
+        return false;
+
+    // function with fewer optional args can't be converted to function
+    // with more optional args
+    if (OptionalArgs < typeToCompare.OptionalArgs)
+        return false;
+
+    for (size_t index = 0; index < ArgumentsCount; ++index) {
         const auto arg = Arguments[index];
         const auto otherArg = typeToCompare.Arguments[index];
         if (!arg->IsConvertableTo(*otherArg, ignoreTagged))
-            return false; 
-    } 
- 
+            return false;
+    }
+
     if (!ReturnType->IsConvertableTo(*typeToCompare.ReturnType, ignoreTagged))
-        return false; 
- 
-    return !Payload || Payload->Equals(*typeToCompare.Payload); 
-} 
- 
+        return false;
+
+    return !Payload || Payload->Equals(*typeToCompare.Payload);
+}
+
 void TCallableType::SetOptionalArgumentsCount(ui32 count) {
     MKQL_ENSURE(count <= ArgumentsCount, "Wrong optional arguments count: " << count << ", function has only " <<
         ArgumentsCount << " arguments");
@@ -1512,7 +1512,7 @@ TCallable::TCallable(ui32 inputsCount, TRuntimeNode* inputs, TCallableType* type
         return;
     }
 
-    MKQL_ENSURE(inputsCount == type->GetArgumentsCount(), "Wrong count of inputs"); 
+    MKQL_ENSURE(inputsCount == type->GetArgumentsCount(), "Wrong count of inputs");
 
     for (size_t index = 0; index < inputsCount; ++index) {
         auto& node = Inputs[index];
@@ -1660,9 +1660,9 @@ bool TCallable::Equals(const TCallable& nodeToCompare) const {
 
 void TCallable::SetResult(TRuntimeNode result, const TTypeEnvironment& env) {
     Y_UNUSED(env);
-    MKQL_ENSURE(!Result.GetNode(), "result is already set"); 
+    MKQL_ENSURE(!Result.GetNode(), "result is already set");
 
-    MKQL_ENSURE(result.GetStaticType()->IsSameType(*GetType()->GetReturnType()), 
+    MKQL_ENSURE(result.GetStaticType()->IsSameType(*GetType()->GetReturnType()),
                 "incorrect result type of function " << GetType()->GetName()
                 << ", left: " << PrintNode(result.GetStaticType(), true)
                 << ", right: " << PrintNode(GetType()->GetReturnType(), true));
@@ -1679,7 +1679,7 @@ bool TRuntimeNode::HasValue() const {
         if (current.IsImmediate())
             return true;
 
-        MKQL_ENSURE(current.GetNode()->GetType()->IsCallable(), "Wrong type"); 
+        MKQL_ENSURE(current.GetNode()->GetType()->IsCallable(), "Wrong type");
 
         const auto& callable = static_cast<const TCallable&>(*current.GetNode());
         if (!callable.HasResult())
@@ -1695,7 +1695,7 @@ TNode* TRuntimeNode::GetValue() const {
         if (current.IsImmediate())
             return current.GetNode();
 
-        MKQL_ENSURE(current.GetNode()->GetType()->IsCallable(), "Wrong type"); 
+        MKQL_ENSURE(current.GetNode()->GetType()->IsCallable(), "Wrong type");
 
         const auto& callable = static_cast<const TCallable&>(*current.GetNode());
         current = callable.GetResult();
@@ -1704,7 +1704,7 @@ TNode* TRuntimeNode::GetValue() const {
 
 void TRuntimeNode::Freeze() {
     while (!IsImmediate()) {
-        MKQL_ENSURE(GetNode()->GetType()->IsCallable(), "Wrong type"); 
+        MKQL_ENSURE(GetNode()->GetType()->IsCallable(), "Wrong type");
 
         const auto& callable = static_cast<const TCallable&>(*GetNode());
         if (!callable.HasResult())
@@ -1721,9 +1721,9 @@ bool TAnyType::IsSameType(const TAnyType& typeToCompare) const {
 
 bool TAnyType::IsConvertableTo(const TAnyType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
-    return IsSameType(typeToCompare); 
-} 
- 
+    return IsSameType(typeToCompare);
+}
+
 void TAnyType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     Y_UNUSED(links);
 }
@@ -1831,20 +1831,20 @@ bool TTupleType::IsSameType(const TTupleType& typeToCompare) const {
 }
 
 bool TTupleType::IsConvertableTo(const TTupleType& typeToCompare, bool ignoreTagged) const {
-    if (this == &typeToCompare) 
-        return true; 
- 
+    if (this == &typeToCompare)
+        return true;
+
     if (ElementsCount != typeToCompare.ElementsCount)
-        return false; 
- 
-    for (size_t index = 0; index < ElementsCount; ++index) { 
+        return false;
+
+    for (size_t index = 0; index < ElementsCount; ++index) {
         if (!Elements[index]->IsConvertableTo(*typeToCompare.Elements[index], ignoreTagged))
-            return false; 
-    } 
- 
-    return true; 
-} 
- 
+            return false;
+    }
+
+    return true;
+}
+
 void TTupleType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     for (ui32 i = 0; i < ElementsCount; ++i) {
         auto& element = Elements[i];
@@ -2002,9 +2002,9 @@ bool TResourceType::IsSameType(const TResourceType& typeToCompare) const {
 
 bool TResourceType::IsConvertableTo(const TResourceType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
-    return IsSameType(typeToCompare); 
-} 
- 
+    return IsSameType(typeToCompare);
+}
+
 void TResourceType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     Y_UNUSED(links);
 }

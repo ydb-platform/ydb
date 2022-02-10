@@ -36,17 +36,17 @@ namespace NActors {
 
     public:
         static bool Send(TAutoPtr<IEventHandle> ev);
- 
-        /** 
-         * Schedule one-shot event that will be send at given time point in the future. 
-         * 
+
+        /**
+         * Schedule one-shot event that will be send at given time point in the future.
+         *
          * @param deadline   the wallclock time point in future when event must be send
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
-        static void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr); 
- 
-        /** 
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
+        static void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
+
+        /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
          * @param deadline   the monotonic time point in future when event must be send
@@ -56,12 +56,12 @@ namespace NActors {
         static void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
 
         /**
-         * Schedule one-shot event that will be send after given delay. 
-         * 
-         * @param delta      the time from now to delay event sending 
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
+         * Schedule one-shot event that will be send after given delay.
+         *
+         * @param delta      the time from now to delay event sending
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
         static void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
 
         static TInstant Now();
@@ -79,9 +79,9 @@ namespace NActors {
         static TActorId RegisterWithSameMailbox(IActor* actor, TActorId parentId);
 
         static const TActorContext& AsActorContext();
-        static TActorContext ActorContextFor(TActorId id); 
+        static TActorContext ActorContextFor(TActorId id);
 
-        static TActorId InterconnectProxy(ui32 nodeid); 
+        static TActorId InterconnectProxy(ui32 nodeid);
         static TActorSystem* ActorSystem();
 
         static i64 GetCurrentEventTicks();
@@ -89,34 +89,34 @@ namespace NActors {
     };
 
     struct TActorContext: public TActivationContext {
-        const TActorId SelfID; 
+        const TActorId SelfID;
 
-        explicit TActorContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID) 
+        explicit TActorContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
         {
         }
 
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const; 
+        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         template <typename TEvent>
-        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const { 
+        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
         }
         bool Send(TAutoPtr<IEventHandle> ev) const;
- 
+
         TInstant Now() const;
         TMonotonic Monotonic() const;
 
-        /** 
-         * Schedule one-shot event that will be send at given time point in the future. 
-         * 
+        /**
+         * Schedule one-shot event that will be send at given time point in the future.
+         *
          * @param deadline   the wallclock time point in future when event must be send
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
-        void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const; 
- 
-        /** 
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
+        void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
+
+        /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
          * @param deadline   the monotonic time point in future when event must be send
@@ -126,20 +126,20 @@ namespace NActors {
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
 
         /**
-         * Schedule one-shot event that will be send after given delay. 
-         * 
-         * @param delta      the time from now to delay event sending 
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
+         * Schedule one-shot event that will be send after given delay.
+         *
+         * @param delta      the time from now to delay event sending
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
- 
-        TActorContext MakeFor(const TActorId& otherId) const { 
+
+        TActorContext MakeFor(const TActorId& otherId) const {
             return TActorContext(Mailbox, ExecutorThread, EventStart, otherId);
         }
 
         // register new actor in ActorSystem on new fresh mailbox.
-        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const; 
+        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const;
 
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
         // There is one thread per mailbox to execute actor, which mean
@@ -153,17 +153,17 @@ namespace NActors {
 
     extern Y_POD_THREAD(TActivationContext*) TlsActivationContext;
 
-    struct TActorIdentity: public TActorId { 
-        explicit TActorIdentity(TActorId actorId) 
-            : TActorId(actorId) 
+    struct TActorIdentity: public TActorId {
+        explicit TActorIdentity(TActorId actorId)
+            : TActorId(actorId)
         {
         }
 
-        void operator=(TActorId actorId) { 
+        void operator=(TActorId actorId) {
             *this = TActorIdentity(actorId);
         }
 
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const; 
+        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
@@ -174,18 +174,18 @@ namespace NActors {
     class IActorOps : TNonCopyable {
     public:
         virtual void Describe(IOutputStream&) const noexcept = 0;
-        virtual bool Send(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0; 
- 
-        /** 
-         * Schedule one-shot event that will be send at given time point in the future. 
-         * 
+        virtual bool Send(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
+
+        /**
+         * Schedule one-shot event that will be send at given time point in the future.
+         *
          * @param deadline   the wallclock time point in future when event must be send
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
-        virtual void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0; 
- 
-        /** 
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
+        virtual void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0;
+
+        /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
          * @param deadline   the monotonic time point in future when event must be send
@@ -195,15 +195,15 @@ namespace NActors {
         virtual void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0;
 
         /**
-         * Schedule one-shot event that will be send after given delay. 
-         * 
-         * @param delta      the time from now to delay event sending 
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
-        virtual void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0; 
- 
-        virtual TActorId Register(IActor*, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept = 0; 
+         * Schedule one-shot event that will be send after given delay.
+         *
+         * @param delta      the time from now to delay event sending
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
+        virtual void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0;
+
+        virtual TActorId Register(IActor*, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept = 0;
         virtual TActorId RegisterWithSameMailbox(IActor*) const noexcept = 0;
     };
 
@@ -219,7 +219,7 @@ namespace NActors {
         i64 ElapsedTicks;
         ui64 HandledEvents;
 
-        friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&); 
+        friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
         friend class TDecorator;
 
     public:
@@ -254,7 +254,7 @@ namespace NActors {
     protected:
         IActor(TReceiveFunc stateFunc, ui32 activityType = OTHER)
             : StateFunc(stateFunc)
-            , SelfActorId(TActorId()) 
+            , SelfActorId(TActorId())
             , ElapsedTicks(0)
             , HandledEvents(0)
             , ActivityType(activityType)
@@ -310,7 +310,7 @@ namespace NActors {
                 InvokeOtherActor(TActor& actor, TMethod&& method, TArgs&&... args) {
             struct TRecurseContext : TActorContext {
                 TActivationContext *Prev;
-                TRecurseContext(const TActorId& actorId) 
+                TRecurseContext(const TActorId& actorId)
                     : TActorContext(TActivationContext::ActorContextFor(actorId))
                     , Prev(TlsActivationContext)
                 {
@@ -323,9 +323,9 @@ namespace NActors {
             return (actor.*method)(std::forward<TArgs>(args)...);
         }
 
-        virtual void Registered(TActorSystem* sys, const TActorId& owner); 
+        virtual void Registered(TActorSystem* sys, const TActorId& owner);
 
-        virtual TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) { 
+        virtual TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) {
             Y_UNUSED(self);
             Y_UNUSED(parentId);
             return TAutoPtr<IEventHandle>();
@@ -350,23 +350,23 @@ namespace NActors {
 
     protected:
         void Describe(IOutputStream&) const noexcept override;
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final; 
+        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
         template <typename TEvent>
-        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{ 
+        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
             return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
         }
- 
+
         template <class TEvent, class ... TEventArgs>
         bool Send(TActorId recipient, TEventArgs&& ... args) const {
             return Send(recipient, MakeHolder<TEvent>(std::forward<TEventArgs>(args)...));
         }
 
-        void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final; 
+        void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
 
         // register new actor in ActorSystem on new fresh mailbox.
-        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept final; 
+        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept final;
 
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
         // There is one thread per mailbox to execute actor, which mean
@@ -454,7 +454,7 @@ namespace NActors {
         return *static_cast<TActorContext*>(tls);
     }
 
-    inline TActorContext TActivationContext::ActorContextFor(TActorId id) { 
+    inline TActorContext TActivationContext::ActorContextFor(TActorId id) {
         auto& tls = *TlsActivationContext;
         return TActorContext(tls.Mailbox, tls.ExecutorThread, tls.EventStart, id);
     }

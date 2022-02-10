@@ -52,7 +52,7 @@ message TEvDescribeProxies {
 
 message TEvDescribeProxiesResult {
     message TProxyDescription {
-        NActorsProto.TActorId ActorID = 1; 
+        NActorsProto.TActorId ActorID = 1;
         uint64 Generation = 2;
         repeated uint64 AttachedSessions = 3;
     }
@@ -69,7 +69,7 @@ message TEvDescribeSessionsResult {
         uint64 SessionId = 1;
         uint64 TimeoutMillis = 2;
         string Description = 3;
-        NActorsProto.TActorId OwnerProxy = 4; 
+        NActorsProto.TActorId OwnerProxy = 4;
     }
 
     repeated TSessionDescription Sessions = 1;
@@ -421,7 +421,7 @@ message TEvSubscribeOnResources {
         double InitialAmount = 3;
     }
     repeated TResourceSubscribeInfo Resources = 1;
-    NActorsProto.TActorId ActorID = 2; 
+    NActorsProto.TActorId ActorID = 2;
 }
 
 message TEvSubscribeOnResourcesResult {
@@ -443,7 +443,7 @@ message TEvUpdateConsumptionState {
         double Amount = 3;
     }
     repeated TResourceInfo ResourcesInfo = 1;
-    NActorsProto.TActorId ActorID = 2; 
+    NActorsProto.TActorId ActorID = 2;
 }
 
 // Ack for TEvUpdateConsumptionState event.

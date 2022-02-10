@@ -1,16 +1,16 @@
 #pragma once
 
-#include <library/cpp/monlib/service/monservice.h> 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
-#include <library/cpp/monlib/service/pages/tablesorter/css_mon_page.h> 
-#include <library/cpp/monlib/service/pages/tablesorter/js_mon_page.h> 
+#include <library/cpp/monlib/service/monservice.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/service/pages/tablesorter/css_mon_page.h>
+#include <library/cpp/monlib/service/pages/tablesorter/js_mon_page.h>
 
 #include <library/cpp/actors/core/mon.h>
 
 namespace NActors {
 
     class TActorSystem;
-    struct TActorId; 
+    struct TActorId;
 
     class TMon : public NMonitoring::TMonService2 {
     public:
@@ -48,7 +48,7 @@ namespace NActors {
 
         NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields);
         NMonitoring::IMonPage *RegisterActorPage(NMonitoring::TIndexMonPage *index, const TString &relPath,
-            const TString &title, bool preTag, TActorSystem *actorSystem, const TActorId &actorId, bool useAuth = true); 
+            const TString &title, bool preTag, TActorSystem *actorSystem, const TActorId &actorId, bool useAuth = true);
         NMonitoring::IMonPage *RegisterCountersPage(const TString &path, const TString &title, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
         NMonitoring::IMonPage *FindPage(const TString &relPath);
         NMonitoring::TIndexMonPage *FindIndexPage(const TString &relPath);

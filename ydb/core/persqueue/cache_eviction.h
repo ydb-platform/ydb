@@ -52,13 +52,13 @@ namespace NPQ {
         };
 
         ERequestType Type;
-        TActorId Sender; 
+        TActorId Sender;
         ui64 CookiePQ;
         ui32 Partition;
         ui32 MetadataWritesCount;
         TVector<TRequestedBlob> Blobs;
 
-        TKvRequest(ERequestType type, TActorId sender, ui64 cookie, ui32 partition) 
+        TKvRequest(ERequestType type, TActorId sender, ui64 cookie, ui32 partition)
         : Type(type)
         , Sender(sender)
         , CookiePQ(cookie)

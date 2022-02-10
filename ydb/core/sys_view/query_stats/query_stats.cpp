@@ -95,7 +95,7 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TQueryStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, 
+    TQueryStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         NKikimrSysView::EStatsType statsType,
         ui64 bucketCount, const TDuration& bucketSize)
@@ -506,7 +506,7 @@ private:
     NKikimrSysView::TEvGetQueryMetricsRequest Request;
 };
 
-THolder<IActor> CreateQueryStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TStringBuf viewName, 
+THolder<IActor> CreateQueryStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TStringBuf viewName,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     if (viewName == TopQueriesByDuration1MinuteName) {

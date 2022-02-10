@@ -21,9 +21,9 @@ class TContext {
     const ui32 NodeIndex = 0;
     THolder<TTestActorRuntime> Runtime;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
-    TActorId CollectorId; 
-    TActorId TabletActorId; 
-    TActorId Sender; 
+    TActorId CollectorId;
+    TActorId TabletActorId;
+    TActorId Sender;
 public:
 
     void SetActor(IActor *actor) {
@@ -39,8 +39,8 @@ public:
         Sender = Runtime->AllocateEdgeActor(NodeIndex);
         TabletActorId = Runtime->AllocateEdgeActor(NodeIndex);
         for (ui32 groupId = 0; groupId < 6; ++groupId) {
-            const TActorId actorId = Runtime->AllocateEdgeActor(NodeIndex); 
-            const TActorId proxyId = MakeBlobStorageProxyID(groupId); 
+            const TActorId actorId = Runtime->AllocateEdgeActor(NodeIndex);
+            const TActorId proxyId = MakeBlobStorageProxyID(groupId);
             Runtime->RegisterService(proxyId, actorId, NodeIndex);
         }
     }
@@ -79,7 +79,7 @@ public:
         return (channel == 3 ? 3 : 2);
     }
 
-    TActorId GetProxyActorId(ui32 channel, ui32 generation) { 
+    TActorId GetProxyActorId(ui32 channel, ui32 generation) {
         ui32 groupId = GetGroupId(channel, generation);
         return MakeBlobStorageProxyID(groupId);
     }
@@ -88,7 +88,7 @@ public:
         Runtime->Send(new IEventHandle(CollectorId, Sender, ev));
     }
 
-    TActorId GetTabletActorId() { 
+    TActorId GetTabletActorId() {
         return TabletActorId;
     }
 

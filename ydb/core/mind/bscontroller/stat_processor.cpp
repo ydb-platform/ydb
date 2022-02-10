@@ -3,7 +3,7 @@
 namespace NKikimr::NBsController {
 
     class TStatProcessorActor : public TActorBootstrapped<TStatProcessorActor> {
-        using TGroupCleanupSchedule = TMultiMap<TInstant, std::pair<TGroupId, TActorId>>; 
+        using TGroupCleanupSchedule = TMultiMap<TInstant, std::pair<TGroupId, TActorId>>;
 
         struct TPerGroupRecord {
             struct TPerAggregatorInfo {
@@ -12,13 +12,13 @@ namespace NKikimr::NBsController {
             };
 
             TGroupStat Accum;
-            THashMap<TActorId, TPerAggregatorInfo> PerAggegatorInfo; 
+            THashMap<TActorId, TPerAggregatorInfo> PerAggegatorInfo;
             TGroupLatencyStats Stats;
 
             void Update(const NKikimrBlobStorage::TEvGroupStatReport& report, TInstant now, TGroupId groupId, TGroupCleanupSchedule& schedule) {
                 TGroupStat stat;
                 if (stat.Deserialize(report)) {
-                    const TActorId vdiskServiceId = ActorIdFromProto(report.GetVDiskServiceId()); 
+                    const TActorId vdiskServiceId = ActorIdFromProto(report.GetVDiskServiceId());
                     auto& item = PerAggegatorInfo[vdiskServiceId];
                     Accum.Replace(stat, item.Stat);
                     item.Stat = std::move(stat);
@@ -31,7 +31,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            void Cleanup(const TActorId& vdiskServiceId) { 
+            void Cleanup(const TActorId& vdiskServiceId) {
                 auto it = PerAggegatorInfo.find(vdiskServiceId);
                 Y_VERIFY(it != PerAggegatorInfo.end());
                 auto& item = it->second;
@@ -48,7 +48,7 @@ namespace NKikimr::NBsController {
 
         static constexpr TDuration UpdatePeriod = TDuration::Seconds(10);
 
-        TActorId ParentActorId; 
+        TActorId ParentActorId;
         TMap<TGroupId, TPerGroupRecord> Groups;
         TSet<TGroupId> UpdatedGroupIds;
         TGroupCleanupSchedule GroupCleanupSchedule;
@@ -89,7 +89,7 @@ namespace NKikimr::NBsController {
             TGroupCleanupSchedule::iterator it;
             for (it = GroupCleanupSchedule.begin(); it != GroupCleanupSchedule.end() && it->first <= now; ++it) {
                 TGroupId groupId;
-                TActorId vdiskServiceId; 
+                TActorId vdiskServiceId;
                 std::tie(groupId, vdiskServiceId) = it->second;
                 auto groupIt = Groups.find(groupId);
                 if (groupIt != Groups.end()) {

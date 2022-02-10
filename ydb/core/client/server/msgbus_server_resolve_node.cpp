@@ -15,8 +15,8 @@ public:
         , ResolveRequest(static_cast<TBusResolveNode*>(msg.GetMessage())->Record)
     {}
 
-    static TActorId MakeServiceID(const TActorContext&) { 
-        return GetNameserviceActorId(); 
+    static TActorId MakeServiceID(const TActorContext&) {
+        return GetNameserviceActorId();
     }
 
     TEvInterconnect::TEvListNodes* MakeReq(const TActorContext&) {

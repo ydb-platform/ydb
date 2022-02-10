@@ -55,7 +55,7 @@ namespace NKikimr {
             {}
         };
 
-        const TActorId ParentId; 
+        const TActorId ParentId;
         std::shared_ptr<TLocalRecoveryContext> LocRecCtx;
         TActiveActors ActiveActors;
         NPDisk::TLogPosition PrevLogPos = {0, 0};

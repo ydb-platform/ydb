@@ -261,7 +261,7 @@ namespace NKikimr {
             TVDiskProxy(
                     std::shared_ptr<TReplCtx> replCtx,
                     const TVDiskID &vdisk,
-                    const TActorId &serviceID); 
+                    const TActorId &serviceID);
 
             TActorId Run(const TActorId& parentId);
             void SendNextRequest();

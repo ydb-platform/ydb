@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/queue.h>
 #include <util/generic/bitmap.h>
 
@@ -156,7 +156,7 @@ namespace NKikimr {
         }
 
         void TKeeper::HandlePoison(const TActorContext& ctx) {
-            for (const TActorId& actorId : State.ChildActors) { 
+            for (const TActorId& actorId : State.ChildActors) {
                 ctx.Send(actorId, new TEvents::TEvPoisonPill);
             }
             Die(ctx);

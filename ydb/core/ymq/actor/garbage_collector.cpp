@@ -14,7 +14,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/string/join.h>
 
@@ -58,8 +58,8 @@ static TSchemeNode& FindOrAllocateSchemeNode(TSchemeNode* root, const TSchemePat
 
 class TSchemeTraversalActor : public TActorBootstrapped<TSchemeTraversalActor> {
 public:
-    TSchemeTraversalActor(const TActorId parentId, 
-                          const TActorId schemeCacheId, 
+    TSchemeTraversalActor(const TActorId parentId,
+                          const TActorId schemeCacheId,
                           const TVector<TSchemePath>& pathsToTraverse,
                           const ui64 maxDepth = Max())
         : ParentId(parentId)
@@ -157,8 +157,8 @@ private:
     }
 
 private:
-    const TActorId ParentId; 
-    const TActorId SchemeCacheId; 
+    const TActorId ParentId;
+    const TActorId SchemeCacheId;
     const TVector<TSchemePath> PathsToTraverse;
 
     const ui64 MaxDepth;
@@ -169,9 +169,9 @@ private:
 
 class TGarbageSearcher : public TActorBootstrapped<TGarbageSearcher> {
 public:
-    TGarbageSearcher(const TActorId parentId, 
-                     const TActorId schemeCacheId, 
-                     const TActorId queuesListReaderId, 
+    TGarbageSearcher(const TActorId parentId,
+                     const TActorId schemeCacheId,
+                     const TActorId queuesListReaderId,
                      const ui64 minimumItemAgeSeconds)
         : ParentId(parentId)
         , SchemeCacheId(schemeCacheId)
@@ -341,9 +341,9 @@ private:
     }
 
 private:
-    const TActorId ParentId; 
-    const TActorId SchemeCacheId; 
-    const TActorId QueuesListReaderId; 
+    const TActorId ParentId;
+    const TActorId SchemeCacheId;
+    const TActorId QueuesListReaderId;
     const TDuration MinimumItemAge;
 
     TSchemePath RootPath;
@@ -361,8 +361,8 @@ private:
 
 class TGarbageCleaner : public TActorBootstrapped<TGarbageCleaner> {
 public:
-    TGarbageCleaner(const TActorId parentId, 
-                    const TActorId schemeCacheId, 
+    TGarbageCleaner(const TActorId parentId,
+                    const TActorId schemeCacheId,
                     TGarbageHint&& garbageHint)
         : ParentId(parentId)
         , SchemeCacheId(schemeCacheId)
@@ -532,8 +532,8 @@ private:
     }
 
 private:
-    const TActorId ParentId; 
-    const TActorId SchemeCacheId; 
+    const TActorId ParentId;
+    const TActorId SchemeCacheId;
     const TGarbageHint GarbageHint;
     std::queue<TSchemeNode> NodesToRemove;
     TSchemeNode CurrentNode;
@@ -543,7 +543,7 @@ private:
 
 class TGarbageCollector : public TActorBootstrapped<TGarbageCollector> {
 public:
-    TGarbageCollector(const TActorId schemeCacheId, const TActorId queuesListReaderId) 
+    TGarbageCollector(const TActorId schemeCacheId, const TActorId queuesListReaderId)
         : SchemeCacheId(schemeCacheId)
         , QueuesListReaderId(queuesListReaderId)
     {
@@ -782,14 +782,14 @@ public:
     }
 
 private:
-    const TActorId SchemeCacheId; 
-    const TActorId QueuesListReaderId; 
+    const TActorId SchemeCacheId;
+    const TActorId QueuesListReaderId;
     bool Scanning = false;
     THashMap<TString, TGarbageHint> CurrentGarbageHints;
     TVector<TCleaningResult> CleaningHistory;
 };
 
-IActor* CreateGarbageCollector(const TActorId schemeCacheId, const TActorId queuesListReaderId) { 
+IActor* CreateGarbageCollector(const TActorId schemeCacheId, const TActorId queuesListReaderId) {
     return new TGarbageCollector(schemeCacheId, queuesListReaderId);
 }
 

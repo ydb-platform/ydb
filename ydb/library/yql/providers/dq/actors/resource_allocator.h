@@ -9,7 +9,7 @@
 namespace NYql {
     NActors::IActor* CreateResourceAllocator(
         NActors::TActorId gwmActor,
-        NActors::TActorId senderId, 
+        NActors::TActorId senderId,
         NActors::TActorId resultId,
         ui32 workerCount,
         const TString& traceId,

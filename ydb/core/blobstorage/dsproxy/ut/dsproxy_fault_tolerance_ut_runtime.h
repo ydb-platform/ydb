@@ -24,7 +24,7 @@ class TFaultToleranceTestRuntime {
 public:
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
-    TVector<std::pair<TVDiskID, TActorId>> VDisks; 
+    TVector<std::pair<TVDiskID, TActorId>> VDisks;
     std::unique_ptr<TAppData> AppData;
     std::unique_ptr<TActorSystem> ActorSystem;
     TProgramShouldContinue KikimrShouldContinue;
@@ -32,12 +32,12 @@ public:
     void Setup(TBlobStorageGroupType groupType, ui32 numFailDomains, ui32 numVDisksPerFailDomain, ui32 numRealms) {
         Counters = new NMonitoring::TDynamicCounters;
 
-        TIntrusivePtr<NScheme::TTypeRegistry> typeRegistry(new NScheme::TKikimrTypeRegistry()); 
+        TIntrusivePtr<NScheme::TTypeRegistry> typeRegistry(new NScheme::TKikimrTypeRegistry());
         auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
         AppData.reset(new NKikimr::TAppData(0, 1, 2, 3, TMap<TString, ui32>(), typeRegistry.Get(), functionRegistry.Get(), nullptr, &KikimrShouldContinue));
         AppData->Counters = Counters;
 
-        NActors::TActorId loggerActorId = TActorId(1, "logger"); 
+        NActors::TActorId loggerActorId = TActorId(1, "logger");
         TIntrusivePtr<NLog::TSettings> logSettings = new NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
                 (IsVerbose ? NLog::PRI_NOTICE : NLog::PRI_CRIT),
                 NLog::PRI_DEBUG, 0);

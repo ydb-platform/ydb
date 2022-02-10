@@ -62,8 +62,8 @@ PEERDIR(
     library/cpp/grpc/client
     library/cpp/logger
     library/cpp/lwtrace/mon
-    library/cpp/monlib/dynamic_counters 
-    library/cpp/monlib/service/pages 
+    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/service/pages
     library/cpp/scheme
     ydb/core/base
     ydb/core/client/minikql_compile

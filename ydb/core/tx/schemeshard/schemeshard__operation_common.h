@@ -18,7 +18,7 @@ bool CollectProposeTransactionResults(const TOperationId& operationId, const TEv
 bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context);
 bool CollectSchemaChanged(const TOperationId& operationId, const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context);
 
-void SendSchemaChangedNotificationAck(const TOperationId& operationId, TActorId ackTo, TShardIdx shardIdx, TOperationContext& context); 
+void SendSchemaChangedNotificationAck(const TOperationId& operationId, TActorId ackTo, TShardIdx shardIdx, TOperationContext& context);
 void AckAllSchemaChanges(const TOperationId& operationId, TTxState& txState, TOperationContext& context);
 
 bool CheckPartitioningChangedForTableModification(TTxState& txState, TOperationContext& context);

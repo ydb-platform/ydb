@@ -184,9 +184,9 @@ struct TEvSchemeShard {
         TEvInitRootShard()
         {}
 
-        TEvInitRootShard(const TActorId& source, ui32 rootTag, const TString& rootTagName) 
+        TEvInitRootShard(const TActorId& source, ui32 rootTag, const TString& rootTagName)
         {
-            ActorIdToProto(source, Record.MutableSource()); 
+            ActorIdToProto(source, Record.MutableSource());
             Record.SetRootTag(rootTag);
             Record.SetRootTagName(rootTagName);
         }
@@ -540,7 +540,7 @@ struct TEvSchemeShard {
 
 }
 
-IActor* CreateFlatTxSchemeShard(const TActorId &tablet, TTabletStorageInfo *info); 
+IActor* CreateFlatTxSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
 bool PartitionConfigHasExternalBlobsEnabled(const NKikimrSchemeOp::TPartitionConfig &partitionConfig);
 }
 

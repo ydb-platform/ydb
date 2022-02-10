@@ -34,10 +34,10 @@ struct TEvKesusProxy {
     };
 
     struct TEvAttachProxyActor : public TEventLocal<TEvAttachProxyActor, EvAttachProxyActor> {
-        const TActorId ProxyActor; 
+        const TActorId ProxyActor;
         const TIntrusivePtr<TSecurityObject> SecurityObject;
 
-        TEvAttachProxyActor(const TActorId& proxyActor, TIntrusivePtr<TSecurityObject> securityObject) 
+        TEvAttachProxyActor(const TActorId& proxyActor, TIntrusivePtr<TSecurityObject> securityObject)
             : ProxyActor(proxyActor)
             , SecurityObject(std::move(securityObject))
         {}

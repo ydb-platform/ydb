@@ -18,16 +18,16 @@ namespace NKikimr {
 namespace NSchemeBoard {
 
 class TSubscriberTest: public NUnitTest::TTestBase {
-    TVector<TActorId> ResolveReplicas() { 
-        const TActorId proxy = MakeStateStorageProxyID(0); 
-        const TActorId edge = Context->AllocateEdgeActor(); 
+    TVector<TActorId> ResolveReplicas() {
+        const TActorId proxy = MakeStateStorageProxyID(0);
+        const TActorId edge = Context->AllocateEdgeActor();
 
         Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
         auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
         Y_VERIFY(ev->Get()->Info);
         auto allReplicas = ev->Get()->Info->SelectAllReplicas();
-        return TVector<TActorId>(allReplicas.begin(), allReplicas.end()); 
+        return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }
 
 public:
@@ -76,7 +76,7 @@ private:
 UNIT_TEST_SUITE_REGISTRATION(TSubscriberTest);
 
 void TSubscriberTest::Boot() {
-    const TActorId edge = Context->AllocateEdgeActor(); 
+    const TActorId edge = Context->AllocateEdgeActor();
 
     Context->CreateSubscriber(edge, "path");
     auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyDelete>(edge);
@@ -86,7 +86,7 @@ void TSubscriberTest::Boot() {
 }
 
 void TSubscriberTest::NotifyUpdate() {
-    const TActorId edge = Context->AllocateEdgeActor(); 
+    const TActorId edge = Context->AllocateEdgeActor();
 
     Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path");
 
@@ -101,7 +101,7 @@ void TSubscriberTest::NotifyUpdate() {
 }
 
 void TSubscriberTest::NotifyDelete() {
-    const TActorId edge = Context->AllocateEdgeActor(); 
+    const TActorId edge = Context->AllocateEdgeActor();
 
     auto replicas = ResolveReplicas();
     Y_VERIFY(replicas.size() > 2);
@@ -124,7 +124,7 @@ void TSubscriberTest::NotifyDelete() {
 }
 
 void TSubscriberTest::StrongNotificationAfterCommit() {
-    const TActorId edge = Context->AllocateEdgeActor(); 
+    const TActorId edge = Context->AllocateEdgeActor();
 
     Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path", 0, 1, false);
     {
@@ -146,9 +146,9 @@ void TSubscriberTest::StrongNotificationAfterCommit() {
 }
 
 void TSubscriberTest::InvalidNotification() {
-    const TActorId edge = Context->AllocateEdgeActor(); 
+    const TActorId edge = Context->AllocateEdgeActor();
 
-    const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path"); 
+    const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path");
 
     // send notification directly to subscriber
     auto* notify = new TSchemeBoardEvents::TEvNotifyBuilder(TPathId(1, 1));
@@ -160,7 +160,7 @@ void TSubscriberTest::InvalidNotification() {
 }
 
 void TSubscriberTest::ReconnectOnFailure() {
-    const TActorId edge = Context->AllocateEdgeActor(1); 
+    const TActorId edge = Context->AllocateEdgeActor(1);
 
     Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path", 0, 1, true, 1);
 
@@ -178,7 +178,7 @@ void TSubscriberTest::ReconnectOnFailure() {
 }
 
 void TSubscriberTest::Sync() {
-    const TActorId edge = Context->AllocateEdgeActor(); 
+    const TActorId edge = Context->AllocateEdgeActor();
 
     auto replicas = ResolveReplicas();
     for (const auto& replica : replicas) {
@@ -186,7 +186,7 @@ void TSubscriberTest::Sync() {
         Context->Send(replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1))));
     }
 
-    const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "path"); 
+    const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "path");
     Context->Send(subscriber, edge, new TSchemeBoardEvents::TEvSyncRequest(), 0, 1);
     auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvSyncResponse>(edge);
 
@@ -196,8 +196,8 @@ void TSubscriberTest::Sync() {
 }
 
 void TSubscriberTest::SyncPartial() {
-    const TActorId edge = Context->AllocateEdgeActor(); 
-    const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path"); 
+    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, "path");
 
     ui64 syncCookie = 0;
     auto replicas = ResolveReplicas();
@@ -250,16 +250,16 @@ void TSubscriberTest::SyncWithOutdatedReplica() {
 }
 
 class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
-    TVector<TActorId> ResolveReplicas(TTestContext& context) { 
-        const TActorId proxy = MakeStateStorageProxyID(0); 
-        const TActorId edge = context.AllocateEdgeActor(); 
+    TVector<TActorId> ResolveReplicas(TTestContext& context) {
+        const TActorId proxy = MakeStateStorageProxyID(0);
+        const TActorId edge = context.AllocateEdgeActor();
 
         context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
         auto ev = context.GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
         Y_VERIFY(ev->Get()->Info);
         auto allReplicas = ev->Get()->Info->SelectAllReplicas();
-        return TVector<TActorId>(allReplicas.begin(), allReplicas.end()); 
+        return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }
 
     THolder<TTestContext> CreateContext() {
@@ -303,18 +303,18 @@ void TSubscriberCombinationsTest::CombinationsRootDomain() {
 
             auto context = CreateContext();
 
-            TVector<TActorId> replicas = ResolveReplicas(*context); 
+            TVector<TActorId> replicas = ResolveReplicas(*context);
             Y_ASSERT(replicas.size() >= 2);
 
-            const TActorId populatorLeft = context->AllocateEdgeActor(); 
+            const TActorId populatorLeft = context->AllocateEdgeActor();
             context->HandshakeReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
             context->CommitReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
 
-            const TActorId populatorRight = context->AllocateEdgeActor(); 
+            const TActorId populatorRight = context->AllocateEdgeActor();
             context->HandshakeReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation);
             context->CommitReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation);
 
-            const TActorId edge = context->AllocateEdgeActor(); 
+            const TActorId edge = context->AllocateEdgeActor();
             context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path);
 
             context->Send(replicas[0], populatorLeft, argsLeft.GenerateUpdate());

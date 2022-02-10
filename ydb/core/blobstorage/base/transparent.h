@@ -5,7 +5,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/buffer.h>
 #include <util/memory/pool.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <ydb/core/blobstorage/vdisk/common/memusage.h>
 #include <ydb/core/blobstorage/base/ptr.h>

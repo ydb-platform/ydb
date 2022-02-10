@@ -39,7 +39,7 @@ namespace NFake {
 
             auto *logger = new NFake::TLogFwd(Sink);
 
-            AddService(TActorId(NodeId, "logger"), logger, EMail::Simple); 
+            AddService(TActorId(NodeId, "logger"), logger, EMail::Simple);
 
             SetupStaticServices();
 
@@ -78,7 +78,7 @@ namespace NFake {
             FireTablet(user, tablet, make, followerId);
         }
 
-        void AddService(TActorId service, IActor *actor, EMail box) 
+        void AddService(TActorId service, IActor *actor, EMail box)
         {
             Env.AddLocalService(service, TActorSetupCmd(actor, box, 0), 0);
         }
@@ -88,7 +88,7 @@ namespace NFake {
             return RunOn(8, { }, actor.Release(), EMail::Simple);
         }
 
-        void RunOn(ui32 lvl, TActorId alias, IActor* actor, EMail box) 
+        void RunOn(ui32 lvl, TActorId alias, IActor* actor, EMail box)
         {
             auto *event = new NFake::TEvFire{ lvl, alias, { actor, box, 0 } };
 

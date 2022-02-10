@@ -1,6 +1,6 @@
-#include "encoder.h" 
- 
-namespace NMonitoring { 
-    IMetricEncoder::~IMetricEncoder() { 
-    } 
-} 
+#include "encoder.h"
+
+namespace NMonitoring {
+    IMetricEncoder::~IMetricEncoder() {
+    }
+}

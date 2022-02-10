@@ -40,7 +40,7 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <type_traits>
 #include <util/generic/algorithm.h>
 #include <util/generic/intrlist.h>

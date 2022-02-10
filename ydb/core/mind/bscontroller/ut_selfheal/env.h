@@ -15,7 +15,7 @@ struct TEnvironmentSetup {
     const ui32 GroupId = 0;
     const ui32 NodeId = 1;
     ui64 NextHostConfigId = 1;
-    TActorId TimerActor; 
+    TActorId TimerActor;
 
     TEnvironmentSetup(ui32 nodeCount)
         : NodeCount(nodeCount)
@@ -168,7 +168,7 @@ struct TEnvironmentSetup {
     }
 
     void SetupStorage() {
-        const TActorId proxyId = MakeBlobStorageProxyID(GroupId); 
+        const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
         Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(), NodeId));
 
         for (ui32 nodeId : Runtime->GetNodes()) {
@@ -190,7 +190,7 @@ struct TEnvironmentSetup {
     void WaitForNodeWardensToConnect() {
         std::vector<TActorId> edges;
         for (ui32 nodeId : Runtime->GetNodes()) {
-            const TActorId wardenId = MakeBlobStorageNodeWardenID(nodeId); 
+            const TActorId wardenId = MakeBlobStorageNodeWardenID(nodeId);
             const TActorId edge = Runtime->AllocateEdgeActor(nodeId);
             Runtime->Send(new IEventHandle(wardenId, edge, new TEvCheckState(EState::CONNECTED)), nodeId);
             edges.push_back(edge);

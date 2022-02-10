@@ -69,9 +69,9 @@ Select a method which is right for you:
 
 ...
 
-void AddMetricRegistry(NYdb::TDriver& driver, NMonitoring::IMetricRegistry* ptr); 
-void AddMetricRegistry(NYdb::TDriver& driver, std::shared_ptr<NMonitoring::IMetricRegistry> ptr); 
-void AddMetricRegistry(NYdb::TDriver& driver, TAtomicSharedPtr<NMonitoring::IMetricRegistry> ptr); 
+void AddMetricRegistry(NYdb::TDriver& driver, NMonitoring::IMetricRegistry* ptr);
+void AddMetricRegistry(NYdb::TDriver& driver, std::shared_ptr<NMonitoring::IMetricRegistry> ptr);
+void AddMetricRegistry(NYdb::TDriver& driver, TAtomicSharedPtr<NMonitoring::IMetricRegistry> ptr);
 ```
 
 If you provide a raw pointer, it's your responsibility to delete the registry. You must shutdown the SDK driver before destroying the registry.

@@ -111,7 +111,7 @@ namespace {
         TIntrusivePtr<ITimeProvider> TimeProvider;
         TScopedAlloc Alloc;
         TTypeEnvironment Env;
-        TKikimrProgramBuilder PgmBuilder; 
+        TKikimrProgramBuilder PgmBuilder;
         TShardDbState ShardDbState;
         std::function<void(TEngineFlatSettings&)> SettingsConfigurer;
         std::function<void(ui64, const TString&)> ShardProgramInspector;

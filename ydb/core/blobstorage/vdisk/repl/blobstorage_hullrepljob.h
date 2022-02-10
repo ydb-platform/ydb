@@ -12,7 +12,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateReplJobActor(
             std::shared_ptr<TReplCtx> replCtx,
-            const TActorId &parentId, 
+            const TActorId &parentId,
             const TLogoBlobID &startKey,
             TQueueActorMapPtr queueActorMapPtr,
             TBlobIdQueuePtr blobsToReplicatePtr,

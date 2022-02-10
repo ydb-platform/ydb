@@ -130,7 +130,7 @@ namespace NKikimr {
         class TSyncLogCtx;
         IActor *CreateSyncLogCommitter(
                 TIntrusivePtr<TSyncLogCtx> slCtx,
-                const TActorId &notifyID, 
+                const TActorId &notifyID,
                 TSyncLogKeeperCommitData &&commitData);
 
     } // NSyncLog

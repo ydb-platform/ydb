@@ -21,7 +21,7 @@ namespace NPQ {
             return NKikimrServices::TActivity::PERSQUEUE_CACHE_ACTOR;
         }
 
-        TPQCacheProxy(const TActorId& tablet, TString topicName, ui32 size) 
+        TPQCacheProxy(const TActorId& tablet, TString topicName, ui32 size)
         : Tablet(tablet)
         , TopicName(topicName)
         , Cookie(0)
@@ -378,7 +378,7 @@ namespace NPQ {
             };
         }
 
-        TActorId Tablet; 
+        TActorId Tablet;
         TString TopicName;
         ui64 Cookie;
         // any TKvRequest would be placed into KvRequests or into BlockedReads depending on ReadsInProgress content

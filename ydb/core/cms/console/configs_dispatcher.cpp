@@ -50,7 +50,7 @@ private:
         // we haven't received subscription confirmation from CMS yet.
         ui64 SubscriptionId = 0;
         TDynBitMap Kinds;
-        THashSet<TActorId> Subscribers; 
+        THashSet<TActorId> Subscribers;
         // Set to true if there were no config update notifications
         // processed for this subscription.
         bool FirstUpdate = true;
@@ -59,7 +59,7 @@ private:
         // Config update which is currently delivered to subscribers.
         TEvConsole::TEvConfigNotificationRequest::TPtr UpdateInProcess;
         // Subscribers who didn't respond yet to the latest config update.
-        THashSet<TActorId> SubscribersToUpdate; 
+        THashSet<TActorId> SubscribersToUpdate;
     };
 
     /**
@@ -71,7 +71,7 @@ private:
     struct TSubscriber : public TThrRefBase {
         using TPtr = TIntrusivePtr<TSubscriber>;
 
-        TActorId Subscriber; 
+        TActorId Subscriber;
         THashSet<TSubscription::TPtr> Subscriptions;
         TConfigId CurrentConfigId;
     };
@@ -104,7 +104,7 @@ public:
     TSubscription::TPtr FindSubscription(ui64 id);
     TSubscription::TPtr FindSubscription(const TDynBitMap &kinds);
 
-    TSubscriber::TPtr FindSubscriber(TActorId aid); 
+    TSubscriber::TPtr FindSubscriber(TActorId aid);
 
     void SendNotificationResponse(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
 
@@ -117,7 +117,7 @@ public:
      * having config update being processed.
      */
 
-    void SendUpdateToSubscriber(TSubscription::TPtr subscription, TActorId subscriber); 
+    void SendUpdateToSubscriber(TSubscription::TPtr subscription, TActorId subscriber);
     /**
      * Remove subscriber and all his subscriptions.
      */
@@ -136,7 +136,7 @@ public:
      * create a new one. If existing subscription has some config received
      * then deliver it to the new subscriber.
      */
-    void AddSubscription(TActorId subscriber, const TDynBitMap &kinds, bool replace); 
+    void AddSubscription(TActorId subscriber, const TDynBitMap &kinds, bool replace);
 
     /**
      * This is called on start and on tenant change to clean up old config
@@ -229,7 +229,7 @@ private:
     THashSet<TSubscription::TPtr> Subscriptions;
     THashMap<ui64, TSubscription::TPtr> SubscriptionsById;
     THashMap<TDynBitMap, TSubscription::TPtr> SubscriptionsByKinds;
-    THashMap<TActorId, TSubscriber::TPtr> Subscribers; 
+    THashMap<TActorId, TSubscriber::TPtr> Subscribers;
 
     // Messages that had an unknown subscription id at the time they are received
     THashMap<ui64, TEvConsole::TEvConfigNotificationRequest::TPtr> OutOfOrderConfigNotifications;
@@ -349,7 +349,7 @@ TConfigsDispatcher::TSubscription::TPtr TConfigsDispatcher::FindSubscription(con
     return it->second;
 }
 
-TConfigsDispatcher::TSubscriber::TPtr TConfigsDispatcher::FindSubscriber(TActorId aid) 
+TConfigsDispatcher::TSubscriber::TPtr TConfigsDispatcher::FindSubscriber(TActorId aid)
 {
     auto it = Subscribers.find(aid);
     if (it == Subscribers.end())
@@ -408,7 +408,7 @@ void TConfigsDispatcher::CreateSubscriberActor(const TDynBitMap &kinds, bool rep
     ++NextRequestCookie;
 }
 
-void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription, TActorId subscriber) 
+void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription, TActorId subscriber)
 {
     Y_VERIFY(subscription->SubscriptionId);
     Y_VERIFY(subscription->UpdateInProcess);
@@ -459,7 +459,7 @@ void TConfigsDispatcher::RemoveSubscription(TSubscription::TPtr subscription)
     Register(CreateSubscriptionEraser(subscription->SubscriptionId));
 }
 
-void TConfigsDispatcher::AddSubscription(TActorId subscriber, 
+void TConfigsDispatcher::AddSubscription(TActorId subscriber,
                                          const TDynBitMap &kinds,
                                          bool replace)
 {

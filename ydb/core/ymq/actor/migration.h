@@ -44,7 +44,7 @@ private:
     const TString UserName;
     const TString QueueName;
     const TActorId QueueLeader;
-    const TActorId SchemeCache; 
+    const TActorId SchemeCache;
     TIntrusivePtr<TQueueCounters> Counters;
     TDuration WaitBeforeMigration;
     bool IsFifoQueue = false;

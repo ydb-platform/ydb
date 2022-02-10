@@ -34,7 +34,7 @@ protected:
 
 class TCondEraseScan: public IActor, public IScan, public IEraserOps {
     struct TDataShardId {
-        TActorId ActorId; 
+        TActorId ActorId;
         ui64 TabletId;
     };
 
@@ -354,7 +354,7 @@ protected:
 
 private:
     const TDataShardId DataShard;
-    TActorId ReplyTo; 
+    TActorId ReplyTo;
     const ui64 TxId;
     THolder<IEraseRowsCondition> Condition;
 

@@ -41,7 +41,7 @@ namespace NActors {
         }
 
         const TActorId dnsId = NDnsResolver::MakeDnsResolverActorId();
-        const TActorId namesId = GetNameserviceActorId(); 
+        const TActorId namesId = GetNameserviceActorId();
         for (auto num : xrange(GetNodeCount())) {
             auto* node = GetRawNode(num);
 
@@ -66,7 +66,7 @@ namespace NActors {
             common->AcceptUUID = {ClusterUUID};
 
             if (UseRealInterconnect) {
-                auto listener = new TInterconnectListenerTCP(nameNode.first, nameNode.second, common); 
+                auto listener = new TInterconnectListenerTCP(nameNode.first, nameNode.second, common);
                 AddLocalService({}, TActorSetupCmd(listener, TMailboxType::Simple, InterconnectPoolId()), num);
                 AddLocalService(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::Simple, 0), num);
             }

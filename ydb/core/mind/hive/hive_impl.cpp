@@ -119,9 +119,9 @@ void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
 void THive::Handle(TEvLocal::TEvRegisterNode::TPtr& ev) {
     NKikimrLocal::TEvRegisterNode& record = ev->Get()->Record;
     if (record.GetHiveId() == TabletID()) {
-        const TActorId &local = ev->Sender; 
+        const TActorId &local = ev->Sender;
         BLOG_D("Handle TEvLocal::TEvRegisterNode from " << ev->Sender << " " << record.ShortDebugString());
-        Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ev->Sender.NodeId())); 
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ev->Sender.NodeId()));
         Execute(CreateRegisterNode(local, std::move(record)));
     } else {
         BLOG_W("Handle incorrect TEvLocal::TEvRegisterNode from " << ev->Sender << " " << record.ShortDebugString());
@@ -142,7 +142,7 @@ bool THive::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorCo
 void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
     BLOG_D("Handle StopTablet");
     NKikimrHive::TEvStopTablet& rec = ev->Get()->Record;
-    const TActorId actorToNotify = rec.HasActorToNotify() ? ActorIdFromProto(rec.GetActorToNotify()) : ev->Sender; 
+    const TActorId actorToNotify = rec.HasActorToNotify() ? ActorIdFromProto(rec.GetActorToNotify()) : ev->Sender;
     if (rec.HasTabletID()) {
 
     } else {
@@ -544,12 +544,12 @@ void THive::Cleanup() {
 
     if (BSControllerPipeClient) {
         NTabletPipe::CloseClient(SelfId(), BSControllerPipeClient);
-        BSControllerPipeClient = TActorId(); 
+        BSControllerPipeClient = TActorId();
     }
 
     if (RootHivePipeClient) {
         NTabletPipe::CloseClient(SelfId(), RootHivePipeClient);
-        RootHivePipeClient = TActorId(); 
+        RootHivePipeClient = TActorId();
     }
 
     if (ResponsivenessPinger) {
@@ -607,7 +607,7 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
 void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
     BLOG_W("Handle TEvInterconnect::TEvNodeConnected, NodeId " << nodeId);
-    Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId)); 
+    Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
 }
 
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
@@ -927,7 +927,7 @@ void THive::RestartBSControllerPipe() {
     BLOG_D("THive::RestartBSControllerPipe");
     if (BSControllerPipeClient) {
         NTabletPipe::CloseClient(SelfId(), BSControllerPipeClient);
-        BSControllerPipeClient = TActorId(); 
+        BSControllerPipeClient = TActorId();
     }
     RequestPoolsInformation();
     for (auto it = Tablets.begin(); it != Tablets.end(); ++it) {
@@ -943,7 +943,7 @@ void THive::RestartRootHivePipe() {
     BLOG_D("THive::RestartRootHivePipe");
     if (RootHivePipeClient) {
         NTabletPipe::CloseClient(SelfId(), RootHivePipeClient);
-        RootHivePipeClient = TActorId(); 
+        RootHivePipeClient = TActorId();
     }
     // trying to retry for free sequence request
     if (RequestingSequenceNow) {
@@ -2148,11 +2148,11 @@ THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> THive::
     return groupParameters;
 }
 
-void THive::ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external) { 
+void THive::ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external) {
     Execute(CreateStartTablet(tabletId, local, cookie, external));
 }
 
-void THive::SendPing(const TActorId& local, TNodeId id) { 
+void THive::SendPing(const TActorId& local, TNodeId id) {
     Send(local,
          new TEvLocal::TEvPing(HiveId,
                                HiveGeneration,
@@ -2162,7 +2162,7 @@ void THive::SendPing(const TActorId& local, TNodeId id) {
          id);
 }
 
-void THive::SendReconnect(const TActorId& local) { 
+void THive::SendReconnect(const TActorId& local) {
     Send(local, new TEvLocal::TEvReconnect(HiveId, HiveGeneration));
 }
 
@@ -2184,7 +2184,7 @@ void THive::UpdateRegisteredDataCenters(TDataCenterId dataCenterId) {
     }
 }
 
-THive::THive(TTabletStorageInfo *info, const TActorId &tablet) 
+THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , HiveUid(Max<ui32>())
@@ -2337,12 +2337,12 @@ void THive::KickTablet(const TTabletInfo& tablet) {
     Send(SelfId(), new TEvPrivate::TEvKickTablet(tablet));
 }
 
-void THive::StopTablet(const TActorId& local, const TTabletInfo& tablet) { 
+void THive::StopTablet(const TActorId& local, const TTabletInfo& tablet) {
     BLOG_D("Sending TEvStopTablet(" << tablet.ToString() << ") to node " << local.NodeId());
     Send(local, new TEvLocal::TEvStopTablet(tablet.GetFullTabletId()));
 }
 
-void THive::StopTablet(const TActorId& local, TFullTabletId tabletId) { 
+void THive::StopTablet(const TActorId& local, TFullTabletId tabletId) {
     BLOG_D("Sending TEvStopTablet(" << tabletId << ") to node " << local.NodeId());
     Send(local, new TEvLocal::TEvStopTablet(tabletId));
 }
@@ -2624,7 +2624,7 @@ TString THive::GetLogPrefix() const {
 
 } // NHive
 
-IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info) { 
+IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info) {
     return new NHive::THive(info, tablet);
 }
 

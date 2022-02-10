@@ -68,7 +68,7 @@ public:
         }
     }
 
-    TActorId GetActorId() const { 
+    TActorId GetActorId() const {
         return MakeBlobStorageVDiskID(NodeId, PDiskId, VSlotId);
     }
 

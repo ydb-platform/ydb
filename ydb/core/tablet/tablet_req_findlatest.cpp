@@ -14,7 +14,7 @@
 namespace NKikimr {
 
 class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLatestLogEntry> {
-    const TActorId Owner; 
+    const TActorId Owner;
     const bool ReadBody;
     const ui32 BlockedGeneration;
     TIntrusivePtr<TTabletStorageInfo> Info;
@@ -72,7 +72,7 @@ public:
         return NKikimrServices::TActivity::TABLET_REQ_FIND_LATEST;
     }
 
-    TTabletReqFindLatestLogEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration) 
+    TTabletReqFindLatestLogEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration)
         : Owner(owner)
         , ReadBody(readBody)
         , BlockedGeneration(blockedGeneration)
@@ -96,7 +96,7 @@ public:
     }
 };
 
-IActor* CreateTabletFindLastEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration) { 
+IActor* CreateTabletFindLastEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration) {
     return new TTabletReqFindLatestLogEntry(owner, readBody, info, blockedGeneration);
 }
 

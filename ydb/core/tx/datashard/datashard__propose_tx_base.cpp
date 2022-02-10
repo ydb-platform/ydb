@@ -64,7 +64,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                             << result->GetStatus() << " errors: " << errors);
             }
 
-            TActorId target = Op ? Op->GetTarget() : Ev->Get()->GetSource(); 
+            TActorId target = Op ? Op->GetTarget() : Ev->Get()->GetSource();
             ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
             ctx.Send(target, result.Release(), 0, cookie);
 

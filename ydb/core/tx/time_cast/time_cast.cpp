@@ -57,7 +57,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
         const ui32 BucketsSz;
         TArrayHolder<TMediatorBucket> Buckets;
 
-        TActorId PipeClient; 
+        TActorId PipeClient;
 
         TMediator(ui32 bucketsSz)
             : BucketsSz(bucketsSz)
@@ -117,7 +117,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
         }
     }
 
-    void TryResync(const TActorId &pipeClient, ui64 tabletId, const TActorContext &ctx) { 
+    void TryResync(const TActorId &pipeClient, ui64 tabletId, const TActorContext &ctx) {
         for (auto &xpair : Mediators) {
             const ui64 mediatorTabletId = xpair.first;
             TMediator &mediator = xpair.second;

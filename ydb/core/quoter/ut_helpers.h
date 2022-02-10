@@ -70,7 +70,7 @@ public:
 
     THolder<TEvQuota::TEvClearance> WaitGetQuotaAnswer();
 
-    TActorId GetEdgeActor(); 
+    TActorId GetEdgeActor();
 
 private:
     void SetupLogging();
@@ -84,7 +84,7 @@ private:
     Tests::TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server;
     THolder<Tests::TClient> Client;
-    TActorId EdgeActor; 
+    TActorId EdgeActor;
 };
 
 class TKesusProxyTestSetup {
@@ -104,7 +104,7 @@ public:
 
         ~TTestTabletPipeFactory();
 
-        IActor* CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig& config) override; 
+        IActor* CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig& config) override;
 
         TTestTabletPipe* ExpectTabletPipeCreation(bool wait = false); // Set expectation to creation of a new pipe.
         TTestTabletPipe* ExpectTabletPipeConnection(); // Set expectation of creation and connecting to new pipe. If no expectation for a pipe is set this is set by default.
@@ -136,7 +136,7 @@ public:
 
             THolder<IEventHandle> GetDestroyedEventHandle();
 
-            const TActorId& GetSelfID() const { 
+            const TActorId& GetSelfID() const {
                 return SelfID;
             }
 
@@ -155,7 +155,7 @@ public:
 
         private:
             TTestTabletPipeFactory* Parent;
-            TActorId SelfID; 
+            TActorId SelfID;
             bool IsDead = false;
         };
 
@@ -177,14 +177,14 @@ public:
         return *Runtime;
     }
 
-    const TActorId& GetKesusProxyId() const { 
+    const TActorId& GetKesusProxyId() const {
         return KesusProxyId;
     }
 
     void WaitProxyStart();
 
-    TActorId GetEdgeActor(); 
-    TActorId GetPipeEdgeActor(); 
+    TActorId GetEdgeActor();
+    TActorId GetPipeEdgeActor();
 
     void SendProxyRequest(const TString& resourceName);
     THolder<TEventHandle<TEvQuota::TEvProxySession>> ProxyRequest(const TString& resourceName, TEvQuota::TEvProxySession::EResult = TEvQuota::TEvProxySession::Success);
@@ -236,10 +236,10 @@ private:
 
 private:
     THolder<TTestActorRuntime> Runtime;
-    TActorId KesusProxyId; 
+    TActorId KesusProxyId;
     TTestTabletPipeFactory* PipeFactory = nullptr;
-    TActorId EdgeActor; 
-    TActorId PipeEdgeActor; 
+    TActorId EdgeActor;
+    TActorId PipeEdgeActor;
 };
 
 } // namespace NKikimr

@@ -48,6 +48,6 @@ struct TBootstrapperInfo : public TThrRefBase {
 };
 
 IActor* CreateBootstrapper(TTabletStorageInfo *tabletInfo, TBootstrapperInfo *bootstrapperInfo, bool standby = false);
-TActorId MakeBootstrapperID(ui64 tablet, ui32 node); 
+TActorId MakeBootstrapperID(ui64 tablet, ui32 node);
 
 }

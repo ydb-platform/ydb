@@ -12,7 +12,7 @@ namespace NYql {
     xx(InProgress, 1)                        \
     xx(Finished, 2)                          \
     xx(Failed, 3)                            \
-    xx(Aborted, 4) 
+    xx(Aborted, 4)
 
         enum class EState {
             YQL_OPERATION_PROGRESS_STATE_MAP(ENUM_VALUE_GEN)

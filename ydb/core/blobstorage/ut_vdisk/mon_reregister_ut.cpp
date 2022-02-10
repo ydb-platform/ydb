@@ -11,7 +11,7 @@
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/event.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/astest.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/http_client.h>
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
     class TMyWorker : public TActorBootstrapped<TMyWorker> {
     private:
         const unsigned Incarnation;
-        const TActorId ParentId; 
+        const TActorId ParentId;
 
         friend class TActorBootstrapped<TMyWorker>;
 
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
         )
 
     public:
-        TMyWorker(unsigned incarnation, const TActorId &parentId) 
+        TMyWorker(unsigned incarnation, const TActorId &parentId)
             : TActorBootstrapped<TThis>()
             , Incarnation(incarnation)
             , ParentId(parentId)
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
     ////////////////////////////////////////////////////////////////////
     class TMyTest : public TActorBootstrapped<TMyTest> {
         std::shared_ptr<TTestWithActorSystem> Env;
-        TActorId WorkerId; 
+        TActorId WorkerId;
 
         friend class TActorBootstrapped<TMyTest>;
 

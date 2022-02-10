@@ -19,7 +19,7 @@ class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet {
 protected:
     using IExecutor = NFlatExecutorSetup::IExecutor;
 
-    TTabletExecutedFlat(TTabletStorageInfo *info, const TActorId &tablet, IMiniKQLFactory *factory); 
+    TTabletExecutedFlat(TTabletStorageInfo *info, const TActorId &tablet, IMiniKQLFactory *factory);
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
 

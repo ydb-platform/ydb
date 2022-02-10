@@ -802,8 +802,8 @@ void LogMkqlResult(const NKikimrMiniKQL::TResult& result, TExprContext& ctx) {
         NProtoBuf::TextFormat::PrintToString(result.GetValue(), &resultValue);
 
         YQL_CLOG(TRACE, ProviderKqp) << "MiniKQL results\n"
-                << "Type:\n" << resultType 
-                << "Value:\n" << resultValue; 
+                << "Type:\n" << resultType
+                << "Value:\n" << resultValue;
     }
 }
 

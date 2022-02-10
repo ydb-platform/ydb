@@ -1,8 +1,8 @@
 #include "mkql_node_builder.h"
 #include "mkql_node_printer.h"
 
-#include <util/generic/algorithm.h> 
- 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -74,8 +74,8 @@ TType* UnpackOptional(TRuntimeNode data, bool& isOptional) {
 }
 
 TType* UnpackOptional(TType* type, bool& isOptional) {
-    isOptional = type->IsOptional(); 
-    if (!isOptional) 
+    isOptional = type->IsOptional();
+    if (!isOptional)
         return type;
 
     auto optType = static_cast<TOptionalType*>(type);
@@ -103,7 +103,7 @@ void TStructTypeBuilder::Reserve(ui32 size) {
     Members.reserve(size);
 }
 
-TStructTypeBuilder& TStructTypeBuilder::Add(const TStringBuf& name, TType* type, ui32* index) { 
+TStructTypeBuilder& TStructTypeBuilder::Add(const TStringBuf& name, TType* type, ui32* index) {
     Members.push_back(TStructMember(Env->InternName(name).Str(), type, index));
     return *this;
 }
@@ -112,19 +112,19 @@ TStructType* TStructTypeBuilder::Build() {
     if (Members.empty())
         return Env->GetEmptyStruct()->GetType();
 
-    Sort(Members.begin(), Members.end()); 
+    Sort(Members.begin(), Members.end());
     return TStructType::Create(Members.size(), Members.data(), *Env);
 }
 
-void TStructTypeBuilder::FillIndexes() { 
-    ui32 index = 0; 
-    for (const TStructMember& member: Members) { 
-        if (member.Index) { 
-            *(member.Index) = index++; 
-        } 
-    } 
-} 
- 
+void TStructTypeBuilder::FillIndexes() {
+    ui32 index = 0;
+    for (const TStructMember& member: Members) {
+        if (member.Index) {
+            *(member.Index) = index++;
+        }
+    }
+}
+
 void TStructTypeBuilder::Clear() {
     Members.clear();
 }

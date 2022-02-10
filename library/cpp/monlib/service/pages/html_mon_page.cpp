@@ -1,6 +1,6 @@
 #include "html_mon_page.h"
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 using namespace NMonitoring;
 
@@ -20,8 +20,8 @@ void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
                 out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/bootstrap/3.3.1/js/bootstrap.min.js'></script>\n";
 
                 if (OutputTableSorterJsCss) {
-                    out << "<link rel='stylesheet' href='/jquery.tablesorter.css'>\n"; 
-                    out << "<script language='javascript' type='text/javascript' src='/jquery.tablesorter.js'></script>\n"; 
+                    out << "<link rel='stylesheet' href='/jquery.tablesorter.css'>\n";
+                    out << "<script language='javascript' type='text/javascript' src='/jquery.tablesorter.js'></script>\n";
                 }
 
                 out << "<style type=\"text/css\">\n";
@@ -34,7 +34,7 @@ void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
                 out << "</style>\n";
             }
             BODY() {
-                OutputNavBar(out); 
+                OutputNavBar(out);
 
                 DIV_CLASS("container") {
                     if (!!Title) {

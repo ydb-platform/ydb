@@ -18,7 +18,7 @@ namespace NFlatTxCoordinator {
 
 namespace NKikimr {
 
-IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info); 
+IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info);
 
 struct TEvTxCoordinator {
     enum EEv {

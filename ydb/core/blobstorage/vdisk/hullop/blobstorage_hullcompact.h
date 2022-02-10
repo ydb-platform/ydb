@@ -65,7 +65,7 @@ namespace NKikimr {
 
         THullCtxPtr HullCtx;
         TPDiskCtxPtr PDiskCtx;
-        const TActorId LIActor; 
+        const TActorId LIActor;
         // FreshSegment to compact if any
         TIntrusivePtr<TFreshSegment> FreshSegment;
         std::shared_ptr<TFreshSegmentSnapshot> FreshSegmentSnap;

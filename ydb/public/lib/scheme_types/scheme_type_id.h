@@ -1,20 +1,20 @@
-#pragma once 
- 
-#include <util/system/types.h> 
+#pragma once
+
+#include <util/system/types.h>
 #include <util/generic/array_size.h>
 #include <util/generic/strbuf.h>
 #include <ydb/library/yql/public/types/yql_types.pb.h>
- 
-namespace NKikimr { 
-namespace NScheme { 
- 
+
+namespace NKikimr {
+namespace NScheme {
+
 constexpr ui32 DECIMAL_PRECISION = 22;
 constexpr ui32 DECIMAL_SCALE = 9;
 
-using TTypeId = ui16; 
- 
-namespace NTypeIds { 
- 
+using TTypeId = ui16;
+
+namespace NTypeIds {
+
 static constexpr TTypeId Int32 = NYql::NProto::Int32;
 static constexpr TTypeId Uint32 = NYql::NProto::Uint32;
 static constexpr TTypeId Int64 = NYql::NProto::Int64;
@@ -25,25 +25,25 @@ static constexpr TTypeId Int8 = NYql::NProto::Int8;
 static constexpr TTypeId Uint8 = NYql::NProto::Uint8;
 static constexpr TTypeId Int16 = NYql::NProto::Int16;
 static constexpr TTypeId Uint16 = NYql::NProto::Uint16;
- 
+
 static constexpr TTypeId Double = NYql::NProto::Double;
 static constexpr TTypeId Float = NYql::NProto::Float;
- 
+
 static constexpr TTypeId Date = NYql::NProto::Date; // days since 1970
 static constexpr TTypeId Datetime = NYql::NProto::Datetime; // seconds since 1970
 static constexpr TTypeId Timestamp = NYql::NProto::Timestamp; // microseconds since 1970 aka TInstant
 static constexpr TTypeId Interval = NYql::NProto::Interval; // microseconds aka TDuration, signed
 
 static constexpr TTypeId PairUi64Ui64 = 0x101; // DEPRECATED, don't use
- 
+
 static constexpr TTypeId String = NYql::NProto::String;
 static constexpr TTypeId String4k = 0x1011;
 static constexpr TTypeId String2m = 0x1012;
- 
+
 static constexpr TTypeId Utf8 = NYql::NProto::Utf8;
 static constexpr TTypeId Yson = NYql::NProto::Yson;
 static constexpr TTypeId Json = NYql::NProto::Json;
- 
+
 static constexpr TTypeId JsonDocument = NYql::NProto::JsonDocument;
 
 static constexpr TTypeId DyNumber = NYql::NProto::DyNumber;
@@ -121,5 +121,5 @@ const char *TypeName(TTypeId typeId) {
     }
 }
 
-} // namspace NScheme 
-} // namspace NKikimr 
+} // namspace NScheme
+} // namspace NKikimr

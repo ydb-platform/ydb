@@ -5,7 +5,7 @@
         "kind":"DSUMMARY",
         "labels":
           {
-            "metric":"temperature" 
+            "metric":"temperature"
           },
         "timeseries":
           [

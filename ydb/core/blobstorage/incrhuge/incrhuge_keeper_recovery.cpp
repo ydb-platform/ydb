@@ -80,7 +80,7 @@ namespace NKikimr {
                 item.ScanQueue.pop();
 
                 // issue scan request
-                const TActorId actorId = ctx.Register(CreateRecoveryScanActor(chunkIdx, true, chunk->ChunkSerNum, 
+                const TActorId actorId = ctx.Register(CreateRecoveryScanActor(chunkIdx, true, chunk->ChunkSerNum,
                     static_cast<ui64>(EScanCookie::Recovery), Keeper.State));
                 const bool added = Keeper.State.ChildActors.insert(actorId).second;
                 Y_VERIFY(added);
@@ -144,7 +144,7 @@ namespace NKikimr {
             Y_VERIFY(status == NKikimrProto::OK);
 
             static const TMaybe<ui64> none;
-            const TActorId actorId = ctx.Register(CreateRecoveryReadLogActor(Keeper.State.Settings.PDiskActorId, 
+            const TActorId actorId = ctx.Register(CreateRecoveryReadLogActor(Keeper.State.Settings.PDiskActorId,
                     Keeper.State.PDiskParams->Owner, Keeper.State.PDiskParams->OwnerRound, chunks ? chunks->Lsn : none,
                     deletes ? deletes->Lsn : none));
             const bool added = Keeper.State.ChildActors.insert(actorId).second;
@@ -152,7 +152,7 @@ namespace NKikimr {
             IHLOG_INFO(ctx, "[IncrHugeKeeper PDisk# %09" PRIu32 "] starting ReadLog", Keeper.State.Settings.PDiskId);
         }
 
-        void TRecovery::ApplyReadLog(const TActorId& sender, TEvIncrHugeReadLogResult& msg, const TActorContext& ctx) { 
+        void TRecovery::ApplyReadLog(const TActorId& sender, TEvIncrHugeReadLogResult& msg, const TActorContext& ctx) {
             const size_t num = Keeper.State.ChildActors.erase(sender);
             Y_VERIFY(num == 1);
 
@@ -287,7 +287,7 @@ namespace NKikimr {
             ProcessScanQueue(ctx);
         }
 
-        void TRecovery::ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx) { 
+        void TRecovery::ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx) {
             const size_t num = Keeper.State.ChildActors.erase(sender);
             Y_VERIFY(num == 1);
 
@@ -460,7 +460,7 @@ namespace NKikimr {
             if (ScanBytesInFlight && ScanBytesInFlight + bytes > Keeper.State.PDiskParams->ChunkSize) {
                 return false;
             }
-            const TActorId actorId = ctx.Register(CreateRecoveryScanActor(item.ChunkIdx, item.IndexOnly, 
+            const TActorId actorId = ctx.Register(CreateRecoveryScanActor(item.ChunkIdx, item.IndexOnly,
                     item.ChunkSerNum, static_cast<ui64>(EScanCookie::Recovery), Keeper.State));
             const bool added = Keeper.State.ChildActors.insert(actorId).second;
             Y_VERIFY(added);

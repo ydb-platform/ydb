@@ -6,13 +6,13 @@ namespace NHive {
 
 class TTxStartTablet : public TTransactionBase<THive> {
     TFullTabletId TabletId;
-    TActorId Local; 
+    TActorId Local;
     ui64 Cookie;
     bool External;
     ui32 KnownGeneration = -1;
 
 public:
-    TTxStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external, THive *hive) 
+    TTxStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external, THive *hive)
         : TBase(hive)
         , TabletId(tabletId)
         , Local(local)
@@ -106,7 +106,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external) { 
+ITransaction* THive::CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external) {
     return new TTxStartTablet(tabletId, local, cookie, external, this);
 }
 

@@ -33,7 +33,7 @@ namespace {
             return AllowedClients_.contains(clientId);
         }
 
-        TCheckedServiceTicket CheckServiceTicket(TStringBuf ticket) override { 
+        TCheckedServiceTicket CheckServiceTicket(TStringBuf ticket) override {
             return Tvm_->CheckServiceTicket(ticket);
         }
 

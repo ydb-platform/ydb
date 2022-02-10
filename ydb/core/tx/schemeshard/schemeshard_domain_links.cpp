@@ -53,20 +53,20 @@ void TParentDomainLink::SendSync(const TActorContext &ctx) {
 void TParentDomainLink::AtPipeError(const TActorContext &ctx) {
     if (Pipe) {
         NTabletPipe::CloseClient(ctx, Pipe);
-        Pipe = TActorId(); 
+        Pipe = TActorId();
     }
 
     SendSync(ctx);
 }
 
-bool TParentDomainLink::HasPipeTo(TTabletId tabletId, TActorId clientId) { 
+bool TParentDomainLink::HasPipeTo(TTabletId tabletId, TActorId clientId) {
     return TTabletId(Self->ParentDomainId.OwnerId) == tabletId && Pipe == clientId;
 }
 
 void TParentDomainLink::Shutdown(const NActors::TActorContext &ctx) {
     if (Pipe) {
         NTabletPipe::CloseClient(ctx, Pipe);
-        Pipe = TActorId(); 
+        Pipe = TActorId();
     }
 }
 
@@ -74,7 +74,7 @@ bool TSubDomainsLinks::Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, 
     Y_VERIFY(Self->IsDomainSchemeShard);
 
     const auto& record = ev->Get()->Record;
-    const TActorId actorId = ev->Sender; 
+    const TActorId actorId = ev->Sender;
 
     const TPathId pathId = Self->MakeLocalId(record.GetDomainPathId());
     const ui64 generation = record.GetGeneration();

@@ -1,27 +1,27 @@
-#include "histogram_snapshot.h" 
- 
+#include "histogram_snapshot.h"
+
 #include <util/stream/output.h>
 
 #include <iostream>
 
 
-namespace NMonitoring { 
- 
+namespace NMonitoring {
+
     IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values) {
         Y_ENSURE(bounds.size() == values.size(),
                  "mismatched sizes: bounds(" << bounds.size() <<
                  ") != buckets(" << values.size() << ')');
- 
+
         auto snapshot = TExplicitHistogramSnapshot::New(bounds.size());
- 
+
         for (size_t i = 0; i != bounds.size(); ++i) {
             (*snapshot)[i].first = bounds[i];
             (*snapshot)[i].second = values[i];
         }
- 
+
         return snapshot;
-    } 
- 
+    }
+
 } // namespace NMonitoring
 
 namespace {

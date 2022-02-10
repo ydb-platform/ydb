@@ -11,7 +11,7 @@ TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TStrin
 TDriver TYdbCommand::CreateDriver(TConfig& config) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(config.Address)
-        .SetDatabase(config.Database) 
+        .SetDatabase(config.Database)
         .SetCredentialsProviderFactory(config.CredentialsGetter(config));
     if (config.EnableSsl) {
         driverConfig.UseSecureConnection(config.CaCerts);

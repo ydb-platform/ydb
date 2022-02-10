@@ -5,7 +5,7 @@
 
 namespace NKikimr::NNetClassifierUpdater {
 
-IActor* MakeNetClassifierUpdaterActor(TActorId localConsole); 
+IActor* MakeNetClassifierUpdaterActor(TActorId localConsole);
 
 TString UnpackNetData(const TString& packedNetData);
 

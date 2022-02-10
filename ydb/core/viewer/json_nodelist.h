@@ -28,7 +28,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
         Become(&TThis::StateRequestedBrowse);

@@ -6,10 +6,10 @@
 #include <library/cpp/actors/core/probes.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/mime/types/mime.h>
-#include <library/cpp/monlib/service/pages/version_mon_page.h> 
-#include <library/cpp/monlib/service/pages/mon_page.h> 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
-#include <library/cpp/monlib/dynamic_counters/page.h> 
+#include <library/cpp/monlib/service/pages/version_mon_page.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/page.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/string_utils/url/url.h>
 #include <util/system/event.h>
@@ -32,7 +32,7 @@ namespace NActors {
             return NKikimrServices::TActivity::ACTORLIB_COMMON;
         }
 
-        TMonRequest(const TActorId &targetActorId, IMonHttpRequest& request, 
+        TMonRequest(const TActorId &targetActorId, IMonHttpRequest& request,
                     NThreading::TPromise<THttpResponsePtr> result, const TVector<TString> &sids, TMon::TRequestAuthorizer authorizer)
             : TActor(&TMonRequest::StateFunc)
             , TargetActorId(targetActorId)
@@ -210,13 +210,13 @@ namespace NActors {
             Die(ctx);
         }
 
-        virtual TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const TActorId& parentId) override { 
+        virtual TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const TActorId& parentId) override {
             Y_UNUSED(parentId);
             return new NActors::IEventHandle(self, self, new TEvents::TEvBootstrap(), 0);
         }
 
     protected:
-        TActorId TargetActorId; 
+        TActorId TargetActorId;
         IMonHttpRequest& Request;
         NThreading::TPromise<THttpResponsePtr> Result;
         const TVector<TString> &AllowedSIDs;
@@ -260,8 +260,8 @@ namespace NActors {
             out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/bootstrap/3.3.1/js/bootstrap.min.js'></script>\n";
 
             if (OutputTableSorterJsCss) {
-                out << "<link rel='stylesheet' href='/jquery.tablesorter.css'>\n"; 
-                out << "<script language='javascript' type='text/javascript' src='/jquery.tablesorter.js'></script>\n"; 
+                out << "<link rel='stylesheet' href='/jquery.tablesorter.css'>\n";
+                out << "<script language='javascript' type='text/javascript' src='/jquery.tablesorter.js'></script>\n";
             }
 
             out << "<style type=\"text/css\">\n";
@@ -275,7 +275,7 @@ namespace NActors {
             out << "</head>";
             out << "<body>";
 
-            OutputNavBar(out); 
+            OutputNavBar(out);
 
             out << "<div class='container'>";
             if (Title) {
@@ -330,7 +330,7 @@ namespace NActors {
     class TActorMonPage: public IMonPage {
     public:
         TActorMonPage(const TString &path, const TString &title, const TString &host, bool preTag,
-                      TActorSystem *actorSystem, const TActorId &actorId, const TVector<TString> &sids, 
+                      TActorSystem *actorSystem, const TActorId &actorId, const TVector<TString> &sids,
                       TMon::TRequestAuthorizer authorizer)
             : IMonPage(path, title)
             , Host(host)
@@ -375,7 +375,7 @@ namespace NActors {
         TString Host;
         bool PreTag;
         TActorSystem *ActorSystem;
-        TActorId TargetActorId; 
+        TActorId TargetActorId;
         const TVector<TString> AllowedSIDs;
         TMon::TRequestAuthorizer Authorizer;
     };
@@ -423,7 +423,7 @@ namespace NActors {
     }
 
     IMonPage *TMon::RegisterActorPage(TIndexMonPage *index, const TString &relPath,
-        const TString &title, bool preTag, TActorSystem *actorSystem, const TActorId &actorId, bool useAuth) { 
+        const TString &title, bool preTag, TActorSystem *actorSystem, const TActorId &actorId, bool useAuth) {
         return RegisterActorPage({
             .Title = title,
             .RelPath = relPath,

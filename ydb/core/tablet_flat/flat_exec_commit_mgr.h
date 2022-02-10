@@ -76,7 +76,7 @@ namespace NTabletFlatExecutor {
                 << ", lvl " << Waste->Level << "b}";
         }
 
-        void Start(IOps *ops, TActorId owner, ui32 *step0, TMonCo *monCo) 
+        void Start(IOps *ops, TActorId owner, ui32 *step0, TMonCo *monCo)
         {
             Y_VERIFY(!std::exchange(Ops, ops), "Commit manager is already started");
 
@@ -185,7 +185,7 @@ namespace NTabletFlatExecutor {
 
     private:
         IOps * Ops = nullptr;
-        TActorId Owner; 
+        TActorId Owner;
         ui32 Back = Max<ui32>();/* Commits confirmation edge step   */
         ui32 Tail = 0;          /* Active detached lower Step       */
         ui32 Head = 0;          /* Tablet current step, AKA Step0   */

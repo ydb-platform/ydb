@@ -3,13 +3,13 @@
 namespace NActors {
     class TSenderBaseActor: public TActorBootstrapped<TSenderBaseActor> {
     protected:
-        const TActorId RecipientActorId; 
+        const TActorId RecipientActorId;
         const ui32 Preload;
         ui64 SequenceNumber = 0;
         ui32 InFlySize = 0;
 
     public:
-        TSenderBaseActor(const TActorId& recipientActorId, ui32 preload = 1) 
+        TSenderBaseActor(const TActorId& recipientActorId, ui32 preload = 1)
             : RecipientActorId(recipientActorId)
             , Preload(preload)
         {

@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/monlib/encode/unistat) 
+UNITTEST_FOR(library/cpp/monlib/encode/unistat)
 
 OWNER(
     msherbakov
@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/encode/protobuf 
+    library/cpp/monlib/encode/protobuf
 )
 
 END()

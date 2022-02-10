@@ -65,7 +65,7 @@ struct TTestContext {
     TInitialEventsFilter InitialEventsFilter;
     TVector<ui64> TabletIds;
     THolder<TTestActorRuntime> Runtime;
-    TActorId Edge; 
+    TActorId Edge;
 
     TTestContext() {
         TabletType = TTabletTypes::KEYVALUEFLAT;

@@ -19,15 +19,15 @@ namespace NKikimr {
 
     IActor *CreateStatusRequestHandler(
             const TIntrusivePtr<TVDiskContext> &vctx,
-            const TActorId &skeletonId, 
-            const TActorId &syncerId, 
-            const TActorId &syncLogId, 
+            const TActorId &skeletonId,
+            const TActorId &syncerId,
+            const TActorId &syncLogId,
             const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
             const TVDiskID selfVDiskId,
             const ui64 incarnationGuid,
             const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo,
             TEvBlobStorage::TEvVStatus::TPtr &ev,
-            const TActorId &notifyId, 
+            const TActorId &notifyId,
             const TInstant &now,
             bool replDone);
 

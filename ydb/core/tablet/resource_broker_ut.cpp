@@ -80,7 +80,7 @@ WaitForBootstrap(TTestActorRuntime &runtime)
 }
 
 static void
-SubmitTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, 
+SubmitTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
            ui64 id, ui64 cpu, ui64 memory, const TString &type,
            ui32 priority, TIntrusivePtr<TThrRefBase> cookie = nullptr)
 {
@@ -95,7 +95,7 @@ SubmitTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
 }
 
 static void
-UpdateTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, 
+UpdateTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
            ui64 id, ui64 cpu, ui64 memory, ui32 priority, const TString &type,
            bool resubmit = false)
 {
@@ -108,7 +108,7 @@ UpdateTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
 }
 
 static void
-UpdateTaskCookie(TTestActorRuntime &runtime, TActorId broker, TActorId sender, 
+UpdateTaskCookie(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
                  ui64 id, TIntrusivePtr<TThrRefBase> cookie)
 {
     TAutoPtr<TEvResourceBroker::TEvUpdateTaskCookie> event
@@ -118,7 +118,7 @@ UpdateTaskCookie(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
 }
 
 static void
-RemoveTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id) 
+RemoveTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id)
 {
     TAutoPtr<TEvResourceBroker::TEvRemoveTask> event
         = new TEvResourceBroker::TEvRemoveTask(id);
@@ -127,7 +127,7 @@ RemoveTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id
 }
 
 static void
-FinishTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id) 
+FinishTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id)
 {
     TAutoPtr<TEvResourceBroker::TEvFinishTask> event
         = new TEvResourceBroker::TEvFinishTask(id);
@@ -170,7 +170,7 @@ CheckCounters(NMonitoring::TDynamicCounterPtr counters, const TString &group, co
     UNIT_ASSERT_VALUES_EQUAL(g->GetCounter("InFlyTasks")->Val(), infly);
 }
 
-static void CheckConfigure(TTestActorRuntime &runtime, TActorId broker, TActorId sender, 
+static void CheckConfigure(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
                            const NKikimrResourceBroker::TResourceBrokerConfig &config,
                            bool success)
 {
@@ -200,8 +200,8 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender1 = runtime.AllocateEdgeActor(); 
-        TActorId sender2 = runtime.AllocateEdgeActor(); 
+        TActorId sender1 = runtime.AllocateEdgeActor();
+        TActorId sender2 = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -553,7 +553,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -611,7 +611,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -647,8 +647,8 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender1 = runtime.AllocateEdgeActor(); 
-        TActorId sender2 = runtime.AllocateEdgeActor(); 
+        TActorId sender1 = runtime.AllocateEdgeActor();
+        TActorId sender2 = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -723,7 +723,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -760,7 +760,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
@@ -806,7 +806,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         auto now = Now();
         runtime.UpdateCurrentTime(now);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();

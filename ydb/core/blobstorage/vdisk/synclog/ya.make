@@ -7,7 +7,7 @@ PEERDIR(
     library/cpp/actors/interconnect
     library/cpp/blockcodecs
     library/cpp/codecs
-    library/cpp/monlib/service/pages 
+    library/cpp/monlib/service/pages
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo

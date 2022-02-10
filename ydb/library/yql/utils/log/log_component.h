@@ -1,27 +1,27 @@
-#pragma once 
- 
-#include <util/generic/strbuf.h> 
-#include <util/generic/yexception.h> 
- 
- 
-namespace NYql { 
-namespace NLog { 
- 
-// keep this enum in sync with simmilar enum from yqlworker config.proto 
-enum class EComponent { 
-    Default = 0, 
-    Core, 
-    CoreExecution, 
-    Sql, 
-    ProviderCommon, 
-    ProviderConfig, 
-    ProviderResult, 
-    ProviderYt, 
-    ProviderKikimr, 
-    ProviderKqp, 
-    ProviderRtmr, 
-    Performance, Perf = Performance, 
-    Net, 
+#pragma once
+
+#include <util/generic/strbuf.h>
+#include <util/generic/yexception.h>
+
+
+namespace NYql {
+namespace NLog {
+
+// keep this enum in sync with simmilar enum from yqlworker config.proto
+enum class EComponent {
+    Default = 0,
+    Core,
+    CoreExecution,
+    Sql,
+    ProviderCommon,
+    ProviderConfig,
+    ProviderResult,
+    ProviderYt,
+    ProviderKikimr,
+    ProviderKqp,
+    ProviderRtmr,
+    Performance, Perf = Performance,
+    Net,
     ProviderStat,
     ProviderSolomon,
     CoreEval,
@@ -32,24 +32,24 @@ enum class EComponent {
     ProviderPq,
     ProviderS3,
     CoreDq,
-    // <--- put other log components here 
-    MaxValue 
-}; 
- 
-struct EComponentHelpers { 
-    static constexpr int ToInt(EComponent component) { 
-        return static_cast<int>(component); 
-    } 
- 
-    static constexpr EComponent FromInt(int component) { 
-        return (component >= ToInt(EComponent::Default) && 
-                component < ToInt(EComponent::MaxValue)) 
-                    ? static_cast<EComponent>(component) 
-                    : EComponent::Default; 
-    } 
- 
-    static TStringBuf ToString(EComponent component) { 
-        switch (component) { 
+    // <--- put other log components here
+    MaxValue
+};
+
+struct EComponentHelpers {
+    static constexpr int ToInt(EComponent component) {
+        return static_cast<int>(component);
+    }
+
+    static constexpr EComponent FromInt(int component) {
+        return (component >= ToInt(EComponent::Default) &&
+                component < ToInt(EComponent::MaxValue))
+                    ? static_cast<EComponent>(component)
+                    : EComponent::Default;
+    }
+
+    static TStringBuf ToString(EComponent component) {
+        switch (component) {
         case EComponent::Default: return TStringBuf("default");
         case EComponent::Core: return TStringBuf("core");
         case EComponent::CoreEval: return TStringBuf("core eval");
@@ -73,13 +73,13 @@ struct EComponentHelpers {
         case EComponent::ProviderPq: return TStringBuf("PQ");
         case EComponent::ProviderS3: return TStringBuf("S3");
         case EComponent::CoreDq: return TStringBuf("core dq");
-        default: 
-            ythrow yexception() << "invalid log component value: " 
-                                << ToInt(component); 
-        } 
-    } 
- 
-    static EComponent FromString(TStringBuf str) { 
+        default:
+            ythrow yexception() << "invalid log component value: "
+                                << ToInt(component);
+        }
+    }
+
+    static EComponent FromString(TStringBuf str) {
         if (str == TStringBuf("default")) return EComponent::Default;
         if (str == TStringBuf("core")) return EComponent::Core;
         if (str == TStringBuf("core eval")) return EComponent::CoreEval;
@@ -103,19 +103,19 @@ struct EComponentHelpers {
         if (str == TStringBuf("PQ")) return EComponent::ProviderPq;
         if (str == TStringBuf("S3")) return EComponent::ProviderS3;
         if (str == TStringBuf("core dq")) return EComponent::CoreDq;
-        ythrow yexception() << "unknown log component: '" << str << '\''; 
-    } 
- 
-    template <typename TFunctor> 
-    static void ForEach(TFunctor&& f) { 
-        static const int minValue = ToInt(EComponent::Default); 
-        static const int maxValue = ToInt(EComponent::MaxValue); 
- 
-        for (int c = minValue; c < maxValue; c++) { 
-            f(FromInt(c)); 
-        } 
-    } 
-}; 
- 
+        ythrow yexception() << "unknown log component: '" << str << '\'';
+    }
+
+    template <typename TFunctor>
+    static void ForEach(TFunctor&& f) {
+        static const int minValue = ToInt(EComponent::Default);
+        static const int maxValue = ToInt(EComponent::MaxValue);
+
+        for (int c = minValue; c < maxValue; c++) {
+            f(FromInt(c));
+        }
+    }
+};
+
 } // namespace NLog
 } // namespace NYql

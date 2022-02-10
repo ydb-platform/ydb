@@ -44,8 +44,8 @@ public:
     TOwnerIdxType::TValueType Owner;
     TVector<TSubDomainKey> EffectiveAllowedDomains; // AllowedDomains | ObjectDomain
     NKikimrHive::ETabletBootMode BootMode;
-    TVector<TActorId> StorageInfoSubscribers; 
-    TActorId LockedToActor; 
+    TVector<TActorId> StorageInfoSubscribers;
+    TActorId LockedToActor;
     TDuration LockedReconnectTimeout;
     ui64 PendingUnlockSeqNo;
 
@@ -101,7 +101,7 @@ public:
         return IsReadyToWork() && TTabletInfo::IsAlive();
     }
 
-    bool IsAliveOnLocal(const TActorId& local) const { 
+    bool IsAliveOnLocal(const TActorId& local) const {
         return IsReadyToWork() && TTabletInfo::IsAliveOnLocal(local);
     }
 
@@ -280,17 +280,17 @@ public:
     }
 
     void NotifyStorageInfo(const TActorContext& ctx) {
-        TVector<TActorId> targets; 
+        TVector<TActorId> targets;
         targets.swap(StorageInfoSubscribers);
-        for (TActorId target : targets) { 
+        for (TActorId target : targets) {
             ctx.Send(target, new TEvHive::TEvGetTabletStorageInfoResult(Id, *TabletStorageInfo));
         }
     }
 
-    TActorId SetLockedToActor(const TActorId& actor, const TDuration& timeout); 
+    TActorId SetLockedToActor(const TActorId& actor, const TDuration& timeout);
 
-    TActorId ClearLockedToActor() { 
-        return SetLockedToActor(TActorId(), TDuration()); 
+    TActorId ClearLockedToActor() {
+        return SetLockedToActor(TActorId(), TDuration());
     }
 
     void ActualizeTabletStatistics(TInstant now);

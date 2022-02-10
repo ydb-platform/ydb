@@ -20,7 +20,7 @@ namespace NKikimr {
     }
 
     TVDiskContext::TVDiskContext(
-                const TActorId &vdiskActorId, 
+                const TActorId &vdiskActorId,
                 std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& vdiskCounters,
                 const TVDiskID &selfVDisk,

@@ -16,15 +16,15 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 static const i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD = 16*24*60*60*1000;
 
-inline TActorId GetPQSchemaServiceActorID() { 
-    return TActorId(0, "PQSchmSvc"); 
+inline TActorId GetPQSchemaServiceActorID() {
+    return TActorId(0, "PQSchmSvc");
 }
 
-IActor* CreatePQSchemaService(const NActors::TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters); 
+IActor* CreatePQSchemaService(const NActors::TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
 class TPQSchemaService : public NActors::TActorBootstrapped<TPQSchemaService> {
 public:
-    TPQSchemaService(const NActors::TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters); 
+    TPQSchemaService(const NActors::TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -54,7 +54,7 @@ private:
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev);
 
-    NActors::TActorId SchemeCache; 
+    NActors::TActorId SchemeCache;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 

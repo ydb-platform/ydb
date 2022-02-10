@@ -1,31 +1,31 @@
-#include "labels.h" 
- 
+#include "labels.h"
+
 #include <util/stream/output.h>
 #include <util/string/split.h>
- 
-static void OutputLabels(IOutputStream& out, const NMonitoring::ILabels& labels) { 
-    size_t i = 0; 
+
+static void OutputLabels(IOutputStream& out, const NMonitoring::ILabels& labels) {
+    size_t i = 0;
     out << '{';
-    for (const auto& label: labels) { 
-        if (i++ > 0) { 
+    for (const auto& label: labels) {
+        if (i++ > 0) {
             out << TStringBuf(", ");
         }
-        out << label; 
-    } 
+        out << label;
+    }
     out << '}';
 }
 
 template <>
-void Out<NMonitoring::ILabelsPtr>(IOutputStream& out, const NMonitoring::ILabelsPtr& labels) { 
-    OutputLabels(out, *labels); 
-} 
- 
-template <> 
-void Out<NMonitoring::ILabels>(IOutputStream& out, const NMonitoring::ILabels& labels) { 
-    OutputLabels(out, labels); 
-} 
- 
-template <> 
+void Out<NMonitoring::ILabelsPtr>(IOutputStream& out, const NMonitoring::ILabelsPtr& labels) {
+    OutputLabels(out, *labels);
+}
+
+template <>
+void Out<NMonitoring::ILabels>(IOutputStream& out, const NMonitoring::ILabels& labels) {
+    OutputLabels(out, labels);
+}
+
+template <>
 void Out<NMonitoring::ILabel>(IOutputStream& out, const NMonitoring::ILabel& labels) {
     out << labels.Name() << "=" << labels.Value();
 }

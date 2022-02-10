@@ -12,15 +12,15 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
 
     TInstant t(Now());
 
-    TVector<TActorId> cc; 
-    TActorId aggregatorId; 
+    TVector<TActorId> cc;
+    TActorId aggregatorId;
     TTestBasicRuntime runtime(1);
     constexpr int NODES = 10;
     constexpr int GROUPS = 1000;
     constexpr int VALUES = 20;
 
     runtime.Initialize(TAppPrepare().Unwrap());
-    TActorId edge = runtime.AllocateEdgeActor(); 
+    TActorId edge = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TABLET_AGGREGATOR, NActors::NLog::PRI_DEBUG);
 
@@ -32,7 +32,7 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
         ++numWorkers;
     }
 
-    runtime.SetRegistrationObserverFunc([&cc, &aggregatorId](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
+    runtime.SetRegistrationObserverFunc([&cc, &aggregatorId](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                 TTestActorRuntime::DefaultRegistrationObserver(runtime, parentId, actorId);
                 if (parentId == aggregatorId) {
                     cc.push_back(actorId);
@@ -87,18 +87,18 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
 
 Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
     Y_UNIT_TEST(SimpleAggregation) {
-        TVector<TActorId> cc; 
-        TActorId aggregatorId; 
+        TVector<TActorId> cc;
+        TActorId aggregatorId;
 
         TTestBasicRuntime runtime(1);
 
         runtime.Initialize(TAppPrepare().Unwrap());
-        TActorId edge = runtime.AllocateEdgeActor(); 
+        TActorId edge = runtime.AllocateEdgeActor();
 
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 2, TString(), 3);
         aggregatorId = runtime.Register(aggregator);
 
-        runtime.SetRegistrationObserverFunc([&cc, &aggregatorId](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
+        runtime.SetRegistrationObserverFunc([&cc, &aggregatorId](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                 TTestActorRuntime::DefaultRegistrationObserver(runtime, parentId, actorId);
                     if (parentId == aggregatorId) {
                         cc.push_back(actorId);
@@ -185,18 +185,18 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
     }
 
     Y_UNIT_TEST(Version3Aggregation) {
-        TVector<TActorId> cc; 
-        TActorId aggregatorId; 
+        TVector<TActorId> cc;
+        TActorId aggregatorId;
 
         TTestBasicRuntime runtime(1);
 
         runtime.Initialize(TAppPrepare().Unwrap());
-        TActorId edge = runtime.AllocateEdgeActor(); 
+        TActorId edge = runtime.AllocateEdgeActor();
 
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 3, "rt3.*--*,cons*/*/rt.*--*", 3);
         aggregatorId = runtime.Register(aggregator);
 
-        runtime.SetRegistrationObserverFunc([&cc, &aggregatorId](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
+        runtime.SetRegistrationObserverFunc([&cc, &aggregatorId](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                 TTestActorRuntime::DefaultRegistrationObserver(runtime, parentId, actorId);
                     if (parentId == aggregatorId) {
                         cc.push_back(actorId);

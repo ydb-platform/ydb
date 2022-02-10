@@ -4,7 +4,7 @@
 
 namespace NKikimr::NSQS {
 
-using NActors::TActorId; 
+using NActors::TActorId;
 using NActors::IActor;
 
 template <typename TDerived>

@@ -1,21 +1,21 @@
 #pragma once
 
-#include "metric.h" 
-#include "metric_registry.h" 
+#include "metric.h"
+#include "metric_registry.h"
 
 namespace NMonitoring {
-    class TFakeMetricRegistry: public IMetricRegistry { 
+    class TFakeMetricRegistry: public IMetricRegistry {
     public:
-        TFakeMetricRegistry() noexcept 
-            : CommonLabels_{0} 
-        { 
-        } 
- 
-        explicit TFakeMetricRegistry(TLabels commonLabels) noexcept 
-            : CommonLabels_{std::move(commonLabels)} 
-        { 
-        } 
- 
+        TFakeMetricRegistry() noexcept
+            : CommonLabels_{0}
+        {
+        }
+
+        explicit TFakeMetricRegistry(TLabels commonLabels) noexcept
+            : CommonLabels_{std::move(commonLabels)}
+        {
+        }
+
         IGauge* Gauge(ILabelsPtr labels) override;
         ILazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) override;
         IIntGauge* IntGauge(ILabelsPtr labels) override;
@@ -32,25 +32,25 @@ namespace NMonitoring {
         IHistogram* HistogramRate(
                 ILabelsPtr labels,
                 IHistogramCollectorPtr collector) override;
-        void Accept(TInstant time, IMetricConsumer* consumer) const override; 
-        void Append(TInstant time, IMetricConsumer* consumer) const override; 
+        void Accept(TInstant time, IMetricConsumer* consumer) const override;
+        void Append(TInstant time, IMetricConsumer* consumer) const override;
 
         const TLabels& CommonLabels() const noexcept override;
-        void RemoveMetric(const ILabels& labels) noexcept override; 
+        void RemoveMetric(const ILabels& labels) noexcept override;
 
     private:
         TRWMutex Lock_;
-        THashMap<ILabelsPtr, IMetricPtr> Metrics_; 
+        THashMap<ILabelsPtr, IMetricPtr> Metrics_;
 
-        template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args> 
-        TMetric* Metric(TLabelsType&& labels, Args&&... args); 
+        template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>
+        TMetric* Metric(TLabelsType&& labels, Args&&... args);
 
         const TLabels CommonLabels_;
     };
 
     template <typename TBase>
     struct TFakeAcceptor: TBase {
-        void Accept(TInstant time, IMetricConsumer* consumer) const override { 
+        void Accept(TInstant time, IMetricConsumer* consumer) const override {
             Y_UNUSED(time, consumer);
         }
     };
@@ -85,9 +85,9 @@ namespace NMonitoring {
         ui64 Get() const noexcept override {
             return 0;
         }
- 
-        void Reset() noexcept override { 
-        } 
+
+        void Reset() noexcept override {
+        }
     };
 
     struct TFakeLazyRate final: public TFakeAcceptor<ILazyRate> {
@@ -123,11 +123,11 @@ namespace NMonitoring {
         {
         }
 
-        void Record(double value) override { 
+        void Record(double value) override {
             Y_UNUSED(value);
         }
 
-        void Record(double value, ui32 count) override { 
+        void Record(double value, ui32 count) override {
             Y_UNUSED(value, count);
         }
 
@@ -135,7 +135,7 @@ namespace NMonitoring {
             return nullptr;
         }
 
-        void Accept(TInstant time, IMetricConsumer* consumer) const override { 
+        void Accept(TInstant time, IMetricConsumer* consumer) const override {
             Y_UNUSED(time, consumer);
         }
 
@@ -148,7 +148,7 @@ namespace NMonitoring {
             Y_UNUSED(n);
             return 0;
         }
- 
+
         ui64 Get() const noexcept override {
             return 0;
         }

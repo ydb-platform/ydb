@@ -137,9 +137,9 @@ struct TEvTabletResolver {
 
     struct TEvTabletProblem : public TEventLocal<TEvTabletProblem, EvTabletProblem> {
         const ui64 TabletID;
-        const TActorId TabletActor; 
+        const TActorId TabletActor;
 
-        TEvTabletProblem(ui64 tabletId, const TActorId &tabletActor) 
+        TEvTabletProblem(ui64 tabletId, const TActorId &tabletActor)
             : TabletID(tabletId)
             , TabletActor(tabletActor)
         {}
@@ -174,8 +174,8 @@ struct TEvTabletResolver {
         const NKikimrProto::EReplyStatus Status;
 
         ui64 TabletID;
-        TActorId TabletActor; 
-        TActorId Tablet; 
+        TActorId TabletActor;
+        TActorId Tablet;
         ui64 CacheEpoch;
 
         TEvForwardResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
@@ -214,6 +214,6 @@ struct TTabletResolverConfig : public TThrRefBase {
 };
 
 IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config);
-TActorId MakeTabletResolverID(); 
+TActorId MakeTabletResolverID();
 
 }

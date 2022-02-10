@@ -132,14 +132,14 @@ namespace NKikimr::NKeyValue {
         };
 
         TVector<TChannelInfo> ChannelInfo;
-        const TActorId ActorId; 
+        const TActorId ActorId;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::KEYVALUE_ACTOR;
         }
 
-        TChannelBalancer(ui8 numChannels, TActorId actorId) 
+        TChannelBalancer(ui8 numChannels, TActorId actorId)
             : ChannelInfo(numChannels)
             , ActorId(actorId)
         {}

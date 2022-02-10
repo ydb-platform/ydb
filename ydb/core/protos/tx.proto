@@ -167,7 +167,7 @@ message TMediatorTransaction {
 
     optional bytes Body = 4;
 
-    optional NActorsProto.TActorId AckTo = 10; // must be set to source coordinator-mediator queue 
+    optional NActorsProto.TActorId AckTo = 10; // must be set to source coordinator-mediator queue
 }
 
 message TEvMediatorPlanStep {

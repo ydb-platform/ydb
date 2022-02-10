@@ -9,7 +9,7 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/datetime/cputimer.h>
 #include <util/generic/queue.h>
@@ -748,7 +748,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
     TString ConfingString;
     const ui64 Tag;
-    const TActorId Parent; 
+    const TActorId Parent;
 
     TMaybe<TDuration> TestDuration;
 
@@ -770,7 +770,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
     }
 
-    TLogWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd, const TActorId& parent, 
+    TLogWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd, const TActorId& parent,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, ui64 tag)
         : Tag(tag)
         , Parent(parent)
@@ -970,7 +970,7 @@ public:
     )
 };
 
-IActor *CreateWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd, const TActorId& parent, 
+IActor *CreateWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd, const TActorId& parent,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters, ui64 tag) {
     return new TLogWriterTestLoadActor(cmd, parent, std::move(counters), tag);
 }

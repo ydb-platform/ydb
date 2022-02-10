@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/monlib/service/pages 
+    library/cpp/monlib/service/pages
     ydb/core/base
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/hulldb/base

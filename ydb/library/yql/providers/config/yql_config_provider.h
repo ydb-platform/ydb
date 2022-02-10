@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <functional>
@@ -17,4 +17,4 @@ TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types,
 
 const THashSet<TStringBuf>& ConfigProviderFunctions();
 
-} // namespace NYql 
+} // namespace NYql

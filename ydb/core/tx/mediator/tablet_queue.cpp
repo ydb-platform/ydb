@@ -60,7 +60,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         void MergeToOutOfOrder(TStepId step, TVector<TTx> &update);
     };
 
-    const TActorId Owner; 
+    const TActorId Owner;
     const ui64 Mediator;
     const ui64 HashRange;
     const ui64 HashBucket;
@@ -76,7 +76,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     TStepId CommitedStep;
     TStepEntry *ActiveStep;
 
-    THashSet<TActorId> TimecastWatches; 
+    THashSet<TActorId> TimecastWatches;
     NMonitoring::TDynamicCounters::TCounterPtr TimecastLagCounter;
 
     void SendToTablet(TTabletEntry::TStep *tabletStep, ui64 tablet, const TActorContext &ctx) {
@@ -87,7 +87,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             x->SetTxId(tx.TxId);
             if (tx.Moderator)
                 x->SetModerator(tx.Moderator);
-            ActorIdToProto(tx.AckTo, x->MutableAckTo()); 
+            ActorIdToProto(tx.AckTo, x->MutableAckTo());
             LOG_DEBUG(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %"
                 PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tablet, tabletStep->StepRef->Step, tx.TxId);
         }
@@ -125,7 +125,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
             // todo: we must throttle delivery
             const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
-            for (const TActorId &x : TimecastWatches) { 
+            for (const TActorId &x : TimecastWatches) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
                     << " Mediator# " << Mediator << " SEND to# " << x.ToString() << " " << evx.ToString());
                 ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
@@ -289,7 +289,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     void Handle(TEvTxMediator::TEvWatchBucket::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString());
-        const TActorId &source = ev->Get()->Source; 
+        const TActorId &source = ev->Get()->Source;
         TimecastWatches.insert(source);
     }
 
@@ -301,7 +301,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     }
 
     void AckOoO(TTabletId tablet, TStepId step, const TVector<TTx> &transactions, const TActorContext &ctx) {
-        TMap<TActorId, TAutoPtr<TEvTxProcessing::TEvPlanStepAck>> acks; 
+        TMap<TActorId, TAutoPtr<TEvTxProcessing::TEvPlanStepAck>> acks;
         for (const TTx &tx : transactions) {
             TAutoPtr<TEvTxProcessing::TEvPlanStepAck> &ack = acks[tx.AckTo];
             if (!ack)
@@ -340,7 +340,7 @@ public:
         return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
     }
 
-    TTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket) 
+    TTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket)
         : TActor(&TThis::StateFunc)
         , Owner(owner)
         , Mediator(mediator)
@@ -455,7 +455,7 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStepId step, TVect
 
 }
 
-IActor* CreateTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket) { 
+IActor* CreateTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket) {
     return new NTxMediator::TTxMediatorTabletQueue(owner, mediator, hashRange, hashBucket);
 }
 

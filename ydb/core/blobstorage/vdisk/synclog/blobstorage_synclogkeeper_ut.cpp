@@ -71,7 +71,7 @@ namespace NKikimr {
     void TSyncLogKeeperTest::CreateState(TEntryPointPair ep) {
         TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
         TIntrusivePtr<TVDiskContext> vctx = new TVDiskContext(
-                TActorId(), 
+                TActorId(),
                 groupInfo.PickTopology(),
                 new NMonitoring::TDynamicCounters(),
                 TVDiskID(),

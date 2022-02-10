@@ -60,7 +60,7 @@ struct TSubscriberId {
         if (proto.HasTabletId())
             TabletId = proto.GetTabletId();
         else if (proto.HasServiceId())
-            ServiceId = ActorIdFromProto(proto.GetServiceId()); 
+            ServiceId = ActorIdFromProto(proto.GetServiceId());
     }
 
     void Serialize(NKikimrConsole::TSubscriber &proto) const
@@ -68,7 +68,7 @@ struct TSubscriberId {
         if (TabletId)
             proto.SetTabletId(TabletId);
         else
-            ActorIdToProto(ServiceId, proto.MutableServiceId()); 
+            ActorIdToProto(ServiceId, proto.MutableServiceId());
     }
 
     bool operator==(const TSubscriberId &other) const
@@ -78,7 +78,7 @@ struct TSubscriberId {
     }
 
     ui64 TabletId = 0;
-    TActorId ServiceId; 
+    TActorId ServiceId;
 };
 
 } // namespace NConsole
@@ -590,7 +590,7 @@ struct TSubscription : public TThrRefBase {
     TConfigId LastProvidedConfig;
     TConfigId CurrentConfigId;
     NKikimrConfig::TAppConfig CurrentConfig;
-    TActorId Worker; 
+    TActorId Worker;
     // Cookie allows to identify whether TEvConfigNotificationResponse
     // still holds actual data. If Cookie doesn't match the one carried
     // in an event then this event is ignored. Cookie is defined when

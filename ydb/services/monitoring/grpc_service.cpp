@@ -6,29 +6,29 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) { 
+static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
     const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     if (res.empty()) {
         return {};
     }
-    return TString{res[0]}; 
+    return TString{res[0]};
 }
 
 TGRpcMonitoringService::TGRpcMonitoringService(NActors::TActorSystem* system,
                                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-                                               NActors::TActorId id) 
+                                               NActors::TActorId id)
      : ActorSystem_(system)
      , Counters_(counters)
      , GRpcRequestProxyId_(id)
 {
 }
 
-void TGRpcMonitoringService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) { 
+void TGRpcMonitoringService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger)); 
+    SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcMonitoringService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
+void TGRpcMonitoringService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
     Limiter_ = limiter;
 }
 
@@ -41,18 +41,18 @@ void TGRpcMonitoringService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcMonitoringService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
+void TGRpcMonitoringService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Monitoring::IN, Ydb::Monitoring::OUT, TGRpcMonitoringService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase* reqCtx) { \ 
+        [this](NGrpc::IRequestContextBase* reqCtx) { \
            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
            ACTION; \
         }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("monitoring", #NAME))->Run(); 
+        #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
     ADD_REQUEST(SelfCheck, SelfCheckRequest, SelfCheckResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvSelfCheckRequest(reqCtx));

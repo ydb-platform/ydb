@@ -16,7 +16,7 @@ namespace NKikimr {
         std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
         TIntrusivePtr<THullDs> HullDs;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
-        TActorId SkeletonId; 
+        TActorId SkeletonId;
         NMonGroup::TReplGroup MonGroup;
 
         // settings
@@ -30,7 +30,7 @@ namespace NKikimr {
                 std::shared_ptr<THugeBlobCtx> hugeBlobCtx,
                 TIntrusivePtr<THullDs> hullDs,
                 TIntrusivePtr<TBlobStorageGroupInfo> info,
-                const TActorId &skeletonId, 
+                const TActorId &skeletonId,
                 TIntrusivePtr<TVDiskConfig> vdiskCfg,
                 std::shared_ptr<std::atomic_uint64_t> pdiskWriteBytes,
                 bool pausedAtStart = false)

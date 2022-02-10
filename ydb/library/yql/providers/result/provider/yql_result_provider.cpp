@@ -1335,7 +1335,7 @@ namespace {
                 YQL_ENSURE(false, "Expected Write!");
             }
 
-            YQL_CLOG(INFO, ProviderResult) << "RewriteIO"; 
+            YQL_CLOG(INFO, ProviderResult) << "RewriteIO";
             return ret;
         }
 
@@ -1470,7 +1470,7 @@ TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultPro
 }
 
 const THashSet<TStringBuf>& ResultProviderFunctions() {
-    return Singleton<TResultProvider::TFunctions>()->Names; 
+    return Singleton<TResultProvider::TFunctions>()->Names;
 }
- 
-} 
+
+}

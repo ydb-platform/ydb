@@ -1,6 +1,6 @@
-package NYql; 
-option java_package = "ru.yandex.yql.proto"; 
- 
+package NYql;
+option java_package = "ru.yandex.yql.proto";
+
 import "ydb/library/yql/protos/clickhouse.proto";
 
 /////////////////////////////// common ///////////////////////////////
@@ -18,12 +18,12 @@ message TActivationPercentage {
     optional bool ExcludeRobots = 5 [default = true];
 }
 
-message TAttr { 
-    required string Name = 1; 
-    required string Value = 2; 
+message TAttr {
+    required string Name = 1;
+    required string Value = 2;
     optional TActivationPercentage Activation = 3;
-} 
- 
+}
+
 message TRemoteFilePattern {
     required string Pattern = 1; // regexp to match
     required string Cluster = 2;  // replacement string for YT server
@@ -60,15 +60,15 @@ message THttpGatewayConfig {
 /////////////////////////////// YT ///////////////////////////////
 
 message TYtClusterConfig {
-    optional string Name = 1; // Short cluster name 
-    optional string Cluster = 2; // Real cluster server name with port 
+    optional string Name = 1; // Short cluster name
+    optional string Cluster = 2; // Real cluster server name with port
     optional bool Default = 3 [default = false]; // Default cluster
     optional string YTToken = 4; // token to use at YT servers
     optional string YTName = 5; // YT cluster name
 
     repeated TAttr Settings = 100;
-} 
- 
+}
+
 message TYtGatewayConfig {
     optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
     optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log
@@ -83,20 +83,20 @@ message TYtGatewayConfig {
     optional uint64 YtDebugLogSize = 11 [default = 0]; // Max YT debug log size
     optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
     optional string LocalChainFile = 14; // File to dump table contet in test mode
- 
+
     repeated TRemoteFilePattern RemoteFilePatterns = 100;
     repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected
     repeated TAttr DefaultSettings = 102;
-} 
- 
+}
+
 /////////////////////////////// Kikimr ///////////////////////////////
 
-message THostPort { 
-    required string Host = 1; 
-    required uint32 Port = 2; 
+message THostPort {
+    required string Host = 1;
+    required uint32 Port = 2;
     optional uint64 TotalTimeoutMs = 3;
-} 
- 
+}
+
 message TKikimrGrpcData {
     repeated string Locators = 1;
     optional uint64 TimeoutMs = 2;
@@ -106,10 +106,10 @@ message TKikimrGrpcData {
     optional bool UseLegacyApi = 6;
 }
 
-message TKikimrClusterConfig { 
-    optional string Name = 1; 
-    optional bool Default = 2 [default = false]; 
-    repeated THostPort MessageBus = 3; 
+message TKikimrClusterConfig {
+    optional string Name = 1;
+    optional bool Default = 2 [default = false];
+    repeated THostPort MessageBus = 3;
     optional TKikimrGrpcData Grpc = 4;
     optional string Database = 5;
     optional uint32 TvmId = 6 [default = 0];
@@ -119,13 +119,13 @@ message TKikimrClusterConfig {
     optional bool IsFromMvp = 10;
     optional ETokenType TokenType = 11;
     repeated TAttr Settings = 101;
-} 
- 
-message TKikimrGatewayConfig { 
-    repeated TKikimrClusterConfig ClusterMapping = 1; 
+}
+
+message TKikimrGatewayConfig {
+    repeated TKikimrClusterConfig ClusterMapping = 1;
     repeated TAttr DefaultSettings = 2;
-} 
- 
+}
+
 /////////////////////////////// Kikimr MVP ///////////////////////////////
 
 message TKikimrMvpProxyConfig {
@@ -435,7 +435,7 @@ message TSqlCoreConfig {
 
 /////////////////////////////// Root ///////////////////////////////
 
-message TGatewaysConfig { 
+message TGatewaysConfig {
     optional TYtGatewayConfig Yt = 1;
     optional TKikimrGatewayConfig Kikimr = 2;
     optional TClickHouseGatewayConfig ClickHouse = 3;
@@ -454,4 +454,4 @@ message TGatewaysConfig {
     optional TPqGatewayConfig Pq = 16;
     optional TS3GatewayConfig S3 = 17;
     optional THttpGatewayConfig HttpGateway = 18;
-} 
+}

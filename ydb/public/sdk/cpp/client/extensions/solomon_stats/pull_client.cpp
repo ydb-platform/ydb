@@ -34,9 +34,9 @@ void TSolomonStatPullExtension::TSolomonStatPage::Output(NMonitoring::IMonHttpRe
 }
 
 TSolomonStatPullExtension::TSolomonStatPullExtension(const TSolomonStatPullExtension::TParams& params, IApi* api)
-    : MetricRegistry_(new NMonitoring::TMetricRegistry(params.GetLabels())) 
+    : MetricRegistry_(new NMonitoring::TMetricRegistry(params.GetLabels()))
     , MonService_(params.Port_, params.Host_, 0), Page_( new TSolomonStatPage("stats", "Statistics", api) ) {
-        api->SetMetricRegistry(MetricRegistry_.get()); 
+        api->SetMetricRegistry(MetricRegistry_.get());
         MonService_.Register(Page_);
         MonService_.StartOrThrow();
     }

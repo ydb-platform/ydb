@@ -19,7 +19,7 @@ namespace NYql::NDqs {
         virtual ~IDqsExecutionPlanner() = default;
         virtual TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) = 0;
         virtual TVector<NDqProto::TDqTask>& GetTasks() = 0;
-        virtual NActors::TActorId GetSourceID() const = 0; 
+        virtual NActors::TActorId GetSourceID() const = 0;
         virtual TString GetResultType(bool withTagged = false) const = 0;
     };
 
@@ -29,8 +29,8 @@ namespace NYql::NDqs {
                                       NYql::TExprContext& exprContext,
                                       const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
                                       NYql::TExprNode::TPtr dqExprRoot,
-                                      NActors::TActorId executerID = NActors::TActorId(), 
-                                      NActors::TActorId resultID = NActors::TActorId(1, 0, 1, 0)); 
+                                      NActors::TActorId executerID = NActors::TActorId(),
+                                      NActors::TActorId resultID = NActors::TActorId(1, 0, 1, 0));
 
         void Clear();
         bool CanFallback();
@@ -42,7 +42,7 @@ namespace NYql::NDqs {
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
         TVector<NDqProto::TDqTask>& GetTasks() override;
 
-        NActors::TActorId GetSourceID() const override; 
+        NActors::TActorId GetSourceID() const override;
         TString GetResultType(bool withTagged = false) const override;
 
         void SetPublicIds(const THashMap<ui64, ui32>& publicIds) {
@@ -67,9 +67,9 @@ namespace NYql::NDqs {
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
         NYql::TExprNode::TPtr DqExprRoot;
         TVector<const TTypeAnnotationNode*> InputType;
-        NActors::TActorId ExecuterID; 
-        NActors::TActorId ResultID; 
-        TMaybe<NActors::TActorId> SourceID = {}; 
+        NActors::TActorId ExecuterID;
+        NActors::TActorId ResultID;
+        TMaybe<NActors::TActorId> SourceID = {};
         ui64 SourceTaskID = 0;
         ui64 _MaxDataSizePerJob = 0;
 
@@ -91,15 +91,15 @@ namespace NYql::NDqs {
 
         TVector<NDqProto::TDqTask>& GetTasks() override;
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
-        NActors::TActorId GetSourceID() const override; 
+        NActors::TActorId GetSourceID() const override;
         TString GetResultType(bool withTagged = false) const override;
 
     private:
         TString Program;
-        NActors::TActorId ExecuterID; 
-        NActors::TActorId ResultID; 
+        NActors::TActorId ExecuterID;
+        NActors::TActorId ResultID;
 
-        TMaybe<NActors::TActorId> SourceID = {}; 
+        TMaybe<NActors::TActorId> SourceID = {};
         TVector<NDqProto::TDqTask> Tasks;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
         const TTypeAnnotationNode* TypeAnn;
@@ -112,14 +112,14 @@ namespace NYql::NDqs {
             const TVector<NDqProto::TDqTask>& tasks,
             ui64 sourceId,
             const TString& resultType,
-            NActors::TActorId executerID, 
-            NActors::TActorId resultID); 
+            NActors::TActorId executerID,
+            NActors::TActorId resultID);
 
         TVector<NDqProto::TDqTask>& GetTasks() override {
             ythrow yexception() << "unimplemented";
         }
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
-        NActors::TActorId GetSourceID() const override; 
+        NActors::TActorId GetSourceID() const override;
         TString GetResultType(bool withTagged = false) const override;
 
     private:
@@ -127,9 +127,9 @@ namespace NYql::NDqs {
         ui64 SourceId = 0;
         TString ResultType;
 
-        NActors::TActorId ExecuterID; 
-        NActors::TActorId ResultID; 
+        NActors::TActorId ExecuterID;
+        NActors::TActorId ResultID;
 
-        TMaybe<NActors::TActorId> SourceID = {}; 
+        TMaybe<NActors::TActorId> SourceID = {};
     };
 }

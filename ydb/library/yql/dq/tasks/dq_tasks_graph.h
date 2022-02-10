@@ -173,7 +173,7 @@ struct TTask {
     TStageId StageId;
     TVector<TInputType> Inputs;
     TVector<TOutputType> Outputs;
-    NActors::TActorId ComputeActorId; 
+    NActors::TActorId ComputeActorId;
     TTaskMeta Meta;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     TTransform OutputTransform;

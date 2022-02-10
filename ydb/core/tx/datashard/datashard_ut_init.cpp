@@ -18,7 +18,7 @@ using NClient::TValue;
 namespace {
 
 TString GetTablePath(TTestActorRuntime &runtime,
-                     TActorId sender, 
+                     TActorId sender,
                      ui64 tableId,
                      ui64 shard)
 {
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::FLAT_DATASHARD), &CreateDataShard);
 
         TDispatchOptions options;

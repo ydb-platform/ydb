@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/string.h>

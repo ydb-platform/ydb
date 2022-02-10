@@ -1,5 +1,5 @@
 #include "blobstorage_hullsatisfactionrank.h"
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/stream/output.h>
 
 using namespace NKikimrServices;

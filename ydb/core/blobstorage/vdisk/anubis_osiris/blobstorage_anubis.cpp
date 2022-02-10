@@ -34,8 +34,8 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
         TQueueActorMapPtr QueueActorMapPtr;
         TActiveActors ActiveActors;
-        const TActorId ParentId; 
-        const TActorId SkeletonId; 
+        const TActorId ParentId;
+        const TActorId SkeletonId;
         TLogoBlobID Pos; // start position
         TLogoBlobsSnapshot LogoBlobsSnap;
         TBarriersSnapshot BarriersSnap;
@@ -244,8 +244,8 @@ namespace NKikimr {
 
         TAnubisQuantumActor(const TIntrusivePtr<THullCtx> &hullCtx,
                             const TQueueActorMapPtr &queueActorMapPtr,
-                            const TActorId &parentId, 
-                            const TActorId &skeletonId, 
+                            const TActorId &parentId,
+                            const TActorId &skeletonId,
                             const TLogoBlobID &pos,
                             TLogoBlobsSnapshot &&logoBlobsSnap,
                             TBarriersSnapshot &&barriersSnap,
@@ -273,8 +273,8 @@ namespace NKikimr {
         // mapping from TVDiskIdShort to proxy
         TQueueActorMapPtr QueueActorMapPtr;
         TActiveActors ActiveActors;
-        const TActorId ParentId; 
-        const TActorId SkeletonId; 
+        const TActorId ParentId;
+        const TActorId SkeletonId;
         const ui32 ReplInterconnectChannel;
         const ui64 AnubisOsirisMaxInFly;
         TLogoBlobID Pos;
@@ -376,8 +376,8 @@ namespace NKikimr {
 
         TAnubis(const TIntrusivePtr<THullCtx> &hullCtx,
                 const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
-                const TActorId &parentId, 
-                const TActorId &skeletonId, 
+                const TActorId &parentId,
+                const TActorId &skeletonId,
                 ui32 replInterconnectChannel,
                 ui64 anubisOsirisMaxInFly)
             : TActorBootstrapped<TAnubis>()
@@ -395,8 +395,8 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateAnubis(const TIntrusivePtr<THullCtx> &hullCtx,
                          const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
-                         const TActorId &parentId, 
-                         const TActorId &skeletonId, 
+                         const TActorId &parentId,
+                         const TActorId &skeletonId,
                          ui32 replInterconnectChannel,
                          ui64 anubisOsirisMaxInFly) {
         return new TAnubis(hullCtx, ginfo, parentId, skeletonId, replInterconnectChannel, anubisOsirisMaxInFly);

@@ -1,6 +1,6 @@
-PROTO_LIBRARY(api-protos) 
+PROTO_LIBRARY(api-protos)
 
-MAVEN_GROUP_ID(com.yandex.ydb) 
+MAVEN_GROUP_ID(com.yandex.ydb)
 
 OWNER(
     dcherednik

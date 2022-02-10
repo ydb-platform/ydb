@@ -3,7 +3,7 @@
 #include <ydb/core/mon/mon.h>
 #include <library/cpp/actors/core/mon.h>
 #include <ydb/core/base/appdata.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <util/generic/algorithm.h>
 #include <ydb/core/base/path.h>
@@ -95,22 +95,22 @@ public:
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
         NKikimrViewer::EObjectType::Root,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* { 
+        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
             return new NViewerPQ::TBrowseRoot(owner, browseContext);
         });
     viewer->RegisterVirtualHandler(
         NKikimrViewer::EObjectType::Consumers,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* { 
+        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
             return new NViewerPQ::TBrowseConsumers(owner, browseContext);
         });
     viewer->RegisterVirtualHandler(
         NKikimrViewer::EObjectType::Consumer,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* { 
+        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
             return new NViewerPQ::TBrowseConsumer(owner, browseContext);
         });
     viewer->RegisterVirtualHandler(
         NKikimrViewer::EObjectType::Topic,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* { 
+        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
             return new NViewerPQ::TBrowseTopic(owner, browseContext);
         });
 }
@@ -118,7 +118,7 @@ void SetupPQVirtualHandlers(IViewer* viewer) {
 void SetupDBVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
         NKikimrViewer::EObjectType::Table,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* { 
+        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
             return new NViewerDB::TBrowseTable(owner, browseContext);
         });
 }

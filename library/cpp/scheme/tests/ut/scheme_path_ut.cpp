@@ -18,9 +18,9 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
         *v.TrySelectOrAdd(path) = 1;
         NSc::NUt::AssertSchemeJson(expected, v);
         UNIT_ASSERT(v.PathExists(path));
-        UNIT_ASSERT(1 == v.TrySelectOrAdd(path)->GetNumber()); 
-        UNIT_ASSERT(1 == v.TrySelect(path).GetNumber()); 
-        UNIT_ASSERT(1 == v.TrySelectAndDelete(path).GetNumber()); 
+        UNIT_ASSERT(1 == v.TrySelectOrAdd(path)->GetNumber());
+        UNIT_ASSERT(1 == v.TrySelect(path).GetNumber());
+        UNIT_ASSERT(1 == v.TrySelectAndDelete(path).GetNumber());
         UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete(path), NSc::Null()));
         NSc::NUt::AssertSchemeJson(delexpected, v);
         UNIT_ASSERT(!v.PathExists(path));
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
 
     Y_UNIT_TEST(TestSelect) {
         NSc::TValue v;
-        UNIT_ASSERT(!v.PathValid(" ")); 
+        UNIT_ASSERT(!v.PathValid(" "));
         UNIT_ASSERT(v.PathExists(""));
         UNIT_ASSERT(v.PathExists("//"));
 

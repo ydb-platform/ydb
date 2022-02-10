@@ -21,9 +21,9 @@ namespace NTabletPipe {
     class IClientCache {
     public:
         virtual ~IClientCache() {}
-        virtual TActorId Prepare(const TActorContext& ctx, ui64 tabletId) = 0; 
-        virtual TActorId Send(const TActorContext& ctx, ui64 tabletId, ui32 eventType, const TIntrusivePtr<TEventSerializedData>& eventBuffer, ui64 cookie = 0) = 0; 
-        virtual TActorId Send(const TActorContext& ctx, ui64 tabletId, IEventBase* payload, ui64 cookie = 0) = 0; 
+        virtual TActorId Prepare(const TActorContext& ctx, ui64 tabletId) = 0;
+        virtual TActorId Send(const TActorContext& ctx, ui64 tabletId, ui32 eventType, const TIntrusivePtr<TEventSerializedData>& eventBuffer, ui64 cookie = 0) = 0;
+        virtual TActorId Send(const TActorContext& ctx, ui64 tabletId, IEventBase* payload, ui64 cookie = 0) = 0;
         virtual void Detach(const TActorContext& ctx) = 0;
         // returns true if connect was successfull
         virtual bool OnConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev) = 0;

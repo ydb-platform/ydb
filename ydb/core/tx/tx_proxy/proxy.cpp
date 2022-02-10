@@ -2,7 +2,7 @@
 
 namespace NKikimr {
 
-TActorId MakeTxProxyID() { 
+TActorId MakeTxProxyID() {
     return TActorId(0, TStringBuf("TxProxyServ"));
 }
 

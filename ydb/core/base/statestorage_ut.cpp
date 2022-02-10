@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
         info->Rings.resize(replicas);
         for (ui32 i : xrange(replicas)) {
             for (ui32 j : xrange(replicasInRing)) {
-                info->Rings[i].Replicas.push_back(TActorId(i, i, i + j, i)); 
+                info->Rings[i].Replicas.push_back(TActorId(i, i, i + j, i));
                 info->Rings[i].UseRingSpecificNodeSelection = useRingSpecificNodeSelection;
             }
         }
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
     }
 
     double UniformityRun(ui32 replicas, ui32 nToSelect, ui32 replicasInRing, bool useRingSpecificNodeSelection) {
-        THashMap<TActorId, ui32> history; 
+        THashMap<TActorId, ui32> history;
 
         TStateStorageInfo info;
         FillStateStorageInfo(&info, replicas, nToSelect, replicasInRing, useRingSpecificNodeSelection);

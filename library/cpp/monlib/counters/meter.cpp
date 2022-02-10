@@ -1,4 +1,4 @@
-#include "meter.h" 
- 
-namespace NMonitoring { 
-} 
+#include "meter.h"
+
+namespace NMonitoring {
+}

@@ -16,9 +16,9 @@ namespace NSchemeShard {
 
 struct TNotifyes {
     TTxId TxId = InvalidTxId;
-    THashSet<TActorId> Actors; 
+    THashSet<TActorId> Actors;
 
-    void Add(const TActorId& actor, TTxId txId) { 
+    void Add(const TActorId& actor, TTxId txId) {
         Y_VERIFY(!TxId || TxId == txId);
         TxId = txId;
         Actors.insert(actor);
@@ -235,7 +235,7 @@ struct TTxState {
     TVector<TShardOperation> Shards; // shards + operations on them
     // not persist:
     THashSet<TShardIdx> ShardsInProgress; // indexes of datashards or pqs that operation waits for
-    THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived; 
+    THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;
     bool ReadyForNotifications = false;
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SplitDescription;
     bool TxShardsListFinalized = false;

@@ -1,10 +1,10 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
-#include <library/cpp/grpc/server/event_callback.h> 
-#include <library/cpp/grpc/server/grpc_async_ctx_base.h> 
-#include <library/cpp/grpc/server/grpc_counters.h> 
-#include <library/cpp/grpc/server/grpc_request_base.h> 
+#include <library/cpp/grpc/server/event_callback.h>
+#include <library/cpp/grpc/server/grpc_async_ctx_base.h>
+#include <library/cpp/grpc/server/grpc_counters.h>
+#include <library/cpp/grpc/server/grpc_request_base.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/log.h>
@@ -69,7 +69,7 @@ public:
      *
      * This must be called before any Read or Write calls
      */
-    virtual void Attach(TActorId actor) = 0; 
+    virtual void Attach(TActorId actor) = 0;
 
     /**
      * Schedules the next message read
@@ -112,9 +112,9 @@ public:
     virtual bool WriteAndFinish(TOut&& message, const grpc::WriteOptions& options, const grpc::Status& status) = 0;
 
 public:
-    virtual NGrpc::TAuthState& GetAuthState() const = 0; 
+    virtual NGrpc::TAuthState& GetAuthState() const = 0;
     virtual TString GetPeerName() const = 0;
-    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0; 
+    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
     virtual grpc_compression_level GetCompressionLevel() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
 };
@@ -122,7 +122,7 @@ public:
 template<class TIn, class TOut, class TServer, int LoggerServiceId>
 class TGRpcStreamingRequest final
     : public TThrRefBase
-    , private NGrpc::TBaseAsyncContext<TServer> 
+    , private NGrpc::TBaseAsyncContext<TServer>
 {
     using TSelf = TGRpcStreamingRequest<TIn, TOut, TServer, LoggerServiceId>;
 
@@ -155,8 +155,8 @@ public:
         TAcceptCallback acceptCallback,
         NActors::TActorSystem& actorSystem,
         const char* name,
-        NGrpc::ICounterBlockPtr counters = nullptr, 
-        NGrpc::IGRpcRequestLimiterPtr limiter = nullptr) 
+        NGrpc::ICounterBlockPtr counters = nullptr,
+        NGrpc::IGRpcRequestLimiterPtr limiter = nullptr)
     {
         TIntrusivePtr<TSelf> self(new TSelf(
             server,
@@ -180,9 +180,9 @@ private:
             TAcceptCallback acceptCallback,
             NActors::TActorSystem& as,
             const char* name,
-            NGrpc::ICounterBlockPtr counters, 
-            NGrpc::IGRpcRequestLimiterPtr limiter) 
-        : NGrpc::TBaseAsyncContext<TServer>(service, cq) 
+            NGrpc::ICounterBlockPtr counters,
+            NGrpc::IGRpcRequestLimiterPtr limiter)
+        : NGrpc::TBaseAsyncContext<TServer>(service, cq)
         , Server(server)
         , AcceptRequest(acceptRequest)
         , AcceptCallback(acceptCallback)
@@ -210,12 +210,12 @@ private:
         return false;
     }
 
-    void OnAccepted(NGrpc::EQueueEventStatus status) { 
+    void OnAccepted(NGrpc::EQueueEventStatus status) {
         MaybeClone();
 
         if (!this->Context.c_call()) {
             // Request dropped before it could start
-            Y_VERIFY(status == NGrpc::EQueueEventStatus::ERROR); 
+            Y_VERIFY(status == NGrpc::EQueueEventStatus::ERROR);
             // Drop extra reference by OnDoneTag
             this->UnRef();
             // We will be freed after return
@@ -224,10 +224,10 @@ private:
 
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream accepted Name# %s ok# %s peer# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false", 
+            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
             this->Context.peer().c_str());
 
-        if (status == NGrpc::EQueueEventStatus::ERROR) { 
+        if (status == NGrpc::EQueueEventStatus::ERROR) {
             // Don't bother registering if accept failed
             if (Counters) {
                 Counters->CountNotOkRequest();
@@ -262,13 +262,13 @@ private:
         }
     }
 
-    void OnDone(NGrpc::EQueueEventStatus status) { 
+    void OnDone(NGrpc::EQueueEventStatus status) {
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream done notification Name# %s ok# %s peer# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false", 
+            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
             this->Context.peer().c_str());
 
-        bool success = status == NGrpc::EQueueEventStatus::OK; 
+        bool success = status == NGrpc::EQueueEventStatus::OK;
 
         auto flags = Flags.load(std::memory_order_acquire);
         auto added = FlagDoneCalled | (success ? FlagDoneSuccess : 0);
@@ -295,7 +295,7 @@ private:
         FinishInternal(grpc::Status(grpc::StatusCode::CANCELLED, "Request abandoned"));
     }
 
-    void Attach(TActorId actor) { 
+    void Attach(TActorId actor) {
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade attach Name# %s actor# %s peer# %s",
             this, Name,
             actor.ToString().c_str(),
@@ -346,10 +346,10 @@ private:
         return true;
     }
 
-    void OnReadDone(NGrpc::EQueueEventStatus status) { 
+    void OnReadDone(NGrpc::EQueueEventStatus status) {
         auto dumpResultText = [&] {
             TString text;
-            if (status == NGrpc::EQueueEventStatus::OK) { 
+            if (status == NGrpc::EQueueEventStatus::OK) {
                 google::protobuf::TextFormat::Printer printer;
                 printer.SetSingleLineMode(true);
                 printer.PrintToString(ReadInProgress->Record, &text);
@@ -361,7 +361,7 @@ private:
 
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] read finished Name# %s ok# %s data# %s peer# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false", 
+            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
             dumpResultText().c_str(),
             this->Context.peer().c_str());
 
@@ -373,7 +373,7 @@ private:
         auto was = ReadQueue--;
         Y_VERIFY_DEBUG(was > 0);
 
-        read->Success = status == NGrpc::EQueueEventStatus::OK; 
+        read->Success = status == NGrpc::EQueueEventStatus::OK;
         if (Counters && read->Success) {
             Counters->CountRequestBytes(read->Record.ByteSize());
         }
@@ -470,14 +470,14 @@ private:
         return true;
     }
 
-    void OnWriteDone(NGrpc::EQueueEventStatus status) { 
+    void OnWriteDone(NGrpc::EQueueEventStatus status) {
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] write finished Name# %s ok# %s peer# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false", 
+            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
             this->Context.peer().c_str());
 
         auto event = MakeHolder<typename IContext::TEvWriteFinished>();
-        event->Success = status == NGrpc::EQueueEventStatus::OK; 
+        event->Success = status == NGrpc::EQueueEventStatus::OK;
         ActorSystem.Send(Actor, event.Release());
 
         THolder<TWriteItem> next;
@@ -559,10 +559,10 @@ private:
         return true;
     }
 
-    void OnFinishDone(NGrpc::EQueueEventStatus status) { 
+    void OnFinishDone(NGrpc::EQueueEventStatus status) {
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream finished Name# %s ok# %s peer# %s grpc status# (%d) message# %s",
             this, Name,
-            status == NGrpc::EQueueEventStatus::OK ? "true" : "false", 
+            status == NGrpc::EQueueEventStatus::OK ? "true" : "false",
             this->Context.peer().c_str(),
             static_cast<int>(Status->error_code()),
             Status->error_message().c_str());
@@ -638,7 +638,7 @@ private:
             return Self->Cancel();
         }
 
-        void Attach(TActorId actor) override { 
+        void Attach(TActorId actor) override {
             Self->Attach(actor);
         }
 
@@ -662,7 +662,7 @@ private:
             return Self->Finish(status);
         }
 
-        NGrpc::TAuthState& GetAuthState() const override { 
+        NGrpc::TAuthState& GetAuthState() const override {
             return Self->AuthState;
         }
 
@@ -670,7 +670,7 @@ private:
             return Self->GetPeerName();
         }
 
-        TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override { 
+        TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
             return Self->GetPeerMetaValues(key);
         }
 
@@ -752,17 +752,17 @@ private:
     TAcceptCallback const AcceptCallback;
     NActors::TActorSystem& ActorSystem;
     const char* const Name;
-    NGrpc::ICounterBlockPtr const Counters; 
-    NGrpc::IGRpcRequestLimiterPtr Limiter; 
+    NGrpc::ICounterBlockPtr const Counters;
+    NGrpc::IGRpcRequestLimiterPtr Limiter;
 
-    NGrpc::TAuthState AuthState; 
+    NGrpc::TAuthState AuthState;
     grpc::ServerAsyncReaderWriter<TOut, TIn> Stream;
     TSingleThreaded SingleThreaded;
     THPTimer RequestTimer;
 
     std::atomic<intptr_t> Flags{ 0 };
 
-    TActorId Actor; 
+    TActorId Actor;
 
     std::atomic<size_t> ReadQueue{ 0 };
     THolder<typename IContext::TEvReadFinished> ReadInProgress;
@@ -772,7 +772,7 @@ private:
 
     TMaybe<grpc::Status> Status;
 
-    using TFixedEvent = NGrpc::TQueueFixedEvent<TSelf>; 
+    using TFixedEvent = NGrpc::TQueueFixedEvent<TSelf>;
     TFixedEvent OnDoneTag = { this, &TSelf::OnDone };
     TFixedEvent OnAcceptedTag = { this, &TSelf::OnAccepted };
     TFixedEvent OnReadDoneTag = { this, &TSelf::OnReadDone };

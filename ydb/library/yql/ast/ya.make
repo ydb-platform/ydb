@@ -14,8 +14,8 @@ SRCS(
     yql_constraint.h
     yql_ast_annotation.cpp
     yql_ast_annotation.h
-    yql_ast_escaping.cpp 
-    yql_ast_escaping.h 
+    yql_ast_escaping.cpp
+    yql_ast_escaping.h
     yql_errors.cpp
     yql_errors.h
     yql_expr.cpp

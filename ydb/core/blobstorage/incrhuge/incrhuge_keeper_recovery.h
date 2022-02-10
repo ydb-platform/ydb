@@ -16,7 +16,7 @@ namespace NKikimr {
                 TVDiskID VDiskId;
                 ui8 Owner;
                 ui64 FirstLsn;
-                TActorId Sender; 
+                TActorId Sender;
                 ui64 Cookie;
                 TQueue<std::pair<TChunkIdx, TChunkInfo *>> ScanQueue;
                 THashMap<TChunkIdx, TDynBitMap> DeletedItemsMap;
@@ -61,7 +61,7 @@ namespace NKikimr {
                 TChunkIdx ChunkIdx;
                 TChunkInfo& Chunk;
             };
-            THashMap<TActorId, TScanInfo> ScannerMap; 
+            THashMap<TActorId, TScanInfo> ScannerMap;
 
         public:
             TRecovery(TKeeper& keeper);
@@ -72,10 +72,10 @@ namespace NKikimr {
                     const TActorContext& ctx);
 
             // handle read log result
-            void ApplyReadLog(const TActorId& sender, TEvIncrHugeReadLogResult& msg, const TActorContext& ctx); 
+            void ApplyReadLog(const TActorId& sender, TEvIncrHugeReadLogResult& msg, const TActorContext& ctx);
 
             // handle scan result
-            void ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx); 
+            void ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx);
 
             // handle init message from client
             void HandleInit(TEvIncrHugeInit::TPtr& ev, const TActorContext& ctx);

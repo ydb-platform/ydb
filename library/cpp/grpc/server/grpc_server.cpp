@@ -15,7 +15,7 @@
 
 #endif
 
-namespace NGrpc { 
+namespace NGrpc {
 
 using NThreading::TFuture;
 
@@ -82,7 +82,7 @@ void TGRpcServer::Start() {
         service->SetGlobalLimiterHandle(&Limiter_);
     }
 
-    class TKeepAliveOption: public grpc::ServerBuilderOption { 
+    class TKeepAliveOption: public grpc::ServerBuilderOption {
     public:
         TKeepAliveOption(int idle, int interval)
             : Idle(idle)
@@ -153,7 +153,7 @@ void TGRpcServer::Start() {
     size_t index = 0;
     for (IGRpcServicePtr service : Services_) {
         // TODO: provide something else for services instead of ServerCompletionQueue
-        service->InitService(CQS_[index++ % CQS_.size()].get(), Options_.Logger); 
+        service->InitService(CQS_[index++ % CQS_.size()].get(), Options_.Logger);
     }
 
     if (Options_.UseCompletionQueuePerThread) {
@@ -237,4 +237,4 @@ TString TGRpcServer::GetHost() const {
     return Options_.Host;
 }
 
-} // namespace NGrpc 
+} // namespace NGrpc

@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
         NAddr::IRemoteAddrPtr Address;
         TString Error;
-        TActorId Edge; 
+        TActorId Edge;
     };
 
 
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
         NAddr::IRemoteAddrRef Address;
         TString Error;
-        TActorId Edge; 
+        TActorId Edge;
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
         ui64 Port;
     };
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
     public:
         TString Error;
         TString Data;
-        TActorId Edge; 
+        TActorId Edge;
         ui16 Port;
 
     private:
@@ -673,7 +673,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
     public:
         TString Error;
-        TActorId Edge; 
+        TActorId Edge;
         ui16 Port;
 
     private:

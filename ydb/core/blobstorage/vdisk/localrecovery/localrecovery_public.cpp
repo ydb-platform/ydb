@@ -66,7 +66,7 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskConfig> Config;
         // generation independent self VDiskId (it is required for Yard init only)
         const TVDiskID SelfVDiskId;
-        const TActorId SkeletonId; 
+        const TActorId SkeletonId;
         const TActorId SkeletonFrontId;
         std::shared_ptr<TLocalRecoveryContext> LocRecCtx;
         std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
@@ -226,7 +226,7 @@ namespace NKikimr {
 
         template <class TMetaBase, class TLoader, int signature>
         bool InitMetabase(const TStartingPoints &startingPoints, TIntrusivePtr<TMetaBase> &metabase,
-                          bool &initFlag, NMonitoring::TDeprecatedCounter &counter, bool &emptyDb, 
+                          bool &initFlag, NMonitoring::TDeprecatedCounter &counter, bool &emptyDb,
                           ui64 freshBufSize, ui64 compThreshold, const TActorContext &ctx) {
             TStartingPoints::const_iterator it;
             // Settings
@@ -570,7 +570,7 @@ namespace NKikimr {
 
             auto ev = std::make_unique<NPDisk::TEvYardInit>(Config->BaseInfo.InitOwnerRound, SelfVDiskId,
                 Config->BaseInfo.PDiskGuid, SkeletonId, SkeletonFrontId, Config->BaseInfo.VDiskSlotId);
-            const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId()); 
+            const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
             auto handle = std::make_unique<IEventHandle>(Config->BaseInfo.PDiskActorID, SelfId(), ev.release(),
                 IEventHandle::FlagForwardOnNondelivery, 0, &nodeWardenId);
             if (const TDuration delay = Config->BaseInfo.YardInitDelay; delay != TDuration::Zero()) {
@@ -659,7 +659,7 @@ namespace NKikimr {
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TIntrusivePtr<TVDiskConfig> &config,
                 const TVDiskID &selfVDiskId,
-                const TActorId &skeletonId, 
+                const TActorId &skeletonId,
                 const TActorId skeletonFrontId,
                 std::shared_ptr<TRopeArena> arena)
             : TActorBootstrapped<TDatabaseLocalRecovery>()
@@ -682,7 +682,7 @@ namespace NKikimr {
             const TIntrusivePtr<TVDiskContext> &vctx,
             const TIntrusivePtr<TVDiskConfig> &config,
             const TVDiskID &selfVDiskId,
-            const TActorId &skeletonId, 
+            const TActorId &skeletonId,
             const TActorId skeletonFrontId,
             std::shared_ptr<TRopeArena> arena) {
         return new TDatabaseLocalRecovery(vctx, config, selfVDiskId, skeletonId, skeletonFrontId, std::move(arena));

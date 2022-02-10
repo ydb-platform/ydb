@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package NYql;
 
-option java_package = "com.yandex.yql.proto"; 
+option java_package = "com.yandex.yql.proto";
 
 message TSeverityIds {
     enum ESeverityId {

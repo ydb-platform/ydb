@@ -14,7 +14,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TTReadBatcherActor : public TActorBootstrapped<TTReadBatcherActor> {
         TReadBatcherCtxPtr Ctx;
-        const TActorId NotifyID; 
+        const TActorId NotifyID;
         std::shared_ptr<TReadBatcherResult> Result;
         const ui8 Priority;
         NWilson::TTraceId TraceId;
@@ -118,7 +118,7 @@ namespace NKikimr {
 
         TTReadBatcherActor(
                 TReadBatcherCtxPtr ctx,
-                const TActorId notifyID, 
+                const TActorId notifyID,
                 std::shared_ptr<TReadBatcherResult> result,
                 ui8 priority,
                 NWilson::TTraceId traceId,
@@ -135,7 +135,7 @@ namespace NKikimr {
 
     IActor *CreateReadBatcherActor(
         TReadBatcherCtxPtr ctx,
-        const TActorId notifyID, 
+        const TActorId notifyID,
         std::shared_ptr<TReadBatcherResult> result,
         ui8 priority,
         NWilson::TTraceId traceId,

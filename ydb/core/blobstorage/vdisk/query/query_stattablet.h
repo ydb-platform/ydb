@@ -10,7 +10,7 @@ namespace NKikimr {
     // Report all this VDisk knows about the requested Tablet
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateTabletStatActor(TIntrusivePtr<THullCtx> hullCtx,
-                                  const TActorId &parentId, 
+                                  const TActorId &parentId,
                                   THullDsSnap &&fullSnap,
                                   TEvBlobStorage::TEvVDbStat::TPtr &ev,
                                   std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result);

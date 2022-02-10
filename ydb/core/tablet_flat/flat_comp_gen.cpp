@@ -1,6 +1,6 @@
 #include "flat_comp_gen.h"
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/cast.h>
 
 namespace NKikimr {

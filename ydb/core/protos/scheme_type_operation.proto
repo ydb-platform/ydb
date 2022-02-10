@@ -11,7 +11,7 @@ message TMetadata {
 
     message TDescription {
         repeated TArg Arg = 1;
-        optional bool Deterministic = 2; 
+        optional bool Deterministic = 2;
     }
 
     message TOperation {

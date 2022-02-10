@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr {
 namespace NPQ {

@@ -27,7 +27,7 @@ namespace NKikimr {
         struct TSjOutcome {
             // we can send a message as a result ...
             std::unique_ptr<IEventBase> Ev;
-            TActorId To; 
+            TActorId To;
             // ... or run a actor
             std::unique_ptr<IActor> ActorActivity;
             bool RunInBatchPool = false;
@@ -131,7 +131,7 @@ namespace NKikimr {
             TSyncerJobTask(
                     EJobType type,
                     const TVDiskID &vdisk,
-                    const TActorId &service, 
+                    const TActorId &service,
                     const NSyncer::TPeerSyncState &peerState,
                     const std::shared_ptr<TSjCtx> &ctx);
             void Output(IOutputStream &str) const;
@@ -180,7 +180,7 @@ namespace NKikimr {
 
         public:
             const TVDiskID VDiskId;
-            const TActorId ServiceId; 
+            const TActorId ServiceId;
         private:
             // job type
             EJobType Type = EJustSync;

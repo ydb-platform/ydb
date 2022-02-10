@@ -152,7 +152,7 @@ private:
     }
 
     void HandleQueueCreated(TSqsEvents::TEvQueueCreated::TPtr& ev) {
-        SchemaActor_ = TActorId(); 
+        SchemaActor_ = TActorId();
         auto event  = ev->Get();
         auto* result = Response_.MutableCreateQueue();
 
@@ -192,7 +192,7 @@ private:
     void PassAway() override {
         if (SchemaActor_) {
             Send(SchemaActor_, new TEvPoisonPill());
-            SchemaActor_ = TActorId(); 
+            SchemaActor_ = TActorId();
         }
         TActionActor<TCreateQueueActor>::PassAway();
     }
@@ -203,7 +203,7 @@ private:
 
 private:
     TString ResourceId_;
-    TActorId SchemaActor_; 
+    TActorId SchemaActor_;
 };
 
 IActor* CreateCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

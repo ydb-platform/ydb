@@ -15,8 +15,8 @@ namespace NActors {
 
     using TSocketPtr = TIntrusivePtr<NInterconnect::TStreamSocket>;
 
-    IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, 
-                                         const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName, 
+    IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self,
+                                         const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params);
 
     IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket);

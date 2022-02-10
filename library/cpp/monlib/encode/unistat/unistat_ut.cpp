@@ -1,7 +1,7 @@
 #include "unistat.h"
 
-#include <library/cpp/monlib/encode/protobuf/protobuf.h> 
-#include <library/cpp/monlib/metrics/labels.h> 
+#include <library/cpp/monlib/encode/protobuf/protobuf.h>
+#include <library/cpp/monlib/metrics/labels.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
         auto sample = samples.GetSamples(0);
-        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::GAUGE); 
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::GAUGE);
         UNIT_ASSERT_VALUES_EQUAL(sample.PointsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
 
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
         DecodeUnistat(input, encoder.Get());
 
         auto sample = samples.GetSamples(0);
-        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::HIST_RATE); 
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::HIST_RATE);
         UNIT_ASSERT_VALUES_EQUAL(sample.PointsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
 
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
         DecodeUnistat(input, encoder.Get());
 
         auto sample = samples.GetSamples(0);
-        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::HISTOGRAM); 
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::HISTOGRAM);
         UNIT_ASSERT_VALUES_EQUAL(sample.PointsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
     }
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 2);
         auto sample = samples.GetSamples(0);
-        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::GAUGE); 
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::GAUGE);
         UNIT_ASSERT_VALUES_EQUAL(sample.PointsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
 
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
         UNIT_ASSERT_VALUES_EQUAL(label.GetValue(), "something_axxx");
 
         sample = samples.GetSamples(1);
-        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::RATE); 
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::RATE);
         UNIT_ASSERT_VALUES_EQUAL(sample.PointsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
 
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
         auto sample = samples.GetSamples(0);
-        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::RATE); 
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::RATE);
         UNIT_ASSERT_VALUES_EQUAL(sample.PointsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
 
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
         auto sample = samples.GetSamples(0);
-        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::GAUGE); 
+        UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::GAUGE);
         UNIT_ASSERT_VALUES_EQUAL(sample.PointsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
 

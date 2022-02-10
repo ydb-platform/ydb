@@ -7,7 +7,7 @@
 namespace NKikimr {
 
 class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
-    const TActorId Owner; 
+    const TActorId Owner;
     const TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     ui32 Generation = 0;
     TActorId CurrentLeader;
@@ -109,7 +109,7 @@ public:
         return NKikimrServices::TActivity::TABLET_REQ_DELETE_TABLET;
     }
 
-    TTabletReqReset(const TActorId& owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 knownGeneration) 
+    TTabletReqReset(const TActorId& owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 knownGeneration)
         : Owner(owner)
         , TabletStorageInfo(tabletStorageInfo)
         , Generation(knownGeneration)
@@ -119,7 +119,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TActorId stateStorageProxyId = MakeStateStorageProxyID(StateStorageGroupFromTabletID(TabletStorageInfo->TabletID)); 
+        TActorId stateStorageProxyId = MakeStateStorageProxyID(StateStorageGroupFromTabletID(TabletStorageInfo->TabletID));
         ctx.Send(stateStorageProxyId, new TEvStateStorage::TEvLookup(TabletStorageInfo->TabletID, 0));
         if (Generation == 0) {
             FindLatestLogEntry(ctx);
@@ -130,7 +130,7 @@ public:
     }
 };
 
-IActor* CreateTabletReqReset(const TActorId& owner, const TIntrusivePtr<NKikimr::TTabletStorageInfo>& info, ui32 knownGeneration) { 
+IActor* CreateTabletReqReset(const TActorId& owner, const TIntrusivePtr<NKikimr::TTabletStorageInfo>& info, ui32 knownGeneration) {
     return new TTabletReqReset(owner, info, knownGeneration);
 }
 

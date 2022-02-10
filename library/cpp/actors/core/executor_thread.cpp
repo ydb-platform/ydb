@@ -50,14 +50,14 @@ namespace NActors {
             &Ctx.WorkerStats);
     }
 
-    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId, const TActorId& parentId) { 
+    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId, const TActorId& parentId) {
         if (poolId == Max<ui32>())
             return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId ? parentId : CurrentRecipient);
         else
             return ActorSystem->Register(actor, mailboxType, poolId, ++RevolvingWriteCounter, parentId ? parentId : CurrentRecipient);
     }
 
-    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) { 
+    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) {
         return Ctx.Executor->Register(actor, mailbox, hint, parentId ? parentId : CurrentRecipient);
     }
 
@@ -71,7 +71,7 @@ namespace NActors {
         DyingActors.clear(); // here is actual destruction of actors
     }
 
-    void TExecutorThread::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) { 
+    void TExecutorThread::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         ++CurrentActorScheduledEventsCounter;
         Ctx.Executor->Schedule(deadline, ev, cookie, Ctx.WorkerId);
     }
@@ -81,11 +81,11 @@ namespace NActors {
         Ctx.Executor->Schedule(deadline, ev, cookie, Ctx.WorkerId);
     }
 
-    void TExecutorThread::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) { 
-        ++CurrentActorScheduledEventsCounter; 
+    void TExecutorThread::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
+        ++CurrentActorScheduledEventsCounter;
         Ctx.Executor->Schedule(delta, ev, cookie, Ctx.WorkerId);
-    } 
- 
+    }
+
     template <class T>
     inline TString SafeTypeName(T* t) {
         if (t == nullptr) {
@@ -102,7 +102,7 @@ namespace NActors {
         return actor ? SafeTypeName(actor) : ("activityType_" + ToString(activityType) + " (destroyed)");
     }
 
-    inline void LwTraceSlowDelivery(IEventHandle* ev, const IActor* actor, ui32 poolId, const TActorId& currentRecipient, 
+    inline void LwTraceSlowDelivery(IEventHandle* ev, const IActor* actor, ui32 poolId, const TActorId& currentRecipient,
                                     double delivMs, double sinceActivationMs, ui32 eventsExecutedBefore) {
         const auto baseEv = (ev && ev->HasEvent()) ? ev->GetBase() : nullptr;
         LWPROBE(EventSlowDelivery,
@@ -116,7 +116,7 @@ namespace NActors {
     }
 
     inline void LwTraceSlowEvent(IEventHandle* ev, ui32 evTypeForTracing, const IActor* actor, ui32 poolId, ui32 activityType,
-                                 const TActorId& currentRecipient, double eventMs) { 
+                                 const TActorId& currentRecipient, double eventMs) {
         // Event could have been destroyed by actor->Receive();
         const auto baseEv = (ev && ev->HasEvent()) ? ev->GetBase() : nullptr;
         LWPROBE(SlowEvent,
@@ -198,7 +198,7 @@ namespace NActors {
                     if (actor)
                         actor->AddElapsedTicks(elapsed);
 
-                    CurrentRecipient = TActorId(); 
+                    CurrentRecipient = TActorId();
                 } else {
                     TAutoPtr<IEventHandle> nonDelivered = ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown);
                     if (nonDelivered.Get()) {

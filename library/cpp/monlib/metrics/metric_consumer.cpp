@@ -8,7 +8,7 @@ namespace NMonitoring {
         Y_ENSURE(false, "Not implemented");
     }
 
-    std::pair<ui32, ui32> IMetricConsumer::PrepareLabel(TStringBuf name, TStringBuf value) { 
+    std::pair<ui32, ui32> IMetricConsumer::PrepareLabel(TStringBuf name, TStringBuf value) {
         Y_UNUSED(name, value);
         Y_ENSURE(false, "Not implemented");
     }

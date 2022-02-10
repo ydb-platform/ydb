@@ -57,7 +57,7 @@ namespace NKikimr {
         TIngress Ingress;
         TRope Buffer;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
-        TActorId Recipient; 
+        TActorId Recipient;
         ui64 RecipientCookie;
     };
 
@@ -76,7 +76,7 @@ namespace NKikimr {
         TIngress Ingress;
         TRope Buffer;
         std::unique_ptr<TEvVMultiPutItemResult> Result;
-        TActorId Recipient; 
+        TActorId Recipient;
         ui64 RecipientCookie;
     };
 
@@ -85,12 +85,12 @@ namespace NKikimr {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     class TLoggedRecVPutHuge : public ILoggedRec {
     public:
-        TLoggedRecVPutHuge(TLsnSeg seg, bool confirmSyncLogAlso, const TActorId &hugeKeeperId, 
+        TLoggedRecVPutHuge(TLsnSeg seg, bool confirmSyncLogAlso, const TActorId &hugeKeeperId,
                 TEvHullLogHugeBlob::TPtr ev);
         void Replay(THull &hull, const TActorContext &ctx, const IActor& actor) override;
 
     private:
-        const TActorId HugeKeeperId; 
+        const TActorId HugeKeeperId;
         TEvHullLogHugeBlob::TPtr Ev;
     };
 
@@ -108,7 +108,7 @@ namespace NKikimr {
         ui32 Gen;
         ui64 IssuerGuid;
         std::unique_ptr<TEvBlobStorage::TEvVBlockResult> Result;
-        TActorId Recipient; 
+        TActorId Recipient;
         ui64 RecipientCookie;
     };
 
@@ -182,7 +182,7 @@ namespace NKikimr {
 
     private:
         std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> Result;
-        TActorId Recipient; 
+        TActorId Recipient;
         ui64 RecipientCookie;
     };
 

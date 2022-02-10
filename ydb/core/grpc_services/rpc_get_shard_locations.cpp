@@ -34,7 +34,7 @@ private:
     TAutoPtr<TEvGetShardLocationsRequest> Request;
     Ydb::ClickhouseInternal::GetShardLocationsResult Result;
 
-    THashMap<ui64, TActorId> ShardPipes; 
+    THashMap<ui64, TActorId> ShardPipes;
     THashMap<ui64, ui32> ShardNodes;
     THashMap<ui32, TNodeInfo> NodeInfos;
 
@@ -102,7 +102,7 @@ private:
         }
 
         // Get list of cluster nodes
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
 
         TBase::Become(&TThis::StateWaitResolve);

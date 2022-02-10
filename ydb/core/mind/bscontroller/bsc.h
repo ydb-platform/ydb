@@ -3,6 +3,6 @@
 
 namespace NKikimr {
 
-IActor* CreateFlatBsController(const TActorId &tablet, TTabletStorageInfo *info); 
+IActor* CreateFlatBsController(const TActorId &tablet, TTabletStorageInfo *info);
 
 } //NKikimr

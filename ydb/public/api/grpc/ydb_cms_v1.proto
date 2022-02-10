@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package Ydb.Cms.V1;
-option java_package = "com.yandex.ydb.cms.v1"; 
+option java_package = "com.yandex.ydb.cms.v1";
 
 import "ydb/public/api/protos/ydb_cms.proto";
 

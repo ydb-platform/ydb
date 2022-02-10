@@ -21,7 +21,7 @@ namespace NKikimr {
 
 class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     const TString Path;
-    const TActorId Owner; 
+    const TActorId Owner;
     const EBoardLookupMode Mode;
     const ui32 StateStorageGroupId;
 
@@ -33,12 +33,12 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     };
 
     struct TReplica {
-        TActorId Replica; 
+        TActorId Replica;
         EReplicaState State = EReplicaState::Unknown;
     };
 
     TVector<TReplica> Replicas;
-    TMap<TActorId, TEvStateStorage::TEvBoardInfo::TInfoEntry> Info; 
+    TMap<TActorId, TEvStateStorage::TEvBoardInfo::TInfoEntry> Info;
 
     ui32 WaitForReplicasToSuccess;
 
@@ -83,8 +83,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
         Replicas.resize(msg->Replicas.size());
         for (auto idx : xrange(msg->Replicas.size())) {
-            const TActorId &replica = msg->Replicas[idx]; 
-            Send(replica, new TEvStateStorage::TEvReplicaBoardLookup(Path, TActorId(), false), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, idx); 
+            const TActorId &replica = msg->Replicas[idx];
+            Send(replica, new TEvStateStorage::TEvReplicaBoardLookup(Path, TActorId(), false), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, idx);
             Replicas[idx].Replica = replica;
             Replicas[idx].State = EReplicaState::Unknown;
         }
@@ -128,7 +128,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             ++Stats.HasInfo;
 
             for (auto &x : record.GetInfo()) {
-                const TActorId oid = ActorIdFromProto(x.GetOwner()); 
+                const TActorId oid = ActorIdFromProto(x.GetOwner());
                 Info[oid].Payload = x.GetPayload();
             }
         }
@@ -170,7 +170,7 @@ public:
         return NKikimrServices::TActivity::BOARD_LOOKUP_ACTOR;
     }
 
-    TBoardLookupActor(const TString &path, TActorId owner, EBoardLookupMode mode, ui32 groupId) 
+    TBoardLookupActor(const TString &path, TActorId owner, EBoardLookupMode mode, ui32 groupId)
         : Path(path)
         , Owner(owner)
         , Mode(mode)
@@ -178,7 +178,7 @@ public:
     {}
 
     void Bootstrap() {
-        const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId); 
+        const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId);
         Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path), IEventHandle::FlagTrackDelivery);
         Become(&TThis::StateResolve);
     }
@@ -201,7 +201,7 @@ public:
     }
 };
 
-IActor* CreateBoardLookupActor(const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode, bool sub, bool useNodeSubsriptions) { 
+IActor* CreateBoardLookupActor(const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode, bool sub, bool useNodeSubsriptions) {
     Y_UNUSED(useNodeSubsriptions);
     Y_VERIFY(!sub, "subscribe mode for board lookup not implemented yet");
     return new TBoardLookupActor(path, owner, mode, groupId);

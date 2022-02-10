@@ -14,7 +14,7 @@ namespace NKikimr {
 
     IActor* CreateHullLogCutterNotifier(
             const TVDiskContextPtr &vctx,
-            const TActorId &logCutterId, 
+            const TActorId &logCutterId,
             TIntrusivePtr<THullDs> hullDs);
 
 } // NKikimr

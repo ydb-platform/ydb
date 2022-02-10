@@ -4,13 +4,13 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxSessionDestroy : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     const NKikimrKesus::TEvDestroySession Record;
 
     TVector<TDelayedEvent> Events;
 
-    TTxSessionDestroy(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDestroySession& record) 
+    TTxSessionDestroy(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDestroySession& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

@@ -55,9 +55,9 @@ namespace NActors {
 
     IActor* CreatePollerActor();
 
-    inline TActorId MakePollerActorId() { 
+    inline TActorId MakePollerActorId() {
         char x[12] = {'I', 'C', 'P', 'o', 'l', 'l', 'e', 'r', '\xDE', '\xAD', '\xBE', '\xEF'};
-        return TActorId(0, TStringBuf(std::begin(x), std::end(x))); 
+        return TActorId(0, TStringBuf(std::begin(x), std::end(x)));
     }
 
 }

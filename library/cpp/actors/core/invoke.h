@@ -92,7 +92,7 @@ namespace NActors {
             , Complete(std::move(complete))
         {}
 
-        void Bootstrap(const TActorId& parentId, const TActorContext& ctx) { 
+        void Bootstrap(const TActorId& parentId, const TActorContext& ctx) {
             auto process = [complete = std::move(Complete)](TEvents::TEvInvokeResult& res, const TActorContext& ctx) {
                 complete([&] { return res.GetResult<TCallback>(); }, ctx);
             };

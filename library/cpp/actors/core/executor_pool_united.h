@@ -7,7 +7,7 @@
 
 #include <library/cpp/actors/util/unordered_cache.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -79,7 +79,7 @@ namespace NActors {
         // Stop currently active execution and start new one if token is available
         // NOTE: Reuses token if it's not destroyed
         bool NextExecution(TPoolId pool, ui32& activation, ui64 revolvingCounter);
- 
+
         // Stop active execution
         void StopExecution(TPoolId pool);
 

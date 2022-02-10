@@ -5,10 +5,10 @@ namespace NKikimr {
 namespace NFlatTxCoordinator {
 
 struct TTxCoordinator::TTxMonitoring : public TTxCoordinator::TTxConsistencyCheck {
-    TActorId ActorToRespond; 
+    TActorId ActorToRespond;
     TString CheckResult;
 
-    TTxMonitoring(TSelf* self, const TActorId& actorToRespond) 
+    TTxMonitoring(TSelf* self, const TActorId& actorToRespond)
         : TTxCoordinator::TTxConsistencyCheck(self)
         , ActorToRespond(actorToRespond)
     {}

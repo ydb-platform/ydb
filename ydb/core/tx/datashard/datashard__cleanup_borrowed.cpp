@@ -17,8 +17,8 @@ class TDataShard::TTxMonitoringCleanupBorrowedPartsActor
 {
 public:
     TTxMonitoringCleanupBorrowedPartsActor(
-            const TActorId& owner, 
-            const TActorId& replyTo, 
+            const TActorId& owner,
+            const TActorId& replyTo,
             THashMap<TLogoBlobID, TVector<ui64>> borrowedParts,
             bool dryRun)
         : Owner(owner)
@@ -184,8 +184,8 @@ public:
     }
 
 private:
-    const TActorId Owner; 
-    const TActorId ReplyTo; 
+    const TActorId Owner;
+    const TActorId ReplyTo;
     const THashMap<TLogoBlobID, TVector<ui64>> BorrowedParts;
     const bool DryRun;
 

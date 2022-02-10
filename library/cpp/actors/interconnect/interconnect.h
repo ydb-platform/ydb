@@ -10,7 +10,7 @@ namespace NActors {
         TString SelfAddress;
         ui32 SelfPort;
 
-        TVector<TActorId> GlobalNameservers; // todo: add some info about (like expected reply time) 
+        TVector<TActorId> GlobalNameservers; // todo: add some info about (like expected reply time)
     };
 
     struct TInterconnectProxySetup: public TThrRefBase {
@@ -41,12 +41,12 @@ namespace NActors {
 
         TIntrusivePtr<TInterconnectGlobalState> GlobalState;
 
-        virtual IActor* CreateSession(const TActorId& ownerId, IProxy* owner) = 0; // returned actor is session and would be attached to same mailbox as proxy to allow sync calls 
+        virtual IActor* CreateSession(const TActorId& ownerId, IProxy* owner) = 0; // returned actor is session and would be attached to same mailbox as proxy to allow sync calls
         virtual TActorSetupCmd CreateAcceptor() = 0;
     };
 
     struct TNameserverSetup {
-        TActorId ServiceID; 
+        TActorId ServiceID;
 
         TIntrusivePtr<TInterconnectGlobalState> GlobalState;
     };
@@ -118,12 +118,12 @@ namespace NActors {
     };
 
     struct TNodeRegistrarSetup {
-        TActorId ServiceID; 
+        TActorId ServiceID;
 
         TIntrusivePtr<TInterconnectGlobalState> GlobalState;
     };
 
-    TActorId GetNameserviceActorId(); 
+    TActorId GetNameserviceActorId();
 
     /**
      * Const table-lookup based name service

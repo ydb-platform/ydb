@@ -29,9 +29,9 @@ public:
     TStructTypeBuilder(const TStructTypeBuilder&) = default;
     TStructTypeBuilder& operator=(const TStructTypeBuilder&) = default;
     void Reserve(ui32 size);
-    TStructTypeBuilder& Add(const TStringBuf& name, TType* type, ui32* index = nullptr); 
+    TStructTypeBuilder& Add(const TStringBuf& name, TType* type, ui32* index = nullptr);
     TStructType* Build();
-    void FillIndexes(); 
+    void FillIndexes();
     void Clear();
 
 private:

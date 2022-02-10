@@ -107,7 +107,7 @@ public:
     // tx propose
 
     void SaveForPropose(TValidatedDataTx::TPtr tx);
-    void SetProposed(ui64 txId, const TActorId& actorId); 
+    void SetProposed(ui64 txId, const TActorId& actorId);
 
     void ForgetUnproposedTx(ui64 txId);
     void ForgetTx(ui64 txId);

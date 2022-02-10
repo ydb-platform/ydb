@@ -130,7 +130,7 @@ public:
             YQL_CLOG(INFO, ProviderKqp) << "Rollback Tx"
                 << ", deferred effects count: " << TxState->Tx().DeferredEffects.Size()
                 << ", locks count: " << TxState->Tx().Locks.Size();
- 
+
             effectsNode = GetRollbackEffects(input->Pos(), ctx);
             State = EFinalizeState::RollbackInProgress;
         }

@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NTxAllocator {
 
-TTxAllocator::TTxAllocator(const TActorId &tablet, TTabletStorageInfo *info) 
+TTxAllocator::TTxAllocator(const TActorId &tablet, TTabletStorageInfo *info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , PrivateMarker((TabletID() & 0xFFFF) << (64 - 16))

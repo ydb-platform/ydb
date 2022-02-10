@@ -256,7 +256,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", response: " << Response->Record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
-        const TActorId sender = Request->Sender; 
+        const TActorId sender = Request->Sender;
         const ui64 cookie = Request->Cookie;
         ctx.Send(sender, Response.Release(), 0, cookie);
 
@@ -405,7 +405,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
 
         for (size_t i = 0; i < txCount; ++i) {
             const auto txId = TTxId(record.GetTransactions(i).GetTxId());
-            const auto coordinator = ActorIdFromProto(record.GetTransactions(i).GetAckTo()); 
+            const auto coordinator = ActorIdFromProto(record.GetTransactions(i).GetAckTo());
             const auto coordinatorId = TTabletId(record.GetTransactions(i).GetCoordinator());
 
             if (!Self->Operations.contains(txId)) {
@@ -443,7 +443,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
             OnComplete.UnbindMsgFromPipe(TOperationId(txId, InvalidSubTxId), coordinatorId, TPipeMessageId(0, txId));
         }
 
-        const TActorId mediator = Ev->Sender; 
+        const TActorId mediator = Ev->Sender;
         OnComplete.MediatorAck(mediator, step);
 
         OnComplete.ApplyOnExecute(Self, txc, ctx);
@@ -1162,7 +1162,7 @@ bool TOperation::IsReadyToNotify() const {
     return IsPublished() && ReadyToNotifyParts.size() == Parts.size();
 }
 
-void TOperation::AddNotifySubscriber(const TActorId& actorId) { 
+void TOperation::AddNotifySubscriber(const TActorId& actorId) {
     Y_VERIFY(!IsReadyToNotify());
     Subscribers.insert(actorId);
 }

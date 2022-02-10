@@ -338,7 +338,7 @@ public:
         ui64 AllocatedNumGroups;
         EState State;
         TString Issue;
-        TActorId Worker; 
+        TActorId Worker;
         size_t GroupFitErrors = 0;
     };
 
@@ -485,7 +485,7 @@ public:
         ui64 Mediators;
         ui64 PlanResolution;
         ui32 TimeCastBucketsPerMediator;
-        TActorId Worker; 
+        TActorId Worker;
         // <type> -> pool
         THashMap<TString, TStoragePool::TPtr> StoragePools;
         // <kind, az> -> count
@@ -498,7 +498,7 @@ public:
         TVector<TAutoPtr<IEventHandle>> StatusRequests;
         ui64 StorageUnitsQuota;
         ui64 ComputationalUnitsQuota;
-        TVector<TActorId> Subscribers; 
+        TVector<TActorId> Subscribers;
         // Error code and issue are used to report the last
         // problem with tenant.
         Ydb::StatusIds::StatusCode ErrorCode;
@@ -714,17 +714,17 @@ public:
                                              Ydb::StatusIds::StatusCode code);
     ITransaction *CreateTxUpdateConfirmedSubdomain(const TString &name,
                                                    ui64 version,
-                                                   TActorId worker); 
+                                                   TActorId worker);
     ITransaction *CreateTxUpdateTenantState(const TString &name,
                                             TTenant::EState state,
-                                            TActorId worker = TActorId()); 
+                                            TActorId worker = TActorId());
     ITransaction *CreateTxUpdateSubDomainKey(const TString &path,
                                              ui64 schemeShardId,
                                              ui64 pathId,
-                                             TActorId worker); 
+                                             TActorId worker);
     ITransaction *CreateTxUpdatePoolState(TTenant::TPtr tenant,
                                           TStoragePool::TPtr pool,
-                                          TActorId worker, 
+                                          TActorId worker,
                                           TStoragePool::EState state);
     ITransaction *CreateTxRevertPoolState(TTenant::TPtr tenant,
                                           TStoragePool::TPtr pool,
@@ -984,7 +984,7 @@ public:
 private:
     TConsole &Self;
     TDomainsInfo::TDomain::TPtr Domain;
-    TActorId TenantSlotBrokerPipe; 
+    TActorId TenantSlotBrokerPipe;
     THashMap<TString, TTenant::TPtr> Tenants;
     THashMap<TDomainId, TString> TenantIdToName;
     THashMap<TString, TRemovedTenant> RemovedTenants;

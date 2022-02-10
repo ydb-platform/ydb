@@ -16,7 +16,7 @@ public:
         return NKikimrServices::TActivity::CMS_WALLE_REQ;
     }
 
-    TWalleCreateTaskAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &event, TActorId cms) 
+    TWalleCreateTaskAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &event, TActorId cms)
         : RequestEvent(event)
         , Cms(cms)
     {
@@ -208,11 +208,11 @@ private:
 
     TEvCms::TEvWalleCreateTaskRequest::TPtr RequestEvent;
     TAutoPtr<TEvCms::TEvWalleCreateTaskResponse> Response;
-    TActorId Cms; 
+    TActorId Cms;
 };
 
 
-IActor *CreateWalleAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, TActorId cms) 
+IActor *CreateWalleAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, TActorId cms)
 {
     return new TWalleCreateTaskAdapter(ev, cms);
 }

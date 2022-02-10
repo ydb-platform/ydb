@@ -205,7 +205,7 @@ public:
                                             str << EncodeHtmlPcdata(EscapeC(TStringBuf(static_cast<const char*>(data), Min(size, (ui32)1024))));
                                             break;
                                         case NScheme::NTypeIds::ActorId:
-                                            str << *(TActorId*)data; 
+                                            str << *(TActorId*)data;
                                             break;
                                         case NScheme::NTypeIds::Utf8:
                                         case NScheme::NTypeIds::Json:

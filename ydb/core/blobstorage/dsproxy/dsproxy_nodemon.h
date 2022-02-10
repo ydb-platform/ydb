@@ -12,8 +12,8 @@
 #include <ydb/core/util/throughput_meter.h>
 #include <ydb/core/mon/mon.h>
 
-#include <library/cpp/monlib/dynamic_counters/percentile/percentile.h> 
-#include <library/cpp/monlib/metrics/histogram_snapshot.h> 
+#include <library/cpp/monlib/dynamic_counters/percentile/percentile.h>
+#include <library/cpp/monlib/metrics/histogram_snapshot.h>
 
 #include <util/generic/ptr.h>
 

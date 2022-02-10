@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(ActorBootstrapped) {
     class TTestBoostrapped: public TActorBootstrapped<TTestBoostrapped>
     {
     public:
-        TTestBoostrapped(const TActorId& edge) 
+        TTestBoostrapped(const TActorId& edge)
             : Edge(edge)
         {}
 
@@ -17,21 +17,21 @@ Y_UNIT_TEST_SUITE(ActorBootstrapped) {
             ctx.Send(Edge, new TEvents::TEvWakeup);
         }
 
-        TActorId Edge; 
+        TActorId Edge;
     };
 
     class TTestBoostrappedParent: public TActorBootstrapped<TTestBoostrappedParent>
     {
     public:
-        TTestBoostrappedParent(const TActorId& edge) 
+        TTestBoostrappedParent(const TActorId& edge)
             : Edge(edge)
         {}
 
-        void Bootstrap(const TActorId&, const TActorContext& ctx) { 
+        void Bootstrap(const TActorId&, const TActorContext& ctx) {
             ctx.Send(Edge, new TEvents::TEvWakeup);
         }
 
-        TActorId Edge; 
+        TActorId Edge;
     };
 
     template <typename TDerivedActor>

@@ -1,15 +1,15 @@
-#include "mkql_opt_literal.h" 
-#include "mkql_node_cast.h" 
-#include "mkql_node_builder.h" 
+#include "mkql_opt_literal.h"
+#include "mkql_node_cast.h"
+#include "mkql_node_builder.h"
 #include "mkql_node_visitor.h"
 #include "mkql_program_builder.h"
 #include "mkql_node_printer.h"
- 
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
- 
+
 #include <util/generic/singleton.h>
 
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -17,16 +17,16 @@ using namespace NDetail;
 
 namespace {
 
-TNode* LiteralAddMember( 
-        const TStructLiteral& oldStruct, 
-        const TStructType& newStructType, 
-        TRuntimeNode newMember, 
-        TRuntimeNode position, 
-        const TTypeEnvironment& env) 
-{ 
+TNode* LiteralAddMember(
+        const TStructLiteral& oldStruct,
+        const TStructType& newStructType,
+        TRuntimeNode newMember,
+        TRuntimeNode position,
+        const TTypeEnvironment& env)
+{
     TStructLiteralBuilder resultBuilder(env);
 
-    TDataLiteral* positionData = AS_VALUE(TDataLiteral, position); 
+    TDataLiteral* positionData = AS_VALUE(TDataLiteral, position);
     const ui32 positionValue = positionData->AsValue().Get<ui32>();
     MKQL_ENSURE(positionValue <= oldStruct.GetType()->GetMembersCount(), "Bad member index");
 
@@ -66,13 +66,13 @@ TNode* LiteralRemoveMember(
 
 TRuntimeNode OptimizeIf(TCallable& callable, const TTypeEnvironment& env) {
     Y_UNUSED(env);
-    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arguments"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arguments");
 
     auto predicateInput = callable.GetInput(0);
     auto thenInput = callable.GetInput(1);
     auto elseInput = callable.GetInput(2);
     if (predicateInput.HasValue()) {
-        TDataLiteral* data = AS_VALUE(TDataLiteral, predicateInput); 
+        TDataLiteral* data = AS_VALUE(TDataLiteral, predicateInput);
         const bool predicateValue = data->AsValue().Get<bool>();
         return predicateValue ? thenInput : elseInput;
     }
@@ -85,11 +85,11 @@ TRuntimeNode OptimizeIf(TCallable& callable, const TTypeEnvironment& env) {
 }
 
 TRuntimeNode OptimizeSize(TCallable& callable, const TTypeEnvironment& env) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments");
 
     auto dataInput = callable.GetInput(0);
     if (dataInput.HasValue()) {
-        TDataLiteral* value = AS_VALUE(TDataLiteral, dataInput); 
+        TDataLiteral* value = AS_VALUE(TDataLiteral, dataInput);
         return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)value->AsValue().AsStringRef().Size()), NUdf::EDataSlot::Uint32, env), true);
     }
 
@@ -97,7 +97,7 @@ TRuntimeNode OptimizeSize(TCallable& callable, const TTypeEnvironment& env) {
 }
 
 TRuntimeNode OptimizeLength(TCallable& callable, const TTypeEnvironment& env) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments");
 
     auto listOrDictInput = callable.GetInput(0);
     if (listOrDictInput.HasValue()) {
@@ -111,15 +111,15 @@ TRuntimeNode OptimizeLength(TCallable& callable, const TTypeEnvironment& env) {
 }
 
 TRuntimeNode OptimizeAddMember(TCallable& callable, const TTypeEnvironment& env) {
-    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arguments"); 
- 
+    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arguments");
+
     auto callableReturnType = callable.GetType()->GetReturnType();
-    MKQL_ENSURE(callableReturnType->IsStruct(), "Expected struct"); 
+    MKQL_ENSURE(callableReturnType->IsStruct(), "Expected struct");
     const auto& newType = static_cast<TStructType&>(*callableReturnType);
 
     auto structInput = callable.GetInput(0);
     if (structInput.HasValue()) {
-        TStructLiteral* value = AS_VALUE(TStructLiteral, structInput); 
+        TStructLiteral* value = AS_VALUE(TStructLiteral, structInput);
         return TRuntimeNode(LiteralAddMember(*value, newType, callable.GetInput(1), callable.GetInput(2), env), true);
     }
 
@@ -142,18 +142,18 @@ TRuntimeNode OptimizeRemoveMember(TCallable& callable, const TTypeEnvironment& e
 
 TRuntimeNode OptimizeMember(TCallable& callable, const TTypeEnvironment& env) {
     Y_UNUSED(env);
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments");
 
     auto structInput = callable.GetInput(0);
     if (structInput.HasValue() && structInput.GetStaticType()->IsStruct()) {
-        TStructLiteral* value = AS_VALUE(TStructLiteral, structInput); 
+        TStructLiteral* value = AS_VALUE(TStructLiteral, structInput);
 
         auto position = callable.GetInput(1);
-        TDataLiteral* positionData = AS_VALUE(TDataLiteral, position); 
+        TDataLiteral* positionData = AS_VALUE(TDataLiteral, position);
         const ui32 positionValue = positionData->AsValue().Get<ui32>();
 
         MKQL_ENSURE(positionValue < value->GetValuesCount(), "Bad member index");
-        return value->GetValue(positionValue); 
+        return value->GetValue(positionValue);
     }
 
     return TRuntimeNode(&callable, false);
@@ -195,7 +195,7 @@ TRuntimeNode OptimizeMap(TCallable& callable, const TTypeEnvironment& env) {
 
     auto listType = static_cast<TListType*>(returnType);
     auto newItemInput = callable.GetInput(2);
-    if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) { 
+    if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) {
         return TRuntimeNode(env.GetListOfVoid(), true);
     }
 
@@ -212,7 +212,7 @@ TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
 
     const auto listType = static_cast<TListType*>(returnType);
     const auto newItemInput = callable.GetInput(2);
-    if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) { 
+    if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) {
         if (newItemInput.GetStaticType()->IsList()) {
             TListLiteral* list = AS_VALUE(TListLiteral, newItemInput);
             if (list->GetItemsCount() == 0) {
@@ -231,16 +231,16 @@ TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
 
 TRuntimeNode OptimizeCoalesce(TCallable& callable, const TTypeEnvironment& env) {
     Y_UNUSED(env);
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments");
 
     auto optionalInput = callable.GetInput(0);
     auto defaultInput = callable.GetInput(1);
     bool isDefaultOptional;
     UnpackOptional(defaultInput, isDefaultOptional);
     if (optionalInput.HasValue()) {
-        auto optionalData = AS_VALUE(TOptionalLiteral, optionalInput); 
-        if (optionalData->HasItem()) { 
-            return isDefaultOptional ? optionalInput : optionalData->GetItem(); 
+        auto optionalData = AS_VALUE(TOptionalLiteral, optionalInput);
+        if (optionalData->HasItem()) {
+            return isDefaultOptional ? optionalInput : optionalData->GetItem();
         } else {
             return defaultInput;
         }
@@ -250,7 +250,7 @@ TRuntimeNode OptimizeCoalesce(TCallable& callable, const TTypeEnvironment& env) 
 }
 
 TRuntimeNode OptimizeExists(TCallable& callable, const TTypeEnvironment& env) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments");
 
     auto optionalInput = callable.GetInput(0);
     if (optionalInput.HasValue()) {
@@ -268,7 +268,7 @@ TRuntimeNode OptimizeNth(TCallable& callable, const TTypeEnvironment& env) {
     auto tupleInput = callable.GetInput(0);
     if (tupleInput.HasValue() && tupleInput.GetStaticType()->IsTuple()) {
         auto tuple = tupleInput.GetValue();
-        auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(1)); 
+        auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(1));
         const ui32 index = indexData->AsValue().Get<ui32>();
 
         const auto& value = static_cast<const TTupleLiteral&>(*tuple);
@@ -340,7 +340,7 @@ struct TOptimizationFuncMapFiller {
     }
 };
 
-} // namespace 
+} // namespace
 
 TCallableVisitFuncProvider GetLiteralPropagationOptimizationFuncProvider() {
     return Singleton<TOptimizationFuncMapFiller>()->Provider;
@@ -353,5 +353,5 @@ TRuntimeNode LiteralPropagationOptimization(TRuntimeNode root, const TTypeEnviro
     return SinglePassVisitCallables(root, explorer, GetLiteralPropagationOptimizationFuncProvider(), env, inPlace, wereChanges);
 }
 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+} // namespace NMiniKQL
+} // namespace NKikimr

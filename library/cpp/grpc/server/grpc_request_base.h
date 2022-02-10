@@ -9,7 +9,7 @@ namespace grpc {
 class ByteBuffer;
 }
 
-namespace NGrpc { 
+namespace NGrpc {
 
 extern const char* GRPC_USER_AGENT_HEADER;
 
@@ -30,7 +30,7 @@ struct TAuthState {
 
 
 //! An interface that may be used to limit concurrency of requests
-class IGRpcRequestLimiter: public TThrRefBase { 
+class IGRpcRequestLimiter: public TThrRefBase {
 public:
     virtual bool IncRequest() = 0;
     virtual void DecRequest() = 0;
@@ -39,7 +39,7 @@ public:
 using IGRpcRequestLimiterPtr = TIntrusivePtr<IGRpcRequestLimiter>;
 
 //! State of current request
-class IRequestContextBase: public TThrRefBase { 
+class IRequestContextBase: public TThrRefBase {
 public:
     enum class EFinishStatus {
         OK,
@@ -72,12 +72,12 @@ public:
 
     //! Returns deadline (server epoch related) if peer set it on its side, or Instanse::Max() otherwise
     virtual TInstant Deadline() const = 0;
- 
-    //! Returns available peer metadata keys 
-    virtual TSet<TStringBuf> GetPeerMetaKeys() const = 0; 
- 
+
+    //! Returns available peer metadata keys
+    virtual TSet<TStringBuf> GetPeerMetaKeys() const = 0;
+
     //! Returns peer optional metavalue
-    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0; 
+    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
 
     //! Returns request compression level
     virtual grpc_compression_level GetCompressionLevel() const = 0;
@@ -113,4 +113,4 @@ public:
     virtual bool SslServer() const = 0;
 };
 
-} // namespace NGrpc 
+} // namespace NGrpc

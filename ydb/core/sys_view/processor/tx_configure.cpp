@@ -5,9 +5,9 @@ namespace NSysView {
 
 struct TSysViewProcessor::TTxConfigure : public TTxBase {
     NKikimrSysView::TEvConfigureProcessor Record;
-    TActorId Sender; 
+    TActorId Sender;
 
-    TTxConfigure(TSelf* self, NKikimrSysView::TEvConfigureProcessor&& record, const TActorId& sender) 
+    TTxConfigure(TSelf* self, NKikimrSysView::TEvConfigureProcessor&& record, const TActorId& sender)
         : TTxBase(self)
         , Record(std::move(record))
         , Sender(sender)

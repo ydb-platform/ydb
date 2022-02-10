@@ -9,7 +9,7 @@
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
 
@@ -26,7 +26,7 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TIntrusivePtr<TSyncerData> SyncerData;
         NMon::TEvHttpInfo::TPtr Ev;
-        const TActorId NotifyId; 
+        const TActorId NotifyId;
 
         friend class TActorBootstrapped<TSyncerSchedulerHttpActor>;
 
@@ -49,7 +49,7 @@ namespace NKikimr {
                             auto vd = GInfo.GetVDiskId(it->VDiskIdShort);
                             str << "VDiskId: " << vd.ToStringWOGeneration() << "<br>";
                             // output node info
-                            TActorId aid = GInfo.GetActorId(it->VDiskIdShort); 
+                            TActorId aid = GInfo.GetActorId(it->VDiskIdShort);
                             ui32 nodeId = aid.NodeId();
                             using TNodeInfo = TEvInterconnect::TNodeInfo;
                             const TNodeInfo *info = NodesInfo->Get()->GetNodeInfo(nodeId);
@@ -72,7 +72,7 @@ namespace NKikimr {
         };
 
         void Bootstrap(const TActorContext &ctx) {
-            ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes()); 
+            ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
             Become(&TThis::StateFunc);
         }
 
@@ -104,7 +104,7 @@ namespace NKikimr {
                                   const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
                                   const TIntrusivePtr<TSyncerData> &syncerData,
                                   NMon::TEvHttpInfo::TPtr &ev,
-                                  const TActorId &notifyId) 
+                                  const TActorId &notifyId)
             : TActorBootstrapped<TSyncerSchedulerHttpActor>()
             , SyncerContext(sc)
             , GInfo(ginfo)
@@ -136,8 +136,8 @@ namespace NKikimr {
     class TSyncerCommitterProxy : public TActorBootstrapped<TSyncerCommitterProxy> {
         friend class TActorBootstrapped<TSyncerCommitterProxy>;
 
-        const TActorId NotifyId; 
-        const TActorId CommitterId; 
+        const TActorId NotifyId;
+        const TActorId CommitterId;
         std::unique_ptr<TSyncerJobTask> Task;
 
         void Bootstrap(const TActorContext &ctx) {
@@ -167,8 +167,8 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_SYNCER_COMMITTER_PROXY;
         }
 
-        TSyncerCommitterProxy(const TActorId &notifyId, 
-                              const TActorId &committerId, 
+        TSyncerCommitterProxy(const TActorId &notifyId,
+                              const TActorId &committerId,
                               std::unique_ptr<TSyncerJobTask> task)
             : TActorBootstrapped<TSyncerCommitterProxy>()
             , NotifyId(notifyId)
@@ -204,7 +204,7 @@ namespace NKikimr {
         TSchedulerQueue SchedulerQueue;
         TActiveActors ActiveActors;
         const TDuration SyncTimeInterval;
-        TActorId CommitterId; 
+        TActorId CommitterId;
         bool Scheduled;
         std::shared_ptr<TSjCtx> JobCtx;
 
@@ -369,7 +369,7 @@ namespace NKikimr {
         TSyncerScheduler(const TIntrusivePtr<TSyncerContext> &sc,
                          const TIntrusivePtr<TBlobStorageGroupInfo> &info,
                          const TIntrusivePtr<TSyncerData> &syncerData,
-                         const TActorId &committerId) 
+                         const TActorId &committerId)
             : TActorBootstrapped<TSyncerScheduler>()
             , SyncerContext(sc)
             , GInfo(info)
@@ -390,7 +390,7 @@ namespace NKikimr {
     IActor* CreateSyncerSchedulerActor(const TIntrusivePtr<TSyncerContext> &sc,
                                        const TIntrusivePtr<TBlobStorageGroupInfo> &info,
                                        const TIntrusivePtr<TSyncerData> &syncerData,
-                                       const TActorId &committerId) { 
+                                       const TActorId &committerId) {
         return new TSyncerScheduler(sc, info, syncerData, committerId);
     }
 

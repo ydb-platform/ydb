@@ -20,7 +20,7 @@ public:
     // returns true if finished
     virtual bool GenerateTask(const TActorContext &ctx) = 0;
     virtual void Handle(TEvHullLogHugeBlob::TPtr &ev, const TActorContext &ctx) = 0;
-    virtual void SetHugeKeeperId(const TActorId &hugeKeeperId) { 
+    virtual void SetHugeKeeperId(const TActorId &hugeKeeperId) {
         HugeKeeperId = hugeKeeperId;
     }
 
@@ -34,7 +34,7 @@ public:
 
 protected:
     const TAllVDisks::TVDiskInstance &VDiskInstance;
-    TActorId HugeKeeperId; 
+    TActorId HugeKeeperId;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -57,7 +57,7 @@ public:
                 TString abcdefghkj(CreateData("abcdefghkj", minHugeBlobSize, true));
                 const TLogoBlobID logoBlobId(0, 1, 10, 0, abcdefghkj.size(), 0, 1);
                 ctx.Send(HugeKeeperId,
-                         new TEvHullWriteHugeBlob(TActorId(), 0, logoBlobId, TIngress(), 
+                         new TEvHullWriteHugeBlob(TActorId(), 0, logoBlobId, TIngress(),
                                 TRope(abcdefghkj),
                                 false, NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
                                 std::make_unique<TEvBlobStorage::TEvVPutResult>()));
@@ -97,10 +97,10 @@ struct THugeModuleContext {
     TIntrusivePtr<NKikimr::TVDiskConfig> Config;
     TVDiskContextPtr VCtx;
     TPDiskCtxPtr PDiskCtx;
-    TActorId MainID; 
-    TActorId LoggerID; 
-    TActorId LogCutterID; 
-    TActorId HugeKeeperID; 
+    TActorId MainID;
+    TActorId LoggerID;
+    TActorId LogCutterID;
+    TActorId HugeKeeperID;
 
     THugeModuleContext(TConfiguration *conf)
         : Conf(conf)

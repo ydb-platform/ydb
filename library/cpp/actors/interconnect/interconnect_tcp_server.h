@@ -34,7 +34,7 @@ namespace NActors {
             }
         }
 
-        TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override; 
+        TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override;
 
         void Die(const TActorContext& ctx) override;
 
@@ -50,8 +50,8 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr const ProxyCommonCtx;
     };
 
-    static inline TActorId MakeInterconnectListenerActorId(bool dynamic) { 
+    static inline TActorId MakeInterconnectListenerActorId(bool dynamic) {
         char x[12] = {'I', 'C', 'L', 'i', 's', 't', 'e', 'n', 'e', 'r', '/', dynamic ? 'D' : 'S'};
-        return TActorId(0, TStringBuf(x, 12)); 
+        return TActorId(0, TStringBuf(x, 12));
     }
 }

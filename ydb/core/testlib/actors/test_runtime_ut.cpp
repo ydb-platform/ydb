@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
     Y_UNIT_TEST(TestHandleEvent) {
         class TMyActor : public TActor<TMyActor> {
         public:
-            TMyActor(const TActorId& sender) 
+            TMyActor(const TActorId& sender)
                 : TActor(&TMyActor::StateFunc)
                 , Sender(sender)
             {
@@ -32,13 +32,13 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             }
 
         private:
-            const TActorId Sender; 
+            const TActorId Sender;
         };
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        TActorId sender = runtime.AllocateEdgeActor(); 
-        TActorId actorId = runtime.Register(new TMyActor(sender)); 
+        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId actorId = runtime.Register(new TMyActor(sender));
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
     }
 
@@ -59,8 +59,8 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        TActorId sender = runtime.AllocateEdgeActor(); 
-        TActorId actorId = runtime.Register(new TMyActor); 
+        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId actorId = runtime.Register(new TMyActor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPoisonPill));
     }
 
@@ -97,9 +97,9 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
         auto actor = new TMyActor;
-        TActorId actorId = runtime.Register(actor); 
+        TActorId actorId = runtime.Register(actor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         UNIT_ASSERT_EQUAL(actor->IsStateChanged(), false);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPong));
@@ -122,8 +122,8 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        TActorId sender = runtime.AllocateEdgeActor(); 
-        TActorId actorId = runtime.Register(new TMyActor); 
+        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId actorId = runtime.Register(new TMyActor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         auto events = runtime.CaptureEvents();
         bool passed = false;
@@ -161,8 +161,8 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             return false;
         });
 
-        TActorId sender = runtime.AllocateEdgeActor(); 
-        TActorId actorId = runtime.Register(new TMyActor); 
+        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId actorId = runtime.Register(new TMyActor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         auto scheduledEvents = runtime.CaptureScheduledEvents();
         UNIT_ASSERT_EQUAL_C(scheduledEvents.size(), 1, "check scheduled count");
@@ -199,19 +199,19 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                 ctx.Send(ChildId, new TEvents::TEvPing());
             }
 
-            TActorId GetChildId() const { 
+            TActorId GetChildId() const {
                 return ChildId;
             }
 
         private:
-            TActorId ChildId; 
+            TActorId ChildId;
         };
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
         auto actor = new TMyActor;
-        TActorId actorId = runtime.Register(actor); 
+        TActorId actorId = runtime.Register(actor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
         auto events = runtime.CaptureEvents();
         bool passed = false;
@@ -270,9 +270,9 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
         try {
-            TActorId sender = runtime.AllocateEdgeActor(); 
+            TActorId sender = runtime.AllocateEdgeActor();
             auto myActor = new TMyActor(&syncMutex);
-            TActorId actorId = runtime.Register(myActor); 
+            TActorId actorId = runtime.Register(myActor);
             runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
             runtime.DispatchEvents();
             auto events = runtime.CaptureEvents();
@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             }
 
         private:
-            TActorId Sender; 
+            TActorId Sender;
             TInstant CurrentTime;
         };
 
@@ -333,9 +333,9 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         });
 
         runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntimeBase::CollapsedTimeScheduledEventsSelector);
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
         auto myActor = new TMyActor;
-        TActorId actorId = runtime.Register(myActor); 
+        TActorId actorId = runtime.Register(myActor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         runtime.DispatchEvents();
         auto events = runtime.CaptureEvents();
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         class TProducerActor : public TActor<TProducerActor> {
         public:
-            TProducerActor(ui32 count, const TVector<TActorId>& recipents) 
+            TProducerActor(ui32 count, const TVector<TActorId>& recipents)
                 : TActor(&TProducerActor::StateFunc)
                 , Count(count)
                 , Recipents(recipents)
@@ -428,30 +428,30 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         private:
             const ui32 Count;
-            const TVector<TActorId> Recipents; 
+            const TVector<TActorId> Recipents;
             TAutoPtr<TThread> Thread;
             TActorSystem* ActorSystem = nullptr;
-            TActorId SelfId; 
+            TActorId SelfId;
         };
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
 
         try {
-            TActorId sender = runtime.AllocateEdgeActor(); 
+            TActorId sender = runtime.AllocateEdgeActor();
             ui32 count = 1000;
             ui32 consumersCount = 4;
             TVector<TConsumerActor*> consumers;
-            TVector<TActorId> consumerIds; 
+            TVector<TActorId> consumerIds;
             for (ui32 i = 0; i < consumersCount; ++i) {
                 auto consumerActor = new TConsumerActor(count);
-                TActorId consumerId = runtime.Register(consumerActor); 
+                TActorId consumerId = runtime.Register(consumerActor);
                 consumers.push_back(consumerActor);
                 consumerIds.push_back(consumerId);
             }
 
             auto producerActor = new TProducerActor(count, consumerIds);
-            TActorId producerId = runtime.Register(producerActor); 
+            TActorId producerId = runtime.Register(producerActor);
             runtime.Send(new IEventHandle(producerId, sender, new TEvents::TEvPing));
             runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(runtime);
@@ -517,15 +517,15 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
         TMyActor* myActor = new TMyActor;
-        TActorId actorId = runtime.Register(myActor); 
+        TActorId actorId = runtime.Register(myActor);
         runtime.EnableScheduleForActor(actorId);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvBootstrap()));
         TAutoPtr<IEventHandle> handle;
         UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(handle));
-        runtime.Send(new IEventHandle(actorId, TActorId(), new TEvents::TEvPing())); 
-        runtime.Schedule(new IEventHandle(sender, TActorId(), new TEvents::TEvWakeup()), 
+        runtime.Send(new IEventHandle(actorId, TActorId(), new TEvents::TEvPing()));
+        runtime.Schedule(new IEventHandle(sender, TActorId(), new TEvents::TEvWakeup()),
             TDuration::MilliSeconds(1000000));
         do {
             runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);
@@ -548,11 +548,11 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         class TCountingActor : public TActorBootstrapped<TCountingActor> {
         private:
-            TVector<TActorId> Targets; 
+            TVector<TActorId> Targets;
             ui32 Counter = 0;
 
         public:
-            TCountingActor(TVector<TActorId> targets) 
+            TCountingActor(TVector<TActorId> targets)
                 : Targets(targets)
             {}
 
@@ -578,10 +578,10 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        TActorId edge1 = runtime.AllocateEdgeActor(); 
-        TActorId edge2 = runtime.AllocateEdgeActor(); 
-        TActorId edge3 = runtime.AllocateEdgeActor(); 
-        TActorId countingActor = runtime.Register(new TCountingActor({edge1, edge2})); 
+        TActorId edge1 = runtime.AllocateEdgeActor();
+        TActorId edge2 = runtime.AllocateEdgeActor();
+        TActorId edge3 = runtime.AllocateEdgeActor();
+        TActorId countingActor = runtime.Register(new TCountingActor({edge1, edge2}));
         runtime.EnableScheduleForActor(countingActor);
 
         // Ignores edge1 event

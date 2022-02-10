@@ -18,12 +18,12 @@ class TFlowControlledRequestActor : public IActor {
     void HandleReply(TAutoPtr<IEventHandle> &ev);
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr &ev);
 public:
-    const TActorId Source; 
+    const TActorId Source;
     const ui64 Cookie;
     const ui32 Flags;
     const ui64 StartCounter;
 
-    TFlowControlledRequestActor(ui32 activity, TFlowControlledRequestQueue *queue, TActorId source, ui64 cookie, ui32 flags) 
+    TFlowControlledRequestActor(ui32 activity, TFlowControlledRequestQueue *queue, TActorId source, ui64 cookie, ui32 flags)
         : IActor(static_cast<TReceiveFunc>(&TFlowControlledRequestActor::StateWait), activity)
         , QueueActor(queue)
         , Source(source)
@@ -49,7 +49,7 @@ public:
 };
 
 class TFlowControlledRequestQueue : public IActor {
-    const TActorId Target; 
+    const TActorId Target;
     const TFlowControlledQueueConfig Config;
 
     TDeque<THolder<IEventHandle>> UnhandledRequests;
@@ -123,7 +123,7 @@ class TFlowControlledRequestQueue : public IActor {
             if (reqActor) {
                 if (reqActor->Flags & IEventHandle::FlagSubscribeOnSession) {
                     TActivationContext::Send(
-                        new IEventHandle(reqActor->Source, TActorId(), new TEvInterconnect::TEvNodeDisconnected(nodeid), 0, reqActor->Cookie) 
+                        new IEventHandle(reqActor->Source, TActorId(), new TEvInterconnect::TEvNodeDisconnected(nodeid), 0, reqActor->Cookie)
                     );
                 }
                 reqActor->PassAway();
@@ -153,7 +153,7 @@ class TFlowControlledRequestQueue : public IActor {
         PassAway();
     }
 public:
-    TFlowControlledRequestQueue(TActorId target, ui32 activity, const TFlowControlledQueueConfig &config) 
+    TFlowControlledRequestQueue(TActorId target, ui32 activity, const TFlowControlledQueueConfig &config)
         : IActor(static_cast<TReceiveFunc>(&TFlowControlledRequestQueue::StateWork), activity)
         , Target(target)
         , Config(config)
@@ -208,7 +208,7 @@ void TFlowControlledRequestActor::HandleUndelivered(TEvents::TEvUndelivered::TPt
 }
 
 
-IActor* CreateFlowControlledRequestQueue(TActorId targetId, ui32 activity, const TFlowControlledQueueConfig &config) { 
+IActor* CreateFlowControlledRequestQueue(TActorId targetId, ui32 activity, const TFlowControlledQueueConfig &config) {
     return new TFlowControlledRequestQueue(targetId, activity, config);
 }
 

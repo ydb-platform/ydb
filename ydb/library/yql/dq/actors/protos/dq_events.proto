@@ -43,7 +43,7 @@ enum EComputeState {
 };
 
 message TComputeActorStats {
-    optional NActorsProto.TActorId ActorId = 1; 
+    optional NActorsProto.TActorId ActorId = 1;
     reserved 2; //optional NKqpProto.TKqpStatsRun LegacyStats = 2;
 };
 

@@ -20,7 +20,7 @@ class TJsonTabletCounters : public TActorBootstrapped<TJsonTabletCounters> {
     using TBase = TActorBootstrapped<TJsonTabletCounters>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    TVector<TActorId> PipeClients; 
+    TVector<TActorId> PipeClients;
     TVector<ui64> Tablets;
     TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> Results;
     THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
@@ -65,7 +65,7 @@ public:
             NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
             record->SetPath(params.Get("path"));
 
-            TActorId txproxy = MakeTxProxyID(); 
+            TActorId txproxy = MakeTxProxyID();
             ctx.Send(txproxy, request.Release());
             Become(&TThis::StateRequestedDescribe, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
         } else if (params.Has("tablet_id")) {
@@ -85,7 +85,7 @@ public:
     }
 
     void Die(const TActorContext& ctx) override {
-        for (const TActorId& pipeClient : PipeClients) { 
+        for (const TActorId& pipeClient : PipeClients) {
             NTabletPipe::CloseClient(ctx, pipeClient);
         }
         TBase::Die(ctx);

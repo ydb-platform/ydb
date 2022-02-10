@@ -273,8 +273,8 @@ private:
     }
 
 private:
-    TActorId NetClassifierActorId; 
-    TActorId ClusterTrackerActorId; 
+    TActorId NetClassifierActorId;
+    TActorId ClusterTrackerActorId;
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr CloudNetworksClassifier;
     TMaybe<TInstant> NetDataUpdateTs;

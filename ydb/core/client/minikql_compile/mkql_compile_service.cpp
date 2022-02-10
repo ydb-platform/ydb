@@ -31,7 +31,7 @@ public:
         using TPtr = TIntrusivePtr<TCompileContext>;
 
         TCompileContext(const TString& pgm,
-            TActorId sender, 
+            TActorId sender,
             const TAlignedPagePoolCounters& allocPoolCounters,
             const NMiniKQL::IFunctionRegistry* functionRegistry)
             : Program(pgm)
@@ -50,7 +50,7 @@ public:
         }
 
         TString Program;
-        TActorId ResponseTo; 
+        TActorId ResponseTo;
         NMiniKQL::TScopedAlloc Alloc;
         NMiniKQL::TTypeEnvironment TypeEnv;
         ui64 Cookie;
@@ -131,7 +131,7 @@ private:
             c->Retried = true;
 
             auto *compileActor = NYql::CreateCompileActor(c->Program, &c->TypeEnv, DbSchemeResolver.Get(), ctx.SelfID, std::move(msg->CompileResolveCookies), false);
-            const TActorId actId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap, appData->UserPoolId); 
+            const TActorId actId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap, appData->UserPoolId);
             Compiling.insert(TCompilingMap::value_type(actId, c));
         }
     }
@@ -161,23 +161,23 @@ private:
 private:
     const size_t COMPILE_INFLIGHT_LIMIT;
     TQueue<TCompileContext::TPtr> CompileQueue;
-    using TCompilingMap = THashMap<TActorId, TCompileContext::TPtr>; 
+    using TCompilingMap = THashMap<TActorId, TCompileContext::TPtr>;
     TCompilingMap Compiling;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TAlignedPagePoolCounters AllocPoolCounters;
-    TActorId SchemeCache; 
+    TActorId SchemeCache;
     THolder<NYql::IDbSchemeResolver> DbSchemeResolver;
 };
 
 
-TActorId MakeMiniKQLCompileServiceID() { 
+TActorId MakeMiniKQLCompileServiceID() {
     const char x[12] = "MKQLCompile";
-    return TActorId(0, TStringBuf(x, 12)); 
+    return TActorId(0, TStringBuf(x, 12));
 }
 
-const TActorId& GetMiniKQLCompileServiceID() { 
-    static TActorId miniKQLCompileServiceID = MakeMiniKQLCompileServiceID(); 
+const TActorId& GetMiniKQLCompileServiceID() {
+    static TActorId miniKQLCompileServiceID = MakeMiniKQLCompileServiceID();
     return miniKQLCompileServiceID;
 }
 

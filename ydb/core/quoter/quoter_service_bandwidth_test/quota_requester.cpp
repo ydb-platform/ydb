@@ -20,7 +20,7 @@ TDuration TRequestDistribution::GetNextRequestTimeDelta() {
     return TDuration::MicroSeconds(static_cast<ui64>(LambdaCoefficient * std::log(rand)));
 }
 
-TBaseQuotaRequester::TBaseQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent) 
+TBaseQuotaRequester::TBaseQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent)
     : Opts(opts)
     , Stats(stats)
     , Parent(parent)
@@ -88,7 +88,7 @@ void TBaseQuotaRequester::SleepUntilNextRequest(TDuration duration) {
     Schedule(duration, new TEvents::TEvWakeup());
 }
 
-TKesusQuotaRequester::TKesusQuotaRequester(const NKikimr::TOptions& opts, NKikimr::TRequestStats& stats, TActorId parent, size_t kesusIndex, size_t resourceIndex) 
+TKesusQuotaRequester::TKesusQuotaRequester(const NKikimr::TOptions& opts, NKikimr::TRequestStats& stats, TActorId parent, size_t kesusIndex, size_t resourceIndex)
     : TBaseQuotaRequester(opts, stats, parent)
     , KesusPath(TTestServer::GetKesusPath(kesusIndex))
     , ResourcePath(TTestServer::GetKesusResource(resourceIndex))
@@ -102,7 +102,7 @@ THolder<TEvQuota::TEvRequest> TKesusQuotaRequester::MakeQuoterRequest() {
     return MakeHolder<TEvQuota::TEvRequest>(TEvQuota::EResourceOperator::And, std::move(reqs), Opts.QuotaRequestDeadline);
 }
 
-TLocalResourceQuotaRequester::TLocalResourceQuotaRequester(const NKikimr::TOptions& opts, NKikimr::TRequestStats& stats, TActorId parent, size_t resourceIndex) 
+TLocalResourceQuotaRequester::TLocalResourceQuotaRequester(const NKikimr::TOptions& opts, NKikimr::TRequestStats& stats, TActorId parent, size_t resourceIndex)
     : TBaseQuotaRequester(opts, stats, parent)
     , ResourceId(TEvQuota::TResourceLeaf::MakeTaggedRateRes(resourceIndex, Opts.LocalResourceQuotaRate))
 {

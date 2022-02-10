@@ -14,7 +14,7 @@ struct TMkqlBuildContext {
     using TMemoizedNodesMap = TArgumentsMap;
 
     const IMkqlCallableCompiler& MkqlCompiler;
-    NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder; 
+    NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
     TExprContext& ExprCtx;
     TMemoizedNodesMap Memoization;
     TMkqlBuildContext *const ParentCtx = nullptr;

@@ -2522,7 +2522,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
 namespace {
     ui64 AsyncCreateCopyTable(
             Tests::TServer::TPtr server,
-            TActorId sender, 
+            TActorId sender,
             const TString &root,
             const TString &name,
             const TString &from)
@@ -2815,9 +2815,9 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
     captureTxProposeResult = false;
 
     // Remember which senders claim to be which shards
-    TVector<TActorId> actors(2); 
+    TVector<TActorId> actors(2);
     for (auto& event : txProposeResults) {
-        TActorId actor = event->Sender; 
+        TActorId actor = event->Sender;
         const auto* msg = event->Get<TEvDataShard::TEvProposeTransactionResult>();
         ui64 shard = msg->Record.GetOrigin();
         for (size_t i = 0; i < tablets.size(); ++i) {
@@ -2860,7 +2860,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
         if (event && event->GetRecipientRewrite() == actors[1]) {
             Cerr << "---- found propose for table-2 ----" << Endl;
             const auto* msg = event->Get<TEvDataShard::TEvProposeTransaction>();
-            TActorId target = msg->GetSource(); 
+            TActorId target = msg->GetSource();
             auto* result = new TEvDataShard::TEvProposeTransactionResult(
                 msg->GetTxKind(),
                 tablets[1],
@@ -3182,7 +3182,7 @@ namespace {
 
     void AsyncReadTable(
             Tests::TServer::TPtr server,
-            TActorId sender, 
+            TActorId sender,
             const TString& path)
     {
         auto &runtime = *server->GetRuntime();
@@ -3496,7 +3496,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
     bool captureSplit = true;
     bool captureSplitChanged = true;
     bool capturePropose = true;
-    THashSet<TActorId> captureDelayedProposeFrom; 
+    THashSet<TActorId> captureDelayedProposeFrom;
     TVector<THolder<IEventHandle>> eventsSplit;
     TVector<THolder<IEventHandle>> eventsSplitChanged;
     TVector<THolder<IEventHandle>> eventsPropose;
@@ -3540,7 +3540,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
 
     const int totalWrites = 10;
-    TVector<TActorId> writeSenders; 
+    TVector<TActorId> writeSenders;
 
     // Send a lot of write requests in parallel (so there's a large propose queue)
     for (int i = 0; i < totalWrites; ++i) {

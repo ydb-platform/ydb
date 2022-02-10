@@ -37,7 +37,7 @@ namespace NKikimr {
         THugeStatActor(
                 TIntrusivePtr<THullCtx> hullCtx,
                 const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
-                const TActorId &parentId, 
+                const TActorId &parentId,
                 THullDsSnap &&fullSnap,
                 TEvBlobStorage::TEvVDbStat::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
@@ -56,7 +56,7 @@ namespace NKikimr {
 
         TIntrusivePtr<THullCtx> HullCtx;
         std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
-        const TActorId ParentId; 
+        const TActorId ParentId;
         THullDsSnap FullSnap;
         TEvBlobStorage::TEvVDbStat::TPtr Ev;
         std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result;
@@ -397,7 +397,7 @@ namespace NKikimr {
     IActor *CreateHugeStatActor(
             TIntrusivePtr<THullCtx> hullCtx,
             const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
-            const TActorId &parentId, 
+            const TActorId &parentId,
             THullDsSnap &&fullSnap,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) {

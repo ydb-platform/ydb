@@ -9,7 +9,7 @@
 
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <type_traits>
 #include <iterator>

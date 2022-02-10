@@ -75,7 +75,7 @@ public:
         }
 
         if (!Self->NodeIdToDataCenter.contains(nodeId))
-            ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId)); 
+            ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
 
         return true;
     }

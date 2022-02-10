@@ -1,8 +1,8 @@
-OWNER( 
-    g:solomon 
-    jamel 
-) 
- 
-RECURSE( 
-    json 
-) 
+OWNER(
+    g:solomon
+    jamel
+)
+
+RECURSE(
+    json
+)

@@ -66,7 +66,7 @@ namespace NKikimr::NStorage {
     class TNodeWarden : public TActorBootstrapped<TNodeWarden> {
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         TIntrusivePtr<TDsProxyNodeMon> DsProxyNodeMon;
-        TActorId DsProxyNodeMonActor; 
+        TActorId DsProxyNodeMonActor;
         TIntrusivePtr<TDsProxyPerPoolCounters> DsProxyPerPoolCounters;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -185,8 +185,8 @@ namespace NKikimr::NStorage {
             TGroupStat Stat;
         };
 
-        TSet<TActorId> RunningVDiskServiceIds; 
-        TMap<TActorId, TAggregatorInfo> PerAggregatorInfo; 
+        TSet<TActorId> RunningVDiskServiceIds;
+        TMap<TActorId, TAggregatorInfo> PerAggregatorInfo;
 
         void ReportLatencies();
         void Handle(TEvGroupStatReport::TPtr ev);
@@ -315,7 +315,7 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         std::queue<std::unique_ptr<IActor>> SyncOpQ;
-        TActorId SyncActorId; 
+        TActorId SyncActorId;
 
         void InvokeSyncOp(std::unique_ptr<IActor> actor);
         void Handle(TEvents::TEvInvokeResult::TPtr ev);
@@ -381,9 +381,9 @@ namespace NKikimr::NStorage {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        std::map<TActorId, std::deque<std::unique_ptr<IEventHandle>>> PendingMessageQ; 
+        std::map<TActorId, std::deque<std::unique_ptr<IEventHandle>>> PendingMessageQ;
 
-        void RegisterPendingActor(const TActorId& actorId); 
+        void RegisterPendingActor(const TActorId& actorId);
         void EnqueuePendingMessage(TAutoPtr<IEventHandle> ev);
         void IssuePendingMessages(const TActorId& actorId);
 

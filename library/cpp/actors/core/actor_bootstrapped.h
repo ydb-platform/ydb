@@ -9,7 +9,7 @@ namespace NActors {
     template<typename TDerived>
     class TActorBootstrapped : public TActor<TDerived> {
     protected:
-        TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override { 
+        TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
             return new IEventHandle(TEvents::TSystem::Bootstrap, 0, self, parentId, {}, 0);
         }
 
@@ -19,11 +19,11 @@ namespace NActors {
             TDerived& self = static_cast<TDerived&>(*this);
             if constexpr (std::is_invocable_v<T, TDerived, const TActorContext&>) {
                 self.Bootstrap(ctx);
-            } else if constexpr (std::is_invocable_v<T, TDerived, const TActorId&, const TActorContext&>) { 
+            } else if constexpr (std::is_invocable_v<T, TDerived, const TActorId&, const TActorContext&>) {
                 self.Bootstrap(ev->Sender, ctx);
             } else if constexpr (std::is_invocable_v<T, TDerived>) {
                 self.Bootstrap();
-            } else if constexpr (std::is_invocable_v<T, TDerived, const TActorId&>) { 
+            } else if constexpr (std::is_invocable_v<T, TDerived, const TActorId&>) {
                 self.Bootstrap(ev->Sender);
             } else {
                 static_assert(dependent_false<TDerived>::value, "No correct Bootstrap() signature");

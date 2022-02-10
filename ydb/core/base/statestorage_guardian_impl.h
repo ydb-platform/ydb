@@ -10,7 +10,7 @@ struct TFollowerTracker {
     TVector<TVector<TActorId>> Reported; // reported followers by replica index
     TMap<TActorId, ui32> Merged; // follower -> referenced by
 
-    bool AddMerged(TActorId x) { 
+    bool AddMerged(TActorId x) {
         auto itPair = Merged.emplace(x, 1);
         if (itPair.second) {
             return true;
@@ -20,7 +20,7 @@ struct TFollowerTracker {
         }
     }
 
-    bool DelMerged(TActorId x) { 
+    bool DelMerged(TActorId x) {
         auto it = Merged.find(x);
         Y_VERIFY(it != Merged.end(), "follower tracker consistency broken");
 
@@ -37,22 +37,22 @@ public:
         : Reported(replicas)
     {}
 
-    const TMap<TActorId, ui32>& GetMerged() const { 
+    const TMap<TActorId, ui32>& GetMerged() const {
         return Merged;
     }
 
     // update reported list for replica, returns true if smth changed
     // reported must be sorted
-    bool Merge(ui32 replicaIdx, TVector<TActorId> &reported) { 
+    bool Merge(ui32 replicaIdx, TVector<TActorId> &reported) {
         bool changed = false;
 
-        TVector<TActorId> &old = Reported[replicaIdx]; 
+        TVector<TActorId> &old = Reported[replicaIdx];
         const ui32 oldSz = old.size();
         bool gotDuplicates = false;
 
         ui32 oldIdx = 0;
-        TActorId prevReported; 
-        for (TActorId x : reported) { 
+        TActorId prevReported;
+        for (TActorId x : reported) {
             if (x == prevReported) { // skip duplicated
                 gotDuplicates = true;
                 continue;

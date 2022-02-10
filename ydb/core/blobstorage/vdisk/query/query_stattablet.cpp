@@ -39,7 +39,7 @@ namespace NKikimr {
         }
 
         TTabletStatActor(TIntrusivePtr<THullCtx> hullCtx,
-                         const TActorId &parentId, 
+                         const TActorId &parentId,
                          THullDsSnap &&fullSnap,
                          TEvBlobStorage::TEvVDbStat::TPtr &ev,
                          std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
@@ -56,7 +56,7 @@ namespace NKikimr {
         class TAggr;
 
         TIntrusivePtr<THullCtx> HullCtx;
-        const TActorId ParentId; 
+        const TActorId ParentId;
         THullDsSnap FullSnap;
         TEvBlobStorage::TEvVDbStat::TPtr Ev;
         std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result;
@@ -362,7 +362,7 @@ namespace NKikimr {
     // CreateTabletStatActor
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateTabletStatActor(TIntrusivePtr<THullCtx> hullCtx,
-                                  const TActorId &parentId, 
+                                  const TActorId &parentId,
                                   THullDsSnap &&fullSnap,
                                   TEvBlobStorage::TEvVDbStat::TPtr &ev,
                                   std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) {

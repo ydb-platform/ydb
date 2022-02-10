@@ -77,7 +77,7 @@ public:
         };
     };
 
-    virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) = 0; // TEvResolveTablesResult. 
+    virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) = 0; // TEvResolveTablesResult.
 };
 
 } // namespace NYql

@@ -41,7 +41,7 @@ namespace NKikimr {
                      const TLogoBlobID &id,
                      ui64 fullDataSize,
                      TRope&& data);
-        TActorId GetMonActorID() const; 
+        TActorId GetMonActorID() const;
 
     private:
         struct TFields;

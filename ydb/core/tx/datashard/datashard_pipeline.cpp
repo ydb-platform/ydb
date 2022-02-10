@@ -520,7 +520,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                     << tx->GetStep() << ":" << tx->GetTxId());
     } else {
         NIceDb::TNiceDb db(txc.DB);
-        TActorId target; 
+        TActorId target;
         TString txBody;
         TVector<TSysTables::TLocksTable::TLock> locks;
         ui64 artifactFlags = 0;
@@ -1097,7 +1097,7 @@ void TPipeline::SaveForPropose(TValidatedDataTx::TPtr tx) {
     }
 }
 
-void TPipeline::SetProposed(ui64 txId, const TActorId& actorId) { 
+void TPipeline::SetProposed(ui64 txId, const TActorId& actorId) {
     auto it = DataTxCache.find(txId);
     if (it != DataTxCache.end()) {
         it->second->SetSource(actorId);

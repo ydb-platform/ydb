@@ -15,14 +15,14 @@ namespace NFake {
 
     struct TWorld {
 
-        static NActors::TActorId Where(EPath path) noexcept 
+        static NActors::TActorId Where(EPath path) noexcept
         {
             std::array<char,13> token{ "NFakeWorld??" };
 
             token[10] = 0xff & ui16(path);
             token[11] = 0xff & (ui16(path) >> 8);
 
-            return NActors::TActorId(0, TStringBuf(token.begin(), 12)); 
+            return NActors::TActorId(0, TStringBuf(token.begin(), 12));
         }
     };
 

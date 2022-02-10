@@ -61,8 +61,8 @@ public:
 
     void ResetSchemeCache(Tests::TServer &server, TTableId tableId) {
         TTestActorRuntime* runtime = server.GetRuntime();
-        TActorId txProxy = MakeTxProxyID(); 
-        TActorId sender = runtime->AllocateEdgeActor(); 
+        TActorId txProxy = MakeTxProxyID();
+        TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<TEvTxUserProxy::TEvInvalidateTable> ev(new TEvTxUserProxy::TEvInvalidateTable(tableId));
         runtime->Send(new IEventHandle(txProxy, sender, ev.Release()));
         TAutoPtr<IEventHandle> handle;
@@ -72,16 +72,16 @@ public:
 
     void KillTablet(Tests::TServer &server, ui64 tabletId) {
         TTestActorRuntime* runtime = server.GetRuntime();
-        TActorId sender = runtime->AllocateEdgeActor(); 
+        TActorId sender = runtime->AllocateEdgeActor();
 
-        runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId()))); 
+        runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
         runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
 
         TAutoPtr<IEventHandle> handle;
         auto forwardResult = runtime->GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(handle);
         UNIT_ASSERT(forwardResult && forwardResult->Tablet);
         runtime->Send(new IEventHandle(forwardResult->Tablet, sender, new TEvents::TEvPoisonPill()));
-        runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId()))); 
+        runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
     }
 
     TVector<ui64> GetTablePartitions(const TString& tablePath) {

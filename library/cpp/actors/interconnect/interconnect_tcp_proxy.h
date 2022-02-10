@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/events.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include "interconnect_common.h"
 #include "interconnect_counters.h"
@@ -70,7 +70,7 @@ namespace NActors {
         }
 
         void Bootstrap();
-        void Registered(TActorSystem* sys, const TActorId& owner) override; 
+        void Registered(TActorSystem* sys, const TActorId& owner) override;
 
     private:
         friend class TInterconnectSessionTCP;
@@ -366,7 +366,7 @@ namespace NActors {
         // read only
         TInterconnectProxyCommon::TPtr const Common;
 
-        const TActorId& GetNameserviceId() const { 
+        const TActorId& GetNameserviceId() const {
             return Common->NameserviceId;
         }
 
@@ -403,24 +403,24 @@ namespace NActors {
         void DropSessionEvent(STATEFN_SIG);
 
         TInterconnectSessionTCP* Session = nullptr;
-        TActorId SessionID; 
+        TActorId SessionID;
 
         // virtual ids used during handshake to check if it is the connection
         // for the same session or to find out the latest shandshake
         // it's virtual because session actor apears after successfull handshake
-        TActorId SessionVirtualId; 
-        TActorId RemoteSessionVirtualId; 
+        TActorId SessionVirtualId;
+        TActorId RemoteSessionVirtualId;
 
-        TActorId GenerateSessionVirtualId() { 
+        TActorId GenerateSessionVirtualId() {
             ICPROXY_PROFILED;
 
             const ui64 localId = TlsActivationContext->ExecutorThread.ActorSystem->AllocateIDSpace(1);
-            return NActors::TActorId(SelfId().NodeId(), 0, localId, 0); 
+            return NActors::TActorId(SelfId().NodeId(), 0, localId, 0);
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        TActorId IncomingHandshakeActor; 
+        TActorId IncomingHandshakeActor;
         TInstant IncomingHandshakeActorFilledIn;
         TInstant IncomingHandshakeActorReset;
         TMaybe<ui64> LastSerialFromIncomingHandshake;
@@ -429,7 +429,7 @@ namespace NActors {
         void DropIncomingHandshake(bool poison = true) {
             ICPROXY_PROFILED;
 
-            if (const TActorId& actorId = std::exchange(IncomingHandshakeActor, TActorId())) { 
+            if (const TActorId& actorId = std::exchange(IncomingHandshakeActor, TActorId())) {
                 LOG_DEBUG_IC("ICP111", "dropped incoming handshake: %s poison: %s", actorId.ToString().data(),
                              poison ? "true" : "false");
                 if (poison) {
@@ -444,7 +444,7 @@ namespace NActors {
         void DropOutgoingHandshake(bool poison = true) {
             ICPROXY_PROFILED;
 
-            if (const TActorId& actorId = std::exchange(OutgoingHandshakeActor, TActorId())) { 
+            if (const TActorId& actorId = std::exchange(OutgoingHandshakeActor, TActorId())) {
                 LOG_DEBUG_IC("ICP112", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(),
                              poison ? "true" : "false");
                 if (poison) {
@@ -477,12 +477,12 @@ namespace NActors {
             SwitchToState(__LINE__, "PendingConnection", &TThis::PendingConnection);
         }
 
-        void IssueIncomingHandshakeReply(const TActorId& handshakeId, ui64 peerLocalId, 
+        void IssueIncomingHandshakeReply(const TActorId& handshakeId, ui64 peerLocalId,
                                          THolder<IEventBase> event);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        TActorId OutgoingHandshakeActor; 
+        TActorId OutgoingHandshakeActor;
         TInstant OutgoingHandshakeActorCreated;
         TInstant OutgoingHandshakeActorReset;
 

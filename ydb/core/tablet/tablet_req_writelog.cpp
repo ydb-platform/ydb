@@ -9,7 +9,7 @@
 namespace NKikimr {
 
 class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
-    const TActorId Owner; 
+    const TActorId Owner;
     const TLogoBlobID LogEntryID;
     TAutoPtr<NKikimrTabletBase::TTabletLogEntry> LogEntry;
     TVector<TEvTablet::TLogEntryReference> References;
@@ -104,7 +104,7 @@ public:
         return NKikimrServices::TActivity::TABLET_REQ_WRITE_LOG;
     }
 
-    TTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &logid, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info) 
+    TTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &logid, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info)
         : Owner(owner)
         , LogEntryID(logid)
         , LogEntry(entry)
@@ -148,7 +148,7 @@ public:
     }
 };
 
-IActor* CreateTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &entryId, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info) { 
+IActor* CreateTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &entryId, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info) {
     return new TTabletReqWriteLog(owner, entryId, entry, refs, commitTactic, info);
 }
 

@@ -1,17 +1,17 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
- 
+
 #include <contrib/libs/re2/re2/re2.h>
- 
+
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
 
 using namespace re2;
-using namespace NKikimr; 
-using namespace NUdf; 
- 
+using namespace NKikimr;
+using namespace NUdf;
+
 namespace {
- 
+
     template <typename T>
     T Id(T x) {
         return x;
@@ -122,7 +122,7 @@ namespace {
             }
             Y_FAIL("Unexpected mode");
         }
- 
+
         TRe2Udf(
             const IValueBuilder*,
             const TUnboxedValuePod& runConfig,
@@ -166,10 +166,10 @@ namespace {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
- 
+
     private:
         TUnboxedValue Run(
-            const IValueBuilder* valueBuilder, 
+            const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try {
             RE2::Anchor anchor = RE2::UNANCHORED;
             if (args[0]) {
@@ -241,7 +241,7 @@ namespace {
             }
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-        } 
+        }
 
         std::unique_ptr<RE2> Regexp;
         const TRegexpGroups RegexpGroups;
@@ -255,7 +255,7 @@ namespace {
             return valueBuilder->NewArray(RegexpGroups.Names.size(), items);
         }
     };
- 
+
     SIMPLE_UDF(TEscape, char*(char*)) {
         const std::string_view input(args[0].AsStringRef());
         const auto& result = RE2::QuoteMeta(StringPiece(input.data(), input.size()));
@@ -420,17 +420,17 @@ namespace {
             sink.Add(TPatternFromLike::Name());
             sink.Add(TOptions::Name());
         }
- 
+
         void BuildFunctionTypeInfo(
-            const TStringRef& name, 
+            const TStringRef& name,
             TType* userType,
-            const TStringRef& typeConfig, 
-            ui32 flags, 
+            const TStringRef& typeConfig,
+            ui32 flags,
             IFunctionTypeInfoBuilder& builder) const final try {
             Y_UNUSED(userType);
             TOptionsSchema optionsSchema = MakeOptionsSchema(builder);
             auto optOptionsStructType = builder.Optional()->Item(optionsSchema.StructType).Build();
- 
+
             bool typesOnly = (flags & TFlags::TypesOnly);
             bool isMatch = (TRe2Udf::Name(TRe2Udf::EMode::MATCH) == name);
             bool isGrep = (TRe2Udf::Name(TRe2Udf::EMode::GREP) == name);
@@ -438,11 +438,11 @@ namespace {
             bool isReplace = (TRe2Udf::Name(TRe2Udf::EMode::REPLACE) == name);
             bool isCount = (TRe2Udf::Name(TRe2Udf::EMode::COUNT) == name);
             bool isFindAndConsume = (TRe2Udf::Name(TRe2Udf::FIND_AND_CONSUME) == name);
- 
+
             if (isMatch || isGrep) {
                 builder.SimpleSignature<bool(TOptional<char*>)>()
                     .RunConfig(MakeRunConfigType(builder, optOptionsStructType));
- 
+
                 if (!typesOnly) {
                     const auto mode = isMatch ? TRe2Udf::EMode::MATCH : TRe2Udf::EMode::GREP;
                     builder.Implementation(new TRe2Udf::TFactory<posix>(mode, optionsSchema, builder.GetSourcePosition()));
@@ -514,11 +514,11 @@ namespace {
             }
         } catch (const std::exception& e) {
             builder.SetError(CurrentExceptionMessage());
-        } 
+        }
     };
- 
+
 }
- 
+
 REGISTER_MODULES(
     TRe2Module<false>,
     TRe2Module<true>)

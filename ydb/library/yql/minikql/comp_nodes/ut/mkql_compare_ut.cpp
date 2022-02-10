@@ -7,13 +7,13 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_list_adapter.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
- 
+
 #include <cfloat>
 #include <utility>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
- 
+
 Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
     Y_UNIT_TEST_LLVM(SqlString) {
         TSetup<LLVM> setup;
@@ -867,7 +867,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    } 
+    }
 
     Y_UNIT_TEST_LLVM(TzMin) {
         TSetup<LLVM> setup;

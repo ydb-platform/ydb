@@ -1,10 +1,10 @@
 #include "grpc_request.h"
 
-namespace NGrpc { 
+namespace NGrpc {
 
 const char* GRPC_USER_AGENT_HEADER = "user-agent";
 
-class TStreamAdaptor: public IStreamAdaptor { 
+class TStreamAdaptor: public IStreamAdaptor {
 public:
     TStreamAdaptor()
         : StreamIsReady_(true)
@@ -56,4 +56,4 @@ IStreamAdaptor::TPtr CreateStreamAdaptor() {
     return std::make_unique<TStreamAdaptor>();
 }
 
-} // namespace NGrpc 
+} // namespace NGrpc

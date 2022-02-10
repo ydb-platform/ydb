@@ -23,7 +23,7 @@ std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrus
         hugeBlobCtx,
         nullptr,
         info,
-        TActorId(), 
+        TActorId(),
         vdiskCfg,
         std::make_shared<std::atomic_uint64_t>());
     return replCtx;

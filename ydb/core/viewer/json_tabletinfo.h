@@ -83,7 +83,7 @@ public:
             NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
             record->SetPath(params.Get("path"));
 
-            TActorId txproxy = MakeTxProxyID(); 
+            TActorId txproxy = MakeTxProxyID();
             TBase::Send(txproxy, request.Release());
             Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
         } else {

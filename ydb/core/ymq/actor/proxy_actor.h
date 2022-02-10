@@ -10,7 +10,7 @@
 #include <ydb/core/ymq/base/debug_info.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NSQS {
 

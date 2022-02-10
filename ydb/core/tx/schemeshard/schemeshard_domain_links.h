@@ -16,7 +16,7 @@ class TSchemeShard;
 
 class TParentDomainLink {
     TSchemeShard* Self;
-    TActorId Pipe; 
+    TActorId Pipe;
     NTabletPipe::TClientConfig PipeClientConfig;
 
 public:
@@ -25,7 +25,7 @@ public:
     THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> MakeSyncMsg() const;
     void SendSync(const TActorContext& ctx);
     void AtPipeError(const TActorContext& ctx);
-    bool HasPipeTo(TTabletId tabletId, TActorId clientId); 
+    bool HasPipeTo(TTabletId tabletId, TActorId clientId);
 };
 
 
@@ -34,7 +34,7 @@ public:
     struct TLink {
         TPathId DomainKey = InvalidPathId;
         ui64 Generation = 0;
-        TActorId ActorId; 
+        TActorId ActorId;
 
         ui64 EffectiveACLVersion = 0;
         ui64 SubdomainVersion = 0;

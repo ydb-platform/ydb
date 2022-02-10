@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
     class TFlooder : public NActors::TActor<TFlooder> {
     public:
-        TFlooder(const TActorId& peer, const TActorId& edge, unsigned count) noexcept 
+        TFlooder(const TActorId& peer, const TActorId& edge, unsigned count) noexcept
             : TActor(&TThis::InitFunc), Peer(peer), Edge(edge), Counter(count), Responses(0ULL)
         {}
 
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             }
         }
 
-        TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId& parentId) noexcept override { 
+        TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId& parentId) noexcept override {
             return new IEventHandle(self, parentId, new TEvents::TEvBootstrap, 0);
         }
 
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             }
         }
 
-        const TActorId Peer, Edge; 
+        const TActorId Peer, Edge;
         const unsigned Counter;
         unsigned Responses;
     };
@@ -515,7 +515,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
 
-        runtime.Send(new IEventHandle(TActorId(runtime.GetNodeId(1), "null"), 
+        runtime.Send(new IEventHandle(TActorId(runtime.GetNodeId(1), "null"),
                                       edge,
                                       new TEvents::TEvPing,
                                       IEventHandle::FlagTrackDelivery, 13),
@@ -640,7 +640,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         auto event = new TEvResolveAddress;
         event->Address = "localhost";
         event->Port = 80;
-        runtime.Send(new IEventHandle(GetNameserviceActorId(), edge, event), 0); 
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), edge, event), 0);
         TAutoPtr<IEventHandle> handle;
         const auto reply = runtime.GrabEdgeEvent<TEvAddressInfo>(handle);
         UNIT_ASSERT_VALUES_EQUAL(NAddr::PrintHostAndPort(*reply->Address),
@@ -688,7 +688,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                     msg->Record.SetMeta(meta);
                     msg->Record.AddPayloadId(msg->AddPayload(TRope(rope1)));
                     msg->Record.AddPayloadId(msg->AddPayload(TRope(rope2)));
-                    runtime.Send(new IEventHandle(edge, TActorId(), msg.Release()), 0); 
+                    runtime.Send(new IEventHandle(edge, TActorId(), msg.Release()), 0);
                 }
 
                 TAutoPtr<IEventHandle> handle;

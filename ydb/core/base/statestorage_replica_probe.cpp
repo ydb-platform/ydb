@@ -22,12 +22,12 @@
 namespace NKikimr {
 
 class TStateStorageReplicaProbe : public TActorBootstrapped<TStateStorageReplicaProbe> {
-    const TActorId ReplicaId; 
+    const TActorId ReplicaId;
 
-    TSet<TActorId> Subscribers; 
+    TSet<TActorId> Subscribers;
 
     void PassAway() override {
-        for (TActorId x : Subscribers) 
+        for (TActorId x : Subscribers)
             Send(x, new TEvStateStorage::TEvReplicaProbeDisconnected(ReplicaId));
         Subscribers.clear();
         Send(TActivationContext::InterconnectProxy(ReplicaId.NodeId()), new TEvents::TEvUnsubscribe());
@@ -49,7 +49,7 @@ class TStateStorageReplicaProbe : public TActorBootstrapped<TStateStorageReplica
 
     void HandlePong() {
     // we can receive outdated pong, we don't care much, it's best effort
-        for (TActorId x : Subscribers) 
+        for (TActorId x : Subscribers)
             Send(x, new TEvStateStorage::TEvReplicaProbeConnected(ReplicaId));
         Subscribers.clear();
     }
@@ -67,7 +67,7 @@ public:
         Become(&TThis::StateWait);
     }
 
-    TStateStorageReplicaProbe(TActorId replicaId) 
+    TStateStorageReplicaProbe(TActorId replicaId)
         : ReplicaId(replicaId)
     {}
 
@@ -96,7 +96,7 @@ public:
     }
 };
 
-IActor* CreateStateStorageReplicaProbe(TActorId replica) { 
+IActor* CreateStateStorageReplicaProbe(TActorId replica) {
     return new TStateStorageReplicaProbe(replica);
 }
 

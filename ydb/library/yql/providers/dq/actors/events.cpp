@@ -21,14 +21,14 @@ namespace NYql::NDqs {
     {
         *Record.MutableRequest() = request;
         NActors::ActorIdToProto(controlId, Record.MutableControlId());
-        NActors::ActorIdToProto(resultId, Record.MutableResultId()); 
+        NActors::ActorIdToProto(resultId, Record.MutableResultId());
         if (checkPointCoordinatorId) {
             NActors::ActorIdToProto(checkPointCoordinatorId, Record.MutableCheckPointCoordinatorId());
         }
     }
 
-    TEvReadyState::TEvReadyState(NActors::TActorId sourceId, TString type) { 
-        NActors::ActorIdToProto(sourceId, Record.MutableSourceId()); 
+    TEvReadyState::TEvReadyState(NActors::TActorId sourceId, TString type) {
+        NActors::ActorIdToProto(sourceId, Record.MutableSourceId());
         *Record.MutableResultType() = std::move(type);
     }
 

@@ -1,18 +1,18 @@
-#include "mkql_value_builder.h" 
+#include "mkql_value_builder.h"
 #include "mkql_validate.h"
- 
+
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/system/env.h>
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-/////////////////////////////////////////////////////////////////////////////// 
-// TDefaultValueBuilder 
-/////////////////////////////////////////////////////////////////////////////// 
+namespace NKikimr {
+namespace NMiniKQL {
+
+///////////////////////////////////////////////////////////////////////////////
+// TDefaultValueBuilder
+///////////////////////////////////////////////////////////////////////////////
 TDefaultValueBuilder::TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy)
     : HolderFactory_(holderFactory)
     , Policy_(policy)
@@ -125,7 +125,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::NewArray(ui32 count, NUdf::TUnboxedVal
 NUdf::TUnboxedValue TDefaultValueBuilder::NewVariant(ui32 index, NUdf::TUnboxedValue&& value) const {
     return HolderFactory_.CreateVariantHolder(value.Release(), index);
 }
- 
+
 NUdf::IDictValueBuilder::TPtr TDefaultValueBuilder::NewDict(const NUdf::TType* dictType, ui32 flags) const
 {
     return HolderFactory_.NewDict(dictType, flags);

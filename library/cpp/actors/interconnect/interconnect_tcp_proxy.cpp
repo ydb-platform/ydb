@@ -3,7 +3,7 @@
 #include "interconnect_tcp_session.h"
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/getpid.h>
 
 namespace NActors {
@@ -45,7 +45,7 @@ namespace NActors {
         LOG_INFO_IC("ICP01", "ready to work");
     }
 
-    void TInterconnectProxyTCP::Registered(TActorSystem* sys, const TActorId& owner) { 
+    void TInterconnectProxyTCP::Registered(TActorSystem* sys, const TActorId& owner) {
         if (!DynamicPtr) {
             // perform usual bootstrap for static nodes
             sys->Send(new IEventHandle(TEvents::TSystem::Bootstrap, 0, SelfId(), owner, nullptr, 0));
@@ -311,9 +311,9 @@ namespace NActors {
 
         auto event = MakeHolder<TEvHandshakeReplyOK>();
         auto* pb = event->Record.MutableSuccess();
-        const TActorId virtualId = GenerateSessionVirtualId(); 
+        const TActorId virtualId = GenerateSessionVirtualId();
         pb->SetProtocol(INTERCONNECT_PROTOCOL_VERSION);
-        pb->SetSenderActorId(virtualId.ToString()); 
+        pb->SetSenderActorId(virtualId.ToString());
         pb->SetProgramPID(GetPID());
         pb->SetProgramStartTime(Common->StartTime);
         pb->SetSerial(virtualId.LocalId());
@@ -536,14 +536,14 @@ namespace NActors {
             SessionVirtualId.ToString().data());
 
         Session = nullptr;
-        SessionID = TActorId(); 
+        SessionID = TActorId();
 
         // drop all pending events as we are closed
         ProcessPendingSessionEvents();
 
         // reset virtual ids as this session is terminated
-        SessionVirtualId = TActorId(); 
-        RemoteSessionVirtualId = TActorId(); 
+        SessionVirtualId = TActorId();
+        RemoteSessionVirtualId = TActorId();
 
         if (Metrics) {
             Metrics->IncSessionDeaths();

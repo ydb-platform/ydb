@@ -9,14 +9,14 @@
 #include <util/network/ip.h>
 #include <library/cpp/cgiparam/cgiparam.h>
 
-#include <functional> 
+#include <functional>
 
 struct TMonitor;
 
 namespace NMonitoring {
     struct IHttpRequest {
-        virtual ~IHttpRequest() { 
-        } 
+        virtual ~IHttpRequest() {
+        }
         virtual const char* GetURI() const = 0;
         virtual const char* GetPath() const = 0;
         virtual const TCgiParameters& GetParams() const = 0;
@@ -28,9 +28,9 @@ namespace NMonitoring {
     };
     // first param - output stream to write result to
     // second param - URL of request
-    typedef std::function<void(IOutputStream&, const IHttpRequest&)> THandler; 
+    typedef std::function<void(IOutputStream&, const IHttpRequest&)> THandler;
 
-    class TCoHttpServer: private TContListener::ICallBack { 
+    class TCoHttpServer: private TContListener::ICallBack {
     public:
         // initialize and schedule coroutines for execution
         TCoHttpServer(TContExecutor& executor, const TString& bindAddr, TIpPort port, THandler handler);
@@ -42,14 +42,14 @@ namespace NMonitoring {
         // @note this call may be blocking; don't use inside coroutines
         // @throws may throw in case of connection error, etc
         void ProcessRequest(IOutputStream&, const IHttpRequest&);
- 
+
     private:
         class TConnection;
 
         // ICallBack implementation
         void OnAcceptFull(const TAcceptFull& a) override;
         void OnError() override;
- 
+
     private:
         TContExecutor& Executor;
         TContListener Listener;
@@ -58,30 +58,30 @@ namespace NMonitoring {
         TIpPort Port;
     };
 
-    class TMtHttpServer: public THttpServer, private THttpServer::ICallBack { 
+    class TMtHttpServer: public THttpServer, private THttpServer::ICallBack {
     public:
         TMtHttpServer(const TOptions& options, THandler handler, IThreadFactory* pool = nullptr);
         TMtHttpServer(const TOptions& options, THandler handler, TSimpleSharedPtr<IThreadPool> pool);
- 
-        /** 
-         * This will cause the server start to accept incoming connections. 
-         * 
-         * @return true if the port binding was successfull, 
-         *         false otherwise. 
-         */ 
-        bool Start(); 
- 
-        /** 
-         * Same as Start() member-function, but will throw TSystemError if 
-         * there were some errors. 
-         */ 
-        void StartOrThrow(); 
- 
-        /** 
-         * Stops the server from accepting new connections. 
-         */ 
-        void Stop(); 
- 
+
+        /**
+         * This will cause the server start to accept incoming connections.
+         *
+         * @return true if the port binding was successfull,
+         *         false otherwise.
+         */
+        bool Start();
+
+        /**
+         * Same as Start() member-function, but will throw TSystemError if
+         * there were some errors.
+         */
+        void StartOrThrow();
+
+        /**
+         * Stops the server from accepting new connections.
+         */
+        void Stop();
+
     private:
         class TConnection;
         TClientRequest* CreateClient() override;
@@ -95,18 +95,18 @@ namespace NMonitoring {
     // will be served in a coroutine context
     class TMonService {
     public:
-        TMonService(TContExecutor& executor, TIpPort internalPort, TIpPort externalPort, 
-                    THandler coHandler, THandler mtHandler); 
+        TMonService(TContExecutor& executor, TIpPort internalPort, TIpPort externalPort,
+                    THandler coHandler, THandler mtHandler);
         void Start();
         void Stop();
- 
+
     protected:
         void DispatchRequest(IOutputStream& out, const IHttpRequest&);
- 
+
     private:
         TCoHttpServer CoServer;
         TMtHttpServer MtServer;
         THandler MtHandler;
     };
 
-} 
+}

@@ -7,7 +7,7 @@ namespace NKikimr::NBsController {
         class TBlobStorageController::TBlobStorageController::TTxConfigCmd
             : public TTransactionBase<TBlobStorageController>
         {
-            const TActorId NotifyId; 
+            const TActorId NotifyId;
             const ui64 Cookie;
             const NKikimrBlobStorage::TConfigRequest Cmd;
             const bool SelfHeal;

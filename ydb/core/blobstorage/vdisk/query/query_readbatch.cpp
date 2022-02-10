@@ -218,7 +218,7 @@ namespace NKikimr {
         return true;
     }
 
-    IActor *TReadBatcher::CreateAsyncDataReader(const TActorId &notifyID, 
+    IActor *TReadBatcher::CreateAsyncDataReader(const TActorId &notifyID,
                                                 ui8 priority,
                                                 NWilson::TTraceId traceId,
                                                 bool isRepl) {

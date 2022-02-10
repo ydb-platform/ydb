@@ -365,7 +365,7 @@ public:
 
         auto it = Items.begin();
         ui64 size = TSelf::Measure(it->first, it->second);
-        this->OnEvict(it->first, const_cast<TValue&>(it->second), size); 
+        this->OnEvict(it->first, const_cast<TValue&>(it->second), size);
         Items.erase(it);
         return true;
     }
@@ -380,7 +380,7 @@ public:
         ui64 size = TSelf::Measure(key, value);
         it = Items.insert(std::make_pair(key, value)).first;
         currentValue = &it->second;
-        this->OnInsert(key, value, size); 
+        this->OnInsert(key, value, size);
         return true;
     }
 
@@ -390,7 +390,7 @@ public:
             return false;
 
         ui64 size = TSelf::Measure(key, it->second);
-        this->OnEvict(it->first, const_cast<TValue&>(it->second), size); 
+        this->OnEvict(it->first, const_cast<TValue&>(it->second), size);
         Items.erase(it);
 
         return true;
@@ -523,7 +523,7 @@ public:
 
         auto item = List.PopBack();
         ui64 size = TSelf::Measure(item->Key, item->Value);
-        this->OnEvict(item->Key, item->Value, size); 
+        this->OnEvict(item->Key, item->Value, size);
         auto itemIt = Index.find(*item);
         Y_VERIFY_DEBUG(itemIt != Index.end());
         Index.erase(itemIt);
@@ -544,7 +544,7 @@ public:
         indexIt = Index.insert(tmpItem).first;
         List.PushFront(const_cast<TItem*>(&*indexIt));
         currentValue = const_cast<TValue*>(&indexIt->Value);
-        this->OnInsert(key, value, size); 
+        this->OnInsert(key, value, size);
         return true;
     }
 
@@ -556,7 +556,7 @@ public:
 
         auto item = const_cast<TItem*>(&*indexIt);
         ui64 size = TSelf::Measure(item->Key, item->Value);
-        this->OnEvict(item->Key, item->Value, size); 
+        this->OnEvict(item->Key, item->Value, size);
         item->Unlink();
         Index.erase(indexIt);
         return true;
@@ -681,7 +681,7 @@ public:
             OutList.PushFront(const_cast<TItemKey*>(&*outInsertedIt));
 
             ui64 size = TSelf::Measure(inItem->Key, inItem->Value);
-            this->OnEvict(inItem->Key, inItem->Value, size); 
+            this->OnEvict(inItem->Key, inItem->Value, size);
             auto inItemIt = InIndex.find(*inItem);
             Y_VERIFY_DEBUG(inItemIt != InIndex.end());
             InIndex.erase(inItemIt);
@@ -691,7 +691,7 @@ public:
                 auto outItem = OutList.PopBack();
                 auto outItemIt = OutIndex.find(*outItem);
                 Y_VERIFY_DEBUG(outItemIt != OutIndex.end());
-                this->OnKeyEvict(outItemIt->Key); 
+                this->OnKeyEvict(outItemIt->Key);
                 OutIndex.erase(outItemIt);
             }
 
@@ -701,7 +701,7 @@ public:
         if (!MainIndex.empty()) {
             auto item = MainList.PopBack();
             ui64 size = TSelf::Measure(item->Key, item->Value);
-            this->OnEvict(item->Key, item->Value, size); 
+            this->OnEvict(item->Key, item->Value, size);
             auto mainIndexIt = MainIndex.find(*item);
             Y_VERIFY_DEBUG(mainIndexIt != MainIndex.end());
             MainIndex.erase(mainIndexIt);
@@ -744,7 +744,7 @@ public:
             currentValue = const_cast<TValue*>(&insertedIt->Value);
         }
 
-        this->OnInsert(key, value, size); 
+        this->OnInsert(key, value, size);
         return true;
     }
 
@@ -755,7 +755,7 @@ public:
             auto item = const_cast<TItem*>(&*mainIndexIt);
             EraseFromOut(item->Key);
             ui64 size = TSelf::Measure(item->Key, item->Value);
-            this->OnEvict(item->Key, item->Value, size); 
+            this->OnEvict(item->Key, item->Value, size);
             item->Unlink();
             MainIndex.erase(mainIndexIt);
             return true;
@@ -766,7 +766,7 @@ public:
             auto item = const_cast<TItem*>(&*inIndexIt);
             EraseFromOut(item->Key);
             ui64 size = TSelf::Measure(item->Key, item->Value);
-            this->OnEvict(item->Key, item->Value, size); 
+            this->OnEvict(item->Key, item->Value, size);
             item->Unlink();
             InIndex.erase(inIndexIt);
             InSize -= size;
@@ -787,7 +787,7 @@ private:
         TItemKey tmpItemKey(key);
         auto outIndexIt = OutIndex.find(tmpItemKey);
         if (outIndexIt != OutIndex.end()) {
-            this->OnKeyEvict(key); 
+            this->OnKeyEvict(key);
             auto item = const_cast<TItemKey*>(&*outIndexIt);
             item->Unlink();
             OutIndex.erase(outIndexIt);

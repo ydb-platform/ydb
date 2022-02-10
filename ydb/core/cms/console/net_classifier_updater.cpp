@@ -65,7 +65,7 @@ private:
     using TBase = TActorBootstrapped<NetClassifierUpdater>;
 
 public:
-    NetClassifierUpdater(TActorId localConsole) 
+    NetClassifierUpdater(TActorId localConsole)
         : LocalConsole(localConsole)
     {
     }
@@ -326,16 +326,16 @@ private:
     }
 
 private:
-    TActorId LocalConsole; 
-    TActorId HttpProxyId; 
-    NMonitoring::TMetricRegistry HttpSensors; 
+    TActorId LocalConsole;
+    TActorId HttpProxyId;
+    NMonitoring::TMetricRegistry HttpSensors;
 
     TString PackedNetData;
     TString LastUpdateDatetimeUTC;
     TInstant LastUpdateTimestamp;
 };
 
-IActor* MakeNetClassifierUpdaterActor(TActorId localConsole) { 
+IActor* MakeNetClassifierUpdaterActor(TActorId localConsole) {
     return new NetClassifierUpdater(localConsole);
 }
 

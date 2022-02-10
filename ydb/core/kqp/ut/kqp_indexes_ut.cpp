@@ -4234,7 +4234,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token")); 
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         }
 
@@ -4247,7 +4247,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token")); 
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         }
 
@@ -4260,7 +4260,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token")); 
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         }
 
@@ -4273,7 +4273,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token")); 
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         }
 

@@ -2,7 +2,7 @@ syntax = "proto3";
 option cc_enable_arenas = true;
 
 package Ydb.TableStats;
-option java_package = "com.yandex.ydb"; 
+option java_package = "com.yandex.ydb";
 
 // Describes select, update (insert, upsert, replace) and delete operations
 message OperationStats {

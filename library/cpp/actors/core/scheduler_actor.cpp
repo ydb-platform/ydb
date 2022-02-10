@@ -39,7 +39,7 @@ namespace NActors {
 
         TVector<NSchedulerQueue::TReader*> Readers;
 
-        TActorId PollerActor; 
+        TActorId PollerActor;
         TPollerToken::TPtr PollerToken;
 
         ui64 RealTime;
@@ -68,7 +68,7 @@ namespace NActors {
             : TActor(&TSchedulerActor::StateFunc)
             , Cfg(cfg)
             , TimerDescriptor(new TTimerDescriptor())
-            , PollerActor(MakePollerActorId()) 
+            , PollerActor(MakePollerActorId())
         {
             Y_ASSERT(Cfg.ResolutionMicroseconds != 0);
             Y_ASSERT(Cfg.ProgressThreshold != 0);

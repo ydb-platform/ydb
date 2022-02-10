@@ -98,7 +98,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
             SendCollectGarbageRequest(vdiskId);
         }
     }
- 
+
     void CheckProgress() {
         Y_VERIFY(Dead || ResponsesReceived < RequestsSent, "No more unreplied vdisk requests!"
             " QuorumTracker# %s RequestsSent# %" PRIu32 " ResponsesReceived# %" PRIu32,

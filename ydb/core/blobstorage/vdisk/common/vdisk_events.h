@@ -211,7 +211,7 @@ namespace NKikimr {
         template <class TClientId>
         struct TWindowStatus {
             TClientId ClientId;
-            TActorId ActorId; 
+            TActorId ActorId;
             EStatus Status;
             bool Notify;
             ui64 ActualWindowSize;
@@ -230,7 +230,7 @@ namespace NKikimr {
                 , FailedMsgId()
             {}
 
-            void Set(const TClientId &clientId, const TActorId& actorId, EStatus status, bool notify, 
+            void Set(const TClientId &clientId, const TActorId& actorId, EStatus status, bool notify,
                     ui64 actualWindowSize, ui64 maxWindowSize, const TMessageId &expectedMsgId,
                     const TMessageId &failedMsgId) {
                 ClientId = clientId;

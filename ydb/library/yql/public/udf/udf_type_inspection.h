@@ -1,36 +1,36 @@
-#pragma once 
- 
+#pragma once
+
 #include "udf_string_ref.h"
-#include "udf_types.h" 
- 
+#include "udf_types.h"
+
 #include <library/cpp/containers/stack_vector/stack_vec.h> // TSmallVec
 #include <util/generic/algorithm.h>
- 
-#include <util/system/yassert.h> // FAIL, VERIFY_DEBUG 
-#include <util/generic/ylimits.h> // Max 
- 
- 
+
+#include <util/system/yassert.h> // FAIL, VERIFY_DEBUG
+#include <util/generic/ylimits.h> // Max
+
+
 namespace NYql {
-namespace NUdf { 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TStubTypeVisitor 
-////////////////////////////////////////////////////////////////////////////// 
+namespace NUdf {
+
+//////////////////////////////////////////////////////////////////////////////
+// TStubTypeVisitor
+//////////////////////////////////////////////////////////////////////////////
 class TStubTypeVisitor1: public ITypeVisitor
-{ 
-private: 
+{
+private:
     void OnDataType(TDataTypeId typeId) override;
-    void OnStruct( 
-            ui32 membersCount, 
-            TStringRef* membersNames, 
-            const TType** membersTypes) override; 
-    void OnList(const TType* itemType) override; 
-    void OnOptional(const TType* itemType) override; 
-    void OnTuple(ui32 elementsCount, const TType** elementsTypes) override; 
-    void OnDict(const TType* keyType, const TType* valueType) override; 
-    void OnCallable( 
-            const TType* returnType, 
-            ui32 argsCount, const TType** argsTypes, 
+    void OnStruct(
+            ui32 membersCount,
+            TStringRef* membersNames,
+            const TType** membersTypes) override;
+    void OnList(const TType* itemType) override;
+    void OnOptional(const TType* itemType) override;
+    void OnTuple(ui32 elementsCount, const TType** elementsTypes) override;
+    void OnDict(const TType* keyType, const TType* valueType) override;
+    void OnCallable(
+            const TType* returnType,
+            ui32 argsCount, const TType** argsTypes,
             ui32 optionalArgsCount,
             const ICallablePayload* payload) override;
     void OnVariant(const TType* underlyingType) override;
@@ -58,7 +58,7 @@ public:
     void OnTagged(const TType* baseType, TStringRef tag) override;
 };
 #endif
- 
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 using TStubTypeVisitor = TStubTypeVisitor4;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
@@ -69,29 +69,29 @@ using TStubTypeVisitor = TStubTypeVisitor2;
 using TStubTypeVisitor = TStubTypeVisitor1;
 #endif
 
-////////////////////////////////////////////////////////////////////////////// 
-// TDataTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TDataTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TDataTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Data) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return TypeId_ != 0; } 
+//////////////////////////////////////////////////////////////////////////////
+// TDataTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TDataTypeInspector: public TStubTypeVisitor
+{
+public:
+    TDataTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Data) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return TypeId_ != 0; }
     TDataTypeId GetTypeId() const { return TypeId_; }
-private: 
+private:
     void OnDataType(TDataTypeId typeId) override {
-        TypeId_ = typeId; 
-    } 
+        TypeId_ = typeId;
+    }
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
     void OnDecimal(ui8, ui8) override {}
 #endif
     TDataTypeId TypeId_ = 0;
-}; 
+};
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 //////////////////////////////////////////////////////////////////////////////
 // TDataAndDecimalTypeInspector
@@ -104,7 +104,7 @@ public:
             typeHelper.VisitType(type, this);
         }
     }
- 
+
     explicit operator bool() const { return TypeId_ != 0; }
     TDataTypeId GetTypeId() const { return TypeId_; }
     ui8 GetPrecision() const {
@@ -129,197 +129,197 @@ private:
     ui8 Precision_ = 0, Scale_ = 0;
 };
 #endif
-////////////////////////////////////////////////////////////////////////////// 
-// TStructTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TStructTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TStructTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Struct) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return MembersCount_ != Max<ui32>(); } 
-    ui32 GetMembersCount() const { return MembersCount_; } 
-    ui32 GetMemberIndex(TStringRef name) const { 
-        ui32 index = 0; 
-        for (TStringRef memberName: MembersNames_) { 
-            if (memberName == name) { 
-                return index; 
-            } 
-            index++; 
-        } 
-        return Max<ui32>(); 
-    } 
-    const TStringRef& GetMemberName(ui32 i) const { return MembersNames_[i]; } 
-    const TType* GetMemberType(ui32 i) const { return MembersTypes_[i]; } 
- 
-private: 
-    void OnStruct( 
-            ui32 membersCount, 
-            TStringRef* membersNames, 
-            const TType** membersTypes) override 
-    { 
-        MembersCount_ = membersCount; 
-        MembersNames_.reserve(membersCount); 
-        MembersTypes_.reserve(membersCount); 
- 
-        for (ui32 i = 0; i < membersCount; i++) { 
-            MembersNames_.push_back(membersNames[i]); 
-            MembersTypes_.push_back(membersTypes[i]); 
-        } 
-    } 
- 
-private: 
-    ui32 MembersCount_ = Max<ui32>(); 
-    TSmallVec<TStringRef> MembersNames_; 
-    TSmallVec<const TType*> MembersTypes_; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TListTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TListTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TListTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::List) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return ItemType_ != nullptr; } 
-    const TType* GetItemType() const { return ItemType_; } 
- 
-private: 
-    void OnList(const TType* itemType) override { 
-        ItemType_ = itemType; 
-    } 
- 
-private: 
-    const TType* ItemType_ = nullptr; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TOptionalTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TOptionalTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TOptionalTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Optional) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return ItemType_ != nullptr; } 
-    const TType* GetItemType() const { return ItemType_; } 
- 
-private: 
-    void OnOptional(const TType* itemType) override { 
-        ItemType_ = itemType; 
-    } 
- 
-private: 
-    const TType* ItemType_ = nullptr; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TTupleTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TTupleTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TTupleTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Tuple) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return ElementsCount_ != Max<ui32>(); } 
-    ui32 GetElementsCount() const { return ElementsCount_; } 
-    const TType* GetElementType(ui32 i) const { return ElementsTypes_[i]; } 
- 
-private: 
-    void OnTuple(ui32 elementsCount, const TType** elementsTypes) override { 
-        ElementsCount_ = elementsCount; 
-        ElementsTypes_.reserve(elementsCount); 
- 
-        for (ui32 i = 0; i < elementsCount; i++) { 
-            ElementsTypes_.push_back(elementsTypes[i]); 
-        } 
-    } 
- 
-private: 
-    ui32 ElementsCount_ = Max<ui32>(); 
-    TSmallVec<const TType*> ElementsTypes_; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TDictTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TDictTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TDictTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Dict) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return KeyType_ != nullptr; } 
-    const TType* GetKeyType() const { return KeyType_; } 
-    const TType* GetValueType() const { return ValueType_; } 
- 
-private: 
-    void OnDict(const TType* keyType, const TType* valueType) override { 
-        KeyType_ = keyType; 
-        ValueType_ = valueType; 
-    } 
- 
-private: 
-    const TType* KeyType_ = nullptr; 
-    const TType* ValueType_ = nullptr; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TCallableTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TCallableTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TCallableTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Callable) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return ReturnType_ != nullptr; } 
-    const TType* GetReturnType() const { return ReturnType_; } 
-    ui32 GetArgsCount() const { return ArgsCount_; } 
-    const TType* GetArgType(ui32 i) const { return ArgsTypes_[i]; } 
-    ui32 GetOptionalArgsCount() const { return OptionalArgsCount_; } 
+//////////////////////////////////////////////////////////////////////////////
+// TStructTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TStructTypeInspector: public TStubTypeVisitor
+{
+public:
+    TStructTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Struct) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return MembersCount_ != Max<ui32>(); }
+    ui32 GetMembersCount() const { return MembersCount_; }
+    ui32 GetMemberIndex(TStringRef name) const {
+        ui32 index = 0;
+        for (TStringRef memberName: MembersNames_) {
+            if (memberName == name) {
+                return index;
+            }
+            index++;
+        }
+        return Max<ui32>();
+    }
+    const TStringRef& GetMemberName(ui32 i) const { return MembersNames_[i]; }
+    const TType* GetMemberType(ui32 i) const { return MembersTypes_[i]; }
+
+private:
+    void OnStruct(
+            ui32 membersCount,
+            TStringRef* membersNames,
+            const TType** membersTypes) override
+    {
+        MembersCount_ = membersCount;
+        MembersNames_.reserve(membersCount);
+        MembersTypes_.reserve(membersCount);
+
+        for (ui32 i = 0; i < membersCount; i++) {
+            MembersNames_.push_back(membersNames[i]);
+            MembersTypes_.push_back(membersTypes[i]);
+        }
+    }
+
+private:
+    ui32 MembersCount_ = Max<ui32>();
+    TSmallVec<TStringRef> MembersNames_;
+    TSmallVec<const TType*> MembersTypes_;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TListTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TListTypeInspector: public TStubTypeVisitor
+{
+public:
+    TListTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::List) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return ItemType_ != nullptr; }
+    const TType* GetItemType() const { return ItemType_; }
+
+private:
+    void OnList(const TType* itemType) override {
+        ItemType_ = itemType;
+    }
+
+private:
+    const TType* ItemType_ = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TOptionalTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TOptionalTypeInspector: public TStubTypeVisitor
+{
+public:
+    TOptionalTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Optional) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return ItemType_ != nullptr; }
+    const TType* GetItemType() const { return ItemType_; }
+
+private:
+    void OnOptional(const TType* itemType) override {
+        ItemType_ = itemType;
+    }
+
+private:
+    const TType* ItemType_ = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TTupleTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TTupleTypeInspector: public TStubTypeVisitor
+{
+public:
+    TTupleTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Tuple) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return ElementsCount_ != Max<ui32>(); }
+    ui32 GetElementsCount() const { return ElementsCount_; }
+    const TType* GetElementType(ui32 i) const { return ElementsTypes_[i]; }
+
+private:
+    void OnTuple(ui32 elementsCount, const TType** elementsTypes) override {
+        ElementsCount_ = elementsCount;
+        ElementsTypes_.reserve(elementsCount);
+
+        for (ui32 i = 0; i < elementsCount; i++) {
+            ElementsTypes_.push_back(elementsTypes[i]);
+        }
+    }
+
+private:
+    ui32 ElementsCount_ = Max<ui32>();
+    TSmallVec<const TType*> ElementsTypes_;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TDictTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TDictTypeInspector: public TStubTypeVisitor
+{
+public:
+    TDictTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Dict) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return KeyType_ != nullptr; }
+    const TType* GetKeyType() const { return KeyType_; }
+    const TType* GetValueType() const { return ValueType_; }
+
+private:
+    void OnDict(const TType* keyType, const TType* valueType) override {
+        KeyType_ = keyType;
+        ValueType_ = valueType;
+    }
+
+private:
+    const TType* KeyType_ = nullptr;
+    const TType* ValueType_ = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TCallableTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TCallableTypeInspector: public TStubTypeVisitor
+{
+public:
+    TCallableTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Callable) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return ReturnType_ != nullptr; }
+    const TType* GetReturnType() const { return ReturnType_; }
+    ui32 GetArgsCount() const { return ArgsCount_; }
+    const TType* GetArgType(ui32 i) const { return ArgsTypes_[i]; }
+    ui32 GetOptionalArgsCount() const { return OptionalArgsCount_; }
     TStringRef GetPayload() const { return HasPayload_ ? Payload_ : TStringRef(); }
     TStringRef GetArgumentName(ui32 i) const { return HasPayload_ ? ArgsNames_[i] : TStringRef(); }
     ui64 GetArgumentFlags(ui32 i) const { return HasPayload_ ? ArgsFlags_[i] : 0; }
- 
-private: 
-    void OnCallable( 
-            const TType* returnType, 
-            ui32 argsCount, const TType** argsTypes, 
+
+private:
+    void OnCallable(
+            const TType* returnType,
+            ui32 argsCount, const TType** argsTypes,
             ui32 optionalArgsCount,
             const ICallablePayload* payload) override
-    { 
-        ReturnType_ = returnType; 
-        ArgsCount_ = argsCount; 
-        OptionalArgsCount_ = optionalArgsCount; 
-        ArgsTypes_.reserve(argsCount); 
- 
-        for (ui32 i = 0; i < argsCount; i++) { 
-            ArgsTypes_.push_back(argsTypes[i]); 
-        } 
+    {
+        ReturnType_ = returnType;
+        ArgsCount_ = argsCount;
+        OptionalArgsCount_ = optionalArgsCount;
+        ArgsTypes_.reserve(argsCount);
+
+        for (ui32 i = 0; i < argsCount; i++) {
+            ArgsTypes_.push_back(argsTypes[i]);
+        }
 
         HasPayload_ = (payload != nullptr);
         if (HasPayload_) {
@@ -331,19 +331,19 @@ private:
                 ArgsFlags_.push_back(payload->GetArgumentFlags(i));
             }
         }
-    } 
- 
-private: 
-    const TType* ReturnType_ = nullptr; 
-    ui32 ArgsCount_ = ~0; 
-    TSmallVec<const TType*> ArgsTypes_; 
-    ui32 OptionalArgsCount_ = ~0; 
+    }
+
+private:
+    const TType* ReturnType_ = nullptr;
+    ui32 ArgsCount_ = ~0;
+    TSmallVec<const TType*> ArgsTypes_;
+    ui32 OptionalArgsCount_ = ~0;
     bool HasPayload_ = false;
     TStringRef Payload_;
     TSmallVec<TStringRef> ArgsNames_;
     TSmallVec<ui64> ArgsFlags_;
-}; 
- 
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // TStreamTypeInspector
 //////////////////////////////////////////////////////////////////////////////
@@ -521,5 +521,5 @@ inline void TStubTypeVisitor4::OnTagged(const TType*, TStringRef) {
 }
 #endif
 
-} // namspace NUdf 
+} // namspace NUdf
 } // namspace NYql

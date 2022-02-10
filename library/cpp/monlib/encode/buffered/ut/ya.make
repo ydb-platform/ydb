@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/monlib/encode/buffered) 
+UNITTEST_FOR(library/cpp/monlib/encode/buffered)
 
 OWNER(
     g:solomon

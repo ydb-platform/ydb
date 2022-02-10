@@ -1,5 +1,5 @@
-#include "kikimr_program_builder.h" 
- 
+#include "kikimr_program_builder.h"
+
 #include <ydb/library/yql/minikql/mkql_node_printer.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
@@ -11,15 +11,15 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
+
+namespace NKikimr {
+namespace NMiniKQL {
     TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
         return CreateDeterministicRandomProvider(1);
     }
- 
+
     TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
         return CreateDeterministicTimeProvider(1);
     }
@@ -66,622 +66,622 @@ namespace NMiniKQL {
     };
 
 Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
- 
-    void VerifySerialization(TNode* pgm, const TTypeEnvironment& env) { 
+
+    void VerifySerialization(TNode* pgm, const TTypeEnvironment& env) {
         TString s = PrintNode(pgm);
         TString serialized = SerializeNode(pgm, env);
         Cout << "Serialized as " << serialized.size() << " bytes" << Endl;
-        TNode* pgm2 = DeserializeNode(serialized, env); 
+        TNode* pgm2 = DeserializeNode(serialized, env);
         TString s2 = PrintNode(pgm2);
-        UNIT_ASSERT_EQUAL(s, s2); 
-    } 
- 
-    void VerifyProgram(TNode* pgm, const TTypeEnvironment& env) { 
-        VerifySerialization(pgm, env); 
-    } 
- 
+        UNIT_ASSERT_EQUAL(s, s2);
+    }
+
+    void VerifyProgram(TNode* pgm, const TTypeEnvironment& env) {
+        VerifySerialization(pgm, env);
+    }
+
     Y_UNIT_TEST(TestEraseRowStaticKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
         keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        keyColumns.push_back(pgmBuilder.NewOptional( 
+        keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2), 
-            keyTypes, 
-            keyColumns)); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2),
+            keyTypes,
+            keyColumns));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[2].Size() == 3); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[2].Size() == 3);
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.To[2].Size() == 3); 
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 0); 
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3); 
+        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.To[2].Size() == 3);
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 0);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestEraseRowPartialDynamicKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        keyColumns.push_back(pgmBuilder.Add( 
+        keyColumns.push_back(pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34),
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         keyColumns.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe"));
         TVector<ui32> keyTypes({ NUdf::TDataType<ui64>::Id, NUdf::TDataType<ui32>::Id, NUdf::TDataType<char*>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2), 
-            keyTypes, 
-            keyColumns)); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2),
+            keyTypes,
+            keyColumns));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[2].IsNull()); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[2].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 1);
-        UNIT_ASSERT(tableKeys[0]->Range.To[0].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 0); 
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3); 
+        UNIT_ASSERT(tableKeys[0]->Range.To[0].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 0);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestEraseRowDynamicKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
-        keyColumns.push_back(pgmBuilder.Add( 
+        keyColumns.push_back(pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34),
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         keyColumns.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe"));
- 
+
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<char*>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2), 
-            keyTypes, 
-            keyColumns)); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2),
+            keyTypes,
+            keyColumns));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 0);
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 0); 
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2); 
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 0);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<char*>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSelectRow) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
         keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        keyColumns.push_back(pgmBuilder.NewOptional( 
+        keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
         columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes", 
-            pgmBuilder.SelectRow(TTableId(1, 2), 
-            keyTypes, 
-            columnsToRead, keyColumns))); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
+            pgmBuilder.SelectRow(TTableId(1, 2),
+            keyTypes,
+            columnsToRead, keyColumns)));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[2].Size() == 3); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[2].Size() == 3);
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.To[2].Size() == 3); 
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.To[2].Size() == 3);
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3); 
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestUpdateRowStaticKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
         keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        keyColumns.push_back(pgmBuilder.NewOptional( 
+        keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
-        auto update = pgmBuilder.GetUpdateRowBuilder(); 
+        auto update = pgmBuilder.GetUpdateRowBuilder();
         update.SetColumn(34, NUdf::TDataType<ui32>::Id,
             pgmBuilder.NewOptional(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
-        update.EraseColumn(56); 
+        update.EraseColumn(56);
         update.InplaceUpdateColumn(78, NUdf::TDataType<ui64>::Id,
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), EInplaceUpdateMode::Sum);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(TTableId(1, 2), 
-            keyTypes, 
-            keyColumns, update)); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(TTableId(1, 2),
+            keyTypes,
+            keyColumns, update));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[2].Size() == 3); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[2].Size() == 3);
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.To[2].Size() == 3); 
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 3); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Set); 
+        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.To[2].Size() == 3);
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 3);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Set);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Set); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == 0); 
-        UNIT_ASSERT(tableKeys[0]->Columns[2].Column == 78); 
-        UNIT_ASSERT(tableKeys[0]->Columns[2].Operation == TKeyDesc::EColumnOperation::InplaceUpdate); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Set);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == 0);
+        UNIT_ASSERT(tableKeys[0]->Columns[2].Column == 78);
+        UNIT_ASSERT(tableKeys[0]->Columns[2].Operation == TKeyDesc::EColumnOperation::InplaceUpdate);
         UNIT_ASSERT(tableKeys[0]->Columns[2].ExpectedType == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3); 
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestUpdateRowDynamicKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
-        keyColumns.push_back(pgmBuilder.Add( 
+        keyColumns.push_back(pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34),
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        keyColumns.push_back(pgmBuilder.NewOptional( 
+        keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
-        auto update = pgmBuilder.GetUpdateRowBuilder(); 
+        auto update = pgmBuilder.GetUpdateRowBuilder();
         update.SetColumn(34, NUdf::TDataType<ui32>::Id,
             pgmBuilder.NewOptional(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
-        update.EraseColumn(56); 
+        update.EraseColumn(56);
         update.InplaceUpdateColumn(78, NUdf::TDataType<ui64>::Id,
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), EInplaceUpdateMode::Sum);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(TTableId(1, 2), 
-            keyTypes, 
-            keyColumns, update)); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(TTableId(1, 2),
+            keyTypes,
+            keyColumns, update));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[2].IsNull()); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[2].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 0);
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 3); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Set); 
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 3);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Set);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Set); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == 0); 
-        UNIT_ASSERT(tableKeys[0]->Columns[2].Column == 78); 
-        UNIT_ASSERT(tableKeys[0]->Columns[2].Operation == TKeyDesc::EColumnOperation::InplaceUpdate); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Set);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == 0);
+        UNIT_ASSERT(tableKeys[0]->Columns[2].Column == 78);
+        UNIT_ASSERT(tableKeys[0]->Columns[2].Operation == TKeyDesc::EColumnOperation::InplaceUpdate);
         UNIT_ASSERT(tableKeys[0]->Columns[2].ExpectedType == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[2].InplaceUpdateMode == (ui32)EInplaceUpdateMode::Sum); 
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3); 
+        UNIT_ASSERT(tableKeys[0]->Columns[2].InplaceUpdateMode == (ui32)EInplaceUpdateMode::Sum);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSelectFromInclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
-        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions()); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
+        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
         from.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         from.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        options.FromColumns = from; 
- 
+        options.FromColumns = from;
+
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
         columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes", 
-            pgmBuilder.SelectRange(TTableId(1, 2), 
-            keyTypes, 
-            columnsToRead, options))); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
+            pgmBuilder.SelectRange(TTableId(1, 2),
+            keyTypes,
+            columnsToRead, options)));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 0);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2); 
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSelectFromExclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
-        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions()); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
+        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
         from.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         from.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        options.FromColumns = from; 
+        options.FromColumns = from;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeInitValue);
- 
+
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
         columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes", 
-            pgmBuilder.SelectRange(TTableId(1, 2), 
-            keyTypes, 
-            columnsToRead, options))); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
+            pgmBuilder.SelectRange(TTableId(1, 2),
+            keyTypes,
+            columnsToRead, options)));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read); 
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
+        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 0);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2); 
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSelectToInclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
-        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions()); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
+        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
         from.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
         TVector<TRuntimeNode> to;
         to.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         to.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        options.FromColumns = from; 
-        options.ToColumns = to; 
- 
+        options.FromColumns = from;
+        options.ToColumns = to;
+
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
         columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes", 
-            pgmBuilder.SelectRange(TTableId(1, 2), 
-            keyTypes, 
-            columnsToRead, options))); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
+            pgmBuilder.SelectRange(TTableId(1, 2),
+            keyTypes,
+            columnsToRead, options)));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2); 
+        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSelectToExclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
-        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions()); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
+        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
         from.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
         TVector<TRuntimeNode> to;
         to.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         to.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
-        options.FromColumns = from; 
-        options.ToColumns = to; 
+        options.FromColumns = from;
+        options.ToColumns = to;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
- 
+
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
         columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes", 
-            pgmBuilder.SelectRange(TTableId(1, 2), 
-            keyTypes, 
-            columnsToRead, options))); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
+            pgmBuilder.SelectRange(TTableId(1, 2),
+            keyTypes,
+            columnsToRead, options)));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull()); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull());
+        UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4); 
-        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull()); 
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2); 
+        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4);
+        UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull());
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSelectBothFromInclusiveToInclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
-        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions()); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
+        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
         TVector<TRuntimeNode> to;
         from.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("a"));
         to.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("bc"));
-        options.FromColumns = from; 
-        options.ToColumns = to; 
- 
+        options.FromColumns = from;
+        options.ToColumns = to;
+
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
         columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id);
         TVector<ui32> keyTypes({ NUdf::TDataType<char*>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes", 
-            pgmBuilder.SelectRange(TTableId(1, 2), 
-            keyTypes, 
-            columnsToRead, options))); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
+            pgmBuilder.SelectRange(TTableId(1, 2),
+            keyTypes,
+            columnsToRead, options)));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 1);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 1); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 1);
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 1);
-        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 1); 
+        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 2);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 1);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<char*>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSelectBothFromExclusiveToExclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
-        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions()); 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
+        TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
         TVector<TRuntimeNode> to;
         from.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("a"));
         to.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("bc"));
-        options.FromColumns = from; 
-        options.ToColumns = to; 
+        options.FromColumns = from;
+        options.ToColumns = to;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(
             TReadRangeOptions::TFlags::ExcludeInitValue | TReadRangeOptions::TFlags::ExcludeTermValue);
- 
+
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
         columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id);
         TVector<ui32> keyTypes({ NUdf::TDataType<char*>::Id });
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes", 
-            pgmBuilder.SelectRange(TTableId(1, 2), 
-            keyTypes, 
-            columnsToRead, options))); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
-        //Cout << PrintNode(*pgm) << Endl; 
-        VerifyProgram(pgm, env); 
- 
-        TExploringNodeVisitor explorer; 
-        explorer.Walk(pgm, env); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
+            pgmBuilder.SelectRange(TTableId(1, 2),
+            keyTypes,
+            columnsToRead, options)));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+        //Cout << PrintNode(*pgm) << Endl;
+        VerifyProgram(pgm, env);
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
-        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
-        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read); 
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveFrom); 
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo); 
-        UNIT_ASSERT(!tableKeys[0]->Range.Point); 
+        UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
+        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveFrom);
+        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 1);
-        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 1); 
+        UNIT_ASSERT(tableKeys[0]->Range.From[0].Size() == 1);
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 1);
-        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 1); 
+        UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 2);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 1);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<char*>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34); 
-        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56); 
-        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read); 
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
-    } 
+    }
 
     Y_UNIT_TEST(TestAcquireLocks) {
         TScopedAlloc alloc;
@@ -749,7 +749,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         UNIT_FAIL("Expected exception.");
     }
-} 
- 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

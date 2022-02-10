@@ -26,8 +26,8 @@ namespace NKikimr {
         {
             TIntrusivePtr<TSyncLogCtx> SlCtx;
             TEvLocalStatus::TPtr Ev;
-            const TActorId NotifyId; 
-            const TActorId KeeperId; 
+            const TActorId NotifyId;
+            const TActorId KeeperId;
 
             friend class TActorBootstrapped<TSyncLogGetLocalStatusActor>;
 
@@ -70,8 +70,8 @@ namespace NKikimr {
 
             TSyncLogGetLocalStatusActor(TIntrusivePtr<TSyncLogCtx> &slCtx,
                                         TEvLocalStatus::TPtr &ev,
-                                        const TActorId &notifyId, 
-                                        const TActorId &keeperId) 
+                                        const TActorId &notifyId,
+                                        const TActorId &keeperId)
                 : TActorBootstrapped<TSyncLogGetLocalStatusActor>()
                 , SlCtx(slCtx)
                 , Ev(ev)
@@ -98,7 +98,7 @@ namespace NKikimr {
             std::unique_ptr<TSyncLogRepaired> Repaired;
             TSyncLogNeighborsPtr NeighborsPtr;
             const TVDiskIncarnationGuid VDiskIncarnationGuid;
-            TActorId KeeperId; 
+            TActorId KeeperId;
             TMaybe<ui64> DbBirthLsn;
             TActiveActors ActiveActors;
 

@@ -21,19 +21,19 @@ namespace NKikimr {
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TPDiskCtxPtr PDiskCtx;
         TIntrusivePtr<THandoffDelegate> HandoffDelegate;
-        const TActorId SkeletonId; 
+        const TActorId SkeletonId;
         const bool RunHandoff;
         const TIntrusivePtr<TLevelIndex<TKey, TMemRec>> LevelIndex;
         ui64 FreeUpToLsn = 0;
     private:
         // ActorId of the LogCutterNotifier, that aggregates cut log lsn for the Hull database
-        TActorId LogNotifierActorId; 
+        TActorId LogNotifierActorId;
 
     public:
         TLevelIndexRunTimeCtx(TIntrusivePtr<TLsnMngr> lsnMngr,
                 TPDiskCtxPtr pdiskCtx,
                 TIntrusivePtr<THandoffDelegate> handoffDelegate,
-                const TActorId skeletonId, 
+                const TActorId skeletonId,
                 bool runHandoff,
                 TIntrusivePtr<TLevelIndex<TKey, TMemRec>> levelIndex)
             : LsnMngr(std::move(lsnMngr))
@@ -59,11 +59,11 @@ namespace NKikimr {
             return FreeUpToLsn;
         }
 
-        void SetLogNotifierActorId(const TActorId &aid) { 
+        void SetLogNotifierActorId(const TActorId &aid) {
             LogNotifierActorId = aid;
         }
 
-        TActorId GetLogNotifierActorId() const { 
+        TActorId GetLogNotifierActorId() const {
             Y_VERIFY(LogNotifierActorId);
             return LogNotifierActorId;
         }
@@ -107,7 +107,7 @@ namespace NKikimr {
             TIntrusivePtr<TVDiskConfig> config,
             TIntrusivePtr<THullDs> hullDs,
             std::shared_ptr<THullLogCtx> hullLogCtx,
-            TActorId loggerId, 
+            TActorId loggerId,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyLogoBlob, TMemRecLogoBlob>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);
 
@@ -115,7 +115,7 @@ namespace NKikimr {
             TIntrusivePtr<TVDiskConfig> config,
             TIntrusivePtr<THullDs> hullDs,
             std::shared_ptr<THullLogCtx> hullLogCtx,
-            TActorId loggerId, 
+            TActorId loggerId,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyBlock, TMemRecBlock>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);
 
@@ -123,7 +123,7 @@ namespace NKikimr {
             TIntrusivePtr<TVDiskConfig> config,
             TIntrusivePtr<THullDs> hullDs,
             std::shared_ptr<THullLogCtx> hullLogCtx,
-            TActorId loggerId, 
+            TActorId loggerId,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyBarrier, TMemRecBarrier>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);
 

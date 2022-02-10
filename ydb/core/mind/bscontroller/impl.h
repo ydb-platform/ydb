@@ -1600,7 +1600,7 @@ private:
     // Metric collection
 
     struct TSelectGroupsQueueItem {
-        TActorId RespondTo; 
+        TActorId RespondTo;
         ui64 Cookie;
         THolder<TEvBlobStorage::TEvControllerSelectGroupsResult> Event;
         TSet<TPDiskId> BlockedPDisks;
@@ -1659,7 +1659,7 @@ public:
         return NKikimrServices::TActivity::BS_CONTROLLER_ACTOR;
     }
 
-    TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info) 
+    TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , ResponsivenessPinger(nullptr)
@@ -1965,7 +1965,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE WARDEN PIPE LIFETIME MANAGEMENT
 
-    THashMap<TActorId, std::optional<TNodeId>> PipeServerToNode; 
+    THashMap<TActorId, std::optional<TNodeId>> PipeServerToNode;
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);

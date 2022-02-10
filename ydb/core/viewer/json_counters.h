@@ -17,7 +17,7 @@ class TJsonCounters : public TActorBootstrapped<TJsonCounters> {
     using TThis = TJsonCounters;
     using TBase = TActorBootstrapped<TJsonCounters>;
     IViewer* Viewer;
-    TActorId Initiator; 
+    TActorId Initiator;
     ui32 Requested;
     ui32 Received;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
@@ -39,7 +39,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
         ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
@@ -55,7 +55,7 @@ public:
     }
 
     void SendRequest(ui32 nodeId, const TActorContext& ctx) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId); 
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         ++Requested;
         ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);

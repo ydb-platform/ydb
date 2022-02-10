@@ -40,8 +40,8 @@ struct TMiniKQLCompileServiceEvents {
     };
 };
 
-NActors::TActorId MakeMiniKQLCompileServiceID(); 
-const NActors::TActorId& GetMiniKQLCompileServiceID(); 
+NActors::TActorId MakeMiniKQLCompileServiceID();
+const NActors::TActorId& GetMiniKQLCompileServiceID();
 NActors::IActor* CreateMiniKQLCompileService(size_t compileInflightLimit);
 NActors::IActor* CreateMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver);
 

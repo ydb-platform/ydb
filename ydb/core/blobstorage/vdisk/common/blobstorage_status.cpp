@@ -11,15 +11,15 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TStatusRequestHandler : public TActorBootstrapped<TStatusRequestHandler> {
         TIntrusivePtr<TVDiskContext> VCtx;
-        const TActorId SkeletonId; 
-        const TActorId SyncerId; 
-        const TActorId SyncLogId; 
+        const TActorId SkeletonId;
+        const TActorId SyncerId;
+        const TActorId SyncLogId;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         const TVDiskID SelfVDiskId;
         const ui64 IncarnationGuid;
         const TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
         TEvBlobStorage::TEvVStatus::TPtr Ev;
-        const TActorId NotifyId; 
+        const TActorId NotifyId;
         const TInstant Now;
         const bool ReplDone;
         unsigned Counter;
@@ -54,8 +54,8 @@ namespace NKikimr {
             Become(&TThis::StateFunc);
         }
 
-        void SendLocalStatusRequest(const TActorContext &ctx, const TActorId &actor) { 
-            if (actor != TActorId()) { 
+        void SendLocalStatusRequest(const TActorContext &ctx, const TActorId &actor) {
+            if (actor != TActorId()) {
                 ctx.Send(actor, new TEvLocalStatus());
                 Counter++;
             }
@@ -93,15 +93,15 @@ namespace NKikimr {
 
         TStatusRequestHandler(
                 const TIntrusivePtr<TVDiskContext> &vctx,
-                const TActorId &skeletonId, 
-                const TActorId &syncerId, 
-                const TActorId &syncLogId, 
+                const TActorId &skeletonId,
+                const TActorId &syncerId,
+                const TActorId &syncLogId,
                 const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                 const TVDiskID selfVDiskId,
                 const ui64 incarnationGuid,
                 const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo,
                 TEvBlobStorage::TEvVStatus::TPtr &ev,
-                const TActorId &notifyId, 
+                const TActorId &notifyId,
                 const TInstant &now,
                 bool replDone)
             : TActorBootstrapped<TStatusRequestHandler>()
@@ -123,15 +123,15 @@ namespace NKikimr {
 
     IActor *CreateStatusRequestHandler(
             const TIntrusivePtr<TVDiskContext> &vctx,
-            const TActorId &skeletonId, 
-            const TActorId &syncerId, 
-            const TActorId &syncLogId, 
+            const TActorId &skeletonId,
+            const TActorId &syncerId,
+            const TActorId &syncLogId,
             const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
             const TVDiskID selfVDiskId,
             const ui64 incarnationGuid,
             const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo,
             TEvBlobStorage::TEvVStatus::TPtr &ev,
-            const TActorId &notifyId, 
+            const TActorId &notifyId,
             const TInstant &now,
             bool replDone) {
         return new TStatusRequestHandler(vctx, skeletonId, syncerId, syncLogId, ifaceMonGroup, selfVDiskId,

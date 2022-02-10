@@ -28,7 +28,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void CreatedHook(const TActorContext& ctx) override;
     bool HandleHook(STFUNC_SIG) override;
 
-//    void ReplyError(const TActorContext& ctx, const TActorId& dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error); 
+//    void ReplyError(const TActorContext& ctx, const TActorId& dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
     void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
 
     void HandleWakeup(const TActorContext&);
@@ -58,7 +58,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //client requests
     void Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
-    void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx); 
+    void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx);
@@ -98,7 +98,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
-#define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \ 
+#define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx);
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
     DESCRIBE_HANDLE(HandleDeleteSessionRequest)
@@ -112,9 +112,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
-#define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, const TActorId& partActor, \ 
+#define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\
-                                  const TActorId& pipeClient, const TActorId& sender); 
+                                  const TActorId& pipeClient, const TActorId& sender);
     DESCRIBE_HANDLE_WITH_SENDER(HandleGetOwnershipRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleReserveBytesRequest)
 #undef DESCRIBE_HANDLE_WITH_SENDER
@@ -130,7 +130,7 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_ACTOR;
     }
 
-    TPersQueue(const TActorId& tablet, TTabletStorageInfo *info); 
+    TPersQueue(const TActorId& tablet, TTabletStorageInfo *info);
 
 private:
     bool ConfigInited;
@@ -138,7 +138,7 @@ private:
     THashMap<ui32, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
 
-    TActorId CacheActor; 
+    TActorId CacheActor;
 
     TSet<TChangeNotification> ChangeConfigNotification;
     NKikimrPQ::TPQTabletConfig NewConfig;
@@ -162,15 +162,15 @@ private:
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
 
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
-    TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests; 
+    TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
     struct TPipeInfo {
-        TActorId PartActor; 
+        TActorId PartActor;
         TString Owner;
         ui32 ServerActors;
     };
 
-    THashMap<TActorId, TPipeInfo> PipesInfo; 
+    THashMap<TActorId, TPipeInfo> PipesInfo;
 
     ui64 NextResponseCookie;
     THashMap<ui64, TAutoPtr<TResponseBuilder>> ResponseProxy;

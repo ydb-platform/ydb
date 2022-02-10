@@ -73,7 +73,7 @@ namespace NKikimr {
                 hugeBlobCtx,
                 nullptr,
                 info,
-                TActorId(), 
+                TActorId(),
                 vdiskCfg,
                 std::make_unique<std::atomic_uint64_t>());
 

@@ -22,7 +22,7 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/messagebus
     library/cpp/messagebus/oldmodule
-    library/cpp/monlib/deprecated/json 
+    library/cpp/monlib/deprecated/json
     library/cpp/uri
 )
 

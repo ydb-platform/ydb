@@ -8,7 +8,7 @@ public:
     TTxUpdateConfirmedSubdomain(TTenantsManager *self,
                                 const TString &path,
                                 ui64 version,
-                                TActorId worker) 
+                                TActorId worker)
         : TBase(self)
         , Path(path)
         , Version(version)
@@ -44,7 +44,7 @@ public:
 
         if (Tenant) {
             if (Tenant->Worker == Worker)
-                Tenant->Worker = TActorId(); 
+                Tenant->Worker = TActorId();
             Tenant->ConfirmedSubdomain = Version;
             if (Tenant->State == TTenant::CONFIGURING_SUBDOMAIN) {
                 Tenant->State = TTenant::RUNNING;
@@ -61,12 +61,12 @@ private:
     TTenant::TPtr Tenant;
     TString Path;
     ui64 Version;
-    TActorId Worker; 
+    TActorId Worker;
 };
 
 ITransaction *TTenantsManager::CreateTxUpdateConfirmedSubdomain(const TString &path,
                                                                 ui64 version,
-                                                                TActorId worker) 
+                                                                TActorId worker)
 {
     return new TTxUpdateConfirmedSubdomain(this, path, version, worker);
 }

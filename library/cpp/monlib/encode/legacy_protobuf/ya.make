@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/encode/legacy_protobuf/protos 
+    library/cpp/monlib/encode/legacy_protobuf/protos
 )
 
 END()

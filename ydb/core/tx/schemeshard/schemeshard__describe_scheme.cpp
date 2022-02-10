@@ -9,7 +9,7 @@ namespace NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     TPathDescriber PathDescriber;
 

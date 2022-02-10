@@ -32,7 +32,7 @@ typedef ui64 TTabletId;
 typedef ui64 TTxId;
 
 struct TTransactionProposal {
-    TActorId Proxy; 
+    TActorId Proxy;
 
     TTxId TxId; // could be zero, then transaction is not saved a-priori and must be idempotent, with body provided
     TStepId MinStep; // not plan before (tablet would be not ready), could be zero
@@ -54,7 +54,7 @@ struct TTransactionProposal {
     TInstant AcceptMoment;
     bool IgnoreLowDiskSpace;
 
-    TTransactionProposal(const TActorId &proxy, TTxId txId, TStepId minStep, TStepId maxStep, bool ignoreLowDiskSpace) 
+    TTransactionProposal(const TActorId &proxy, TTxId txId, TStepId minStep, TStepId maxStep, bool ignoreLowDiskSpace)
         : Proxy(proxy)
         , TxId(txId)
         , MinStep(minStep)
@@ -66,11 +66,11 @@ struct TTransactionProposal {
 struct TCoordinatorStepConfirmations {
     struct TEntry {
         TTxId TxId;
-        TActorId ProxyId; 
+        TActorId ProxyId;
         TEvTxProxy::TEvProposeTransactionStatus::EStatus Status;
         TStepId Step;
 
-        TEntry(TTxId txid, const TActorId &proxyId, TEvTxProxy::TEvProposeTransactionStatus::EStatus status, TStepId step) 
+        TEntry(TTxId txid, const TActorId &proxyId, TEvTxProxy::TEvProposeTransactionStatus::EStatus status, TStepId step)
             : TxId(txid)
             , ProxyId(proxyId)
             , Status(status)
@@ -135,7 +135,7 @@ struct TMediatorConfirmations {
     {}
 };
 
-IActor* CreateTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration); 
+IActor* CreateTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration);
 
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
@@ -277,7 +277,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
     struct TMediator {
         typedef TOneOneQueueInplace<TMediatorStep *, 32> TStepQueue;
 
-        TActorId QueueActor; 
+        TActorId QueueActor;
         ui64 GenCookie;
         bool PushUpdates;
 
@@ -331,8 +331,8 @@ public:
         static const ui32 CurrentVersion;
 
         struct Transaction : Table<0> {
-            struct ID : Column<0, NScheme::NTypeIds::Uint64> {}; // PK 
-            struct Plan : Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct ID : Column<0, NScheme::NTypeIds::Uint64> {}; // PK
+            struct Plan : Column<1, NScheme::NTypeIds::Uint64> {};
             struct AffectedSet : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TTabletId>; };
 
             using TKey = TableKey<ID>;
@@ -340,9 +340,9 @@ public:
         };
 
         struct AffectedSet : Table<4> {
-            struct MediatorID : Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct MediatorID : Column<1, NScheme::NTypeIds::Uint64> {};
             struct TransactionID : Column<2, Transaction::ID::ColumnType> {};
-            struct DataShardID : Column<3, NScheme::NTypeIds::Uint64> {}; 
+            struct DataShardID : Column<3, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<MediatorID, TransactionID, DataShardID>;
             using TColumns = TableColumns<MediatorID, TransactionID, DataShardID>;
@@ -355,8 +355,8 @@ public:
                 AcquireReadStepLast,
             };
 
-            struct StateKey : Column<0, NScheme::NTypeIds::Uint64> { using Type = EKeyType; }; // PK 
-            struct StateValue : Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct StateKey : Column<0, NScheme::NTypeIds::Uint64> { using Type = EKeyType; }; // PK
+            struct StateValue : Column<1, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<StateKey>;
             using TColumns = TableColumns<StateKey, StateValue>;
@@ -477,7 +477,7 @@ private:
 
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
 
-    void DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId()); 
+    void DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
 
     void Sync(ui64 mediator, const TActorContext &ctx);
     void Sync(const TActorContext &ctx);
@@ -505,7 +505,7 @@ public:
         return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR;
     }
 
-    TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet); 
+    TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet);
 
     // no incomming pipes is allowed in StateInit
     STFUNC_TABLET_INIT(StateInit,

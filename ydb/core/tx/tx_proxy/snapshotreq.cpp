@@ -229,7 +229,7 @@ public:
     void TryToInvalidateTable(TTableId tableId, const TActorContext& ctx) {
         const bool notYetInvalidated = InvalidatedTables.insert(tableId).second;
         if (notYetInvalidated) {
-            ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId())); 
+            ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId()));
         }
     }
 
@@ -1035,7 +1035,7 @@ public:
 private:
     const TTxProxyServices& Services;
     const ui64 TxId;
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     THolder<TEvTxUserProxy::TEvProposeTransaction> Request;
     const TIntrusivePtr<TTxProxyMon> TxProxyMon;
@@ -1063,7 +1063,7 @@ private:
     ui64 SelectedCoordinator = 0;
     THolder<const NACLib::TUserToken> UserToken;
 
-    TActorId ResolveActorID; 
+    TActorId ResolveActorID;
     TTablePathHashSet InvalidatedTables;
     TMap<ui64, TPerShardState> PerShardStates;
     size_t TabletsToPrepare = 0;
@@ -1270,7 +1270,7 @@ public:
     void TryToInvalidateTable(TTableId tableId, const TActorContext& ctx) {
         const bool notYetInvalidated = InvalidatedTables.insert(tableId).second;
         if (notYetInvalidated) {
-            ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId())); 
+            ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId()));
         }
     }
 
@@ -1620,7 +1620,7 @@ public:
 
 private:
     const TTxProxyServices& Services;
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     THolder<TEvTxUserProxy::TEvProposeTransaction> Request;
     const TIntrusivePtr<TTxProxyMon> TxProxyMon;
@@ -1643,7 +1643,7 @@ private:
 
     THolder<const NACLib::TUserToken> UserToken;
 
-    TActorId ResolveActorID; 
+    TActorId ResolveActorID;
     TTablePathHashSet InvalidatedTables;
     TMap<ui64, TPerShardState> PerShardStates;
     size_t TabletsToWait = 0;

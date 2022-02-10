@@ -343,7 +343,7 @@ TActiveTransaction::TActiveTransaction(TDataShard *self,
                                        TTransactionContext &txc,
                                        const TActorContext &ctx,
                                        const TBasicOpInfo &op,
-                                       const TActorId &target, 
+                                       const TActorId &target,
                                        const TString &txBody,
                                        const TVector<TSysTables::TLocksTable::TLock> &locks,
                                        ui64 artifactFlags)
@@ -373,7 +373,7 @@ void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
 void TActiveTransaction::FillTxData(TDataShard *self,
                                     TTransactionContext &txc,
                                     const TActorContext &ctx,
-                                    const TActorId &target, 
+                                    const TActorId &target,
                                     const TString &txBody,
                                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                                     ui64 artifactFlags)

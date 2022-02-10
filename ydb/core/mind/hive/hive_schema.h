@@ -74,10 +74,10 @@ struct Schema : NIceDb::Schema {
         struct AllowedDataCenters : Column<17, NScheme::NTypeIds::String> { using Type = TVector<ui32>; };
         struct TabletStorageVersion : Column<18, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; };
         struct ObjectID : Column<19, NScheme::NTypeIds::Uint64> { using Type = TObjectId; };
-        struct ActorsToNotify : Column<111, NScheme::NTypeIds::String> { using Type = TVector<TActorId>; }; 
+        struct ActorsToNotify : Column<111, NScheme::NTypeIds::String> { using Type = TVector<TActorId>; };
         struct AllowedDomains : Column<112, NScheme::NTypeIds::String> { using Type = TVector<TSubDomainKey>; }; //order sets priority
         struct BootMode : Column<113, NScheme::NTypeIds::Uint64> { using Type = NKikimrHive::ETabletBootMode; static constexpr NKikimrHive::ETabletBootMode Default = NKikimrHive::TABLET_BOOT_MODE_DEFAULT; };
-        struct LockedToActor : Column<114, NScheme::NTypeIds::String> { using Type = TActorId; }; 
+        struct LockedToActor : Column<114, NScheme::NTypeIds::String> { using Type = TActorId; };
         struct LockedReconnectTimeout : Column<115, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct ObjectDomain : Column<116, NScheme::NTypeIds::String> { using Type = NKikimrSubDomains::TDomainKey; };
 

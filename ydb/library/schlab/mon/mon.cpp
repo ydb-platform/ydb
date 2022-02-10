@@ -1,9 +1,9 @@
 #include "mon.h"
 
 #include <ydb/library/schlab/schemu/schemu.h>
-#include <library/cpp/monlib/service/pages/mon_page.h> 
-#include <library/cpp/monlib/service/pages/resource_mon_page.h> 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/mon_page.h>
+#include <library/cpp/monlib/service/pages/resource_mon_page.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <util/stream/str.h>

@@ -6,7 +6,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/mon.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
 
@@ -14,7 +14,7 @@ namespace NKikimr {
     // TMonErrorActor
     ////////////////////////////////////////////////////////////////////////////
     class TMonErrorActor : public TActorBootstrapped<TMonErrorActor> {
-        const TActorId NotifyId; 
+        const TActorId NotifyId;
         NMon::TEvHttpInfo::TPtr Ev;
         const TString Explanation;
 
@@ -31,7 +31,7 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_MON_ERROR;
         }
 
-        TMonErrorActor(const TActorId &notifyId, 
+        TMonErrorActor(const TActorId &notifyId,
                        NMon::TEvHttpInfo::TPtr &ev,
                        const TString &explanation)
             : TActorBootstrapped<TMonErrorActor>()
@@ -47,8 +47,8 @@ namespace NKikimr {
     class TSkeletonMonMainPageActor : public TActorBootstrapped<TSkeletonMonMainPageActor> {
         TIntrusivePtr<TDb> Db;
         NMon::TEvHttpInfo::TPtr Ev;
-        const TActorId NotifyId; 
-        const TActorId LocalRecovActorID; 
+        const TActorId NotifyId;
+        const TActorId LocalRecovActorID;
         unsigned Counter;
 
         TString SkeletonState;
@@ -69,7 +69,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             // send requests to all actors
-            if (bool(TActorId(Db->SkeletonID))) { 
+            if (bool(TActorId(Db->SkeletonID))) {
                 ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::SkeletonStateId));
                 Counter++;
                 ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::HullInfoId));
@@ -78,27 +78,27 @@ namespace NKikimr {
                 Counter++;
             }
 
-            if (bool(TActorId(Db->SyncerID))) { 
+            if (bool(TActorId(Db->SyncerID))) {
                 ctx.Send(Db->SyncerID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::SyncerInfoId));
                 Counter++;
             }
 
-            if (bool(TActorId(Db->SyncLogID))) { 
+            if (bool(TActorId(Db->SyncLogID))) {
                 ctx.Send(Db->SyncLogID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::SyncLogId));
                 Counter++;
             }
 
-            if (bool(TActorId(Db->ReplID))) { 
+            if (bool(TActorId(Db->ReplID))) {
                 ctx.Send(Db->ReplID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::ReplId));
                 Counter++;
             }
 
-            if (bool(TActorId(Db->LogCutterID))) { 
+            if (bool(TActorId(Db->LogCutterID))) {
                 ctx.Send(Db->LogCutterID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::LogCutterId));
                 Counter++;
             }
 
-            if (bool(TActorId(Db->HugeKeeperID))) { 
+            if (bool(TActorId(Db->HugeKeeperID))) {
                 ctx.Send(Db->HugeKeeperID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::HugeKeeperId));
                 Counter++;
             }
@@ -108,7 +108,7 @@ namespace NKikimr {
                 Counter++;
             }
 
-            if (bool(TActorId(Db->DskSpaceTrackerID))) { 
+            if (bool(TActorId(Db->DskSpaceTrackerID))) {
                 ctx.Send(Db->DskSpaceTrackerID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::DskSpaceTrackerId));
                 Counter++;
             }
@@ -118,7 +118,7 @@ namespace NKikimr {
                 Counter++;
             }
 
-            if (bool(TActorId(Db->AnubisRunnerID))) { 
+            if (bool(TActorId(Db->AnubisRunnerID))) {
                 ctx.Send(Db->AnubisRunnerID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::AnubisRunnerId));
                 Counter++;
             }
@@ -224,8 +224,8 @@ namespace NKikimr {
 
         TSkeletonMonMainPageActor(TIntrusivePtr<TDb> &db,
                                   NMon::TEvHttpInfo::TPtr &ev,
-                                  const TActorId notifyId, 
-                                  const TActorId &localRecovActorID) 
+                                  const TActorId notifyId,
+                                  const TActorId &localRecovActorID)
             : TActorBootstrapped<TSkeletonMonMainPageActor>()
             , Db(db)
             , Ev(ev)
@@ -237,8 +237,8 @@ namespace NKikimr {
 
     IActor* CreateSkeletonMonRequestHandler(TIntrusivePtr<TDb> &db,
                                             NMon::TEvHttpInfo::TPtr &ev,
-                                            const TActorId notifyId, 
-                                            const TActorId &localRecovActorID) { 
+                                            const TActorId notifyId,
+                                            const TActorId &localRecovActorID) {
         return new TSkeletonMonMainPageActor(db, ev, notifyId, localRecovActorID);
     }
 
@@ -301,8 +301,8 @@ namespace NKikimr {
         const TVDiskID SelfVDiskId;
         TIntrusivePtr<TVDiskConfig> Cfg;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
-        const TActorId NotifyId; 
-        const TActorId SkeletonFrontID; 
+        const TActorId NotifyId;
+        const TActorId SkeletonFrontID;
         NMon::TEvHttpInfo::TPtr Ev;
         TLogoBlobID From;
         TLogoBlobID To;
@@ -479,10 +479,10 @@ namespace NKikimr {
         }
 
         TSkeletonFrontMonLogoBlobsQueryActor(const TVDiskID &selfVDiskId,
-                                             const TActorId &notifyId, 
+                                             const TActorId &notifyId,
                                              TIntrusivePtr<TVDiskConfig> cfg,
                                              const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
-                                             const TActorId &skeletonFrontID, 
+                                             const TActorId &skeletonFrontID,
                                              NMon::TEvHttpInfo::TPtr &ev)
             : TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor>()
             , SelfVDiskId(selfVDiskId)
@@ -507,8 +507,8 @@ namespace NKikimr {
         const TVDiskID SelfVDiskId;
         TIntrusivePtr<TVDiskConfig> Cfg;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
-        const TActorId NotifyId; 
-        const TActorId SkeletonFrontID; 
+        const TActorId NotifyId;
+        const TActorId SkeletonFrontID;
         NMon::TEvHttpInfo::TPtr Ev;
         TKeyBarrier From;
         TKeyBarrier To;
@@ -668,10 +668,10 @@ namespace NKikimr {
         }
 
         TSkeletonFrontMonBarriersQueryActor(const TVDiskID &selfVDiskId,
-                                            const TActorId &notifyId, 
+                                            const TActorId &notifyId,
                                             TIntrusivePtr<TVDiskConfig> cfg,
                                             const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
-                                            const TActorId &skeletonFrontID, 
+                                            const TActorId &skeletonFrontID,
                                             NMon::TEvHttpInfo::TPtr &ev)
             : TActorBootstrapped<TSkeletonFrontMonBarriersQueryActor>()
             , SelfVDiskId(selfVDiskId)
@@ -695,8 +695,8 @@ namespace NKikimr {
     class TSkeletonFrontMonDbStatActor : public TActorBootstrapped<TSkeletonFrontMonDbStatActor> {
         const TVDiskID SelfVDiskId;
         TIntrusivePtr<TVDiskConfig> Cfg;
-        const TActorId NotifyId; 
-        const TActorId SkeletonFrontID; 
+        const TActorId NotifyId;
+        const TActorId SkeletonFrontID;
         NMon::TEvHttpInfo::TPtr Ev;
         const NKikimrBlobStorage::EDbStatAction Action;
         const TString Dbname;
@@ -874,9 +874,9 @@ namespace NKikimr {
         }
 
         TSkeletonFrontMonDbStatActor(const TVDiskID &selfVDiskId,
-                                     const TActorId &notifyId, 
+                                     const TActorId &notifyId,
                                      TIntrusivePtr<TVDiskConfig> cfg,
-                                     const TActorId &skeletonFrontID, 
+                                     const TActorId &skeletonFrontID,
                                      NMon::TEvHttpInfo::TPtr &ev,
                                      NKikimrBlobStorage::EDbStatAction action,
                                      const TString &dbname)
@@ -895,8 +895,8 @@ namespace NKikimr {
     // TSkeletonFrontMonMainPageActor
     ////////////////////////////////////////////////////////////////////////////
     class TSkeletonFrontMonMainPageActor : public TActorBootstrapped<TSkeletonFrontMonMainPageActor> {
-        const TActorId NotifyId; 
-        const TActorId SkeletonID; 
+        const TActorId NotifyId;
+        const TActorId SkeletonID;
         NMon::TEvHttpInfo::TPtr Ev;
         TString SkeletonFrontAnswer;
         TString SkeletonAnswer;
@@ -960,8 +960,8 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_MON_SF_MAIN_PAGE;
         }
 
-        TSkeletonFrontMonMainPageActor(const TActorId &notifyId, 
-                                       const TActorId &skeletonID, 
+        TSkeletonFrontMonMainPageActor(const TActorId &notifyId,
+                                       const TActorId &skeletonID,
                                        NMon::TEvHttpInfo::TPtr &ev,
                                        const TString &frontHtml)
             : TActorBootstrapped<TSkeletonFrontMonMainPageActor>()
@@ -976,9 +976,9 @@ namespace NKikimr {
     // SKELETON FRONT MON REQUEST HANDLER
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateFrontSkeletonMonRequestHandler(const TVDiskID &selfVDiskId,
-                                                 const TActorId &notifyId, 
-                                                 const TActorId &skeletonID, 
-                                                 const TActorId &skeletonFrontID, 
+                                                 const TActorId &notifyId,
+                                                 const TActorId &skeletonID,
+                                                 const TActorId &skeletonFrontID,
                                                  TIntrusivePtr<TVDiskConfig> cfg,
                                                  const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                  NMon::TEvHttpInfo::TPtr &ev,

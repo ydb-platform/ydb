@@ -14,10 +14,10 @@ namespace NCms {
 constexpr const char *WALLE_CMS_USER = "Wall-E";
 constexpr const char *WALLE_API_URL_PREFIX = "/api/walle/v11/";
 
-IActor *CreateWalleAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, TActorId cms); 
+IActor *CreateWalleAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, TActorId cms);
 IActor *CreateWalleAdapter(TEvCms::TEvWalleListTasksRequest::TPtr &ev, const TCmsStatePtr state);
-IActor *CreateWalleAdapter(TEvCms::TEvWalleCheckTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms); 
-IActor *CreateWalleAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms); 
+IActor *CreateWalleAdapter(TEvCms::TEvWalleCheckTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms);
+IActor *CreateWalleAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms);
 
 IActor *CreateWalleApiHandler(NMon::TEvHttpInfo::TPtr &event);
 

@@ -5,7 +5,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
- 
+
 Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
     Y_UNIT_TEST_LLVM(TestDictLength) {
         TSetup<LLVM> setup;

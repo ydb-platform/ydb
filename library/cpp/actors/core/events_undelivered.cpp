@@ -41,7 +41,7 @@ namespace NActors {
     TAutoPtr<IEventHandle> IEventHandle::ForwardOnNondelivery(ui32 reason, bool unsure) {
         if (Flags & FlagForwardOnNondelivery) {
             const ui32 updatedFlags = Flags & ~(FlagForwardOnNondelivery | FlagSubscribeOnSession);
-            const TActorId recp = OnNondeliveryHolder ? OnNondeliveryHolder->Recipient : TActorId(); 
+            const TActorId recp = OnNondeliveryHolder ? OnNondeliveryHolder->Recipient : TActorId();
 
             if (Event)
                 return new IEventHandle(recp, Sender, Event.Release(), updatedFlags, Cookie, &Recipient, TraceId.Clone());

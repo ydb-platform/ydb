@@ -290,7 +290,7 @@ private:
     THashSet<TSubDomainKey> SubDomainKeys;
     bool AllowYdbRequestsWithoutDatabase = true;
     NKikimrConfig::TAppConfig AppConfig;
-    TActorId SchemeCache; 
+    TActorId SchemeCache;
     bool DynamicNode = false;
     TString RootDatabase;
     TIntrusivePtr<TGrpcProxyCounters> Counters;
@@ -381,9 +381,9 @@ void TGRpcRequestProxyImpl::HandlePoolStatus(TEvTenantPool::TEvTenantPoolStatus:
 void TGRpcRequestProxyImpl::HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx) {
     const auto record = ev->Get();
     ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse {
-        record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_OK, 
+        record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_OK,
         record->GetInternalToken(),
-        record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_UNAVAILABLE, 
+        record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
         NYql::TIssues()});
 }
 
@@ -426,8 +426,8 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
 
 bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
-    return state.State == NGrpc::TAuthState::AS_OK || 
-           state.State == NGrpc::TAuthState::AS_FAIL && state.NeedAuth == false || 
+    return state.State == NGrpc::TAuthState::AS_OK ||
+           state.State == NGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
            state.NeedAuth == false && !ctx.GetYdbToken();
 }
 

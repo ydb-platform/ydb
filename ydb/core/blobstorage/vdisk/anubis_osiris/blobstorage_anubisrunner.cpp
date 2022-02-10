@@ -4,7 +4,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/mon.h>
 
 using namespace NKikimrServices;
@@ -17,15 +17,15 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TAnubisRunnerHttpInfoActor : public TActorBootstrapped<TAnubisRunnerHttpInfoActor> {
         NMon::TEvHttpInfo::TPtr Ev;
-        const TActorId ReplyId; 
-        const TActorId NotifyId; 
-        const TActorId AnubisId; 
+        const TActorId ReplyId;
+        const TActorId NotifyId;
+        const TActorId AnubisId;
         const TString CurRunnerState;
 
         friend class TActorBootstrapped<TAnubisRunnerHttpInfoActor>;
 
         void Bootstrap(const TActorContext &ctx) {
-            if (AnubisId == TActorId()) { 
+            if (AnubisId == TActorId()) {
                 RenderHtmlAndReply(ctx, TString());
             } else {
                 Become(&TThis::StateFunc);
@@ -86,8 +86,8 @@ namespace NKikimr {
 
         TAnubisRunnerHttpInfoActor(
                              NMon::TEvHttpInfo::TPtr &ev,
-                             const TActorId &notifyId, 
-                             const TActorId &anubisId, 
+                             const TActorId &notifyId,
+                             const TActorId &anubisId,
                              const TString &curRunnerState)
             : TActorBootstrapped<TAnubisRunnerHttpInfoActor>()
             , Ev(ev)
@@ -147,7 +147,7 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQuorumForAnubisTracker QuorumTracker;
         TActiveActors ActiveActors;
-        TActorId AnubisId; 
+        TActorId AnubisId;
         bool RetryAnubis = true;
         bool AnubisScheduled = false;
 
@@ -176,7 +176,7 @@ namespace NKikimr {
 
         void Handle(TEvAnubisDone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
-            AnubisId = TActorId(); 
+            AnubisId = TActorId();
             RetryAnubis = ev->Get()->Issues.HaveProblems();
             // check if need to schedule Anubis later on
             if (RetryAnubis && !AnubisScheduled) {
@@ -218,9 +218,9 @@ namespace NKikimr {
             if (AnubisId) {
                 ActiveActors.Erase(AnubisId);
                 ctx.Send(AnubisId, new TEvents::TEvPoisonPill());
-                AnubisId = TActorId(); 
+                AnubisId = TActorId();
                 RunAnubis(ctx);
-                Y_VERIFY(AnubisId != TActorId()); 
+                Y_VERIFY(AnubisId != TActorId());
             }
         }
 

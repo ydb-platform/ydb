@@ -180,17 +180,17 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
-        NMonitoring::TMetricRegistry sensors; 
+        NMonitoring::TMetricRegistry sensors;
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
-        NActors::TActorId proxyId = actorSystem.Register(proxy); 
-        actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true); 
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
         actorSystem.DispatchEvents();
 
-        NActors::TActorId serverId = actorSystem.AllocateEdgeActor(); 
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
         actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
 
-        NActors::TActorId clientId = actorSystem.AllocateEdgeActor(); 
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test");
         actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
 
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
-        NMonitoring::TMetricRegistry sensors; 
+        NMonitoring::TMetricRegistry sensors;
 
         TString certificateContent = R"___(-----BEGIN PRIVATE KEY-----
 MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCzRZjodO7Aqe1w
@@ -273,7 +273,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         certificateFile.Write(certificateContent.data(), certificateContent.size());
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
-        NActors::TActorId proxyId = actorSystem.Register(proxy); 
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
 
         THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         ///////// https configuration
@@ -281,13 +281,13 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         add->CertificateFile = certificateFile.Name();
         add->PrivateKeyFile = certificateFile.Name();
         /////////
-        actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), add.Release()), 0, true); 
+        actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), add.Release()), 0, true);
         actorSystem.DispatchEvents();
 
-        NActors::TActorId serverId = actorSystem.AllocateEdgeActor(); 
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
         actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
 
-        NActors::TActorId clientId = actorSystem.AllocateEdgeActor(); 
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("https://[::1]:" + ToString(port) + "/test");
         actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
 
@@ -314,11 +314,11 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         NActors::TActorSystem actorSystem(setup);
         actorSystem.Start();
         NHttp::THttpProxy* incomingProxy = new NHttp::THttpProxy();
-        NActors::TActorId incomingProxyId = actorSystem.Register(incomingProxy); 
+        NActors::TActorId incomingProxyId = actorSystem.Register(incomingProxy);
         actorSystem.Send(incomingProxyId, new NHttp::TEvHttpProxy::TEvAddListeningPort(13337));
 
         NHttp::THttpProxy* outgoingProxy = new NHttp::THttpProxy();
-        NActors::TActorId outgoingProxyId = actorSystem.Register(outgoingProxy); 
+        NActors::TActorId outgoingProxyId = actorSystem.Register(outgoingProxy);
 
         THolder<NHttp::THttpStaticStringRequest> httpRequest = MakeHolder<NHttp::THttpStaticStringRequest>("GET /test HTTP/1.1\r\n\r\n");
         actorSystem.Send(outgoingProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest("[::]:13337", std::move(httpRequest)));

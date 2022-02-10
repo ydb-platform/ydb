@@ -723,7 +723,7 @@ private:
 
     std::unique_ptr<TEvReadTableRequest> Request_;
 
-    TActorId ReadTableActor; 
+    TActorId ReadTableActor;
 
     TList<TEvTxProcessing::TEvStreamQuotaRequest::TPtr> QuotaRequestQueue_;
 
@@ -734,7 +734,7 @@ private:
 
     size_t LeftInGRpcAdaptorQueue_;
 
-    THashSet<TActorId> StreamSubscribers_; 
+    THashSet<TActorId> StreamSubscribers_;
 
     TDuration InactiveClientTimeout_;
     TDuration InactiveServerTimeout_;

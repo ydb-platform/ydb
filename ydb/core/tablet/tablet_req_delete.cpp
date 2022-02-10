@@ -19,7 +19,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
         {}
     };
 
-    const TActorId Owner; 
+    const TActorId Owner;
     TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     TVector<TRequestInfo> Requests;
     ui32 FinishedRequests;
@@ -28,7 +28,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TActorContext &ctx) {
         if (status == NKikimrProto::OK) {
-            const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()); 
+            const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(
                          TabletStorageInfo->TabletID,
                          0,
@@ -83,7 +83,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
             if (FinishedRequests >= Requests.size()) {
                 if (Generation == std::numeric_limits<ui32>::max()) {
                     ui64 StateStorageId = StateStorageGroupFromTabletID(TabletStorageInfo->TabletID);
-                    const TActorId proxyActorID = MakeStateStorageProxyID(StateStorageId); 
+                    const TActorId proxyActorID = MakeStateStorageProxyID(StateStorageId);
                     ctx.Send(proxyActorID, new TEvStateStorage::TEvDelete(TabletStorageInfo->TabletID));
                 }
 
@@ -117,7 +117,7 @@ public:
         return NKikimrServices::TActivity::TABLET_REQ_DELETE_TABLET;
     }
 
-    TTabletReqDelete(const TActorId &owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 generation = std::numeric_limits<ui32>::max()) 
+    TTabletReqDelete(const TActorId &owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 generation = std::numeric_limits<ui32>::max())
         : Owner(owner)
         , TabletStorageInfo(tabletStorageInfo)
         , FinishedRequests(0)
@@ -134,7 +134,7 @@ public:
     }
 };
 
-IActor* CreateTabletReqDelete(const TActorId &owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 generation) { 
+IActor* CreateTabletReqDelete(const TActorId &owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 generation) {
     return new TTabletReqDelete(owner, tabletStorageInfo, generation);
 }
 

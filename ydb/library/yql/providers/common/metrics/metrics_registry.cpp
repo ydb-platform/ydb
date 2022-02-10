@@ -1,51 +1,51 @@
-#include "metrics_registry.h" 
- 
+#include "metrics_registry.h"
+
 #include <ydb/library/yql/providers/common/metrics/protos/metrics_registry.pb.h>
 
-#include <util/generic/hash.h> 
-#include <util/generic/maybe.h> 
-#include <util/generic/stack.h> 
- 
- 
-namespace NYql { 
-namespace { 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TCountersPhotographer 
-////////////////////////////////////////////////////////////////////////////// 
-class TCountersPhotographer: public NMonitoring::ICountableConsumer { 
-public: 
+#include <util/generic/hash.h>
+#include <util/generic/maybe.h>
+#include <util/generic/stack.h>
+
+
+namespace NYql {
+namespace {
+
+//////////////////////////////////////////////////////////////////////////////
+// TCountersPhotographer
+//////////////////////////////////////////////////////////////////////////////
+class TCountersPhotographer: public NMonitoring::ICountableConsumer {
+public:
     TCountersPhotographer(NProto::TCounterGroup* groupProto, bool invalidate)
-        : HasAnyCounters_(false) 
+        : HasAnyCounters_(false)
         , Invalidate_(invalidate)
-    { 
-        GroupsProto_.push(groupProto); 
-    } 
- 
-    bool HasAnyCounters() const { 
-        return HasAnyCounters_; 
-    } 
- 
-private: 
-    void OnCounter( 
+    {
+        GroupsProto_.push(groupProto);
+    }
+
+    bool HasAnyCounters() const {
+        return HasAnyCounters_;
+    }
+
+private:
+    void OnCounter(
             const TString& labelName, const TString& labelValue,
-            const TSensorCounter* counter) override 
-    { 
-        HasAnyCounters_ = true; 
- 
-        auto* counterProto = GroupsProto_.top()->AddCounters(); 
-        counterProto->SetDerivative(counter->ForDerivative()); 
-        auto counterVal = counter->Val(); 
-        counterProto->SetValue(counterVal); 
+            const TSensorCounter* counter) override
+    {
+        HasAnyCounters_ = true;
+
+        auto* counterProto = GroupsProto_.top()->AddCounters();
+        counterProto->SetDerivative(counter->ForDerivative());
+        auto counterVal = counter->Val();
+        counterProto->SetValue(counterVal);
         if (Invalidate_) {
-            const_cast<TSensorCounter*>(counter)->Sub(counterVal); 
+            const_cast<TSensorCounter*>(counter)->Sub(counterVal);
         }
- 
-        auto* label = counterProto->MutableLabel(); 
-        label->SetName(labelName); 
-        label->SetValue(labelValue); 
-    } 
- 
+
+        auto* label = counterProto->MutableLabel();
+        label->SetName(labelName);
+        label->SetValue(labelValue);
+    }
+
     void OnHistogram(const TString& labelName, const TString& labelValue, NMonitoring::IHistogramSnapshotPtr snapshot, bool) override {
         if (Invalidate_) {
             return;
@@ -64,48 +64,48 @@ private:
             bucket->SetUpperBound(upperBound);
             bucket->SetValue(value);
         }
-    } 
- 
-    void OnGroupBegin( 
+    }
+
+    void OnGroupBegin(
             const TString& labelName, const TString& labelValue,
-            const TSensorsGroup*) override 
-    { 
+            const TSensorsGroup*) override
+    {
         if (labelName.empty() && labelValue.empty()) {
-            // root group is alrady present 
-            return; 
-        } 
- 
-        auto* groupProto = GroupsProto_.top()->AddGroups(); 
-        auto* label = groupProto->MutableLabel(); 
-        label->SetName(labelName); 
-        label->SetValue(labelValue); 
- 
-        GroupsProto_.push(groupProto); 
-    } 
- 
-    void OnGroupEnd(const TString&, const TString&, const TSensorsGroup*) override { 
-        GroupsProto_.pop(); 
-    } 
- 
-private: 
+            // root group is alrady present
+            return;
+        }
+
+        auto* groupProto = GroupsProto_.top()->AddGroups();
+        auto* label = groupProto->MutableLabel();
+        label->SetName(labelName);
+        label->SetValue(labelValue);
+
+        GroupsProto_.push(groupProto);
+    }
+
+    void OnGroupEnd(const TString&, const TString&, const TSensorsGroup*) override {
+        GroupsProto_.pop();
+    }
+
+private:
     TStack<NProto::TCounterGroup*> GroupsProto_;
-    bool HasAnyCounters_; 
+    bool HasAnyCounters_;
     bool Invalidate_;
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TMetricsRegistryImpl 
-////////////////////////////////////////////////////////////////////////////// 
-class TMetricsRegistryImpl final: public IMetricsRegistry { 
-public: 
-    TMetricsRegistryImpl( 
-            TSensorsGroupPtr sensors, 
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TMetricsRegistryImpl
+//////////////////////////////////////////////////////////////////////////////
+class TMetricsRegistryImpl final: public IMetricsRegistry {
+public:
+    TMetricsRegistryImpl(
+            TSensorsGroupPtr sensors,
             TMaybe<TString> userName)
-        : Sensors_(std::move(sensors)) 
-        , UserName_(std::move(userName)) 
-    { 
-    } 
- 
+        : Sensors_(std::move(sensors))
+        , UserName_(std::move(userName))
+    {
+    }
+
     void SetCounter(
         const TString& labelName,
         const TString& labelValue,
@@ -129,27 +129,27 @@ public:
         }
     }
 
-    void IncCounter( 
+    void IncCounter(
             const TString& labelName,
             const TString& labelValue,
-            bool derivative) override 
-    { 
-        // total aggregate counter 
-        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative); 
-        if (totalCnt) { 
-            totalCnt->Inc(); 
-        } 
- 
-        if (UserName_) { 
-            // per user counter 
-            auto userCnt = GetCounter(labelName, labelValue, UserName_.Get(), 
-                                      derivative); 
-            if (userCnt) { 
-                userCnt->Inc(); 
-            } 
-        } 
-    } 
- 
+            bool derivative) override
+    {
+        // total aggregate counter
+        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative);
+        if (totalCnt) {
+            totalCnt->Inc();
+        }
+
+        if (UserName_) {
+            // per user counter
+            auto userCnt = GetCounter(labelName, labelValue, UserName_.Get(),
+                                      derivative);
+            if (userCnt) {
+                userCnt->Inc();
+            }
+        }
+    }
+
     void AddCounter(
             const TString& labelName,
             const TString& labelValue,
@@ -172,19 +172,19 @@ public:
         }
     }
 
-    bool TakeSnapshot(NProto::TMetricsRegistrySnapshot* snapshot) const override { 
-        bool hasRootGroupBefore = snapshot->HasRootGroup(); 
+    bool TakeSnapshot(NProto::TMetricsRegistrySnapshot* snapshot) const override {
+        bool hasRootGroupBefore = snapshot->HasRootGroup();
         TCountersPhotographer photographer(snapshot->MutableRootGroup(), snapshot->GetDontIncrement() == false);
         Sensors_->Accept(TString(), TString(), photographer);
-        if (!photographer.HasAnyCounters() && !hasRootGroupBefore) { 
-            // remove prematurely allocated group 
-            snapshot->ClearRootGroup(); 
-            return false; 
-        } 
-        return true; 
-    } 
- 
-    void MergeSnapshot(const NProto::TMetricsRegistrySnapshot& snapshot) override { 
+        if (!photographer.HasAnyCounters() && !hasRootGroupBefore) {
+            // remove prematurely allocated group
+            snapshot->ClearRootGroup();
+            return false;
+        }
+        return true;
+    }
+
+    void MergeSnapshot(const NProto::TMetricsRegistrySnapshot& snapshot) override {
         MergeFromGroupProto(
             snapshot.HasMergeToRoot()
                 ? GetSensorsRootGroup().Get()
@@ -193,42 +193,42 @@ public:
             snapshot.HasDontIncrement()
                 ? snapshot.GetDontIncrement()
                 : false);
-    } 
- 
+    }
+
     IMetricsRegistryPtr Personalized(const TString& userName) const override {
-        return new TMetricsRegistryImpl(Sensors_, MakeMaybe(userName)); 
-    } 
- 
-    void Flush() override { 
-        // do nothing 
-    } 
- 
+        return new TMetricsRegistryImpl(Sensors_, MakeMaybe(userName));
+    }
+
+    void Flush() override {
+        // do nothing
+    }
+
     TSensorsGroupPtr GetSensors() override {
         return Sensors_.Get();
     }
 
-private: 
-    TSensorCounterPtr GetCounter( 
+private:
+    TSensorCounterPtr GetCounter(
             const TString& labelName,
             const TString& labelValue,
             const TString* userName,
-            bool derivative) 
-    { 
+            bool derivative)
+    {
         static const TString USER("user");
         static const TString USER_ABSOLUTE("user_absolute");
         static const TString TOTAL("total");
- 
+
         const TString& userGroup = derivative ? USER : USER_ABSOLUTE;
-        return Sensors_ 
-                ->GetSubgroup(userGroup, userName ? *userName : TOTAL) 
-                ->GetNamedCounter(labelName, labelValue, derivative); 
-    } 
- 
-    void MergeFromGroupProto( 
+        return Sensors_
+                ->GetSubgroup(userGroup, userName ? *userName : TOTAL)
+                ->GetNamedCounter(labelName, labelValue, derivative);
+    }
+
+    void MergeFromGroupProto(
             TSensorsGroup* group, const NProto::TCounterGroup& groupProto, bool asIs)
-    { 
-        for (const auto& counterProto: groupProto.GetCounters()) { 
-            const auto& label = counterProto.GetLabel(); 
+    {
+        for (const auto& counterProto: groupProto.GetCounters()) {
+            const auto& label = counterProto.GetLabel();
 
             if (!counterProto.GetBucket().empty()) {
                 NMonitoring::TBucketBounds bounds;
@@ -261,28 +261,28 @@ private:
                     *counter += counterProto.GetValue();
                 }
             }
-        } 
- 
-        for (const auto& subGroupProto: groupProto.GetGroups()) { 
-            const auto& label = subGroupProto.GetLabel(); 
-            auto subGroup = group->GetSubgroup( 
-                        label.GetName(), label.GetValue()); 
+        }
+
+        for (const auto& subGroupProto: groupProto.GetGroups()) {
+            const auto& label = subGroupProto.GetLabel();
+            auto subGroup = group->GetSubgroup(
+                        label.GetName(), label.GetValue());
             MergeFromGroupProto(subGroup.Get(), subGroupProto, asIs);
-        } 
-    } 
- 
-private: 
-    TSensorsGroupPtr Sensors_; 
+        }
+    }
+
+private:
+    TSensorsGroupPtr Sensors_;
     const TMaybe<TString> UserName_;
 
     THashMap<NMonitoring::THistogramPtr, NMonitoring::IHistogramCollector*> Histograms;
-}; 
- 
-} // namespace 
- 
- 
-IMetricsRegistryPtr CreateMetricsRegistry(TSensorsGroupPtr sensors) { 
-    return new TMetricsRegistryImpl(std::move(sensors), Nothing()); 
-} 
- 
-} // namespace NYql 
+};
+
+} // namespace
+
+
+IMetricsRegistryPtr CreateMetricsRegistry(TSensorsGroupPtr sensors) {
+    return new TMetricsRegistryImpl(std::move(sensors), Nothing());
+}
+
+} // namespace NYql

@@ -28,7 +28,7 @@ void SetErrorCode(
 // GetTopicMetadata command
 //
 
-TPersQueueGetTopicMetadataProcessor::TPersQueueGetTopicMetadataProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache) 
+TPersQueueGetTopicMetadataProcessor::TPersQueueGetTopicMetadataProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache)
     : TPersQueueBaseRequestProcessor(request, schemeCache, false)
 {
     const auto& topics = RequestProto->GetMetaRequest().GetCmdGetTopicMetadata().GetTopic();
@@ -198,7 +198,7 @@ void TPersQueueGetPartitionOffsetsTopicWorker::Answer(const TActorContext& ctx, 
 // GetPartitionStatus command
 //
 
-TPersQueueGetPartitionStatusProcessor::TPersQueueGetPartitionStatusProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache) 
+TPersQueueGetPartitionStatusProcessor::TPersQueueGetPartitionStatusProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache)
     : TPersQueueBaseRequestProcessor(request, schemeCache, false)
 {
     GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().GetTopicRequest(), PartitionsToRequest);

@@ -17,7 +17,7 @@ protected:
     private:
         const TAllVDisks::TVDiskInstance VDiskInfo;
         IDataSetPtr DataSetPtr;
-        const TActorId PDiskId; 
+        const TActorId PDiskId;
         TAutoPtr<IDataSet::TIterator> It;
 
         void Send(const TActorContext &ctx) {
@@ -27,7 +27,7 @@ protected:
         }
 
     public:
-        TSender(const TAllVDisks::TVDiskInstance vdiskInfo, IDataSetPtr dataSetPtr, const TActorId &pdiskId) 
+        TSender(const TAllVDisks::TVDiskInstance vdiskInfo, IDataSetPtr dataSetPtr, const TActorId &pdiskId)
             : VDiskInfo(vdiskInfo)
             , DataSetPtr(dataSetPtr)
             , PDiskId(pdiskId)

@@ -4,8 +4,8 @@
 #include "type_coders.h"
 #include "type_decoders.h"
 
-namespace NKikimr { 
-namespace NScheme { 
+namespace NKikimr {
+namespace NScheme {
 
 template <typename TCoder, typename TDecoder>
 class TCodecImpl : public ICodec {
@@ -64,6 +64,6 @@ class TDeltaZigZagCodec : public TCodecImpl<TDeltaZigZagCoder<TIntType, IsNullab
 template <bool IsNullable>
 class TBoolCodec : public TCodecImpl<TBoolCoder<IsNullable>, TBoolDecoder<IsNullable>> { };
 
-} // namespace NScheme 
-} // namespace NKikimr 
+} // namespace NScheme
+} // namespace NKikimr
 

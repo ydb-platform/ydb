@@ -7,7 +7,7 @@ namespace NHive {
 class TTxKillNode : public TTransactionBase<THive> {
 protected:
     TNodeId NodeId;
-    TActorId Local; 
+    TActorId Local;
 public:
     TTxKillNode(TNodeId nodeId, const TActorId& local, THive *hive)
         : TBase(hive)
@@ -50,7 +50,7 @@ public:
                 db.Table<Schema::Node>().Key(NodeId).Delete();
                 Self->DeleteNode(NodeId);
             } else {
-                db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Local>(TActorId()); 
+                db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Local>(TActorId());
             }
         }
         return true;

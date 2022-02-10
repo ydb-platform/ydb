@@ -56,11 +56,11 @@ namespace NActors {
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
 
-        void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0, 
-            const NKikimr::NTabletPipe::TClientConfig& pipeConfig = NKikimr::NTabletPipe::TClientConfig(), TActorId clientId = TActorId(), ui64 cookie = 0); 
-        void SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload, 
+        void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,
+            const NKikimr::NTabletPipe::TClientConfig& pipeConfig = NKikimr::NTabletPipe::TClientConfig(), TActorId clientId = TActorId(), ui64 cookie = 0);
+        void SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
                                            ui32 nodeIndex = 0, ui64 cookie = 0);
-        TActorId ConnectToPipe(ui64 tabletId, const TActorId& sender, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig); 
+        TActorId ConnectToPipe(ui64 tabletId, const TActorId& sender, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig);
         NKikimr::TAppData& GetAppData(ui32 nodeIndex = 0);
 
         TPortManager& GetPortManager() {

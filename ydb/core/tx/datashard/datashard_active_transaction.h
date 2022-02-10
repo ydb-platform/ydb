@@ -58,7 +58,7 @@ struct TSchemaOperation {
 
     ui64 TxId;
     EType Type;
-    TActorId Source; 
+    TActorId Source;
     ui64 TabletId;
     ui64 MinStep;
     ui64 MaxStep;
@@ -178,10 +178,10 @@ public:
 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
 
-    TActorId Source() const { return Source_; } 
-    void SetSource(const TActorId& actorId) { Source_ = actorId; } 
+    TActorId Source() const { return Source_; }
+    void SetSource(const TActorId& actorId) { Source_ = actorId; }
     void SetStep(ui64 step) { StepTxId_.Step = step; }
-    bool IsProposed() const { return Source_ != TActorId(); } 
+    bool IsProposed() const { return Source_ != TActorId(); }
 
     bool IsTableRead() const { return Tx.HasReadTableTransaction(); }
 
@@ -201,7 +201,7 @@ public:
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
 
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
-    TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); } 
+    TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); }
     const NKikimrTxDataShard::TReadTableTransaction &GetReadTableTransaction() const { return Tx.GetReadTableTransaction(); }
 
     ui32 ExtractKeys(bool allowErrors);
@@ -230,7 +230,7 @@ private:
     TStepOrder StepTxId_;
     ui64 TabletId_;
     TString TxBody;
-    TActorId Source_; 
+    TActorId Source_;
     TEngineBay EngineBay;
     NKikimrTxDataShard::TDataTransaction Tx;
     NKikimrTxDataShard::TError::EKind ErrCode;
@@ -331,7 +331,7 @@ public:
                        TTransactionContext &txc,
                        const TActorContext &ctx,
                        const TBasicOpInfo &op,
-                       const TActorId &target, 
+                       const TActorId &target,
                        const TString &txBody,
                        const TVector<TSysTables::TLocksTable::TLock> &locks,
                        ui64 artifactFlags);
@@ -342,7 +342,7 @@ public:
     void FillTxData(TDataShard *self,
                     TTransactionContext &txc,
                     const TActorContext &ctx,
-                    const TActorId &target, 
+                    const TActorId &target,
                     const TString &txBody,
                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                     ui64 artifactFlags);
@@ -523,11 +523,11 @@ public:
     TActorId GetAsyncJobActor() const { return AsyncJobActor; }
     void KillAsyncJobActor(const TActorContext& ctx);
 
-    void SetStreamSink(TActorId sink) { StreamSink = sink; } 
-    TActorId GetStreamSink() const { return StreamSink; } 
+    void SetStreamSink(TActorId sink) { StreamSink = sink; }
+    TActorId GetStreamSink() const { return StreamSink; }
 
-    void SetScanActor(TActorId aid) { ScanActor = aid; } 
-    TActorId GetScanActor() const { return ScanActor; } 
+    void SetScanActor(TActorId aid) { ScanActor = aid; }
+    TActorId GetScanActor() const { return ScanActor; }
 
     ui64 IncrementPageFaultCount() {
         return ++PageFaultCount;
@@ -556,8 +556,8 @@ private:
     ui64 ScanSnapshotId;
     ui64 ScanTask;
     TActorId AsyncJobActor;
-    TActorId StreamSink; 
-    TActorId ScanActor; 
+    TActorId StreamSink;
+    TActorId ScanActor;
     ui64 PageFaultCount = 0;
 };
 

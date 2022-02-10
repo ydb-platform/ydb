@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "blobstorage_hullhuge.h"
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <ydb/core/base/blobstorage.h>
 
 #include <util/generic/queue.h>
@@ -50,7 +50,7 @@ namespace NKikimr {
         ui64 LastDeletionLsn = 0;
 
         // delayed huge blob deleter actor id
-        TActorId ActorId; 
+        TActorId ActorId;
 
         // a queue of removed huge blobs per compaction
         struct TRemovedHugeBlobsQueueItem {
@@ -67,12 +67,12 @@ namespace NKikimr {
         TDeque<TRemovedHugeBlobsQueueItem> RemovedHugeBlobsQueue;
 
     public:
-        void SetActorId(const TActorId& actorId) { 
+        void SetActorId(const TActorId& actorId) {
             Y_VERIFY(!ActorId);
             ActorId = actorId;
         }
 
-        const TActorId& GetActorId() const { 
+        const TActorId& GetActorId() const {
             return ActorId;
         }
 
@@ -182,7 +182,7 @@ namespace NKikimr {
     private:
         friend class TDelayedHugeBlobDeleterActor;
 
-        void ReleaseSnapshot(ui64 cookie, const TActorContext& ctx, const TActorId& hugeKeeperId) { 
+        void ReleaseSnapshot(ui64 cookie, const TActorContext& ctx, const TActorId& hugeKeeperId) {
             auto it = CurrentSnapshots.find(cookie);
             Y_VERIFY(it != CurrentSnapshots.end() && it->second > 0);
             if (!--it->second) {
@@ -191,7 +191,7 @@ namespace NKikimr {
             }
         }
 
-        void ProcessRemovedHugeBlobsQueue(const TActorContext& ctx, const TActorId& hugeKeeperId) { 
+        void ProcessRemovedHugeBlobsQueue(const TActorContext& ctx, const TActorId& hugeKeeperId) {
             // if we have no snapshots, we can safely process all messages; otherwise we can process only those messages
             // which do not have snapshots created before the point of compaction
             while (RemovedHugeBlobsQueue) {
@@ -222,11 +222,11 @@ namespace NKikimr {
 
         // implemented in blobstorage_hull.h
         ~TDelayedHugeBlobDeleterNotifier() {
-            ActorSystem->Send(new IEventHandle(Info->GetActorId(), TActorId(), new TEvHullReleaseSnapshot(Cookie))); 
+            ActorSystem->Send(new IEventHandle(Info->GetActorId(), TActorId(), new TEvHullReleaseSnapshot(Cookie)));
         }
     };
 
-    IActor *CreateDelayedHugeBlobDeleterActor(const TActorId &hugeKeeperId, 
+    IActor *CreateDelayedHugeBlobDeleterActor(const TActorId &hugeKeeperId,
         TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info);
 
 } // NKikimr

@@ -8,7 +8,7 @@
 
 #include <utility>
 
-namespace NBus { 
+namespace NBus {
     namespace NPrivate {
         void SetSockOptTcpCork(SOCKET s, bool value);
 
@@ -24,5 +24,5 @@ namespace NBus {
     };
 
     std::pair<unsigned, TVector<TBindResult>> BindOnPort(int port, bool reusePort);
- 
+
 }

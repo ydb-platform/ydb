@@ -2309,7 +2309,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             request.set_session_id(sessionId);
             Ydb::Table::KeepAliveResponse response;
             auto status = stub->KeepAlive(&context, request, &response);
-            UNIT_ASSERT(status.ok()); 
+            UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::BAD_SESSION);
@@ -2367,7 +2367,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             request.set_session_id(sessionId);
             Ydb::Table::KeepAliveResponse response;
             auto status = stub->KeepAlive(&context, request, &response);
-            UNIT_ASSERT(status.ok()); 
+            UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_SESSION);
@@ -2413,7 +2413,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             request.set_session_id(sessionId);
             Ydb::Table::KeepAliveResponse response;
             auto status = stub->KeepAlive(&context, request, &response);
-            UNIT_ASSERT(status.ok()); 
+            UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_SESSION);
@@ -2459,7 +2459,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             request.set_session_id(sessionId);
             Ydb::Table::KeepAliveResponse response;
             auto status = stub->KeepAlive(&context, request, &response);
-            UNIT_ASSERT(status.ok()); 
+            UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_SESSION);

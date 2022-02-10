@@ -2,8 +2,8 @@
 
 #include "events.h"
 #include "event_local.h"
-#include <library/cpp/monlib/service/monservice.h> 
-#include <library/cpp/monlib/service/pages/mon_page.h> 
+#include <library/cpp/monlib/service/monservice.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 
 namespace NActors {
     namespace NMon {

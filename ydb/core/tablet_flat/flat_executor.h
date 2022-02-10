@@ -30,7 +30,7 @@
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/system/hp_timer.h>
 #include <util/thread/singleton.h>
@@ -408,7 +408,7 @@ class TExecutor
 
     TTabletCountersWithTxTypes* AppTxCounters = nullptr;
 
-    TActorId Launcher; 
+    TActorId Launcher;
 
     THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads;
     THashMap<TPrivatePageCacheWaitPad*, THolder<TCompactionReadWaitPad>> CompactionReadWaitPads;
@@ -441,7 +441,7 @@ class TExecutor
     TControlWrapper LogFlushDelayOverrideUsec;
 
     ui64 Stamp() const noexcept;
-    void Registered(TActorSystem*, const TActorId&) override; 
+    void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
     void Broken();
     void Active(const TActorContext &ctx);
@@ -630,7 +630,7 @@ public:
 
     float GetRejectProbability() const override;
 
-    TActorId GetLauncher() const { return Launcher; } 
+    TActorId GetLauncher() const { return Launcher; }
 };
 
 }}

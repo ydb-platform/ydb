@@ -68,7 +68,7 @@ PEERDIR(
     library/cpp/html/escape
     library/cpp/ipmath
     library/cpp/lwtrace
-    library/cpp/monlib/dynamic_counters 
+    library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
     ydb/core/base
     ydb/core/protos

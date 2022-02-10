@@ -3,7 +3,7 @@
 
 #define ENSURE_SCHEME_TYPE(expected, gotName) \
     do { \
-        Y_ENSURE(expected == NScheme::NTypeIds::gotName, "Data scheme type mismatch: expected " << expected << ", but got " #gotName << "."); \ 
+        Y_ENSURE(expected == NScheme::NTypeIds::gotName, "Data scheme type mismatch: expected " << expected << ", but got " #gotName << "."); \
     } while (0);
 
 

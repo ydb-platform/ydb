@@ -9,7 +9,7 @@ namespace NKikimr::NSQS {
 
 class TBatchRequestReplyCallback : public IReplyCallback {
 public:
-    TBatchRequestReplyCallback(const TActorId& bacthActor, ui64 cookie) 
+    TBatchRequestReplyCallback(const TActorId& bacthActor, ui64 cookie)
         : BatchActor_(bacthActor)
         , Cookie_(cookie)
     {
@@ -17,12 +17,12 @@ public:
 
 private:
     void DoSendReply(const NKikimrClient::TSqsResponse& resp) override {
-        const TActorId sender = TActivationContext::AsActorContext().SelfID; 
+        const TActorId sender = TActivationContext::AsActorContext().SelfID;
         TActivationContext::Send(new IEventHandle(BatchActor_, sender, new TSqsEvents::TEvSqsResponse(resp), 0, Cookie_));
     }
 
 private:
-    const TActorId BatchActor_; 
+    const TActorId BatchActor_;
     const ui64 Cookie_;
 };
 

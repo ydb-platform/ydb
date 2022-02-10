@@ -286,9 +286,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
 
-    void RegisterSession(const TActorId& pipe, const TActorContext& ctx); 
+    void RegisterSession(const TActorId& pipe, const TActorContext& ctx);
     struct TPipeInfo;
-    void UnregisterSession(const TActorId& pipe, const TActorContext& ctx); 
+    void UnregisterSession(const TActorId& pipe, const TActorContext& ctx);
     void RebuildStructs();
 
     bool Inited;
@@ -308,14 +308,14 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui64 TxId;
     ui32 NumActiveParts;
 
-    TVector<TActorId> WaitingResponse; 
+    TVector<TActorId> WaitingResponse;
     TVector<TEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
     TVector<TEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
 
     struct TPipeInfo {
         TString ClientId;
         TString Session;
-        TActorId Sender; 
+        TActorId Sender;
         bool WithGroups;
         ui32 ServerActors;
     };
@@ -328,7 +328,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TPartitionInfo {
         ui64 TabletId;
         EPartitionState State;
-        TActorId Session; 
+        TActorId Session;
         ui32 GroupId;
     };
 
@@ -345,7 +345,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             {}
 
             TString Session;
-            TActorId Sender; 
+            TActorId Sender;
             ui32 NumSuspended;
             ui32 NumActive;
 
@@ -366,12 +366,12 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         THashMap<ui32, TPartitionInfo> PartitionsInfo; // partitionId -> info
         std::deque<ui32> FreePartitions;
-        THashMap<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics 
+        THashMap<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics
 
         void ScheduleBalance(const TActorContext& ctx);
         void Balance(const TActorContext& ctx);
-        void LockPartition(const TActorId pipe, ui32 partition, const TActorContext& ctx); 
-        void ReleasePartition(const TActorId pipe, const ui32 group, const ui32 count, const TActorContext& ctx); 
+        void LockPartition(const TActorId pipe, ui32 partition, const TActorContext& ctx);
+        void ReleasePartition(const TActorId pipe, const ui32 group, const ui32 count, const TActorContext& ctx);
         TStringBuilder GetPrefix() const;
 
         bool WakeupScheduled = false;
@@ -405,18 +405,18 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         TClientGroupInfo& AddGroup(const ui32 group);
         void FillEmptyGroup(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo);
         void AddSession(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
-                        const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record); 
+                        const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record);
         TStringBuilder GetPrefix() const;
 
     };
 
     THashMap<TString, TClientInfo> ClientsInfo; //map from userId -> to info
 
-    THashMap<TActorId, TPipeInfo> PipesInfo; 
+    THashMap<TActorId, TPipeInfo> PipesInfo;
 
     NMetrics::TResourceMetrics *ResourceMetrics;
 
-    THashMap<ui64, TActorId> TabletPipes; 
+    THashMap<ui64, TActorId> TabletPipes;
 
     THashSet<ui64> WaitingForStat;
     bool WaitingForACL;
@@ -436,7 +436,7 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_READ_BALANCER_ACTOR;
     }
 
-    TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info) 
+    TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , Inited(false)

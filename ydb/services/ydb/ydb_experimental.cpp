@@ -8,17 +8,17 @@ namespace NKikimr {
 namespace NGRpcService {
 
 TGRpcYdbExperimentalService::TGRpcYdbExperimentalService(NActors::TActorSystem *system,
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id) 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id) {}
 
-void TGRpcYdbExperimentalService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
+void TGRpcYdbExperimentalService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger)); 
+    SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcYdbExperimentalService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
+void TGRpcYdbExperimentalService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
     Limiter_ = limiter;
 }
 
@@ -31,7 +31,7 @@ void TGRpcYdbExperimentalService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbExperimentalService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
+void TGRpcYdbExperimentalService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -39,11 +39,11 @@ void TGRpcYdbExperimentalService::SetupIncomingRequests(NGrpc::TLoggerPtr logger
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Experimental::IN, Ydb::Experimental::OUT, TGRpcYdbExperimentalService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \ 
+        [this](NGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Experimental::V1::ExperimentalService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("experimental", #NAME))->Run(); 
+        #NAME, logger, getCounterBlock("experimental", #NAME))->Run();
 
     ADD_REQUEST(ExecuteStreamQuery, ExecuteStreamQueryRequest, ExecuteStreamQueryResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvExperimentalStreamQueryRequest(ctx));

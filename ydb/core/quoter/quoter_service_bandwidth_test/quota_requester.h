@@ -24,7 +24,7 @@ private:
 
 class TBaseQuotaRequester : public NActors::TActorBootstrapped<TBaseQuotaRequester> {
 public:
-    TBaseQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent); 
+    TBaseQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -49,7 +49,7 @@ protected:
 protected:
     const TOptions& Opts;
     TRequestStats& Stats;
-    const TActorId Parent; 
+    const TActorId Parent;
 
     TInstant StartTime;
     TRequestDistribution Distribution;
@@ -60,7 +60,7 @@ protected:
 
 class TKesusQuotaRequester : public TBaseQuotaRequester {
 public:
-    TKesusQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent, size_t kesusIndex, size_t resourceIndex); 
+    TKesusQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent, size_t kesusIndex, size_t resourceIndex);
 
     THolder<TEvQuota::TEvRequest> MakeQuoterRequest() override;
 
@@ -71,7 +71,7 @@ private:
 
 class TLocalResourceQuotaRequester : public TBaseQuotaRequester {
 public:
-    TLocalResourceQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent, size_t resourceIndex); 
+    TLocalResourceQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent, size_t resourceIndex);
 
     THolder<TEvQuota::TEvRequest> MakeQuoterRequest() override;
 

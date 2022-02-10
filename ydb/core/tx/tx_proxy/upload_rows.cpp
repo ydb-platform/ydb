@@ -9,7 +9,7 @@ namespace NTxProxy {
 class TUploadRowsInternal : public TUploadRowsBase<NKikimrServices::TActivity::UPLOAD_ROWS_INTERNAL> {
 public:
     TUploadRowsInternal(
-        TActorId sender, 
+        TActorId sender,
         const TString& table,
         std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
@@ -73,7 +73,7 @@ private:
     }
 
 private:
-    const TActorId Sender; 
+    const TActorId Sender;
     const TString Table;
     const std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
     const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Rows;
@@ -81,7 +81,7 @@ private:
     NYql::TIssues Issues;
 };
 
-IActor* CreateUploadRowsInternal(const TActorId& sender, 
+IActor* CreateUploadRowsInternal(const TActorId& sender,
     const TString& table,
     std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
     std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,

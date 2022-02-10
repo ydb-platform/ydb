@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
         TStringBuf data = "{ a : [ { b : 1, d : { e : -1.e5 } }, { f : 0, g : [ h, i ] } ] }";
         NSc::TValue v = NSc::TValue::FromJson(data);
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(true), v.Clone().ToJson(true));
-        UNIT_ASSERT(v.Has("a")); 
+        UNIT_ASSERT(v.Has("a"));
         UNIT_ASSERT(v["a"].Has(1));
         UNIT_ASSERT(v["a"][0].Has("b"));
         UNIT_ASSERT(v["a"][0].Has("d"));
@@ -62,8 +62,8 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
             UNIT_ASSERT_C(NSc::TValue::Equal(v["a"], v2), Sprintf("\n%s\n!=\n%s\n", v["a"].ToJson().data(), v2.ToJson().data()));
         }
 
-        UNIT_ASSERT(v.Has("a")); 
-        UNIT_ASSERT(v.Has("q")); 
+        UNIT_ASSERT(v.Has("a"));
+        UNIT_ASSERT(v.Has("q"));
         UNIT_ASSERT(TStringBuf("r") == v["q"]);
         UNIT_ASSERT(v["a"].Has(1));
         UNIT_ASSERT(!v["a"][0].Has("b"));

@@ -14,7 +14,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     TTxId TxId;
     TVector<ISubOperationBase::TPtr> Parts;
 
-    THashSet<TActorId> Subscribers; 
+    THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;
     THashSet<TTxId> WaitOperations;
 
@@ -80,7 +80,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     void ReadyToNotifyPart(TSubTxId partId);
     bool IsReadyToNotify(const TActorContext& ctx) const;
     bool IsReadyToNotify() const;
-    void AddNotifySubscriber(const TActorId& actorId); 
+    void AddNotifySubscriber(const TActorId& actorId);
     void DoNotify(TSchemeShard* ss, TSideEffects& sideEffects, const TActorContext& ctx);
 
     bool IsReadyToDone(const TActorContext& ctx) const;

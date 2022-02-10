@@ -28,11 +28,11 @@ namespace NYql::NDqs {
         Record.MutableError()->SetErrorCode(code);
     }
 
-    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids) { 
+    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids) {
         auto& group = *Record.MutableWorkers();
         group.SetResourceId(resourceId);
         for (const auto& actorId : ids) {
-            NActors::ActorIdToProto(actorId, group.AddWorkerActor()); 
+            NActors::ActorIdToProto(actorId, group.AddWorkerActor());
         }
     }
 

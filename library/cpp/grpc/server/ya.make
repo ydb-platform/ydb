@@ -16,10 +16,10 @@ GENERATE_ENUM_SERIALIZATION(grpc_request_base.h)
 
 PEERDIR(
     contrib/libs/grpc
-    library/cpp/monlib/dynamic_counters/percentile 
+    library/cpp/monlib/dynamic_counters/percentile
 )
 
 END()
- 
-RECURSE_FOR_TESTS(ut) 
- 
+
+RECURSE_FOR_TESTS(ut)
+

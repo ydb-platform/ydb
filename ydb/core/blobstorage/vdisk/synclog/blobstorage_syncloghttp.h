@@ -17,8 +17,8 @@ namespace NKikimr {
         IActor* CreateGetHttpInfoActor(const TIntrusivePtr<TVDiskContext> &vctx,
                                        const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
                                        NMon::TEvHttpInfo::TPtr &ev,
-                                       const TActorId &notifyId, 
-                                       const TActorId &keeperId, 
+                                       const TActorId &notifyId,
+                                       const TActorId &keeperId,
                                        TSyncLogNeighborsPtr neighborsPtr);
 
     } // NSyncLog

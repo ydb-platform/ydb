@@ -35,8 +35,8 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect
     library/cpp/grpc/client
-    library/cpp/grpc/server 
-    library/cpp/grpc/server/actors 
+    library/cpp/grpc/server
+    library/cpp/grpc/server/actors
     library/cpp/regex/pcre
     library/cpp/testing/gmock_in_unittest
     library/cpp/testing/unittest

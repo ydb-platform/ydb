@@ -11,9 +11,9 @@ namespace NActors {
     // TEvTrackActor is sent by child actor in Register[Local]Subactor to an actor tracker to notify it about new
     // tracked subactor in pool.
     struct TEvTrackActor : TEventLocal<TEvTrackActor, TEvents::TSystem::TrackActor> {
-        const TActorId NewSubactorId; 
+        const TActorId NewSubactorId;
 
-        TEvTrackActor(const TActorId& newSubactorId) 
+        TEvTrackActor(const TActorId& newSubactorId)
             : NewSubactorId(newSubactorId)
         {}
     };
@@ -25,17 +25,17 @@ namespace NActors {
 
     class TActorTracker {
         // our killer -- the one who sent TEvPoisonPill here
-        TActorId KillerActorId; 
+        TActorId KillerActorId;
 
         // a set of registered child actors we are tracking
-        TSet<TActorId> RegisteredActors; 
+        TSet<TActorId> RegisteredActors;
 
         // number of in flight TEvTrackActor messages coming to tracker, but not yet processed; high bit indicates if
         // we are stopping and can't register new actors
         TAtomic NumInFlightTracks = 0;
 
         // actor id for this tracker
-        TActorId ActorId; 
+        TActorId ActorId;
 
     public:
         void BindToActor(const TActorContext& ctx);
@@ -59,11 +59,11 @@ namespace NActors {
 
         // register subactor inside this tracker on a separate mailbox; should be called instead of ExecutorThread's
         // method
-        TActorId RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx, 
+        TActorId RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
                 TMailboxType::EType mailboxType = TMailboxType::Simple, ui32 poolId = Max<ui32>());
 
         // register subactor inside the same mailbox as of the caller
-        TActorId RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx); 
+        TActorId RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx);
 
     private:
         bool PreRegister();
@@ -71,7 +71,7 @@ namespace NActors {
         void Handle(TEvUntrackActor::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvents::TEvPoisonTaken::TPtr& ev, const TActorContext& ctx);
-        void RemoveActorFromTrackList(const TActorId& subactorId, const TActorContext& ctx); 
+        void RemoveActorFromTrackList(const TActorId& subactorId, const TActorContext& ctx);
         void CheckIfPoisonPillDone(const TActorContext& ctx);
 
     private:
@@ -90,9 +90,9 @@ namespace NActors {
         {}
 
         // subactor registration helpers
-        TActorId RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx, 
+        TActorId RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
                 TMailboxType::EType mailboxType = TMailboxType::Simple, ui32 poolId = Max<ui32>());
-        TActorId RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx); 
+        TActorId RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx);
 
         // an override for tracked actors that also informs tracker about the death of tracked actor
         void Die(const TActorContext& ctx) override;
@@ -101,7 +101,7 @@ namespace NActors {
         // internally it calls Die() to terminate this actor
         void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
 
-        TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& /*parent*/) override; 
+        TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& /*parent*/) override;
         virtual void AfterBootstrap(const TActorContext& ctx) = 0;
 
     private:

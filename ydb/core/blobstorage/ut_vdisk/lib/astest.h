@@ -13,7 +13,7 @@
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/library/pdisk_io/aio.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/event.h>
 
 
@@ -61,13 +61,13 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     setup1->Executors[3].Reset(new TBasicExecutorPool(3, 8, 20));
     setup1->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
 
-    const TActorId nameserviceId = GetNameserviceActorId(); 
+    const TActorId nameserviceId = GetNameserviceActorId();
     TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup)); 
+    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
 
 
     ///////////////////////// LOGGER ///////////////////////////////////////////////
-    NActors::TActorId loggerActorId = NActors::TActorId(1, "logger"); 
+    NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
     TIntrusivePtr<NActors::NLog::TSettings> logSettings;
     logSettings.Reset(new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR,
                                                    NActors::NLog::PRI_DEBUG, 0)); // NOTICE
@@ -88,14 +88,14 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
                                                                    NActors::CreateStderrBackend(),
                                                                    Counters->GetSubgroup("logger", "counters"));
     NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 0);
-    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd); 
+    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
     setup1->LocalServices.push_back(loggerActorPair);
     //////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////// SETUP TEST ACTOR ///////////////////////////////////
-    NActors::TActorId testActorId = NActors::TActorId(1, "test123"); 
+    NActors::TActorId testActorId = NActors::TActorId(1, "test123");
     TActorSetupCmd testActorSetup(testActor, TMailboxType::Simple, 0);
-    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testActorId, testActorSetup)); 
+    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testActorId, testActorSetup));
     //////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////// TYPE REGISTRY //////////////////////////////////////

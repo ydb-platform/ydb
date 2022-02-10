@@ -20,7 +20,7 @@ struct TTestContext {
     TTabletTypes::EType TabletType;
     ui64 TabletId;
     THolder<TTestActorRuntime> Runtime;
-    THashMap<ui64, TActorId> ProxyActors; 
+    THashMap<ui64, TActorId> ProxyActors;
 
     TTestContext();
 
@@ -38,26 +38,26 @@ struct TTestContext {
 
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
-    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor) { 
+    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor) {
         return Runtime->GrabEdgeEvent<TEvent>(actor)->Release();
     }
 
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
-    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) { 
+    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
         return Runtime->GrabEdgeEventIf<TEvent>(actor, [=](const auto& ev) {
             return ev->Cookie == cookie;
         })->Release();
     }
 
     // Dynamically allocates a proxy
-    TActorId GetProxy(ui64 proxyId, ui32 nodeIndex = 1); 
+    TActorId GetProxy(ui64 proxyId, ui32 nodeIndex = 1);
 
     // Sends payload to proxy from edge
-    void SendFromEdge(ui64 proxyId, const TActorId& edge, IEventBase* payload, ui64 cookie = 0); 
+    void SendFromEdge(ui64 proxyId, const TActorId& edge, IEventBase* payload, ui64 cookie = 0);
 
     // Expects TEvProxyError at the edge with the specified cookie and status
-    void ExpectProxyError(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status); 
+    void ExpectProxyError(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status);
 
     void CreateSemaphore(ui64 proxyId, const TString& name, ui64 limit, const TString& data,
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
@@ -70,11 +70,11 @@ struct TTestContext {
 
     // Returns a cookie used for the session
     ui64 SendAttachSession(
-        ui64 proxyId, const TActorId& edge, ui64 sessionId, ui64 timeoutMillis = 0, 
+        ui64 proxyId, const TActorId& edge, ui64 sessionId, ui64 timeoutMillis = 0,
         const TString& description = TString(), ui64 seqNo = 0);
 
     // Returns sessionId from the result
-    ui64 ExpectAttachSessionResult(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
+    ui64 ExpectAttachSessionResult(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
 
     // Describes and verifies info about semaphores
 

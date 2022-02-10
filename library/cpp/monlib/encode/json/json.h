@@ -1,20 +1,20 @@
-#pragma once 
- 
-#include <library/cpp/monlib/encode/encoder.h> 
-#include <library/cpp/monlib/encode/format.h> 
- 
+#pragma once
 
-class IOutputStream; 
- 
-namespace NMonitoring { 
+#include <library/cpp/monlib/encode/encoder.h>
+#include <library/cpp/monlib/encode/format.h>
+
+
+class IOutputStream;
+
+namespace NMonitoring {
 
     class TJsonDecodeError: public yexception {
     };
 
-    IMetricEncoderPtr EncoderJson(IOutputStream* out, int indentation = 0); 
- 
+    IMetricEncoderPtr EncoderJson(IOutputStream* out, int indentation = 0);
+
     /// Buffered encoder will merge series with same labels into one.
-    IMetricEncoderPtr BufferedEncoderJson(IOutputStream* out, int indentation = 0); 
+    IMetricEncoderPtr BufferedEncoderJson(IOutputStream* out, int indentation = 0);
 
     IMetricEncoderPtr EncoderCloudJson(IOutputStream* out,
                                        int indentation = 0,
@@ -25,5 +25,5 @@ namespace NMonitoring {
                                                TStringBuf metricNameLabel = "name");
 
     void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel = "name");
- 
-} 
+
+}

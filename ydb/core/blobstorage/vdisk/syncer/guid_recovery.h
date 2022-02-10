@@ -142,8 +142,8 @@ namespace NKikimr {
     class TVDiskContext;
     IActor *CreateVDiskGuidRecoveryActor(TIntrusivePtr<TVDiskContext> vctx,
                                          TIntrusivePtr<TBlobStorageGroupInfo> info,
-                                         const TActorId &committerId, 
-                                         const TActorId &notifyId, 
+                                         const TActorId &committerId,
+                                         const TActorId &notifyId,
                                          const NSyncer::TLocalSyncerState &localState);
 
 } // NKikimr

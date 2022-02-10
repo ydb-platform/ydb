@@ -141,7 +141,7 @@ private:
     void Die(const TActorContext &ctx) override;
 
     template<typename TResponseEvent>
-    void ReplyWithError(TActorId sender, 
+    void ReplyWithError(TActorId sender,
                         NKikimrNodeBroker::TStatus::ECode code,
                         const TString &reason,
                         const TActorContext &ctx)
@@ -317,7 +317,7 @@ private:
     bool SingleDomainAlloc = false;
 
 public:
-    TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info) 
+    TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , EpochDuration(TDuration::Hours(1))

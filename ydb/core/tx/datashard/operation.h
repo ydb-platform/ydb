@@ -508,8 +508,8 @@ public:
     {
     }
 
-    TActorId GetTarget() const { return Target; } 
-    void SetTarget(TActorId target) { Target = target; } 
+    TActorId GetTarget() const { return Target; }
+    void SetTarget(TActorId target) { Target = target; }
 
     ui64 GetCookie() const { return Cookie; }
     void SetCookie(ui64 cookie) { Cookie = cookie; }
@@ -793,7 +793,7 @@ protected:
     }
     void ClearInputData() { InputData = nullptr; }
 
-    TActorId Target; 
+    TActorId Target;
 
 private:
     THPTimer TotalTimer;

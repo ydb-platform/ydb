@@ -101,11 +101,11 @@ private:
 
     static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(5*60);
 
-    TActorId SchemeCache; 
+    TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
     TInstant Deadline;
-    TActorId TimeoutTimerActorId; 
+    TActorId TimeoutTimerActorId;
     bool WaitingResolveReply;
     bool Finished;
 

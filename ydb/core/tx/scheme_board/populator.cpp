@@ -408,8 +408,8 @@ public:
     }
 
     explicit TReplicaPopulator(
-            const TActorId& parent, 
-            const TActorId& replica, 
+            const TActorId& parent,
+            const TActorId& replica,
             const ui64 owner,
             const ui64 generation)
         : Parent(parent)
@@ -478,8 +478,8 @@ public:
     }
 
 private:
-    const TActorId Parent; 
-    const TActorId Replica; 
+    const TActorId Parent;
+    const TActorId Replica;
     const ui64 Owner;
     const ui64 Generation;
 
@@ -497,7 +497,7 @@ private:
 }; // TReplicaPopulator
 
 class TPopulator: public TMonitorableActor<TPopulator> {
-    TConstArrayRef<TActorId> SelectReplicas(TPathId pathId, TStringBuf path) { 
+    TConstArrayRef<TActorId> SelectReplicas(TPathId pathId, TStringBuf path) {
         SelectionReplicaCache.clear();
 
         const ui64 pathHash = CityHash64(path);
@@ -509,16 +509,16 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end());
 
         GroupInfo->SelectReplicas(idHash, &selection);
-        for (const TActorId& replica : selection) { 
+        for (const TActorId& replica : selection) {
             if (Find(SelectionReplicaCache, replica) == SelectionReplicaCache.end()) {
                 SelectionReplicaCache.emplace_back(replica);
             }
         }
 
         if (SelectionReplicaCache) {
-            return TConstArrayRef<TActorId>(&SelectionReplicaCache.front(), SelectionReplicaCache.size()); 
+            return TConstArrayRef<TActorId>(&SelectionReplicaCache.front(), SelectionReplicaCache.size());
         } else {
-            return TConstArrayRef<TActorId>(); 
+            return TConstArrayRef<TActorId>();
         }
     }
 
@@ -528,9 +528,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         const auto& record = it->second.Record;
 
-        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, record.GetPath()); 
+        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, record.GetPath());
         for (const auto& replica : replicas) {
-            const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica); 
+            const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
             Y_VERIFY(replicaPopulator != nullptr);
 
             auto update = MakeHolder<TSchemeBoardEvents::TEvUpdateBuilder>(Owner, Generation, record, isDeletion);
@@ -549,8 +549,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             << ", sender# " << ev->Sender
             << ", pathId# " << ev->Get()->PathId);
 
-        const TActorId replicaPopulator = ev->Sender; 
-        const TActorId replica = ev->Get()->Replica; 
+        const TActorId replicaPopulator = ev->Sender;
+        const TActorId replica = ev->Get()->Replica;
 
         if (ReplicaToReplicaPopulator[replica] != replicaPopulator) {
             SBP_LOG_CRIT("Inconsistent replica populator"
@@ -589,7 +589,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
 
             TPathId pathId(it->second.Record.GetPathOwnerId(), it->second.Record.GetPathId());
-            TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, it->second.Record.GetPath()); 
+            TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, it->second.Record.GetPath());
             if (Find(replicas, replica) != replicas.end()) {
                 break;
             }
@@ -922,7 +922,7 @@ public:
     void Bootstrap() {
         TMonitorableActor::Bootstrap();
 
-        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup); 
+        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
         Send(proxy, new TEvStateStorage::TEvListSchemeBoard(), IEventHandle::FlagTrackDelivery);
         Become(&TThis::StateResolve);
     }
@@ -976,12 +976,12 @@ private:
     TDelayedUpdates DelayedUpdates;
 
     TIntrusiveConstPtr<TStateStorageInfo> GroupInfo;
-    THashMap<TActorId, TActorId> ReplicaToReplicaPopulator; 
+    THashMap<TActorId, TActorId> ReplicaToReplicaPopulator;
 
-    TVector<TActorId> SelectionReplicaCache; 
+    TVector<TActorId> SelectionReplicaCache;
 
     struct TUpdateAckInfo {
-        TActorId AckTo; 
+        TActorId AckTo;
         TMap<std::pair<TPathId, ui64>, ui32> PathAcks;
     };
 

@@ -61,10 +61,10 @@ static void SignalDoneEvent() {
 }
 
 struct TTestConfig {
-    TActorId IcbActorId; 
+    TActorId IcbActorId;
     TControlBoard *Icb;
 
-    TTestConfig(TActorId icbActorId, TControlBoard *icb) 
+    TTestConfig(TActorId icbActorId, TControlBoard *icb)
         : IcbActorId(icbActorId)
         , Icb(icb)
     {}
@@ -72,7 +72,7 @@ struct TTestConfig {
 
 template <class T>
 static void Run(i64 instances = 1) {
-    TVector<TActorId> testIds; 
+    TVector<TActorId> testIds;
     TAppData appData(0, 0, 0, 0, TMap<TString, ui32>(),
                      nullptr, nullptr, nullptr, nullptr);
 
@@ -95,21 +95,21 @@ static void Run(i64 instances = 1) {
         setup->Executors[2].Reset(new TIOExecutorPool(2, 10));
         setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
 
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup)); 
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
 
         // ICB Actor creation
-        TActorId IcbActorId = MakeIcbId(setup->NodeId); 
+        TActorId IcbActorId = MakeIcbId(setup->NodeId);
         TActorSetupCmd testSetup(CreateImmediateControlActor(appData.Icb, Counters), TMailboxType::Revolving, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(IcbActorId, testSetup)); 
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(IcbActorId, testSetup));
 
 
         THolder<TTestConfig> testConfig(new TTestConfig(IcbActorId, appData.Icb.Get()));
         for (ui32 i = 0; i < instances; ++i) {
             testIds[i] = MakeBlobStorageProxyID(1 + i);
             TActorSetupCmd testSetup(new T(testConfig.Get()), TMailboxType::Revolving, 0);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testIds[i], testSetup)); 
+            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testIds[i], testSetup));
         }
 
         AtomicSet(DoneCounter, 0);
@@ -117,7 +117,7 @@ static void Run(i64 instances = 1) {
 
         /////////////////////// LOGGER ///////////////////////////////////////////////
 
-        NActors::TActorId loggerActorId = NActors::TActorId(1, "logger"); 
+        NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
             new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0));
         //logSettings->Append(
@@ -137,7 +137,7 @@ static void Run(i64 instances = 1) {
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(logSettings, NActors::CreateStderrBackend(),
             GetServiceCounters(Counters, "utils"));
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 2);
-        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd); 
+        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
         setup->LocalServices.push_back(loggerActorPair);
         //////////////////////////////////////////////////////////////////////////////
 
@@ -147,7 +147,7 @@ static void Run(i64 instances = 1) {
 
         VERBOSE_COUT("Sending TEvBoot to test");
         for (ui32 i = 0; i < instances; ++i) {
-            ActorSystem->Send(testIds[i], new TEvTablet::TEvBoot(MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), nullptr)); 
+            ActorSystem->Send(testIds[i], new TEvTablet::TEvBoot(MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), nullptr));
         }
 
         TAtomicBase doneCount = 0;
@@ -203,7 +203,7 @@ protected:
 
     TResponseData LastResponse;
 
-    const TActorId IcbActor; 
+    const TActorId IcbActor;
     TControlBoard *Icb;
     int TestStep;
 

@@ -7,7 +7,7 @@ RECURSE(
     metrics
     mkql
     comp_nodes
-    proto 
+    proto
     provider
     schema
     schema/expr

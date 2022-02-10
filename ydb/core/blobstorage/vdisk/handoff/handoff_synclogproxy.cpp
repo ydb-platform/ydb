@@ -14,8 +14,8 @@ namespace NKikimr {
         };
         typedef TDeque<TItem> TQueueType;
 
-        const TActorId SkeletonId; 
-        const TActorId NotifyId; 
+        const TActorId SkeletonId;
+        const TActorId NotifyId;
         ui64 OrderId = 0;
         bool Finished = false;
         TQueueType Queue = {};
@@ -67,8 +67,8 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_HANDOFF_SYNCLOG_PROXY;
         }
 
-        THandoffSyncLogProxy(const TActorId &skeletonId, 
-                             const TActorId &notifyId) 
+        THandoffSyncLogProxy(const TActorId &skeletonId,
+                             const TActorId &notifyId)
             : TActor<THandoffSyncLogProxy>(&TThis::StateFunc)
             , SkeletonId(skeletonId)
             , NotifyId(notifyId)
@@ -76,7 +76,7 @@ namespace NKikimr {
         }
     };
 
-    IActor* CreateHandoffSyncLogProxy(const TActorId &skeletonId, const TActorId &notifyId) { 
+    IActor* CreateHandoffSyncLogProxy(const TActorId &skeletonId, const TActorId &notifyId) {
         return new THandoffSyncLogProxy(skeletonId, notifyId);
     }
 

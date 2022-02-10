@@ -157,7 +157,7 @@ struct TTopicInfo {
 struct TTabletInfo {
     ui32 NodeId = 0;
     TString Topic;
-    TActorId PipeClient; 
+    TActorId PipeClient;
     bool BrokenPipe = false;
     bool IsBalancer = false;
     TVector<NKikimrPQ::TOffsetsResponse::TPartResult> OffsetResponses;
@@ -195,7 +195,7 @@ void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) {
     ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest(TopicPrefix(ctx)));
 
     if (ListNodes) {
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
     }
 
@@ -360,7 +360,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
         const auto& name = perTopicInfo->TopicEntry.PQGroupInfo->Description.GetName();
         THolder<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name);
         if (childActor.Get() != nullptr) {
-            const TActorId actorId = ctx.Register(childActor.Release()); 
+            const TActorId actorId = ctx.Register(childActor.Release());
             perTopicInfo->ActorId = actorId;
             topics.emplace(name);
             Children.emplace(actorId, std::move(perTopicInfo));
@@ -447,8 +447,8 @@ protected:
     ui64 CurrentCookie;
     ui32 FetchRequestBytesLeft;
     NKikimrClient::TPersQueueFetchResponse FetchResponse;
-    TVector<TActorId> PQClient; 
-    const TActorId SchemeCache; 
+    TVector<TActorId> PQClient;
+    const TActorId SchemeCache;
 
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
 
@@ -473,7 +473,7 @@ public:
 
     virtual void SendReplyAndDie(NKikimrClient::TResponse&& response, const TActorContext& ctx) = 0;
 
-    TMessageBusServerPersQueueImpl(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache) 
+    TMessageBusServerPersQueueImpl(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache)
         : RequestProto(request)
         , RequestId(RequestProto.HasRequestId() ? RequestProto.GetRequestId() : "<none>")
         , IsMetaRequest(RequestProto.HasMetaRequest())
@@ -988,7 +988,7 @@ public:
 
             NTabletPipe::TClientConfig clientConfig;
             PQClient.push_back(ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
-            ActorIdToProto(PQClient.back(), RequestProto.MutablePartitionRequest()->MutablePipeClient()); 
+            ActorIdToProto(PQClient.back(), RequestProto.MutablePartitionRequest()->MutablePipeClient());
 
             TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record.Swap(&RequestProto);
@@ -1317,7 +1317,7 @@ public:
         if (RequestProto.HasMetaRequest() && (RequestProto.GetMetaRequest().HasCmdGetPartitionLocations()
                 || RequestProto.GetMetaRequest().HasCmdGetReadSessionsInfo())) {
             //only for this request NodeId-s and Nodes names are required
-            const TActorId nameserviceId = GetNameserviceActorId(); 
+            const TActorId nameserviceId = GetNameserviceActorId();
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         }
 
@@ -1369,7 +1369,7 @@ private:
 
 class TErrorReplier : public TActorBootstrapped<TErrorReplier> {
 public:
-    TErrorReplier(const NKikimrClient::TPersQueueRequest& request, const TActorId& /*schemeCache*/) 
+    TErrorReplier(const NKikimrClient::TPersQueueRequest& request, const TActorId& /*schemeCache*/)
         : RequestId(request.HasRequestId() ? request.GetRequestId() : "<none>")
     {
     }

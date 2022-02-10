@@ -16,7 +16,7 @@ namespace NKikimr {
     // TGuardedActorID
     ////////////////////////////////////////////////////////////////////////////
     class TGuardedActorID {
-        TActorId ActorID; 
+        TActorId ActorID;
         TAtomic SetUp;
 
     public:
@@ -25,13 +25,13 @@ namespace NKikimr {
             , SetUp(0)
         {}
 
-        void Set(const TActorId &id) { 
+        void Set(const TActorId &id) {
             ActorID = id;
             AtomicAdd(SetUp, 1);
         }
 
-        operator TActorId() { 
-            return SetUp ? ActorID : TActorId(); 
+        operator TActorId() {
+            return SetUp ? ActorID : TActorId();
         }
 
         operator bool() {

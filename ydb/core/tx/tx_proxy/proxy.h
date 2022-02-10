@@ -25,8 +25,8 @@ namespace NMiniKQL {
 
 namespace NTxProxy {
     struct TTxProxyServices {
-        TActorId Proxy; 
-        TActorId SchemeCache; 
+        TActorId Proxy;
+        TActorId SchemeCache;
         TActorId LeaderPipeCache;
         TActorId FollowerPipeCache;
     };
@@ -172,9 +172,9 @@ struct TEvTxUserProxy {
     struct TEvInvalidateTableResult : public TEventSimple<TEvInvalidateTableResult, EvInvalidateTableResult> {};
 
     struct TEvProposeKqpTransaction : public TEventLocal<TEvProposeKqpTransaction, EvProposeKqpTransaction> {
-        TActorId ExecuterId; 
+        TActorId ExecuterId;
 
-        TEvProposeKqpTransaction(const TActorId& executerId) 
+        TEvProposeKqpTransaction(const TActorId& executerId)
             : ExecuterId(executerId) {}
     };
 
@@ -311,6 +311,6 @@ namespace NTxProxy {
 }
 
 IActor* CreateTxProxy(const TVector<ui64> &allocators);
-TActorId MakeTxProxyID(); 
+TActorId MakeTxProxyID();
 
 }

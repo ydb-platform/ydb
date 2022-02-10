@@ -1,6 +1,6 @@
 #include "blobstorage_hullhugeheap.h"
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
     namespace NHuge {

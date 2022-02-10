@@ -10,7 +10,7 @@ namespace NKikimr {
             const TChunkSerNum ChunkSerNum;
             const ui64 Cookie;
             const TKeeperCommonState& State;
-            TActorId KeeperActorId; 
+            TActorId KeeperActorId;
 
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -28,7 +28,7 @@ namespace NKikimr {
             {}
 
         private:
-            TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override { 
+            TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
                 return new IEventHandle(self, parentId, new TEvents::TEvBootstrap);
             }
 

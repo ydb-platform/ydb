@@ -1,10 +1,10 @@
 #pragma once
- 
+
 #include "mkql_computation_node.h"
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
- 
+
 #include <util/system/type_name.h>
 
 namespace NKikimr {
@@ -35,12 +35,12 @@ private:
 };
 
 class TUnboxedImmutableComputationNode: public TRefCountedComputationNode<IComputationNode>
-{ 
+{
 public:
     TUnboxedImmutableComputationNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value);
 
     ~TUnboxedImmutableComputationNode();
- 
+
 private:
     void InitNode(TComputationContext&) const override {}
 
@@ -103,7 +103,7 @@ private:
 };
 
 class TExternalComputationNode: public TStatefulComputationNode<IComputationExternalNode>
-{ 
+{
 public:
     TExternalComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any);
 
@@ -143,7 +143,7 @@ protected:
 
 template <typename TDerived, bool SerializableState = false>
 class TStatefulSourceComputationNode: public TStatefulComputationNode<IComputationNode, SerializableState>
-{ 
+{
     using TStatefulComputationNode = TStatefulComputationNode<IComputationNode, SerializableState>;
 private:
     bool IsTemporaryValue() const final {
@@ -197,7 +197,7 @@ protected:
     }
 
     TString DebugString() const override {
-        return TypeName<TDerived>(); 
+        return TypeName<TDerived>();
     }
 
     mutable std::unordered_set<const IComputationNode*> Sources; // TODO: remove const and mutable.
@@ -791,21 +791,21 @@ protected:
 
 template <typename TDerived, typename TBase = NUdf::IBoxedValue>
 class TComputationValue: public TBase, public TWithMiniKQLAlloc
-{ 
+{
 public:
     template <typename... Args>
     TComputationValue(TMemoryUsageInfo* memInfo, Args&&... args)
         : TBase(std::forward<Args>(args)...)
     {
-        M_.MemInfo = memInfo; 
-        MKQL_MEM_TAKE(memInfo, this, sizeof(TDerived), 
-                "TDerived: " << DebugString()); 
-    } 
- 
-    ~TComputationValue() { 
+        M_.MemInfo = memInfo;
+        MKQL_MEM_TAKE(memInfo, this, sizeof(TDerived),
+                "TDerived: " << DebugString());
+    }
+
+    ~TComputationValue() {
         MKQL_MEM_RETURN(GetMemInfo(), this, sizeof(TDerived));
-    } 
- 
+    }
+
 private:
     bool HasFastListLength() const override {
         ThrowNotSupported(__func__);
@@ -814,7 +814,7 @@ private:
 
     ui64 GetListLength() const override {
         ThrowNotSupported(__func__);
-        return 0; 
+        return 0;
     }
 
     ui64 GetEstimatedListLength() const override {
@@ -828,7 +828,7 @@ private:
     }
 
     const NUdf::TOpaqueListRepresentation* GetListRepresentation() const override {
-        return nullptr; 
+        return nullptr;
     }
 
     NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override {
@@ -855,12 +855,12 @@ private:
 
     ui64 GetDictLength() const override {
         ThrowNotSupported(__func__);
-        return 0; 
+        return 0;
     }
 
     bool HasDictItems() const override {
         ThrowNotSupported(__func__);
-        return false; 
+        return false;
     }
 
     NUdf::TStringRef GetResourceTag() const override {
@@ -920,14 +920,14 @@ private:
     }
 
     NUdf::TUnboxedValue Run(
-            const NUdf::IValueBuilder* valueBuilder, 
+            const NUdf::IValueBuilder* valueBuilder,
             const NUdf::TUnboxedValuePod* args) const override
-    { 
+    {
         Y_UNUSED(valueBuilder);
         Y_UNUSED(args);
         ThrowNotSupported(__func__);
-        return {}; 
-    } 
+        return {};
+    }
 
     bool Skip() override {
         NUdf::TUnboxedValue stub;
@@ -1021,14 +1021,14 @@ private:
 
 public:
     TString DebugString() const {
-        return TypeName<TDerived>(); 
-    } 
- 
-protected: 
-    inline TMemoryUsageInfo* GetMemInfo() const { 
-        return static_cast<TMemoryUsageInfo*>(M_.MemInfo); 
-    } 
- 
+        return TypeName<TDerived>();
+    }
+
+protected:
+    inline TMemoryUsageInfo* GetMemInfo() const {
+        return static_cast<TMemoryUsageInfo*>(M_.MemInfo);
+    }
+
     [[noreturn]] void ThrowNotSupported(const char* func) const {
         THROW yexception() << "Unsupported access to '" << func << "' method of: " << TypeName(*this);
     }

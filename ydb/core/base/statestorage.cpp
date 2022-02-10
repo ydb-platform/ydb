@@ -71,7 +71,7 @@ void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection) con
 
     if (selection->Sz < NToSelect) {
         selection->Status.Reset(new TStateStorageInfo::TSelection::EStatus[NToSelect]);
-        selection->SelectedReplicas.Reset(new TActorId[NToSelect]); 
+        selection->SelectedReplicas.Reset(new TActorId[NToSelect]);
     }
 
     selection->Sz = NToSelect;
@@ -89,7 +89,7 @@ void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection) con
     }
 }
 
-TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const { 
+TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {
     if (Replicas.size() == 1)
         return Replicas[0];
 
@@ -101,12 +101,12 @@ TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {
     }
 }
 
-TList<TActorId> TStateStorageInfo::SelectAllReplicas() const { 
+TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
 // TODO: we really need this method in such way?
-    TList<TActorId> replicas; 
+    TList<TActorId> replicas;
 
     for (auto &ring : Rings) {
-        for (TActorId replica : ring.Replicas) 
+        for (TActorId replica : ring.Replicas)
             replicas.push_back(replica);
     }
 
@@ -115,7 +115,7 @@ TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
 
 ui32 TStateStorageInfo::TRing::ContentHash() const {
     ui64 hash = 17;
-    for (TActorId replica : Replicas) { 
+    for (TActorId replica : Replicas) {
         hash = Hash64to32((hash << 32) | replica.Hash32());
     }
     return static_cast<ui32>(hash);
@@ -233,7 +233,7 @@ static void CopyStateStorageRingInfo(
         for (ui32 inode = 0, enode = source.NodeSize(); inode != enode; ++inode) {
             serviceId[depth] = (inode + 1);
 
-            const TActorId replicaActorID = TActorId(source.GetNode(inode), TStringBuf(serviceId, serviceId + 12)); 
+            const TActorId replicaActorID = TActorId(source.GetNode(inode), TStringBuf(serviceId, serviceId + 12));
             info->Rings[inode].Replicas.push_back(replicaActorID);
         }
 
@@ -243,12 +243,12 @@ static void CopyStateStorageRingInfo(
     Y_FAIL("must have rings or legacy node config");
 }
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config) { 
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     info->StateStorageGroup = config.GetSSId();
 
     const size_t offset = FindIndex(namePrefix, char());
-    Y_VERIFY(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength); 
+    Y_VERIFY(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
 
     memcpy(namePrefix + offset, reinterpret_cast<const char *>(&info->StateStorageGroup), sizeof(ui32));
     CopyStateStorageRingInfo(config.GetRing(), info.Get(), namePrefix, offset + sizeof(ui32));
@@ -261,9 +261,9 @@ void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& 
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo)
 {
-    char ssr[TActorId::MaxServiceIDLength] = { 's', 's', 'r' }; // state storage replica 
-    char ssb[TActorId::MaxServiceIDLength] = { 's', 's', 'b' }; // state storage board 
-    char sbr[TActorId::MaxServiceIDLength] = { 's', 'b', 'r' }; // scheme board replica 
+    char ssr[TActorId::MaxServiceIDLength] = { 's', 's', 'r' }; // state storage replica
+    char ssb[TActorId::MaxServiceIDLength] = { 's', 's', 'b' }; // state storage board
+    char sbr[TActorId::MaxServiceIDLength] = { 's', 'b', 'r' }; // scheme board replica
 
     stateStorageInfo = BuildStateStorageInfo(ssr, config);
     boardInfo = BuildStateStorageInfo(ssb, config);

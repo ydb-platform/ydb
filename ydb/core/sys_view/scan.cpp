@@ -15,7 +15,7 @@
 namespace NKikimr {
 namespace NSysView {
 
-THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, 
+THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     if (tableId.SysViewInfo == PartitionStatsName) {

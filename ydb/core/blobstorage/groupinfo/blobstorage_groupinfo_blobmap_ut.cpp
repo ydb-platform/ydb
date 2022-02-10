@@ -25,7 +25,7 @@ namespace {
             }
         }
 
-        bool PickSubgroup(ui32 hash, ui32 vdiskSz, TVDiskID *outVDisk, TActorId *outServiceIds) const { 
+        bool PickSubgroup(ui32 hash, ui32 vdiskSz, TVDiskID *outVDisk, TActorId *outServiceIds) const {
             const ui32 subgroupSz = BlobSubgroupSize;
             Y_VERIFY(vdiskSz == subgroupSz);
 

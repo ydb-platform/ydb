@@ -274,8 +274,8 @@ IMessageBusServer* CreateMsgBusTracingServer(
     ui32 bindPort = TProtocol::DefaultPort
 );
 
-inline NActors::TActorId CreateMsgBusProxyId() { 
-    return NActors::TActorId(0, "MsgBusProxy"); 
+inline NActors::TActorId CreateMsgBusProxyId() {
+    return NActors::TActorId(0, "MsgBusProxy");
 }
 
 }

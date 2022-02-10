@@ -4,12 +4,12 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxConfigGet : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
 
     THolder<TEvKesus::TEvGetConfigResult> Reply;
 
-    TTxConfigGet(TSelf* self, const TActorId& sender, ui64 cookie) 
+    TTxConfigGet(TSelf* self, const TActorId& sender, ui64 cookie)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

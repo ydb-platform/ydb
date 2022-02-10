@@ -1,5 +1,5 @@
-#include <library/cpp/monlib/encode/spack/spack_v1.h> 
-#include <library/cpp/monlib/encode/fake/fake.h> 
+#include <library/cpp/monlib/encode/spack/spack_v1.h>
+#include <library/cpp/monlib/encode/fake/fake.h>
 
 #include <util/stream/mem.h>
 

@@ -37,8 +37,8 @@ namespace NKikimr {
     class THullSyncFullActor : public TActorBootstrapped<THullSyncFullActor> {
         TIntrusivePtr<TVDiskConfig> Config;
         TIntrusivePtr<THullCtx> HullCtx;
-        const TActorId ParentId; 
-        const TActorId Recipient; 
+        const TActorId ParentId;
+        const TActorId Recipient;
         THullDsSnap FullSnap;
         // keys are subject to change during the processing
         TKeyLogoBlob KeyLogoBlob;
@@ -172,9 +172,9 @@ namespace NKikimr {
         THullSyncFullActor(
                 const TIntrusivePtr<TVDiskConfig> &config,
                 const TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId, 
+                const TActorId &parentId,
                 const TVDiskID &sourceVDisk,
-                const TActorId &recipient, 
+                const TActorId &recipient,
                 THullDsSnap &&fullSnap,
                 const TKeyLogoBlob &keyLogoBlob,
                 const TKeyBlock &keyBlock,
@@ -204,9 +204,9 @@ namespace NKikimr {
     IActor *CreateHullSyncFullActor(
             const TIntrusivePtr<TVDiskConfig> &config,
             const TIntrusivePtr<THullCtx> &hullCtx,
-            const TActorId &parentId, 
+            const TActorId &parentId,
             const TVDiskID &sourceVDisk,
-            const TActorId &recipient, 
+            const TActorId &recipient,
             THullDsSnap &&fullSnap,
             const TKeyLogoBlob &keyLogoBlob,
             const TKeyBlock &keyBlock,

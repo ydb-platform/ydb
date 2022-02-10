@@ -1,50 +1,50 @@
-#pragma once 
- 
-#include <util/generic/array_ref.h>
-#include <util/generic/ptr.h> 
-#include <util/generic/vector.h> 
-#include <util/generic/yexception.h>
- 
-#include <cmath>
-#include <limits> 
- 
+#pragma once
 
-namespace NMonitoring { 
- 
-    using TBucketBound = double; 
-    using TBucketValue = ui64; 
- 
-    using TBucketBounds = TVector<TBucketBound>; 
-    using TBucketValues = TVector<TBucketValue>; 
- 
-    constexpr ui32 HISTOGRAM_MAX_BUCKETS_COUNT = 51; 
-    constexpr TBucketBound HISTOGRAM_INF_BOUND = std::numeric_limits<TBucketBound>::max(); 
- 
-    /////////////////////////////////////////////////////////////////////////// 
-    // IHistogramSnapshot 
-    /////////////////////////////////////////////////////////////////////////// 
-    class IHistogramSnapshot: public TAtomicRefCount<IHistogramSnapshot> { 
-    public: 
-        virtual ~IHistogramSnapshot() = default; 
- 
-        /** 
-         * @return buckets count. 
-         */ 
-        virtual ui32 Count() const = 0; 
- 
-        /** 
-         * @return upper bound for the bucket with particular index. 
-         */ 
-        virtual TBucketBound UpperBound(ui32 index) const = 0; 
- 
-        /** 
-         * @return value stored in the bucket with particular index. 
-         */ 
-        virtual TBucketValue Value(ui32 index) const = 0; 
-    }; 
- 
-    using IHistogramSnapshotPtr = TIntrusivePtr<IHistogramSnapshot>; 
- 
+#include <util/generic/array_ref.h>
+#include <util/generic/ptr.h>
+#include <util/generic/vector.h>
+#include <util/generic/yexception.h>
+
+#include <cmath>
+#include <limits>
+
+
+namespace NMonitoring {
+
+    using TBucketBound = double;
+    using TBucketValue = ui64;
+
+    using TBucketBounds = TVector<TBucketBound>;
+    using TBucketValues = TVector<TBucketValue>;
+
+    constexpr ui32 HISTOGRAM_MAX_BUCKETS_COUNT = 51;
+    constexpr TBucketBound HISTOGRAM_INF_BOUND = std::numeric_limits<TBucketBound>::max();
+
+    ///////////////////////////////////////////////////////////////////////////
+    // IHistogramSnapshot
+    ///////////////////////////////////////////////////////////////////////////
+    class IHistogramSnapshot: public TAtomicRefCount<IHistogramSnapshot> {
+    public:
+        virtual ~IHistogramSnapshot() = default;
+
+        /**
+         * @return buckets count.
+         */
+        virtual ui32 Count() const = 0;
+
+        /**
+         * @return upper bound for the bucket with particular index.
+         */
+        virtual TBucketBound UpperBound(ui32 index) const = 0;
+
+        /**
+         * @return value stored in the bucket with particular index.
+         */
+        virtual TBucketValue Value(ui32 index) const = 0;
+    };
+
+    using IHistogramSnapshotPtr = TIntrusivePtr<IHistogramSnapshot>;
+
     ///////////////////////////////////////////////////////////////////////////////
     // TLinearHistogramSnapshot
     ///////////////////////////////////////////////////////////////////////////////
@@ -85,9 +85,9 @@ namespace NMonitoring {
         TBucketValues Values_;
     };
 
-    /////////////////////////////////////////////////////////////////////////// 
+    ///////////////////////////////////////////////////////////////////////////
     // TExponentialHistogramSnapshot
-    /////////////////////////////////////////////////////////////////////////// 
+    ///////////////////////////////////////////////////////////////////////////
     class TExponentialHistogramSnapshot: public IHistogramSnapshot {
     public:
         TExponentialHistogramSnapshot(

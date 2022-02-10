@@ -1,6 +1,6 @@
 #include "tablet_impl.h"
 
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/string/escape.h>
 #include <util/string/subst.h>
@@ -31,7 +31,7 @@ struct TKesusTablet::THtmlRenderer {
         }
     }
 
-    void RenderProxyLink(IOutputStream& out, const TActorId& actorId) { 
+    void RenderProxyLink(IOutputStream& out, const TActorId& actorId) {
         TCgiParameters params;
         params.InsertEscaped("proxy", TStringBuilder() << actorId);
         out << "<a href=\"app?TabletID=" << Self->TabletID() << "&" << params() << "\">" << actorId << "</a>";
@@ -63,7 +63,7 @@ struct TKesusTablet::THtmlRenderer {
         }
     }
 
-    void RenderProxyDetails(IOutputStream& out, const TActorId& actorId) { 
+    void RenderProxyDetails(IOutputStream& out, const TActorId& actorId) {
         const auto* proxy = Self->Proxies.FindPtr(actorId);
         if (!proxy) {
             RenderError(out, "Proxy not found");
@@ -97,7 +97,7 @@ struct TKesusTablet::THtmlRenderer {
     }
 
     void RenderProxyDetails(IOutputStream& out, const TString& actorIdText) {
-        TActorId actorId; 
+        TActorId actorId;
         if (!actorId.Parse(actorIdText.data(), actorIdText.size())) {
             RenderError(out, "Invalid proxy id");
             return;
@@ -429,7 +429,7 @@ struct TKesusTablet::THtmlRenderer {
                 }
                 TABLEBODY() {
                     const auto& clients = resource->GetSessions();
-                    for (const NActors::TActorId& clientId : clients) { 
+                    for (const NActors::TActorId& clientId : clients) {
                         const TQuoterSession* session = Self->QuoterResources.FindSession(clientId, resource->GetResourceId());
                         Y_VERIFY(session);
                         TABLER() {

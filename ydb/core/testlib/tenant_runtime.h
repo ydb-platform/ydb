@@ -205,7 +205,7 @@ public:
     void SendToBroker(IEventBase* event);
     void SendToConsole(IEventBase* event);
 
-    TActorId Sender; 
+    TActorId Sender;
     TTenantTestConfig Config;
     NKikimrConfig::TAppConfig Extension;
     THashMap<TSubDomainKey, TString> SubDomainKeys;

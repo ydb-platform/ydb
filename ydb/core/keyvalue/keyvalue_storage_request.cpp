@@ -376,7 +376,7 @@ public:
             IntermediateResults->Stat.YellowMoveChannels.reserve(YellowMoveChannels.size());
             IntermediateResults->Stat.YellowMoveChannels.insert(IntermediateResults->Stat.YellowMoveChannels.end(),
                     YellowMoveChannels.begin(), YellowMoveChannels.end());
-            TActorId keyValueActorId = IntermediateResults->KeyValueActorId; 
+            TActorId keyValueActorId = IntermediateResults->KeyValueActorId;
             ctx.Send(keyValueActorId, new TEvKeyValue::TEvIntermediate(std::move(IntermediateResults)));
             Die(ctx);
             return true;
@@ -479,7 +479,7 @@ public:
                 YellowMoveChannels.begin(), YellowMoveChannels.end());
 
         IntermediateResults->UpdateStat();
-        TActorId keyValueActorId = IntermediateResults->KeyValueActorId; 
+        TActorId keyValueActorId = IntermediateResults->KeyValueActorId;
         ctx.Send(keyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResults->RequestUid,
             IntermediateResults->CreatedAtGeneration, IntermediateResults->CreatedAtStep,

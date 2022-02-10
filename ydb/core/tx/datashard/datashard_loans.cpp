@@ -86,7 +86,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         // Send Ack
-        TActorId ackTo = Ev->Sender; 
+        TActorId ackTo = Ev->Sender;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack parts " << PartMetaVec << " return to tablet " << FromTabletId);
 
         ctx.Send(ackTo, new TEvDataShard::TEvReturnBorrowedPartAck(PartMetaVec), 0, Ev->Cookie);

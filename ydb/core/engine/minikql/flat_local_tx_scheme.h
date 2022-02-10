@@ -16,7 +16,7 @@ namespace NMiniKQL {
 
 class TFlatLocalSchemeTx : public NTabletFlatExecutor::ITransaction {
 public:
-    TFlatLocalSchemeTx(TActorId sender, TEvTablet::TEvLocalSchemeTx::TPtr &ev) 
+    TFlatLocalSchemeTx(TActorId sender, TEvTablet::TEvLocalSchemeTx::TPtr &ev)
         : Sender(sender)
         , Ev(ev)
     {}
@@ -52,7 +52,7 @@ public:
     }
 
 private:
-    const TActorId Sender; 
+    const TActorId Sender;
     TEvTablet::TEvLocalSchemeTx::TPtr Ev;
     TAutoPtr<TEvTablet::TEvLocalSchemeTxResponse> Response;
 };

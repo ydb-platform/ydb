@@ -69,7 +69,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/messagebus
     library/cpp/messagebus/protobuf
-    library/cpp/monlib/messagebus 
+    library/cpp/monlib/messagebus
     library/cpp/protobuf/json
     library/cpp/protobuf/util
     library/cpp/threading/future

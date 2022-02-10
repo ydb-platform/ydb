@@ -27,13 +27,13 @@ protected:
     const bool ConnectToFollower;
 
 private:
-    TActorId PipeClient; 
+    TActorId PipeClient;
     ui64 TabletId = 0;
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
-            PipeClient = TActorId(); 
+            PipeClient = TActorId();
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx,
                 Sprintf("Tablet pipe client connected with status# %s for tablet %" PRIu64 " Marker# MBT3",
                     NKikimrProto::EReplyStatus_Name(msg->Status).data(), msg->TabletId)), ctx);
@@ -42,7 +42,7 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        PipeClient = TActorId(); 
+        PipeClient = TActorId();
         SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx, "Tablet pipe client destroyed Marker# MBT2"));
         return Die(ctx);
     }
@@ -54,7 +54,7 @@ protected:
     void Die(const TActorContext &ctx) override {
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
-            PipeClient = TActorId(); 
+            PipeClient = TActorId();
         }
         TActorBootstrapped<TDerived>::Die(ctx);
     }

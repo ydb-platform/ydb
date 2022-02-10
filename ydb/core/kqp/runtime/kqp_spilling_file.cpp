@@ -68,7 +68,7 @@ struct TEvKqpSpillingLocalFile {
 // it provides human-readable description for logs and viewer.
 class TKqpLocalFileSpillingActor : public TActorBootstrapped<TKqpLocalFileSpillingActor> {
 public:
-    TKqpLocalFileSpillingActor(ui64 txId, const TString& details, const TActorId& client, bool removeBlobsAfterRead) 
+    TKqpLocalFileSpillingActor(ui64 txId, const TString& details, const TActorId& client, bool removeBlobsAfterRead)
         : TxId(txId)
         , Details(details)
         , ClientActorId(client)
@@ -132,7 +132,7 @@ private:
     }
 
 private:
-    void ValidateSender(const TActorId& sender) { 
+    void ValidateSender(const TActorId& sender) {
         YQL_ENSURE(ClientActorId == sender, "" << ClientActorId << " != " << sender);
     }
 
@@ -144,9 +144,9 @@ private:
 private:
     const ui64 TxId;
     const TString Details;
-    const TActorId ClientActorId; 
+    const TActorId ClientActorId;
     const bool RemoveBlobsAfterRead;
-    TActorId ServiceActorId; 
+    TActorId ServiceActorId;
 };
 
 class TKqpLocalFileSpillingService : public TActorBootstrapped<TKqpLocalFileSpillingService> {
@@ -163,13 +163,13 @@ private:
         static_assert(EEv::LastEvent - EventSpaceBegin(TKikimrEvents::ES_PRIVATE) < 16);
 
         struct TEvCloseFileResponse : public TEventLocal<TEvCloseFileResponse, EvCloseFileResponse> {
-            TActorId Client; 
+            TActorId Client;
             TDuration WaitTime;
             TDuration WorkTime;
         };
 
         struct TEvWriteFileResponse : public TEventLocal<TEvWriteFileResponse, EvWriteFileResponse> {
-            TActorId Client; 
+            TActorId Client;
             TDuration WaitTime;
             TDuration WorkTime;
             ui64 BlobId = 0;
@@ -178,7 +178,7 @@ private:
         };
 
         struct TEvReadFileResponse : public TEventLocal<TEvReadFileResponse, EvReadFileResponse> {
-            TActorId Client; 
+            TActorId Client;
             TDuration WaitTime;
             TDuration WorkTime;
             ui64 BlobId = 0;
@@ -189,7 +189,7 @@ private:
     };
 
     struct TFileDesc;
-    using TFilesIt = __yhashtable_iterator<std::pair<const TActorId, TFileDesc>>; 
+    using TFilesIt = __yhashtable_iterator<std::pair<const TActorId, TFileDesc>>;
 
 public:
     TKqpLocalFileSpillingService(const NKikimrConfig::TTableServiceConfig::TSpillingServiceConfig::TLocalFileConfig& config,
@@ -746,8 +746,8 @@ private:
 
 private:
     struct TCloseFileOp : public IObjectInQueue {
-        TActorId Client; 
-        TActorId Service; 
+        TActorId Client;
+        TActorId Service;
         TActorSystem* ActorSystem;
         TVector<THolder<TFileHandle>> FileHandles;
         TVector<TString> FileNames;
@@ -779,8 +779,8 @@ private:
     };
 
     struct TWriteFileOp : public IObjectInQueue {
-        TActorId Client; 
-        TActorId Service; 
+        TActorId Client;
+        TActorId Service;
         TActorSystem* ActorSystem;
         TString FileName;
         bool CreateFile = false;
@@ -818,8 +818,8 @@ private:
     };
 
     struct TReadFileOp : public IObjectInQueue {
-        TActorId Client; 
-        TActorId Service; 
+        TActorId Client;
+        TActorId Service;
         TActorSystem* ActorSystem;
         TString FileName;
         ui64 BlobId;
@@ -942,14 +942,14 @@ private:
     };
 
     THolder<IThreadPool> IoThreadPool;
-    THashMap<TActorId, TFileDesc> Files; 
+    THashMap<TActorId, TFileDesc> Files;
     TList<const TClosedFileDesc> ClosedFiles;
     ui64 TotalSize = 0;
 };
 
 } // anonymous namespace
 
-IActor* CreateKqpLocalFileSpillingActor(ui64 txId, const TString& details, const TActorId& client, 
+IActor* CreateKqpLocalFileSpillingActor(ui64 txId, const TString& details, const TActorId& client,
     bool removeBlobsAfterRead)
 {
     return new TKqpLocalFileSpillingActor(txId, details, client, removeBlobsAfterRead);

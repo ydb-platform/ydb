@@ -36,7 +36,7 @@ public:
         const auto& params(Event->Get()->Request.GetParams());
         StaticNodesOnly = FromStringWithDefault<bool>(params.Get("static_only"), StaticNodesOnly);
         DynamicNodesOnly = FromStringWithDefault<bool>(params.Get("dynamic_only"), DynamicNodesOnly);
-        const TActorId nameserviceId = GetNameserviceActorId(); 
+        const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
         Become(&TThis::StateRequestedList);
@@ -59,7 +59,7 @@ public:
     }
 
     void SendRequest(ui32 nodeId, const TActorContext& ctx) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId); 
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         THolder<TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
         ctx.Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         ++NodesRequested;

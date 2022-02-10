@@ -88,7 +88,7 @@ class TPDisk;
 class TSysLogReader : public TThrRefBase {
     TPDisk *const PDisk;
     TActorSystem *const ActorSystem;
-    const TActorId ReplyTo; 
+    const TActorId ReplyTo;
     const TReqId ReqId;
 
     THolder<TEvReadLogResult> Result;

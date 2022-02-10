@@ -143,7 +143,7 @@ protected:
     virtual IEventBase* MakeRequest() const = 0;
 
 public:
-    explicit TRequestRunner(const TActorId& replyTo, ui64 tabletID) 
+    explicit TRequestRunner(const TActorId& replyTo, ui64 tabletID)
         : ReplyTo(replyTo)
         , TabletID(tabletID)
     {
@@ -171,14 +171,14 @@ public:
     using TBase = TRequestRunner<TEvResponse, TDerived>;
 
 private:
-    const TActorId ReplyTo; 
+    const TActorId ReplyTo;
     const ui64 TabletID;
 
-    TActorId Pipe; 
+    TActorId Pipe;
 };
 
 void EraseRows(
-        TServer::TPtr server, const TActorId& sender, const TString& path, 
+        TServer::TPtr server, const TActorId& sender, const TString& path,
         const TTableId& tableId, TVector<ui32> keyTags, TVector<TString> keys,
         ui32 status = TProto::TEvEraseResponse::OK, const TString& error = "") {
     using TEvRequest = TEvDataShard::TEvEraseRowsRequest;
@@ -220,7 +220,7 @@ void EraseRows(
 }
 
 void ConditionalEraseRows(
-        TServer::TPtr server, const TActorId& sender, const TString& path, 
+        TServer::TPtr server, const TActorId& sender, const TString& path,
         const TTableId& tableId, ui32 columnId, ui64 threshold, EUnit unit = TUnit::AUTO,
         const NDataShard::TIndexes& indexes = {}, const TProto::TLimits& limits = {},
         ui32 status = TProto::TEvCondEraseResponse::ACCEPTED, const TString& error = "") {
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
-        const TActorId sender = runtime.AllocateEdgeActor(); 
+        const TActorId sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
-        const TActorId sender = runtime.AllocateEdgeActor(); 
+        const TActorId sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
-        const TActorId sender = runtime.AllocateEdgeActor(); 
+        const TActorId sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
@@ -627,7 +627,7 @@ key = 4, value = (empty maybe)
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
-        const TActorId sender = runtime.AllocateEdgeActor(); 
+        const TActorId sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
@@ -673,7 +673,7 @@ key = 4, value = (empty maybe)
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
-        const TActorId sender = runtime.AllocateEdgeActor(); 
+        const TActorId sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);

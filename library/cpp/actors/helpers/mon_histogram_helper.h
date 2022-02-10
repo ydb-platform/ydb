@@ -1,9 +1,9 @@
 #pragma once
 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <util/string/cast.h> 
- 
+#include <util/string/cast.h>
+
 namespace NActors {
     namespace NMon {
         class THistogramCounterHelper {
@@ -79,7 +79,7 @@ namespace NActors {
             ui64 FirstBucketVal;
             ui64 BucketCount;
             TVector<NMonitoring::TDynamicCounters::TCounterPtr> BucketsHolder;
-            TVector<NMonitoring::TDeprecatedCounter*> Buckets; 
+            TVector<NMonitoring::TDeprecatedCounter*> Buckets;
         };
 
     }

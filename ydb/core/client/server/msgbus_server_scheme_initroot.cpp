@@ -17,7 +17,7 @@ class TMessageBusSchemeInitRoot : public TMessageBusSecureRequest<TMessageBusSer
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusSchemeInitRoot>>;
     THolder<TBusSchemeInitRoot> Request;
     const bool WithRetry = true;
-    TActorId PipeClient; 
+    TActorId PipeClient;
 
     void ReplyWithResult(EResponseStatus status, TEvSchemeShard::TEvInitRootShardResult::EStatus ssStatus, const TActorContext &ctx) {
         TAutoPtr<TBusResponseStatus> response(new TBusResponseStatus(status));
@@ -42,7 +42,7 @@ class TMessageBusSchemeInitRoot : public TMessageBusSecureRequest<TMessageBusSer
     void Die(const TActorContext &ctx) override {
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
-            PipeClient = TActorId(); 
+            PipeClient = TActorId();
         }
         TBase::Die(ctx);
     }

@@ -118,7 +118,7 @@ bool NTableState::CollectSchemaChanged(
     auto ssId = context.SS->SelfTabletId();
 
     const auto& evRecord = ev->Get()->Record;
-    const TActorId ackTo = ev->Get()->GetSource(); 
+    const TActorId ackTo = ev->Get()->GetSource();
 
     auto datashardId = TTabletId(evRecord.GetOrigin());
 
@@ -193,7 +193,7 @@ void NTableState::AckAllSchemaChanges(const TOperationId &operationId, TTxState 
 
     // Ack to all participating datashards
     for (const auto& items : txState.SchemeChangeNotificationReceived) {
-        const TActorId ackTo = items.second.first; 
+        const TActorId ackTo = items.second.first;
         const auto shardIdx = items.first;
         const auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
 

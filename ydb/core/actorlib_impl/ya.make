@@ -46,8 +46,8 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/messagebus/monitoring
-    library/cpp/monlib/dynamic_counters 
-    library/cpp/monlib/service/pages/tablesorter 
+    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/service/pages/tablesorter
     library/cpp/packedtypes
     library/cpp/sliding_window
     ydb/core/base

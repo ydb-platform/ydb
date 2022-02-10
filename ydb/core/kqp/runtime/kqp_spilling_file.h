@@ -8,7 +8,7 @@
 
 namespace NKikimr::NKqp {
 
-NActors::IActor* CreateKqpLocalFileSpillingActor(ui64 txId, const TString& details, const NActors::TActorId& client, 
+NActors::IActor* CreateKqpLocalFileSpillingActor(ui64 txId, const TString& details, const NActors::TActorId& client,
     bool removeBlobsAfterRead);
 
 NActors::IActor* CreateKqpLocalFileSpillingService(

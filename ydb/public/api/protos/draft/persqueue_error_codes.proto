@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package NPersQueue.NErrorCode;
-option java_package = "com.yandex.ydb.persqueue"; 
+option java_package = "com.yandex.ydb.persqueue";
 
 enum EErrorCode {
     OK = 0;

@@ -17,8 +17,8 @@ namespace NKikimr {
 namespace NGRpcProxy {
 namespace V1 {
 
-inline TActorId GetPQWriteServiceActorID() { 
-    return TActorId(0, "PQWriteSvc"); 
+inline TActorId GetPQWriteServiceActorID() {
+    return TActorId(0, "PQWriteSvc");
 }
 
 IActor* CreatePQWriteService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
@@ -59,12 +59,12 @@ private:
     void Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorContext& ctx);
 
-    NActors::TActorId SchemeCache; 
+    NActors::TActorId SchemeCache;
     NActors::TActorId NewSchemeCache;
 
     TAtomic LastCookie = 0;
 
-    THashMap<ui64, TActorId> Sessions; 
+    THashMap<ui64, TActorId> Sessions;
     // Created at by session cookie map by remote preferred cluster name
     THashMap<TString, THashMap<ui64, TInstant>> SessionsByRemotePreferredCluster;
     THashMap<ui64, TString> RemotePreferredClusterBySessionCookie;

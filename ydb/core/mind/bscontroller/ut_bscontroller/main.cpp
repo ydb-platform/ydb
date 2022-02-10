@@ -91,7 +91,7 @@ struct TEnvironmentSetup {
     }
 
     NKikimrBlobStorage::TConfigResponse Invoke(const NKikimrBlobStorage::TConfigRequest& request) {
-        const TActorId self = Runtime->AllocateEdgeActor(); 
+        const TActorId self = Runtime->AllocateEdgeActor();
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         ev->Record.MutableRequest()->CopyFrom(request);
         Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
@@ -110,7 +110,7 @@ struct TEnvironmentSetup {
 
 
     NKikimrBlobStorage::TEvControllerSelectGroupsResult SelectGroups(const NKikimrBlobStorage::TEvControllerSelectGroups& request) {
-        const TActorId self = Runtime->AllocateEdgeActor(); 
+        const TActorId self = Runtime->AllocateEdgeActor();
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
         ev->Record.MergeFrom(request);
         Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
@@ -119,8 +119,8 @@ struct TEnvironmentSetup {
     }
 
     TVector<std::tuple<TString, i32, ui32>> GetNodes() {
-        const TActorId edge = Runtime->AllocateEdgeActor(); 
-        Runtime->Send(new IEventHandle(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes)); 
+        const TActorId edge = Runtime->AllocateEdgeActor();
+        Runtime->Send(new IEventHandle(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes));
         auto response = Runtime->GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(edge);
         TVector<std::tuple<TString, i32, ui32>> res;
         for (const auto& nodeInfo : response->Get()->Nodes) {
@@ -224,7 +224,7 @@ struct TEnvironmentSetup {
     }
 
     void SetupStorage() {
-        const TActorId proxyId = MakeBlobStorageProxyID(GroupId); 
+        const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
         Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(), NodeId), NodeId);
     }
 

@@ -31,7 +31,7 @@ struct TYdbRpcCounters {
     THashMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> ResponseByStatus;
 };
 
-class TYdbCounterBlock : public NGrpc::ICounterBlock { 
+class TYdbCounterBlock : public NGrpc::ICounterBlock {
 protected:
     bool Streaming = false;
     bool Percentile = false;
@@ -142,7 +142,7 @@ public:
         }
     }
 
-    NGrpc::ICounterBlockPtr Clone() override { 
+    NGrpc::ICounterBlockPtr Clone() override {
         return this;
     }
 
@@ -463,7 +463,7 @@ private:
 };
 
 
-class TYdbCounterBlockWrapper : public NGrpc::ICounterBlock { 
+class TYdbCounterBlockWrapper : public NGrpc::ICounterBlock {
     TYdbCounterBlockPtr Common;
     TString ServiceName;
     TString RequestName;
@@ -542,7 +542,7 @@ public:
         Db->FinishProcessing(requestSize, responseSize, ok, status, requestDuration);
     }
 
-    NGrpc::ICounterBlockPtr Clone() override { 
+    NGrpc::ICounterBlockPtr Clone() override {
         return new TYdbCounterBlockWrapper(Common, ServiceName, RequestName, Percentile, Streaming);
     }
 
@@ -617,7 +617,7 @@ TServiceCounterCB::TServiceCounterCB(NMonitoring::TDynamicCounterPtr counters, T
     }
 }
 
-NGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName, 
+NGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName,
     const char* requestName, bool percentile, bool streaming) const
 {
     auto block = MakeIntrusive<TYdbCounterBlock>(Counters, serviceName, requestName, percentile, streaming);
@@ -626,7 +626,7 @@ NGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName,
         ActorSystem->Send(ActorId, new TUpdaterActor::TEvRegisterItem(block));
     }
 
-    NGrpc::ICounterBlockPtr res(block); 
+    NGrpc::ICounterBlockPtr res(block);
     if (ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters()) {
         res = MakeIntrusive<TYdbCounterBlockWrapper>(block, serviceName, requestName, percentile, streaming);
     }

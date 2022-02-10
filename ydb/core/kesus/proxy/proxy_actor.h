@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NKesus {
 
-IActor* CreateKesusProxyActor(const TActorId& meta, ui64 tabletId, const TString& kesusPath); 
+IActor* CreateKesusProxyActor(const TActorId& meta, ui64 tabletId, const TString& kesusPath);
 
 }
 }

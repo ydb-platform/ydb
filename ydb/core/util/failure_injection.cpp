@@ -2,7 +2,7 @@
 #include <ydb/core/protos/services.pb.h>
 #include <util/system/mutex.h>
 #include <util/generic/queue.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>

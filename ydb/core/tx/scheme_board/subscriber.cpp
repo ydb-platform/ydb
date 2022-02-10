@@ -563,8 +563,8 @@ public:
     using TBase = TSubscriberProxy<TPath, TDerived, TReplicaDerived>;
 
 private:
-    const TActorId Parent; 
-    const TActorId Replica; 
+    const TActorId Parent;
+    const TActorId Replica;
     const TPath Path;
     const ui64 DomainOwnerId;
 
@@ -617,7 +617,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return notify;
     }
 
-    TMap<TActorId, TState>::const_iterator SelectStateImpl() const { 
+    TMap<TActorId, TState>::const_iterator SelectStateImpl() const {
         Y_VERIFY(!States.empty());
 
         auto it = States.begin();
@@ -924,7 +924,7 @@ public:
     }
 
     explicit TSubscriber(
-            const TActorId& owner, 
+            const TActorId& owner,
             const TPath& path,
             const ui64 stateStorageGroup,
             const ui64 domainOwnerId)
@@ -940,7 +940,7 @@ public:
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
 
-        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup); 
+        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
         this->Send(proxy, new TEvStateStorage::TEvResolveSchemeBoard(Path), IEventHandle::FlagTrackDelivery);
         this->Become(&TDerived::StateResolve);
     }
@@ -981,14 +981,14 @@ public:
     using TBase = TSubscriber<TPath, TDerived, TProxyDerived>;
 
 private:
-    const TActorId Owner; 
+    const TActorId Owner;
     const TPath Path;
     const ui64 StateStorageGroup;
     const ui64 DomainOwnerId;
 
     TSet<TActorId> Proxies;
     TMap<TActorId, TState> States;
-    TMap<TActorId, NKikimrSchemeBoard::TEvNotify> InitialResponses; 
+    TMap<TActorId, NKikimrSchemeBoard::TEvNotify> InitialResponses;
     TMaybe<TState> State;
 
     ui64 DelayedSyncRequest;
@@ -1011,7 +1011,7 @@ public:
 } // NSchemeBoard
 
 IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner, 
+    const TActorId& owner,
     const TString& path,
     const ui64 stateStorageGroup,
     const ui64 domainOwnerId
@@ -1020,7 +1020,7 @@ IActor* CreateSchemeBoardSubscriber(
 }
 
 IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner, 
+    const TActorId& owner,
     const TPathId& pathId,
     const ui64 stateStorageGroup,
     const ui64 domainOwnerId
@@ -1029,7 +1029,7 @@ IActor* CreateSchemeBoardSubscriber(
 }
 
 IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner, 
+    const TActorId& owner,
     const TString& path,
     const ui64 stateStorageGroup,
     const EDeletionPolicy deletionPolicy
@@ -1039,7 +1039,7 @@ IActor* CreateSchemeBoardSubscriber(
 }
 
 IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner, 
+    const TActorId& owner,
     const TPathId& pathId,
     const ui64 stateStorageGroup,
     const EDeletionPolicy deletionPolicy

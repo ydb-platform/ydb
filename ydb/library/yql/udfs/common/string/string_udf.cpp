@@ -1,7 +1,7 @@
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
- 
+
 #include <library/cpp/charset/codepage.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/html/pcdata/pcdata.h>
@@ -23,9 +23,9 @@
 #include <util/string/util.h>
 #include <util/string/vector.h>
 
-using namespace NKikimr; 
-using namespace NUdf; 
- 
+using namespace NKikimr;
+using namespace NUdf;
+
 namespace {
 #define STRING_UDF(udfName, function)                \
     SIMPLE_UDF(T##udfName, char*(TAutoMap<char*>)) { \
@@ -141,7 +141,7 @@ namespace {
     XX(Base64Decode, Base64Decode) \
     XX(Base64StrictDecode, Base64StrictDecode)         \
     XX(HexDecode, HexDecode)
- 
+
 #define STROKA_CASE_UDF_MAP(XX) \
     XX(ToLower, ToLower)        \
     XX(ToUpper, ToUpper)        \

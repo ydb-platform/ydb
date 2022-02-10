@@ -28,7 +28,7 @@ public:
 
         struct TNodeDesc {
             ui32 NodeId = std::numeric_limits<ui32>::max();
-            TActorId ResourceManagerId; 
+            TActorId ResourceManagerId;
             ui64 RemainsMemory = 0;
             ui32 RemainsComputeActors = 0;
             TVector<ui64> Tasks;
@@ -45,7 +45,7 @@ public:
         for (auto& node : nodeResources) {
             nodes.emplace(TNodeDesc{
                 node.GetNodeId(),
-                ActorIdFromProto(node.GetResourceManagerActorId()), 
+                ActorIdFromProto(node.GetResourceManagerActorId()),
                 node.GetTotalMemory() - node.GetUsedMemory(),
                 node.GetAvailableComputeActors(),
                 {}

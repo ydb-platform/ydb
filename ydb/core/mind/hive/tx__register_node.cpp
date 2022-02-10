@@ -5,11 +5,11 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxRegisterNode : public TTransactionBase<THive> {
-    TActorId Local; 
+    TActorId Local;
     NKikimrLocal::TEvRegisterNode Record;
 
 public:
-    TTxRegisterNode(const TActorId& local, NKikimrLocal::TEvRegisterNode record, THive *hive) 
+    TTxRegisterNode(const TActorId& local, NKikimrLocal::TEvRegisterNode record, THive *hive)
         : TBase(hive)
         , Local(local)
         , Record(std::move(record))
@@ -74,7 +74,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateRegisterNode(const TActorId& local, NKikimrLocal::TEvRegisterNode rec) { 
+ITransaction* THive::CreateRegisterNode(const TActorId& local, NKikimrLocal::TEvRegisterNode rec) {
     return new TTxRegisterNode(local, std::move(rec), this);
 }
 

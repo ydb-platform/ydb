@@ -329,7 +329,7 @@ public:
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePreparedScanQuery(const TString& cluster,
         const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, TExprContext& ctx,
-        const NActors::TActorId& target) override 
+        const NActors::TActorId& target) override
     {
         YQL_ENSURE(cluster == Cluster);
         YQL_ENSURE(phyQuery.GetType() == NKqpProto::TKqpPhyQuery::TYPE_SCAN);
@@ -590,7 +590,7 @@ private:
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePhysicalScanQuery(const TExprNode::TPtr& world,
-        const NKqpProto::TKqpPhyQuery& phyQuery, TExprContext& ctx, const NActors::TActorId& target) 
+        const NKqpProto::TKqpPhyQuery& phyQuery, TExprContext& ctx, const NActors::TActorId& target)
     {
         ScanRunQueryTransformer->Rewind();
 

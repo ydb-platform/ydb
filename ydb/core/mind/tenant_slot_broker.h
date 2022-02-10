@@ -53,7 +53,7 @@ struct TEvTenantSlotBroker {
 
 };
 
-IActor *CreateTenantSlotBroker(const TActorId &tablet, TTabletStorageInfo *info); 
+IActor *CreateTenantSlotBroker(const TActorId &tablet, TTabletStorageInfo *info);
 
 } // NTenantSlotBroker
 } // namespace NKikimr

@@ -393,7 +393,7 @@ struct TEvStateStorage {
     };
 
     struct TEvResponseReplicasDumps : public TEventLocal<TEvResponseReplicasDumps, EvResponseReplicasDumps> {
-        TVector<std::pair<TActorId, TAutoPtr<TEvReplicaDump>>> ReplicasDumps; 
+        TVector<std::pair<TActorId, TAutoPtr<TEvReplicaDump>>> ReplicasDumps;
     };
 
     struct TEvReplicaRegFollower : public TEventPB<TEvReplicaRegFollower, NKikimrStateStorage::TEvRegisterFollower, EvReplicaRegFollower> {
@@ -433,7 +433,7 @@ struct TEvStateStorage {
 
         const EStatus Status;
         const TString Path;
-        TMap<TActorId, TInfoEntry> InfoEntries; 
+        TMap<TActorId, TInfoEntry> InfoEntries;
 
         TEvBoardInfo(EStatus status, const TString &path)
             : Status(status)
@@ -458,7 +458,7 @@ struct TStateStorageInfo : public TThrRefBase {
         };
 
         ui32 Sz;
-        TArrayHolder<TActorId> SelectedReplicas; 
+        TArrayHolder<TActorId> SelectedReplicas;
         TArrayHolder<EStatus> Status;
 
         TSelection()
@@ -467,15 +467,15 @@ struct TStateStorageInfo : public TThrRefBase {
 
         void MergeReply(EStatus status, EStatus *owner, ui64 targetCookie, bool resetOld);
 
-        const TActorId* begin() const { return SelectedReplicas.Get(); } 
-        const TActorId* end() const { return SelectedReplicas.Get() + Sz; } 
+        const TActorId* begin() const { return SelectedReplicas.Get(); }
+        const TActorId* end() const { return SelectedReplicas.Get() + Sz; }
     };
 
     struct TRing {
         bool UseRingSpecificNodeSelection;
-        TVector<TActorId> Replicas; 
+        TVector<TActorId> Replicas;
 
-        TActorId SelectReplica(ui32 hash) const; 
+        TActorId SelectReplica(ui32 hash) const;
         ui32 ContentHash() const;
     };
 
@@ -484,7 +484,7 @@ struct TStateStorageInfo : public TThrRefBase {
     TVector<TRing> Rings;
 
     void SelectReplicas(ui64 tabletId, TSelection *selection) const;
-    TList<TActorId> SelectAllReplicas() const; 
+    TList<TActorId> SelectAllReplicas() const;
     ui32 ContentHash() const;
 
     TStateStorageInfo()
@@ -506,7 +506,7 @@ enum class EBoardLookupMode {
     MajorityDoubleTime,
 };
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config); 
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config);
 void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
@@ -517,13 +517,13 @@ IActor* CreateStateStorageWarden(const TIntrusivePtr<TStateStorageInfo> &info, c
 IActor* CreateStateStorageProxy(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard);
 IActor* CreateStateStorageProxyStub();
 IActor* CreateStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex);
-IActor* CreateStateStorageMonitoringActor(ui64 targetTablet, const TActorId &sender, const TString &query); 
+IActor* CreateStateStorageMonitoringActor(ui64 targetTablet, const TActorId &sender, const TString &query);
 IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation);
 IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower); // created as followerCandidate
 IActor* CreateStateStorageBoardReplica(const TIntrusivePtr<TStateStorageInfo> &, ui32);
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32);
-IActor* CreateBoardLookupActor(const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode, bool sub, bool useNodeSubscriptions); 
-IActor* CreateBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg); 
+IActor* CreateBoardLookupActor(const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode, bool sub, bool useNodeSubscriptions);
+IActor* CreateBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg);
 
 TString MakeEndpointsBoardPath(const TString &database);
 

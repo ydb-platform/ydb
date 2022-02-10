@@ -4,7 +4,7 @@
 #include "html_output.h"
 
 #include <library/cpp/messagebus/remote_connection_status.h>
-#include <library/cpp/monlib/deprecated/json/writer.h> 
+#include <library/cpp/monlib/deprecated/json/writer.h>
 
 #include <library/cpp/archive/yarchive.h>
 #include <library/cpp/http/fetch/httpfsm.h>
@@ -621,57 +621,57 @@ struct TBusWww::TImpl {
             }
         }
 
-        void WriteQueueSensors(NMonitoring::TDeprecatedJsonWriter& sj, TStringBuf queueName, TBusMessageQueue* queue) { 
+        void WriteQueueSensors(NMonitoring::TDeprecatedJsonWriter& sj, TStringBuf queueName, TBusMessageQueue* queue) {
             auto status = queue->GetStatusRecordInternal();
-            sj.OpenMetric(); 
+            sj.OpenMetric();
             sj.WriteLabels("mb_queue", queueName, "sensor", "WorkQueueSize");
             sj.WriteValue(status.ExecutorStatus.WorkQueueSize);
-            sj.CloseMetric(); 
+            sj.CloseMetric();
         }
 
-        void WriteMessageCounterSensors(NMonitoring::TDeprecatedJsonWriter& sj, 
+        void WriteMessageCounterSensors(NMonitoring::TDeprecatedJsonWriter& sj,
                                         TStringBuf labelName, TStringBuf sessionName, bool read, const TMessageCounter& counter) {
             TStringBuf readOrWrite = read ? "read" : "write";
 
-            sj.OpenMetric(); 
+            sj.OpenMetric();
             sj.WriteLabels(labelName, sessionName, "mb_dir", readOrWrite, "sensor", "MessageBytes");
             sj.WriteValue(counter.BytesData);
             sj.WriteModeDeriv();
-            sj.CloseMetric(); 
+            sj.CloseMetric();
 
-            sj.OpenMetric(); 
+            sj.OpenMetric();
             sj.WriteLabels(labelName, sessionName, "mb_dir", readOrWrite, "sensor", "MessageCount");
             sj.WriteValue(counter.Count);
             sj.WriteModeDeriv();
-            sj.CloseMetric(); 
+            sj.CloseMetric();
         }
 
-        void WriteSessionStatus(NMonitoring::TDeprecatedJsonWriter& sj, TStringBuf sessionName, bool client, 
+        void WriteSessionStatus(NMonitoring::TDeprecatedJsonWriter& sj, TStringBuf sessionName, bool client,
                                 TBusSession* session) {
             TStringBuf labelName = client ? "mb_client_session" : "mb_server_session";
 
             auto status = session->GetStatusRecordInternal();
 
-            sj.OpenMetric(); 
+            sj.OpenMetric();
             sj.WriteLabels(labelName, sessionName, "sensor", "InFlightCount");
             sj.WriteValue(status.Status.InFlightCount);
-            sj.CloseMetric(); 
+            sj.CloseMetric();
 
-            sj.OpenMetric(); 
+            sj.OpenMetric();
             sj.WriteLabels(labelName, sessionName, "sensor", "InFlightSize");
             sj.WriteValue(status.Status.InFlightSize);
-            sj.CloseMetric(); 
+            sj.CloseMetric();
 
-            sj.OpenMetric(); 
+            sj.OpenMetric();
             sj.WriteLabels(labelName, sessionName, "sensor", "SendQueueSize");
             sj.WriteValue(status.ConnectionStatusSummary.WriterStatus.SendQueueSize);
-            sj.CloseMetric(); 
+            sj.CloseMetric();
 
             if (client) {
-                sj.OpenMetric(); 
+                sj.OpenMetric();
                 sj.WriteLabels(labelName, sessionName, "sensor", "AckMessagesSize");
                 sj.WriteValue(status.ConnectionStatusSummary.WriterStatus.AckMessagesSize);
-                sj.CloseMetric(); 
+                sj.CloseMetric();
             }
 
             WriteMessageCounterSensors(sj, labelName, sessionName, false,
@@ -686,10 +686,10 @@ struct TBusWww::TImpl {
             Y_UNUSED(ss);
             bool all = q == "" && cs == "" && ss == "";
 
-            NMonitoring::TDeprecatedJsonWriter sj(&Os); 
+            NMonitoring::TDeprecatedJsonWriter sj(&Os);
 
             sj.OpenDocument();
-            sj.OpenMetrics(); 
+            sj.OpenMetrics();
 
             for (unsigned i = 0; i < Outer->Queues.size(); ++i) {
                 TString queueName = Outer->Queues.Entries[i].first;
@@ -716,7 +716,7 @@ struct TBusWww::TImpl {
                 }
             }
 
-            sj.CloseMetrics(); 
+            sj.CloseMetrics();
             sj.CloseDocument();
         }
 

@@ -5,7 +5,7 @@
 #include <ydb/core/protos/tx.pb.h>
 
 namespace NKikimr {
-IActor* CreateTxAllocator(const TActorId &tablet, TTabletStorageInfo *info); 
+IActor* CreateTxAllocator(const TActorId &tablet, TTabletStorageInfo *info);
 }
 
 namespace NKikimr {

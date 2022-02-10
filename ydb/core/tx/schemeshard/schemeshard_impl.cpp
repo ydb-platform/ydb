@@ -4400,7 +4400,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActor
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
     const auto tableId = TTabletId(ev->Get()->Record.GetOrigin());
 
-    TActorId ackTo = ev->Get()->GetSource(); 
+    TActorId ackTo = ev->Get()->GetSource();
 
     if (!Operations.contains(txId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -4533,7 +4533,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
 
 void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
     const auto tabletId = TTabletId(ev->Get()->TabletId);
-    const TActorId clientId = ev->Get()->ClientId; 
+    const TActorId clientId = ev->Get()->ClientId;
 
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Handle TEvClientConnected"
@@ -4580,7 +4580,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TAc
 
 void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
     const auto tabletId = TTabletId(ev->Get()->TabletId);
-    const TActorId clientId = ev->Get()->ClientId; 
+    const TActorId clientId = ev->Get()->ClientId;
 
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Client pipe"
@@ -5856,7 +5856,7 @@ TSchemeShard::TDedicatedPipePool::TDedicatedPipePool() {
 void TSchemeShard::TDedicatedPipePool::Create(TIndexBuildId ownerTxId, TTabletId dst, THolder<IEventBase> message, const TActorContext &ctx) {
     Y_VERIFY(!Pipes[ownerTxId].contains(dst));
 
-    TActorId clientId = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, ui64(dst), PipeCfg)); 
+    TActorId clientId = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, ui64(dst), PipeCfg));
 
     Pipes[ownerTxId][dst] = clientId;
     Owners[clientId] = TOwnerRec(ownerTxId, dst);
@@ -5873,7 +5873,7 @@ void TSchemeShard::TDedicatedPipePool::Close(TIndexBuildId ownerTxId, TTabletId 
         return;
     }
 
-    TActorId actorId = Pipes.at(ownerTxId).at(dst); 
+    TActorId actorId = Pipes.at(ownerTxId).at(dst);
     NTabletPipe::CloseClient(ctx, actorId);
 
     Owners.erase(actorId);

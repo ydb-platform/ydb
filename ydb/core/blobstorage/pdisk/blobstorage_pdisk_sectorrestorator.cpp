@@ -7,7 +7,7 @@ namespace NPDisk {
 
 TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,
         const bool isErasureEncode, const TDiskFormat &format,
-        TActorSystem *actorSystem, const TActorId pDiskActorId, ui32 pDiskId, TPDiskMon *mon, 
+        TActorSystem *actorSystem, const TActorId pDiskActorId, ui32 pDiskId, TPDiskMon *mon,
         TBufferPool *bufferPool)
     : IsTrippleCopy(isTrippleCopy)
     , ErasureDataParts(erasureDataParts)

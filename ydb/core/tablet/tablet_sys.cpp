@@ -47,14 +47,14 @@ ui64 TTablet::TabletID() const {
 void TTablet::NextFollowerAttempt() {
     const ui32 node = FollowerInfo.KnownLeaderID.NodeId();
     if (node && node != SelfId().NodeId()) {
-        const TActorId proxy = TActivationContext::InterconnectProxy(node); 
+        const TActorId proxy = TActivationContext::InterconnectProxy(node);
         Send(proxy, new TEvents::TEvUnsubscribe);
     }
     FollowerInfo.NextAttempt();
 }
 
 void TTablet::ReportTabletStateChange(ETabletState state) {
-    const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()); 
+    const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
     if (state == TTabletStateInfo::Created || state == TTabletStateInfo::ResolveLeader) {
         Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, Info, StateStorageInfo.KnownGeneration, Leader));
     } else {
@@ -91,7 +91,7 @@ void TTablet::TabletBlockBlobStorage() {
     Y_VERIFY(Info);
 
     IActor * const x = CreateTabletReqBlockBlobStorage(SelfId(), Info.Get(), StateStorageInfo.KnownGeneration - 1, false);
-    TActorId newActorId = Register(x); 
+    TActorId newActorId = Register(x);
 
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBlockBlobStorage>(newActorId, StateStorageInfo.KnownGeneration));
@@ -356,7 +356,7 @@ void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
         return;
     }
 
-    RebuildGraphRequest = TActorId(); // check consistency?? 
+    RebuildGraphRequest = TActorId(); // check consistency??
     TEvTabletBase::TEvRebuildGraphResult *msg = ev->Get();
     BLOG_TRACE("Follower received rebuild history result Status# " << msg->Status);
 
@@ -479,7 +479,7 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
         // Drop currently running graph rebuild request
         if (RebuildGraphRequest) {
             Send(RebuildGraphRequest, new TEvents::TEvPoisonPill());
-            RebuildGraphRequest = TActorId(); 
+            RebuildGraphRequest = TActorId();
         }
 
         if (!UserTablet) {
@@ -537,7 +537,7 @@ void TTablet::HandleByFollower(TEvTablet::TEvPromoteToLeader::TPtr &ev) {
 
     if (RebuildGraphRequest) {
         Send(RebuildGraphRequest, new TEvents::TEvPoisonPill());
-        RebuildGraphRequest = TActorId(); 
+        RebuildGraphRequest = TActorId();
     }
 
     // setup start info
@@ -939,7 +939,7 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
     if (ev->Cookie != 0) // remains from follower past
         return;
 
-    RebuildGraphRequest = TActorId(); // check consistency?? 
+    RebuildGraphRequest = TActorId(); // check consistency??
 
     TEvTabletBase::TEvRebuildGraphResult *msg = ev->Get();
     if (IntrospectionTrace) {
@@ -1028,7 +1028,7 @@ TTablet::TLogEntry* TTablet::MakeLogEntry(TEvTablet::TCommitInfo &commitInfo, NK
     Graph.Index[step] = entry;
     entry->IsSnapshot = commitInfo.IsSnapshot || commitInfo.IsTotalSnapshot;
     entry->IsTotalSnapshot = commitInfo.IsTotalSnapshot;
-    entry->Source = TActorId(); 
+    entry->Source = TActorId();
 
     for (ui32 dependsOn : commitInfo.DependsOn) {
         TGraph::TIndex::iterator it = Graph.Index.find(dependsOn);
@@ -1840,7 +1840,7 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     Y_VERIFY(TTabletTypes::TYPE_INVALID != info->TabletType);
 }
 
-TAutoPtr<IEventHandle> TTablet::AfterRegister(const TActorId &self, const TActorId& parentId) { 
+TAutoPtr<IEventHandle> TTablet::AfterRegister(const TActorId &self, const TActorId& parentId) {
     Y_UNUSED(parentId);
     return new IEventHandle(self, self, new TEvents::TEvBootstrap());
 }
@@ -1914,15 +1914,15 @@ void TTablet::ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorI
     TActivationContext::Register(CreateTabletReqWriteLog(owner, logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticDefault, info));
 }
 
-TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, TActorIdentity owner) { 
+TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, TActorIdentity owner) {
     return TActivationContext::Register(Op(owner, info), owner, MailboxType, PoolId);
 }
 
-TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, const TActorContext &ctx) { 
+TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, const TActorContext &ctx) {
     return Apply(info, TActorIdentity(ctx.SelfID));
 }
 
-TActorId TTabletSetupInfo::Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx, 
+TActorId TTabletSetupInfo::Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                   ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
     return ctx.ExecutorThread.RegisterActor(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
@@ -1934,7 +1934,7 @@ TActorId TTabletSetupInfo::Follower(TTabletStorageInfo *info, const TActorId &la
                                             TabletMailboxType, TabletPoolId);
 }
 
-IActor* CreateTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo, 
+IActor* CreateTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,
                      ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
     return new TTablet(launcher, info, setupInfo, true, suggestedGeneration, 0, profiles, txCacheQuota);
 }
@@ -1945,7 +1945,7 @@ IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info,
 }
 
 void TTablet::SendIntrospectionData() {
-    const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()); 
+    const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
     Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvIntrospectionData(TabletID(), IntrospectionTrace.Release()));
     IntrospectionTrace.Reset(NTracing::CreateTrace(NTracing::ITrace::TypeSysTabletBootstrap));
 }

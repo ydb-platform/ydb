@@ -63,7 +63,7 @@ private:
     }
 
     void HandleUserCreated(TSqsEvents::TEvUserCreated::TPtr& ev) {
-        SchemaActor = TActorId(); 
+        SchemaActor = TActorId();
         if (ev->Get()->Success) {
         } else {
             MakeError(Response_.MutableCreateUser(), NErrors::INTERNAL_FAILURE);
@@ -75,7 +75,7 @@ private:
     void PassAway() override {
         if (SchemaActor) {
             Send(SchemaActor, new TEvPoisonPill());
-            SchemaActor = TActorId(); 
+            SchemaActor = TActorId();
         }
         TActionActor<TCreateUserActor>::PassAway();
     }
@@ -85,7 +85,7 @@ private:
     }
 
 private:
-    TActorId SchemaActor; 
+    TActorId SchemaActor;
 };
 
 IActor* CreateCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

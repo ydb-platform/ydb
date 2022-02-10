@@ -118,14 +118,14 @@ namespace NHive {
 
 struct TCompleteNotifications {
     TVector<THolder<IEventHandle>> Notifications;
-    TActorId SelfID; 
+    TActorId SelfID;
 
-    void Reset(const TActorId &selfId) { 
+    void Reset(const TActorId &selfId) {
         Notifications.clear();
         SelfID = selfId;
     }
 
-    void Send(const TActorId &recipient, IEventBase *ev, ui32 flags = 0, ui64 cookie = 0) { 
+    void Send(const TActorId &recipient, IEventBase *ev, ui32 flags = 0, ui64 cookie = 0) {
         Notifications.emplace_back(new IEventHandle(recipient, SelfID, ev, flags, cookie));
     }
 
@@ -239,7 +239,7 @@ protected:
 
     void StartHiveBalancer(int maxMovements = 0, bool recheckOnFinish = false, const std::vector<TNodeId>& filterNodeIds = {});
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
-    void StartHiveFill(TNodeId nodeId, const TActorId& initiator); 
+    void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
     ITransaction* CreateDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev);
@@ -249,11 +249,11 @@ protected:
     ITransaction* CreateRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId);
     ITransaction* CreateInitScheme();
-    ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie); 
-    ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie); 
+    ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie);
+    ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateLoadEverything();
-    ITransaction* CreateRegisterNode(const TActorId& local, NKikimrLocal::TEvRegisterNode rec); 
-    ITransaction* CreateStatus(const TActorId& local, NKikimrLocal::TEvStatus rec); 
+    ITransaction* CreateRegisterNode(const TActorId& local, NKikimrLocal::TEvRegisterNode rec);
+    ITransaction* CreateStatus(const TActorId& local, NKikimrLocal::TEvStatus rec);
     ITransaction* CreateUpdateTabletStatus(TTabletId tabletId,
                                            const TActorId &local,
                                            ui32 generation,
@@ -264,14 +264,14 @@ protected:
     ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local);
     ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups = {});
     ITransaction* CreateCheckTablets();
-    ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec); 
-    ITransaction* CreateStopTablet(TTabletId tabletId, const TActorId& actorToNotify); 
+    ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
+    ITransaction* CreateStopTablet(TTabletId tabletId, const TActorId& actorToNotify);
     ITransaction* CreateResumeTablet(TTabletId tabletId, const TActorId& actorToNotify);
-    ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false); 
+    ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
     ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
-    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup); 
-    ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie); 
-    ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie); 
+    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
+    ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
+    ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo);
     ITransaction* CreateRequestTabletSequence(TEvHive::TEvRequestTabletIdSequence::TPtr event);
     ITransaction* CreateResponseTabletSequence(TEvHive::TEvResponseTabletIdSequence::TPtr event);
@@ -291,8 +291,8 @@ public:
     TDomainsView DomainsView;
 
 protected:
-    TActorId BSControllerPipeClient; 
-    TActorId RootHivePipeClient; 
+    TActorId BSControllerPipeClient;
+    TActorId RootHivePipeClient;
     ui64 HiveUid; // Hive Personal Identifier - identifies a unique individual hive
     ui32 HiveDomain;
     TTabletId RootHiveId;
@@ -367,7 +367,7 @@ protected:
     i32 MigrationProgress = 0;
     NKikimrHive::TEvSeizeTablets MigrationFilter;
 
-    TActorId ResponsivenessActorID; 
+    TActorId ResponsivenessActorID;
     TTabletResponsivenessPinger *ResponsivenessPinger;
     // remove after upgrade to sub hives
     ui64 NextTabletId = 0x10000;
@@ -391,7 +391,7 @@ protected:
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
-        TActorId Sender; 
+        TActorId Sender;
         ui64 Cookie;
     };
 
@@ -507,7 +507,7 @@ public:
         return NKikimrServices::TActivity::HIVE_ACTOR;
     }
 
-    THive(TTabletStorageInfo *info, const TActorId &tablet); 
+    THive(TTabletStorageInfo *info, const TActorId &tablet);
 
 protected:
     STATEFN(StateInit);
@@ -600,16 +600,16 @@ public:
             NKikimr::NHive::TResourceRawValues deltaRaw,
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
     static void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
-    void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external); 
+    void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
     ui32 GetRegisteredDataCenters();
     void UpdateRegisteredDataCenters(TDataCenterId dataCenterId);
-    void SendPing(const TActorId& local, TNodeId id); 
-    void SendReconnect(const TActorId& local); 
+    void SendPing(const TActorId& local, TNodeId id);
+    void SendReconnect(const TActorId& local);
     static THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
     void KickTablet(const TTabletInfo& tablet);
-    void StopTablet(const TActorId& local, const TTabletInfo& tablet); 
-    void StopTablet(const TActorId& local, TFullTabletId tabletId); 
+    void StopTablet(const TActorId& local, const TTabletInfo& tablet);
+    void StopTablet(const TActorId& local, TFullTabletId tabletId);
     void RunProcessBootQueue();
 
     TTabletMetricsAggregates DefaultResourceMetricsAggregates;

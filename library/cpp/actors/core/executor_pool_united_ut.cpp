@@ -37,7 +37,7 @@ private:
 
 private:
     TAtomic Counter;
-    TActorId Receiver; 
+    TActorId Receiver;
 
     std::function<void(void)> Action;
 

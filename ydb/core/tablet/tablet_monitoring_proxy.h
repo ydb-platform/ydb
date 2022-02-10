@@ -23,9 +23,9 @@ struct TTabletMonitoringProxyConfig {
 };
 
 //
-inline TActorId MakeTabletMonitoringProxyID(ui32 node = 0) { 
+inline TActorId MakeTabletMonitoringProxyID(ui32 node = 0) {
     char x[12] = {'t','a','b','l','m','o','n','p','r','o','x','y'};
-    return TActorId(node, TStringBuf(x, 12)); 
+    return TActorId(node, TStringBuf(x, 12));
 }
 
 //

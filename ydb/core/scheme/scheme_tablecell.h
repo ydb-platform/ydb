@@ -1,9 +1,9 @@
 #pragma once
- 
+
 #include "defs.h"
-#include "scheme_type_id.h" 
+#include "scheme_type_id.h"
 #include "scheme_type_order.h"
-#include "scheme_types_defs.h" 
+#include "scheme_types_defs.h"
 
 #include <util/generic/hash.h>
 #include <util/system/unaligned_mem.h>
@@ -129,7 +129,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
     switch (type.GetTypeId()) {
 
 #define SIMPLE_TYPE_SWITCH(typeEnum, castType)      \
-    case NKikimr::NScheme::NTypeIds::typeEnum:      \ 
+    case NKikimr::NScheme::NTypeIds::typeEnum:      \
     {                                               \
         Y_VERIFY_DEBUG(a.IsInline());                      \
         Y_VERIFY_DEBUG(b.IsInline());                      \

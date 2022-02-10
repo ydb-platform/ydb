@@ -1,7 +1,7 @@
 #pragma once
- 
-#include "mkql_keys.h" 
- 
+
+#include "mkql_keys.h"
+
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>

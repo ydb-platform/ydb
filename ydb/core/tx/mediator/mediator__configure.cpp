@@ -7,14 +7,14 @@ using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
 
 struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
-    TActorId AckTo; 
+    TActorId AckTo;
     ui64 Version;
     TVector<TCoordinatorId> Coordinators;
     ui32 TimeCastBuketsPerMediator;
     TAutoPtr<TEvSubDomain::TEvConfigureStatus> Respond;
     bool ConfigurationApplied;
 
-    TTxConfigure(TSelf *mediator, TActorId ackTo, ui64 version, const TVector<TCoordinatorId>& coordinators, ui32 timeCastBuckets) 
+    TTxConfigure(TSelf *mediator, TActorId ackTo, ui64 version, const TVector<TCoordinatorId>& coordinators, ui32 timeCastBuckets)
         : TBase(mediator)
         , AckTo(ackTo)
         , Version(version)
@@ -83,7 +83,7 @@ struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
     }
 };
 
-ITransaction* TTxMediator::CreateTxConfigure(TActorId ackTo, ui64 version, const TVector<TCoordinatorId> &coordinators, ui32 timeCastBuckets) { 
+ITransaction* TTxMediator::CreateTxConfigure(TActorId ackTo, ui64 version, const TVector<TCoordinatorId> &coordinators, ui32 timeCastBuckets) {
     return new TTxMediator::TTxConfigure(this, ackTo, version, coordinators, timeCastBuckets);
 }
 

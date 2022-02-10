@@ -1928,14 +1928,14 @@ public:
         return SessionPool_.GetActiveSessions();
     }
 
-    i64 GetActiveSessionsLimit() const { 
-        return SessionPool_.GetActiveSessionsLimit(); 
-    } 
- 
-    i64 GetCurrentPoolSize() const { 
-        return SessionPool_.GetCurrentPoolSize(); 
-    } 
- 
+    i64 GetActiveSessionsLimit() const {
+        return SessionPool_.GetActiveSessionsLimit();
+    }
+
+    i64 GetCurrentPoolSize() const {
+        return SessionPool_.GetCurrentPoolSize();
+    }
+
     TAsyncCreateSessionResult CreateSession(const TCreateSessionSettings& settings, bool standalone,
         TString preferedLocation = TString())
     {
@@ -3204,14 +3204,14 @@ i64 TTableClient::GetActiveSessionCount() const {
     return Impl_->GetActiveSessionCount();
 }
 
-i64 TTableClient::GetActiveSessionsLimit() const { 
-    return Impl_->GetActiveSessionsLimit(); 
-} 
- 
-i64 TTableClient::GetCurrentPoolSize() const { 
-    return Impl_->GetCurrentPoolSize(); 
-} 
- 
+i64 TTableClient::GetActiveSessionsLimit() const {
+    return Impl_->GetActiveSessionsLimit();
+}
+
+i64 TTableClient::GetCurrentPoolSize() const {
+    return Impl_->GetCurrentPoolSize();
+}
+
 TTableBuilder TTableClient::GetTableBuilder() {
     return TTableBuilder();
 }
@@ -3332,10 +3332,10 @@ protected:
                 return self->Promise.SetValue(status);
         }
     }
- 
-    static void HandleException(TRetryContextPtr self, std::exception_ptr e) { 
-        self->Promise.SetException(e); 
-    } 
+
+    static void HandleException(TRetryContextPtr self, std::exception_ptr e) {
+        self->Promise.SetException(e);
+    }
 };
 
 class TRetryOperationWithSession : public TRetryOperationContext {
@@ -3358,17 +3358,17 @@ public:
             TableClient.GetSession(
                 TCreateSessionSettings().ClientTimeout(Settings.GetSessionClientTimeout_)).Subscribe(
                 [self](const TAsyncCreateSessionResult& resultFuture) {
-                    try { 
-                        auto& result = resultFuture.GetValue(); 
-                        if (!result.IsSuccess()) { 
-                            return HandleStatus(self, result); 
-                        } 
- 
-                        auto* myself = dynamic_cast<TRetryOperationWithSession*>(self.Get()); 
-                        myself->Session = result.GetSession(); 
-                        myself->DoRunOp(self); 
-                    } catch (...) { 
-                        return HandleException(self, std::current_exception()); 
+                    try {
+                        auto& result = resultFuture.GetValue();
+                        if (!result.IsSuccess()) {
+                            return HandleStatus(self, result);
+                        }
+
+                        auto* myself = dynamic_cast<TRetryOperationWithSession*>(self.Get());
+                        myself->Session = result.GetSession();
+                        myself->DoRunOp(self);
+                    } catch (...) {
+                        return HandleException(self, std::current_exception());
                     }
             });
         } else {
@@ -3383,11 +3383,11 @@ private:
 
     void DoRunOp(TRetryContextPtr self) {
         Operation(Session.GetRef()).Subscribe([self](const TAsyncStatus& result) {
-            try { 
-                return HandleStatus(self, result.GetValue()); 
-            } catch (...) { 
-                return HandleException(self, std::current_exception()); 
-            } 
+            try {
+                return HandleStatus(self, result.GetValue());
+            } catch (...) {
+                return HandleException(self, std::current_exception());
+            }
         });
     }
 };
@@ -3414,11 +3414,11 @@ public:
     void Execute() override {
         TRetryContextPtr self(this);
         Operation(TableClient).Subscribe([self](const TAsyncStatus& result) {
-            try { 
-                return HandleStatus(self, result.GetValue()); 
-            } catch (...) { 
-                return HandleException(self, std::current_exception()); 
-            } 
+            try {
+                return HandleStatus(self, result.GetValue());
+            } catch (...) {
+                return HandleException(self, std::current_exception());
+            }
         });
     }
 };

@@ -18,11 +18,11 @@ namespace NBlockIO {
         struct TLoaded; /* hack for fwd decl of BS interface units */
 
     public:
-        TBlockIO(TActorId service, ui64 cookie); 
+        TBlockIO(TActorId service, ui64 cookie);
         ~TBlockIO();
 
     private:
-        void Registered(TActorSystem*, const TActorId&) override; 
+        void Registered(TActorSystem*, const TActorId&) override;
         void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx);
         void Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch>) noexcept;
         void Dispatch() noexcept;
@@ -30,13 +30,13 @@ namespace NBlockIO {
         void Terminate(EStatus code) noexcept;
 
     private:
-        const TActorId Service; 
+        const TActorId Service;
         const ui64 Cookie = Max<ui64>();
         TAutoPtr<NUtil::ILogger> Logger;
 
         /*_ immutable request settings  */
 
-        TActorId Owner; 
+        TActorId Owner;
         EPriority Priority = EPriority::None;
         TAutoPtr<NPageCollection::TFetch> Origin;
 
@@ -60,7 +60,7 @@ namespace NBlockIO {
     };
 
     template<typename ... TArgs>
-    inline void Once(NActors::IActorOps *ops, TActorId service, 
+    inline void Once(NActors::IActorOps *ops, TActorId service,
                         ui64 cookie, TArgs&& ... args) noexcept
     {
         auto self = ops->Register(new TBlockIO(service, cookie));

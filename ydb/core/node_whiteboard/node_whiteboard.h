@@ -400,9 +400,9 @@ struct TEvWhiteboard{
     struct TEvSignalBodyResponse : TEventPB<TEvSignalBodyResponse, NKikimrWhiteboard::TEvSignalBodyResponse, EvSignalBodyResponse> {};
 };
 
-inline TActorId MakeNodeWhiteboardServiceId(ui32 node) { 
+inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {
     char x[12] = {'n','o','d','e','w','h','i','t','e','b','o','a'};
-    return TActorId(node, TStringBuf(x, 12)); 
+    return TActorId(node, TStringBuf(x, 12));
 }
 
 IActor* CreateNodeWhiteboardService();

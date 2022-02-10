@@ -91,7 +91,7 @@ public:
         return Server.GrpcPort;
     }
 
-    NGrpc::TServerOptions& GetGrpcServerOptions() { 
+    NGrpc::TServerOptions& GetGrpcServerOptions() {
         return Server.GrpcServerOptions;
     }
 

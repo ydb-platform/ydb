@@ -17,7 +17,7 @@ namespace NKikimr {
         TIntrusivePtr<TDb> Db;
         TIntrusivePtr<THullCtx> HullCtx;
         const TVDiskID SelfVDiskId;
-        const TActorId ParentId; 
+        const TActorId ParentId;
         std::shared_ptr<THull> Hull;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         TEvBlobStorage::TEvVSyncFull::TPtr Ev;
@@ -42,7 +42,7 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             IFaceMonGroup->SyncFullMsgs()++;
 
-            TActorId recipient = Ev->Sender; 
+            TActorId recipient = Ev->Sender;
             const ui64 cookie = Ev->Cookie;
             TSyncState clientSyncState(SyncStateFromSyncState(Record.GetSyncState()));
 
@@ -97,7 +97,7 @@ namespace NKikimr {
             }
 
             // parse stage and keys
-            TActorId recipient = Ev->Sender; 
+            TActorId recipient = Ev->Sender;
             const NKikimrBlobStorage::ESyncFullStage stage = Record.GetStage();
             const TLogoBlobID logoBlobFrom = LogoBlobIDFromLogoBlobID(Record.GetLogoBlobFrom());
             const ui64 blockTabletFrom = Record.GetBlockTabletFrom();
@@ -158,7 +158,7 @@ namespace NKikimr {
         TVSyncFullHandler(const TIntrusivePtr<TDb> &db,
                           const TIntrusivePtr<THullCtx> &hullCtx,
                           const TVDiskID &selfVDiskId,
-                          const TActorId &parentId, 
+                          const TActorId &parentId,
                           const std::shared_ptr<THull> &hull,
                           const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                           TEvBlobStorage::TEvVSyncFull::TPtr &ev,
@@ -190,7 +190,7 @@ namespace NKikimr {
     IActor *CreateHullSyncFullHandler(const TIntrusivePtr<TDb> &db,
                                       const TIntrusivePtr<THullCtx> &hullCtx,
                                       const TVDiskID &selfVDiskId,
-                                      const TActorId &parentId, 
+                                      const TActorId &parentId,
                                       const std::shared_ptr<THull> &hull,
                                       const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                                       TEvBlobStorage::TEvVSyncFull::TPtr &ev,

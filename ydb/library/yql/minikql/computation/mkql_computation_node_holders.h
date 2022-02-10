@@ -1,14 +1,14 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/library/yql/utils/hash.h>
 
 #include "mkql_computation_node_impl.h"
 #include "mkql_computation_node_list.h"
- 
+
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/minikql/compact_hash.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
- 
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
 
 #include <util/generic/maybe.h>
@@ -17,7 +17,7 @@
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
- 
+
 #ifndef MKQL_DISABLE_CODEGEN
 namespace llvm {
     class Value;
@@ -25,11 +25,11 @@ namespace llvm {
 }
 #endif
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-class TMemoryUsageInfo; 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
+class TMemoryUsageInfo;
+
 #ifndef MKQL_DISABLE_CODEGEN
 struct TCodegenContext;
 #endif
@@ -122,16 +122,16 @@ struct TValueEqual {
     TValueEqual(const TKeyTypes& types, bool isTuple)
         : Types(&types)
         , IsTuple(isTuple)
-    {} 
- 
+    {}
+
     bool operator()(const NUdf::TUnboxedValue& left, const NUdf::TUnboxedValue& right) const {
         return CompareKeys(left, right, *Types, IsTuple) == 0;
-    } 
- 
+    }
+
     const TKeyTypes* Types;
     bool IsTuple;
-}; 
- 
+};
+
 struct TValueLess {
     TValueLess(const TKeyTypes& types, bool isTuple)
         : Types(&types)
@@ -148,12 +148,12 @@ struct TValueLess {
 
 constexpr NUdf::THashType HashOfNull = ~0ULL;
 
-struct TValueHasher { 
+struct TValueHasher {
     TValueHasher(const TKeyTypes& types, bool isTuple)
         : Types(&types)
         , IsTuple(isTuple)
-    {} 
- 
+    {}
+
     NUdf::THashType operator()(const NUdf::TUnboxedValuePod& value) const {
         if (!value)
             return HashOfNull;
@@ -177,12 +177,12 @@ struct TValueHasher {
             return hash;
         }
         return NUdf::GetValueHash((*Types).front().first, value);
-    } 
- 
+    }
+
     const TKeyTypes* Types;
     bool IsTuple;
-}; 
- 
+};
+
 template<typename T>
 struct TFloatHash : private std::hash<T> {
     std::size_t operator()(T value) const {
@@ -204,7 +204,7 @@ template <typename T>
 using TMyEquals = std::conditional_t<std::is_floating_point<T>::value, TFloatEquals<T>, std::equal_to<T>>;
 
 constexpr float COMPACT_HASH_MAX_LOAD_FACTOR = 1.2f;
- 
+
 using TValuesDictHashMap = std::unordered_map<
         NUdf::TUnboxedValue, NUdf::TUnboxedValue,
         NYql::TVaryingHash<NUdf::TUnboxedValue, TValueHasher>, TValueEqual,
@@ -295,32 +295,32 @@ using THashedDictFiller = std::function<void(TValuesDictHashMap&)>;
 using THashedSetFiller = std::function<void(TValuesDictHashSet&)>;
 using TSortedDictFiller = std::function<void(TKeyPayloadPairVector&)>;
 using TSortedSetFiller = std::function<void(TUnboxedValueVector&)>;
- 
-enum class EDictSortMode { 
-    RequiresSorting, 
-    SortedUniqueAscending, 
-    SortedUniqueDescening 
-}; 
- 
-class TTypeHolder: public TComputationValue<TTypeHolder> { 
-public: 
-    TTypeHolder(TMemoryUsageInfo* memInfo, TType* type) 
-        : TComputationValue(memInfo) 
-        , Type(type) 
+
+enum class EDictSortMode {
+    RequiresSorting,
+    SortedUniqueAscending,
+    SortedUniqueDescening
+};
+
+class TTypeHolder: public TComputationValue<TTypeHolder> {
+public:
+    TTypeHolder(TMemoryUsageInfo* memInfo, TType* type)
+        : TComputationValue(memInfo)
+        , Type(type)
     {}
- 
+
     NUdf::TStringRef GetResourceTag() const override {
         return NUdf::TStringRef::Of("TypeHolder");
     }
 
     void* GetResource() override {
-        return Type; 
-    } 
- 
+        return Type;
+    }
+
 private:
-    TType* const Type; 
-}; 
- 
+    TType* const Type;
+};
+
 class TArrowBlock: public TComputationValue<TArrowBlock> {
 public:
     explicit TArrowBlock(TMemoryUsageInfo* memInfo, arrow::Datum&& datum)
@@ -349,26 +349,26 @@ private:
     arrow::Datum Datum_;
 };
 
-////////////////////////////////////////////////////////////////////////////// 
-// THolderFactory 
-////////////////////////////////////////////////////////////////////////////// 
-class THolderFactory: private TNonCopyable 
-{ 
-public: 
+//////////////////////////////////////////////////////////////////////////////
+// THolderFactory
+//////////////////////////////////////////////////////////////////////////////
+class THolderFactory: private TNonCopyable
+{
+public:
     THolderFactory(
         TAllocState& allocState,
         TMemoryUsageInfo& memInfo,
         const IFunctionRegistry* functionRegistry = nullptr);
- 
-    template <typename T, typename... TArgs> 
+
+    template <typename T, typename... TArgs>
     NUdf::TUnboxedValuePod Create(TArgs&&... args) const {
         return NUdf::TUnboxedValuePod(AllocateOn<T>(CurrentAllocState, &MemInfo, std::forward<TArgs>(args)...));
-    } 
- 
+    }
+
     NUdf::TUnboxedValuePod CreateTypeHolder(TType* type) const;
- 
+
     NUdf::TUnboxedValuePod CreateDirectListHolder(TDefaultListRepresentation&& items) const;
- 
+
     NUdf::TUnboxedValuePod CreateDirectArrayHolder(ui32 size, NUdf::TUnboxedValue*& itemsPtr) const;
 
     NUdf::TFlatDataBlockPtr CreateFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const;
@@ -404,20 +404,20 @@ public:
             TType* encodedType) const;
 
     NUdf::TUnboxedValuePod CreateDirectSortedDictHolder(
-            TSortedDictFiller filler, 
+            TSortedDictFiller filler,
             const TKeyTypes& types,
             bool isTuple,
-            EDictSortMode mode, 
+            EDictSortMode mode,
             bool eagerFill,
             TType* encodedType) const;
- 
+
     NUdf::TUnboxedValuePod CreateDirectHashedDictHolder(
-            THashedDictFiller filler, 
+            THashedDictFiller filler,
             const TKeyTypes& types,
             bool isTuple,
             bool eagerFill,
             TType* encodedType) const;
- 
+
     NUdf::TUnboxedValuePod CreateDirectHashedSetHolder(
         THashedSetFiller filler,
         const TKeyTypes& types,
@@ -462,12 +462,12 @@ public:
 
     NUdf::TUnboxedValuePod Cloned(const NUdf::TUnboxedValuePod& it) const;
     NUdf::TUnboxedValuePod Reversed(const NUdf::TUnboxedValuePod& it) const;
- 
+
     NUdf::TUnboxedValuePod CreateLimitedList(
             NUdf::IBoxedValuePtr&& parent,
-            TMaybe<ui64> skip, TMaybe<ui64> take, 
-            TMaybe<ui64> knownLength) const; 
- 
+            TMaybe<ui64> skip, TMaybe<ui64> take,
+            TMaybe<ui64> knownLength) const;
+
     NUdf::TUnboxedValuePod ReverseList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
     NUdf::TUnboxedValuePod SkipList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
     NUdf::TUnboxedValuePod TakeList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
@@ -488,10 +488,10 @@ public:
 
     NUdf::TUnboxedValuePod CloneArray(const NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& itemsPtr) const;
 
-    TMemoryUsageInfo& GetMemInfo() const { 
-        return MemInfo; 
-    } 
- 
+    TMemoryUsageInfo& GetMemInfo() const {
+        return MemInfo;
+    }
+
     NUdf::TUnboxedValuePod GetEmptyContainer() const {
         return static_cast<const NUdf::TUnboxedValuePod&>(EmptyContainer);
     }
@@ -518,13 +518,13 @@ public:
     NUdf::TUnboxedValuePod ExtendList(NUdf::TUnboxedValue* data, ui64 size) const;
     NUdf::TUnboxedValuePod ExtendStream(NUdf::TUnboxedValue* data, ui64 size) const;
 
-private: 
+private:
     TAllocState* const CurrentAllocState;
-    TMemoryUsageInfo& MemInfo; 
+    TMemoryUsageInfo& MemInfo;
     const IFunctionRegistry* const FunctionRegistry;
     const NUdf::TUnboxedValue EmptyContainer;
-}; 
- 
+};
+
 constexpr const ui32 STEP_FOR_RSS_CHECK = 100U;
 
 // Returns true if current usage delta exceeds the memory limit
@@ -542,35 +542,35 @@ inline bool TComputationContext::CheckAdjustedMemLimit(ui64 memLimit, ui64 initM
     return currentMemUsage * UsageAdjustor >= initMemUsage + memLimit;
 }
 
-////////////////////////////////////////////////////////////////////////////// 
-// TNodeFactory 
-////////////////////////////////////////////////////////////////////////////// 
-class TNodeFactory: private TNonCopyable 
-{ 
-public: 
+//////////////////////////////////////////////////////////////////////////////
+// TNodeFactory
+//////////////////////////////////////////////////////////////////////////////
+class TNodeFactory: private TNonCopyable
+{
+public:
     TNodeFactory(TMemoryUsageInfo& memInfo, TComputationMutables& mutables);
- 
+
     IComputationNode* CreateTypeNode(TType* type) const;
- 
+
     IComputationNode* CreateImmutableNode(NUdf::TUnboxedValue&& value) const;
- 
+
     IComputationNode* CreateEmptyNode() const;
- 
+
     IComputationNode* CreateArrayNode(TComputationNodePtrVector&& items) const;
 
-    IComputationNode* CreateOptionalNode(IComputationNode* item) const; 
- 
-    IComputationNode* CreateDictNode( 
+    IComputationNode* CreateOptionalNode(IComputationNode* item) const;
+
+    IComputationNode* CreateDictNode(
             std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
             const TKeyTypes& types, bool isTuple, TType* encodedType) const;
- 
+
     IComputationNode* CreateVariantNode(IComputationNode* item, ui32 index) const;
- 
-private: 
-    TMemoryUsageInfo& MemInfo; 
+
+private:
+    TMemoryUsageInfo& MemInfo;
     TComputationMutables& Mutables;
-}; 
- 
+};
+
 void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded);
 
 struct TContainerCacheOnContext : private TNonCopyable {

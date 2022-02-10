@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TEnumerationTest) {
         runtime.Register(CreateTenantNodeEnumerationPublisher(), 0);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1000));
 
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
         runtime.Register(CreateTenantNodeEnumerationLookup(sender, "/" + DOMAIN1_NAME));
 
         TAutoPtr<IEventHandle> handle;

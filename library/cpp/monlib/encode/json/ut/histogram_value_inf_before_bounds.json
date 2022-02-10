@@ -5,7 +5,7 @@
         "kind":"HIST",
         "labels":
           {
-            "metric":"responseTimeMillis" 
+            "metric":"responseTimeMillis"
           },
         "ts":1509843723,
         "hist":

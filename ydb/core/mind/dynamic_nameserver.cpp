@@ -301,7 +301,7 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
 void TDynamicNameserver::OnPipeDestroyed(ui32 domain,
                                          const TActorContext &ctx)
 {
-    NodeBrokerPipes[domain] = TActorId(); 
+    NodeBrokerPipes[domain] = TActorId();
     PendingRequestAnswered(domain, ctx);
 
     if (EpochUpdates.contains(domain)) {

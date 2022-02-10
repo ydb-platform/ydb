@@ -24,14 +24,14 @@ class TPDisk;
 
 class TCompletionEventSender : public TCompletionAction {
     TPDisk *PDisk;
-    const TActorId Recipient; 
+    const TActorId Recipient;
     THolder<IEventBase> Event;
     NMonitoring::TDynamicCounters::TCounterPtr Counter;
 
 public:
     THolder<TRequestBase> Req;
 
-    TCompletionEventSender(TPDisk *pDisk, const TActorId &recipient, IEventBase *event, 
+    TCompletionEventSender(TPDisk *pDisk, const TActorId &recipient, IEventBase *event,
             NMonitoring::TDynamicCounters::TCounterPtr &counter)
         : PDisk(pDisk)
         , Recipient(recipient)
@@ -39,7 +39,7 @@ public:
         , Counter(counter)
     {}
 
-    TCompletionEventSender(TPDisk *pDisk, const TActorId &recipient, IEventBase *event) 
+    TCompletionEventSender(TPDisk *pDisk, const TActorId &recipient, IEventBase *event)
         : PDisk(pDisk)
         , Recipient(recipient)
         , Event(event)
@@ -66,7 +66,7 @@ public:
 };
 
 class TCompletionChunkWrite : public TCompletionAction {
-    const TActorId Recipient; 
+    const TActorId Recipient;
     THolder<TEvChunkWriteResult> Event;
     TPDiskMon *Mon;
     ui32 PDiskId;

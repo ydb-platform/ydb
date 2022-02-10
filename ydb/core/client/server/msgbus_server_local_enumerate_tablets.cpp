@@ -67,12 +67,12 @@ public:
         }
     }
 
-    TActorId MakeServiceID(const TActorContext &ctx) { 
+    TActorId MakeServiceID(const TActorContext &ctx) {
         auto &domainsInfo = *AppData(ctx)->DomainsInfo;
         auto domainIt = domainsInfo.Domains.find(DomainUid);
         if (domainIt == domainsInfo.Domains.end()) {
             // Report details in CreateErrorReply
-            TActorId invalidId; 
+            TActorId invalidId;
             return invalidId;
         }
         ui32 nodeId = IsNodeIdPresent ? NodeId : ctx.SelfID.NodeId();

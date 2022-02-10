@@ -135,7 +135,7 @@ private:
 
 struct TReadTableRequest : public TThrRefBase {
     struct TQuotaRequest {
-        TActorId Sender; 
+        TActorId Sender;
         ui64 ShardId;
     };
 
@@ -148,8 +148,8 @@ struct TReadTableRequest : public TThrRefBase {
     TString ResponseData;
     ui64 ResponseDataFrom;
     TKeySpace KeySpace;
-    THashMap<ui64, TActorId> ClearanceSenders; 
-    THashMap<ui64, TActorId> StreamingShards; 
+    THashMap<ui64, TActorId> ClearanceSenders;
+    THashMap<ui64, TActorId> StreamingShards;
     TSerializedCellVec FromValues;
     TSerializedCellVec ToValues;
     THolder<TKeyDesc> KeyDesc;
@@ -303,7 +303,7 @@ private:
     TDuration CancelAfter;
     TSchedulerCookieHolder ExecTimeoutCookieHolder;
 
-    TActorId RequestSource; 
+    TActorId RequestSource;
     ui32 TxFlags;
     bool CanUseFollower;
     bool StreamResponse;
@@ -1087,7 +1087,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
         dataTransaction.SetStreamResponse(StreamResponse);
         dataTransaction.SetImmediate(immediate);
         dataTransaction.SetReadOnly(true);
-        ActorIdToProto(SelfId(), dataTransaction.MutableSink()); 
+        ActorIdToProto(SelfId(), dataTransaction.MutableSink());
         auto &tx = *dataTransaction.MutableReadTableTransaction();
         tx.MutableTableId()->SetOwnerId(ReadTableRequest->KeyDesc->TableId.PathId.OwnerId);
         tx.MutableTableId()->SetTableId(ReadTableRequest->KeyDesc->TableId.PathId.LocalPathId);
@@ -1173,7 +1173,7 @@ TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLReque
 void TDataReq::TryToInvalidateTable(TTableId tableId, const TActorContext &ctx) {
     const bool notYetInvalidated = InvalidatedTables.insert(tableId).second;
     if (notYetInvalidated)
-        ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId())); 
+        ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId()));
 }
 
 void TDataReq::MarkShardError(ui64 shardId, TDataReq::TPerTablet &perTablet, bool invalidateDistCache, const TActorContext &ctx) {
@@ -1276,9 +1276,9 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     if (txbody.HasMiniKQLTransaction()) {
         const auto& mkqlTxBody = txbody.GetMiniKQLTransaction();
 
-        const TAppData* appData = AppData(ctx); 
-        const auto functionRegistry = appData->FunctionRegistry; 
- 
+        const TAppData* appData = AppData(ctx);
+        const auto functionRegistry = appData->FunctionRegistry;
+
         if (mkqlTxBody.GetFlatMKQL()) {
             FlatMKQLRequest = new TFlatMKQLRequest;
             FlatMKQLRequest->LlvmRuntime = mkqlTxBody.GetLlvmRuntime();

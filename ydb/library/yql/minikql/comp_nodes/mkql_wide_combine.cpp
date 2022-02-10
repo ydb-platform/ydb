@@ -7,8 +7,8 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/utils/cast.h>
 
-#include <util/string/cast.h> 
- 
+#include <util/string/cast.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 

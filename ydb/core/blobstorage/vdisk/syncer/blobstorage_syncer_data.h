@@ -116,13 +116,13 @@ namespace NKikimr {
 
     private:
         const TString LogPrefix;
-        const TActorId NotifyId; 
+        const TActorId NotifyId;
         TNeighbors Neighbors;
         NSync::TQuorumTracker QuorumTracker;
 
     public:
         TSyncNeighbors(const TString &logPrefix,
-                       const TActorId &notifyId, 
+                       const TActorId &notifyId,
                        const TVDiskIdShort &self,
                        std::shared_ptr<TBlobStorageGroupInfo::TTopology> top);
 
@@ -188,10 +188,10 @@ namespace NKikimr {
     struct TSyncerData : public TThrRefBase {
         TSyncNeighborsPtr Neighbors;
         NSyncer::TLocalSyncerState LocalSyncerState;
-        const TActorId NotifyId; 
+        const TActorId NotifyId;
 
         TSyncerData(const TString &logPrefix,
-                    const TActorId &notifyId, 
+                    const TActorId &notifyId,
                     const TVDiskIdShort &selfVDisk,
                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                     const TString &entryPoint = TString());
@@ -205,7 +205,7 @@ namespace NKikimr {
         // check and cut signature
         static TString WithoutSignature(const TString &entryPoint);
         static bool CheckEntryPoint(const TString &logPrefix,
-                                    const TActorId &notifyId, 
+                                    const TActorId &notifyId,
                                     const TVDiskIdShort &selfVDisk,
                                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                     const TString &entryPoint);

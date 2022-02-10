@@ -1,6 +1,6 @@
 #include "read_balancer.h"
 #include <ydb/core/tablet/tablet_exception.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 namespace NKikimr {
@@ -65,7 +65,7 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
             ++Self->NumActiveParts;
             ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
             ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
-            Self->PartitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1}; 
+            Self->PartitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1};
             if (!partsRowset.Next())
                 return false;
         }
@@ -506,7 +506,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (it == PartitionsInfo.end()) {
             Y_VERIFY(group <= TotalGroups && group > prevGroups || TotalGroups == 0);
             Y_VERIFY(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
-            partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group}; 
+            partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group};
             newPartitions.push_back(std::make_pair(p.GetPartition(), TPartInfo{p.GetTabletId(), group}));
             if (!NoGroupsInBase)
                 newGroups.push_back(std::make_pair(group, p.GetPartition()));
@@ -543,7 +543,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
                 it = p.second.ClientGroupsInfo.find(group);
             }
             it->second.FreePartitions.push_back(part.first);
-            it->second.PartitionsInfo[part.first] = {part.second.TabletId, EPS_FREE, TActorId(), group}; 
+            it->second.PartitionsInfo[part.first] = {part.second.TabletId, EPS_FREE, TActorId(), group};
             it->second.ScheduleBalance(ctx);
         }
     }
@@ -617,7 +617,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
         return;
 
     auto it = TabletPipes.find(tabletId);
-    TActorId pipeClient; 
+    TActorId pipeClient;
     if (it == TabletPipes.end()) {
         NTabletPipe::TClientConfig clientConfig;
         pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
@@ -724,10 +724,10 @@ void TPersQueueReadBalancer::GetACL(const TActorContext& ctx) {
 
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
 {
-    const TActorId& sender = ev->Get()->ClientId; 
+    const TActorId& sender = ev->Get()->ClientId;
     auto it = PipesInfo.find(sender);
     if (it == PipesInfo.end()) {
-        PipesInfo.insert({sender, {"", "", TActorId(), false, 1}}); 
+        PipesInfo.insert({sender, {"", "", TActorId(), false, 1}});
     } else {
         it->second.ServerActors++;
     }
@@ -760,9 +760,9 @@ void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const
 }
 
 void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
-                                                    const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record) { 
+                                                    const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record) {
 
-    TActorId pipe = ActorIdFromProto(record.GetPipeClient()); 
+    TActorId pipe = ActorIdFromProto(record.GetPipeClient());
 
     Y_VERIFY(pipe);
 
@@ -793,7 +793,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
 {
     const auto& record = ev->Get()->Record;
 
-    TActorId pipe = ActorIdFromProto(record.GetPipeClient()); 
+    TActorId pipe = ActorIdFromProto(record.GetPipeClient());
     LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "client " << record.GetClientId() << " register session for pipe " << pipe << " session " << record.GetSession());
 
     Y_VERIFY(!record.GetSession().empty());
@@ -900,7 +900,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
                 auto si = response->Record.AddReadSessions();
                 si->SetSession(s.second.Session);
 
-                ActorIdToProto(s.second.Sender, si->MutableSessionActor()); 
+                ActorIdToProto(s.second.Sender, si->MutableSessionActor());
             }
         }
     }
@@ -968,7 +968,7 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx)
 {
     const auto& record = ev->Get()->Record;
-    TActorId sender = ActorIdFromProto(record.GetPipeClient()); 
+    TActorId sender = ActorIdFromProto(record.GetPipeClient());
     const TString& clientId = record.GetClientId();
 
     auto pit = PartitionsInfo.find(record.GetPartition());
@@ -1007,7 +1007,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     }
     Y_VERIFY(kt != cit->second.SessionsInfo.end());
     Y_VERIFY(jt != cit->second.PartitionsInfo.end());
-    jt->second.Session = TActorId(); 
+    jt->second.Session = TActorId();
     jt->second.State = EPS_FREE;
     cit->second.FreePartitions.push_back(jt->first);
 
@@ -1024,7 +1024,7 @@ void TPersQueueReadBalancer::RebuildStructs() {
     //TODO : track session with smallest and biggest number of (active but not suspended partitions
 }
 
-void TPersQueueReadBalancer::RegisterSession(const TActorId& pipe, const TActorContext& ctx) 
+void TPersQueueReadBalancer::RegisterSession(const TActorId& pipe, const TActorContext& ctx)
 {
     //TODO : change structs for only this session, not all client
     auto it = PipesInfo.find(pipe);
@@ -1036,7 +1036,7 @@ void TPersQueueReadBalancer::RegisterSession(const TActorId& pipe, const TActorC
     }
 }
 
-void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActorContext& ctx) 
+void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActorContext& ctx)
 {
     //TODO : change structs for only this session
     auto it = PipesInfo.find(pipe);
@@ -1047,7 +1047,7 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     for (auto& c : jt->second.ClientGroupsInfo) {
         for (auto& p : c.second.PartitionsInfo) { //TODO: reverse map
             if (p.second.Session == pipe) {
-                p.second.Session = TActorId(); 
+                p.second.Session = TActorId();
                 p.second.State = EPS_FREE;
                 c.second.FreePartitions.push_back(p.first);
             }
@@ -1124,7 +1124,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
 }
 
 
-void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe, ui32 partition, const TActorContext& ctx) { 
+void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe, ui32 partition, const TActorContext& ctx) {
 
     auto jt = SessionsInfo.find(std::make_pair(pipe, RandomNumber));
     Y_VERIFY(jt != SessionsInfo.end());
@@ -1146,7 +1146,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe
     res->Record.SetGeneration(Generation);
     res->Record.SetStep(++(*Step));
     res->Record.SetClientId(ClientId);
-    ActorIdToProto(pipe, res->Record.MutablePipeClient()); 
+    ActorIdToProto(pipe, res->Record.MutablePipeClient());
     res->Record.SetTabletId(PartitionsInfo[partition].TabletId);
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " lock partition for pipe "
@@ -1155,7 +1155,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe
     ctx.Send(pipeInfo.Sender, res.Release());
 }
 
-void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId pipe, const ui32 group, const ui32 count, const TActorContext& ctx) { 
+void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId pipe, const ui32 group, const ui32 count, const TActorContext& ctx) {
 
     auto it = SessionsInfo.find(std::make_pair(pipe, RandomNumber));
     Y_VERIFY(it != SessionsInfo.end());
@@ -1171,7 +1171,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId p
     res->Record.SetClientId(ClientId);
     res->Record.SetCount(count);
     res->Record.SetGroup(group);
-    ActorIdToProto(pipe, res->Record.MutablePipeClient()); 
+    ActorIdToProto(pipe, res->Record.MutablePipeClient());
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " release partition group " << group
                                 << " for pipe " << pipe << " session " << sessionInfo.Session);

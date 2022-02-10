@@ -7,13 +7,13 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxUpgradeAccessDatabaseRights : public TTransactionBase<TSchemeShard> {
     bool IsDryRun;
-    TActorId AnswerTo; 
+    TActorId AnswerTo;
     std::function< NActors::IEventBase* (const TMap<TPathId, TSet<TString>>&) > AnswerFunc;
     TSideEffects SideEffects;
 
     TTxUpgradeAccessDatabaseRights(TSelf* self,
                                    const bool isDryRun,
-                                   const TActorId& answerTo, 
+                                   const TActorId& answerTo,
                                    std::function< NActors::IEventBase* (const TMap<TPathId, TSet<TString>>&) > answerFunc)
         : TTransactionBase<TSchemeShard>(self)
         , IsDryRun(isDryRun)
@@ -145,7 +145,7 @@ struct TSchemeShard::TTxUpgradeAccessDatabaseRights : public TTransactionBase<TS
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUpgradeAccessDatabaseRights(
-    const TActorId& answerTo, bool isDryRun, std::function< NActors::IEventBase*(const TMap<TPathId, TSet<TString>>&) > func) { 
+    const TActorId& answerTo, bool isDryRun, std::function< NActors::IEventBase*(const TMap<TPathId, TSet<TString>>&) > func) {
     return new TTxUpgradeAccessDatabaseRights(this, isDryRun, answerTo, func);
 }
 

@@ -18,19 +18,19 @@ namespace NKqp {
 const TStringBuf DefaultKikimrClusterName = "kikimr";
 const TStringBuf DefaultKikimrPublicClusterName = "db";
 
-inline NActors::TActorId MakeKqpProxyID(ui32 nodeId) { 
+inline NActors::TActorId MakeKqpProxyID(ui32 nodeId) {
     const char name[12] = "kqp_proxy";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12)); 
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-inline NActors::TActorId MakeKqpCompileServiceID(ui32 nodeId) { 
+inline NActors::TActorId MakeKqpCompileServiceID(ui32 nodeId) {
     const char name[12] = "kqp_compile";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12)); 
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-inline NActors::TActorId MakeKqpResourceManagerServiceID(ui32 nodeId) { 
+inline NActors::TActorId MakeKqpResourceManagerServiceID(ui32 nodeId) {
     const char name[12] = "kqp_resman";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12)); 
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
 inline NActors::TActorId MakeKqpRmServiceID(ui32 nodeId) {
@@ -43,9 +43,9 @@ inline NActors::TActorId MakeKqpNodeServiceID(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-inline NActors::TActorId MakeKqpLocalFileSpillingServiceID(ui32 nodeId) { 
+inline NActors::TActorId MakeKqpLocalFileSpillingServiceID(ui32 nodeId) {
     const char name[12] = "kqp_lfspill";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12)); 
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
 class TKqpShutdownController;

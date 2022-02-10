@@ -19,7 +19,7 @@ class TCmsRPC : public TRpcOperationRequestActor<TCmsRPC<TRequest, TCmsRequest, 
     using TThis = TCmsRPC<TRequest, TCmsRequest, TCmsResponse>;
     using TBase = TRpcOperationRequestActor<TThis, TRequest>;
 
-    TActorId CmsPipe; 
+    TActorId CmsPipe;
 
 public:
     TCmsRPC(TRequest* msg)

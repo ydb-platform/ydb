@@ -14,10 +14,10 @@ Y_UNIT_TEST_SUITE(LargeMessage) {
     using namespace NActors;
 
     class TProducer: public TActorBootstrapped<TProducer> {
-        const TActorId RecipientActorId; 
+        const TActorId RecipientActorId;
 
     public:
-        TProducer(const TActorId& recipientActorId) 
+        TProducer(const TActorId& recipientActorId)
             : RecipientActorId(recipientActorId)
         {}
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(LargeMessage) {
 
     class TConsumer : public TActorBootstrapped<TConsumer> {
         TManualEvent& Done;
-        TActorId SessionId; 
+        TActorId SessionId;
 
     public:
         TConsumer(TManualEvent& done)
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(LargeMessage) {
 
         TManualEvent done;
         TConsumer* consumer = new TConsumer(done);
-        const TActorId recp = testCluster.RegisterActor(consumer, 1); 
+        const TActorId recp = testCluster.RegisterActor(consumer, 1);
         testCluster.RegisterActor(new TProducer(recp), 2);
         done.WaitI();
     }

@@ -1,7 +1,7 @@
-#include "index_mon_page.h" 
- 
+#include "index_mon_page.h"
+
 #include <util/generic/cast.h>
-#include <util/string/ascii.h> 
+#include <util/string/ascii.h>
 
 using namespace NMonitoring;
 
@@ -51,7 +51,7 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
     }
 }
 
-void TIndexMonPage::OutputIndex(IOutputStream& out, bool pathEndsWithSlash) { 
+void TIndexMonPage::OutputIndex(IOutputStream& out, bool pathEndsWithSlash) {
     TGuard<TMutex> g(Mtx);
     for (auto& Page : Pages) {
         IMonPage* page = Page.Get();
@@ -65,7 +65,7 @@ void TIndexMonPage::OutputIndex(IOutputStream& out, bool pathEndsWithSlash) {
     }
 }
 
-void TIndexMonPage::Register(TMonPagePtr page) { 
+void TIndexMonPage::Register(TMonPagePtr page) {
     TGuard<TMutex> g(Mtx);
     auto insres = PagesByPath.insert(std::make_pair("/" + page->GetPath(), page));
     if (insres.second) {
@@ -80,10 +80,10 @@ void TIndexMonPage::Register(TMonPagePtr page) {
         // this already present, replace it
         insres.first->second = page;
     }
-    page->Parent = this; 
+    page->Parent = this;
 }
 
-TIndexMonPage* TIndexMonPage::RegisterIndexPage(const TString& path, const TString& title) { 
+TIndexMonPage* TIndexMonPage::RegisterIndexPage(const TString& path, const TString& title) {
     TGuard<TMutex> g(Mtx);
     TIndexMonPage* page = VerifyDynamicCast<TIndexMonPage*>(FindPage(path));
     if (page) {
@@ -116,7 +116,7 @@ void TIndexMonPage::OutputCommonJsCss(IOutputStream& out) {
     out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/bootstrap/3.3.1/js/bootstrap.min.js'></script>\n";
 }
 
-void TIndexMonPage::OutputHead(IOutputStream& out) { 
+void TIndexMonPage::OutputHead(IOutputStream& out) {
     out << "<head>\n";
     OutputCommonJsCss(out);
     out << "<title>" << Title << "</title>\n";
@@ -128,19 +128,19 @@ void TIndexMonPage::OutputBody(IMonHttpRequest& req) {
     out << "<body>\n";
 
     // part of common navbar
-    OutputNavBar(out); 
+    OutputNavBar(out);
 
     out << "<div class='container'>\n"
-             << "<h2>" << Title << "</h2>\n"; 
+             << "<h2>" << Title << "</h2>\n";
     OutputIndex(out, req.GetPathInfo().EndsWith('/'));
     out << "<div>\n"
         << "</body>\n";
 }
 
-void TIndexMonPage::SortPages() { 
+void TIndexMonPage::SortPages() {
     TGuard<TMutex> g(Mtx);
     std::sort(Pages.begin(), Pages.end(), [](const TMonPagePtr& a, const TMonPagePtr& b) {
-        return AsciiCompareIgnoreCase(a->GetTitle(), b->GetTitle()) < 0; 
+        return AsciiCompareIgnoreCase(a->GetTitle(), b->GetTitle()) < 0;
     });
 }
 

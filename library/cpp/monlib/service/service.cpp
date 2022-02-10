@@ -7,13 +7,13 @@
 #include <library/cpp/uri/http_url.h>
 
 #include <util/generic/buffer.h>
-#include <util/stream/str.h> 
+#include <util/stream/str.h>
 #include <util/stream/buffer.h>
-#include <util/stream/zerocopy.h> 
-#include <util/string/vector.h> 
- 
+#include <util/stream/zerocopy.h>
+#include <util/string/vector.h>
+
 namespace NMonitoring {
-    class THttpClient: public IHttpRequest { 
+    class THttpClient: public IHttpRequest {
     public:
         void ServeRequest(THttpInput& in, IOutputStream& out, const NAddr::IRemoteAddr* remoteAddr, const THandler& Handler) {
             try {
@@ -36,7 +36,7 @@ namespace NMonitoring {
                     }
                     Headers = &in.Headers();
                     CgiParams.Scan(Url.Get(THttpURL::FieldQuery));
-                } catch (...) { 
+                } catch (...) {
                     out << "HTTP/1.1 500 Internal server error\r\nConnection: Close\r\n\r\n";
                     YSYSLOG(TLOG_ERR, "THttpClient: internal error while serving monitoring request: %s", CurrentExceptionMessage().data());
                 }
@@ -46,7 +46,7 @@ namespace NMonitoring {
 
                 Handler(out, *this);
                 out.Finish();
-            } catch (...) { 
+            } catch (...) {
                 auto msg = CurrentExceptionMessage();
                 out << "HTTP/1.1 500 Internal server error\r\nConnection: Close\r\n\r\n" << msg;
                 out.Finish();
@@ -102,7 +102,7 @@ namespace NMonitoring {
 
     /* TCoHttpServer */
 
-    class TCoHttpServer::TConnection: public THttpClient { 
+    class TCoHttpServer::TConnection: public THttpClient {
     public:
         TConnection(const TCoHttpServer::TAcceptFull& acc, const TCoHttpServer& parent)
             : Socket(acc.S->Release())
@@ -111,7 +111,7 @@ namespace NMonitoring {
         {
         }
 
-        void operator()(TCont* c) { 
+        void operator()(TCont* c) {
             try {
                 THolder<TConnection> me(this);
                 TContIO io(Socket, c);
@@ -122,11 +122,11 @@ namespace NMonitoring {
                 ServeRequest(in, s, RemoteAddr, Parent.Handler);
                 out << s.Str();
                 out.Finish();
-            } catch (...) { 
+            } catch (...) {
                 YSYSLOG(TLOG_WARNING, "TCoHttpServer::TConnection: error: %s\n", CurrentExceptionMessage().data());
             }
         }
- 
+
     private:
         TSocketHolder Socket;
         const NAddr::IRemoteAddr* RemoteAddr;
@@ -171,15 +171,15 @@ namespace NMonitoring {
             TSocket sock(addr);
             TSocketOutput sock_out(sock);
             TSocketInput sock_in(sock);
-            sock_out << "GET " << request.GetURI() << " HTTP/1.0\r\n\r\n"; 
+            sock_out << "GET " << request.GetURI() << " HTTP/1.0\r\n\r\n";
             THttpInput http_in(&sock_in);
             try {
                 out << "HTTP/1.1 200 Ok\nConnection: Close\n\n";
                 TransferData(&http_in, &out);
-            } catch (...) { 
+            } catch (...) {
                 YSYSLOG(TLOG_DEBUG, "TCoHttpServer: while getting data from backend: %s", CurrentExceptionMessage().data());
             }
-        } catch (const yexception& /*e*/) { 
+        } catch (const yexception& /*e*/) {
             out << "HTTP/1.1 500 Internal server error\nConnection: Close\n\n";
             YSYSLOG(TLOG_DEBUG, "TCoHttpServer: while getting data from backend: %s", CurrentExceptionMessage().data());
         }
@@ -187,7 +187,7 @@ namespace NMonitoring {
 
     /* TMtHttpServer */
 
-    class TMtHttpServer::TConnection: public TClientRequest, public THttpClient { 
+    class TMtHttpServer::TConnection: public TClientRequest, public THttpClient {
     public:
         TConnection(const TMtHttpServer& parent)
             : Parent(parent)
@@ -198,7 +198,7 @@ namespace NMonitoring {
             ServeRequest(Input(), Output(), NAddr::GetPeerAddr(Socket()).Get(), Parent.Handler);
             return true;
         }
- 
+
     private:
         const TMtHttpServer& Parent;
     };
@@ -215,32 +215,32 @@ namespace NMonitoring {
     {
     }
 
-    bool TMtHttpServer::Start() { 
-        return THttpServer::Start(); 
-    } 
- 
-    void TMtHttpServer::StartOrThrow() { 
-        if (!Start()) { 
-            const auto& opts = THttpServer::Options(); 
-            TNetworkAddress addr = opts.Host 
+    bool TMtHttpServer::Start() {
+        return THttpServer::Start();
+    }
+
+    void TMtHttpServer::StartOrThrow() {
+        if (!Start()) {
+            const auto& opts = THttpServer::Options();
+            TNetworkAddress addr = opts.Host
                                        ? TNetworkAddress(opts.Host, opts.Port)
                                        : TNetworkAddress(opts.Port);
-            ythrow TSystemError(GetErrorCode()) << addr; 
-        } 
-    } 
- 
-    void TMtHttpServer::Stop() { 
-        THttpServer::Stop(); 
-    } 
- 
+            ythrow TSystemError(GetErrorCode()) << addr;
+        }
+    }
+
+    void TMtHttpServer::Stop() {
+        THttpServer::Stop();
+    }
+
     TClientRequest* TMtHttpServer::CreateClient() {
         return new TConnection(*this);
     }
 
     /* TService */
 
-    TMonService::TMonService(TContExecutor& executor, TIpPort internalPort, TIpPort externalPort, 
-                             THandler coHandler, THandler mtHandler) 
+    TMonService::TMonService(TContExecutor& executor, TIpPort internalPort, TIpPort externalPort,
+                             THandler coHandler, THandler mtHandler)
         : CoServer(executor, "127.0.0.1", internalPort, std::move(coHandler))
         , MtServer(THttpServerOptions(externalPort), std::bind(&TMonService::DispatchRequest, this, std::placeholders::_1, std::placeholders::_2))
         , MtHandler(std::move(mtHandler))
@@ -261,8 +261,8 @@ namespace NMonitoring {
         if (strcmp(request.GetPath(), "/") == 0) {
             out << "HTTP/1.1 200 Ok\nConnection: Close\n\n";
             MtHandler(out, request);
-        } else 
+        } else
             CoServer.ProcessRequest(out, request);
     }
 
-} 
+}

@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/dynamic_counters 
+    library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/blobstorage/base
 )

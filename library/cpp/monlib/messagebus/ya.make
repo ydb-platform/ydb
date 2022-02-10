@@ -10,7 +10,7 @@ SRCS(
 PEERDIR(
     library/cpp/messagebus
     library/cpp/messagebus/www
-    library/cpp/monlib/dynamic_counters 
+    library/cpp/monlib/dynamic_counters
 )
 
 END()

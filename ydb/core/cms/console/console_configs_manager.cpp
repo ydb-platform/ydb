@@ -366,7 +366,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     while (!subscriptionRowset.EndOfSet()) {
         ui64 id = subscriptionRowset.GetValue<Schema::ConfigSubscriptions::Id>();
         ui64 tabletId = subscriptionRowset.GetValue<Schema::ConfigSubscriptions::TabletId>();
-        TActorId serviceId = subscriptionRowset.GetValue<Schema::ConfigSubscriptions::ServiceId>(); 
+        TActorId serviceId = subscriptionRowset.GetValue<Schema::ConfigSubscriptions::ServiceId>();
         ui32 nodeId = subscriptionRowset.GetValue<Schema::ConfigSubscriptions::NodeId>();
         TString host = subscriptionRowset.GetValue<Schema::ConfigSubscriptions::Host>();
         TString tenant = subscriptionRowset.GetValue<Schema::ConfigSubscriptions::Tenant>();
@@ -580,12 +580,12 @@ void TConfigsManager::Handle(TEvPrivate::TEvStateLoaded::TPtr &/*ev*/, const TAc
 {
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetConfigs(ConfigIndex.GetConfigItems()));
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetSubscriptions(SubscriptionIndex.GetSubscriptions()));
-    ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes()); 
+    ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
 }
 
 void TConfigsManager::Handle(TEvPrivate::TEvCleanupSubscriptions::TPtr &/*ev*/, const TActorContext &ctx)
 {
-    ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes()); 
+    ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
 }
 
 void TConfigsManager::ForwardToConfigsProvider(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)

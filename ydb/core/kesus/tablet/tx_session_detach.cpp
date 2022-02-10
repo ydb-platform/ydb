@@ -4,13 +4,13 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxSessionDetach : public TTxBase {
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
     const NKikimrKesus::TEvDetachSession Record;
 
     THolder<TEvKesus::TEvDetachSessionResult> Reply;
 
-    explicit TTxSessionDetach(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDetachSession& record) 
+    explicit TTxSessionDetach(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDetachSession& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

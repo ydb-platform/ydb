@@ -4,7 +4,7 @@ OWNER(fomichev)
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/monlib/service/pages 
+    library/cpp/monlib/service/pages
     ydb/core/base
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/groupinfo

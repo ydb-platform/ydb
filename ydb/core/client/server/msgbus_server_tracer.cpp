@@ -166,7 +166,7 @@ public:
         this->SendReplyAndDie(response.Release(), ctx);
     }
 
-    TActorId MakeServiceID(const TActorContext &ctx) { 
+    TActorId MakeServiceID(const TActorContext &ctx) {
         Y_UNUSED(ctx);
         return MakeMessageBusTraceServiceID();
     }

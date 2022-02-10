@@ -17,8 +17,8 @@ private:
     using TBase = TActorBootstrapped<TTabletConfigSender>;
 
     TSubscription::TPtr Subscription;
-    TActorId OwnerId; 
-    TActorId Pipe; 
+    TActorId OwnerId;
+    TActorId Pipe;
     TSchedulerCookieHolder TimeoutTimerCookieHolder;
 
 public:
@@ -27,7 +27,7 @@ public:
         return NKikimrServices::TActivity::CMS_CONFIGS_PROVIDER;
     }
 
-    TTabletConfigSender(TSubscription::TPtr subscription, TActorId ownerId) 
+    TTabletConfigSender(TSubscription::TPtr subscription, TActorId ownerId)
         : Subscription(subscription)
         , OwnerId(ownerId)
     {
@@ -47,7 +47,7 @@ public:
     {
         if (Pipe) {
             NTabletPipe::CloseClient(ctx, Pipe);
-            Pipe = TActorId(); 
+            Pipe = TActorId();
         }
 
         SendNotifyRequest(ctx);
@@ -153,7 +153,7 @@ private:
     using TBase = TActorBootstrapped<TServiceConfigSender>;
 
     TSubscription::TPtr Subscription;
-    TActorId OwnerId; 
+    TActorId OwnerId;
     TDuration RetryInterval;
     TSchedulerCookieHolder TimeoutTimerCookieHolder;
     bool ScheduledRetry;
@@ -164,7 +164,7 @@ public:
         return NKikimrServices::TActivity::CMS_CONFIGS_PROVIDER;
     }
 
-    TServiceConfigSender(TSubscription::TPtr subscription, TActorId ownerId) 
+    TServiceConfigSender(TSubscription::TPtr subscription, TActorId ownerId)
         : Subscription(subscription)
         , OwnerId(ownerId)
         , RetryInterval(TDuration::Seconds(5))
@@ -457,7 +457,7 @@ void TConfigsProvider::ApplySubscriptionModifications(const TSubscriptionModific
                     "TConfigsProvider: remove subscription " << subscription->ToString());
         if (subscription->Worker) {
             ctx.Send(subscription->Worker, new TEvents::TEvPoisonPill);
-            subscription->Worker = TActorId(); 
+            subscription->Worker = TActorId();
         }
         SubscriptionIndex.RemoveSubscription(id);
     }
@@ -485,7 +485,7 @@ void TConfigsProvider::ApplySubscriptionModifications(const TSubscriptionModific
         subscription->Cookie = pr.second;
         if (subscription->Worker) {
             ctx.Send(subscription->Worker, new TEvents::TEvPoisonPill);
-            subscription->Worker = TActorId(); 
+            subscription->Worker = TActorId();
         }
         subscriptions.insert(subscription);
     }
@@ -883,7 +883,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &e
     // provided config anyway because cookie update always come with
     // last provided update.
     subscription->LastProvidedConfig.Load(rec.GetConfigId());
-    subscription->Worker = TActorId(); 
+    subscription->Worker = TActorId();
 
     ctx.Send(ev->Forward(ConfigsManager));
 }
@@ -1012,7 +1012,7 @@ void TConfigsProvider::Handle(TEvPrivate::TEvNotificationTimeout::TPtr &ev, cons
                     << " subscription id=" << subscription->Id);
         return;
     }
-    subscription->Worker = TActorId(); 
+    subscription->Worker = TActorId();
     CheckSubscription(subscription, ctx);
 }
 
@@ -1033,7 +1033,7 @@ void TConfigsProvider::Handle(TEvPrivate::TEvSenderDied::TPtr &ev, const TActorC
                     << " subscription id=" << subscription->Id);
         return;
     }
-    subscription->Worker = TActorId(); 
+    subscription->Worker = TActorId();
     CheckSubscription(subscription, ctx);
 }
 

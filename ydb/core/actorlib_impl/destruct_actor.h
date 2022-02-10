@@ -25,8 +25,8 @@ private:
     }
 };
 
-TActorId GetDestructActorID() noexcept { 
-    return TActorId(0, "destructor"); 
+TActorId GetDestructActorID() noexcept {
+    return TActorId(0, "destructor");
 }
 
 }

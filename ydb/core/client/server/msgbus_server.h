@@ -134,8 +134,8 @@ class TMessageBusServer : public IMessageBusServer, public NBus::IBusServerHandl
     const NBus::TBusServerSessionConfig &SessionConfig;
     NBus::TBusMessageQueuePtr BusQueue;
     NBus::TBusServerSessionPtr Session;
-    TActorId Proxy; 
-    TActorId Monitor; 
+    TActorId Proxy;
+    TActorId Monitor;
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
 protected:
     TProtocol Protocol;
@@ -150,7 +150,7 @@ public:
     );
     ~TMessageBusServer();
 
-    void InitSession(TActorSystem *actorSystem, const TActorId &proxy); 
+    void InitSession(TActorSystem *actorSystem, const TActorId &proxy);
     void ShutdownSession();
 
     void RegisterMonPage(NMonitoring::TBusNgMonPage *busMonPage);

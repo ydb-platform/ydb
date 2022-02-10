@@ -32,16 +32,16 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     const TString QueueName;
     const NMonitoring::TDynamicCounterPtr Counters;
     TBlobStorageQueue Queue;
-    TActorId BlobStorageProxy; 
+    TActorId BlobStorageProxy;
     const TVDiskIdShort VDiskIdShort;
-    TActorId RemoteVDisk; 
+    TActorId RemoteVDisk;
     TVDiskID VDiskId;
     NKikimrBlobStorage::EVDiskQueueId QueueId;
     const TDuration QueueWatchdogTimeout;
     ui64 CheckReadinessCookie = 1;
     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
     const ui32 InterconnectChannel;
-    TActorId SessionId; 
+    TActorId SessionId;
     std::optional<NKikimrBlobStorage::TGroupInfo> RecentGroup;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TBlobStorageGroupType GType;
@@ -90,7 +90,7 @@ public:
         Y_VERIFY(Info);
     }
 
-    void Bootstrap(const TActorId& parent, const TActorContext& ctx) { 
+    void Bootstrap(const TActorId& parent, const TActorContext& ctx) {
         ApplyGroupInfo(*std::exchange(Info, nullptr));
         QLOG_INFO_S("BSQ01", "starting parent# " << parent);
         InitCounters();
@@ -397,7 +397,7 @@ private:
         // reset watchdog back to default interval -- we've got successful response
         ResetWatchdogTimer(ctx.Now());
 
-        TActorId sender; 
+        TActorId sender;
         ui64 cookie = 0;
         TDuration processingTime;
         bool isOk = Queue.OnResponse(msgId, sequenceId, ev->Cookie, &sender, &cookie, &processingTime);
@@ -588,7 +588,7 @@ private:
     ////////////////////////////////////////////////////////////////////////
 
     struct TStatusRequestItem {
-        TActorId Sender; 
+        TActorId Sender;
         ui64 Cookie;
     };
 
@@ -642,7 +642,7 @@ private:
         Pump(ctx);
     }
 
-    void SendStatusErrorResponse(const TActorId& sender, ui64 cookie, NKikimrProto::EReplyStatus status, 
+    void SendStatusErrorResponse(const TActorId& sender, ui64 cookie, NKikimrProto::EReplyStatus status,
             const TActorContext& ctx) {
         QLOG_DEBUG_S("BSQ34", "Status# " << status
             << " VDiskId# " << VDiskId

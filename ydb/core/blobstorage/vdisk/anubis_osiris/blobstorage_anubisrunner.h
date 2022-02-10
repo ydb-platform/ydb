@@ -48,12 +48,12 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     struct TAnubisCtx {
         TIntrusivePtr<THullCtx> HullCtx;
-        TActorId SkeletonId; 
+        TActorId SkeletonId;
         ui32 ReplInterconnectChannel;
         ui64 AnubisOsirisMaxInFly;
         TDuration AnubisTimeout;
 
-        TAnubisCtx(const TIntrusivePtr<THullCtx> &hullCtx, const TActorId &skeletonId, 
+        TAnubisCtx(const TIntrusivePtr<THullCtx> &hullCtx, const TActorId &skeletonId,
                 ui32 replInterconnectChannel, ui64 anubisOsirisMaxInFly, TDuration anubisTimeout)
             : HullCtx(hullCtx)
             , SkeletonId(skeletonId)

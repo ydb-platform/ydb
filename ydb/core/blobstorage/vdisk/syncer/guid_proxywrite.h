@@ -52,8 +52,8 @@ namespace NKikimr {
     IActor *CreateProxyForWritingVDiskGuid(TIntrusivePtr<TVDiskContext> vctx,
                                            const TVDiskID &selfVDiskId,
                                            const TVDiskID &targetVDiskId,
-                                           const TActorId &targetServiceId, 
-                                           const TActorId &notifyId, 
+                                           const TActorId &targetServiceId,
+                                           const TActorId &notifyId,
                                            NKikimrBlobStorage::TSyncGuidInfo::EState state,
                                            TVDiskEternalGuid guid);
 

@@ -11,7 +11,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     const TTabletTypes::EType TabletType;
     const ui32 AssignStateStorage;
 
-    const TActorId Sender; 
+    const TActorId Sender;
     const ui64 Cookie;
 
     NKikimrProto::EReplyStatus Status;
@@ -32,7 +32,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     NKikimrHive::TForwardRequest ForwardRequest;
 
 public:
-    TTxCreateTablet(NKikimrHive::TEvCreateTablet record, const TActorId& sender, const ui64 cookie, THive* hive) 
+    TTxCreateTablet(NKikimrHive::TEvCreateTablet record, const TActorId& sender, const ui64 cookie, THive* hive)
         : TBase(hive)
         , RequestData(std::move(record))
         , OwnerId(RequestData.GetOwner())
@@ -364,7 +364,7 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::TabletType>(tablet.Type),
                                                         NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet.KnownGeneration),
                                                         NIceDb::TUpdate<Schema::Tablet::State>(tablet.State),
-                                                        NIceDb::TUpdate<Schema::Tablet::ActorsToNotify>(TVector<TActorId>(1, Sender)), 
+                                                        NIceDb::TUpdate<Schema::Tablet::ActorsToNotify>(TVector<TActorId>(1, Sender)),
                                                         NIceDb::TUpdate<Schema::Tablet::AllowedNodes>(tablet.AllowedNodes),
                                                         NIceDb::TUpdate<Schema::Tablet::AllowedDataCenters>(allowedDataCenters),
                                                         NIceDb::TUpdate<Schema::Tablet::AllowedDataCenterIds>(tablet.AllowedDataCenters),
@@ -485,7 +485,7 @@ public:
                     tablet->InitiateAssignTabletGroups();
                 } else if (Status == NKikimrProto::OK && tablet->IsBootingSuppressed()) {
                     // Tablet will never boot, so notify about creation right now
-                    for (const TActorId& actor : tablet->ActorsToNotify) { 
+                    for (const TActorId& actor : tablet->ActorsToNotify) {
                         ctx.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
                     }
                     tablet->ActorsToNotify.clear();
@@ -509,7 +509,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie) { 
+ITransaction* THive::CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie) {
     return new TTxCreateTablet(std::move(rec), sender, cookie, this);
 }
 

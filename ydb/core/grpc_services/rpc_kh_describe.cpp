@@ -33,7 +33,7 @@ private:
     Ydb::ClickhouseInternal::DescribeTableResult Result;
 
     TDuration Timeout;
-    TActorId TimeoutTimerActorId; 
+    TActorId TimeoutTimerActorId;
 
     bool WaitingResolveReply;
     bool Finished;

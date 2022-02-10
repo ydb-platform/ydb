@@ -20,11 +20,11 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         TServer server = TServer(serverSettings, true);
         TTestActorRuntime *runtime = server.GetRuntime();
 
-        const TActorId serviceId = MakeQuoterServiceID(); 
-        const TActorId serviceActorId = runtime->Register(CreateQuoterService()); 
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
         runtime->RegisterService(serviceId, serviceActorId);
 
-        TActorId sender = runtime->AllocateEdgeActor(); 
+        TActorId sender = runtime->AllocateEdgeActor();
         {
             runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         UNIT_ASSERT(pathDesc.HasKesus());
         const ui64 tabletId = pathDesc.GetKesus().GetKesusTabletId();
 
-        TActorId sender = runtime->AllocateEdgeActor(); 
+        TActorId sender = runtime->AllocateEdgeActor();
         ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
@@ -173,11 +173,11 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        const TActorId serviceId = MakeQuoterServiceID(); 
-        const TActorId serviceActorId = runtime->Register(CreateQuoterService()); 
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
         runtime->RegisterService(serviceId, serviceActorId);
 
-        const TActorId sender = runtime->AllocateEdgeActor(); 
+        const TActorId sender = runtime->AllocateEdgeActor();
 
         constexpr TDuration testDuration = TDuration::Seconds(2);
         constexpr TDuration waitDuration = TDuration::MilliSeconds(150);
@@ -261,11 +261,11 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         TServer server = TServer(serverSettings, true);
         TTestActorRuntime *runtime = server.GetRuntime();
 
-        const TActorId serviceId = MakeQuoterServiceID(); 
-        const TActorId serviceActorId = runtime->Register(CreateQuoterService()); 
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
         runtime->RegisterService(serviceId, serviceActorId);
 
-        TActorId sender = runtime->AllocateEdgeActor(); 
+        TActorId sender = runtime->AllocateEdgeActor();
         {
             runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
@@ -304,11 +304,11 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         TServer server = TServer(serverSettings, true);
         TTestActorRuntime *runtime = server.GetRuntime();
 
-        const TActorId serviceId = MakeQuoterServiceID(); 
-        const TActorId serviceActorId = runtime->Register(CreateQuoterService()); 
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
         runtime->RegisterService(serviceId, serviceActorId);
 
-        TActorId sender = runtime->AllocateEdgeActor(); 
+        TActorId sender = runtime->AllocateEdgeActor();
         {
             runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {

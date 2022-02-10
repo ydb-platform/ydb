@@ -11,7 +11,7 @@ namespace NActors {
 
 class TMelancholicGopher : public TActor<TMelancholicGopher> {
     const double SurveyForSeconds;
-    const TActorId ReportTo; 
+    const TActorId ReportTo;
 
     void Round(const TActorContext &ctx) {
         if (SurveyForSeconds > 0.0) {
@@ -26,7 +26,7 @@ public:
         return ACTORLIB_COMMON;
     }
 
-    TMelancholicGopher(double surveyForSeconds, const TActorId &reportTo) 
+    TMelancholicGopher(double surveyForSeconds, const TActorId &reportTo)
         : TActor(&TThis::StateFunc)
         , SurveyForSeconds(surveyForSeconds)
         , ReportTo(reportTo)
@@ -44,7 +44,7 @@ class TGopherMother : public TActorBootstrapped<TGopherMother> {
     const TVector<std::pair<ui32, double>> LineProfile;
     const ui32 Lines;
     const ui32 ShotsInRound;
-    TVector<TActorId> HeadGophers; 
+    TVector<TActorId> HeadGophers;
     ui32 WaitFor;
 
     TInstant RoundStart;
@@ -83,8 +83,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         HeadGophers.reserve(Lines);
         for (ui32 lines = Lines; lines > 0; --lines) {
-            HeadGophers.push_back(TActorId()); 
-            TActorId &head = HeadGophers.back(); 
+            HeadGophers.push_back(TActorId());
+            TActorId &head = HeadGophers.back();
             head = ctx.SelfID;
             for (const auto &xpair : LineProfile)
                 head = ctx.ExecutorThread.ActorSystem->Register(CreateMelancholicGopher(xpair.second, head), TMailboxType::Simple, xpair.first);
@@ -101,7 +101,7 @@ public:
     }
 };
 
-IActor* CreateMelancholicGopher(double surveyForSeconds, const TActorId &reportTo) { 
+IActor* CreateMelancholicGopher(double surveyForSeconds, const TActorId &reportTo) {
     return new TMelancholicGopher(surveyForSeconds, reportTo);
 }
 

@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <library/cpp/monlib/service/pages/mon_page.h> 
+#include <library/cpp/monlib/service/pages/mon_page.h>
 
 namespace NKikimr {
 

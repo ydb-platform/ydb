@@ -218,7 +218,7 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
     }
 
-    TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache, 
+    TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                const TString& topicName, const TString& topicPath, const bool localDC, TString dcId,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
                const TActorContext& ctx, bool newPartition = false);
@@ -435,8 +435,8 @@ private:
     ui64 EndOffset;
 
     ui64 WriteInflightSize;
-    TActorId Tablet; 
-    TActorId BlobCache; 
+    TActorId Tablet;
+    TActorId BlobCache;
 
     EInitState InitState;
 
@@ -587,7 +587,7 @@ private:
     const bool NewPartition;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
-    THashSet<TActorId> OwnerPipes; 
+    THashSet<TActorId> OwnerPipes;
 
     TSourceIdStorage SourceIdStorage;
 

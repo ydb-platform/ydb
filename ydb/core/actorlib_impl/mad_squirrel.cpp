@@ -5,7 +5,7 @@
 namespace NActors {
 
 class TMadSquirrel : public TActor<TMadSquirrel> {
-    TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId &) override { 
+    TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId &) override {
         return new IEventHandle(self, self, new TEvents::TEvWakeup());
     }
 

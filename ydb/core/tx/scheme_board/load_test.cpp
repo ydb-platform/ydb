@@ -183,7 +183,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     }
 
     void Boot() {
-        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroupFromTabletID(Owner)); 
+        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroupFromTabletID(Owner));
         Send(proxy, new TEvStateStorage::TEvListSchemeBoard(), IEventHandle::FlagTrackDelivery);
 
         Become(&TThis::StateBoot);
@@ -234,7 +234,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         Y_VERIFY(msg->PathId.LocalPathId == NextPathId - 1);
 
         Send(Subscriber, new TEvents::TEvPoisonPill());
-        Subscriber = TActorId(); 
+        Subscriber = TActorId();
 
         const TInstant ts = TInstant::FromValue(GetPathVersion(msg->DescribeSchemeResult));
         *SyncDuration = (TlsActivationContext->Now() - ts).MilliSeconds();
@@ -317,8 +317,8 @@ private:
 
     TDescriptions Descriptions;
     ui64 NextPathId;
-    TActorId Populator; 
-    TActorId Subscriber; 
+    TActorId Populator;
+    TActorId Subscriber;
 
 }; // TLoadProducer
 
@@ -326,7 +326,7 @@ class TLoadConsumer: public TActorBootstrapped<TLoadConsumer> {
     void Subscribe(const TPathId& pathId) {
         const ui32 ssId = StateStorageGroupFromTabletID(Owner);
         for (ui32 i = 0; i < Config.SubscriberMulti; ++i) {
-            const TActorId subscriber = Register(CreateSchemeBoardSubscriber( 
+            const TActorId subscriber = Register(CreateSchemeBoardSubscriber(
                 SelfId(), pathId, ssId,
                 ESchemeBoardSubscriberDeletionPolicy::Majority
             ));
@@ -407,7 +407,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SubscribersCount;
 
     ui64 MaxPathId;
-    TVector<TActorId> Subscribers; 
+    TVector<TActorId> Subscribers;
 
 }; // TLoadConsumer
 

@@ -7,7 +7,7 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    void DoActorInit(TActorSystem* sys, IActor* actor, const TActorId& self, const TActorId& owner) { 
+    void DoActorInit(TActorSystem* sys, IActor* actor, const TActorId& self, const TActorId& owner) {
         actor->SelfActorId = self;
         actor->Registered(sys, owner);
     }
@@ -97,7 +97,7 @@ namespace NActors {
         mailbox->AttachActor(localActorId, actor);
 
         // do init
-        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint); 
+        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
 
         // Once we unlock the mailbox the actor starts running and we cannot use the pointer any more
@@ -144,7 +144,7 @@ namespace NActors {
         const ui64 localActorId = AllocateID();
         mailbox->AttachActor(localActorId, actor);
 
-        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint); 
+        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
         NHPTimer::STime elapsed = GetCycleCountFast() - hpstart;
         if (elapsed > 1000000) {

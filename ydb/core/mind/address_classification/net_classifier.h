@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/event_local.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/ptr.h>
 
@@ -16,11 +16,11 @@
 
 namespace NKikimr::NNetClassifier {
 
-using NActors::TActorId; 
+using NActors::TActorId;
 
-inline TActorId MakeNetClassifierID() { 
+inline TActorId MakeNetClassifierID() {
     static const char x[12] = "net_classvc";
-    return TActorId(0, TStringBuf(x, 12)); 
+    return TActorId(0, TStringBuf(x, 12));
 }
 
 NActors::IActor* CreateNetClassifier();

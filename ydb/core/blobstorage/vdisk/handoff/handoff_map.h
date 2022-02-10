@@ -112,7 +112,7 @@ namespace NKikimr {
         // Finish transforming items, shutdown proxy
         void Finish(const TActorContext &ctx) {
             // do nothing by default, all work is done in template specialization for logo blobs
-            Y_VERIFY_DEBUG(ProxyID == TActorId()); 
+            Y_VERIFY_DEBUG(ProxyID == TActorId());
             ctx.Send(NotifyID, new TEvHandoffSyncLogFinished(false));
         }
 
@@ -121,7 +121,7 @@ namespace NKikimr {
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         TIntrusivePtr<THandoffDelegate> HandoffDelegate;
         const bool RunHandoff;
-        const TActorId SkeletonId; 
+        const TActorId SkeletonId;
         // TODO: we can store MoveMap and DelMap in a more compact way
         //       Hints: 1. most of values are zero (we don't want to move or delete)
         //              2. we can store only 2 bit for every local part, not 8 bits for the whole logoblob key
@@ -130,8 +130,8 @@ namespace NKikimr {
         unsigned Counter;
         TTransformedItem TrRes;
         TStat Stat;
-        TActorId ProxyID; 
-        TActorId NotifyID; 
+        TActorId ProxyID;
+        TActorId NotifyID;
     };
 
 
@@ -302,7 +302,7 @@ namespace NKikimr {
 
     template <>
     template <class TIterator>
-    inline TActorId THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::BuildMap( 
+    inline TActorId THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::BuildMap(
             const TActorContext &ctx,
             const TLevelIndexSnapshot &levelSnap,
             const TIterator &i,
@@ -371,10 +371,10 @@ namespace NKikimr {
                 "THandoffMap: finished: %s", Stat.ToStringRuntimeStat().data()));
 
         if (RunHandoff) {
-            Y_VERIFY_DEBUG(ProxyID != TActorId()); 
+            Y_VERIFY_DEBUG(ProxyID != TActorId());
             ctx.Send(ProxyID, new TEvHandoffSyncLogDel()); // i.e. finish
         } else {
-            Y_VERIFY_DEBUG(ProxyID == TActorId()); 
+            Y_VERIFY_DEBUG(ProxyID == TActorId());
             ctx.Send(NotifyID, new TEvHandoffSyncLogFinished(false));
         }
     }

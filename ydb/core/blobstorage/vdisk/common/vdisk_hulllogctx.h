@@ -9,16 +9,16 @@ namespace NKikimr {
     struct THullLogCtx {
         TIntrusivePtr<TVDiskContext> VCtx;
         TPDiskCtxPtr PDiskCtx;
-        TActorId SkeletonId; 
-        TActorId SyncLogId; 
-        TActorId HugeKeeperId; 
+        TActorId SkeletonId;
+        TActorId SyncLogId;
+        TActorId HugeKeeperId;
 
         THullLogCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
-                TActorId skeletonId, 
-                TActorId syncLogId, 
-                TActorId hugeKeeperId) 
+                TActorId skeletonId,
+                TActorId syncLogId,
+                TActorId hugeKeeperId)
             : VCtx(vctx)
             , PDiskCtx(pdiskCtx)
             , SkeletonId(skeletonId)

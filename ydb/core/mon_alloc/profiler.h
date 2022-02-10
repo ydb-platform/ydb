@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/events.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/string.h>
 
@@ -110,9 +110,9 @@ namespace NActors {
         virtual void Stop(IOutputStream& out, size_t limit, bool forLog) = 0;
     };
 
-    inline TActorId MakeProfilerID(ui32 nodeId) { 
+    inline TActorId MakeProfilerID(ui32 nodeId) {
         char x[12] = {'p', 'r', 'o', 'f', 'i', 'l', 'e', 'r', 's', 'e', 'r', 'v'};
-        return TActorId(nodeId, TStringBuf(x, 12)); 
+        return TActorId(nodeId, TStringBuf(x, 12));
     }
 
     IActor* CreateProfilerActor(

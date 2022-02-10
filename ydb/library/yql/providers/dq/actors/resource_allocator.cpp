@@ -188,10 +188,10 @@ private:
         }
 
         if (AllocatedCount == RequestedCount) {
-            TVector<NActors::TActorId> workerIds; 
+            TVector<NActors::TActorId> workerIds;
             for (auto& group : AllocatedWorkers) {
                 for (const auto& actorIdProto : group.GetWorkerActor()) {
-                    workerIds.emplace_back(NActors::ActorIdFromProto(actorIdProto)); 
+                    workerIds.emplace_back(NActors::ActorIdFromProto(actorIdProto));
                 }
             }
 
@@ -217,7 +217,7 @@ private:
     {
         for (const auto& group : AllocatedWorkers) {
             for (const auto& actorIdProto : group.GetWorkerActor()) {
-                auto actorNode = NActors::ActorIdFromProto(actorIdProto).NodeId(); 
+                auto actorNode = NActors::ActorIdFromProto(actorIdProto).NodeId();
                 auto request = MakeHolder<TEvFreeWorkersNotify>(group.GetResourceId());
                 request->Record.SetTraceId(TraceId);
                 Send(MakeWorkerManagerActorID(actorNode), request.Release());
@@ -297,7 +297,7 @@ private:
     }
 
     const TActorId GwmActor;
-    const TActorId SenderId; 
+    const TActorId SenderId;
     const TActorId ControlId;
 
     THashMap<ui64, TRequestInfo> RequestedNodes;

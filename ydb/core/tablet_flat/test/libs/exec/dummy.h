@@ -32,7 +32,7 @@ namespace NFake {
             Comp    = 0x01,
         };
 
-        TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner, 
+        TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
                 ui32 flags = 0 /* ORed EFlg enum */)
             : ::NActors::IActor(static_cast<TReceiveFunc>(&TDummy::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
             , TTabletExecutedFlat(info, tablet, nullptr)
@@ -128,7 +128,7 @@ namespace NFake {
         }
 
     private:
-        TActorId Owner; 
+        TActorId Owner;
         const ui32 Flags = 0;
         EState State = EState::Boot;
     };

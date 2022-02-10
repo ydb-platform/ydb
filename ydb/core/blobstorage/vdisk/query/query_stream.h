@@ -14,7 +14,7 @@ namespace NKikimr {
 
         TIntrusivePtr<THullCtx> HullCtx;
         std::optional<THullDsSnap> FullSnap;
-        TActorId SkeletonId; 
+        TActorId SkeletonId;
         const TString StreamId;
         TInstant Deadline;
         ui64 SequenceId = 1;
@@ -269,7 +269,7 @@ namespace NKikimr {
             , StreamId(std::move(ev->Get()->StreamId))
         {}
 
-        void Bootstrap(const TActorId& parentId, const TActorContext& ctx) { 
+        void Bootstrap(const TActorId& parentId, const TActorContext& ctx) {
             Become(&TLevelIndexStreamActor::StateFunc);
 
             // record all snapped data into the processor and release snapshot

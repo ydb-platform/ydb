@@ -46,7 +46,7 @@ using TResourceLimitConstPtr = TIntrusiveConstPtr<TResourceLimit>;
 class TTask : public TThrRefBase,
               public TEvResourceBroker::TTask {
 public:
-    TTask(const TEvResourceBroker::TTask &task, const TActorId &client, 
+    TTask(const TEvResourceBroker::TTask &task, const TActorId &client,
           TInstant timestamp, TTaskCountersPtr counters);
 
     // Get string with task's name, ID and client info.
@@ -68,7 +68,7 @@ public:
 
 public:
     // Actor which submitted task.
-    TActorId Client; 
+    TActorId Client;
     // Task queue task is currently attached to.
     TTaskQueuePtr Queue;
     // True if task has allocated resources.
@@ -315,7 +315,7 @@ public:
     /**
      * Update queued task. Return true on success and false if task not found.
      */
-    bool UpdateTask(ui64 taskId, const TActorId &client, const TResourceValues &requiredResources, 
+    bool UpdateTask(ui64 taskId, const TActorId &client, const TResourceValues &requiredResources,
                     ui64 priority, const TString &type, bool resubmit, const TActorSystem &as);
     /**
      * Update cookie for submitted task. Return true on success and false if task not found.
@@ -391,7 +391,7 @@ private:
     THashMap<TString, TTaskQueuePtr> Queues;
     THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
-    THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks; 
+    THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
     const NMonitoring::TDynamicCounterPtr Counters;
     TQueueCountersPtr TotalCounters;
     NMonitoring::TDynamicCounters::TCounterPtr MissingTaskTypeCounter;

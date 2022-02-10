@@ -40,7 +40,7 @@ protected:
     using TThis = TJsonWhiteboardRequest<RequestType, ResponseType>;
     using TBase = TViewerPipeClient<TThis>;
     IViewer* Viewer;
-    TActorId Initiator; 
+    TActorId Initiator;
     NMon::TEvHttpInfo::TPtr Event;
     std::vector<TNodeId> FilterNodeIds;
     ui64 ChangedSince;
@@ -81,7 +81,7 @@ public:
     }
 
     void SendNodeRequest(TNodeId nodeId) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId); 
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         THolder<RequestType> request = BuildRequest(nodeId);
         TBase::SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         NodeIds.insert(nodeId);
@@ -132,7 +132,7 @@ public:
                 static const TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TBase::SelfId().NodeId());
                 TBase::SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvNodeStateRequest());
             } else {
-                const TActorId nameserviceId = GetNameserviceActorId(); 
+                const TActorId nameserviceId = GetNameserviceActorId();
                 TBase::Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             }
             TBase::Become(&TThis::StateRequestedBrowse);

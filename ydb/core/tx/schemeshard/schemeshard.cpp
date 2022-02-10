@@ -45,7 +45,7 @@ namespace NSchemeShard {
     }
 }
 
-IActor* CreateFlatTxSchemeShard(const TActorId &tablet, TTabletStorageInfo *info) { 
+IActor* CreateFlatTxSchemeShard(const TActorId &tablet, TTabletStorageInfo *info) {
     return new NSchemeShard::TSchemeShard(tablet, info);
 }
 

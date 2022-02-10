@@ -18,7 +18,7 @@ namespace NKikimr {
         const TVDiskID SelfVDisk; // FIXME: switch to TVDiskIdShort
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         NHandoff::TProxiesPtr ProxiesPtr;
-        TActorId MonActorID = {}; 
+        TActorId MonActorID = {};
         const THandoffParams Params;
         bool ProxiesStarted = false;
 
@@ -75,7 +75,7 @@ namespace NKikimr {
         return ref.Get().Restore(ctx, id, fullDataSize, std::move(data));
     }
 
-    TActorId THandoffDelegate::GetMonActorID() const { 
+    TActorId THandoffDelegate::GetMonActorID() const {
         return Fields->MonActorID;
     }
 

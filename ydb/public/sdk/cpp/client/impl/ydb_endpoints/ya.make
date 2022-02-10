@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/metrics 
+    library/cpp/monlib/metrics
     ydb/public/api/grpc
 )
 

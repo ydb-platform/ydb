@@ -2,7 +2,7 @@
 #include "blobstorage_synclog_private_events.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/mon.h>
 
 

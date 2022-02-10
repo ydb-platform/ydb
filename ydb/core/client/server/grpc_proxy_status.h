@@ -12,7 +12,7 @@
 namespace NKikimr {
 
 ////////////////////////////////////////////
-TActorId MakeGRpcProxyStatusID(ui32 node); 
+TActorId MakeGRpcProxyStatusID(ui32 node);
 
 ////////////////////////////////////////////
 struct TEvGRpcProxyStatus {

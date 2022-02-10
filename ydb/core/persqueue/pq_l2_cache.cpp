@@ -44,7 +44,7 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
 void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<TKey, TCacheValue::TPtr>& evictedBlobs)
 {
     TInstant now = TAppData::TimeProvider->Now();
-    THashMap<TActorId, THolder<TCacheL2Response>> responses; 
+    THashMap<TActorId, THolder<TCacheL2Response>> responses;
 
     for (auto rm : evictedBlobs) {
         const TKey& key = rm.first;

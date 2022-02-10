@@ -4,8 +4,8 @@
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/utils/cast.h>
 
-#include <util/string/cast.h> 
- 
+#include <util/string/cast.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 

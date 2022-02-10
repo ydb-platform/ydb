@@ -1,31 +1,31 @@
 PY23_LIBRARY()
- 
+
 OWNER(g:python-contrib)
 
 VERSION(1.20.112)
- 
+
 LICENSE(Apache-2.0)
- 
-PEERDIR( 
-    contrib/python/dateutil 
-    contrib/python/jmespath 
+
+PEERDIR(
+    contrib/python/dateutil
+    contrib/python/jmespath
     contrib/python/six
     contrib/python/urllib3
     library/python/resource
-) 
- 
+)
+
 NO_LINT()
 
 NO_CHECK_IMPORTS(
     botocore.crt.auth
 )
 
-PY_SRCS( 
-    TOP_LEVEL 
+PY_SRCS(
+    TOP_LEVEL
     botocore/__init__.py
     botocore/args.py
     botocore/auth.py
-    botocore/awsrequest.py 
+    botocore/awsrequest.py
     botocore/client.py
     botocore/compat.py
     botocore/config.py
@@ -43,12 +43,12 @@ PY_SRCS(
     botocore/docs/client.py
     botocore/docs/docstring.py
     botocore/docs/example.py
-    botocore/docs/method.py 
+    botocore/docs/method.py
     botocore/docs/paginator.py
-    botocore/docs/params.py 
+    botocore/docs/params.py
     botocore/docs/service.py
-    botocore/docs/shape.py 
-    botocore/docs/sharedexample.py 
+    botocore/docs/shape.py
+    botocore/docs/sharedexample.py
     botocore/docs/utils.py
     botocore/docs/waiter.py
     botocore/endpoint.py
@@ -89,8 +89,8 @@ PY_SRCS(
     botocore/vendored/requests/packages/urllib3/__init__.py
     botocore/vendored/requests/packages/urllib3/exceptions.py
     botocore/waiter.py
-) 
- 
+)
+
 RESOURCE_FILES(
     PREFIX contrib/python/botocore/
     .dist-info/METADATA
@@ -916,7 +916,7 @@ RESOURCE_FILES(
     #botocore/data/xray/2016-04-12/service-2.json
 )
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     tests

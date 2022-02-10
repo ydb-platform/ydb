@@ -218,9 +218,9 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             settings.SetAllowOtherKinds(false);
         }
         switch (policy.keep_in_memory()) {
-        case Ydb::FeatureFlag::STATUS_UNSPECIFIED: 
+        case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
             break;
-        case Ydb::FeatureFlag::ENABLED: 
+        case Ydb::FeatureFlag::ENABLED:
             if (!AppData()->FeatureFlags.GetEnablePublicApiKeepInMemory()) {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = "Setting keep_in_memory to ENABLED is not allowed";
@@ -228,7 +228,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             }
             GetDefaultFamilyDescription(storagePolicy)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
             break;
-        case Ydb::FeatureFlag::DISABLED: 
+        case Ydb::FeatureFlag::DISABLED:
             GetDefaultFamilyDescription(storagePolicy)->ClearColumnCache();
             break;
         default:
@@ -325,12 +325,12 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         if (policy.replicas_count())
             replicationPolicy.SetFollowerCount(policy.replicas_count());
         switch (policy.create_per_availability_zone()) {
-        case Ydb::FeatureFlag::STATUS_UNSPECIFIED: 
+        case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
             break;
-        case Ydb::FeatureFlag::ENABLED: 
+        case Ydb::FeatureFlag::ENABLED:
             replicationPolicy.SetCrossDataCenter(true);
             break;
-        case Ydb::FeatureFlag::DISABLED: 
+        case Ydb::FeatureFlag::DISABLED:
             replicationPolicy.SetCrossDataCenter(false);
             break;
         default:
@@ -340,12 +340,12 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             return false;
         }
         switch (policy.allow_promotion()) {
-        case Ydb::FeatureFlag::STATUS_UNSPECIFIED: 
+        case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
             break;
-        case Ydb::FeatureFlag::ENABLED: 
+        case Ydb::FeatureFlag::ENABLED:
             replicationPolicy.SetAllowFollowerPromotion(true);
             break;
-        case Ydb::FeatureFlag::DISABLED: 
+        case Ydb::FeatureFlag::DISABLED:
             replicationPolicy.SetAllowFollowerPromotion(false);
             break;
         default:

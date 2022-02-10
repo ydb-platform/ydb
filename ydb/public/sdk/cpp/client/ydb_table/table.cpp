@@ -3643,15 +3643,15 @@ static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settin
         if (policy.CreatePerAvailabilityZone_) {
             proto->mutable_replication_policy()->set_create_per_availability_zone(
                 policy.CreatePerAvailabilityZone_.GetRef()
-                ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED 
-                : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED 
+                ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED
+                : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED
             );
         }
         if (policy.AllowPromotion_) {
             proto->mutable_replication_policy()->set_allow_promotion(
                 policy.AllowPromotion_.GetRef()
-                ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED 
-                : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED 
+                ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED
+                : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED
             );
         }
     }

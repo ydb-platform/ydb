@@ -1,7 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package Ydb; 
+package Ydb;
 option java_package = "com.yandex.ydb.common";
 option java_outer_classname = "CommonProtos";
 

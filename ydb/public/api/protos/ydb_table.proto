@@ -127,7 +127,7 @@ message StoragePolicy {
     StoragePool log = 3;
     StoragePool data = 4;
     StoragePool external = 5;
-    Ydb.FeatureFlag.Status keep_in_memory = 6; 
+    Ydb.FeatureFlag.Status keep_in_memory = 6;
     repeated ColumnFamilyPolicy column_families = 7;
 }
 
@@ -221,10 +221,10 @@ message ReplicationPolicy {
     uint32 replicas_count = 2;
     // If this feature in enabled then requested number of replicas
     // will be created in each availability zone.
-    Ydb.FeatureFlag.Status create_per_availability_zone = 3; 
+    Ydb.FeatureFlag.Status create_per_availability_zone = 3;
     // If this feature in enabled then read-only replicas can be promoted
     // to leader.
-    Ydb.FeatureFlag.Status allow_promotion = 4; 
+    Ydb.FeatureFlag.Status allow_promotion = 4;
 }
 
 message CachingPolicy {

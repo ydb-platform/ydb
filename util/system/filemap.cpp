@@ -153,14 +153,14 @@ public:
     }
 
     void CheckFile() const {
-        if (!File_.IsOpen()) { 
+        if (!File_.IsOpen()) {
             ythrow yexception() << "TMemoryMap: FILE '" << DbgName_ << "' is not open, " << LastSystemErrorText();
-        } 
-        if (Length_ < 0) { 
+        }
+        if (Length_ < 0) {
             ythrow yexception() << "'" << DbgName_ << "' is not a regular file";
-        } 
-    } 
- 
+        }
+    }
+
     inline TImpl(FILE* f, EOpenMode om, TString dbgName)
         : File_(Duplicate(f))
         , DbgName_(std::move(dbgName))

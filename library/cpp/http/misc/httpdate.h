@@ -17,5 +17,5 @@ inline time_t parse_http_date(const TStringBuf& datestring) {
 
 int format_http_date(char buf[], size_t size, time_t when);
 char* format_http_date(time_t when, char* buf, size_t len);
- 
+
 TString FormatHttpDate(time_t when);

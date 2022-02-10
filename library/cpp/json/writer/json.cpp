@@ -1,14 +1,14 @@
-#include "json.h" 
+#include "json.h"
 
 #include <library/cpp/json/json_value.h>
 
 #include <util/string/cast.h>
 #include <util/string/strspn.h>
-#include <util/generic/algorithm.h> 
-#include <util/generic/ymath.h> 
+#include <util/generic/algorithm.h>
+#include <util/generic/ymath.h>
 #include <util/generic/singleton.h>
- 
-namespace NJsonWriter { 
+
+namespace NJsonWriter {
     TBuf::TBuf(EHtmlEscapeMode mode, IOutputStream* stream)
         : Stream(stream)
         , NeedComma(false)
@@ -25,7 +25,7 @@ namespace NJsonWriter {
             StringStream.Reset(new TStringStream);
             Stream = StringStream.Get();
         }
- 
+
         Stack.reserve(64); // should be enough for most cases
         StackPush(JE_OUTER_SPACE);
     }
@@ -47,12 +47,12 @@ namespace NJsonWriter {
 
     inline void TBuf::StackPush(EJsonEntity e) {
         Stack.push_back(e);
-    } 
- 
+    }
+
     inline EJsonEntity TBuf::StackTop() const {
         return Stack.back();
     }
- 
+
     inline void TBuf::StackPop() {
         Y_ASSERT(!Stack.empty());
         const EJsonEntity current = StackTop();
@@ -81,8 +81,8 @@ namespace NJsonWriter {
                             << EntityToStr(StackTop()) << " on the stack";
         }
         StackPop();
-    } 
- 
+    }
+
     void TBuf::PrintIndentation(bool closing) {
         if (!IndentSpaces)
             return;
@@ -126,7 +126,7 @@ namespace NJsonWriter {
         }
         WriteComma();
     }
- 
+
     inline void TBuf::BeginKey() {
         if (Y_UNLIKELY(!KeyExpected())) {
             ythrow TError() << "JSON writer: key written outside of an object";
@@ -135,14 +135,14 @@ namespace NJsonWriter {
         StackPush(JE_PAIR);
         NeedComma = false;
         NeedNewline = false;
-    } 
+    }
 
     inline void TBuf::EndValue() {
         if (StackTop() == JE_PAIR) {
             StackPop();
         }
     }
- 
+
     TValueContext TBuf::BeginList() {
         NeedNewline = true;
         BeginValue();
@@ -150,8 +150,8 @@ namespace NJsonWriter {
         StackPush(JE_LIST);
         NeedComma = false;
         return TValueContext(*this);
-    } 
- 
+    }
+
     TPairContext TBuf::BeginObject() {
         NeedNewline = true;
         BeginValue();
@@ -159,28 +159,28 @@ namespace NJsonWriter {
         StackPush(JE_OBJECT);
         NeedComma = false;
         return TPairContext(*this);
-    } 
- 
+    }
+
     TAfterColonContext TBuf::UnsafeWriteKey(const TStringBuf& s) {
         BeginKey();
         RawWriteChar('"');
         UnsafeWriteRawBytes(s);
         UnsafeWriteRawBytes("\":", 2);
         return TAfterColonContext(*this);
-    } 
- 
+    }
+
     TAfterColonContext TBuf::WriteKey(const TStringBuf& s) {
         // use the default escaping mode for this object
         return WriteKey(s, EscapeMode);
     }
- 
+
     TAfterColonContext TBuf::WriteKey(const TStringBuf& s, EHtmlEscapeMode hem) {
         BeginKey();
         WriteBareString(s, hem);
         RawWriteChar(':');
         return TAfterColonContext(*this);
     }
- 
+
     TAfterColonContext TBuf::CompatWriteKeyWithoutQuotes(const TStringBuf& s) {
         BeginKey();
         Y_ASSERT(AllOf(s, [](char x) { return 'a' <= x && x <= 'z'; }));
@@ -194,44 +194,44 @@ namespace NJsonWriter {
         EndValue();
         return *this;
     }
- 
+
     TBuf& TBuf::EndObject() {
         CheckAndPop(JE_OBJECT);
         EndValue();
         return *this;
     }
- 
+
     TValueContext TBuf::WriteString(const TStringBuf& s) {
         // use the default escaping mode for this object
         return WriteString(s, EscapeMode);
     }
- 
+
     TValueContext TBuf::WriteString(const TStringBuf& s, EHtmlEscapeMode hem) {
         BeginValue();
         WriteBareString(s, hem);
         EndValue();
         return TValueContext(*this);
     }
- 
+
     TValueContext TBuf::WriteNull() {
         UnsafeWriteValue(TStringBuf("null"));
         return TValueContext(*this);
     }
- 
+
     TValueContext TBuf::WriteBool(bool b) {
         constexpr TStringBuf trueVal = "true";
         constexpr TStringBuf falseVal = "false";
         UnsafeWriteValue(b ? trueVal : falseVal);
         return TValueContext(*this);
     }
- 
+
     TValueContext TBuf::WriteInt(int i) {
         char buf[22]; // enough to hold any 64-bit number
         size_t len = ToString(i, buf, sizeof(buf));
         UnsafeWriteValue(buf, len);
         return TValueContext(*this);
     }
- 
+
     TValueContext TBuf::WriteLongLong(long long i) {
         static_assert(sizeof(long long) <= 8, "expect sizeof(long long) <= 8");
         char buf[22]; // enough to hold any 64-bit number
@@ -239,14 +239,14 @@ namespace NJsonWriter {
         UnsafeWriteValue(buf, len);
         return TValueContext(*this);
     }
- 
+
     TValueContext TBuf::WriteULongLong(unsigned long long i) {
         char buf[22]; // enough to hold any 64-bit number
         size_t len = ToString(i, buf, sizeof(buf));
         UnsafeWriteValue(buf, len);
         return TValueContext(*this);
     }
- 
+
     template <class TFloat>
     TValueContext TBuf::WriteFloatImpl(TFloat f, EFloatToStringMode mode, int ndigits) {
         char buf[512]; // enough to hold most floats, the same buffer is used in FloatToString implementation
@@ -271,7 +271,7 @@ namespace NJsonWriter {
     TValueContext TBuf::WriteDouble(double f, EFloatToStringMode mode, int ndigits) {
         return WriteFloatImpl(f, mode, ndigits);
     }
- 
+
     namespace {
         struct TFinder: public TCompactStrSpn {
             inline TFinder()
@@ -306,12 +306,12 @@ namespace NJsonWriter {
         }
         UnsafeWriteRawBytes(b, e - b);
         RawWriteChar('"');
-    } 
- 
+    }
+
     inline void TBuf::RawWriteChar(char c) {
         Stream->Write(c);
     }
- 
+
     void TBuf::WriteHexEscape(unsigned char c) {
         Y_ASSERT(c < 0x80);
         UnsafeWriteRawBytes("\\u00", 4);
@@ -319,13 +319,13 @@ namespace NJsonWriter {
         RawWriteChar(hexDigits[(c & 0xf0) >> 4]);
         RawWriteChar(hexDigits[(c & 0x0f)]);
     }
- 
+
 #define MATCH(sym, string)                        \
     case sym:                                     \
         UnsafeWriteRawBytes(beg, cur - beg);      \
         UnsafeWriteRawBytes(TStringBuf(string));  \
         return true
- 
+
     inline bool TBuf::EscapedWriteChar(const char* beg, const char* cur, EHtmlEscapeMode hem) {
         unsigned char c = *cur;
         if (hem == HEM_ESCAPE_HTML) {
@@ -337,11 +337,11 @@ namespace NJsonWriter {
                 MATCH('&', "&amp;");
             }
             //for other characters, we fall through to the non-HTML-escaped part
-        } 
- 
+        }
+
         if (hem == HEM_RELAXED && c == '/')
             return false;
- 
+
         if (hem != HEM_UNSAFE) {
             switch (c) {
                 case '/':
@@ -356,16 +356,16 @@ namespace NJsonWriter {
                     return true;
             }
             // for other characters, fall through to the non-escaped part
-        } 
- 
+        }
+
         switch (c) {
-            MATCH('"', "\\\""); 
-            MATCH('\\', "\\\\"); 
-            MATCH('\b', "\\b"); 
-            MATCH('\f', "\\f"); 
-            MATCH('\n', "\\n"); 
-            MATCH('\r', "\\r"); 
-            MATCH('\t', "\\t"); 
+            MATCH('"', "\\\"");
+            MATCH('\\', "\\\\");
+            MATCH('\b', "\\b");
+            MATCH('\f', "\\f");
+            MATCH('\n', "\\n");
+            MATCH('\r', "\\r");
+            MATCH('\t', "\\t");
         }
         if (c < 0x20) {
             UnsafeWriteRawBytes(beg, cur - beg);
@@ -374,14 +374,14 @@ namespace NJsonWriter {
         }
 
         return false;
-    } 
+    }
 
 #undef MATCH
 
     static bool LessStrPtr(const TString* a, const TString* b) {
         return *a < *b;
     }
- 
+
     TValueContext TBuf::WriteJsonValue(const NJson::TJsonValue* v, bool sortKeys, EFloatToStringMode mode, int ndigits) {
         using namespace NJson;
         switch (v->GetType()) {
@@ -411,7 +411,7 @@ namespace NJsonWriter {
                     WriteJsonValue(&it, sortKeys, mode, ndigits);
                 EndList();
                 break;
-            } 
+            }
             case JSON_MAP: {
                 BeginObject();
                 const TJsonValue::TMapType& map = v->GetMap();
@@ -436,10 +436,10 @@ namespace NJsonWriter {
                 }
                 EndObject();
                 break;
-            } 
-        } 
+            }
+        }
         return TValueContext(*this);
-    } 
+    }
 
     TPairContext TBuf::UnsafeWritePair(const TStringBuf& s) {
         if (Y_UNLIKELY(StackTop() != JE_OBJECT)) {
@@ -448,28 +448,28 @@ namespace NJsonWriter {
         WriteComma();
         UnsafeWriteRawBytes(s);
         return TPairContext(*this);
-    } 
- 
+    }
+
     void TBuf::UnsafeWriteValue(const TStringBuf& s) {
         BeginValue();
         UnsafeWriteRawBytes(s);
         EndValue();
-    } 
- 
+    }
+
     void TBuf::UnsafeWriteValue(const char* s, size_t len) {
         BeginValue();
         UnsafeWriteRawBytes(s, len);
         EndValue();
     }
- 
+
     void TBuf::UnsafeWriteRawBytes(const char* src, size_t len) {
         Stream->Write(src, len);
     }
- 
+
     void TBuf::UnsafeWriteRawBytes(const TStringBuf& s) {
         UnsafeWriteRawBytes(s.data(), s.size());
     }
- 
+
     const TString& TBuf::Str() const {
         if (!StringStream) {
             ythrow TError() << "JSON writer: Str() called "
@@ -480,7 +480,7 @@ namespace NJsonWriter {
         }
         return StringStream->Str();
     }
- 
+
     void TBuf::FlushTo(IOutputStream* stream) {
         if (!StringStream) {
             ythrow TError() << "JSON writer: FlushTo() called "
@@ -488,7 +488,7 @@ namespace NJsonWriter {
         }
         stream->Write(StringStream->Str());
         StringStream->Clear();
-    } 
+    }
 
     TString WrapJsonToCallback(const TBuf& buf, TStringBuf callback) {
         if (!callback) {
@@ -496,12 +496,12 @@ namespace NJsonWriter {
         } else {
             return TString::Join(callback, "(", buf.Str(), ")");
         }
-    } 
- 
+    }
+
     TBufState TBuf::State() const {
         return TBufState{NeedComma, NeedNewline, Stack};
-    } 
- 
+    }
+
     void TBuf::Reset(const TBufState& from) {
         NeedComma = from.NeedComma;
         NeedNewline = from.NeedNewline;

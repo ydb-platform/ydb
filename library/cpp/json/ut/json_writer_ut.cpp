@@ -71,17 +71,17 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
 
     Y_UNIT_TEST(SortKeys) {
         TString expected = "{\"a\":null,\"j\":null,\"n\":null,\"y\":null,\"z\":null}";
-        TJsonValue v; 
-        v["z"] = JSON_NULL; 
-        v["n"] = JSON_NULL; 
-        v["a"] = JSON_NULL; 
-        v["y"] = JSON_NULL; 
-        v["j"] = JSON_NULL; 
-        TStringStream out; 
-        WriteJson(&out, &v, false, true); 
-        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), expected); 
-    } 
- 
+        TJsonValue v;
+        v["z"] = JSON_NULL;
+        v["n"] = JSON_NULL;
+        v["a"] = JSON_NULL;
+        v["y"] = JSON_NULL;
+        v["j"] = JSON_NULL;
+        TStringStream out;
+        WriteJson(&out, &v, false, true);
+        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), expected);
+    }
+
     Y_UNIT_TEST(SimpleUnsignedIntegerWriteTest) {
         {
             TString expected = "{\"test\":1}";

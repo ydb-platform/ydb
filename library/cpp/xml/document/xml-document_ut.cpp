@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
- 
-#include "xml-document.h" 
- 
+
+#include "xml-document.h"
+
 Y_UNIT_TEST_SUITE(TestXmlDocument) {
     Y_UNIT_TEST(Iteration) {
         NXml::TDocument xml(
@@ -19,40 +19,40 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
     }
 
     Y_UNIT_TEST(ParseString) {
-        NXml::TDocument xml( 
+        NXml::TDocument xml(
             "<?xml version=\"1.0\"?>\n"
             "<root>\n"
             "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n"
             "<text>Некоторый текст</text>\n"
             "</root>",
             NXml::TDocument::String);
- 
-        NXml::TConstNode root = xml.Root(); 
-        NXml::TConstNode b = root.Node("a/b"); 
-        UNIT_ASSERT_EQUAL(b.Attr<int>("len"), 15); 
-        UNIT_ASSERT_EQUAL(b.Attr<bool>("correct"), true); 
- 
-        NXml::TConstNode text = root.Node("text"); 
+
+        NXml::TConstNode root = xml.Root();
+        NXml::TConstNode b = root.Node("a/b");
+        UNIT_ASSERT_EQUAL(b.Attr<int>("len"), 15);
+        UNIT_ASSERT_EQUAL(b.Attr<bool>("correct"), true);
+
+        NXml::TConstNode text = root.Node("text");
         UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст");
-    } 
+    }
     Y_UNIT_TEST(SerializeString) {
-        NXml::TDocument xml("frob", NXml::TDocument::RootName); 
-        xml.Root().SetAttr("xyzzy", "Frobozz"); 
-        xml.Root().SetAttr("kulness", 0.3); 
-        xml.Root().SetAttr("timelimit", 3); 
- 
-        NXml::TNode authors = xml.Root().AddChild("authors"); 
-        authors.AddChild("graham").SetAttr("name", "Nelson"); 
-        authors.AddChild("zarf").SetValue("Andrew Plotkin"); 
-        authors.AddChild("emshort", "Emily Short"); 
- 
+        NXml::TDocument xml("frob", NXml::TDocument::RootName);
+        xml.Root().SetAttr("xyzzy", "Frobozz");
+        xml.Root().SetAttr("kulness", 0.3);
+        xml.Root().SetAttr("timelimit", 3);
+
+        NXml::TNode authors = xml.Root().AddChild("authors");
+        authors.AddChild("graham").SetAttr("name", "Nelson");
+        authors.AddChild("zarf").SetValue("Andrew Plotkin");
+        authors.AddChild("emshort", "Emily Short");
+
         TString data = xml.ToString("utf-8");
-        UNIT_ASSERT_EQUAL(data, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" 
-                                "<frob xyzzy=\"Frobozz\" kulness=\"0.3\" timelimit=\"3\">\n" 
+        UNIT_ASSERT_EQUAL(data, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                                "<frob xyzzy=\"Frobozz\" kulness=\"0.3\" timelimit=\"3\">\n"
                                 "  <authors>\n"
                                 "    <graham name=\"Nelson\"/>\n"
                                 "    <zarf>Andrew Plotkin</zarf>\n"
-                                "    <emshort>Emily Short</emshort>\n" 
+                                "    <emshort>Emily Short</emshort>\n"
                                 "  </authors>\n"
                                 "</frob>\n");
         // check default utf8 output with ru
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
             UNIT_ASSERT_VALUES_EQUAL(xml2.ToString(), "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                                       "<frob xyzzy=\"привет =)\"/>\n");
         }
-    } 
+    }
     Y_UNIT_TEST(XPathNs) {
         using namespace NXml;
         TDocument xml(
@@ -114,11 +114,11 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EQUAL(node.Value<TString>(), "");
         node = node.NextSibling();
         UNIT_ASSERT_EQUAL(node.IsNull(), true);
-        TStringStream iterLog; 
+        TStringStream iterLog;
         for (const auto& node2 : root.Nodes("/root/*")) {
             iterLog << node2.Name() << ';';
-        } 
-        UNIT_ASSERT_STRINGS_EQUAL(iterLog.Str(), "a;c;"); 
+        }
+        UNIT_ASSERT_STRINGS_EQUAL(iterLog.Str(), "a;c;");
 
         // get only element nodes, ignore text nodes with empty "name" param
         node = root.FirstChild(TString());
@@ -152,29 +152,29 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EXCEPTION(node.IsText(), yexception);
     }
     Y_UNIT_TEST(DefVal) {
-        using namespace NXml; 
-        TDocument xml("<?xml version=\"1.0\"?>\n" 
+        using namespace NXml;
+        TDocument xml("<?xml version=\"1.0\"?>\n"
                       "<root><a></a></root>",
                       NXml::TDocument::String);
-        UNIT_ASSERT_EQUAL(xml.Root().Node("a", true).Node("b", true).Value<int>(3), 3); 
-    } 
+        UNIT_ASSERT_EQUAL(xml.Root().Node("a", true).Node("b", true).Value<int>(3), 3);
+    }
     Y_UNIT_TEST(NodesVsXPath) {
-        using namespace NXml; 
-        TDocument xml("<?xml version=\"1.0\"?>\n" 
+        using namespace NXml;
+        TDocument xml("<?xml version=\"1.0\"?>\n"
                       "<root><a x=\"y\"></a></root>",
                       NXml::TDocument::String);
-        UNIT_ASSERT_EXCEPTION(xml.Root().Nodes("/root/a/@x"), yexception); 
-        UNIT_ASSERT_VALUES_EQUAL(xml.Root().XPath("/root/a/@x").Size(), 1); 
-    } 
+        UNIT_ASSERT_EXCEPTION(xml.Root().Nodes("/root/a/@x"), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(xml.Root().XPath("/root/a/@x").Size(), 1);
+    }
     Y_UNIT_TEST(NodeIsFirst) {
-        using namespace NXml; 
-        TDocument xml("<?xml version=\"1.0\"?>\n" 
-                      "<root><a x=\"y\">first</a>" 
+        using namespace NXml;
+        TDocument xml("<?xml version=\"1.0\"?>\n"
+                      "<root><a x=\"y\">first</a>"
                       "<a>second</a></root>",
                       NXml::TDocument::String);
-        UNIT_ASSERT_EXCEPTION(xml.Root().Node("/root/a/@x"), yexception); 
+        UNIT_ASSERT_EXCEPTION(xml.Root().Node("/root/a/@x"), yexception);
         UNIT_ASSERT_STRINGS_EQUAL(xml.Root().Node("/root/a").Value<TString>(), "first");
-    } 
+    }
     Y_UNIT_TEST(CopyNode) {
         using namespace NXml;
         // default-construct empty node
@@ -304,16 +304,16 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EXCEPTION(xml1.Root(), yexception);
         UNIT_ASSERT_VALUES_EQUAL(xml2.Root().ToString(), "<foo><bar/></foo>");
     }
- 
-    Y_UNIT_TEST(StringConversion) { 
-        using namespace NXml; 
-        TDocument xml("foo", TDocument::RootName); 
-        auto root = xml.Root(); 
-        const TStringBuf stringBuf = "bar"; 
-        root.SetAttr("bar", stringBuf); 
-        const TString tString = "baz"; 
-        root.SetAttr("baz", tString); 
-        root.SetAttr("quux", "literal"); 
-        root.SetAttr("frob", 500); 
-    } 
-} 
+
+    Y_UNIT_TEST(StringConversion) {
+        using namespace NXml;
+        TDocument xml("foo", TDocument::RootName);
+        auto root = xml.Root();
+        const TStringBuf stringBuf = "bar";
+        root.SetAttr("bar", stringBuf);
+        const TString tString = "baz";
+        root.SetAttr("baz", tString);
+        root.SetAttr("quux", "literal");
+        root.SetAttr("frob", 500);
+    }
+}

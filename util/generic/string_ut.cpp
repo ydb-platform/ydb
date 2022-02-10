@@ -32,7 +32,7 @@ public:
         UNIT_ASSERT(s.size() == sizeof(data));
         UNIT_ASSERT(s.StartsWith(s));
         UNIT_ASSERT(s.EndsWith(s));
-        UNIT_ASSERT(s.Contains('\0')); 
+        UNIT_ASSERT(s.Contains('\0'));
 
         const char raw_def[] = "def";
         const char raw_zero[] = "\0";

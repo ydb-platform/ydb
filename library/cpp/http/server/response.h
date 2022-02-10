@@ -51,10 +51,10 @@ public:
         return *this;
     }
 
-    TString GetContent() const { 
-        return Content; 
-    } 
- 
+    TString GetContent() const {
+        return Content;
+    }
+
     /**
      * @note If @arg content isn't empty its size is automatically added as a
      * "Content-Length" header during output to IOutputStream.

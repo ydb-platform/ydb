@@ -1,7 +1,7 @@
 #pragma once
 
 // Deprecated. Use library/cpp/json/writer in new code.
- 
+
 #include "json_value.h"
 
 #include <library/cpp/json/writer/json.h>

@@ -73,14 +73,14 @@ namespace NJson {
             throw yexception() << "JSON writer: invalid UTF-8";
         if (Buf.KeyExpected()) {
             Buf.WriteKey(value);
-        } else { 
+        } else {
             if (DontEscapeStrings) {
                 Buf.UnsafeWriteValue(TString("\"") + value + '"');
             } else {
                 Buf.WriteString(value);
             }
-        } 
-    } 
+        }
+    }
 
     void TJsonWriter::WriteNull() {
         Buf.WriteNull();

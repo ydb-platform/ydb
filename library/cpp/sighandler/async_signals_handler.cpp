@@ -215,14 +215,14 @@ void SetAsyncSignalHandler(int, TAutoPtr<TEventHandler>) {
 #endif
 
 namespace {
-    template <typename TFunc> 
-    class TFunctionEventHandler: public TEventHandler { 
-        TFunc Func; 
+    template <typename TFunc>
+    class TFunctionEventHandler: public TEventHandler {
+        TFunc Func;
 
     public:
-        TFunctionEventHandler(TFunc func) { 
-            if (func) 
-                Func = func; 
+        TFunctionEventHandler(TFunc func) {
+            if (func)
+                Func = func;
         }
 
         int Handle(int signum) override {
@@ -238,8 +238,8 @@ namespace {
 void SetAsyncSignalHandler(int signum, void (*handler)(int)) {
     SetAsyncSignalHandler(signum, new TFunctionEventHandler<void (*)(int)>(handler));
 }
- 
+
 void SetAsyncSignalFunction(int signum, std::function<void(int)> func) {
     typedef std::function<void(int)> TFunc;
-    SetAsyncSignalHandler(signum, new TFunctionEventHandler<TFunc>(func)); 
-} 
+    SetAsyncSignalHandler(signum, new TFunctionEventHandler<TFunc>(func));
+}

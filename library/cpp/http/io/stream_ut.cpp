@@ -420,27 +420,27 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(ContentLengthRemoval) {
-        TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n"); 
-        THttpInput i(&request); 
+        TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n");
+        THttpInput i(&request);
         TString result;
-        TStringOutput out(result); 
-        THttpOutput httpOut(&out, &i); 
- 
-        httpOut.EnableKeepAlive(true); 
-        httpOut.EnableCompression(true); 
-        httpOut << "HTTP/1.1 200 OK\r\n"; 
-        char answer[] = "Mary had a little lamb."; 
+        TStringOutput out(result);
+        THttpOutput httpOut(&out, &i);
+
+        httpOut.EnableKeepAlive(true);
+        httpOut.EnableCompression(true);
+        httpOut << "HTTP/1.1 200 OK\r\n";
+        char answer[] = "Mary had a little lamb.";
         httpOut << "Content-Length: " << strlen(answer) << "\r\n"
                                                            "\r\n";
-        httpOut << answer; 
-        httpOut.Finish(); 
- 
-        Cdbg << result; 
-        result.to_lower(); 
-        UNIT_ASSERT(result.Contains("content-encoding: gzip")); 
-        UNIT_ASSERT(!result.Contains("content-length")); 
-    } 
- 
+        httpOut << answer;
+        httpOut.Finish();
+
+        Cdbg << result;
+        result.to_lower();
+        UNIT_ASSERT(result.Contains("content-encoding: gzip"));
+        UNIT_ASSERT(!result.Contains("content-length"));
+    }
+
     Y_UNIT_TEST(CodecsPriority) {
         TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip, br\r\n\r\n");
         TVector<TStringBuf> codecs = {"br", "gzip"};

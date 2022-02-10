@@ -6,7 +6,7 @@
 #include <util/folder/path.h>
 
 #include <cerrno>
- 
+
 #if defined(_win_)
     #include "fs_win.h"
 
@@ -174,11 +174,11 @@ i64 GetFileLength(FHANDLE fd) {
     if (::fstat(fd, &statbuf) != 0) {
         return -1L;
     }
-    if (!(statbuf.st_mode & (S_IFREG | S_IFBLK | S_IFCHR))) { 
-        // st_size only makes sense for regular files or devices 
-        errno = EINVAL; 
-        return -1L; 
-    } 
+    if (!(statbuf.st_mode & (S_IFREG | S_IFBLK | S_IFCHR))) {
+        // st_size only makes sense for regular files or devices
+        errno = EINVAL;
+        return -1L;
+    }
     return statbuf.st_size;
 #else
     #error unsupported platform
@@ -199,11 +199,11 @@ i64 GetFileLength(const char* name) {
     if (r == -1) {
         return -1;
     }
-    if (!(buf.st_mode & (S_IFREG | S_IFBLK | S_IFCHR))) { 
-        // st_size only makes sense for regular files or devices 
-        errno = EINVAL; 
-        return -1; 
-    } 
+    if (!(buf.st_mode & (S_IFREG | S_IFBLK | S_IFCHR))) {
+        // st_size only makes sense for regular files or devices
+        errno = EINVAL;
+        return -1;
+    }
     return (i64)buf.st_size;
 #else
     #error unsupported platform

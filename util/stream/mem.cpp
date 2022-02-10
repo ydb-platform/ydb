@@ -18,8 +18,8 @@ TMemoryInput::TMemoryInput(const TStringBuf buf) noexcept
     : Buf_(buf.data())
     , Len_(buf.size())
 {
-} 
- 
+}
+
 TMemoryInput::~TMemoryInput() = default;
 
 size_t TMemoryInput::DoNext(const void** ptr, size_t len) {

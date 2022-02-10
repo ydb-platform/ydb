@@ -220,7 +220,7 @@ RECURSE(
     lzmasdk
     lzo2
     matrixssl
-    mecab 
+    mecab
     metrohash
     mimalloc
     minilzo

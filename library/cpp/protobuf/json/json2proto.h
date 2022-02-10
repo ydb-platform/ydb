@@ -8,7 +8,7 @@
 
 #include <util/stream/input.h>
 #include <util/stream/str.h>
-#include <util/stream/mem.h> 
+#include <util/stream/mem.h>
 
 namespace google {
     namespace protobuf {
@@ -218,5 +218,5 @@ namespace NProtobufJson {
     T Json2Proto(const char* ptr, const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
         return Json2Proto<T>(TStringBuf(ptr), config);
     }
- 
+
 }

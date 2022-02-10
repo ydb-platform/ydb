@@ -203,7 +203,7 @@ RECURSE(
     vault_client
     watch_dog
     watch_dog/example
-    wiki 
+    wiki
     windows
     windows/ut
     yandex_tracker_client

@@ -776,7 +776,7 @@ private:
                 TString scheme = Request_->BestCompressionScheme(ComprSchemas_);
                 if (scheme != "identity") {
                     AddOrReplaceHeader(THttpInputHeader("Content-Encoding", scheme));
-                    RemoveHeader("Content-Length"); 
+                    RemoveHeader("Content-Length");
                 }
             }
 
@@ -851,9 +851,9 @@ private:
     }
 
     inline void RemoveHeader(const TString& hdr) {
-        Headers_.RemoveHeader(hdr); 
-    } 
- 
+        Headers_.RemoveHeader(hdr);
+    }
+
 private:
     IOutputStream* Slave_;
     TState State_;

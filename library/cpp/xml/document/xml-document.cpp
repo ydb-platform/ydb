@@ -75,7 +75,7 @@ namespace NXml {
         Doc = std::move(doc);
     }
 
-    void TDocument::ParseString(TZtStringBuf xml) { 
+    void TDocument::ParseString(TZtStringBuf xml) {
         TParserCtxtPtr pctx(xmlNewParserCtxt());
         if (pctx.Get() == nullptr)
             THROW(XmlException, "Can't create parser context");
@@ -89,19 +89,19 @@ namespace NXml {
     }
 
     TNode TDocument::Root() {
-        xmlNode* r = xmlDocGetRootElement(Doc.Get()); 
+        xmlNode* r = xmlDocGetRootElement(Doc.Get());
         if (r == nullptr)
             THROW(XmlException, "TDocument hasn't root element");
 
-        return TNode(Doc.Get(), r); 
+        return TNode(Doc.Get(), r);
     }
 
     TConstNode TDocument::Root() const {
-        xmlNode* r = xmlDocGetRootElement(Doc.Get()); 
+        xmlNode* r = xmlDocGetRootElement(Doc.Get());
         if (r == nullptr)
             THROW(XmlException, "TDocument hasn't root element");
 
-        return TConstNode(TNode(Doc.Get(), r)); 
+        return TConstNode(TNode(Doc.Get(), r));
     }
 
     bool TNode::IsNull() const {
@@ -126,12 +126,12 @@ namespace NXml {
         return ctx;
     }
 
-    TConstNodes TNode::XPath(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const { 
+    TConstNodes TNode::XPath(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const {
         TXPathContextPtr ctxt = CreateXPathContext(ns);
         return XPath(xpath, quiet, *ctxt);
     }
 
-    TConstNodes TNode::XPath(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const { 
+    TConstNodes TNode::XPath(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
         if (xmlXPathSetContextNode(NodePointer, &ctxt) != 0)
             THROW(XmlException, "Can't set xpath context node, probably the context is associated with another document");
 
@@ -141,59 +141,59 @@ namespace NXml {
 
         TConstNodes nodes(DocPointer, obj);
 
-        if (nodes.Size() == 0 && !quiet) 
+        if (nodes.Size() == 0 && !quiet)
             THROW(NodeNotFound, xpath);
 
         return nodes;
     }
 
-    TConstNodes TNode::Nodes(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const { 
+    TConstNodes TNode::Nodes(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const {
         TXPathContextPtr ctxt = CreateXPathContext(ns);
         return Nodes(xpath, quiet, *ctxt);
     }
 
-    TConstNodes TNode::Nodes(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const { 
+    TConstNodes TNode::Nodes(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
         TConstNodes nodes = XPath(xpath, quiet, ctxt);
-        if (nodes.Size() != 0 && !nodes[0].IsElementNode()) 
-            THROW(XmlException, "xpath points to non-element nodes: " << xpath); 
-        return nodes; 
-    } 
+        if (nodes.Size() != 0 && !nodes[0].IsElementNode())
+            THROW(XmlException, "xpath points to non-element nodes: " << xpath);
+        return nodes;
+    }
 
-    TNode TNode::Node(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) { 
+    TNode TNode::Node(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) {
         TXPathContextPtr ctxt = CreateXPathContext(ns);
         return Node(xpath, quiet, *ctxt);
     }
 
-    TConstNode TNode::Node(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const { 
+    TConstNode TNode::Node(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const {
         TXPathContextPtr ctxt = CreateXPathContext(ns);
         return Node(xpath, quiet, *ctxt);
     }
 
-    TNode TNode::Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) { 
+    TNode TNode::Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) {
         TConstNodes n = Nodes(xpath, quiet, ctxt);
 
-        if (n.Size() == 0 && !quiet) 
+        if (n.Size() == 0 && !quiet)
             THROW(NodeNotFound, xpath);
 
-        if (n.Size() == 0) 
-            return TNode(); 
+        if (n.Size() == 0)
+            return TNode();
         else
             return n[0].ConstCast();
     }
 
-    TConstNode TNode::Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const { 
+    TConstNode TNode::Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
         return const_cast<TNode*>(this)->Node(xpath, quiet, ctxt);
     }
 
-    TNode TNode::FirstChild(TZtStringBuf name) { 
-        if (IsNull()) 
+    TNode TNode::FirstChild(TZtStringBuf name) {
+        if (IsNull())
             THROW(XmlException, "Node is null");
 
-        return Find(NodePointer->children, name); 
+        return Find(NodePointer->children, name);
     }
 
-    TConstNode TNode::FirstChild(TZtStringBuf name) const { 
-        return const_cast<TNode*>(this)->FirstChild(name); 
+    TConstNode TNode::FirstChild(TZtStringBuf name) const {
+        return const_cast<TNode*>(this)->FirstChild(name);
     }
 
     TNode TNode::FirstChild() {
@@ -218,15 +218,15 @@ namespace NXml {
         return const_cast<TNode*>(this)->Parent();
     }
 
-    TNode TNode::NextSibling(TZtStringBuf name) { 
-        if (IsNull()) 
+    TNode TNode::NextSibling(TZtStringBuf name) {
+        if (IsNull())
             THROW(XmlException, "Node is null");
 
-        return Find(NodePointer->next, name); 
+        return Find(NodePointer->next, name);
     }
 
-    TConstNode TNode::NextSibling(TZtStringBuf name) const { 
-        return const_cast<TNode*>(this)->NextSibling(name); 
+    TConstNode TNode::NextSibling(TZtStringBuf name) const {
+        return const_cast<TNode*>(this)->NextSibling(name);
     }
 
     TNode TNode::NextSibling() {
@@ -242,7 +242,7 @@ namespace NXml {
 
     /* NOTE: by default child will inherit it's parent ns */
 
-    TNode TNode::AddChild(TZtStringBuf name) { 
+    TNode TNode::AddChild(TZtStringBuf name) {
         return AddChild(name, "");
     }
 
@@ -262,12 +262,12 @@ namespace NXml {
         return NodePointer->_private;
     }
 
-    TNode TNode::Find(xmlNode* start, TZtStringBuf name) { 
+    TNode TNode::Find(xmlNode* start, TZtStringBuf name) {
         for (; start; start = start->next)
             if (start->type == XML_ELEMENT_NODE && (name.empty() || !xmlStrcmp(start->name, XMLCHAR(name.c_str()))))
-                return TNode(DocPointer, start); 
+                return TNode(DocPointer, start);
 
-        return TNode(); 
+        return TNode();
     }
 
     TString TNode::Name() const {
@@ -278,7 +278,7 @@ namespace NXml {
     }
 
     TString TNode::Path() const {
-        TCharPtr path(xmlGetNodePath(NodePointer)); 
+        TCharPtr path(xmlGetNodePath(NodePointer));
         if (!!path)
             return CAST2CHAR(path.Get());
         else
@@ -313,7 +313,7 @@ namespace NXml {
         return len;
     }
 
-    void TNode::SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const { 
+    void TNode::SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const {
         const char* encoding = enc.size() ? enc.data() : "utf-8";
         TSaveCtxtPtr ctx(xmlSaveToIO(XmlWriteToOstream, /* close */ nullptr, &stream,
                                      encoding, options));
@@ -321,45 +321,45 @@ namespace NXml {
             THROW(XmlException, "Failed saving node to stream");
     }
 
-    void TNode::Save(IOutputStream& stream, TZtStringBuf enc, bool shouldFormat) const { 
+    void TNode::Save(IOutputStream& stream, TZtStringBuf enc, bool shouldFormat) const {
         SaveInternal(stream, enc, shouldFormat ? XML_SAVE_FORMAT : 0);
     }
 
-    void TNode::SaveAsHtml(IOutputStream& stream, TZtStringBuf enc, bool shouldFormat) const { 
+    void TNode::SaveAsHtml(IOutputStream& stream, TZtStringBuf enc, bool shouldFormat) const {
         int options = XML_SAVE_AS_HTML;
         options |= shouldFormat ? XML_SAVE_FORMAT : 0;
         SaveInternal(stream, enc, options);
     }
 
     TConstNodes::TConstNodes(const TConstNodes& nodes)
-        : SizeValue(nodes.Size()) 
-        , Doc(nodes.Doc) 
-        , Obj(nodes.Obj) 
+        : SizeValue(nodes.Size())
+        , Doc(nodes.Doc)
+        , Obj(nodes.Obj)
     {
     }
 
     TConstNodes& TConstNodes::operator=(const TConstNodes& nodes) {
         if (this != &nodes) {
-            SizeValue = nodes.Size(); 
-            Doc = nodes.Doc; 
-            Obj = nodes.Obj; 
+            SizeValue = nodes.Size();
+            Doc = nodes.Doc;
+            Obj = nodes.Obj;
         }
 
         return *this;
     }
 
     TConstNodes::TConstNodes(TConstNodesRef ref)
-        : SizeValue(ref.r_.Size()) 
-        , Doc(ref.r_.Doc) 
-        , Obj(ref.r_.Obj) 
+        : SizeValue(ref.r_.Size())
+        , Doc(ref.r_.Doc)
+        , Obj(ref.r_.Obj)
     {
     }
 
     TConstNodes& TConstNodes::operator=(TConstNodesRef ref) {
         if (this != &ref.r_) {
-            SizeValue = ref.r_.Size(); 
-            Doc = ref.r_.Doc; 
-            Obj = ref.r_.Obj; 
+            SizeValue = ref.r_.Size();
+            Doc = ref.r_.Doc;
+            Obj = ref.r_.Obj;
         }
         return *this;
     }
@@ -376,18 +376,18 @@ namespace NXml {
     }
 
     TConstNode TConstNodes::operator[](size_t number) const {
-        if (number + 1 > Size()) 
+        if (number + 1 > Size())
             THROW(XmlException, "index out of range " << number);
 
-        if (!Obj || !Obj->nodesetval) 
-            THROW(XmlException, "Broken TConstNodes object, Obj is null"); 
+        if (!Obj || !Obj->nodesetval)
+            THROW(XmlException, "Broken TConstNodes object, Obj is null");
 
-        xmlNode* node = Obj->nodesetval->nodeTab[number]; 
-        return TNode(Doc, node); 
+        xmlNode* node = Obj->nodesetval->nodeTab[number];
+        return TNode(Doc, node);
     }
 
     TConstNode TConstNodes::TNodeIter::operator*() const {
-        return Nodes[Index]; 
-    } 
- 
+        return Nodes[Index];
+    }
+
 }

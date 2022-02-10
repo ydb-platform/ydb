@@ -2,10 +2,10 @@
 
 #include <library/cpp/xml/init/ptr.h>
 #include <util/generic/ptr.h>
-#include <libxml/xmlstring.h> 
-#include <libxml/tree.h> 
-#include <libxml/xpath.h> 
-#include <libxml/uri.h> 
+#include <libxml/xmlstring.h>
+#include <libxml/tree.h>
+#include <libxml/xpath.h>
+#include <libxml/uri.h>
 #include <libxml/xmlsave.h>
 
 namespace NXml {
@@ -36,15 +36,15 @@ namespace NXml {
 
     }
 
-    typedef TxmlXPathContextPtr TXPathContextPtr; 
-    typedef TxmlXPathObjectPtr TXPathObjectPtr; 
+    typedef TxmlXPathContextPtr TXPathContextPtr;
+    typedef TxmlXPathObjectPtr TXPathObjectPtr;
     typedef TAutoPtr<char, NDetail::TSignedCharPtrTraits> TSignedCharPtr;
     typedef TAutoPtr<xmlChar, NDetail::TCharPtrTraits> TCharPtr;
     typedef TxmlDocHolder TDocHolder;
-    typedef TxmlURIPtr TURIPtr; 
-    typedef TxmlNodePtr TNodePtr; 
+    typedef TxmlURIPtr TURIPtr;
+    typedef TxmlNodePtr TNodePtr;
     typedef TAutoPtr<xmlOutputBuffer, NDetail::TOutputBufferPtrTraits> TOutputBufferPtr;
-    typedef TxmlParserCtxtPtr TParserCtxtPtr; 
+    typedef TxmlParserCtxtPtr TParserCtxtPtr;
     typedef TAutoPtr<xmlSaveCtxt, NDetail::TSaveCtxtPtrTraits> TSaveCtxtPtr;
 
 }

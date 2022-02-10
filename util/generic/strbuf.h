@@ -303,20 +303,20 @@ public:
     }
 
     Y_PURE_FUNCTION inline TdSelf Before(TCharType c) const noexcept {
-        TdSelf l, r; 
+        TdSelf l, r;
         return TrySplit(c, l, r) ? l : *this;
     }
- 
+
     Y_PURE_FUNCTION inline TdSelf RAfter(TCharType c) const noexcept {
         TdSelf l, r;
         return TryRSplit(c, l, r) ? r : *this;
     }
 
     Y_PURE_FUNCTION inline TdSelf RBefore(TCharType c) const noexcept {
-        TdSelf l, r; 
+        TdSelf l, r;
         return TryRSplit(c, l, r) ? l : *this;
-    } 
- 
+    }
+
 public:
     inline bool AfterPrefix(const TdSelf& prefix, TdSelf& result) const noexcept {
         if (this->StartsWith(prefix)) {

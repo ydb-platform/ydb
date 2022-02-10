@@ -1,24 +1,24 @@
 #pragma once
 
 #include "xml-document-decl.h"
-#include "libxml-guards.h" 
+#include "libxml-guards.h"
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 
 namespace NXml {
 #define THROW(x, y) ythrow yexception() << #x << ": " << y
 
-    // libxml defines unsigned char -> xmlChar, 
-    // and all functions use xmlChar. 
+    // libxml defines unsigned char -> xmlChar,
+    // and all functions use xmlChar.
     inline static const char* CAST2CHAR(const xmlChar* x) {
         return reinterpret_cast<const char*>(x);
     }
     inline static const xmlChar* XMLCHAR(const char* x) {
         return reinterpret_cast<const xmlChar*>(x);
     }
- 
+
     template <class T>
-    void TNode::AttrInternal(TCharPtr& value, T& res, TStringBuf errContext) const { 
+    void TNode::AttrInternal(TCharPtr& value, T& res, TStringBuf errContext) const {
         try {
             res = FromString<T>(CAST2CHAR(value.Get()));
         } catch (TFromStringException&) {
@@ -27,16 +27,16 @@ namespace NXml {
     }
 
     template <>
-    inline void TNode::AttrInternal(TCharPtr& value, TString& res, TStringBuf /*errContext*/) const { 
+    inline void TNode::AttrInternal(TCharPtr& value, TString& res, TStringBuf /*errContext*/) const {
         TString tmp(CAST2CHAR(value.Get()));
         res.swap(tmp);
     }
 
     template <class T>
-    T TNode::Attr(TZtStringBuf name) const { 
-        TCharPtr value(xmlGetProp(NodePointer, XMLCHAR(name.c_str()))); 
+    T TNode::Attr(TZtStringBuf name) const {
+        TCharPtr value(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
         if (!value) {
-            THROW(AttributeNotFound, Path() << "@" << name); 
+            THROW(AttributeNotFound, Path() << "@" << name);
         }
 
         T t;
@@ -45,8 +45,8 @@ namespace NXml {
     }
 
     template <class T>
-    T TNode::Attr(TZtStringBuf name, const T& defvalue) const { 
-        TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str()))); 
+    T TNode::Attr(TZtStringBuf name, const T& defvalue) const {
+        TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
         if (!attr) {
             return defvalue;
         }
@@ -57,18 +57,18 @@ namespace NXml {
     }
 
     template <class T>
-    void TNode::Attr(TZtStringBuf name, T& value) const { 
-        TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str()))); 
+    void TNode::Attr(TZtStringBuf name, T& value) const {
+        TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
         if (!attr) {
-            THROW(AttributeNotFound, Path() << name); 
+            THROW(AttributeNotFound, Path() << name);
         }
 
         AttrInternal(attr, value, name);
     }
 
     template <class T>
-    void TNode::Attr(TZtStringBuf name, T& value, const T& defvalue) const { 
-        TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str()))); 
+    void TNode::Attr(TZtStringBuf name, T& value, const T& defvalue) const {
+        TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
 
         if (!attr) {
             value = defvalue;
@@ -80,10 +80,10 @@ namespace NXml {
     template <class T>
     T TNode::Value() const {
         if (!NodePointer || xmlIsBlankNode(NodePointer)) {
-            THROW(NodeIsBlank, Path()); 
+            THROW(NodeIsBlank, Path());
         }
 
-        TCharPtr val(xmlNodeGetContent(NodePointer)); 
+        TCharPtr val(xmlNodeGetContent(NodePointer));
         T t;
         AttrInternal(val, t, this->Name());
         return t;
@@ -95,26 +95,26 @@ namespace NXml {
             return defvalue;
         }
 
-        TCharPtr val(xmlNodeGetContent(NodePointer)); 
+        TCharPtr val(xmlNodeGetContent(NodePointer));
         T t;
         AttrInternal(val, t, this->Name());
         return t;
     }
 
     template <class T>
-    typename std::enable_if<!std::is_convertible_v<T, TStringBuf>, void>::type 
-    TNode::SetValue(const T& value) { 
+    typename std::enable_if<!std::is_convertible_v<T, TStringBuf>, void>::type
+    TNode::SetValue(const T& value) {
         TStringStream ss;
         ss << value;
-        SetValue(ss.Str()); 
-    } 
- 
-    inline void TNode::SetValue(TStringBuf value) { 
-        xmlNodeSetContent(NodePointer, XMLCHAR(""));
-        xmlNodeAddContentLen(NodePointer, XMLCHAR(value.data()), value.Size()); 
+        SetValue(ss.Str());
     }
 
-    inline void TNode::SetAttr(TZtStringBuf name, TZtStringBuf value) { 
+    inline void TNode::SetValue(TStringBuf value) {
+        xmlNodeSetContent(NodePointer, XMLCHAR(""));
+        xmlNodeAddContentLen(NodePointer, XMLCHAR(value.data()), value.Size());
+    }
+
+    inline void TNode::SetAttr(TZtStringBuf name, TZtStringBuf value) {
         xmlAttr* attr = xmlSetProp(NodePointer, XMLCHAR(name.c_str()), XMLCHAR(value.c_str()));
 
         if (!attr) {
@@ -127,14 +127,14 @@ namespace NXml {
     }
 
     template <class T>
-    typename std::enable_if<!std::is_convertible_v<T, TZtStringBuf>, void>::type 
-    TNode::SetAttr(TZtStringBuf name, const T& value) { 
+    typename std::enable_if<!std::is_convertible_v<T, TZtStringBuf>, void>::type
+    TNode::SetAttr(TZtStringBuf name, const T& value) {
         TStringStream ss;
         ss << value;
-        SetAttr(name, TZtStringBuf(ss.Str())); 
+        SetAttr(name, TZtStringBuf(ss.Str()));
     }
 
-    inline void TNode::SetAttr(TZtStringBuf name) { 
+    inline void TNode::SetAttr(TZtStringBuf name) {
         xmlAttr* attr = xmlSetProp(NodePointer, XMLCHAR(name.c_str()), nullptr);
 
         if (!attr) {
@@ -144,7 +144,7 @@ namespace NXml {
         }
     }
 
-    inline void TNode::DelAttr(TZtStringBuf name) { 
+    inline void TNode::DelAttr(TZtStringBuf name) {
         if (xmlUnsetProp(NodePointer, XMLCHAR(name.c_str())) < 0)
             THROW(XmlException, "Can't delete node attribute <"
                                     << name
@@ -152,14 +152,14 @@ namespace NXml {
     }
 
     template <class T>
-    typename std::enable_if<!std::is_convertible_v<T, TZtStringBuf>, TNode>::type 
-    TNode::AddChild(TZtStringBuf name, const T& value) { 
+    typename std::enable_if<!std::is_convertible_v<T, TZtStringBuf>, TNode>::type
+    TNode::AddChild(TZtStringBuf name, const T& value) {
         TStringStream ss;
         ss << value;
-        return AddChild(name, TZtStringBuf(ss.Str())); 
+        return AddChild(name, TZtStringBuf(ss.Str()));
     }
 
-    inline TNode TNode::AddChild(TZtStringBuf name, TZtStringBuf value) { 
+    inline TNode TNode::AddChild(TZtStringBuf name, TZtStringBuf value) {
         if (IsNull()) {
             THROW(XmlException, "addChild [name=" << name << ", value=" << value
                                                   << "]: can't add child to null node");
@@ -179,18 +179,18 @@ namespace NXml {
                                                   << "]: xmlNewTextChild returned NULL");
         }
 
-        return TNode(DocPointer, child); 
+        return TNode(DocPointer, child);
     }
 
     template <class T>
-    typename std::enable_if<!std::is_convertible_v<T, TStringBuf>, TNode>::type 
-    TNode::AddText(const T& value) { 
+    typename std::enable_if<!std::is_convertible_v<T, TStringBuf>, TNode>::type
+    TNode::AddText(const T& value) {
         TStringStream ss;
         ss << value;
         return AddText(ss.Str());
     }
 
-    inline TNode TNode::AddText(TStringBuf value) { 
+    inline TNode TNode::AddText(TStringBuf value) {
         if (IsNull()) {
             THROW(XmlException, "addChild [value=" << value
                                                    << "]: can't add child to null node");

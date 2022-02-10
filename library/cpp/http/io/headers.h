@@ -102,9 +102,9 @@ public:
     // Проверяет, есть ли такой заголовок
     bool HasHeader(TStringBuf header) const;
 
-    /// Удаляет заголовок, если он есть. 
+    /// Удаляет заголовок, если он есть.
     void RemoveHeader(TStringBuf header);
- 
+
     /// Ищет заголовок по указанному имени
     /// Возвращает nullptr, если не нашел
     const THttpInputHeader* FindHeader(TStringBuf header) const;

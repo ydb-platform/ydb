@@ -29,9 +29,9 @@ Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
         const TTestMap& b = a;
         UNIT_ASSERT(b.FindPtr(42) && *b.FindPtr(42) == "dog");
         UNIT_ASSERT_EQUAL(b.FindPtr(0), nullptr);
- 
-        UNIT_ASSERT_STRINGS_EQUAL(b.Value(42, "cat"), "dog"); 
-        UNIT_ASSERT_STRINGS_EQUAL(b.Value(0, "alien"), "alien"); 
+
+        UNIT_ASSERT_STRINGS_EQUAL(b.Value(42, "cat"), "dog");
+        UNIT_ASSERT_STRINGS_EQUAL(b.Value(0, "alien"), "alien");
     }
 
     Y_UNIT_TEST(TestTemplateFind) {
@@ -39,8 +39,8 @@ Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
 
         m[TString("x")] = 2;
 
-        UNIT_ASSERT(m.FindPtr(TStringBuf("x"))); 
-        UNIT_ASSERT_EQUAL(*m.FindPtr(TStringBuf("x")), 2); 
+        UNIT_ASSERT(m.FindPtr(TStringBuf("x")));
+        UNIT_ASSERT_EQUAL(*m.FindPtr(TStringBuf("x")), 2);
     }
 
     Y_UNIT_TEST(TestValue) {

@@ -1,7 +1,7 @@
 #include "levenshtein_diff.h"
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/generic/string.h>
 
 namespace {
@@ -28,8 +28,8 @@ Y_UNIT_TEST_SUITE(Levenstein) {
     Y_UNIT_TEST(Distance) {
         UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("hello"), TStringBuf("hulloah")), 3);
         UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("yeoman"), TStringBuf("yo man")), 2);
-    } 
-} 
+    }
+}
 
 Y_UNIT_TEST_SUITE(WeightedLevenstein) {
     Y_UNIT_TEST(EqualStrings) {

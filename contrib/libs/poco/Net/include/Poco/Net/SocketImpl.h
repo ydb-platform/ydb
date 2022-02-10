@@ -213,9 +213,9 @@ public:
 		/// Returns true if the next operation corresponding to
 		/// mode will not block, false otherwise.
 
-	bool pollImpl(Poco::Timespan& timeout, int mode); 
-		/// Modifies `timeout` 
- 
+	bool pollImpl(Poco::Timespan& timeout, int mode);
+		/// Modifies `timeout`
+
 	virtual void setSendBufferSize(int size);
 		/// Sets the size of the send buffer.
 
@@ -450,7 +450,7 @@ protected:
 	static void error(int code, const std::string& arg);
 		/// Throws an appropriate exception for the given error code.
 
-protected: 
+protected:
 	SocketImpl(const SocketImpl&);
 	SocketImpl& operator = (const SocketImpl&);
 

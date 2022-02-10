@@ -324,7 +324,7 @@ RECURSE(
     dparse
     dpath
     dpkt
-    drf-extensions 
+    drf-extensions
     drf_ujson
     drf-yasg
     easywebdav

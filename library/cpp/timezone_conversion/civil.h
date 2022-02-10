@@ -100,13 +100,13 @@ namespace NDatetime {
      */
     TTimeZone GetTimeZone(TStringBuf name);
 
-    /** 
-     * Returns a time zone that is a fixed offset (seconds east) from UTC. 
-     * Note: If the absolute value of the offset is greater than 24 hours 
-     * you'll get UTC (i.e., zero offset) instead. 
-     */ 
-    TTimeZone GetFixedTimeZone(const long offset); 
- 
+    /**
+     * Returns a time zone that is a fixed offset (seconds east) from UTC.
+     * Note: If the absolute value of the offset is greater than 24 hours
+     * you'll get UTC (i.e., zero offset) instead.
+     */
+    TTimeZone GetFixedTimeZone(const long offset);
+
     /** Convert civil time from one timezone to another
      * @param[in] src is source time with 'from' timezone 
      * @param[in] from is a initial timezone

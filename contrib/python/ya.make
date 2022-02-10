@@ -823,7 +823,7 @@ RECURSE(
     PyHamcrest
     pyjavaproperties
     PyJWT
-    pykdtree 
+    pykdtree
     pyketama
     pylev
     pylint
@@ -847,7 +847,7 @@ RECURSE(
     pyproj
     pyre2
     pyrepl
-    pyresample 
+    pyresample
     pyrsistent
     pysctp
     pysendfile
@@ -886,7 +886,7 @@ RECURSE(
     pytest-twisted
     pytest-vcr
     pytest-xdist
-    pytest-xprocess 
+    pytest-xprocess
     python-crfsuite
     python-crontab
     python-daemon

@@ -1,31 +1,31 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 import pytest
- 
+
 from jinja2 import Environment
 from jinja2 import Markup
- 
- 
+
+
 class MyDict(dict):
     pass
- 
- 
-class TestTestsCase(object): 
-    def test_defined(self, env): 
+
+
+class TestTestsCase(object):
+    def test_defined(self, env):
         tmpl = env.from_string("{{ missing is defined }}|{{ true is defined }}")
         assert tmpl.render() == "False|True"
- 
-    def test_even(self, env): 
+
+    def test_even(self, env):
         tmpl = env.from_string("""{{ 1 is even }}|{{ 2 is even }}""")
         assert tmpl.render() == "False|True"
- 
-    def test_odd(self, env): 
+
+    def test_odd(self, env):
         tmpl = env.from_string("""{{ 1 is odd }}|{{ 2 is odd }}""")
         assert tmpl.render() == "True|False"
- 
-    def test_lower(self, env): 
+
+    def test_lower(self, env):
         tmpl = env.from_string("""{{ "foo" is lower }}|{{ "FOO" is lower }}""")
         assert tmpl.render() == "True|False"
- 
+
     # Test type checks
     @pytest.mark.parametrize(
         "op,expect",
@@ -112,27 +112,27 @@ class TestTestsCase(object):
     def test_types(self, env, op, expect):
         t = env.from_string("{{{{ {op} }}}}".format(op=op))
         assert t.render(mydict=MyDict(), complex=complex(1, 2)) == str(expect)
- 
-    def test_upper(self, env): 
-        tmpl = env.from_string('{{ "FOO" is upper }}|{{ "foo" is upper }}') 
+
+    def test_upper(self, env):
+        tmpl = env.from_string('{{ "FOO" is upper }}|{{ "foo" is upper }}')
         assert tmpl.render() == "True|False"
- 
-    def test_equalto(self, env): 
-        tmpl = env.from_string( 
+
+    def test_equalto(self, env):
+        tmpl = env.from_string(
             "{{ foo is eq 12 }}|"
             "{{ foo is eq 0 }}|"
             "{{ foo is eq (3 * 4) }}|"
-            '{{ bar is eq "baz" }}|' 
-            '{{ bar is eq "zab" }}|' 
-            '{{ bar is eq ("ba" + "z") }}|' 
+            '{{ bar is eq "baz" }}|'
+            '{{ bar is eq "zab" }}|'
+            '{{ bar is eq ("ba" + "z") }}|'
             "{{ bar is eq bar }}|"
             "{{ bar is eq foo }}"
-        ) 
+        )
         assert (
             tmpl.render(foo=12, bar="baz")
             == "True|False|True|True|False|True|True|False"
         )
- 
+
     @pytest.mark.parametrize(
         "op,expect",
         (
@@ -150,39 +150,39 @@ class TestTestsCase(object):
             ("ge 3", False),
         ),
     )
-    def test_compare_aliases(self, env, op, expect): 
+    def test_compare_aliases(self, env, op, expect):
         t = env.from_string("{{{{ 2 is {op} }}}}".format(op=op))
-        assert t.render() == str(expect) 
- 
-    def test_sameas(self, env): 
+        assert t.render() == str(expect)
+
+    def test_sameas(self, env):
         tmpl = env.from_string("{{ foo is sameas false }}|{{ 0 is sameas false }}")
         assert tmpl.render(foo=False) == "True|False"
- 
-    def test_no_paren_for_arg1(self, env): 
+
+    def test_no_paren_for_arg1(self, env):
         tmpl = env.from_string("{{ foo is sameas none }}")
         assert tmpl.render(foo=None) == "True"
- 
-    def test_escaped(self, env): 
-        env = Environment(autoescape=True) 
+
+    def test_escaped(self, env):
+        env = Environment(autoescape=True)
         tmpl = env.from_string("{{ x is escaped }}|{{ y is escaped }}")
         assert tmpl.render(x="foo", y=Markup("foo")) == "False|True"
- 
-    def test_greaterthan(self, env): 
+
+    def test_greaterthan(self, env):
         tmpl = env.from_string("{{ 1 is greaterthan 0 }}|{{ 0 is greaterthan 1 }}")
         assert tmpl.render() == "True|False"
- 
-    def test_lessthan(self, env): 
+
+    def test_lessthan(self, env):
         tmpl = env.from_string("{{ 0 is lessthan 1 }}|{{ 1 is lessthan 0 }}")
         assert tmpl.render() == "True|False"
- 
-    def test_multiple_tests(self): 
-        items = [] 
 
-        def matching(x, y): 
-            items.append((x, y)) 
-            return False 
+    def test_multiple_tests(self):
+        items = []
 
-        env = Environment() 
+        def matching(x, y):
+            items.append((x, y))
+            return False
+
+        env = Environment()
         env.tests["matching"] = matching
         tmpl = env.from_string(
             "{{ 'us-west-1' is matching '(us-east-1|ap-northeast-1)'"
@@ -193,8 +193,8 @@ class TestTestsCase(object):
             ("us-west-1", "(us-east-1|ap-northeast-1)"),
             ("stage", "(dev|stage)"),
         ]
- 
-    def test_in(self, env): 
+
+    def test_in(self, env):
         tmpl = env.from_string(
             '{{ "o" is in "foo" }}|'
             '{{ "foo" is in "foo" }}|'

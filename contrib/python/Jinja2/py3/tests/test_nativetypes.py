@@ -1,76 +1,76 @@
 import math
 
-import pytest 
- 
-from jinja2.exceptions import UndefinedError 
-from jinja2.nativetypes import NativeEnvironment 
+import pytest
+
+from jinja2.exceptions import UndefinedError
+from jinja2.nativetypes import NativeEnvironment
 from jinja2.nativetypes import NativeTemplate
-from jinja2.runtime import Undefined 
- 
- 
-@pytest.fixture 
-def env(): 
-    return NativeEnvironment() 
- 
- 
+from jinja2.runtime import Undefined
+
+
+@pytest.fixture
+def env():
+    return NativeEnvironment()
+
+
 def test_is_defined_native_return(env):
     t = env.from_string("{{ missing is defined }}")
     assert not t.render()
- 
- 
+
+
 def test_undefined_native_return(env):
     t = env.from_string("{{ missing }}")
     assert isinstance(t.render(), Undefined)
- 
- 
+
+
 def test_adding_undefined_native_return(env):
     t = env.from_string("{{ 3 + missing }}")
- 
+
     with pytest.raises(UndefinedError):
         t.render()
- 
- 
+
+
 def test_cast_int(env):
     t = env.from_string("{{ value|int }}")
     result = t.render(value="3")
     assert isinstance(result, int)
     assert result == 3
- 
- 
+
+
 def test_list_add(env):
     t = env.from_string("{{ a + b }}")
     result = t.render(a=["a", "b"], b=["c", "d"])
     assert isinstance(result, list)
     assert result == ["a", "b", "c", "d"]
- 
- 
+
+
 def test_multi_expression_add(env):
     t = env.from_string("{{ a }} + {{ b }}")
     result = t.render(a=["a", "b"], b=["c", "d"])
     assert not isinstance(result, list)
     assert result == "['a', 'b'] + ['c', 'd']"
- 
- 
+
+
 def test_loops(env):
     t = env.from_string("{% for x in value %}{{ x }}{% endfor %}")
     result = t.render(value=["a", "b", "c", "d"])
     assert isinstance(result, str)
     assert result == "abcd"
- 
- 
+
+
 def test_loops_with_ints(env):
     t = env.from_string("{% for x in value %}{{ x }}{% endfor %}")
     result = t.render(value=[1, 2, 3, 4])
     assert isinstance(result, int)
     assert result == 1234
- 
- 
+
+
 def test_loop_look_alike(env):
     t = env.from_string("{% for x in value %}{{ x }}{% endfor %}")
     result = t.render(value=[1])
     assert isinstance(result, int)
     assert result == 1
- 
+
 
 @pytest.mark.parametrize(
     ("source", "expect"),

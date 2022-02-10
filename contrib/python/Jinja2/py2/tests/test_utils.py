@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 import pickle
 import random
 from collections import deque
 from copy import copy as shallow_copy
- 
-import pytest 
+
+import pytest
 from markupsafe import Markup
- 
+
 from jinja2._compat import range_type
 from jinja2._compat import string_types
 from jinja2.utils import consume
@@ -16,19 +16,19 @@ from jinja2.utils import missing
 from jinja2.utils import object_type_repr
 from jinja2.utils import select_autoescape
 from jinja2.utils import urlize
- 
- 
-class TestLRUCache(object): 
-    def test_simple(self): 
-        d = LRUCache(3) 
-        d["a"] = 1 
-        d["b"] = 2 
-        d["c"] = 3 
-        d["a"] 
-        d["d"] = 4 
-        assert len(d) == 3 
+
+
+class TestLRUCache(object):
+    def test_simple(self):
+        d = LRUCache(3)
+        d["a"] = 1
+        d["b"] = 2
+        d["c"] = 3
+        d["a"]
+        d["d"] = 4
+        assert len(d) == 3
         assert "a" in d and "c" in d and "d" in d and "b" not in d
- 
+
     def test_itervalue_deprecated(self):
         cache = LRUCache(3)
         cache["a"] = 1
@@ -50,18 +50,18 @@ class TestLRUCache(object):
         values = [v for v in cache.values()]
         assert len(values) == 0
 
-    def test_pickleable(self): 
-        cache = LRUCache(2) 
-        cache["foo"] = 42 
-        cache["bar"] = 23 
-        cache["foo"] 
- 
-        for protocol in range(3): 
-            copy = pickle.loads(pickle.dumps(cache, protocol)) 
-            assert copy.capacity == cache.capacity 
-            assert copy._mapping == cache._mapping 
-            assert copy._queue == cache._queue 
- 
+    def test_pickleable(self):
+        cache = LRUCache(2)
+        cache["foo"] = 42
+        cache["bar"] = 23
+        cache["foo"]
+
+        for protocol in range(3):
+            copy = pickle.loads(pickle.dumps(cache, protocol))
+            assert copy.capacity == cache.capacity
+            assert copy._mapping == cache._mapping
+            assert copy._queue == cache._queue
+
     @pytest.mark.parametrize("copy_func", [LRUCache.copy, shallow_copy])
     def test_copy(self, copy_func):
         cache = LRUCache(2)
@@ -72,7 +72,7 @@ class TestLRUCache(object):
         copy["c"] = 3
         assert copy._queue != cache._queue
         assert "a" not in copy and "b" in copy and "c" in copy
- 
+
     def test_clear(self):
         d = LRUCache(3)
         d["a"] = 1
@@ -118,25 +118,25 @@ class TestLRUCache(object):
         assert len(d) == 2
 
 
-class TestHelpers(object): 
-    def test_object_type_repr(self): 
-        class X(object): 
-            pass 
- 
+class TestHelpers(object):
+    def test_object_type_repr(self):
+        class X(object):
+            pass
+
         assert object_type_repr(42) == "int object"
         assert object_type_repr([]) == "list object"
         assert object_type_repr(X()) == "__tests__.test_utils.X object"
         assert object_type_repr(None) == "None"
         assert object_type_repr(Ellipsis) == "Ellipsis"
 
-    def test_autoescape_select(self): 
-        func = select_autoescape( 
+    def test_autoescape_select(self):
+        func = select_autoescape(
             enabled_extensions=("html", ".htm"),
             disabled_extensions=("txt",),
             default_for_string="STRING",
             default="NONE",
-        ) 
- 
+        )
+
         assert func(None) == "STRING"
         assert func("unknown.foo") == "NONE"
         assert func("foo.html")
@@ -144,12 +144,12 @@ class TestHelpers(object):
         assert not func("foo.txt")
         assert func("FOO.HTML")
         assert not func("FOO.TXT")
- 
- 
-class TestEscapeUrlizeTarget(object): 
-    def test_escape_urlize_target(self): 
-        url = "http://example.org" 
-        target = "<script>" 
+
+
+class TestEscapeUrlizeTarget(object):
+    def test_escape_urlize_target(self):
+        url = "http://example.org"
+        target = "<script>"
         assert urlize(url, target=target) == (
             '<a href="http://example.org"'
             ' target="&lt;script&gt;">'

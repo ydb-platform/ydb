@@ -20,8 +20,8 @@ enum ESimpleCounters {
     COUNTER_SUB_DOMAIN_COUNT = 9                          [(CounterOpts) = {Name: "SubDomains"}];
     COUNTER_SUB_DOMAIN_COORDINATOR_COUNT = 10             [(CounterOpts) = {Name: "SubDomainsCoordinators"}];
     COUNTER_SUB_DOMAIN_MEDIATOR_COUNT = 11                [(CounterOpts) = {Name: "SubDomainsMediators"}];
-    COUNTER_RTMR_VOLUME_COUNT = 12                        [(CounterOpts) = {Name: "RtmrVolumesCount"}];
-    COUNTER_RTMR_PARTITIONS_COUNT = 13                    [(CounterOpts) = {Name: "RtmrPartitionsCount"}];
+    COUNTER_RTMR_VOLUME_COUNT = 12                        [(CounterOpts) = {Name: "RtmrVolumesCount"}]; 
+    COUNTER_RTMR_PARTITIONS_COUNT = 13                    [(CounterOpts) = {Name: "RtmrPartitionsCount"}]; 
     COUNTER_BLOCKSTORE_VOLUME_COUNT = 14                  [(CounterOpts) = {Name: "BlockStoreVolumes"}];
     COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT = 15            [(CounterOpts) = {Name: "BlockStoreVolumeShards"}];
     COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT = 16         [(CounterOpts) = {Name: "BlockStorePartitionShards"}];

@@ -2101,7 +2101,7 @@ void TPDisk::OnDriveStartup() {
             if (DriveData.IsWriteCacheValid && !DriveData.IsWriteCacheEnabled) {
                 BlockDevice->SetWriteCache(true);
                 isChanged = true;
-                str << " Attempted enabling the disabled Write Cache.";
+                str << " Attempted enabling the disabled Write Cache."; 
             } else {
                 str << " Write cache is not disabled, no need to enable it.";
             }
@@ -2109,7 +2109,7 @@ void TPDisk::OnDriveStartup() {
         case NKikimrBlobStorage::TPDiskConfig::ForceEnable:
             BlockDevice->SetWriteCache(true);
             isChanged = true;
-            str << " Attempted force-enabling the Write Cache.";
+            str << " Attempted force-enabling the Write Cache."; 
             break;
         case NKikimrBlobStorage::TPDiskConfig::Disable:
             if (DriveData.IsWriteCacheValid && DriveData.IsWriteCacheEnabled) {
@@ -2122,7 +2122,7 @@ void TPDisk::OnDriveStartup() {
         case NKikimrBlobStorage::TPDiskConfig::ForceDisable:
             BlockDevice->SetWriteCache(false);
             isChanged = true;
-            str << "Attempted force-disabling the Write Cache.";
+            str << "Attempted force-disabling the Write Cache."; 
             break;
         default:
             break;

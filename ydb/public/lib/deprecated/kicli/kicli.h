@@ -570,7 +570,7 @@ public:
         Table,
         PersQueueGroup,
         SubDomain,
-        RtmrVolume,
+        RtmrVolume, 
         BlockStoreVolume,
         Kesus,
         SolomonVolume,

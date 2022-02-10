@@ -85,14 +85,14 @@ struct TServerOptions {
 
     //! GRPC auth
     DECLARE_FIELD(UseAuth, bool, false);
-
-    //! Default compression level. Used when no compression options provided by client.
-    //  Mapping to particular compression algorithm depends on client.
-    DECLARE_FIELD(DefaultCompressionLevel, grpc_compression_level, GRPC_COMPRESS_LEVEL_NONE);
-
-    //! Custom configurator for ServerBuilder.
-    DECLARE_FIELD(ServerBuilderMutator, std::function<void(grpc::ServerBuilder&)>, [](grpc::ServerBuilder&){});
-
+ 
+    //! Default compression level. Used when no compression options provided by client. 
+    //  Mapping to particular compression algorithm depends on client. 
+    DECLARE_FIELD(DefaultCompressionLevel, grpc_compression_level, GRPC_COMPRESS_LEVEL_NONE); 
+ 
+    //! Custom configurator for ServerBuilder. 
+    DECLARE_FIELD(ServerBuilderMutator, std::function<void(grpc::ServerBuilder&)>, [](grpc::ServerBuilder&){}); 
+ 
     DECLARE_FIELD(ExternalListener, IExternalListener::TPtr, nullptr);
 
     //! Logger which will be used to write logs about requests handling (iff appropriate log level is enabled).

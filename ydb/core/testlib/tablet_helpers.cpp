@@ -1134,7 +1134,7 @@ namespace NKikimr {
                 HFunc(TEvHive::TEvDeleteTablet, Handle);
                 HFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
                 HFunc(TEvHive::TEvRequestHiveInfo, Handle);
-                HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
+                HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle); 
                 HFunc(TEvFakeHive::TEvSubscribeToTabletDeletion, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
             }
@@ -1368,21 +1368,21 @@ namespace NKikimr {
             ctx.Send(ev->Sender, response.Release());
         }
 
-        void Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr &ev, const TActorContext &ctx) {
-            ui64 tabletId = ev->Get()->Record.GetTabletID();
+        void Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr &ev, const TActorContext &ctx) { 
+            ui64 tabletId = ev->Get()->Record.GetTabletID(); 
             if (!State->TabletIdToOwner.contains(tabletId)) {
-                ctx.Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
-                return;
-            }
-
-            auto key = State->TabletIdToOwner[tabletId];
-            auto it = State->Tablets.find(key);
-            Y_VERIFY(it != State->Tablets.end());
-
+                ctx.Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie); 
+                return; 
+            } 
+ 
+            auto key = State->TabletIdToOwner[tabletId]; 
+            auto it = State->Tablets.find(key); 
+            Y_VERIFY(it != State->Tablets.end()); 
+ 
             THolder<TTabletStorageInfo> tabletInfo(CreateTestTabletInfo(tabletId, it->second.Type));
-            ctx.Send(ev->Sender, new TEvLocal::TEvBootTablet(*tabletInfo.Get(), 0), 0, ev->Cookie);
-        }
-
+            ctx.Send(ev->Sender, new TEvLocal::TEvBootTablet(*tabletInfo.Get(), 0), 0, ev->Cookie); 
+        } 
+ 
         void Handle(TEvFakeHive::TEvSubscribeToTabletDeletion::TPtr &ev, const TActorContext &ctx) {
             ui64 tabletId = ev->Get()->TabletId;
             auto it = State->TabletIdToOwner.find(tabletId);

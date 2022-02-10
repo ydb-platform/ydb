@@ -2340,57 +2340,57 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
 
-        // Read RTMR volumes
-        {
-            auto rowset = db.Table<Schema::RtmrVolumes>().Range().Select();
-            if (!rowset.IsReady())
-                return false;
-
-            while (!rowset.EndOfSet()) {
+        // Read RTMR volumes 
+        { 
+            auto rowset = db.Table<Schema::RtmrVolumes>().Range().Select(); 
+            if (!rowset.IsReady()) 
+                return false; 
+ 
+            while (!rowset.EndOfSet()) { 
                 TLocalPathId localPathId = rowset.GetValue<Schema::RtmrVolumes::PathId>();
                 TPathId pathId(selfId, localPathId);
 
-                Self->RtmrVolumes[pathId] = new TRtmrVolumeInfo();
+                Self->RtmrVolumes[pathId] = new TRtmrVolumeInfo(); 
                 Self->IncrementPathDbRefCount(pathId);
-
-                if (!rowset.Next())
-                    return false;
-            }
-        }
-
-        // Read RTMR partitions
-        {
-            auto rowset = db.Table<Schema::RTMRPartitions>().Range().Select();
-            if (!rowset.IsReady())
-                return false;
-
-            while (!rowset.EndOfSet()) {
+ 
+                if (!rowset.Next()) 
+                    return false; 
+            } 
+        } 
+ 
+        // Read RTMR partitions 
+        { 
+            auto rowset = db.Table<Schema::RTMRPartitions>().Range().Select(); 
+            if (!rowset.IsReady()) 
+                return false; 
+ 
+            while (!rowset.EndOfSet()) { 
                 TLocalPathId localPathId = rowset.GetValue<Schema::RTMRPartitions::PathId>();
                 TPathId pathId(selfId, localPathId);
-
-                auto it = Self->RtmrVolumes.find(pathId);
-                Y_VERIFY(it != Self->RtmrVolumes.end());
-                Y_VERIFY(it->second);
-
-                auto partitionId = rowset.GetValue<Schema::RTMRPartitions::PartitionId>();
-                Y_VERIFY(partitionId.size() == sizeof(TGUID));
-
-                TGUID guidId;
-                Copy(partitionId.cbegin(), partitionId.cend(), (char*)guidId.dw);
-
-                ui64 busKey = rowset.GetValue<Schema::RTMRPartitions::BusKey>();
+ 
+                auto it = Self->RtmrVolumes.find(pathId); 
+                Y_VERIFY(it != Self->RtmrVolumes.end()); 
+                Y_VERIFY(it->second); 
+ 
+                auto partitionId = rowset.GetValue<Schema::RTMRPartitions::PartitionId>(); 
+                Y_VERIFY(partitionId.size() == sizeof(TGUID)); 
+ 
+                TGUID guidId; 
+                Copy(partitionId.cbegin(), partitionId.cend(), (char*)guidId.dw); 
+ 
+                ui64 busKey = rowset.GetValue<Schema::RTMRPartitions::BusKey>(); 
                 TLocalShardIdx localShardIdx = rowset.GetValue<Schema::RTMRPartitions::ShardIdx>();
                 TShardIdx shardIdx = Self->MakeLocalId(localShardIdx);
                 auto tabletId = Self->ShardInfos.at(shardIdx).TabletID;
-
-                TRtmrPartitionInfo::TPtr partitionInfo = new TRtmrPartitionInfo(guidId, busKey, shardIdx, tabletId);
-                it->second->Partitions[shardIdx] = partitionInfo;
-
-                if (!rowset.Next())
-                    return false;
-            }
-        }
-
+ 
+                TRtmrPartitionInfo::TPtr partitionInfo = new TRtmrPartitionInfo(guidId, busKey, shardIdx, tabletId); 
+                it->second->Partitions[shardIdx] = partitionInfo; 
+ 
+                if (!rowset.Next()) 
+                    return false; 
+            } 
+        } 
+ 
         // Read Solomon volumes
         {
             auto rowset = db.Table<Schema::SolomonVolumes>().Range().Select();
@@ -3698,9 +3698,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::Mediator:
                 Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_MEDIATOR_COUNT].Add(1);
                 break;
-            case ETabletType::RTMRPartition:
-                Self->TabletCounters->Simple()[COUNTER_RTMR_PARTITIONS_COUNT].Add(1);
-                break;
+            case ETabletType::RTMRPartition: 
+                Self->TabletCounters->Simple()[COUNTER_RTMR_PARTITIONS_COUNT].Add(1); 
+                break; 
             case ETabletType::KeyValue:
                 Self->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Add(1);
                 break;

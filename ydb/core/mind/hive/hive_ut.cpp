@@ -4357,33 +4357,33 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // Hive should notify the old owner on unlocking
         VerifyLockTabletExecutionLost(runtime, tabletId, owner);
     }
-
+ 
     Y_UNIT_TEST(TestExternalBoot) {
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true);
-        CreateLocal(runtime, 0); // only the 1st node has local running
-        const ui64 hiveTablet = MakeDefaultHiveID(0);
-        const ui64 testerTablet = MakeDefaultHiveID(1);
+        Setup(runtime, true); 
+        CreateLocal(runtime, 0); // only the 1st node has local running 
+        const ui64 hiveTablet = MakeDefaultHiveID(0); 
+        const ui64 testerTablet = MakeDefaultHiveID(1); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
-
+ 
         TAutoPtr<TEvHive::TEvCreateTablet> ev = new TEvHive::TEvCreateTablet(testerTablet, 0, TTabletTypes::Dummy, BINDED_CHANNELS);
-        ev->Record.SetTabletBootMode(NKikimrHive::ETabletBootMode::TABLET_BOOT_MODE_EXTERNAL);
+        ev->Record.SetTabletBootMode(NKikimrHive::ETabletBootMode::TABLET_BOOT_MODE_EXTERNAL); 
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
-
+ 
         TActorId owner1 = runtime.AllocateEdgeActor(0);
-        runtime.SendToPipe(hiveTablet, owner1, new TEvHive::TEvInitiateTabletExternalBoot(tabletId), 0, GetPipeConfigWithRetries());
-
-        TAutoPtr<IEventHandle> handle;
-        auto* result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(handle);
-        UNIT_ASSERT(result);
+        runtime.SendToPipe(hiveTablet, owner1, new TEvHive::TEvInitiateTabletExternalBoot(tabletId), 0, GetPipeConfigWithRetries()); 
+ 
+        TAutoPtr<IEventHandle> handle; 
+        auto* result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(handle); 
+        UNIT_ASSERT(result); 
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetSuggestedGeneration(), 1);
         UNIT_ASSERT_EQUAL(result->Record.GetBootMode(), NKikimrLocal::EBootMode::BOOT_MODE_LEADER);
-
-        const auto& storageInfo = result->Record.GetInfo();
-        UNIT_ASSERT_EQUAL(storageInfo.GetTabletID(), tabletId);
-        UNIT_ASSERT_EQUAL(storageInfo.GetTabletType(), TTabletTypes::Dummy);
-        UNIT_ASSERT(storageInfo.ChannelsSize() > 0);
-    }
+ 
+        const auto& storageInfo = result->Record.GetInfo(); 
+        UNIT_ASSERT_EQUAL(storageInfo.GetTabletID(), tabletId); 
+        UNIT_ASSERT_EQUAL(storageInfo.GetTabletType(), TTabletTypes::Dummy); 
+        UNIT_ASSERT(storageInfo.ChannelsSize() > 0); 
+    } 
 
     Y_UNIT_TEST(TestExternalBootWhenLocked) {
         TTestBasicRuntime runtime(2, false);

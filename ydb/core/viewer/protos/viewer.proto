@@ -25,7 +25,7 @@ enum EObjectType {
     RtmrOperation = 11;
     RtmrTasks = 12; // flat list of tasks
     RtmrTask = 13; // task is the group of operations, associated tables and some metadata
-    RtmrVolume = 14;
+    RtmrVolume = 14; 
     BlockStoreVolume = 15;
     Kesus = 16;
     SolomonVolume = 17;

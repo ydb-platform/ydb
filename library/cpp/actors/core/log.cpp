@@ -702,19 +702,19 @@ namespace NActors {
         const TString Indent;
     };
 
-    class TLineFileLogBackend: public TFileLogBackend {
-    public:
-        TLineFileLogBackend(const TString& path)
-            : TFileLogBackend(path)
+    class TLineFileLogBackend: public TFileLogBackend { 
+    public: 
+        TLineFileLogBackend(const TString& path) 
+            : TFileLogBackend(path) 
         {
         }
-
-        // Append newline after every record
-        void WriteData(const TLogRecord& rec) override {
+ 
+        // Append newline after every record 
+        void WriteData(const TLogRecord& rec) override { 
             TFileLogBackend::WriteData(TRecordWithNewline(rec));
-        }
-    };
-
+        } 
+    }; 
+ 
     class TCompositeLogBackend: public TLogBackend {
     public:
         TCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends)
@@ -740,7 +740,7 @@ namespace NActors {
     }
 
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName) {
-        return new TLineFileLogBackend(fileName);
+        return new TLineFileLogBackend(fileName); 
     }
 
     TAutoPtr<TLogBackend> CreateNullBackend() {

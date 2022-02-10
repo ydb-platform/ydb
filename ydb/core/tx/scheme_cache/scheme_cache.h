@@ -113,7 +113,7 @@ struct TSchemeCacheNavigate {
         KindPath = 2,
         KindTable = 3,
         KindTopic = 4,
-        KindRtmr = 5,
+        KindRtmr = 5, 
         KindKesus = 6,
         KindSolomon = 7,
         KindSubdomain = 8,
@@ -159,11 +159,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TPersQueueGroupDescription Description;
     };
 
-    struct TRtmrVolumeInfo : public TAtomicRefCount<TRtmrVolumeInfo> {
-        EKind Kind = KindUnknown;
+    struct TRtmrVolumeInfo : public TAtomicRefCount<TRtmrVolumeInfo> { 
+        EKind Kind = KindUnknown; 
         NKikimrSchemeOp::TRtmrVolumeDescription Description;
-    };
-
+    }; 
+ 
     struct TKesusInfo : public TAtomicRefCount<TKesusInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TKesusDescription Description;
@@ -237,7 +237,7 @@ struct TSchemeCacheNavigate {
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
         TIntrusiveConstPtr<TPQGroupInfo> PQGroupInfo;
-        TIntrusiveConstPtr<TRtmrVolumeInfo> RTMRVolumeInfo;
+        TIntrusiveConstPtr<TRtmrVolumeInfo> RTMRVolumeInfo; 
         TIntrusiveConstPtr<TKesusInfo> KesusInfo;
         TIntrusiveConstPtr<TSolomonVolumeInfo> SolomonVolumeInfo;
         TIntrusiveConstPtr<TOlapStoreInfo> OlapStoreInfo;

@@ -169,14 +169,14 @@ namespace NSchemeShardUT_Private {
 
     // rtmr
     GENERIC_HELPERS(CreateRtmrVolume);
-
+ 
     // solomon
     GENERIC_HELPERS(CreateSolomon);
     GENERIC_HELPERS(AlterSolomon);
     GENERIC_HELPERS(DropSolomon);
     DROP_BY_PATH_ID_HELPERS(DropSolomon);
     NKikimrSchemeOp::TCreateSolomonVolume TakeTabletsFromAnotherSolomonVol(TString name, TString ls, ui32 count = 0);
-
+ 
     // kesus
     GENERIC_HELPERS(CreateKesus);
     GENERIC_HELPERS(AlterKesus);

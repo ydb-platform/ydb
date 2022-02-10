@@ -55,7 +55,7 @@ IF (MODULE_TAG == "CPP_PROTO")
     GENERATE_ENUM_SERIALIZATION(ydb_persqueue_cluster_discovery.pb.h)
     GENERATE_ENUM_SERIALIZATION(draft/datastreams.pb.h)
 ENDIF()
-
+ 
 EXCLUDE_TAGS(GO_PROTO)
 
 END()

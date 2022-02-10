@@ -1833,30 +1833,30 @@ void THive::Handle(TEvHive::TEvFillNode::TPtr& ev) {
 void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
     TLeaderTabletInfo* tablet = FindTablet(tabletId);
-
-    if (!tablet) {
+ 
+    if (!tablet) { 
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
         BLOG_ERROR("Tablet not found " << tabletId);
-        return;
-    }
-
+        return; 
+    } 
+ 
     if (tablet->State == ETabletState::GroupAssignment ||
         tablet->State == ETabletState::BlockStorage)
     {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::TRYLATER), 0, ev->Cookie);
         BLOG_W("Tablet waiting for group assignment " << tabletId);
-        return;
-    }
-
+        return; 
+    } 
+ 
     if (!tablet->IsBootingSuppressed()) {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
         BLOG_ERROR("Tablet " << tabletId << " is not expected to boot externally");
-        return;
-    }
-
+        return; 
+    } 
+ 
     Execute(CreateStartTablet(TFullTabletId(tabletId, 0), ev->Sender, ev->Cookie, /* external */ true));
-}
-
+} 
+ 
 void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
     ClusterConfig = record.GetConfig().GetHiveConfig();

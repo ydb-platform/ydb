@@ -68,7 +68,7 @@ public:
         case NKikimrSchemeOp::EPathType::EPathTypeColumnStore: // TODO
             return NKikimrViewer::EObjectType::Directory;
         case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
-            return NKikimrViewer::EObjectType::RtmrVolume;
+            return NKikimrViewer::EObjectType::RtmrVolume; 
         case NKikimrSchemeOp::EPathType::EPathTypeTable:
         case NKikimrSchemeOp::EPathType::EPathTypeColumnTable: // TODO
             return NKikimrViewer::EObjectType::Table;

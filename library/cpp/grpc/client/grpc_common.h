@@ -3,7 +3,7 @@
 #include <grpc++/grpc++.h>
 #include <grpc++/resource_quota.h>
 
-#include <util/datetime/base.h>
+#include <util/datetime/base.h> 
 #include <unordered_map>
 #include <util/generic/string.h>
 
@@ -20,7 +20,7 @@ struct TGRpcClientConfig {
     ui32 MaxInFlight = 0;
     bool EnableSsl = false;
     TString SslCaCert;  //Implicitly enables Ssl if not empty
-    grpc_compression_algorithm CompressionAlgoritm = GRPC_COMPRESS_NONE;
+    grpc_compression_algorithm CompressionAlgoritm = GRPC_COMPRESS_NONE; 
     ui64 MemQuota = 0;
     std::unordered_map<TString, TString> StringChannelParams;
     std::unordered_map<TString, int> IntChannelParams;
@@ -34,7 +34,7 @@ struct TGRpcClientConfig {
     TGRpcClientConfig& operator=(TGRpcClientConfig&&) = default;
 
     TGRpcClientConfig(const TString& locator, TDuration timeout = TDuration::Max(),
-            ui64 maxMessageSize = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, ui32 maxInFlight = 0, TString caCert = "",
+            ui64 maxMessageSize = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, ui32 maxInFlight = 0, TString caCert = "", 
             grpc_compression_algorithm compressionAlgorithm = GRPC_COMPRESS_NONE, bool enableSsl = false)
         : Locator(locator)
         , Timeout(timeout)
@@ -42,7 +42,7 @@ struct TGRpcClientConfig {
         , MaxInFlight(maxInFlight)
         , EnableSsl(enableSsl)
         , SslCaCert(caCert)
-        , CompressionAlgoritm(compressionAlgorithm)
+        , CompressionAlgoritm(compressionAlgorithm) 
     {}
 };
 
@@ -50,16 +50,16 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     grpc::ChannelArguments args;
     args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize);
     args.SetMaxSendMessageSize(config.MaxOutboundMessageSize ? config.MaxOutboundMessageSize : config.MaxMessageSize);
-    args.SetCompressionAlgorithm(config.CompressionAlgoritm);
+    args.SetCompressionAlgorithm(config.CompressionAlgoritm); 
 
-    for (const auto& kvp: config.StringChannelParams) {
-        args.SetString(kvp.first, kvp.second);
-    }
-
-    for (const auto& kvp: config.IntChannelParams) {
-        args.SetInt(kvp.first, kvp.second);
-    }
-
+    for (const auto& kvp: config.StringChannelParams) { 
+        args.SetString(kvp.first, kvp.second); 
+    } 
+ 
+    for (const auto& kvp: config.IntChannelParams) { 
+        args.SetInt(kvp.first, kvp.second); 
+    } 
+ 
     if (config.MemQuota) {
         grpc::ResourceQuota quota;
         quota.Resize(config.MemQuota);

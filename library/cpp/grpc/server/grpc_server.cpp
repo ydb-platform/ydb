@@ -142,8 +142,8 @@ void TGRpcServer::Start() {
         */
         Cerr << "GRpc memory quota temporarily disabled due to issues with grpc quoter" << Endl;
     }
-    Options_.ServerBuilderMutator(builder);
-    builder.SetDefaultCompressionLevel(Options_.DefaultCompressionLevel);
+    Options_.ServerBuilderMutator(builder); 
+    builder.SetDefaultCompressionLevel(Options_.DefaultCompressionLevel); 
 
     Server_ = builder.BuildAndStart();
     if (!Server_) {

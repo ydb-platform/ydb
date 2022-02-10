@@ -22,10 +22,10 @@ struct TRetryState {
         }
         ++RetryNumber;
         RetryDuration = wait;
-        return RetryNumber <= policy.RetryLimitCount;
+        return RetryNumber <= policy.RetryLimitCount; 
     }
 
-    ui32 RetryNumber = 0;
+    ui32 RetryNumber = 0; 
     TDuration RetryDuration;
 };
 

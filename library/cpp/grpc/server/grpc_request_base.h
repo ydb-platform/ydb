@@ -3,8 +3,8 @@
 #include <google/protobuf/message.h>
 #include <library/cpp/threading/future/future.h>
 
-#include <grpc++/server_context.h>
-
+#include <grpc++/server_context.h> 
+ 
 namespace grpc {
 class ByteBuffer;
 }
@@ -79,9 +79,9 @@ public:
     //! Returns peer optional metavalue
     virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
 
-    //! Returns request compression level
-    virtual grpc_compression_level GetCompressionLevel() const = 0;
-
+    //! Returns request compression level 
+    virtual grpc_compression_level GetCompressionLevel() const = 0; 
+ 
     //! Returns protobuf arena allocator associated with current request
     //! Lifetime of the arena is lifetime of the context
     virtual google::protobuf::Arena* GetArena() = 0;

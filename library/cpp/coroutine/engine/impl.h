@@ -99,8 +99,8 @@ public:
 
     void ReSchedule() noexcept;
 
-    void Switch() noexcept; 
- 
+    void Switch() noexcept;
+
     void SwitchTo(TExceptionSafeContext* ctx) {
         Trampoline_.SwitchTo(ctx);
     }

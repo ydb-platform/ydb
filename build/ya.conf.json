@@ -368,7 +368,7 @@
         },
         "fio": {
             "description": "flexible I/O tester"
-        }, 
+        },
         "amduprof-cli": {
             "description": "AMDuProfCLI is a command-line tool for AMD uProf Profiler"
         },
@@ -378,12 +378,12 @@
         "foremost": {
             "description": "Foremost is a Linux program to recover files based on their headers"
         },
-        "stress-ng": { 
-            "description": "stress load tester" 
+        "stress-ng": {
+            "description": "stress load tester"
         },
-        "atop": { 
-            "description": "Advanced System & Process Monitor" 
-        }, 
+        "atop": {
+            "description": "Advanced System & Process Monitor"
+        },
         "bpftool": {
             "description": "tool for inspection and simple manipulation of eBPF programs and maps"
         },
@@ -4900,8 +4900,8 @@
                 }
             ]
         },
-        "qemu": { 
-            "tools": { 
+        "qemu": {
+            "tools": {
                 "qemu": {
                     "bottle": "qemu",
                     "executable": "qemu"
@@ -4918,16 +4918,16 @@
                     "bottle": "qemu",
                     "executable": "qemu-nbd"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "qyp": {
             "tools": {
                 "qyp": {
@@ -5024,22 +5024,22 @@
                 }
             ]
         },
-        "atop": { 
-            "tools": { 
-                "atop": { 
-                    "bottle": "atop", 
-                    "executable": "atop" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "atop": {
+            "tools": {
+                "atop": {
+                    "bottle": "atop",
+                    "executable": "atop"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "bpftool": {
             "tools": {
                 "bpftool": {
@@ -5088,22 +5088,22 @@
                 }
             ]
         },
-        "stress-ng": { 
-            "tools": { 
-                "stress-ng": { 
-                    "bottle": "stress-ng", 
-                    "executable": "stress-ng" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "stress-ng": {
+            "tools": {
+                "stress-ng": {
+                    "bottle": "stress-ng",
+                    "executable": "stress-ng"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "iperf": {
             "tools": {
                 "iperf": {
@@ -7418,14 +7418,14 @@
                 ]
             }
         },
-        "qemu": { 
-            "formula": { 
+        "qemu": {
+            "formula": {
                 "sandbox_id": [
                     504011268
                 ],
-                "match": "Build executable" 
-            }, 
-            "executable": { 
+                "match": "Build executable"
+            },
+            "executable": {
                 "qemu": [
                     "qemu",
                     "bin",
@@ -7446,8 +7446,8 @@
                     "bin",
                     "qemu-nbd"
                 ]
-            } 
-        }, 
+            }
+        },
         "qyp": {
             "formula": {
                 "sandbox_id": [
@@ -7522,20 +7522,20 @@
                 ]
             }
         },
-        "atop": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    576898586 
-                ], 
-                "match": "infra/kernel/tools/atop/build/atop-static.tar.gz" 
-            }, 
-            "executable": { 
-                "atop": [ 
-                    "atop", 
-                    "atop" 
-                ] 
-            } 
-        }, 
+        "atop": {
+            "formula": {
+                "sandbox_id": [
+                    576898586
+                ],
+                "match": "infra/kernel/tools/atop/build/atop-static.tar.gz"
+            },
+            "executable": {
+                "atop": [
+                    "atop",
+                    "atop"
+                ]
+            }
+        },
         "bpftool": {
             "formula": {
                 "sandbox_id": [
@@ -7578,20 +7578,20 @@
                 ]
             }
         },
-        "stress-ng": { 
-            "formula": { 
-                "sandbox_id": [ 
+        "stress-ng": {
+            "formula": {
+                "sandbox_id": [
                     755257561
-                ], 
-                "match": "infra/kernel/tools/stress-ng/build/stress-ng-static.tar.gz" 
-            }, 
-            "executable": { 
-                "stress-ng": [ 
-                    "stress-ng", 
-                    "stress-ng" 
-                ] 
-            } 
-        }, 
+                ],
+                "match": "infra/kernel/tools/stress-ng/build/stress-ng-static.tar.gz"
+            },
+            "executable": {
+                "stress-ng": [
+                    "stress-ng",
+                    "stress-ng"
+                ]
+            }
+        },
         "iperf": {
             "formula": {
                 "sandbox_id": [

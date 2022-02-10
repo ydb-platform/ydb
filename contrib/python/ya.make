@@ -782,7 +782,7 @@ RECURSE(
     pure-python-adb
     pure-sasl
     py
-    py-asciimath 
+    py-asciimath
     py-expression-eval
     py-radix
     py3c
@@ -1175,7 +1175,7 @@ RECURSE(
     yappi
     yarl
     yfinance
-    youtube-dl 
+    youtube-dl
     yoyo-migrations
     yt-dlp
     zake

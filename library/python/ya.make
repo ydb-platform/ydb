@@ -24,7 +24,7 @@ RECURSE(
     build_info
     build_info/ut
     capabilities
-    celery_dashboard
+    celery_dashboard 
     certifi
     cgroups
     charset

@@ -137,14 +137,14 @@ public:
     }
 
     TTabletList(const TActorId &sender, ui32 filterNodeId,
-                const TIntrusivePtr<ITabletStateClassifier>& stateClassifier, 
-                const TIntrusivePtr<ITabletListRenderer>& renderer) 
+                const TIntrusivePtr<ITabletStateClassifier>& stateClassifier,
+                const TIntrusivePtr<ITabletListRenderer>& renderer)
         : Sender(sender)
         , NodesRequested(0)
         , NodesReceived(0)
         , FilterNodeId(filterNodeId)
-        , StateClassifier(stateClassifier) 
-        , Renderer(renderer) 
+        , StateClassifier(stateClassifier)
+        , Renderer(renderer)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -208,11 +208,11 @@ public:
         }
     }
 
-    void BuildTabletList(std::function<bool(const NKikimrWhiteboard::TTabletStateInfo&)> filter, 
+    void BuildTabletList(std::function<bool(const NKikimrWhiteboard::TTabletStateInfo&)> filter,
                         TVector<TTabletListElement>& tabletsToRender) {
         TVector<ui64> tabletIdIndex;
 
-        tabletsToRender.clear(); 
+        tabletsToRender.clear();
         for (const auto& ni : PerNodeTabletInfo) {
             if (FilterNodeId != 0 && FilterNodeId != ni.first)
                 continue;
@@ -228,42 +228,42 @@ public:
 
         Sort(tabletIdIndex);
 
-        for (const auto& ni : PerNodeTabletInfo) { 
-            if (FilterNodeId != 0 && FilterNodeId != ni.first) 
-                continue; 
-            auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), ni.first); 
-            if (eq_it.first != NodesInfo->Nodes.end() && ni.second) { 
+        for (const auto& ni : PerNodeTabletInfo) {
+            if (FilterNodeId != 0 && FilterNodeId != ni.first)
+                continue;
+            auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), ni.first);
+            if (eq_it.first != NodesInfo->Nodes.end() && ni.second) {
                 const TEvInterconnect::TNodeInfo& nodeInfo = *eq_it.first;
-                for (const auto& ti : ni.second->Record.GetTabletStateInfo()) { 
-                    if (filter(ti)) { 
-                        ui64 index = EqualRange(tabletIdIndex.begin(), tabletIdIndex.end(), ti.GetTabletId()).first - tabletIdIndex.begin(); 
-                        tabletsToRender.push_back({ &nodeInfo, index, &ti }); 
+                for (const auto& ti : ni.second->Record.GetTabletStateInfo()) {
+                    if (filter(ti)) {
+                        ui64 index = EqualRange(tabletIdIndex.begin(), tabletIdIndex.end(), ti.GetTabletId()).first - tabletIdIndex.begin();
+                        tabletsToRender.push_back({ &nodeInfo, index, &ti });
                     }
                 }
             }
-        } 
+        }
     }
 
     void RenderResponse(const TActorContext &ctx) {
         Sort(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end());
         TString filterNodeHost;
-        if (FilterNodeId != 0) { 
-            auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), FilterNodeId); 
-            if (eq_it.first != NodesInfo->Nodes.end()) { 
-                filterNodeHost = eq_it.first->Host; 
-            } 
-        } 
+        if (FilterNodeId != 0) {
+            auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), FilterNodeId);
+            if (eq_it.first != NodesInfo->Nodes.end()) {
+                filterNodeHost = eq_it.first->Host;
+            }
+        }
         TStringStream str;
         HTML(str) {
-            Renderer->RenderPageHeader(str); 
-            for(ui32 cls = 0; cls < StateClassifier->GetMaxTabletStateClass(); cls++) { 
-                auto filter = StateClassifier->GetTabletStateClassFilter(cls); 
+            Renderer->RenderPageHeader(str);
+            for(ui32 cls = 0; cls < StateClassifier->GetMaxTabletStateClass(); cls++) {
+                auto filter = StateClassifier->GetTabletStateClassFilter(cls);
                 TVector<TTabletListElement> tablets;
-                BuildTabletList(filter, tablets); 
-                auto listName = StateClassifier->GetTabletStateClassName(cls); 
-                Renderer->RenderTabletList(str, listName, tablets, {FilterNodeId, filterNodeHost}); 
-            } 
-            Renderer->RenderPageFooter(str); 
+                BuildTabletList(filter, tablets);
+                auto listName = StateClassifier->GetTabletStateClassName(cls);
+                Renderer->RenderTabletList(str, listName, tablets, {FilterNodeId, filterNodeHost});
+            }
+            Renderer->RenderPageFooter(str);
         }
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(str.Str()));
         Die(ctx);
@@ -290,9 +290,9 @@ protected:
     size_t NodesRequested;
     size_t NodesReceived;
     ui32 FilterNodeId;
-    TIntrusivePtr<ITabletStateClassifier> StateClassifier; 
-    TIntrusivePtr<ITabletListRenderer> Renderer; 
- 
+    TIntrusivePtr<ITabletStateClassifier> StateClassifier;
+    TIntrusivePtr<ITabletListRenderer> Renderer;
+
 };
 
 class TStateStorageTabletList : public TActorBootstrapped<TStateStorageTabletList> {
@@ -410,21 +410,21 @@ protected:
 };
 
 class TNodeTabletMonitor : public TActorBootstrapped<TNodeTabletMonitor> {
-private: 
-    TIntrusivePtr<ITabletStateClassifier> StateClassifier; 
-    TIntrusivePtr<ITabletListRenderer> TableRenderer; 
- 
+private:
+    TIntrusivePtr<ITabletStateClassifier> StateClassifier;
+    TIntrusivePtr<ITabletListRenderer> TableRenderer;
+
 public:
- 
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
     }
 
-    TNodeTabletMonitor(const TIntrusivePtr<ITabletStateClassifier>& stateClassifier, 
-                       const TIntrusivePtr<ITabletListRenderer>& renderer) 
-        : StateClassifier(stateClassifier) 
-        , TableRenderer(renderer) 
-    { 
+    TNodeTabletMonitor(const TIntrusivePtr<ITabletStateClassifier>& stateClassifier,
+                       const TIntrusivePtr<ITabletListRenderer>& renderer)
+        : StateClassifier(stateClassifier)
+        , TableRenderer(renderer)
+    {
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -465,7 +465,7 @@ private:
                 ui32 filterNodeId = 0;
                 if (cgi.Has("node_id"))
                     filterNodeId = FromStringWithDefault<ui32>(cgi.Get("node_id"));
-                ctx.ExecutorThread.RegisterActor(new TTabletList(ev->Sender, filterNodeId, StateClassifier, TableRenderer)); 
+                ctx.ExecutorThread.RegisterActor(new TTabletList(ev->Sender, filterNodeId, StateClassifier, TableRenderer));
                 return;
             } else if (actionParam == "browse_ss" && cgi.Has("ss_id")) {
                 ctx.ExecutorThread.RegisterActor(new TStateStorageTabletList(ev->Sender, FromStringWithDefault<ui32>(cgi.Get("ss_id"))));
@@ -477,10 +477,10 @@ private:
 };
 
 
-IActor* CreateNodeTabletMonitor(const TIntrusivePtr<ITabletStateClassifier>& stateClassifier, 
-                                const TIntrusivePtr<ITabletListRenderer>& renderer) 
-{ 
-    return new TNodeTabletMonitor(stateClassifier, renderer); 
+IActor* CreateNodeTabletMonitor(const TIntrusivePtr<ITabletStateClassifier>& stateClassifier,
+                                const TIntrusivePtr<ITabletListRenderer>& renderer)
+{
+    return new TNodeTabletMonitor(stateClassifier, renderer);
 }
 
 } // NNodeTabletMonitor

@@ -1,13 +1,13 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(spuchin)
- 
-SRCS( 
-    yql_testlib.cpp 
-    yql_testlib.h 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    yql_testlib.cpp
+    yql_testlib.h
+)
+
+PEERDIR(
     library/cpp/grpc/client
     library/cpp/regex/pcre
     library/cpp/testing/unittest
@@ -28,8 +28,8 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/udf_resolve
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()

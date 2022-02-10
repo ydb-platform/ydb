@@ -38,7 +38,7 @@ public:
         NKikimrViewer::TBrowseInfo& pbConsumers = *browseInfo.AddChildren();
         pbConsumers.SetType(NKikimrViewer::EObjectType::Consumers);
         pbConsumers.SetName("Consumers");
-        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo))); 
+        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo)));
         Die(ctx);
     }
 };
@@ -301,7 +301,7 @@ public:
             pbConsumer.SetType(NKikimrViewer::EObjectType::Consumer);
             pbConsumer.SetName(pr.first);
         }
-        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo))); 
+        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo)));
         Die(ctx);
     }
 };
@@ -349,7 +349,7 @@ public:
                 }
             }
         }
-        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo))); 
+        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo)));
         Die(ctx);
     }
 };
@@ -414,7 +414,7 @@ public:
             }
         }
 
-        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo))); 
+        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo)));
         Die(ctx);
     }
 };

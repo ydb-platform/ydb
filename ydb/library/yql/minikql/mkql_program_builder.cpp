@@ -3969,9 +3969,9 @@ TRuntimeNode TProgramBuilder::StrictFromString(TRuntimeNode data, TType* type) {
         callableBuilder.Add(NewDataLiteral(params.first));
         callableBuilder.Add(NewDataLiteral(params.second));
     }
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::ToBytes(TRuntimeNode data) {
     return UnaryDataFunction(data, __func__, TDataFunctionFlags::HasStringResult | TDataFunctionFlags::AllowOptionalArgs | TDataFunctionFlags::CommonOptionalResult);
 }

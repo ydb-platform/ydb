@@ -107,48 +107,48 @@ IActor* CreateMessageBusServerProxy(
     return new TMessageBusServerProxy(server, pqReadSessionsInfoWorkerFactory);
 }
 
-TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, 
+TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
                                                  const NKikimrTxUserProxy::TEvProposeTransactionStatus &result) {
-    TAutoPtr<TBusResponse> response(new TBusResponse()); 
-    response->Record.SetStatus(status); 
-    response->Record.SetProxyErrorCode(result.GetStatus()); 
- 
+    TAutoPtr<TBusResponse> response(new TBusResponse());
+    response->Record.SetStatus(status);
+    response->Record.SetProxyErrorCode(result.GetStatus());
+
     response->Record.SetStatusCode(result.GetStatusCode());
     response->Record.MutableIssues()->CopyFrom(result.GetIssues());
 
-    if (result.HasExecutionEngineStatus()) 
-        response->Record.SetExecutionEngineStatus(result.GetExecutionEngineStatus()); 
-    if (result.HasExecutionEngineResponseStatus()) 
-        response->Record.SetExecutionEngineResponseStatus(result.GetExecutionEngineResponseStatus()); 
+    if (result.HasExecutionEngineStatus())
+        response->Record.SetExecutionEngineStatus(result.GetExecutionEngineStatus());
+    if (result.HasExecutionEngineResponseStatus())
+        response->Record.SetExecutionEngineResponseStatus(result.GetExecutionEngineResponseStatus());
     if (result.HasMiniKQLCompileResults())
         response->Record.MutableMiniKQLCompileResults()->CopyFrom(result.GetMiniKQLCompileResults());
-    if (result.HasMiniKQLErrors()) 
-        response->Record.SetMiniKQLErrors(result.GetMiniKQLErrors()); 
-    if (result.HasDataShardErrors()) 
-        response->Record.SetDataShardErrors(result.GetDataShardErrors()); 
-    if (result.ComplainingDataShardsSize()) 
-        response->Record.MutableComplainingDataShards()->CopyFrom(result.GetComplainingDataShards()); 
-    if (result.UnresolvedKeysSize()) 
-        response->Record.MutableUnresolvedKeys()->CopyFrom(result.GetUnresolvedKeys()); 
+    if (result.HasMiniKQLErrors())
+        response->Record.SetMiniKQLErrors(result.GetMiniKQLErrors());
+    if (result.HasDataShardErrors())
+        response->Record.SetDataShardErrors(result.GetDataShardErrors());
+    if (result.ComplainingDataShardsSize())
+        response->Record.MutableComplainingDataShards()->CopyFrom(result.GetComplainingDataShards());
+    if (result.UnresolvedKeysSize())
+        response->Record.MutableUnresolvedKeys()->CopyFrom(result.GetUnresolvedKeys());
     if (result.HasHadFollowerReads())
         response->Record.SetHadFollowerReads(result.GetHadFollowerReads());
- 
-    if (result.HasTxId()) 
-        response->Record.SetTxId(result.GetTxId()); 
-    if (result.HasStep()) 
-        response->Record.SetStep(result.GetStep()); 
- 
-    if (result.HasSchemeShardStatus()) 
-        response->Record.SetSchemeStatus(result.GetSchemeShardStatus()); 
-    if (result.HasSchemeShardReportedId()) 
-        response->Record.SetSchemeTagId(result.GetSchemeShardReportedId()); 
- 
+
+    if (result.HasTxId())
+        response->Record.SetTxId(result.GetTxId());
+    if (result.HasStep())
+        response->Record.SetStep(result.GetStep());
+
+    if (result.HasSchemeShardStatus())
+        response->Record.SetSchemeStatus(result.GetSchemeShardStatus());
+    if (result.HasSchemeShardReportedId())
+        response->Record.SetSchemeTagId(result.GetSchemeShardReportedId());
+
     if (result.HasTimings())
         response->Record.MutableProxyTimings()->CopyFrom(result.GetTimings());
- 
-    return response.Release(); 
+
+    return response.Release();
 }
- 
+
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_request.cpp
 
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp

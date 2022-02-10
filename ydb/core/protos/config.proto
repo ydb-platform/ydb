@@ -275,14 +275,14 @@ message TLogConfig {
     }
 
     repeated TEntry Entry = 1;
-    optional bool   SysLog = 2 [default = false]; 
-    optional uint32 DefaultLevel = 3 [default = 4]; // NActors::NLog::PRI_WARN 
-    optional uint32 DefaultSamplingLevel = 4 [default = 7]; // NActors::NLog::PRI_DEBUG 
-    optional uint32 DefaultSamplingRate = 5 [default = 0]; 
-    optional string Format = 6 [default = "full"]; // "full" | "short" | "json" 
-    optional string ClusterName = 7; 
+    optional bool   SysLog = 2 [default = false];
+    optional uint32 DefaultLevel = 3 [default = 4]; // NActors::NLog::PRI_WARN
+    optional uint32 DefaultSamplingLevel = 4 [default = 7]; // NActors::NLog::PRI_DEBUG
+    optional uint32 DefaultSamplingRate = 5 [default = 0];
+    optional string Format = 6 [default = "full"]; // "full" | "short" | "json"
+    optional string ClusterName = 7;
     optional bool AllowDropEntries = 8 [default = true];
-    optional bool UseLocalTimestamps = 9 [default = false]; 
+    optional bool UseLocalTimestamps = 9 [default = false];
     optional string BackendFileName = 10;
     optional string SysLogService = 11;
     optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog
@@ -294,7 +294,7 @@ message TCompileServiceConfig {
     optional uint32 InflightLimit = 1 [default = 100000];
 }
 
-message TBootstrap { 
+message TBootstrap {
     enum ETabletType {
         TX_DUMMY = 0;
 
@@ -315,10 +315,10 @@ message TBootstrap {
         DATASHARD = 31;
         FLAT_SCHEMESHARD = 32;
         KEYVALUEFLAT = 33;
- 
-        JOBRUNNER_POOL_MANAGER = 40; 
-        FLAT_JOBRUNNER_POOL_MANAGER = 41; 
- 
+
+        JOBRUNNER_POOL_MANAGER = 40;
+        FLAT_JOBRUNNER_POOL_MANAGER = 41;
+
         CMS = 51;
         NODE_BROKER = 52;
 
@@ -373,7 +373,7 @@ message TInterconnectConfig {
 
     repeated TChannel Channel = 1;
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
-    optional bool StartTcp = 3 [default = false]; 
+    optional bool StartTcp = 3 [default = false];
     optional uint32 SelfKickDelay = 4; // DEPRECATED
     optional uint32 HandshakeTimeout = 5;
     optional uint32 HeartbeatInterval = 6;
@@ -434,8 +434,8 @@ message TChannelProfileConfig {
 
     repeated TProfile Profile = 1;
 }
- 
-message TMonitoringConfig { 
+
+message TMonitoringConfig {
     message TDatabaseLabels {
         optional bool Enabled = 1 [default = true];
         // If labels are enabled and services list is empty
@@ -470,7 +470,7 @@ message TMonitoringConfig {
         repeated TAttributeGroup AttributeGroups = 2;
     };
 
-    optional uint32 MonitoringPort = 1 [default = 0]; 
+    optional uint32 MonitoringPort = 1 [default = 0];
     optional uint32 MonitoringThreads = 2 [default = 10];
     optional string MonitoringCaption = 3 [default = "YDB Monitoring"];
     optional uint32 TabletMonitoringRetries = 4 [default = 1];
@@ -483,75 +483,75 @@ message TMonitoringConfig {
     optional string ProcessLocation = 11;
     optional string AllowOrigin = 12;
     optional string RedirectMainPageTo = 13 [default = "monitoring/"];
-} 
- 
-message TRestartsCountConfig { 
-    optional string RestartsCountFile = 1 [default = ""]; 
-} 
- 
-message TMessageBusConfig { 
- 
-    message TBusQueueConfig { 
-        optional string Name = 1; 
-        optional uint32 NumWorkers = 2 [default = 1]; 
-    } 
- 
-    message TBusSessionConfig { 
-        optional string Name = 1 [default = ""]; 
-        optional uint32 NumRetries = 2 [default = 0]; 
-        optional uint32 RetryInterval = 3 [default = 1000]; 
-        optional bool   ReconnectWhenIdle = 4 [default = false]; 
-        optional uint64 MaxInFlight = 5 [default = 1000]; 
-        optional uint32 PerConnectionMaxInFlight = 6 [default = 0]; 
-        optional uint32 PerConnectionMaxInFlightBySize = 7 [default = 0]; 
-        optional int64  MaxInFlightBySize = 8 [default = -1]; 
-        optional int64  TotalTimeout = 9 [default = 0]; 
-        optional int64  SendTimeout = 10 [default = 0]; 
-        optional int64  ConnectTimeout = 11 [default = 0]; 
-        optional uint64 DefaultBufferSize = 12 [default = 10240]; 
-        optional uint64 MaxBufferSize = 13 [default = 1048576]; 
-        optional uint32 SocketRecvBufferSize = 14 [default = 0]; 
-        optional uint32 SocketSendBufferSize = 15 [default = 0]; 
-        optional int32  SocketToS = 16 [default = -1]; 
-        optional uint64 SendThreshold = 17 [default = 10240]; 
-        optional uint64 Cork = 18 [default = 0]; // milliseconds 
-        optional uint32 MaxMessageSize = 19 [default = 0x01A00000]; 
-        optional bool   TcpNoDelay = 20 [default = false]; 
-        optional bool   TcpCork = 21 [default = false]; 
-        optional bool   ExecuteOnMessageInWorkerPool = 22 [default = true]; 
-        optional bool   ExecuteOnReplyInWorkerPool = 23 [default = true]; 
-        optional uint32 ListenPort = 24 [default = 0]; 
-    } 
- 
-    optional bool   StartBusProxy = 1 [default = false]; 
-    optional uint32 BusProxyPort = 2 [default = 14505]; 
-    optional TBusQueueConfig ProxyBusQueueConfig = 3; 
-    optional TBusSessionConfig ProxyBusSessionConfig = 4; 
-    repeated uint64 ProxyBindToProxy = 5; 
-    optional bool   StartTracingBusProxy = 6 [default = true]; // move to TMessageBusTraceServiceConfig 
-    optional string TracePath = 7; 
+}
+
+message TRestartsCountConfig {
+    optional string RestartsCountFile = 1 [default = ""];
+}
+
+message TMessageBusConfig {
+
+    message TBusQueueConfig {
+        optional string Name = 1;
+        optional uint32 NumWorkers = 2 [default = 1];
+    }
+
+    message TBusSessionConfig {
+        optional string Name = 1 [default = ""];
+        optional uint32 NumRetries = 2 [default = 0];
+        optional uint32 RetryInterval = 3 [default = 1000];
+        optional bool   ReconnectWhenIdle = 4 [default = false];
+        optional uint64 MaxInFlight = 5 [default = 1000];
+        optional uint32 PerConnectionMaxInFlight = 6 [default = 0];
+        optional uint32 PerConnectionMaxInFlightBySize = 7 [default = 0];
+        optional int64  MaxInFlightBySize = 8 [default = -1];
+        optional int64  TotalTimeout = 9 [default = 0];
+        optional int64  SendTimeout = 10 [default = 0];
+        optional int64  ConnectTimeout = 11 [default = 0];
+        optional uint64 DefaultBufferSize = 12 [default = 10240];
+        optional uint64 MaxBufferSize = 13 [default = 1048576];
+        optional uint32 SocketRecvBufferSize = 14 [default = 0];
+        optional uint32 SocketSendBufferSize = 15 [default = 0];
+        optional int32  SocketToS = 16 [default = -1];
+        optional uint64 SendThreshold = 17 [default = 10240];
+        optional uint64 Cork = 18 [default = 0]; // milliseconds
+        optional uint32 MaxMessageSize = 19 [default = 0x01A00000];
+        optional bool   TcpNoDelay = 20 [default = false];
+        optional bool   TcpCork = 21 [default = false];
+        optional bool   ExecuteOnMessageInWorkerPool = 22 [default = true];
+        optional bool   ExecuteOnReplyInWorkerPool = 23 [default = true];
+        optional uint32 ListenPort = 24 [default = 0];
+    }
+
+    optional bool   StartBusProxy = 1 [default = false];
+    optional uint32 BusProxyPort = 2 [default = 14505];
+    optional TBusQueueConfig ProxyBusQueueConfig = 3;
+    optional TBusSessionConfig ProxyBusSessionConfig = 4;
+    repeated uint64 ProxyBindToProxy = 5;
+    optional bool   StartTracingBusProxy = 6 [default = true]; // move to TMessageBusTraceServiceConfig
+    optional string TracePath = 7;
     optional uint64 CompileInflightLimit_Depricated = 8 [default = 100000];
-} 
- 
-message TTabletsConfig { 
- 
-    message TTablet { 
+}
+
+message TTabletsConfig {
+
+    message TTablet {
         optional string Type = 1;
-        repeated uint32 Node = 2; 
-        optional NKikimrTabletBase.TTabletStorageInfo Info = 3; 
-        optional bool StandBy = 4; 
-        optional uint64 WatchThreshold = 5; 
-    } 
- 
-    repeated TTablet Tablet = 1; 
-} 
- 
-message TKQPConfig { 
+        repeated uint32 Node = 2;
+        optional NKikimrTabletBase.TTabletStorageInfo Info = 3;
+        optional bool StandBy = 4;
+        optional uint64 WatchThreshold = 5;
+    }
+
+    repeated TTablet Tablet = 1;
+}
+
+message TKQPConfig {
     optional bool Enable = 1 [default = true];
 
     repeated NKikimrKqp.TKqpSetting Settings = 10;
-} 
- 
+}
+
 message TMemoryLogConfig {
     optional uint64 LogBufferSize = 1;
     optional uint64 LogGrainSize = 2;
@@ -1330,25 +1330,25 @@ message TConfigVersion {
     repeated TConfigItemVersion Items = 1;
 }
 
-message TAppConfig { 
-    optional TActorSystemConfig ActorSystemConfig = 1; 
-    optional TLogConfig LogConfig = 2; 
-    optional TStaticNameserviceConfig NameserviceConfig = 3; 
-    optional TInterconnectConfig InterconnectConfig = 4; 
-    optional TDomainsConfig DomainsConfig = 5; 
-    optional TBlobStorageConfig BlobStorageConfig = 6; 
-    optional TChannelProfileConfig ChannelProfileConfig = 7; 
-    optional TBootstrap BootstrapConfig = 8; 
-    optional TMonitoringConfig MonitoringConfig = 10; 
-    optional TRestartsCountConfig RestartsCountConfig = 11; 
-    optional TMessageBusConfig MessageBusConfig = 12; 
-    optional TTabletsConfig TabletsConfig = 13; // alternative bootstrapper configuration 
+message TAppConfig {
+    optional TActorSystemConfig ActorSystemConfig = 1;
+    optional TLogConfig LogConfig = 2;
+    optional TStaticNameserviceConfig NameserviceConfig = 3;
+    optional TInterconnectConfig InterconnectConfig = 4;
+    optional TDomainsConfig DomainsConfig = 5;
+    optional TBlobStorageConfig BlobStorageConfig = 6;
+    optional TChannelProfileConfig ChannelProfileConfig = 7;
+    optional TBootstrap BootstrapConfig = 8;
+    optional TMonitoringConfig MonitoringConfig = 10;
+    optional TRestartsCountConfig RestartsCountConfig = 11;
+    optional TMessageBusConfig MessageBusConfig = 12;
+    optional TTabletsConfig TabletsConfig = 13; // alternative bootstrapper configuration
     optional NKikimrBlobStorage.TAllVDiskKinds VDiskConfig = 14;
     optional NKikimrBlobStorage.TDriveModelList DriveModelConfig = 31;
     optional NKikimrBlobStorage.TIncrHugeConfig IncrHugeConfig = 18;
     optional string UDFsDir = 15;
     repeated string UDFsPaths = 16;
-    optional TKQPConfig KQPConfig = 17; 
+    optional TKQPConfig KQPConfig = 17;
     optional TMemoryLogConfig MemoryLogConfig = 19;
     optional TGRpcConfig GRpcConfig = 20;
     optional TDynamicNameserviceConfig DynamicNameserviceConfig = 22;
@@ -1384,4 +1384,4 @@ message TAppConfig {
     optional string ClusterYamlConfig = 101;
 
     optional TConfigVersion Version = 102;
-} 
+}

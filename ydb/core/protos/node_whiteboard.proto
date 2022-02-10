@@ -21,11 +21,11 @@ enum EFlag {
     Red = 4;
 }
 
-message TCustomTabletAttribute { 
-    optional uint32 Key = 1; // implementation-dependent 
-    optional string Value = 2; 
-} 
- 
+message TCustomTabletAttribute {
+    optional uint32 Key = 1; // implementation-dependent
+    optional string Value = 2;
+}
+
 message TTabletStateInfo {
     enum ETabletState {
         Created = 0;
@@ -51,12 +51,12 @@ message TTabletStateInfo {
     optional uint64 CreateTime = 2;
     optional uint64 ChangeTime = 3;
     optional ETabletState State = 4;
-    optional uint32 UserState = 5; // implementation-dependent 
-    optional uint32 Generation = 6; 
+    optional uint32 UserState = 5; // implementation-dependent
+    optional uint32 Generation = 6;
     optional NKikimrTabletBase.TTabletTypes.EType Type = 7;
-    optional string Host = 8; 
-    repeated uint32 ChannelGroupIDs = 9; // BS Group per channel 
-    repeated TCustomTabletAttribute Attributes = 10; 
+    optional string Host = 8;
+    repeated uint32 ChannelGroupIDs = 9; // BS Group per channel
+    repeated TCustomTabletAttribute Attributes = 10;
     optional uint32 NodeId = 11; // filled during merge
     optional bool Leader = 12; // leader or follower
     optional uint32 Count = 13; // filled during group count

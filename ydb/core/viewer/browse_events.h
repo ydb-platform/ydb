@@ -1,43 +1,43 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
- 
-#include <util/generic/string.h> 
- 
-namespace NKikimr { 
-namespace NViewer { 
- 
-namespace NViewerEvents { 
-    enum EEv { 
-        EvBrowseResponse = EventSpaceBegin(TKikimrEvents::ES_VIEWER), 
+
+#include <util/generic/string.h>
+
+namespace NKikimr {
+namespace NViewer {
+
+namespace NViewerEvents {
+    enum EEv {
+        EvBrowseResponse = EventSpaceBegin(TKikimrEvents::ES_VIEWER),
         EvBrowseRequestSent,
         EvBrowseRequestCompleted,
-        EvEnd 
-    }; 
- 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER), "expected EvEnd < EventSpaceEnd"); 
- 
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER), "expected EvEnd < EventSpaceEnd");
+
     using TTabletId = ui64;
 
-    struct TEvBrowseResponse : TEventLocal<TEvBrowseResponse, EvBrowseResponse> { 
-        TEvBrowseResponse( 
-                NKikimrViewer::TBrowseInfo&& browseInfo, 
-                NKikimrViewer::TMetaInfo&& metaInfo 
-                ) 
-            : BrowseInfo(std::move(browseInfo)) 
-            , MetaInfo(std::move(metaInfo)) 
-        {} 
- 
-        TEvBrowseResponse(const TString& error) 
-            : Error(error) 
-        {} 
- 
-        NKikimrViewer::TBrowseInfo BrowseInfo; 
-        NKikimrViewer::TMetaInfo MetaInfo; 
-        TString Error; 
-    }; 
+    struct TEvBrowseResponse : TEventLocal<TEvBrowseResponse, EvBrowseResponse> {
+        TEvBrowseResponse(
+                NKikimrViewer::TBrowseInfo&& browseInfo,
+                NKikimrViewer::TMetaInfo&& metaInfo
+                )
+            : BrowseInfo(std::move(browseInfo))
+            , MetaInfo(std::move(metaInfo))
+        {}
+
+        TEvBrowseResponse(const TString& error)
+            : Error(error)
+        {}
+
+        NKikimrViewer::TBrowseInfo BrowseInfo;
+        NKikimrViewer::TMetaInfo MetaInfo;
+        TString Error;
+    };
 
     struct TEvBrowseRequestSent : TEventLocal<TEvBrowseRequestSent, EvBrowseRequestSent> {
         TActorId Actor;
@@ -74,7 +74,7 @@ namespace NViewerEvents {
             , Event(event)
         {}
     };
-}   // namespace NViewerEvents 
- 
-}   // namespace NViewer 
-}   // namespace NKikimr 
+}   // namespace NViewerEvents
+
+}   // namespace NViewer
+}   // namespace NKikimr

@@ -24,7 +24,7 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/base/grpc_service_factory.h>
- 
+
 #include <google/protobuf/text_format.h>
 
 #include <functional>
@@ -74,7 +74,7 @@ namespace Tests {
     ui64 ChangeDomain(ui64 tabletId, ui32 domainUid);
     ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid);
     NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry);
- 
+
 
     struct TServerSettings: public TThrRefBase, public TTestFeatureFlagsHolder<TServerSettings> {
         static constexpr ui64 BOX_ID = 999;
@@ -206,10 +206,10 @@ namespace Tests {
 
         void Initialize();
 
-    public: 
+    public:
         using TPtr = TIntrusivePtr<TServer>;
         using TMapStoragePool = TDomainsInfo::TDomain::TStoragePoolKinds;
- 
+
         TServer(const TServerSettings& settings, bool defaultInit = true);
         TServer(TServerSettings::TConstPtr settings, bool defaultInit = true);
 
@@ -237,7 +237,7 @@ namespace Tests {
         const TServerSettings& GetSettings() const;
         const NScheme::TTypeRegistry* GetTypeRegistry();
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
- 
+
         ui32 StaticNodes() const {
             return Settings->NodeCount;
         }
@@ -250,7 +250,7 @@ namespace Tests {
     protected:
         const TServerSettings::TConstPtr Settings;
         const bool UseStoragePools;
- 
+
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
@@ -258,8 +258,8 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         std::unique_ptr<NGrpc::TGRpcServer> GRpcServer;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
-    }; 
- 
+    };
+
     class TClient {
     public:
         struct TFlatQueryOptions {

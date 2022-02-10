@@ -1,5 +1,5 @@
 #pragma once
-#include "base_utils.h" 
+#include "base_utils.h"
 
 namespace NKikimr {
 

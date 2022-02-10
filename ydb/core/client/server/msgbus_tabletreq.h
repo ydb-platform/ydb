@@ -1,5 +1,5 @@
 #pragma once
-#include "msgbus_server.h" 
+#include "msgbus_server.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -7,19 +7,19 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/protos/services.pb.h>
-#include <util/generic/hash_set.h> 
-#include <util/generic/vector.h> 
+#include <util/generic/hash_set.h>
+#include <util/generic/vector.h>
 
-#define CHECK_PROTOBUF_FIELD_PRESENCE(pb, field, errslist) \ 
-    if (!pb.Has##field()) { \ 
-        errslist.push_back( #field );\ 
-    } 
- 
+#define CHECK_PROTOBUF_FIELD_PRESENCE(pb, field, errslist) \
+    if (!pb.Has##field()) { \
+        errslist.push_back( #field );\
+    }
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
 template<typename TDerived, typename TTabletReplyEvent>
-class TMessageBusTabletRequest : public TActorBootstrapped<TDerived>, public TMessageBusSessionIdentHolder { 
+class TMessageBusTabletRequest : public TActorBootstrapped<TDerived>, public TMessageBusSessionIdentHolder {
 
 protected:
     const TDuration Timeout;
@@ -72,7 +72,7 @@ protected:
     }
 
     TMessageBusTabletRequest(TBusMessageContext &msg, bool withRetry, TDuration timeout, bool connectToFollower)
-        : TMessageBusSessionIdentHolder(msg) 
+        : TMessageBusSessionIdentHolder(msg)
         , Timeout(timeout)
         , WithRetry(withRetry)
         , ConnectToFollower(connectToFollower)
@@ -123,7 +123,7 @@ template<typename TDerived, typename TTabletReplyEvent, NKikimrServices::TActivi
 class TMessageBusSimpleTabletRequest : public TMessageBusTabletRequest<TDerived, TTabletReplyEvent> {
 protected:
     const ui64 TabletID;
- 
+
     TMessageBusSimpleTabletRequest(TBusMessageContext &msg, ui64 tabletId, bool withRetry, TDuration timeout, bool connectToFollower)
         : TMessageBusTabletRequest<TDerived, TTabletReplyEvent>(msg, withRetry, timeout, connectToFollower)
         , TabletID(tabletId)

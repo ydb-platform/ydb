@@ -73,13 +73,13 @@ struct TKikimrEvents : TEvents {
         ES_CMS,
         ES_NODE_BROKER,
         ES_TX_ALLOCATOR, //4152
-        // reserve event space for each RTMR process 
-        ES_RTMR_STORAGE, 
-        ES_RTMR_PROXY, 
-        ES_RTMR_PUSHER, 
-        ES_RTMR_HOST, 
+        // reserve event space for each RTMR process
+        ES_RTMR_STORAGE,
+        ES_RTMR_PROXY,
+        ES_RTMR_PUSHER,
+        ES_RTMR_HOST,
         ES_RESOURCE_BROKER,
-        ES_VIEWER, 
+        ES_VIEWER,
         ES_SUB_DOMAIN,
         ES_GRPC_PROXY_STATUS, //OLD
         ES_SQS,

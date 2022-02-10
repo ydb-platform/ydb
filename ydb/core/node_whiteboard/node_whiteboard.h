@@ -92,7 +92,7 @@ struct TEvWhiteboard{
             Record.SetState(state);
             Record.SetGeneration(generation);
         }
- 
+
         TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation, bool leader) {
             Record.SetTabletId(tabletId);
             Record.SetFollowerId(followerId);
@@ -102,9 +102,9 @@ struct TEvWhiteboard{
         }
 
         TEvTabletStateUpdate(TTabletId tabletId, ui32 userState) {
-            Record.SetTabletId(tabletId); 
-            Record.SetUserState(userState); 
-        } 
+            Record.SetTabletId(tabletId);
+            Record.SetUserState(userState);
+        }
     };
 
     struct TEvTabletStateRequest : public TEventPB<TEvTabletStateRequest, NKikimrWhiteboard::TEvTabletStateRequest, EvTabletStateRequest> {};

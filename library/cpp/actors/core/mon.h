@@ -13,7 +13,7 @@ namespace NActors {
             RemoteHttpInfo,
             RemoteHttpInfoRes,
             RemoteJsonInfoRes,
-            RemoteBinaryInfoRes, 
+            RemoteBinaryInfoRes,
             End
         };
 
@@ -200,22 +200,22 @@ namespace NActors {
         struct TEvRemoteBinaryInfoRes: public NActors::TEventBase<TEvRemoteBinaryInfoRes, RemoteBinaryInfoRes> {
             TEvRemoteBinaryInfoRes() {
             }
- 
+
             TEvRemoteBinaryInfoRes(const TString& blob)
-                : Blob(blob) 
+                : Blob(blob)
             {
             }
- 
+
             TString Blob;
- 
+
             TString ToStringHeader() const override {
-                return "TEvRemoteBinaryInfoRes"; 
-            } 
- 
+                return "TEvRemoteBinaryInfoRes";
+            }
+
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
                 return serializer->WriteString(&Blob);
-            } 
- 
+            }
+
             ui32 CalculateSerializedSize() const override {
                 return Blob.size();
             }
@@ -224,11 +224,11 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) { 
+            static IEventBase* Load(TEventSerializedData* bufs) {
                 return new TEvRemoteBinaryInfoRes(bufs->GetString());
-            } 
-        }; 
- 
+            }
+        };
+
     }
 
 }

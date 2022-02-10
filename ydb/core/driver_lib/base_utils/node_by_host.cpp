@@ -1,5 +1,5 @@
 #include "node_by_host.h"
-#include "base_utils.h" 
+#include "base_utils.h"
 
 namespace NKikimr {
 

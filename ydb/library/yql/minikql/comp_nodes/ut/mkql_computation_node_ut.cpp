@@ -4490,15 +4490,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             const auto failgraph = setup.BuildGraph(fail, {});
             UNIT_ASSERT_EXCEPTION(failgraph->GetValue(), yexception);
         }
- 
+
         {
             const auto wrongData = pb.NewDataLiteral<NUdf::EDataSlot::String>("");
             const auto fail = pb.StrictFromString(wrongData, pb.NewDataType(NUdf::TDataType<double>::Id));
             const auto failgraph = setup.BuildGraph(fail, {});
             UNIT_ASSERT_EXCEPTION(failgraph->GetValue(), yexception);
-        } 
+        }
     }
- 
+
     Y_UNIT_TEST_LLVM(TestFromBytes) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;

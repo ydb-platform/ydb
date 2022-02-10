@@ -84,7 +84,7 @@ namespace NKikimr {
     IActor* CreateFlatDummyTablet(const TActorId &tablet, TTabletStorageInfo *info);
 
     void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex = 0);
- 
+
 
     struct TEvFakeHive {
         enum EEv {
@@ -109,40 +109,40 @@ namespace NKikimr {
         };
     };
 
-    struct TFakeHiveTabletInfo { 
+    struct TFakeHiveTabletInfo {
         const TTabletTypes::EType Type;
-        const ui64 TabletId; 
+        const ui64 TabletId;
         TActorId BootstrapperActorId;
- 
+
         TChannelsBindings BoundChannels;
         ui32 ChannelsProfile;
 
         THashSet<TActorId> DeletionWaiters;
 
         TFakeHiveTabletInfo(TTabletTypes::EType type, ui64 tabletId, TActorId bootstrapperActorId)
-            : Type(type) 
-            , TabletId(tabletId) 
+            : Type(type)
+            , TabletId(tabletId)
             , BootstrapperActorId(bootstrapperActorId)
-        {} 
+        {}
 
         TFakeHiveTabletInfo(const TFakeHiveTabletInfo& info) = default;
-    }; 
- 
-    struct TFakeHiveState : TThrRefBase { 
+    };
+
+    struct TFakeHiveState : TThrRefBase {
         TMap<std::pair<ui64, ui64>, TFakeHiveTabletInfo> Tablets;
         TMap<ui64, std::pair<ui64, ui64>> TabletIdToOwner;
         TMap<ui64, ui64> TabletIdToHive;
-        ui64 NextTabletId; 
+        ui64 NextTabletId;
         ui64 NextHiveNextTabletId;
- 
+
         static constexpr ui64 TABLETS_PER_CHILD_HIVE = 1000000; // amount of tablet ids we reserve for child hive
 
-        typedef TIntrusivePtr<TFakeHiveState> TPtr; 
- 
-        TFakeHiveState() 
+        typedef TIntrusivePtr<TFakeHiveState> TPtr;
+
+        TFakeHiveState()
             : NextTabletId(TTestTxConfig::FakeHiveTablets)
             , NextHiveNextTabletId(NextTabletId + TABLETS_PER_CHILD_HIVE)
-        {} 
+        {}
 
         TPtr AllocateSubHive() {
             if (NextHiveNextTabletId == 0) {
@@ -160,11 +160,11 @@ namespace NKikimr {
         ui64 AllocateTabletId() {
             return NextTabletId++;
         }
-    }; 
- 
+    };
+
     typedef std::function<std::function<IActor* (const TActorId &, TTabletStorageInfo*)>(ui32 type)> TGetTabletCreationFunc;
- 
-    void BootFakeHive(TTestActorRuntime& runtime, ui64 tabletId, TFakeHiveState::TPtr state, 
-                      TGetTabletCreationFunc getTabletCreationFunc = nullptr); 
- 
+
+    void BootFakeHive(TTestActorRuntime& runtime, ui64 tabletId, TFakeHiveState::TPtr state,
+                      TGetTabletCreationFunc getTabletCreationFunc = nullptr);
+
 }

@@ -9,7 +9,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/viewer/json/json.h>
-#include "browse_events.h" 
+#include "browse_events.h"
 #include "viewer.h"
 #include "wb_aggregate.h"
 
@@ -98,25 +98,25 @@ public:
         return NKikimrViewer::EObjectType::Unknown;
     }
 
-    TString GetNextName() const { 
-        TString nextName; 
+    TString GetNextName() const {
+        TString nextName;
         if (CurrentPath.size() < Path.size()) {
             auto pos = CurrentPath.size();
             if (Path[pos] == '/') {
                 ++pos;
             }
-            if (CurrentType == NKikimrViewer::RtmrTables) { 
-                nextName = Path.substr(pos); 
-            } else { 
-                auto end_pos = pos; 
-                while (end_pos < Path.size() && Path[end_pos] != '/') { 
-                    ++end_pos; 
-                } 
- 
-                nextName = Path.substr(pos, end_pos - pos); 
+            if (CurrentType == NKikimrViewer::RtmrTables) {
+                nextName = Path.substr(pos);
+            } else {
+                auto end_pos = pos;
+                while (end_pos < Path.size() && Path[end_pos] != '/') {
+                    ++end_pos;
+                }
+
+                nextName = Path.substr(pos, end_pos - pos);
             }
         }
-        return nextName; 
+        return nextName;
     }
 
     void FillCommonData(NKikimrViewer::TBrowseInfo& browseInfo, NKikimrViewer::TMetaInfo& metaInfo) {
@@ -197,34 +197,34 @@ public:
         }
     }
 
-    void StepOnPath(const TActorContext& ctx, const TString& currentName) { 
+    void StepOnPath(const TActorContext& ctx, const TString& currentName) {
         switch (CurrentType) {
         case NKikimrViewer::EObjectType::Unknown:
         case NKikimrViewer::EObjectType::Root:
         case NKikimrViewer::EObjectType::Directory:
         case NKikimrViewer::EObjectType::Table:
             {
-                const auto* domainsInfo = AppData(ctx)->DomainsInfo.Get(); 
-                if (!domainsInfo || !TxProxy) { 
-                    break; 
-                } 
-                bool hasTxAllocators = false; 
-                for (const auto& pair: domainsInfo->Domains) { 
-                    if (!pair.second->TxAllocators.empty()) { 
-                        hasTxAllocators = true; 
-                        break; 
-                    } 
-                } 
-                if (!hasTxAllocators) { 
-                    break; 
-                } 
+                const auto* domainsInfo = AppData(ctx)->DomainsInfo.Get();
+                if (!domainsInfo || !TxProxy) {
+                    break;
+                }
+                bool hasTxAllocators = false;
+                for (const auto& pair: domainsInfo->Domains) {
+                    if (!pair.second->TxAllocators.empty()) {
+                        hasTxAllocators = true;
+                        break;
+                    }
+                }
+                if (!hasTxAllocators) {
+                    break;
+                }
                 THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
                 if (!BrowseContext.UserToken.empty()) {
                     request->Record.SetUserToken(BrowseContext.UserToken);
                 }
                 NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
                 record->SetPath(CurrentPath);
-                ctx.Send(TxProxy, request.Release(), IEventHandle::FlagTrackDelivery); 
+                ctx.Send(TxProxy, request.Release(), IEventHandle::FlagTrackDelivery);
                 ++Requests;
                 ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(TxProxy, TEvTxUserProxy::EvNavigate));
             }
@@ -251,7 +251,7 @@ public:
     }
 
     void NextStep(const TActorContext& ctx) {
-        TString currentName = GetNextName(); 
+        TString currentName = GetNextName();
         if (currentName.empty()) {
             return ReplyAndDie(ctx);
         }
@@ -266,7 +266,7 @@ public:
                 BrowseInfo.Clear();
                 MetaInfo.Clear();
                 DescribeResult.Reset();
-                return StepOnPath(ctx, currentName); 
+                return StepOnPath(ctx, currentName);
             }
         }
         return HandleBadRequest(ctx, "The path is not found");
@@ -297,7 +297,7 @@ public:
         }
     }
 
-    void Handle(NViewerEvents::TEvBrowseResponse::TPtr &ev, const TActorContext &ctx) { 
+    void Handle(NViewerEvents::TEvBrowseResponse::TPtr &ev, const TActorContext &ctx) {
         BrowseInfo.MergeFrom(ev->Get()->BrowseInfo);
         MetaInfo.MergeFrom(ev->Get()->MetaInfo);
         ++Responses;
@@ -322,7 +322,7 @@ public:
         }
         CurrentPath = Path.substr(0, 1);
         CurrentType = NKikimrViewer::EObjectType::Root;
-        StepOnPath(ctx, "/"); 
+        StepOnPath(ctx, "/");
         Become(&TThis::StateWork);
     }
 
@@ -336,15 +336,15 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            HFunc(NViewerEvents::TEvBrowseResponse, Handle); 
+            HFunc(NViewerEvents::TEvBrowseResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
-            HFunc(TEvents::TEvUndelivered, HandleUndelivered); 
+            HFunc(TEvents::TEvUndelivered, HandleUndelivered);
         }
     }
 
     void ReplyAndDie(const TActorContext &ctx) {
         FillCommonData(BrowseInfo, MetaInfo);
-        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(BrowseInfo), std::move(MetaInfo))); 
+        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(BrowseInfo), std::move(MetaInfo)));
         Die(ctx);
     }
 
@@ -356,17 +356,17 @@ public:
     void HandlePoisonPill(const TActorContext& ctx) {
         Die(ctx);
     }
- 
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) { 
-        if (ev->Get()->SourceType == TEvTxUserProxy::EvNavigate) { 
-            ++Responses; 
-            ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate)); 
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+        if (ev->Get()->SourceType == TEvTxUserProxy::EvNavigate) {
+            ++Responses;
+            ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
             TxProxy = TActorId(); // do not query this TxProxy any more
             if (Responses == Requests) {
-                NextStep(ctx); 
-            } 
-        } 
-    } 
+                NextStep(ctx);
+            }
+        }
+    }
 };
 
 class TBrowseTabletsCommon : public TActorBootstrapped<TBrowseTabletsCommon> {

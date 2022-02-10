@@ -1,13 +1,13 @@
-LIBRARY(cli_utils) 
- 
+LIBRARY(cli_utils)
+
 OWNER(g:kikimr)
- 
-SRCS( 
+
+SRCS(
     cli.cpp
-    cli.h 
+    cli.h
     cli_actorsystem_perftest.cpp
-    cli_cmd_config.h 
-    cli_cmd_config.cpp 
+    cli_cmd_config.h
+    cli_cmd_config.cpp
     cli_cmds.h
     cli_cmds_admin.cpp
     cli_cmds_bs.cpp
@@ -24,19 +24,19 @@ SRCS(
     cli_cmds_server.cpp
     cli_cmds_tablet.cpp
     cli_cmds_tenant.cpp
-    cli_fakeinitshard.cpp 
+    cli_fakeinitshard.cpp
     cli_keyvalue.cpp
     cli_persqueue.cpp
     cli_persqueue_cluster_discovery.cpp
     cli_persqueue_stress.cpp
     cli_load.cpp
-    cli_minikql_compile_and_exec.cpp 
-    cli_mb_trace.cpp 
-    cli_scheme_cache_append.cpp 
-    cli_scheme_initroot.cpp 
-) 
- 
-PEERDIR( 
+    cli_minikql_compile_and_exec.cpp
+    cli_mb_trace.cpp
+    cli_scheme_cache_append.cpp
+    cli_scheme_initroot.cpp
+)
+
+PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/grpc/client
     library/cpp/protobuf/json
@@ -59,8 +59,8 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/lib/deprecated/client
     ydb/public/lib/ydb_cli/common
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()

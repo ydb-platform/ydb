@@ -336,8 +336,8 @@ TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder()
 TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder(TBusMessageContext &msg)
 {
     InitSession(msg);
-} 
- 
+}
+
 TMessageBusSessionIdentHolder::~TMessageBusSessionIdentHolder()
 {}
 
@@ -365,16 +365,16 @@ void TBusMessageWatcher::NotifyForget() {
     if (MessageWatcher) {
         MessageWatcher->OnMessageDied(GetMessageId());
         MessageWatcher = nullptr;
-    } 
-} 
- 
+    }
+}
+
 void TBusMessageWatcher::NotifyReply(NBus::TBusMessage *response) {
     if (MessageWatcher) {
         MessageWatcher->OnMessageReplied(GetMessageId(), response);
         MessageWatcher = nullptr;
     }
 }
- 
+
 
 
 class TMessageBusMonitorActor : public TActorBootstrapped<TMessageBusMonitorActor> {
@@ -581,7 +581,7 @@ void TMessageBusServer::ClientActorRequest(ActorCreationFunc func, TBusMessageCo
     if (IActor *x = func(msg))
         ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
     else
-        msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR)); 
+        msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR));
 }
 
 void TMessageBusServer::GetTypes(TBusMessageContext &msg) {

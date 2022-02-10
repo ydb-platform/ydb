@@ -56,7 +56,7 @@ SRCS(
     msgbus_server_tx_request.cpp
     msgbus_server_types.cpp
     msgbus_server_whoami.cpp
-    msgbus_servicereq.h 
+    msgbus_servicereq.h
     msgbus_tabletreq.h
     grpc_server.cpp
     grpc_server.h

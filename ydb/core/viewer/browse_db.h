@@ -194,7 +194,7 @@ public:
             }
         }
 
-        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo))); 
+        ctx.Send(Owner, new NViewerEvents::TEvBrowseResponse(std::move(browseInfo), std::move(metaInfo)));
         Die(ctx);
     }
 };

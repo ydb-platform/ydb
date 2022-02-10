@@ -339,5 +339,5 @@ void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TAc
     ctx.Register(new TMessageBusServerRequest(ev->Get()));
 }
 
-} 
+}
 }

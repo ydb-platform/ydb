@@ -59,13 +59,13 @@ namespace NCodecs {
         virtual TString GetName() const = 0;
 
         virtual ui8 /*free bits in last byte*/ Encode(TStringBuf, TBuffer&) const = 0;
-        virtual ui8 Encode(const TBuffer& input, TBuffer& output) const {
-            return Encode(TStringBuf(input.Data(), input.Data() + input.Size()), output);
-        }
+        virtual ui8 Encode(const TBuffer& input, TBuffer& output) const { 
+            return Encode(TStringBuf(input.Data(), input.Data() + input.Size()), output); 
+        } 
         virtual void Decode(TStringBuf, TBuffer&) const = 0;
-        virtual void Decode(const TBuffer& input, TBuffer& output) const {
-            Decode(TStringBuf(input.Data(), input.Data() + input.Size()), output);
-        }
+        virtual void Decode(const TBuffer& input, TBuffer& output) const { 
+            Decode(TStringBuf(input.Data(), input.Data() + input.Size()), output); 
+        } 
 
         virtual ~ICodec() = default;
 

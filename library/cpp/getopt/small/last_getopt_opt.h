@@ -620,18 +620,18 @@ namespace NLastGetopt {
             return StoreResultT<T>(target, def);
         }
 
-        template <typename T> 
-        TOpt& StoreResultDef(T* target) { 
-            DefaultValue_ = ToString(*target); 
-            return StoreResultT<T>(target, *target); 
-        } 
- 
-        template <typename T, typename TpDef> 
-        TOpt& StoreResultDef(T* target, const TpDef& def) { 
-            DefaultValue_ = ToString(def); 
-            return StoreResultT<T>(target, def); 
-        } 
- 
+        template <typename T>
+        TOpt& StoreResultDef(T* target) {
+            DefaultValue_ = ToString(*target);
+            return StoreResultT<T>(target, *target);
+        }
+
+        template <typename T, typename TpDef>
+        TOpt& StoreResultDef(T* target, const TpDef& def) {
+            DefaultValue_ = ToString(def);
+            return StoreResultT<T>(target, def);
+        }
+
         // Sugar for storing flags (option without arguments) to boolean vars
         TOpt& SetFlag(bool* target) {
             return DefaultValue("0").StoreResult(target, true);
@@ -678,12 +678,12 @@ namespace NLastGetopt {
             return Handler1T<T>([target](auto&& value) { target->push_back(std::move(value)); });
         }
 
-        // Appends FromString<T>(arg) to *target for each argument 
-        template <typename T> 
-        TOpt& InsertTo(THashSet<T>* target) { 
+        // Appends FromString<T>(arg) to *target for each argument
+        template <typename T>
+        TOpt& InsertTo(THashSet<T>* target) {
             return Handler1T<T>([target](auto&& value) { target->insert(std::move(value)); });
-        } 
- 
+        }
+
         // Emplaces TString arg to *target for each argument
         template <typename T>
         TOpt& EmplaceTo(TVector<T>* target) {

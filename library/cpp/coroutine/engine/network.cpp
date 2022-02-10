@@ -112,11 +112,11 @@ namespace NCoro {
     TContIOStatus ReadVectorD(TCont* cont, SOCKET fd, TContIOVector* vec, TInstant deadline) noexcept {
         while (true) {
             ssize_t res = DoReadVector(fd, vec);
-
+ 
             if (res >= 0) {
                 return TContIOStatus::Success((size_t) res);
-            }
-
+            } 
+ 
             {
                 const int err = LastSystemError();
 
@@ -215,7 +215,7 @@ namespace NCoro {
         }
 
         const int ret = ConnectD(cont, res, ai.ai_addr, (socklen_t) ai.ai_addrlen, deadline);
-
+ 
         if (!ret) {
             s.Swap(res);
         }

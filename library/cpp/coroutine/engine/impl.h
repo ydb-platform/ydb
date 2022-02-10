@@ -84,9 +84,9 @@ public:
     }
 
     bool IAmRunning() const noexcept;
-
+ 
     void Cancel() noexcept;
-
+ 
     bool Cancelled() const noexcept {
         return Cancelled_;
     }

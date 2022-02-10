@@ -8,7 +8,7 @@
 /// modules that communicate with multiple external or local sessions
 /// NBus::TBusSession.
 
-/// To implement the module some virtual functions needs to be overridden:
+/// To implement the module some virtual functions needs to be overridden: 
 
 /// NBus::TBusModule::CreateExtSession() creates and registers an
 /// external session that receives incoming messages as input for module
@@ -25,11 +25,11 @@
 /// factory method NBus::IJobFactory::CreateJobInstance() to create your instances.
 
 /// Processing of a given message starts with a call to NBus::TBusModule::Start()
-/// handler that should be overridden in the module implementation. Within
+/// handler that should be overridden in the module implementation. Within 
 /// the callback handler module can perform any computation and access any
 /// datastore tables that it needs. The handler can also access any module
 /// variables. However, same handler can be called from multiple threads so,
-/// it is recommended that handler only access read-only module level variables.
+/// it is recommended that handler only access read-only module level variables. 
 
 /// Handler should use NBus::TBusJob::Send() to send messages to other client
 /// sessions and it can use NBus::TBusJob::Reply() to send reply to the main

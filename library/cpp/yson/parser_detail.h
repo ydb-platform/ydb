@@ -58,7 +58,7 @@ namespace NYson {
                 TBase::SkipCharToken(EndAttributesSymbol);
                 Consumer->OnEndAttributes();
             }
-
+ 
             void ParseMap() {
                 Consumer->OnBeginMap();
                 ParseMapFragment(EndMapSymbol);
@@ -323,11 +323,11 @@ namespace NYson {
     class TStatelessYsonParserImplBase {
     public:
         virtual void Parse(const TStringBuf& data, EYsonType type = ::NYson::EYsonType::Node) = 0;
-
+ 
         virtual ~TStatelessYsonParserImplBase() {
-        }
+        } 
     };
-
+ 
     template <class TConsumer, bool EnableLinePositionInfo>
     class TStatelessYsonParserImpl
        : public TStatelessYsonParserImplBase {

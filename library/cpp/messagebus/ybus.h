@@ -1,6 +1,6 @@
 #pragma once
 
-/// Asynchronous Messaging Library implements framework for sending and
+/// Asynchronous Messaging Library implements framework for sending and 
 /// receiving messages between loosely connected processes.
 
 #include "coreconn.h"

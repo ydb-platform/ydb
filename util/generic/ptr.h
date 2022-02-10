@@ -548,8 +548,8 @@ public:
     // Reset(TIntrusivePtr&&)
     inline void Reset(TIntrusivePtr t) noexcept {
         Swap(t);
-    }
-
+    } 
+ 
     inline void Reset() noexcept {
         Drop();
     }
@@ -668,8 +668,8 @@ public:
     // Reset(TIntrusiveConstPtr&&)
     inline void Reset(TIntrusiveConstPtr t) noexcept {
         Swap(t);
-    }
-
+    } 
+ 
     inline void Reset() noexcept {
         Drop();
     }

@@ -4285,14 +4285,14 @@
                 }
             ]
         },
-        "allure_commandline": { 
+        "allure_commandline": {
             "tools": {
                 "allure": {
                     "bottle": "allure_commandline",
                     "executable": "allure"
                 }
             },
-            "platforms": [ 
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4305,7 +4305,7 @@
                     },
                     "default": true
                 }
-            ] 
+            ]
         },
         "ctags": {
             "tools": {
@@ -7139,9 +7139,9 @@
         "allure_commandline": {
             "formula": {
                 "sandbox_id": 569859192,
-                "match": "Allure Commandline" 
-            }, 
-            "executable": { 
+                "match": "Allure Commandline"
+            },
+            "executable": {
                 "allure": [
                     "bin",
                     "allure"

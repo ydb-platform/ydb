@@ -4928,14 +4928,14 @@
                 }
             ]
         },
-        "qyp": { 
-            "tools": { 
+        "qyp": {
+            "tools": {
                 "qyp": {
                     "bottle": "qyp",
                     "executable": "vmctl"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4954,8 +4954,8 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "rtcdiag": {
             "tools": {
                 "rtcdiag": {
@@ -7448,19 +7448,19 @@
                 ]
             }
         },
-        "qyp": { 
-            "formula": { 
+        "qyp": {
+            "formula": {
                 "sandbox_id": [
                     1197649240
                 ],
-                "match": "infra/qyp/vmctl/bin/vmctl" 
-            }, 
-            "executable": { 
+                "match": "infra/qyp/vmctl/bin/vmctl"
+            },
+            "executable": {
                 "vmctl": [
                     "vmctl"
                 ]
-            } 
-        }, 
+            }
+        },
         "rtcdiag": {
             "formula": {
                 "sandbox_id": [

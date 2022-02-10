@@ -150,7 +150,7 @@ public:
         http_status = -1;
         location.clear();
         hreflangs[0] = 0;
-        retry_after = DEFAULT_RETRY_AFTER; 
+        retry_after = DEFAULT_RETRY_AFTER;
         x_robots_state = "xxxxx";
     }
 
@@ -160,7 +160,7 @@ public:
         printf("squid_error: %" PRIi8 "\n", squid_error);
         printf("accept_ranges: %" PRIi8 "\n", accept_ranges);
         printf("location: \"%s\"\n", location.c_str());
-        printf("retry_after: %" PRIi64 "\n", retry_after); 
+        printf("retry_after: %" PRIi64 "\n", retry_after);
     }
 };
 

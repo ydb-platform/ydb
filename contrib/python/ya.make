@@ -11,7 +11,7 @@ RECURSE(
     aioch
     aiochclient
     aiodns
-    aiodocker 
+    aiodocker
     aiofiles
     aioftp
     aiogram
@@ -575,7 +575,7 @@ RECURSE(
     kiwisolver
     kombu
     korean-lunar-calendar
-    kubernetes 
+    kubernetes
     langcodes
     lark-parser
     lazy
@@ -607,7 +607,7 @@ RECURSE(
     Markdown
     MarkupSafe
     marshmallow
-    marshmallow_dataclass 
+    marshmallow_dataclass
     marshmallow-enum
     marshmallow-mongoengine
     marshmallow-oneofschema

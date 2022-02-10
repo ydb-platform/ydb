@@ -25,7 +25,7 @@ namespace NSan {
         ~TFiberContext() noexcept;
 
         void BeforeFinish() noexcept;
-        void BeforeSwitch(TFiberContext* old) noexcept; 
+        void BeforeSwitch(TFiberContext* old) noexcept;
         void AfterSwitch() noexcept;
 
         static void AfterStart() noexcept;
@@ -35,7 +35,7 @@ namespace NSan {
         const void* Stack_;
         size_t Len_;
 
-        const bool IsMainFiber_; 
+        const bool IsMainFiber_;
 #if defined(_tsan_enabled_)
         void* const CurrentTSanFiberContext_;
 #endif

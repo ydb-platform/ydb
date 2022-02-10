@@ -1,15 +1,15 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/codecs/tls_cache.h>
-
+ 
 Y_UNIT_TEST_SUITE(CodecsBufferFactoryTest){
     void AssignToBuffer(TBuffer & buf, TStringBuf val){
         buf.Assign(val.data(), val.size());
 }
-
+ 
 TStringBuf AsStringBuf(const TBuffer& b) {
     return TStringBuf(b.Data(), b.Size());
 }
-
+ 
 Y_UNIT_TEST(TestAcquireReleaseReuse) {
     NCodecs::TBufferTlsCache factory;
     // acquiring the first buffer
@@ -19,7 +19,7 @@ Y_UNIT_TEST(TestAcquireReleaseReuse) {
         // acquiring the second buffer
         auto buf2 = factory.Item();
         AssignToBuffer(buf2.Get(), "Buffer_02");
-    }
+    } 
     // the first buffer should stay intact
     UNIT_ASSERT_EQUAL(AsStringBuf(buf1.Get()), "Buffer_01");
     {

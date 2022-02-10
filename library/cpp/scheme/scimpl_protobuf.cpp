@@ -11,17 +11,17 @@ using namespace google::protobuf;
 
 namespace NSc {
     TValue TValue::From(const Message& msg, bool mapAsDict) {
-        TValue v;
-        const Reflection* r = msg.GetReflection();
+        TValue v; 
+        const Reflection* r = msg.GetReflection(); 
         TVector<const FieldDescriptor*> fields;
         TVector<const FieldDescriptor*>::iterator it;
         int i1;
 
-        r->ListFields(msg, &fields);
+        r->ListFields(msg, &fields); 
         for (it = fields.begin(), i1 = 0; it != fields.end(); ++it, ++i1) {
-            const FieldDescriptor* field = *it;
-            try {
-                if (field->is_repeated()) {
+            const FieldDescriptor* field = *it; 
+            try { 
+                if (field->is_repeated()) { 
                     if (field->is_map() && mapAsDict) {
                         auto& elem = v[field->name()];
                         for (int i2 = 0; i2 < r->FieldSize(msg, field); ++i2) {
@@ -34,22 +34,22 @@ namespace NSc {
                         for (int i2 = 0; i2 < r->FieldSize(msg, field); ++i2)
                             v[field->name()][i2] = FromRepeatedField(msg, field, i2);
                     }
-                } else {
-                    v[field->name()] = FromField(msg, field);
-                }
-            } catch (...) {
-                /* conversion failed, skip this field */
+                } else { 
+                    v[field->name()] = FromField(msg, field); 
+                } 
+            } catch (...) { 
+                /* conversion failed, skip this field */ 
             }
         }
-
-        return v;
+ 
+        return v; 
     }
 
-    TValue TValue::FromField(const Message& msg, const FieldDescriptor* field) {
-        TValue v;
-        const Reflection* r = msg.GetReflection();
+    TValue TValue::FromField(const Message& msg, const FieldDescriptor* field) { 
+        TValue v; 
+        const Reflection* r = msg.GetReflection(); 
 
-        switch (field->cpp_type()) {
+        switch (field->cpp_type()) { 
             case FieldDescriptor::CPPTYPE_INT32:
                 v = r->GetInt32(msg, field);
                 break;
@@ -82,16 +82,16 @@ namespace NSc {
                 break;
             default:
                 ythrow TSchemeException() << "field " << field->full_name() << " unexpected type " << (int)field->cpp_type();
-        }
+        } 
 
-        return v;
+        return v; 
     }
 
-    TValue TValue::FromRepeatedField(const Message& msg, const FieldDescriptor* field, int index) {
-        TValue v;
-        const Reflection* r = msg.GetReflection();
+    TValue TValue::FromRepeatedField(const Message& msg, const FieldDescriptor* field, int index) { 
+        TValue v; 
+        const Reflection* r = msg.GetReflection(); 
 
-        switch (field->cpp_type()) {
+        switch (field->cpp_type()) { 
             case FieldDescriptor::CPPTYPE_INT32:
                 v = r->GetRepeatedInt32(msg, field, index);
                 break;
@@ -124,9 +124,9 @@ namespace NSc {
                 break;
             default:
                 ythrow TSchemeException() << "field " << field->full_name() << " unexpected type " << (int)field->cpp_type();
-        }
+        } 
 
-        return v;
+        return v; 
     }
 
     void TValue::To(Message& msg, const TProtoOpts& opts) const {

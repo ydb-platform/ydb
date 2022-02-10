@@ -1,47 +1,47 @@
-// Protocol Buffers - Google's data interchange format
-// Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// Author: kenton@google.com (Kenton Varda)
-// Author: jonp@google.com (Jon Perlow)
-//  Based on original Protocol Buffers design by
-//  Sanjay Ghemawat, Jeff Dean, and others.
-
-#ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_STRING_FIELD_H__
-#define GOOGLE_PROTOBUF_COMPILER_JAVA_STRING_FIELD_H__
-
-#include <map>
+// Protocol Buffers - Google's data interchange format 
+// Copyright 2008 Google Inc.  All rights reserved. 
+// https://developers.google.com/protocol-buffers/ 
+// 
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions are 
+// met: 
+// 
+//     * Redistributions of source code must retain the above copyright 
+// notice, this list of conditions and the following disclaimer. 
+//     * Redistributions in binary form must reproduce the above 
+// copyright notice, this list of conditions and the following disclaimer 
+// in the documentation and/or other materials provided with the 
+// distribution. 
+//     * Neither the name of Google Inc. nor the names of its 
+// contributors may be used to endorse or promote products derived from 
+// this software without specific prior written permission. 
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ 
+// Author: kenton@google.com (Kenton Varda) 
+// Author: jonp@google.com (Jon Perlow) 
+//  Based on original Protocol Buffers design by 
+//  Sanjay Ghemawat, Jeff Dean, and others. 
+ 
+#ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_STRING_FIELD_H__ 
+#define GOOGLE_PROTOBUF_COMPILER_JAVA_STRING_FIELD_H__ 
+ 
+#include <map> 
 #include <string>
 #include <google/protobuf/compiler/java/java_field.h>
-
-namespace google {
-namespace protobuf {
+ 
+namespace google { 
+namespace protobuf { 
 namespace compiler {
 namespace java {
 class Context;            // context.h
@@ -50,78 +50,78 @@ class ClassNameResolver;  // name_resolver.h
 }  // namespace compiler
 }  // namespace protobuf
 }  // namespace google
-
+ 
 namespace google {
-namespace protobuf {
-namespace compiler {
-namespace java {
-
-class ImmutableStringFieldGenerator : public ImmutableFieldGenerator {
- public:
+namespace protobuf { 
+namespace compiler { 
+namespace java { 
+ 
+class ImmutableStringFieldGenerator : public ImmutableFieldGenerator { 
+ public: 
   explicit ImmutableStringFieldGenerator(const FieldDescriptor* descriptor,
                                          int messageBitIndex,
                                          int builderBitIndex, Context* context);
-  ~ImmutableStringFieldGenerator();
-
+  ~ImmutableStringFieldGenerator(); 
+ 
   // implements ImmutableFieldGenerator
   // ---------------------------------------
-  int GetNumBitsForMessage() const;
-  int GetNumBitsForBuilder() const;
-  void GenerateInterfaceMembers(io::Printer* printer) const;
-  void GenerateMembers(io::Printer* printer) const;
-  void GenerateBuilderMembers(io::Printer* printer) const;
-  void GenerateInitializationCode(io::Printer* printer) const;
-  void GenerateBuilderClearCode(io::Printer* printer) const;
-  void GenerateMergingCode(io::Printer* printer) const;
-  void GenerateBuildingCode(io::Printer* printer) const;
-  void GenerateParsingCode(io::Printer* printer) const;
-  void GenerateParsingDoneCode(io::Printer* printer) const;
-  void GenerateSerializationCode(io::Printer* printer) const;
-  void GenerateSerializedSizeCode(io::Printer* printer) const;
-  void GenerateFieldBuilderInitializationCode(io::Printer* printer) const;
-  void GenerateEqualsCode(io::Printer* printer) const;
-  void GenerateHashCode(io::Printer* printer) const;
+  int GetNumBitsForMessage() const; 
+  int GetNumBitsForBuilder() const; 
+  void GenerateInterfaceMembers(io::Printer* printer) const; 
+  void GenerateMembers(io::Printer* printer) const; 
+  void GenerateBuilderMembers(io::Printer* printer) const; 
+  void GenerateInitializationCode(io::Printer* printer) const; 
+  void GenerateBuilderClearCode(io::Printer* printer) const; 
+  void GenerateMergingCode(io::Printer* printer) const; 
+  void GenerateBuildingCode(io::Printer* printer) const; 
+  void GenerateParsingCode(io::Printer* printer) const; 
+  void GenerateParsingDoneCode(io::Printer* printer) const; 
+  void GenerateSerializationCode(io::Printer* printer) const; 
+  void GenerateSerializedSizeCode(io::Printer* printer) const; 
+  void GenerateFieldBuilderInitializationCode(io::Printer* printer) const; 
+  void GenerateEqualsCode(io::Printer* printer) const; 
+  void GenerateHashCode(io::Printer* printer) const; 
   void GenerateKotlinDslMembers(io::Printer* printer) const;
-
+ 
   TProtoStringType GetBoxedType() const;
-
- protected:
-  const FieldDescriptor* descriptor_;
+ 
+ protected: 
+  const FieldDescriptor* descriptor_; 
   std::map<TProtoStringType, TProtoStringType> variables_;
-  ClassNameResolver* name_resolver_;
-
- private:
-  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ImmutableStringFieldGenerator);
-};
-
-class ImmutableStringOneofFieldGenerator
-    : public ImmutableStringFieldGenerator {
- public:
+  ClassNameResolver* name_resolver_; 
+ 
+ private: 
+  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ImmutableStringFieldGenerator); 
+}; 
+ 
+class ImmutableStringOneofFieldGenerator 
+    : public ImmutableStringFieldGenerator { 
+ public: 
   ImmutableStringOneofFieldGenerator(const FieldDescriptor* descriptor,
                                      int messageBitIndex, int builderBitIndex,
                                      Context* context);
-  ~ImmutableStringOneofFieldGenerator();
-
- private:
-  void GenerateMembers(io::Printer* printer) const;
-  void GenerateBuilderMembers(io::Printer* printer) const;
-  void GenerateMergingCode(io::Printer* printer) const;
-  void GenerateBuildingCode(io::Printer* printer) const;
-  void GenerateParsingCode(io::Printer* printer) const;
-  void GenerateSerializationCode(io::Printer* printer) const;
-  void GenerateSerializedSizeCode(io::Printer* printer) const;
-
-  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ImmutableStringOneofFieldGenerator);
-};
-
-class RepeatedImmutableStringFieldGenerator : public ImmutableFieldGenerator {
- public:
-  explicit RepeatedImmutableStringFieldGenerator(
-      const FieldDescriptor* descriptor, int messageBitIndex,
-      int builderBitIndex, Context* context);
+  ~ImmutableStringOneofFieldGenerator(); 
+ 
+ private: 
+  void GenerateMembers(io::Printer* printer) const; 
+  void GenerateBuilderMembers(io::Printer* printer) const; 
+  void GenerateMergingCode(io::Printer* printer) const; 
+  void GenerateBuildingCode(io::Printer* printer) const; 
+  void GenerateParsingCode(io::Printer* printer) const; 
+  void GenerateSerializationCode(io::Printer* printer) const; 
+  void GenerateSerializedSizeCode(io::Printer* printer) const; 
+ 
+  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ImmutableStringOneofFieldGenerator); 
+}; 
+ 
+class RepeatedImmutableStringFieldGenerator : public ImmutableFieldGenerator { 
+ public: 
+  explicit RepeatedImmutableStringFieldGenerator( 
+      const FieldDescriptor* descriptor, int messageBitIndex, 
+      int builderBitIndex, Context* context); 
   ~RepeatedImmutableStringFieldGenerator() override;
-
-  // implements ImmutableFieldGenerator ---------------------------------------
+ 
+  // implements ImmutableFieldGenerator --------------------------------------- 
   int GetNumBitsForMessage() const override;
   int GetNumBitsForBuilder() const override;
   void GenerateInterfaceMembers(io::Printer* printer) const override;
@@ -140,20 +140,20 @@ class RepeatedImmutableStringFieldGenerator : public ImmutableFieldGenerator {
   void GenerateEqualsCode(io::Printer* printer) const override;
   void GenerateHashCode(io::Printer* printer) const override;
   void GenerateKotlinDslMembers(io::Printer* printer) const override;
-
+ 
   TProtoStringType GetBoxedType() const override;
-
- private:
-  const FieldDescriptor* descriptor_;
+ 
+ private: 
+  const FieldDescriptor* descriptor_; 
   std::map<TProtoStringType, TProtoStringType> variables_;
-  ClassNameResolver* name_resolver_;
-
-  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(RepeatedImmutableStringFieldGenerator);
-};
-
-}  // namespace java
-}  // namespace compiler
-}  // namespace protobuf
+  ClassNameResolver* name_resolver_; 
+ 
+  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(RepeatedImmutableStringFieldGenerator); 
+}; 
+ 
+}  // namespace java 
+}  // namespace compiler 
+}  // namespace protobuf 
 }  // namespace google
-
-#endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_STRING_FIELD_H__
+ 
+#endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_STRING_FIELD_H__ 

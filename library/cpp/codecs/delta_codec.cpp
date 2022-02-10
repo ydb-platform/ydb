@@ -1,6 +1,6 @@
-#include "delta_codec.h"
-
-namespace NCodecs {
+#include "delta_codec.h" 
+ 
+namespace NCodecs { 
     template <>
     TStringBuf TDeltaCodec<ui64, true>::MyName() {
         return "delta64-unsigned";
@@ -17,5 +17,5 @@ namespace NCodecs {
     TStringBuf TDeltaCodec<ui32, false>::MyName() {
         return "delta32-signed";
     }
-
-}
+ 
+} 

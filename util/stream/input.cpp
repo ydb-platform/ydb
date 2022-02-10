@@ -120,9 +120,9 @@ TString IInputStream::ReadTo(char ch) {
 }
 
 size_t IInputStream::Skip(size_t sz) {
-    return DoSkip(sz);
-}
-
+    return DoSkip(sz); 
+} 
+ 
 size_t IInputStream::DoSkip(size_t sz) {
     if (sz < 128) {
         return Load(alloca(sz), sz);
@@ -143,8 +143,8 @@ size_t IInputStream::DoSkip(size_t sz) {
     }
 
     return total;
-}
-
+} 
+ 
 TString IInputStream::ReadAll() {
     TString result;
     TStringOutput stream(result);

@@ -1,24 +1,24 @@
 LIBRARY()
 
-OWNER(
-    pg
-    g:balancer
-)
+OWNER( 
+    pg 
+    g:balancer 
+) 
 
 GENERATE_ENUM_SERIALIZATION(poller.h)
 GENERATE_ENUM_SERIALIZATION(stack/stack_common.h)
-
+ 
 PEERDIR(
     contrib/libs/libc_compat
     library/cpp/containers/intrusive_rb_tree
 )
 
 SRCS(
-    cont_poller.cpp
+    cont_poller.cpp 
     helper.cpp
     impl.cpp
     iostatus.cpp
-    network.cpp
+    network.cpp 
     poller.cpp
     sockpool.cpp
     stack/stack.cpp
@@ -26,7 +26,7 @@ SRCS(
     stack/stack_guards.cpp
     stack/stack_storage.cpp
     stack/stack_utils.cpp
-    trampoline.cpp
+    trampoline.cpp 
 )
 
 END()

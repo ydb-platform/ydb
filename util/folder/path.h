@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "fwd.h"
 #include "pathsplit.h"
@@ -174,9 +174,9 @@ public:
     bool Exists() const;
     /// false if not exists
     bool IsDirectory() const;
-    /// false if not exists
-    bool IsFile() const;
-    /// false if not exists
+    /// false if not exists 
+    bool IsFile() const; 
+    /// false if not exists 
     bool IsSymlink() const;
     /// throw TIoException if not exists
     void CheckExists() const;
@@ -192,7 +192,7 @@ public:
 
     TFsPath RealPath() const;
     TFsPath RealLocation() const;
-    TFsPath ReadLink() const;
+    TFsPath ReadLink() const; 
 
     /// always absolute
     static TFsPath Cwd();

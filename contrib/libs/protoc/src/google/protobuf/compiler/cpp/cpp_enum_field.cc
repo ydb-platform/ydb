@@ -1,77 +1,77 @@
-// Protocol Buffers - Google's data interchange format
-// Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// Author: kenton@google.com (Kenton Varda)
-//  Based on original Protocol Buffers design by
-//  Sanjay Ghemawat, Jeff Dean, and others.
-
+// Protocol Buffers - Google's data interchange format 
+// Copyright 2008 Google Inc.  All rights reserved. 
+// https://developers.google.com/protocol-buffers/ 
+// 
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions are 
+// met: 
+// 
+//     * Redistributions of source code must retain the above copyright 
+// notice, this list of conditions and the following disclaimer. 
+//     * Redistributions in binary form must reproduce the above 
+// copyright notice, this list of conditions and the following disclaimer 
+// in the documentation and/or other materials provided with the 
+// distribution. 
+//     * Neither the name of Google Inc. nor the names of its 
+// contributors may be used to endorse or promote products derived from 
+// this software without specific prior written permission. 
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ 
+// Author: kenton@google.com (Kenton Varda) 
+//  Based on original Protocol Buffers design by 
+//  Sanjay Ghemawat, Jeff Dean, and others. 
+ 
 #include <google/protobuf/compiler/cpp/cpp_enum_field.h>
 #include <google/protobuf/compiler/cpp/cpp_helpers.h>
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/wire_format.h>
 #include <google/protobuf/stubs/strutil.h>
-
-namespace google {
-namespace protobuf {
-namespace compiler {
-namespace cpp {
-
-namespace {
-
-void SetEnumVariables(const FieldDescriptor* descriptor,
+ 
+namespace google { 
+namespace protobuf { 
+namespace compiler { 
+namespace cpp { 
+ 
+namespace { 
+ 
+void SetEnumVariables(const FieldDescriptor* descriptor, 
                       std::map<TProtoStringType, TProtoStringType>* variables,
-                      const Options& options) {
-  SetCommonFieldVariables(descriptor, variables, options);
-  const EnumValueDescriptor* default_value = descriptor->default_value_enum();
+                      const Options& options) { 
+  SetCommonFieldVariables(descriptor, variables, options); 
+  const EnumValueDescriptor* default_value = descriptor->default_value_enum(); 
   (*variables)["type"] = QualifiedClassName(descriptor->enum_type(), options);
-  (*variables)["default"] = Int32ToString(default_value->number());
-  (*variables)["full_name"] = descriptor->full_name();
-}
-
-}  // namespace
-
-// ===================================================================
-
-EnumFieldGenerator::EnumFieldGenerator(const FieldDescriptor* descriptor,
-                                       const Options& options)
+  (*variables)["default"] = Int32ToString(default_value->number()); 
+  (*variables)["full_name"] = descriptor->full_name(); 
+} 
+ 
+}  // namespace 
+ 
+// =================================================================== 
+ 
+EnumFieldGenerator::EnumFieldGenerator(const FieldDescriptor* descriptor, 
+                                       const Options& options) 
     : FieldGenerator(descriptor, options) {
-  SetEnumVariables(descriptor, &variables_, options);
-}
-
-EnumFieldGenerator::~EnumFieldGenerator() {}
-
+  SetEnumVariables(descriptor, &variables_, options); 
+} 
+ 
+EnumFieldGenerator::~EnumFieldGenerator() {} 
+ 
 void EnumFieldGenerator::GeneratePrivateMembers(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("int $name$_;\n");
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateAccessorDeclarations(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -83,8 +83,8 @@ void EnumFieldGenerator::GenerateAccessorDeclarations(
       "void ${1$_internal_set_$name$$}$($type$ value);\n"
       "public:\n",
       descriptor_);
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateInlineAccessorDefinitions(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -100,7 +100,7 @@ void EnumFieldGenerator::GenerateInlineAccessorDefinitions(
       "inline void $classname$::_internal_set_$name$($type$ value) {\n");
   if (!HasPreservingUnknownEnumSemantics(descriptor_)) {
     format("  assert($type$_IsValid(value));\n");
-  }
+  } 
   format(
       "  $set_hasbit$\n"
       "  $name$_ = value;\n"
@@ -110,28 +110,28 @@ void EnumFieldGenerator::GenerateInlineAccessorDefinitions(
       "$annotate_set$"
       "  // @@protoc_insertion_point(field_set:$full_name$)\n"
       "}\n");
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateClearingCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_ = $default$;\n");
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateMergingCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("_internal_set_$name$(from._internal_$name$());\n");
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateSwappingCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("swap($name$_, other->$name$_);\n");
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateConstructorCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_ = $default$;\n");
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -145,8 +145,8 @@ void EnumFieldGenerator::GenerateSerializeWithCachedSizesToArray(
       "target = stream->EnsureSpace(target);\n"
       "target = ::$proto_ns$::internal::WireFormatLite::WriteEnumToArray(\n"
       "  $number$, this->_internal_$name$(), target);\n");
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateByteSize(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format(
@@ -154,24 +154,24 @@ void EnumFieldGenerator::GenerateByteSize(io::Printer* printer) const {
       "  "
       "::$proto_ns$::internal::WireFormatLite::EnumSize(this->_internal_$name$("
       "));\n");
-}
-
+} 
+ 
 void EnumFieldGenerator::GenerateConstinitInitializer(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_($default$)\n");
-}
-
-// ===================================================================
-
+} 
+ 
+// =================================================================== 
+ 
 EnumOneofFieldGenerator::EnumOneofFieldGenerator(
     const FieldDescriptor* descriptor, const Options& options)
     : EnumFieldGenerator(descriptor, options) {
-  SetCommonOneofFieldVariables(descriptor, &variables_);
-}
-
-EnumOneofFieldGenerator::~EnumOneofFieldGenerator() {}
-
+  SetCommonOneofFieldVariables(descriptor, &variables_); 
+} 
+ 
+EnumOneofFieldGenerator::~EnumOneofFieldGenerator() {} 
+ 
 void EnumOneofFieldGenerator::GenerateInlineAccessorDefinitions(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -190,7 +190,7 @@ void EnumOneofFieldGenerator::GenerateInlineAccessorDefinitions(
       "inline void $classname$::_internal_set_$name$($type$ value) {\n");
   if (!HasPreservingUnknownEnumSemantics(descriptor_)) {
     format("  assert($type$_IsValid(value));\n");
-  }
+  } 
   format(
       "  if (!_internal_has_$name$()) {\n"
       "    clear_$oneof_name$();\n"
@@ -203,43 +203,43 @@ void EnumOneofFieldGenerator::GenerateInlineAccessorDefinitions(
       "$annotate_set$"
       "  // @@protoc_insertion_point(field_set:$full_name$)\n"
       "}\n");
-}
-
+} 
+ 
 void EnumOneofFieldGenerator::GenerateClearingCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$field_member$ = $default$;\n");
-}
-
+} 
+ 
 void EnumOneofFieldGenerator::GenerateSwappingCode(io::Printer* printer) const {
-  // Don't print any swapping code. Swapping the union will swap this field.
-}
-
+  // Don't print any swapping code. Swapping the union will swap this field. 
+} 
+ 
 void EnumOneofFieldGenerator::GenerateConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$ns$::_$classname$_default_instance_.$name$_ = $default$;\n");
-}
-
-// ===================================================================
-
-RepeatedEnumFieldGenerator::RepeatedEnumFieldGenerator(
-    const FieldDescriptor* descriptor, const Options& options)
+} 
+ 
+// =================================================================== 
+ 
+RepeatedEnumFieldGenerator::RepeatedEnumFieldGenerator( 
+    const FieldDescriptor* descriptor, const Options& options) 
     : FieldGenerator(descriptor, options) {
-  SetEnumVariables(descriptor, &variables_, options);
-}
-
-RepeatedEnumFieldGenerator::~RepeatedEnumFieldGenerator() {}
-
+  SetEnumVariables(descriptor, &variables_, options); 
+} 
+ 
+RepeatedEnumFieldGenerator::~RepeatedEnumFieldGenerator() {} 
+ 
 void RepeatedEnumFieldGenerator::GeneratePrivateMembers(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("::$proto_ns$::RepeatedField<int> $name$_;\n");
-  if (descriptor_->is_packed() &&
-      HasGeneratedMethods(descriptor_->file(), options_)) {
+  if (descriptor_->is_packed() && 
+      HasGeneratedMethods(descriptor_->file(), options_)) { 
     format("mutable std::atomic<int> _$name$_cached_byte_size_;\n");
-  }
-}
-
+  } 
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateAccessorDeclarations(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -258,8 +258,8 @@ void RepeatedEnumFieldGenerator::GenerateAccessorDeclarations(
       "$deprecated_attr$::$proto_ns$::RepeatedField<int>* "
       "${1$mutable_$name$$}$();\n",
       descriptor_);
-}
-
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateInlineAccessorDefinitions(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -275,7 +275,7 @@ void RepeatedEnumFieldGenerator::GenerateInlineAccessorDefinitions(
       "inline void $classname$::set_$name$(int index, $type$ value) {\n");
   if (!HasPreservingUnknownEnumSemantics(descriptor_)) {
     format("  assert($type$_IsValid(value));\n");
-  }
+  } 
   format(
       "  $name$_.Set(index, value);\n"
       "$annotate_set$"
@@ -284,7 +284,7 @@ void RepeatedEnumFieldGenerator::GenerateInlineAccessorDefinitions(
       "inline void $classname$::_internal_add_$name$($type$ value) {\n");
   if (!HasPreservingUnknownEnumSemantics(descriptor_)) {
     format("  assert($type$_IsValid(value));\n");
-  }
+  } 
   format(
       "  $name$_.Add(value);\n"
       "}\n"
@@ -309,35 +309,35 @@ void RepeatedEnumFieldGenerator::GenerateInlineAccessorDefinitions(
       "  // @@protoc_insertion_point(field_mutable_list:$full_name$)\n"
       "  return _internal_mutable_$name$();\n"
       "}\n");
-}
-
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateClearingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.Clear();\n");
-}
-
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateMergingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.MergeFrom(from.$name$_);\n");
-}
-
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateSwappingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.InternalSwap(&other->$name$_);\n");
-}
-
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateConstructorCode(
     io::Printer* printer) const {
-  // Not needed for repeated fields.
-}
-
+  // Not needed for repeated fields. 
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateMergeFromCodedStream(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  // Don't use ReadRepeatedPrimitive here so that the enum can be validated.
+  // Don't use ReadRepeatedPrimitive here so that the enum can be validated. 
   format(
       "int value = 0;\n"
       "DO_((::$proto_ns$::internal::WireFormatLite::ReadPrimitive<\n"
@@ -345,30 +345,30 @@ void RepeatedEnumFieldGenerator::GenerateMergeFromCodedStream(
       "       input, &value)));\n");
   if (HasPreservingUnknownEnumSemantics(descriptor_)) {
     format("add_$name$(static_cast< $type$ >(value));\n");
-  } else {
+  } else { 
     format(
         "if ($type$_IsValid(value)) {\n"
         "  add_$name$(static_cast< $type$ >(value));\n");
-    if (UseUnknownFieldSet(descriptor_->file(), options_)) {
+    if (UseUnknownFieldSet(descriptor_->file(), options_)) { 
       format(
           "} else {\n"
           "  mutable_unknown_fields()->AddVarint(\n"
           "      $number$, static_cast<$uint64$>(value));\n");
-    } else {
+    } else { 
       format(
           "} else {\n"
           "  unknown_fields_stream.WriteVarint32(tag);\n"
           "  unknown_fields_stream.WriteVarint32(\n"
           "      static_cast<$uint32$>(value));\n");
-    }
+    } 
     format("}\n");
-  }
-}
-
+  } 
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateMergeFromCodedStreamWithPacking(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  if (!descriptor_->is_packed()) {
+  if (!descriptor_->is_packed()) { 
     // This path is rarely executed, so we use a non-inlined implementation.
     if (HasPreservingUnknownEnumSemantics(descriptor_)) {
       format(
@@ -379,7 +379,7 @@ void RepeatedEnumFieldGenerator::GenerateMergeFromCodedStreamWithPacking(
           "       nullptr,\n"
           "       nullptr,\n"
           "       this->_internal_mutable_$name$())));\n");
-    } else if (UseUnknownFieldSet(descriptor_->file(), options_)) {
+    } else if (UseUnknownFieldSet(descriptor_->file(), options_)) { 
       format(
           "DO_((::$proto_ns$::internal::WireFormat::"
           "ReadPackedEnumPreserveUnknowns(\n"
@@ -388,7 +388,7 @@ void RepeatedEnumFieldGenerator::GenerateMergeFromCodedStreamWithPacking(
           "       $type$_IsValid,\n"
           "       mutable_unknown_fields(),\n"
           "       this->_internal_mutable_$name$())));\n");
-    } else {
+    } else { 
       format(
           "DO_((::$proto_ns$::internal::"
           "WireFormatLite::ReadPackedEnumPreserveUnknowns(\n"
@@ -397,8 +397,8 @@ void RepeatedEnumFieldGenerator::GenerateMergeFromCodedStreamWithPacking(
           "       $type$_IsValid,\n"
           "       &unknown_fields_stream,\n"
           "       this->_internal_mutable_$name$())));\n");
-    }
-  } else {
+    } 
+  } else { 
     format(
         "$uint32$ length;\n"
         "DO_(input->ReadVarint32(&length));\n"
@@ -411,34 +411,34 @@ void RepeatedEnumFieldGenerator::GenerateMergeFromCodedStreamWithPacking(
         "       input, &value)));\n");
     if (HasPreservingUnknownEnumSemantics(descriptor_)) {
       format("  add_$name$(static_cast< $type$ >(value));\n");
-    } else {
+    } else { 
       format(
           "  if ($type$_IsValid(value)) {\n"
           "    _internal_add_$name$(static_cast< $type$ >(value));\n"
           "  } else {\n");
-      if (UseUnknownFieldSet(descriptor_->file(), options_)) {
+      if (UseUnknownFieldSet(descriptor_->file(), options_)) { 
         format(
             "  mutable_unknown_fields()->AddVarint(\n"
             "      $number$, static_cast<$uint64$>(value));\n");
-      } else {
+      } else { 
         format(
             "    unknown_fields_stream.WriteVarint32(tag);\n"
             "    unknown_fields_stream.WriteVarint32(\n"
             "        static_cast<$uint32$>(value));\n");
-      }
+      } 
       format("  }\n");
-    }
+    } 
     format(
         "}\n"
         "input->PopLimit(limit);\n");
-  }
-}
-
+  } 
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateSerializeWithCachedSizesToArray(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  if (descriptor_->is_packed()) {
-    // Write the tag and the size.
+  if (descriptor_->is_packed()) { 
+    // Write the tag and the size. 
     format(
         "{\n"
         "  int byte_size = "
@@ -448,16 +448,16 @@ void RepeatedEnumFieldGenerator::GenerateSerializeWithCachedSizesToArray(
         "        $number$, $name$_, byte_size, target);\n"
         "  }\n"
         "}\n");
-  } else {
+  } else { 
     format(
         "for (int i = 0, n = this->_internal_$name$_size(); i < n; i++) {\n"
         "  target = stream->EnsureSpace(target);\n"
         "  target = ::$proto_ns$::internal::WireFormatLite::WriteEnumToArray(\n"
         "      $number$, this->_internal_$name$(i), target);\n"
         "}\n");
-  }
-}
-
+  } 
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateByteSize(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format(
@@ -470,9 +470,9 @@ void RepeatedEnumFieldGenerator::GenerateByteSize(io::Printer* printer) const {
       "for (unsigned int i = 0; i < count; i++) {\n"
       "  data_size += ::$proto_ns$::internal::WireFormatLite::EnumSize(\n"
       "    this->_internal_$name$(static_cast<int>(i)));\n"
-      "}\n");
-
-  if (descriptor_->is_packed()) {
+      "}\n"); 
+ 
+  if (descriptor_->is_packed()) { 
     format(
         "if (data_size > 0) {\n"
         "  total_size += $tag_size$ +\n"
@@ -483,13 +483,13 @@ void RepeatedEnumFieldGenerator::GenerateByteSize(io::Printer* printer) const {
         "_$name$_cached_byte_size_.store(cached_size,\n"
         "                                std::memory_order_relaxed);\n"
         "total_size += data_size;\n");
-  } else {
+  } else { 
     format("total_size += ($tag_size$UL * count) + data_size;\n");
-  }
+  } 
   format.Outdent();
   format("}\n");
-}
-
+} 
+ 
 void RepeatedEnumFieldGenerator::GenerateConstinitInitializer(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -500,7 +500,7 @@ void RepeatedEnumFieldGenerator::GenerateConstinitInitializer(
   }
 }
 
-}  // namespace cpp
-}  // namespace compiler
-}  // namespace protobuf
-}  // namespace google
+}  // namespace cpp 
+}  // namespace compiler 
+}  // namespace protobuf 
+}  // namespace google 

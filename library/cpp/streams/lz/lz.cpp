@@ -460,78 +460,78 @@ DEF_COMPRESSOR(TLzfCompress, TFastLZ)
 DEF_DECOMPRESSOR(TLzfDecompress, TFastLZ)
 
 /*
- * LZ4
- */
-class TLZ4 {
+ * LZ4 
+ */ 
+class TLZ4 { 
 public:
     static const char signature[];
-
+ 
     static inline size_t Hint(size_t len) noexcept {
         return Max<size_t>((size_t)(len * 1.06), 100);
     }
-
+ 
     inline size_t Compress(const char* data, size_t len, char* ptr, size_t dstMaxSize) {
         return LZ4_compress_default(data, ptr, len, dstMaxSize);
     }
-
+ 
     inline size_t Decompress(const char* data, size_t len, char* ptr, size_t max) {
         int res = LZ4_decompress_safe(data, ptr, len, max);
         if (res < 0)
             ythrow TDecompressorError();
         return res;
     }
-
+ 
     inline void InitFromStream(IInputStream*) const noexcept {
     }
-
+ 
     static inline bool SaveIncompressibleChunks() noexcept {
         return false;
     }
-};
-
-const char TLZ4::signature[] = "LZ.4";
-
-DEF_COMPRESSOR(TLz4Compress, TLZ4)
-DEF_DECOMPRESSOR(TLz4Decompress, TLZ4)
-
-/*
- * Snappy
- */
-class TSnappy {
+}; 
+ 
+const char TLZ4::signature[] = "LZ.4"; 
+ 
+DEF_COMPRESSOR(TLz4Compress, TLZ4) 
+DEF_DECOMPRESSOR(TLz4Decompress, TLZ4) 
+ 
+/* 
+ * Snappy 
+ */ 
+class TSnappy { 
 public:
     static const char signature[];
-
+ 
     static inline size_t Hint(size_t len) noexcept {
         return Max<size_t>(snappy::MaxCompressedLength(len), 100);
     }
-
+ 
     inline size_t Compress(const char* data, size_t len, char* ptr, size_t /*dstMaxSize*/) {
         size_t reslen = 0;
         snappy::RawCompress(data, len, ptr, &reslen);
         return reslen;
     }
-
+ 
     inline size_t Decompress(const char* data, size_t len, char* ptr, size_t) {
         size_t srclen = 0;
         if (!snappy::GetUncompressedLength(data, len, &srclen) || !snappy::RawUncompress(data, len, ptr))
             ythrow TDecompressorError();
         return srclen;
     }
-
+ 
     inline void InitFromStream(IInputStream*) const noexcept {
     }
-
+ 
     static inline bool SaveIncompressibleChunks() noexcept {
         return false;
     }
-};
-
-const char TSnappy::signature[] = "Snap";
-
-DEF_COMPRESSOR(TSnappyCompress, TSnappy)
-DEF_DECOMPRESSOR(TSnappyDecompress, TSnappy)
-
-/*
+}; 
+ 
+const char TSnappy::signature[] = "Snap"; 
+ 
+DEF_COMPRESSOR(TSnappyCompress, TSnappy) 
+DEF_DECOMPRESSOR(TSnappyDecompress, TSnappy) 
+ 
+/* 
  * QuickLZ
  */
 class TQuickLZBase {

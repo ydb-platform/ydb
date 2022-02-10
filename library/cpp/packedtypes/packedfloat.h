@@ -1,65 +1,65 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/generic/cast.h>
 #include <util/generic/ylimits.h>
 #include <util/system/hi_lo.h>
 
-#include <cmath>
-#include <cfloat>
+#include <cmath> 
+#include <cfloat> 
 #include <limits>
-#include <algorithm>
+#include <algorithm> 
 #include <cassert>
-
-namespace NPackedFloat {
+ 
+namespace NPackedFloat { 
     /*
- Exponent    Mantissa zero   Mantissa non-zero   Equation
- 0x00        zero            denormal            (-1)^sign * 2^-126 * 0.mantissa
- 0x01–0xfe       normalized value                (-1)^sign * 2^(exponent - 127) * 1.mantissa
- 0xff        infinity        NaN
- * */
-
+ Exponent    Mantissa zero   Mantissa non-zero   Equation 
+ 0x00        zero            denormal            (-1)^sign * 2^-126 * 0.mantissa 
+ 0x01–0xfe       normalized value                (-1)^sign * 2^(exponent - 127) * 1.mantissa 
+ 0xff        infinity        NaN 
+ * */ 
+ 
     //fast 16 bit floats by melkov
     template <ui8 SIGNED>
     struct float16 {
     private:
         typedef float16<SIGNED> self;
-
+ 
     public:
         ui16 val;
-
+ 
         explicit float16(ui16 v = 0)
             : val(v)
         {
         }
-
+ 
         self& operator=(float t) {
             assert(SIGNED == 1 || SIGNED == 0 && t >= 0.);
             val = BitCast<ui32>(t) >> (15 + SIGNED);
             return *this;
         }
-
+ 
         operator float() const {
             return BitCast<float>((ui32)val << (15 + SIGNED));
         }
-
+ 
         static self New(float v) {
             self f;
             return f = v;
         }
-
+ 
         static self denorm_min() {
             return self(0x0001);
         }
-
+ 
         static self min() {
             return self(SIGNED ? 0x0080 : 0x0100);
         }
-
+ 
         static self max() {
             return self(SIGNED ? 0x7f7f : 0xfeff);
         }
-    };
-
+    }; 
+ 
     //fast 8 bit floats
     template <ui8 SIGNED, ui8 DENORM = 0>
     struct float8 {
@@ -70,23 +70,23 @@ namespace NPackedFloat {
             FMaxExp = SIGNED ? 0x83 : 0x87,
             MaxExp = SIGNED ? 0x70 : 0xf0,
         };
-
+ 
     public:
         ui8 val;
-
+ 
         explicit float8(ui8 v = 0)
             : val(v)
         {
         }
-
+ 
         self& operator=(float t) {
             assert(SIGNED == 1 || SIGNED == 0 && t >= 0.);
             ui16 hi16 = Hi16(t);
-
+ 
             ui8 sign = SIGNED ? Hi8(hi16) & 0x80 : 0;
-
+ 
             hi16 <<= 1;
-
+ 
             ui8 fexp = Hi8(hi16);
             ui8 exp;
             ui8 frac = (Lo8(hi16) & 0xf0) >> 4;
@@ -103,15 +103,15 @@ namespace NPackedFloat {
 
             val = sign | exp | frac;
             return *this;
-        }
-
+        } 
+ 
         operator float() const {
             ui32 v = 0;
-
+ 
             v |= SIGNED ? (val & 0x80) << 24 : 0;
             ui8 frac = val & 0x0f;
             ui8 exp = val & MaxExp;
-
+ 
             if (exp) {
                 v |= ((exp >> 4) + FMinExp) << 23 | frac << 19;
             } else if (DENORM && val & 0x0f) {
@@ -119,33 +119,33 @@ namespace NPackedFloat {
                     frac <<= 1;
                     ++exp;
                 }
-
+ 
                 v |= (FMinExp - exp + 1) << 23 | (frac & 0x0f) << 19;
             } else
                 v |= 0;
-
+ 
             return BitCast<float>(v);
         }
-
+ 
         static self New(float v) {
             self f;
             return f = v;
         }
-
+ 
         static self denorm_min() {
             return self(0x01);
         }
-
+ 
         static self min() {
             return self(0x10);
         }
-
+ 
         static self max() {
             return self(SIGNED ? 0x7f : 0xff);
         }
     };
-}
-
+} 
+ 
 using f64 = double;
 using f32 = float;
 static_assert(sizeof(f32) == 4, "expect sizeof(f32) == 4");
@@ -156,7 +156,7 @@ using f8 = NPackedFloat::float8<1>;
 using uf8 = NPackedFloat::float8<0>;
 using f8d = NPackedFloat::float8<1, 1>;
 using uf8d = NPackedFloat::float8<0, 1>;
-
+ 
 // [0,1) value in 1/255s.
 using frac8 = ui8;
 

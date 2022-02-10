@@ -1265,11 +1265,11 @@ typedef U32 DTable_max_t[FSE_DTABLE_SIZE_U32(FSE_MAX_TABLELOG)];
 
 /* Function templates */
 
-#define FSE_DECODE_TYPE FSE_decode_t
+#define FSE_DECODE_TYPE FSE_decode_t 
 
 static U32 FSE_tableStep(U32 tableSize) { return (tableSize>>1) + (tableSize>>3) + 3; }
 
-static size_t FSE_buildDTable
+static size_t FSE_buildDTable 
 (FSE_DTable* dt, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog)
 {
     void* ptr = dt+1;
@@ -2400,7 +2400,7 @@ typedef size_t (*decompressionAlgo)(void* dst, size_t dstSize, const void* cSrc,
 
 static size_t HUF_decompress (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
 {
-    static const decompressionAlgo decompress[3] = { HUF_decompress4X2, HUF_decompress4X4, NULL };
+    static const decompressionAlgo decompress[3] = { HUF_decompress4X2, HUF_decompress4X4, NULL }; 
     /* estimate decompression time */
     U32 Q;
     const U32 D256 = (U32)(dstSize >> 8);

@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TLzTest) {
         TestCompress<TLzqCompress>();
         TestDecompress<TLzqDecompress>();
     }
-
+ 
     Y_UNIT_TEST(TestLzq151_1) {
         TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 1, TLzqCompress::M_0>>();
         TestDecompress<TLzqDecompress>();
@@ -235,14 +235,14 @@ Y_UNIT_TEST_SUITE(TLzTest) {
     }
 
     Y_UNIT_TEST(TestLz4) {
-        TestCompress<TLz4Compress>();
-        TestDecompress<TLz4Decompress>();
-    }
-
+        TestCompress<TLz4Compress>(); 
+        TestDecompress<TLz4Decompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestSnappy) {
-        TestCompress<TSnappyCompress>();
-        TestDecompress<TSnappyDecompress>();
-    }
+        TestCompress<TSnappyCompress>(); 
+        TestDecompress<TSnappyDecompress>(); 
+    } 
 
     Y_UNIT_TEST(TestGeneric) {
         TestMixedDecompress<TLzoCompress>();

@@ -59,7 +59,7 @@
 #include "mem.h"           /* read */
 #include "error_private.h"
 #include "fse.h"
-#include "huf_static.h"
+#include "huf_static.h" 
 #include "zstd_internal.h"
 #include "divsufsort.h"
 #include "zdict_static.h"
@@ -830,12 +830,12 @@ size_t ZDICT_trainFromBuffer_unsafe(
     size_t dictSize = 0;
 
     /* checks */
-    if (maxDictSize <= g_provision_entropySize + g_min_fast_dictContent) return ERROR(dstSize_tooSmall);
+    if (maxDictSize <= g_provision_entropySize + g_min_fast_dictContent) return ERROR(dstSize_tooSmall); 
     if (!dictList) return ERROR(memory_allocation);
 
     /* init */
     { unsigned u; for (u=0, sBuffSize=0; u<nbSamples; u++) sBuffSize += sampleSizes[u]; }
-    if (sBuffSize < DIB_MINSAMPLESSIZE) return 0;   /* not enough source to create dictionary */
+    if (sBuffSize < DIB_MINSAMPLESSIZE) return 0;   /* not enough source to create dictionary */ 
     ZDICT_initDictItem(dictList);
     g_displayLevel = params.notificationLevel;
     if (selectivity==0) selectivity = g_selectivity_default;
@@ -876,7 +876,7 @@ size_t ZDICT_trainFromBuffer_unsafe(
         for (u=1; u<dictList->pos; u++) {
             U32 l = dictList[u].length;
             ptr -= l;
-            if (ptr<(BYTE*)dictBuffer) return ERROR(GENERIC);   /* should not happen */
+            if (ptr<(BYTE*)dictBuffer) return ERROR(GENERIC);   /* should not happen */ 
             memcpy(ptr, (const char*)samplesBuffer+dictList[u].pos, l);
         }
 

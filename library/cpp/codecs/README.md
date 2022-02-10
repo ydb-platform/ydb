@@ -1,8 +1,8 @@
 This is a library of compression algorithms with a unified interface and serialization.
 See also library/cpp/codecs/static, where a support for statically compiled dictionaries is implemented.
-
+ 
 All algorithms have a common `ICodec` interface (described in codecs.h).
-
+ 
 The `ICodec` interface has the following methods:\
     `virtual ui8 ICodec::Encode (TMemoryRegion, TBuffer&) const;`\
             - Input - memory region. Output - filled buffer and the rest of the last byte, if it was not filled to the end.\
@@ -27,9 +27,9 @@ The `ICodec` interface has the following methods:\
                     For example, it allows you to save information about which combination of codecs was in use (see below).\
     `virtual void Learn(ISequenceReader*);`\
             - The interface for teaching codecs that use information about the distribution of data.
-
+ 
 In addition, the library has a number of utilities that allow a more flexible use of it.
-
+ 
 In the `ICodec` class the following methods are available:\
     `static TCodecPtr GetInstance(const TString& name);`\
             - Creation of a codec instance by a symbolic name\

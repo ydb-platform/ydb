@@ -7,18 +7,18 @@
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
  */
-
+ 
 #ifndef DICTBUILDER_H_001
 #define DICTBUILDER_H_001
-
+ 
 #if defined (__cplusplus)
 extern "C" {
 #endif
-
-
+ 
+ 
 /*======  Dependencies  ======*/
 #include <stddef.h>  /* size_t */
-
+ 
 
 /* =====   ZDICTLIB_API : control library symbols visibility   ===== */
 #ifndef ZDICTLIB_VISIBILITY
@@ -35,7 +35,7 @@ extern "C" {
 #else
 #  define ZDICTLIB_API ZDICTLIB_VISIBILITY
 #endif
-
+ 
 /*******************************************************************************
  * Zstd dictionary builder
  *
@@ -174,7 +174,7 @@ extern "C" {
  * just like if they controlled the compressed data.
  *
  ******************************************************************************/
-
+ 
 
 /*! ZDICT_trainFromBuffer():
  *  Train a dictionary from an array of samples.
@@ -199,7 +199,7 @@ extern "C" {
 ZDICTLIB_API size_t ZDICT_trainFromBuffer(void* dictBuffer, size_t dictBufferCapacity,
                                     const void* samplesBuffer,
                                     const size_t* samplesSizes, unsigned nbSamples);
-
+ 
 typedef struct {
     int      compressionLevel;   /*< optimize for a specific zstd compression level; 0 means default */
     unsigned notificationLevel;  /*< Write log to stderr; 0 = none (default); 1 = errors; 2 = progression; 3 = details; 4 = debug; */
@@ -212,7 +212,7 @@ typedef struct {
                                   *           - high range : >= (2^31)
                                   */
 } ZDICT_params_t;
-
+ 
 /*! ZDICT_finalizeDictionary():
  * Given a custom content as a basis for dictionary, and a set of samples,
  * finalize dictionary by adding headers and statistics according to the zstd
@@ -254,27 +254,27 @@ ZDICTLIB_API size_t ZDICT_finalizeDictionary(void* dstDictBuffer, size_t maxDict
                                 ZDICT_params_t parameters);
 
 
-/*======   Helper functions   ======*/
+/*======   Helper functions   ======*/ 
 ZDICTLIB_API unsigned ZDICT_getDictID(const void* dictBuffer, size_t dictSize);  /**< extracts dictID; @return zero if error (not a valid dictionary) */
 ZDICTLIB_API size_t ZDICT_getDictHeaderSize(const void* dictBuffer, size_t dictSize);  /* returns dict header size; returns a ZSTD error code on failure */
 ZDICTLIB_API unsigned ZDICT_isError(size_t errorCode);
 ZDICTLIB_API const char* ZDICT_getErrorName(size_t errorCode);
-
-
-
-#ifdef ZDICT_STATIC_LINKING_ONLY
-
-/* ====================================================================================
- * The definitions in this section are considered experimental.
- * They should never be used with a dynamic library, as they may change in the future.
- * They are provided for advanced usages.
- * Use them only in association with static linking.
- * ==================================================================================== */
-
+ 
+ 
+ 
+#ifdef ZDICT_STATIC_LINKING_ONLY 
+ 
+/* ==================================================================================== 
+ * The definitions in this section are considered experimental. 
+ * They should never be used with a dynamic library, as they may change in the future. 
+ * They are provided for advanced usages. 
+ * Use them only in association with static linking. 
+ * ==================================================================================== */ 
+ 
 #define ZDICT_DICTSIZE_MIN    256
 /* Deprecated: Remove in v1.6.0 */
 #define ZDICT_CONTENTSIZE_MIN 128
-
+ 
 /*! ZDICT_cover_params_t:
  *  k and d are the only required parameters.
  *  For others, value 0 means default.
@@ -289,7 +289,7 @@ typedef struct {
     unsigned shrinkDictMaxRegression; /* Sets shrinkDictMaxRegression so that a smaller dictionary can be at worse shrinkDictMaxRegression% worse than the max dict size dictionary. */
     ZDICT_params_t zParams;
 } ZDICT_cover_params_t;
-
+ 
 typedef struct {
     unsigned k;                  /* Segment size : constraint: 0 < k : Reasonable range [16, 2048+] */
     unsigned d;                  /* dmer size : constraint: 0 < d <= k : Reasonable range [6, 16] */
@@ -393,7 +393,7 @@ typedef struct {
     unsigned selectivityLevel;   /* 0 means default; larger => select more => larger dictionary */
     ZDICT_params_t zParams;
 } ZDICT_legacy_params_t;
-
+ 
 /*! ZDICT_trainFromBuffer_legacy():
  *  Train a dictionary from an array of samples.
  *  Samples must be stored concatenated in a single flat buffer `samplesBuffer`,
@@ -413,7 +413,7 @@ ZDICTLIB_API size_t ZDICT_trainFromBuffer_legacy(
     void* dictBuffer, size_t dictBufferCapacity,
     const void* samplesBuffer, const size_t* samplesSizes, unsigned nbSamples,
     ZDICT_legacy_params_t parameters);
-
+ 
 
 /* Deprecation warnings */
 /* It is generally possible to disable deprecation warnings from compiler,
@@ -437,16 +437,16 @@ ZDICTLIB_API size_t ZDICT_trainFromBuffer_legacy(
 #    define ZDICT_DEPRECATED(message) ZDICTLIB_API
 #  endif
 #endif /* ZDICT_DISABLE_DEPRECATE_WARNINGS */
-
+ 
 ZDICT_DEPRECATED("use ZDICT_finalizeDictionary() instead")
-size_t ZDICT_addEntropyTablesFromBuffer(void* dictBuffer, size_t dictContentSize, size_t dictBufferCapacity,
+size_t ZDICT_addEntropyTablesFromBuffer(void* dictBuffer, size_t dictContentSize, size_t dictBufferCapacity, 
                                   const void* samplesBuffer, const size_t* samplesSizes, unsigned nbSamples);
-
-
-#endif   /* ZDICT_STATIC_LINKING_ONLY */
-
-#if defined (__cplusplus)
-}
-#endif
-
-#endif   /* DICTBUILDER_H_001 */
+ 
+ 
+#endif   /* ZDICT_STATIC_LINKING_ONLY */ 
+ 
+#if defined (__cplusplus) 
+} 
+#endif 
+ 
+#endif   /* DICTBUILDER_H_001 */ 

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #if !defined(FROM_IMPL)
 #define PROGRAM_VERSION GetProgramSvnVersion()

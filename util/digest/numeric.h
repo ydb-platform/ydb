@@ -1,11 +1,11 @@
-#pragma once
+#pragma once 
 
 #include <util/generic/typelist.h>
 #include <util/system/defaults.h>
 
 /*
- * original url (now dead): http://www.cris.com/~Ttwang/tech/inthash.htm
- * copy: https://gist.github.com/badboy/6267743
+ * original url (now dead): http://www.cris.com/~Ttwang/tech/inthash.htm 
+ * copy: https://gist.github.com/badboy/6267743 
  */
 
 static constexpr ui8 IntHashImpl(ui8 key8) noexcept {

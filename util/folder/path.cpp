@@ -68,7 +68,7 @@ TFsPath TFsPath::RelativeTo(const TFsPath& root) const {
     }
 
     if (!this->IsSubpathOf(root)) {
-        ythrow TIoException() << "path " << *this << " is not subpath of " << root;
+        ythrow TIoException() << "path " << *this << " is not subpath of " << root; 
     }
 
     split.erase(split.begin(), split.begin() + rsplit.size());
@@ -121,9 +121,9 @@ TFsPath& TFsPath::operator/=(const TFsPath& that) {
 
     } else if (that.IsDefined() && that.GetPath() != ".") {
         if (!that.IsRelative()) {
-            ythrow TIoException() << "path should be relative: " << that.GetPath();
+            ythrow TIoException() << "path should be relative: " << that.GetPath(); 
         }
-
+ 
         TSplit split = GetSplit();
         const TSplit& rsplit = that.GetSplit();
         split.insert(split.end(), rsplit.begin(), rsplit.end());
@@ -212,7 +212,7 @@ TFsPath::TFsPath(const char* path)
 
 TFsPath TFsPath::Child(const TString& name) const {
     if (!name) {
-        ythrow TIoException() << "child name must not be empty";
+        ythrow TIoException() << "child name must not be empty"; 
     }
 
     return *this / name;
@@ -222,7 +222,7 @@ struct TClosedir {
     static void Destroy(DIR* dir) {
         if (dir) {
             if (0 != closedir(dir)) {
-                ythrow TIoSystemError() << "failed to closedir";
+                ythrow TIoSystemError() << "failed to closedir"; 
             }
         }
     }
@@ -232,7 +232,7 @@ void TFsPath::ListNames(TVector<TString>& children) const {
     CheckDefined();
     THolder<DIR, TClosedir> dir(opendir(this->c_str()));
     if (!dir) {
-        ythrow TIoSystemError() << "failed to opendir " << Path_;
+        ythrow TIoSystemError() << "failed to opendir " << Path_; 
     }
 
     for (;;) {
@@ -245,7 +245,7 @@ void TFsPath::ListNames(TVector<TString>& children) const {
         int r = readdir_r(dir.Get(), &de, &ok);
         Y_PRAGMA_DIAGNOSTIC_POP
         if (r != 0) {
-            ythrow TIoSystemError() << "failed to readdir " << Path_;
+            ythrow TIoSystemError() << "failed to readdir " << Path_; 
         }
         if (ok == nullptr) {
             return;
@@ -319,16 +319,16 @@ TFsPath TFsPath::RealLocation() const {
     return ::RealLocation(*this);
 }
 
-TFsPath TFsPath::ReadLink() const {
-    CheckDefined();
-
+TFsPath TFsPath::ReadLink() const { 
+    CheckDefined(); 
+ 
     if (!IsSymlink()) {
-        ythrow TIoException() << "not a symlink " << *this;
+        ythrow TIoException() << "not a symlink " << *this; 
     }
-
+ 
     return NFs::ReadLink(*this);
-}
-
+} 
+ 
 bool TFsPath::Exists() const {
     return IsDefined() && NFs::Exists(*this);
 }
@@ -343,14 +343,14 @@ bool TFsPath::IsDirectory() const {
     return IsDefined() && TFileStat(GetPath().data()).IsDir();
 }
 
-bool TFsPath::IsFile() const {
+bool TFsPath::IsFile() const { 
     return IsDefined() && TFileStat(GetPath().data()).IsFile();
-}
-
-bool TFsPath::IsSymlink() const {
+} 
+ 
+bool TFsPath::IsSymlink() const { 
     return IsDefined() && TFileStat(GetPath().data(), true).IsSymlink();
-}
-
+} 
+ 
 void TFsPath::DeleteIfExists() const {
     if (!IsDefined()) {
         return;

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/stream/output.h>
 #include <util/stream/input.h>
@@ -7,8 +7,8 @@
 
 #include <ctime>
 
-// XXX: uses system calls for trivial things. may be very slow therefore.
-
+// XXX: uses system calls for trivial things. may be very slow therefore. 
+ 
 time_t GetDateStart(time_t ts);
 
 // Local date (without time zone)

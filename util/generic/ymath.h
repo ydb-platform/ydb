@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>

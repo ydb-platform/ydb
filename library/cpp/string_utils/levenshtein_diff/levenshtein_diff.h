@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/draft/matrix.h>
 #include <util/generic/algorithm.h>

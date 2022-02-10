@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <library/cpp/dbg_output/dump.h>
 
@@ -15,7 +15,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
-
+ 
 #include <util/system/defaults.h>
 #include <util/system/type_name.h>
 #include <util/system/spinlock.h>
@@ -382,7 +382,7 @@ public:                       \
         }                                                                                                                                                              \
     } while (false)
 
-//doubles
+//doubles 
 // UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED* macros do not handle NaNs correctly (see IGNIETFERRO-1419) and are for backward compatibility
 // only. Consider switching to regular UNIT_ASSERT_DOUBLES_EQUAL* macros if you're still using the deprecated version.
 #define UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED_C(E, A, D, C)                                                     \
@@ -422,9 +422,9 @@ public:                       \
         }                                                                                                                              \
     } while (false)
 
-#define UNIT_ASSERT_DOUBLES_EQUAL(E, A, D) UNIT_ASSERT_DOUBLES_EQUAL_C(E, A, D, "")
+#define UNIT_ASSERT_DOUBLES_EQUAL(E, A, D) UNIT_ASSERT_DOUBLES_EQUAL_C(E, A, D, "") 
 
-//strings
+//strings 
 #define UNIT_ASSERT_STRINGS_EQUAL_C(A, B, C)                                                                 \
     do {                                                                                                     \
         const TString _a(A);                                                                                 \
@@ -435,7 +435,7 @@ public:                       \
         }                                                                                                    \
     } while (false)
 
-#define UNIT_ASSERT_STRINGS_EQUAL(A, B) UNIT_ASSERT_STRINGS_EQUAL_C(A, B, "")
+#define UNIT_ASSERT_STRINGS_EQUAL(A, B) UNIT_ASSERT_STRINGS_EQUAL_C(A, B, "") 
 
 #define UNIT_ASSERT_STRING_CONTAINS_C(A, B, C)                                                                                  \
     do {                                                                                                                        \
@@ -471,7 +471,7 @@ public:                       \
 
 #define UNIT_ASSERT_STRINGS_UNEQUAL(A, B) UNIT_ASSERT_STRINGS_UNEQUAL_C(A, B, "")
 
-//bool
+//bool 
 #define UNIT_ASSERT_C(A, C)                                                                             \
     do {                                                                                                \
         if (!(A)) {                                                                                     \
@@ -479,9 +479,9 @@ public:                       \
         }                                                                                               \
     } while (false)
 
-#define UNIT_ASSERT(A) UNIT_ASSERT_C(A, "")
+#define UNIT_ASSERT(A) UNIT_ASSERT_C(A, "") 
 
-//general
+//general 
 #define UNIT_ASSERT_EQUAL_C(A, B, C)                                                                                  \
     do {                                                                                                              \
         if (!((A) == (B))) {                                                                                          \
@@ -489,7 +489,7 @@ public:                       \
         }                                                                                                             \
     } while (false)
 
-#define UNIT_ASSERT_EQUAL(A, B) UNIT_ASSERT_EQUAL_C(A, B, "")
+#define UNIT_ASSERT_EQUAL(A, B) UNIT_ASSERT_EQUAL_C(A, B, "") 
 
 #define UNIT_ASSERT_UNEQUAL_C(A, B, C)                                                                                 \
     do {                                                                                                               \
@@ -498,8 +498,8 @@ public:                       \
         }                                                                                                              \
     } while (false)
 
-#define UNIT_ASSERT_UNEQUAL(A, B) UNIT_ASSERT_UNEQUAL_C(A, B, "")
-
+#define UNIT_ASSERT_UNEQUAL(A, B) UNIT_ASSERT_UNEQUAL_C(A, B, "") 
+ 
 #define UNIT_ASSERT_LT_C(A, B, C)                                                                                        \
     do {                                                                                                                 \
         if (!((A) < (B))) {                                                                                              \
@@ -703,7 +703,7 @@ public:                       \
         }
     }
 
-//values
+//values 
 #define UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, EQflag, EQstr, NEQstr)                                                                  \
     do {                                                                                                                               \
         TString _as;                                                                                                                   \
@@ -727,7 +727,7 @@ public:                       \
 #define UNIT_ASSERT_VALUES_UNEQUAL_C(A, B, C) \
     UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, false, "!=", "==")
 
-#define UNIT_ASSERT_VALUES_EQUAL(A, B) UNIT_ASSERT_VALUES_EQUAL_C(A, B, "")
+#define UNIT_ASSERT_VALUES_EQUAL(A, B) UNIT_ASSERT_VALUES_EQUAL_C(A, B, "") 
 #define UNIT_ASSERT_VALUES_UNEQUAL(A, B) UNIT_ASSERT_VALUES_UNEQUAL_C(A, B, "")
 
 // Checks that test will fail while executing given expression

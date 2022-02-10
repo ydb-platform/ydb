@@ -11,48 +11,48 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         TString expected2 = expected1 + ",\"array\":[\"stroka\",false]";
         TString expected3 = expected2 + "}";
 
-        TStringStream out;
+        TStringStream out; 
 
-        TJsonWriter json(&out, false);
-        json.OpenMap();
-        json.Write("key1", (ui16)1);
+        TJsonWriter json(&out, false); 
+        json.OpenMap(); 
+        json.Write("key1", (ui16)1); 
         json.WriteKey("key2");
         json.Write((i32)2);
-        json.Write("key3", (ui64)3);
+        json.Write("key3", (ui64)3); 
 
         UNIT_ASSERT(out.Empty());
-        json.Flush();
-        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected1);
+        json.Flush(); 
+        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected1); 
 
-        json.Write("array");
-        json.OpenArray();
-        json.Write("stroka");
-        json.Write(false);
-        json.CloseArray();
+        json.Write("array"); 
+        json.OpenArray(); 
+        json.Write("stroka"); 
+        json.Write(false); 
+        json.CloseArray(); 
 
-        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected1);
-        json.Flush();
-        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected2);
+        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected1); 
+        json.Flush(); 
+        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected2); 
 
-        json.CloseMap();
+        json.CloseMap(); 
 
-        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected2);
-        json.Flush();
-        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected3);
-    }
+        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected2); 
+        json.Flush(); 
+        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected3); 
+    } 
 
     Y_UNIT_TEST(SimpleWriteValueTest) {
         TString expected = "{\"key1\":null,\"key2\":{\"subkey1\":[1,{\"subsubkey\":\"test2\"},null,true],\"subkey2\":\"test\"}}";
-        TJsonValue v;
-        v["key1"] = JSON_NULL;
-        v["key2"]["subkey1"].AppendValue(1);
-        v["key2"]["subkey1"].AppendValue(JSON_MAP)["subsubkey"] = "test2";
-        v["key2"]["subkey1"].AppendValue(JSON_NULL);
-        v["key2"]["subkey1"].AppendValue(true);
-        v["key2"]["subkey2"] = "test";
-        TStringStream out;
-        WriteJson(&out, &v);
-        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
+        TJsonValue v; 
+        v["key1"] = JSON_NULL; 
+        v["key2"]["subkey1"].AppendValue(1); 
+        v["key2"]["subkey1"].AppendValue(JSON_MAP)["subsubkey"] = "test2"; 
+        v["key2"]["subkey1"].AppendValue(JSON_NULL); 
+        v["key2"]["subkey1"].AppendValue(true); 
+        v["key2"]["subkey2"] = "test"; 
+        TStringStream out; 
+        WriteJson(&out, &v); 
+        UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected); 
     }
 
     Y_UNIT_TEST(FormatOutput) {

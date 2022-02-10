@@ -52,37 +52,37 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT(!TMatcher(TFsm("чзн", opts)).Match("чзх").Final());
     }
 
-    Y_UNIT_TEST(AndNot) {
-        NRegExp::TFsmBase::TOptions opts;
-        opts.AndNotSupport = true;
-        {
-            NRegExp::TFsm fsm(".*&~([0-9]*)", opts);
-            UNIT_ASSERT(TMatcher(fsm).Match("a2").Final());
-            UNIT_ASSERT(TMatcher(fsm).Match("ab").Final());
-            UNIT_ASSERT(TMatcher(fsm).Match("1a").Final());
-            UNIT_ASSERT(!TMatcher(fsm).Match("12").Final());
-        }
-        {
-            NRegExp::TFsm fsm(".*&~(.*[0-9].*)", opts);
-            UNIT_ASSERT(TMatcher(fsm).Match("ab").Final());
-            UNIT_ASSERT(!TMatcher(fsm).Match("a2").Final());
-            UNIT_ASSERT(!TMatcher(fsm).Match("1a").Final());
-            UNIT_ASSERT(!TMatcher(fsm).Match("12").Final());
-        }
-        {
-            NRegExp::TFsm fsm(
-                "((([a-z0-9_\\-]+[.])*[a-z0-9_\\-]+)"
-                "&~(\\d+[.]\\d+[.]\\d+[.]\\d+))(:\\d+)?",
-                TFsm::TOptions().SetCaseInsensitive(true).SetAndNotSupport(true)
-            );
-            UNIT_ASSERT(TMatcher(fsm).Match("yandex.ru").Final());
-            UNIT_ASSERT(TMatcher(fsm).Match("yandex").Final());
-            UNIT_ASSERT(TMatcher(fsm).Match("yandex:80").Final());
-            UNIT_ASSERT(!TMatcher(fsm).Match("127.0.0.1").Final());
-            UNIT_ASSERT(!TMatcher(fsm).Match("127.0.0.1:8080").Final());
-        }
-    }
-
+    Y_UNIT_TEST(AndNot) { 
+        NRegExp::TFsmBase::TOptions opts; 
+        opts.AndNotSupport = true; 
+        { 
+            NRegExp::TFsm fsm(".*&~([0-9]*)", opts); 
+            UNIT_ASSERT(TMatcher(fsm).Match("a2").Final()); 
+            UNIT_ASSERT(TMatcher(fsm).Match("ab").Final()); 
+            UNIT_ASSERT(TMatcher(fsm).Match("1a").Final()); 
+            UNIT_ASSERT(!TMatcher(fsm).Match("12").Final()); 
+        } 
+        { 
+            NRegExp::TFsm fsm(".*&~(.*[0-9].*)", opts); 
+            UNIT_ASSERT(TMatcher(fsm).Match("ab").Final()); 
+            UNIT_ASSERT(!TMatcher(fsm).Match("a2").Final()); 
+            UNIT_ASSERT(!TMatcher(fsm).Match("1a").Final()); 
+            UNIT_ASSERT(!TMatcher(fsm).Match("12").Final()); 
+        } 
+        { 
+            NRegExp::TFsm fsm( 
+                "((([a-z0-9_\\-]+[.])*[a-z0-9_\\-]+)" 
+                "&~(\\d+[.]\\d+[.]\\d+[.]\\d+))(:\\d+)?", 
+                TFsm::TOptions().SetCaseInsensitive(true).SetAndNotSupport(true) 
+            ); 
+            UNIT_ASSERT(TMatcher(fsm).Match("yandex.ru").Final()); 
+            UNIT_ASSERT(TMatcher(fsm).Match("yandex").Final()); 
+            UNIT_ASSERT(TMatcher(fsm).Match("yandex:80").Final()); 
+            UNIT_ASSERT(!TMatcher(fsm).Match("127.0.0.1").Final()); 
+            UNIT_ASSERT(!TMatcher(fsm).Match("127.0.0.1:8080").Final()); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(Glue) {
         TFsm glued =
             TFsm("qw", TFsm::TOptions().SetCaseInsensitive(true)) |

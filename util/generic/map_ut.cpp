@@ -1,40 +1,40 @@
 #include "map.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/memory/pool.h>
+#include <util/memory/pool.h> 
 #include <algorithm>
 
 Y_UNIT_TEST_SUITE(TYMapTest) {
     template <typename TAlloc>
     void DoTestMap1(TMap<char, int, TLess<char>, TAlloc>& m);
-
+ 
     template <typename TAlloc>
     void DoTestMMap1(TMultiMap<char, int, TLess<char>, TAlloc>& mm);
-
+ 
     Y_UNIT_TEST(TestMap1) {
         {
             TMap<char, int, TLess<char>> m;
             DoTestMap1(m);
-        }
+        } 
         {
             TMemoryPool p(100);
             TMap<char, int, TLess<char>, TPoolAllocator> m(&p);
             DoTestMap1(m);
         }
     }
-
+ 
     Y_UNIT_TEST(TestMMap1) {
         {
             TMultiMap<char, int, TLess<char>> mm;
             DoTestMMap1(mm);
-        }
+        } 
         {
             TMemoryPool p(100);
             TMultiMap<char, int, TLess<char>, TPoolAllocator> mm(&p);
             DoTestMMap1(mm);
         }
     }
-
+ 
     template <typename TAlloc>
     void DoTestMap1(TMap<char, int, TLess<char>, TAlloc>& m) {
         using maptype = TMap<char, int, TLess<char>, TAlloc>;
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
     template <typename TAlloc>
     void DoTestMMap1(TMultiMap<char, int, TLess<char>, TAlloc>& m) {
         using mmap = TMultiMap<char, int, TLess<char>, TAlloc>;
-
+ 
         UNIT_ASSERT(m.count('X') == 0);
 
         m.insert(std::pair<const char, int>('X', 10)); // Standard way.

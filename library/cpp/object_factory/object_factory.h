@@ -7,7 +7,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
 
-namespace NObjectFactory {
+namespace NObjectFactory { 
     template <class TProduct, class... TArgs>
     class IFactoryObjectCreator {
     public:
@@ -15,7 +15,7 @@ namespace NObjectFactory {
         virtual ~IFactoryObjectCreator() {
         }
     };
-
+ 
     template <class TProduct>
     class IFactoryObjectCreator<TProduct, void> {
     public:
@@ -239,5 +239,5 @@ namespace NObjectFactory {
             }
         };
     };
-
-}
+ 
+} 

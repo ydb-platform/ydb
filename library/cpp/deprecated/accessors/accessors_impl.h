@@ -1,8 +1,8 @@
-#pragma once
-
-#include "memory_traits.h"
-
-namespace NAccessors {
+#pragma once 
+ 
+#include "memory_traits.h" 
+ 
+namespace NAccessors { 
     namespace NPrivate {
         template <typename Ta>
         struct TMemoryAccessorBase {
@@ -10,33 +10,33 @@ namespace NAccessors {
                 SimpleMemory = TMemoryTraits<Ta>::SimpleMemory,
                 ContinuousMemory = TMemoryTraits<Ta>::ContinuousMemory,
             };
-
+ 
             struct TBadAccessor;
         };
-
+ 
         template <typename Ta>
         struct TBegin: public TMemoryAccessorBase<Ta> {
             using TElementType = typename TMemoryTraits<Ta>::TElementType;
-
+ 
             template <typename Tb>
             struct TNoMemoryIndirectionBegin {
                 static const TElementType* Get(const Tb& b) {
                     return (const TElementType*)&b;
                 }
             };
-
+ 
             template <typename Tb>
             struct TIndirectMemoryRegionBegin {
                 Y_HAS_MEMBER(Begin);
                 Y_HAS_MEMBER(begin);
-
+ 
                 template <typename Tc>
                 struct TByBegin {
                     static const TElementType* Get(const Tc& b) {
                         return (const TElementType*)b.Begin();
                     }
                 };
-
+ 
                 template <typename Tc>
                 struct TBybegin {
                     static const TElementType* Get(const Tc& b) {
@@ -61,46 +61,46 @@ namespace NAccessors {
 
             static const TElementType* Get(const Ta& b) {
                 return TGet::Get(b);
-            }
-        };
-
+            } 
+        }; 
+ 
         template <typename Ta>
         struct TEnd: public TMemoryAccessorBase<Ta> {
             using TElementType = typename TMemoryTraits<Ta>::TElementType;
-
+ 
             template <typename Tb>
             struct TNoMemoryIndirectionEnd {
                 static const TElementType* Get(const Tb& b) {
                     return (const TElementType*)(&b + 1);
                 }
             };
-
+ 
             template <typename Tb>
             struct TIndirectMemoryRegionEnd {
                 Y_HAS_MEMBER(End);
                 Y_HAS_MEMBER(end);
-
+ 
                 template <typename Tc>
                 struct TByEnd {
                     static const TElementType* Get(const Tc& b) {
                         return (const TElementType*)b.End();
                     }
                 };
-
+ 
                 template <typename Tc>
                 struct TByend {
                     static const TElementType* Get(const Tc& b) {
                         return (const TElementType*)b.end();
                     }
                 };
-
+ 
                 using TGet = std::conditional_t<THasEnd<Tb>::value, TByEnd<Tb>, TByend<Tb>>;
-
+ 
                 static const TElementType* Get(const Tb& b) {
                     return TGet::Get(b);
                 }
             };
-
+ 
             using TGet = std::conditional_t<
                 TMemoryAccessorBase<Ta>::SimpleMemory,
                 TNoMemoryIndirectionEnd<Ta>,
@@ -108,11 +108,11 @@ namespace NAccessors {
                     TMemoryAccessorBase<Ta>::ContinuousMemory,
                     TIndirectMemoryRegionEnd<Ta>,
                     typename TMemoryAccessorBase<Ta>::TBadAccessor>>;
-
+ 
             static const TElementType* Get(const Ta& b) {
                 return TGet::Get(b);
-            }
-        };
+            } 
+        }; 
 
         template <typename Ta, bool Init>
         struct TClear: public TMemoryAccessorBase<Ta> {
@@ -346,39 +346,39 @@ namespace NAccessors {
         template <typename Ta>
         struct TAssign: public TMemoryAccessorBase<Ta> {
             using TElementType = typename TMemoryTraits<Ta>::TElementType;
-
+ 
             template <typename Tb>
             struct TNoMemoryIndirectionAssign {
                 static void Do(Tb& b, const TElementType* beg, const TElementType* end) {
-                    if (sizeof(Tb) == sizeof(TElementType) && end - beg > 0) {
-                        memcpy(&b, beg, sizeof(Tb));
-                    } else if (end - beg > 0) {
-                        memcpy(&b, beg, Min<size_t>((end - beg) * sizeof(TElementType), sizeof(Tb)));
-                    } else {
-                        Zero(b);
-                    }
+                    if (sizeof(Tb) == sizeof(TElementType) && end - beg > 0) { 
+                        memcpy(&b, beg, sizeof(Tb)); 
+                    } else if (end - beg > 0) { 
+                        memcpy(&b, beg, Min<size_t>((end - beg) * sizeof(TElementType), sizeof(Tb))); 
+                    } else { 
+                        Zero(b); 
+                    } 
                 }
             };
-
+ 
             template <typename Tb>
             struct TIndirectMemoryRegionAssign {
                 Y_HAS_MEMBER(Assign);
                 Y_HAS_MEMBER(assign);
-
+ 
                 template <typename Tc>
                 struct TByAssign {
                     static void Do(Tc& b, const TElementType* beg, const TElementType* end) {
                         b.Assign(beg, end);
                     }
                 };
-
+ 
                 template <typename Tc>
                 struct TByassign {
                     static void Do(Tc& b, const TElementType* beg, const TElementType* end) {
                         b.assign(beg, end);
                     }
                 };
-
+ 
                 template <typename Tc>
                 struct TByClearAppend {
                     static void Do(Tc& b, const TElementType* beg, const TElementType* end) {
@@ -386,14 +386,14 @@ namespace NAccessors {
                         TAppendRegion<Tc>::Do(b, beg, end);
                     }
                 };
-
+ 
                 template <typename Tc>
                 struct TByConstruction {
                     static void Do(Tc& b, const TElementType* beg, const TElementType* end) {
                         b = Tc(beg, end);
                     }
                 };
-
+ 
                 using TDo = std::conditional_t<
                     THasAssign<Tb>::value,
                     TByAssign<Tb>,
@@ -404,17 +404,17 @@ namespace NAccessors {
                             TMemoryTraits<Tb>::OwnsMemory,
                             TByClearAppend<Tb>,
                             TByConstruction<Tb>>>>;
-
+ 
                 static void Do(Tb& b, const TElementType* beg, const TElementType* end) {
                     TDo::Do(b, beg, end);
                 }
             };
-
+ 
             using TDo = std::conditional_t<TMemoryAccessorBase<Ta>::SimpleMemory, TNoMemoryIndirectionAssign<Ta>, TIndirectMemoryRegionAssign<Ta>>;
-
+ 
             static void Do(Ta& b, const TElementType* beg, const TElementType* end) {
                 TDo::Do(b, beg, end);
-            }
-        };
-    }
-}
+            } 
+        }; 
+    } 
+} 

@@ -1098,10 +1098,10 @@ TFile::TFile(FHANDLE fd)
 }
 
 TFile::TFile(FHANDLE fd, const TString& name)
-    : Impl_(new TImpl(fd, name))
-{
-}
-
+    : Impl_(new TImpl(fd, name)) 
+{ 
+} 
+ 
 TFile::TFile(const TString& fName, EOpenMode oMode)
     : Impl_(new TImpl(fName, oMode))
 {

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 /**
  * @class TNonCopyable
@@ -21,18 +21,18 @@ namespace NNonCopyable { // protection from unintended ADL
         TNonCopyable() = default;
         ~TNonCopyable() = default;
     };
-
+ 
     struct TMoveOnly {
         TMoveOnly(TMoveOnly&&) noexcept = default;
         TMoveOnly& operator=(TMoveOnly&&) noexcept = default;
-
-        TMoveOnly(const TMoveOnly&) = delete;
-        TMoveOnly& operator=(const TMoveOnly&) = delete;
-
-        TMoveOnly() = default;
-        ~TMoveOnly() = default;
-    };
+ 
+        TMoveOnly(const TMoveOnly&) = delete; 
+        TMoveOnly& operator=(const TMoveOnly&) = delete; 
+ 
+        TMoveOnly() = default; 
+        ~TMoveOnly() = default; 
+    }; 
 }
 
 using TNonCopyable = NNonCopyable::TNonCopyable;
-using TMoveOnly = NNonCopyable::TMoveOnly;
+using TMoveOnly = NNonCopyable::TMoveOnly; 

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
@@ -6,15 +6,15 @@
 #include <util/network/pollerimpl.h>
 #include <util/datetime/base.h>
 
-enum class EContPoller {
-    Default /* "default" */,
+enum class EContPoller { 
+    Default /* "default" */, 
     Combined /* "combined" */,
-    Select /* "select" */,
-    Poll /* "poll" */,
-    Epoll /* "epoll" */,
-    Kqueue /* "kqueue" */
-};
-
+    Select /* "select" */, 
+    Poll /* "poll" */, 
+    Epoll /* "epoll" */, 
+    Kqueue /* "kqueue" */ 
+}; 
+ 
 class IPollerFace {
 public:
     struct TChange {
@@ -29,12 +29,12 @@ public:
         ui16 Filter;
     };
 
-    using TEvents = TVector<TEvent>;
+    using TEvents = TVector<TEvent>; 
 
     virtual ~IPollerFace() {
     }
 
-    void Set(void* ptr, SOCKET fd, ui16 flags) {
+    void Set(void* ptr, SOCKET fd, ui16 flags) { 
         const TChange c = {fd, ptr, flags};
 
         Set(c);
@@ -44,7 +44,7 @@ public:
     virtual void Wait(TEvents& events, TInstant deadLine) = 0;
     virtual EContPoller PollEngine() const = 0;
 
-    static THolder<IPollerFace> Default();
-    static THolder<IPollerFace> Construct(TStringBuf name);
-    static THolder<IPollerFace> Construct(EContPoller poller);
+    static THolder<IPollerFace> Default(); 
+    static THolder<IPollerFace> Construct(TStringBuf name); 
+    static THolder<IPollerFace> Construct(EContPoller poller); 
 };

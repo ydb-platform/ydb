@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/system/align.h>
 #include <util/system/yassert.h>

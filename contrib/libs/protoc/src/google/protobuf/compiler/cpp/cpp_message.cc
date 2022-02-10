@@ -1,47 +1,47 @@
-// Protocol Buffers - Google's data interchange format
-// Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// Author: kenton@google.com (Kenton Varda)
-//  Based on original Protocol Buffers design by
-//  Sanjay Ghemawat, Jeff Dean, and others.
-
+// Protocol Buffers - Google's data interchange format 
+// Copyright 2008 Google Inc.  All rights reserved. 
+// https://developers.google.com/protocol-buffers/ 
+// 
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions are 
+// met: 
+// 
+//     * Redistributions of source code must retain the above copyright 
+// notice, this list of conditions and the following disclaimer. 
+//     * Redistributions in binary form must reproduce the above 
+// copyright notice, this list of conditions and the following disclaimer 
+// in the documentation and/or other materials provided with the 
+// distribution. 
+//     * Neither the name of Google Inc. nor the names of its 
+// contributors may be used to endorse or promote products derived from 
+// this software without specific prior written permission. 
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ 
+// Author: kenton@google.com (Kenton Varda) 
+//  Based on original Protocol Buffers design by 
+//  Sanjay Ghemawat, Jeff Dean, and others. 
+ 
 #include <google/protobuf/compiler/cpp/cpp_message.h>
 
-#include <algorithm>
+#include <algorithm> 
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <memory>
+#include <map> 
+#include <memory> 
 #include <unordered_map>
-#include <utility>
-#include <vector>
+#include <utility> 
+#include <vector> 
 
 #include <google/protobuf/compiler/cpp/cpp_enum.h>
 #include <google/protobuf/compiler/cpp/cpp_extension.h>
@@ -59,21 +59,21 @@
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/substitute.h>
 #include <google/protobuf/stubs/hash.h>
-
-
+ 
+ 
 // Must be included last.
 #include <google/protobuf/port_def.inc>
 
-namespace google {
-namespace protobuf {
-namespace compiler {
-namespace cpp {
-
-using internal::WireFormat;
-using internal::WireFormatLite;
-
-namespace {
-
+namespace google { 
+namespace protobuf { 
+namespace compiler { 
+namespace cpp { 
+ 
+using internal::WireFormat; 
+using internal::WireFormatLite; 
+ 
+namespace { 
+ 
 static constexpr int kNoHasbit = -1;
 
 // Create an expression that evaluates to
@@ -98,8 +98,8 @@ TProtoStringType ConditionalToCheckBitmasks(
           ? parts[0]
           : StrCat("(", Join(parts, "\n       | "), ")");
   return result + (return_success ? " == 0" : " != 0");
-}
-
+} 
+ 
 void PrintPresenceCheck(const Formatter& format, const FieldDescriptor* field,
                         const std::vector<int>& has_bit_indices,
                         io::Printer* printer, int* cached_has_word_index) {
@@ -118,46 +118,46 @@ void PrintPresenceCheck(const Formatter& format, const FieldDescriptor* field,
   format.Indent();
 }
 
-struct FieldOrderingByNumber {
-  inline bool operator()(const FieldDescriptor* a,
-                         const FieldDescriptor* b) const {
-    return a->number() < b->number();
-  }
-};
-
-// Sort the fields of the given Descriptor by number into a new[]'d array
-// and return it.
+struct FieldOrderingByNumber { 
+  inline bool operator()(const FieldDescriptor* a, 
+                         const FieldDescriptor* b) const { 
+    return a->number() < b->number(); 
+  } 
+}; 
+ 
+// Sort the fields of the given Descriptor by number into a new[]'d array 
+// and return it. 
 std::vector<const FieldDescriptor*> SortFieldsByNumber(
     const Descriptor* descriptor) {
   std::vector<const FieldDescriptor*> fields(descriptor->field_count());
-  for (int i = 0; i < descriptor->field_count(); i++) {
-    fields[i] = descriptor->field(i);
-  }
+  for (int i = 0; i < descriptor->field_count(); i++) { 
+    fields[i] = descriptor->field(i); 
+  } 
   std::sort(fields.begin(), fields.end(), FieldOrderingByNumber());
-  return fields;
-}
-
-// Functor for sorting extension ranges by their "start" field number.
-struct ExtensionRangeSorter {
-  bool operator()(const Descriptor::ExtensionRange* left,
-                  const Descriptor::ExtensionRange* right) const {
-    return left->start < right->start;
-  }
-};
-
+  return fields; 
+} 
+ 
+// Functor for sorting extension ranges by their "start" field number. 
+struct ExtensionRangeSorter { 
+  bool operator()(const Descriptor::ExtensionRange* left, 
+                  const Descriptor::ExtensionRange* right) const { 
+    return left->start < right->start; 
+  } 
+}; 
+ 
 bool IsPOD(const FieldDescriptor* field) {
   if (field->is_repeated() || field->is_extension()) return false;
-  switch (field->cpp_type()) {
+  switch (field->cpp_type()) { 
     case FieldDescriptor::CPPTYPE_ENUM:
-    case FieldDescriptor::CPPTYPE_INT32:
+    case FieldDescriptor::CPPTYPE_INT32: 
     case FieldDescriptor::CPPTYPE_INT64:
-    case FieldDescriptor::CPPTYPE_UINT32:
+    case FieldDescriptor::CPPTYPE_UINT32: 
     case FieldDescriptor::CPPTYPE_UINT64:
-    case FieldDescriptor::CPPTYPE_FLOAT:
-    case FieldDescriptor::CPPTYPE_DOUBLE:
+    case FieldDescriptor::CPPTYPE_FLOAT: 
+    case FieldDescriptor::CPPTYPE_DOUBLE: 
     case FieldDescriptor::CPPTYPE_BOOL:
       return true;
-    case FieldDescriptor::CPPTYPE_STRING:
+    case FieldDescriptor::CPPTYPE_STRING: 
       return false;
     default:
       return false;
@@ -196,33 +196,33 @@ RunMap FindRuns(const std::vector<const FieldDescriptor*>& fields,
       if (last_start == nullptr) {
         last_start = field;
       }
-
+ 
       runs[last_start]++;
     } else {
       last_start = nullptr;
-    }
-  }
+    } 
+  } 
   return runs;
-}
-
-// Emits an if-statement with a condition that evaluates to true if |field| is
-// considered non-default (will be sent over the wire), for message types
-// without true field presence. Should only be called if
+} 
+ 
+// Emits an if-statement with a condition that evaluates to true if |field| is 
+// considered non-default (will be sent over the wire), for message types 
+// without true field presence. Should only be called if 
 // !HasHasbit(field).
-bool EmitFieldNonDefaultCondition(io::Printer* printer,
+bool EmitFieldNonDefaultCondition(io::Printer* printer, 
                                   const TProtoStringType& prefix,
-                                  const FieldDescriptor* field) {
+                                  const FieldDescriptor* field) { 
   GOOGLE_CHECK(!HasHasbit(field));
   Formatter format(printer);
   format.Set("prefix", prefix);
   format.Set("name", FieldName(field));
-  // Merge and serialize semantics: primitive fields are merged/serialized only
-  // if non-zero (numeric) or non-empty (string).
-  if (!field->is_repeated() && !field->containing_oneof()) {
-    if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
+  // Merge and serialize semantics: primitive fields are merged/serialized only 
+  // if non-zero (numeric) or non-empty (string). 
+  if (!field->is_repeated() && !field->containing_oneof()) { 
+    if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) { 
       format("if (!$prefix$_internal_$name$().empty()) {\n");
-    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-      // Message fields still have has_$name$() methods.
+    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) { 
+      // Message fields still have has_$name$() methods. 
       format("if ($prefix$_internal_has_$name$()) {\n");
     } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_DOUBLE ||
                field->cpp_type() == FieldDescriptor::CPPTYPE_FLOAT) {
@@ -230,63 +230,63 @@ bool EmitFieldNonDefaultCondition(io::Printer* printer,
       format(
           "if (!($prefix$_internal_$name$() <= 0 && $prefix$_internal_$name$() "
           ">= 0)) {\n");
-    } else {
+    } else { 
       format("if ($prefix$_internal_$name$() != 0) {\n");
-    }
+    } 
     format.Indent();
-    return true;
+    return true; 
   } else if (field->real_containing_oneof()) {
     format("if (_internal_has_$name$()) {\n");
     format.Indent();
-    return true;
-  }
-  return false;
-}
-
-// Does the given field have a has_$name$() method?
-bool HasHasMethod(const FieldDescriptor* field) {
+    return true; 
+  } 
+  return false; 
+} 
+ 
+// Does the given field have a has_$name$() method? 
+bool HasHasMethod(const FieldDescriptor* field) { 
   if (!IsProto3(field->file())) {
-    // In proto1/proto2, every field has a has_$name$() method.
-    return true;
-  }
-  // For message types without true field presence, only fields with a message
+    // In proto1/proto2, every field has a has_$name$() method. 
+    return true; 
+  } 
+  // For message types without true field presence, only fields with a message 
   // type or inside an one-of have a has_$name$() method.
   return field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE ||
          field->has_optional_keyword() || field->real_containing_oneof();
-}
-
-// Collects map entry message type information.
+} 
+ 
+// Collects map entry message type information. 
 void CollectMapInfo(const Options& options, const Descriptor* descriptor,
                     std::map<TProtoStringType, TProtoStringType>* variables) {
-  GOOGLE_CHECK(IsMapEntryMessage(descriptor));
+  GOOGLE_CHECK(IsMapEntryMessage(descriptor)); 
   std::map<TProtoStringType, TProtoStringType>& vars = *variables;
-  const FieldDescriptor* key = descriptor->FindFieldByName("key");
-  const FieldDescriptor* val = descriptor->FindFieldByName("value");
+  const FieldDescriptor* key = descriptor->FindFieldByName("key"); 
+  const FieldDescriptor* val = descriptor->FindFieldByName("value"); 
   vars["key_cpp"] = PrimitiveTypeName(options, key->cpp_type());
-  switch (val->cpp_type()) {
-    case FieldDescriptor::CPPTYPE_MESSAGE:
+  switch (val->cpp_type()) { 
+    case FieldDescriptor::CPPTYPE_MESSAGE: 
       vars["val_cpp"] = FieldMessageTypeName(val, options);
-      break;
-    case FieldDescriptor::CPPTYPE_ENUM:
+      break; 
+    case FieldDescriptor::CPPTYPE_ENUM: 
       vars["val_cpp"] = ClassName(val->enum_type(), true);
-      break;
-    default:
+      break; 
+    default: 
       vars["val_cpp"] = PrimitiveTypeName(options, val->cpp_type());
-  }
+  } 
   vars["key_wire_type"] =
       "TYPE_" + ToUpper(DeclaredTypeMethodName(key->type()));
   vars["val_wire_type"] =
       "TYPE_" + ToUpper(DeclaredTypeMethodName(val->type()));
-}
-
-// Does the given field have a private (internal helper only) has_$name$()
-// method?
-bool HasPrivateHasMethod(const FieldDescriptor* field) {
-  // Only for oneofs in message types with no field presence. has_$name$(),
-  // based on the oneof case, is still useful internally for generated code.
+} 
+ 
+// Does the given field have a private (internal helper only) has_$name$() 
+// method? 
+bool HasPrivateHasMethod(const FieldDescriptor* field) { 
+  // Only for oneofs in message types with no field presence. has_$name$(), 
+  // based on the oneof case, is still useful internally for generated code. 
   return IsProto3(field->file()) && field->real_containing_oneof();
-}
-
+} 
+ 
 // TODO(ckennelly):  Cull these exclusions if/when these protos do not have
 // their methods overridden by subclasses.
 
@@ -553,18 +553,18 @@ bool ColdChunkSkipper::OnEndChunk(int chunk, io::Printer* printer) {
   return true;
 }
 
-}  // anonymous namespace
-
-// ===================================================================
-
+}  // anonymous namespace 
+ 
+// =================================================================== 
+ 
 MessageGenerator::MessageGenerator(
     const Descriptor* descriptor,
     const std::map<TProtoStringType, TProtoStringType>& vars, int index_in_file_messages,
     const Options& options, MessageSCCAnalyzer* scc_analyzer)
-    : descriptor_(descriptor),
+    : descriptor_(descriptor), 
       index_in_file_messages_(index_in_file_messages),
-      classname_(ClassName(descriptor, false)),
-      options_(options),
+      classname_(ClassName(descriptor, false)), 
+      options_(options), 
       field_generators_(descriptor, options, scc_analyzer),
       max_has_bit_index_(0),
       num_weak_fields_(0),
@@ -644,38 +644,38 @@ MessageGenerator::MessageGenerator(
 
   if (!has_bit_indices_.empty()) {
     field_generators_.SetHasBitIndices(has_bit_indices_);
-  }
-
-  num_required_fields_ = 0;
-  for (int i = 0; i < descriptor->field_count(); i++) {
-    if (descriptor->field(i)->is_required()) {
-      ++num_required_fields_;
-    }
-  }
+  } 
+ 
+  num_required_fields_ = 0; 
+  for (int i = 0; i < descriptor->field_count(); i++) { 
+    if (descriptor->field(i)->is_required()) { 
+      ++num_required_fields_; 
+    } 
+  } 
 
   table_driven_ =
       TableDrivenParsingEnabled(descriptor_, options_, scc_analyzer_);
   parse_function_generator_.reset(new ParseFunctionGenerator(
       descriptor_, max_has_bit_index_, has_bit_indices_, options_,
       scc_analyzer_, variables_));
-}
-
+} 
+ 
 MessageGenerator::~MessageGenerator() = default;
-
+ 
 size_t MessageGenerator::HasBitsSize() const {
   return (max_has_bit_index_ + 31) / 32;
 }
-
+ 
 int MessageGenerator::HasBitIndex(const FieldDescriptor* field) const {
   return has_bit_indices_.empty() ? kNoHasbit
                                   : has_bit_indices_[field->index()];
-}
-
+} 
+ 
 int MessageGenerator::HasByteIndex(const FieldDescriptor* field) const {
   int hasbit = HasBitIndex(field);
   return hasbit == kNoHasbit ? kNoHasbit : hasbit / 8;
-}
-
+} 
+ 
 int MessageGenerator::HasWordIndex(const FieldDescriptor* field) const {
   int hasbit = HasBitIndex(field);
   return hasbit == kNoHasbit ? kNoHasbit : hasbit / 32;
@@ -684,18 +684,18 @@ int MessageGenerator::HasWordIndex(const FieldDescriptor* field) const {
 void MessageGenerator::AddGenerators(
     std::vector<std::unique_ptr<EnumGenerator>>* enum_generators,
     std::vector<std::unique_ptr<ExtensionGenerator>>* extension_generators) {
-  for (int i = 0; i < descriptor_->enum_type_count(); i++) {
+  for (int i = 0; i < descriptor_->enum_type_count(); i++) { 
     enum_generators->emplace_back(
         new EnumGenerator(descriptor_->enum_type(i), variables_, options_));
     enum_generators_.push_back(enum_generators->back().get());
-  }
+  } 
   for (int i = 0; i < descriptor_->extension_count(); i++) {
     extension_generators->emplace_back(
         new ExtensionGenerator(descriptor_->extension(i), options_));
     extension_generators_.push_back(extension_generators->back().get());
   }
-}
-
+} 
+ 
 void MessageGenerator::GenerateFieldAccessorDeclarations(io::Printer* printer) {
   Formatter format(printer, variables_);
   // optimized_fields_ does not contain fields where
@@ -717,7 +717,7 @@ void MessageGenerator::GenerateFieldAccessorDeclarations(io::Printer* printer) {
     }
     ordered_fields.push_back(field);
   }
-
+ 
   if (!ordered_fields.empty()) {
     format("enum : int {\n");
     for (auto field : ordered_fields) {
@@ -732,14 +732,14 @@ void MessageGenerator::GenerateFieldAccessorDeclarations(io::Printer* printer) {
   }
   for (auto field : ordered_fields) {
     PrintFieldComment(format, field);
-
+ 
     Formatter::SaveState save(&format);
 
     std::map<TProtoStringType, TProtoStringType> vars;
-    SetCommonFieldVariables(field, &vars, options_);
+    SetCommonFieldVariables(field, &vars, options_); 
     format.AddMap(vars);
-
-    if (field->is_repeated()) {
+ 
+    if (field->is_repeated()) { 
       format("$deprecated_attr$int ${1$$name$_size$}$() const$2$\n", field,
              !IsFieldStripped(field, options_) ? ";" : " {__builtin_trap();}");
       if (!IsFieldStripped(field, options_)) {
@@ -749,7 +749,7 @@ void MessageGenerator::GenerateFieldAccessorDeclarations(io::Printer* printer) {
             "public:\n",
             field);
       }
-    } else if (HasHasMethod(field)) {
+    } else if (HasHasMethod(field)) { 
       format("$deprecated_attr$bool ${1$has_$name$$}$() const$2$\n", field,
              !IsFieldStripped(field, options_) ? ";" : " {__builtin_trap();}");
       if (!IsFieldStripped(field, options_)) {
@@ -758,7 +758,7 @@ void MessageGenerator::GenerateFieldAccessorDeclarations(io::Printer* printer) {
             "bool _internal_has_$name$() const;\n"
             "public:\n");
       }
-    } else if (HasPrivateHasMethod(field)) {
+    } else if (HasPrivateHasMethod(field)) { 
       if (!IsFieldStripped(field, options_)) {
         format(
             "private:\n"
@@ -766,19 +766,19 @@ void MessageGenerator::GenerateFieldAccessorDeclarations(io::Printer* printer) {
             "public:\n",
             field);
       }
-    }
+    } 
     format("$deprecated_attr$void ${1$clear_$name$$}$()$2$\n", field,
            !IsFieldStripped(field, options_) ? ";" : "{__builtin_trap();}");
-
-    // Generate type-specific accessor declarations.
-    field_generators_.get(field).GenerateAccessorDeclarations(printer);
-
+ 
+    // Generate type-specific accessor declarations. 
+    field_generators_.get(field).GenerateAccessorDeclarations(printer); 
+ 
     format("\n");
-  }
-
-  if (descriptor_->extension_range_count() > 0) {
-    // Generate accessors for extensions.  We just call a macro located in
-    // extension_set.h since the accessors about 80 lines of static code.
+  } 
+ 
+  if (descriptor_->extension_range_count() > 0) { 
+    // Generate accessors for extensions.  We just call a macro located in 
+    // extension_set.h since the accessors about 80 lines of static code. 
     format("$GOOGLE_PROTOBUF$_EXTENSION_ACCESSORS($classname$)\n");
     // Generate MessageSet specific APIs for proto2 MessageSet.
     // For testing purposes we don't check for bridge.MessageSet, so
@@ -788,19 +788,19 @@ void MessageGenerator::GenerateFieldAccessorDeclarations(io::Printer* printer) {
       // Special-case MessageSet
       format("GOOGLE_PROTOBUF_EXTENSION_MESSAGE_SET_ACCESSORS($classname$)\n");
     }
-  }
-
+  } 
+ 
   for (auto oneof : OneOfRange(descriptor_)) {
     Formatter::SaveState saver(&format);
     format.Set("oneof_name", oneof->name());
     format.Set("camel_oneof_name", UnderscoresToCamelCase(oneof->name(), true));
     format(
         "void ${1$clear_$oneof_name$$}$();\n"
-        "$camel_oneof_name$Case $oneof_name$_case() const;\n",
+        "$camel_oneof_name$Case $oneof_name$_case() const;\n", 
         oneof);
-  }
-}
-
+  } 
+} 
+ 
 void MessageGenerator::GenerateSingularFieldHasBits(
     const FieldDescriptor* field, Formatter format) {
   if (IsFieldStripped(field, options_)) {
@@ -808,7 +808,7 @@ void MessageGenerator::GenerateSingularFieldHasBits(
         "inline bool $classname$::has_$name$() const { "
         "__builtin_trap(); }\n");
     return;
-  }
+  } 
   if (field->options().weak()) {
     format(
         "inline bool $classname$::has_$name$() const {\n"
@@ -845,27 +845,27 @@ void MessageGenerator::GenerateSingularFieldHasBits(
         "  return _internal_has_$name$();\n"
         "}\n");
   } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-    // Message fields have a has_$name$() method.
+    // Message fields have a has_$name$() method. 
     if (IsLazy(field, options_, scc_analyzer_)) {
       format(
           "inline bool $classname$::_internal_has_$name$() const {\n"
-          "  return !$name$_.IsCleared();\n"
-          "}\n");
+          "  return !$name$_.IsCleared();\n" 
+          "}\n"); 
     } else {
       format(
           "inline bool $classname$::_internal_has_$name$() const {\n"
           "  return this != internal_default_instance() "
           "&& $name$_ != nullptr;\n"
           "}\n");
-    }
+    } 
     format(
         "inline bool $classname$::has_$name$() const {\n"
         "$annotate_has$"
         "  return _internal_has_$name$();\n"
         "}\n");
-  }
-}
-
+  } 
+} 
+ 
 void MessageGenerator::GenerateOneofHasBits(io::Printer* printer) {
   Formatter format(printer, variables_);
   for (auto oneof : OneOfRange(descriptor_)) {
@@ -874,14 +874,14 @@ void MessageGenerator::GenerateOneofHasBits(io::Printer* printer) {
     format.Set("cap_oneof_name", ToUpper(oneof->name()));
     format(
         "inline bool $classname$::has_$oneof_name$() const {\n"
-        "  return $oneof_name$_case() != $cap_oneof_name$_NOT_SET;\n"
-        "}\n"
+        "  return $oneof_name$_case() != $cap_oneof_name$_NOT_SET;\n" 
+        "}\n" 
         "inline void $classname$::clear_has_$oneof_name$() {\n"
-        "  _oneof_case_[$oneof_index$] = $cap_oneof_name$_NOT_SET;\n"
-        "}\n");
-  }
-}
-
+        "  _oneof_case_[$oneof_index$] = $cap_oneof_name$_NOT_SET;\n" 
+        "}\n"); 
+  } 
+} 
+ 
 void MessageGenerator::GenerateOneofMemberHasBits(const FieldDescriptor* field,
                                                   const Formatter& format) {
   if (IsFieldStripped(field, options_)) {
@@ -895,12 +895,12 @@ void MessageGenerator::GenerateOneofMemberHasBits(const FieldDescriptor* field,
         "}\n");
     return;
   }
-  // Singular field in a oneof
-  // N.B.: Without field presence, we do not use has-bits or generate
-  // has_$name$() methods, but oneofs still have set_has_$name$().
-  // Oneofs also have has_$name$() but only as a private helper
-  // method, so that generated code is slightly cleaner (vs.  comparing
-  // _oneof_case_[index] against a constant everywhere).
+  // Singular field in a oneof 
+  // N.B.: Without field presence, we do not use has-bits or generate 
+  // has_$name$() methods, but oneofs still have set_has_$name$(). 
+  // Oneofs also have has_$name$() but only as a private helper 
+  // method, so that generated code is slightly cleaner (vs.  comparing 
+  // _oneof_case_[index] against a constant everywhere). 
   //
   // If has_$name$() is private, there is no need to add an internal accessor.
   // Only annotate public accessors.
@@ -925,33 +925,33 @@ void MessageGenerator::GenerateOneofMemberHasBits(const FieldDescriptor* field,
       "inline void $classname$::set_has_$name$() {\n"
       "  _oneof_case_[$oneof_index$] = k$field_name$;\n"
       "}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateFieldClear(const FieldDescriptor* field,
                                           bool is_inline, Formatter format) {
   if (IsFieldStripped(field, options_)) {
     format("void $classname$::clear_$name$() { __builtin_trap(); }\n");
     return;
   }
-
+ 
   // Generate clear_$name$().
   if (is_inline) {
     format("inline ");
   }
   format("void $classname$::clear_$name$() {\n");
-
+ 
   format.Indent();
 
   if (field->real_containing_oneof()) {
-    // Clear this field only if it is the active field in this oneof,
-    // otherwise ignore
+    // Clear this field only if it is the active field in this oneof, 
+    // otherwise ignore 
     format("if (_internal_has_$name$()) {\n");
     format.Indent();
     field_generators_.get(field).GenerateClearingCode(format.printer());
     format("clear_has_$oneof_name$();\n");
     format.Outdent();
     format("}\n");
-  } else {
+  } else { 
     field_generators_.get(field).GenerateClearingCode(format.printer());
     if (HasHasbit(field)) {
       int has_bit_index = HasBitIndex(field);
@@ -959,32 +959,32 @@ void MessageGenerator::GenerateFieldClear(const FieldDescriptor* field,
       format.Set("has_mask",
                  strings::Hex(1u << (has_bit_index % 32), strings::ZERO_PAD_8));
       format("_has_bits_[$has_array_index$] &= ~0x$has_mask$u;\n");
-    }
-  }
+    } 
+  } 
   format("$annotate_clear$");
   format.Outdent();
   format("}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateFieldAccessorDefinitions(io::Printer* printer) {
   Formatter format(printer, variables_);
   format("// $classname$\n\n");
-
+ 
   for (auto field : FieldRange(descriptor_)) {
     PrintFieldComment(format, field);
-
+ 
     if (IsFieldStripped(field, options_)) {
       continue;
     }
-
+ 
     std::map<TProtoStringType, TProtoStringType> vars;
-    SetCommonFieldVariables(field, &vars, options_);
-
+    SetCommonFieldVariables(field, &vars, options_); 
+ 
     Formatter::SaveState saver(&format);
     format.AddMap(vars);
 
-    // Generate has_$name$() or $name$_size().
-    if (field->is_repeated()) {
+    // Generate has_$name$() or $name$_size(). 
+    if (field->is_repeated()) { 
       if (IsFieldStripped(field, options_)) {
         format(
             "inline int $classname$::$name$_size() const { "
@@ -1002,34 +1002,34 @@ void MessageGenerator::GenerateFieldAccessorDefinitions(io::Printer* printer) {
                     field->message_type()
                 ? ".weak"
                 : "");
-      }
+      } 
     } else if (field->real_containing_oneof()) {
       format.Set("field_name", UnderscoresToCamelCase(field->name(), true));
       format.Set("oneof_name", field->containing_oneof()->name());
       format.Set("oneof_index",
                  StrCat(field->containing_oneof()->index()));
       GenerateOneofMemberHasBits(field, format);
-    } else {
-      // Singular field.
+    } else { 
+      // Singular field. 
       GenerateSingularFieldHasBits(field, format);
-    }
-
+    } 
+ 
     if (!IsCrossFileMaybeMap(field)) {
       GenerateFieldClear(field, true, format);
-    }
-
-    // Generate type-specific accessors.
+    } 
+ 
+    // Generate type-specific accessors. 
     if (!IsFieldStripped(field, options_)) {
       field_generators_.get(field).GenerateInlineAccessorDefinitions(printer);
     }
-
+ 
     format("\n");
-  }
-
+  } 
+ 
   // Generate has_$name$() and clear_has_$name$() functions for oneofs.
   GenerateOneofHasBits(printer);
-}
-
+} 
+ 
 void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
   Formatter format(printer, variables_);
   format.Set("class_final",
@@ -1127,9 +1127,9 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
           "  ::$proto_ns$::Metadata GetMetadata() const final;\n");
     }
     format("};\n");
-    return;
-  }
-
+    return; 
+  } 
+ 
   format(
       "class $dllexport_decl $${1$$classname$$}$$ class_final$ :\n"
       "    public $superclass$ /* @@protoc_insertion_point("
@@ -1137,7 +1137,7 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
       descriptor_);
   format(" public:\n");
   format.Indent();
-
+ 
   if (EnableMessageOwnedArena(descriptor_)) {
     format(
         "inline $classname$() : $classname$("
@@ -1188,17 +1188,17 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
         "  return $mutable_unknown_fields$;\n"
         "}\n"
         "\n");
-  }
-
-  // Only generate this member if it's not disabled.
-  if (HasDescriptorMethods(descriptor_->file(), options_) &&
-      !descriptor_->options().no_standard_descriptor_accessor()) {
+  } 
+ 
+  // Only generate this member if it's not disabled. 
+  if (HasDescriptorMethods(descriptor_->file(), options_) && 
+      !descriptor_->options().no_standard_descriptor_accessor()) { 
     format(
         "static const ::$proto_ns$::Descriptor* descriptor() {\n"
         "  return GetDescriptor();\n"
         "}\n");
-  }
-
+  } 
+ 
   if (HasDescriptorMethods(descriptor_->file(), options_)) {
     // These shadow non-static methods of the same names in Message.  We
     // redefine them here because calls directly on the generated class can be
@@ -1217,14 +1217,14 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
         "  return default_instance().GetMetadata().reflection;\n"
         "}\n");
   }
-
+ 
   format(
       "static const $classname$& default_instance() {\n"
       "  return *internal_default_instance();\n"
       "}\n");
 
-  // Generate enum values for every field in oneofs. One list is generated for
-  // each oneof with an additional *_NOT_SET value.
+  // Generate enum values for every field in oneofs. One list is generated for 
+  // each oneof with an additional *_NOT_SET value. 
   for (auto oneof : OneOfRange(descriptor_)) {
     format("enum $1$Case {\n", UnderscoresToCamelCase(oneof->name(), true));
     format.Indent();
@@ -1233,14 +1233,14 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
           UnderscoresToCamelCase(field->name(), true);
       format("k$1$ = $2$,\n", oneof_enum_case_field_name,  // 1
              field->number());                             // 2
-    }
+    } 
     format("$1$_NOT_SET = 0,\n", ToUpper(oneof->name()));
     format.Outdent();
     format(
-        "};\n"
-        "\n");
-  }
-
+        "};\n" 
+        "\n"); 
+  } 
+ 
   // TODO(gerbens) make this private, while still granting other protos access.
   format(
       "static inline const $classname$* internal_default_instance() {\n"
@@ -1251,7 +1251,7 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
       "  $1$;\n"
       "\n",
       index_in_file_messages_);
-
+ 
   if (IsAnyMessage(descriptor_, options_)) {
     format(
         "// implements Any -----------------------------------------------\n"
@@ -1317,8 +1317,8 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
         "static bool ParseAnyTypeUrl(::PROTOBUF_NAMESPACE_ID::ConstStringParam "
         "type_url,\n"
         "                            TProtoStringType* full_type_name);\n");
-  }
-
+  } 
+ 
   format(
       "friend void swap($classname$& a, $classname$& b) {\n"
       "  a.Swap(&b);\n"
@@ -1343,25 +1343,25 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
       "}\n");
 
   format(
-      "\n"
+      "\n" 
       "// implements Message ----------------------------------------------\n"
       "\n"
       "inline $classname$* New() const final {\n"
       "  return new $classname$();\n"
-      "}\n"
+      "}\n" 
       "\n"
       "$classname$* New(::$proto_ns$::Arena* arena) const final {\n"
       "  return CreateMaybeMessage<$classname$>(arena);\n"
       "}\n");
-
+ 
   // For instances that derive from Message (rather than MessageLite), some
   // methods are virtual and should be marked as final.
   format.Set("full_final", HasDescriptorMethods(descriptor_->file(), options_)
                                ? "final"
                                : "");
 
-  if (HasGeneratedMethods(descriptor_->file(), options_)) {
-    if (HasDescriptorMethods(descriptor_->file(), options_)) {
+  if (HasGeneratedMethods(descriptor_->file(), options_)) { 
+    if (HasDescriptorMethods(descriptor_->file(), options_)) { 
       format(
           // Use Message's built-in MergeFrom and CopyFrom when the passed-in
           // argument is a generic Message instance, and only define the custom
@@ -1378,14 +1378,14 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
           "static void MergeImpl(::$proto_ns$::Message*to, const "
           "::$proto_ns$::Message&from);\n"
           "public:\n");
-    } else {
+    } else { 
       format(
           "void CheckTypeAndMergeFrom(const ::$proto_ns$::MessageLite& from)"
           "  final;\n"
           "void CopyFrom(const $classname$& from);\n"
           "void MergeFrom(const $classname$& from);\n");
-    }
-
+    } 
+ 
     format.Set("clear_final",
                ShouldMarkClearAsFinal(descriptor_, options_) ? "final" : "");
 
@@ -1402,13 +1402,13 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
         "    $uint8$* target, ::$proto_ns$::io::EpsCopyOutputStream* stream) "
         "const final;\n");
 
-    // DiscardUnknownFields() is implemented in message.cc using reflections. We
-    // need to implement this function in generated code for messages.
-    if (!UseUnknownFieldSet(descriptor_->file(), options_)) {
+    // DiscardUnknownFields() is implemented in message.cc using reflections. We 
+    // need to implement this function in generated code for messages. 
+    if (!UseUnknownFieldSet(descriptor_->file(), options_)) { 
       format("void DiscardUnknownFields()$ full_final$;\n");
-    }
-  }
-
+    } 
+  } 
+ 
   format(
       "int GetCachedSize() const final { return _cached_size_.Get(); }"
       "\n\nprivate:\n"
@@ -1430,18 +1430,18 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
       // TODO(gerbens) Make this private! Currently people are deriving from
       // protos to give access to this constructor, breaking the invariants
       // we rely on.
-      "protected:\n"
+      "protected:\n" 
       "explicit $classname$(::$proto_ns$::Arena* arena,\n"
       "                     bool is_message_owned = false);\n"
-      "private:\n"
-      "static void ArenaDtor(void* object);\n"
+      "private:\n" 
+      "static void ArenaDtor(void* object);\n" 
       "inline void RegisterArenaDtor(::$proto_ns$::Arena* arena);\n");
-
+ 
   format(
-      "public:\n"
-      "\n");
-
-  if (HasDescriptorMethods(descriptor_->file(), options_)) {
+      "public:\n" 
+      "\n"); 
+ 
+  if (HasDescriptorMethods(descriptor_->file(), options_)) { 
     if (HasGeneratedMethods(descriptor_->file(), options_)) {
       format(
           "static const ClassData _class_data_;\n"
@@ -1452,149 +1452,149 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
     format(
         "::$proto_ns$::Metadata GetMetadata() const final;\n"
         "\n");
-  } else {
+  } else { 
     format(
         "TProtoStringType GetTypeName() const final;\n"
         "\n");
-  }
-
+  } 
+ 
   format(
       "// nested types ----------------------------------------------------\n"
       "\n");
-
-  // Import all nested message classes into this class's scope with typedefs.
-  for (int i = 0; i < descriptor_->nested_type_count(); i++) {
-    const Descriptor* nested_type = descriptor_->nested_type(i);
-    if (!IsMapEntryMessage(nested_type)) {
+ 
+  // Import all nested message classes into this class's scope with typedefs. 
+  for (int i = 0; i < descriptor_->nested_type_count(); i++) { 
+    const Descriptor* nested_type = descriptor_->nested_type(i); 
+    if (!IsMapEntryMessage(nested_type)) { 
       format.Set("nested_full_name", ClassName(nested_type, false));
       format.Set("nested_name", ResolveKeyword(nested_type->name()));
       format("typedef ${1$$nested_full_name$$}$ ${1$$nested_name$$}$;\n",
              nested_type);
-    }
-  }
-
-  if (descriptor_->nested_type_count() > 0) {
+    } 
+  } 
+ 
+  if (descriptor_->nested_type_count() > 0) { 
     format("\n");
-  }
-
-  // Import all nested enums and their values into this class's scope with
-  // typedefs and constants.
-  for (int i = 0; i < descriptor_->enum_type_count(); i++) {
-    enum_generators_[i]->GenerateSymbolImports(printer);
+  } 
+ 
+  // Import all nested enums and their values into this class's scope with 
+  // typedefs and constants. 
+  for (int i = 0; i < descriptor_->enum_type_count(); i++) { 
+    enum_generators_[i]->GenerateSymbolImports(printer); 
     format("\n");
-  }
-
+  } 
+ 
   format(
       "// accessors -------------------------------------------------------\n"
       "\n");
-
-  // Generate accessor methods for all fields.
-  GenerateFieldAccessorDeclarations(printer);
-
-  // Declare extension identifiers.
-  for (int i = 0; i < descriptor_->extension_count(); i++) {
-    extension_generators_[i]->GenerateDeclaration(printer);
-  }
-
-
+ 
+  // Generate accessor methods for all fields. 
+  GenerateFieldAccessorDeclarations(printer); 
+ 
+  // Declare extension identifiers. 
+  for (int i = 0; i < descriptor_->extension_count(); i++) { 
+    extension_generators_[i]->GenerateDeclaration(printer); 
+  } 
+ 
+ 
   format("// @@protoc_insertion_point(class_scope:$full_name$)\n");
-
-  // Generate private members.
+ 
+  // Generate private members. 
   format.Outdent();
   format(" private:\n");
   format.Indent();
   // TODO(seongkim): Remove hack to track field access and remove this class.
   format("class _Internal;\n");
-
+ 
   for (auto field : FieldRange(descriptor_)) {
     // set_has_***() generated in all oneofs.
     if (!field->is_repeated() && !field->options().weak() &&
         field->real_containing_oneof()) {
       format("void set_has_$1$();\n", FieldName(field));
-    }
-  }
+    } 
+  } 
   format("\n");
-
-  // Generate oneof function declarations
+ 
+  // Generate oneof function declarations 
   for (auto oneof : OneOfRange(descriptor_)) {
     format(
         "inline bool has_$1$() const;\n"
         "inline void clear_has_$1$();\n\n",
         oneof->name());
-  }
-
-  if (HasGeneratedMethods(descriptor_->file(), options_) &&
-      !descriptor_->options().message_set_wire_format() &&
-      num_required_fields_ > 1) {
+  } 
+ 
+  if (HasGeneratedMethods(descriptor_->file(), options_) && 
+      !descriptor_->options().message_set_wire_format() && 
+      num_required_fields_ > 1) { 
     format(
         "// helper for ByteSizeLong()\n"
         "size_t RequiredFieldsByteSizeFallback() const;\n\n");
-  }
-
+  } 
+ 
   if (HasGeneratedMethods(descriptor_->file(), options_)) {
     parse_function_generator_->GenerateDataDecls(printer);
   }
 
-  // Prepare decls for _cached_size_ and _has_bits_.  Their position in the
-  // output will be determined later.
-
-  bool need_to_emit_cached_size = true;
+  // Prepare decls for _cached_size_ and _has_bits_.  Their position in the 
+  // output will be determined later. 
+ 
+  bool need_to_emit_cached_size = true; 
   const TProtoStringType cached_size_decl =
       "mutable ::$proto_ns$::internal::CachedSize _cached_size_;\n";
-
+ 
   const size_t sizeof_has_bits = HasBitsSize();
   const TProtoStringType has_bits_decl =
       sizeof_has_bits == 0 ? ""
                            : StrCat("::$proto_ns$::internal::HasBits<",
                                           sizeof_has_bits, "> _has_bits_;\n");
-
-  // To minimize padding, data members are divided into three sections:
-  // (1) members assumed to align to 8 bytes
-  // (2) members corresponding to message fields, re-ordered to optimize
-  //     alignment.
-  // (3) members assumed to align to 4 bytes.
-
-  // Members assumed to align to 8 bytes:
-
-  if (descriptor_->extension_range_count() > 0) {
+ 
+  // To minimize padding, data members are divided into three sections: 
+  // (1) members assumed to align to 8 bytes 
+  // (2) members corresponding to message fields, re-ordered to optimize 
+  //     alignment. 
+  // (3) members assumed to align to 4 bytes. 
+ 
+  // Members assumed to align to 8 bytes: 
+ 
+  if (descriptor_->extension_range_count() > 0) { 
     format(
         "::$proto_ns$::internal::ExtensionSet _extensions_;\n"
         "\n");
-  }
-
+  } 
+ 
   format(
       "template <typename T> friend class "
       "::$proto_ns$::Arena::InternalHelper;\n"
-      "typedef void InternalArenaConstructable_;\n"
-      "typedef void DestructorSkippable_;\n");
-
+      "typedef void InternalArenaConstructable_;\n" 
+      "typedef void DestructorSkippable_;\n"); 
+ 
   if (!has_bit_indices_.empty()) {
-    // _has_bits_ is frequently accessed, so to reduce code size and improve
+    // _has_bits_ is frequently accessed, so to reduce code size and improve 
     // speed, it should be close to the start of the object. Placing
     // _cached_size_ together with _has_bits_ improves cache locality despite
     // potential alignment padding.
     format(has_bits_decl.c_str());
     format(cached_size_decl.c_str());
     need_to_emit_cached_size = false;
-  }
-
-  // Field members:
-
-  // Emit some private and static members
+  } 
+ 
+  // Field members: 
+ 
+  // Emit some private and static members 
   for (auto field : optimized_order_) {
-    const FieldGenerator& generator = field_generators_.get(field);
-    generator.GenerateStaticMembers(printer);
-    generator.GeneratePrivateMembers(printer);
-  }
-
-  // For each oneof generate a union
+    const FieldGenerator& generator = field_generators_.get(field); 
+    generator.GenerateStaticMembers(printer); 
+    generator.GeneratePrivateMembers(printer); 
+  } 
+ 
+  // For each oneof generate a union 
   for (auto oneof : OneOfRange(descriptor_)) {
     TProtoStringType camel_oneof_name = UnderscoresToCamelCase(oneof->name(), true);
     format("union $1$Union {\n", camel_oneof_name);
     format.Indent();
     format(
-        // explicit empty constructor is needed when union contains
-        // ArenaStringPtr members for string fields.
+        // explicit empty constructor is needed when union contains 
+        // ArenaStringPtr members for string fields. 
         "constexpr $1$Union() : _constinit_{} {}\n"
         "  ::$proto_ns$::internal::ConstantInitialized _constinit_;\n",
         camel_oneof_name);
@@ -1602,53 +1602,53 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* printer) {
       if (!IsFieldStripped(field, options_)) {
         field_generators_.get(field).GeneratePrivateMembers(printer);
       }
-    }
+    } 
     format.Outdent();
     format("} $1$_;\n", oneof->name());
     for (auto field : FieldRange(oneof)) {
       if (!IsFieldStripped(field, options_)) {
         field_generators_.get(field).GenerateStaticMembers(printer);
       }
-    }
-  }
-
-  // Members assumed to align to 4 bytes:
-
-  if (need_to_emit_cached_size) {
+    } 
+  } 
+ 
+  // Members assumed to align to 4 bytes: 
+ 
+  if (need_to_emit_cached_size) { 
     format(cached_size_decl.c_str());
-    need_to_emit_cached_size = false;
-  }
-
-  // Generate _oneof_case_.
+    need_to_emit_cached_size = false; 
+  } 
+ 
+  // Generate _oneof_case_. 
   if (descriptor_->real_oneof_decl_count() > 0) {
     format(
         "$uint32$ _oneof_case_[$1$];\n"
         "\n",
         descriptor_->real_oneof_decl_count());
-  }
-
+  } 
+ 
   if (num_weak_fields_) {
     format("::$proto_ns$::internal::WeakFieldMap _weak_field_map_;\n");
   }
-  // Generate _any_metadata_ for the Any type.
+  // Generate _any_metadata_ for the Any type. 
   if (IsAnyMessage(descriptor_, options_)) {
     format("::$proto_ns$::internal::AnyMetadata _any_metadata_;\n");
-  }
-
+  } 
+ 
   // The TableStruct struct needs access to the private parts, in order to
   // construct the offsets of all members.
   format("friend struct ::$tablename$;\n");
-
+ 
   format.Outdent();
   format("};");
-  GOOGLE_DCHECK(!need_to_emit_cached_size);
+  GOOGLE_DCHECK(!need_to_emit_cached_size); 
 }  // NOLINT(readability/fn_size)
-
+ 
 void MessageGenerator::GenerateInlineMethods(io::Printer* printer) {
   if (IsMapEntryMessage(descriptor_)) return;
   GenerateFieldAccessorDefinitions(printer);
-
-  // Generate oneof_case() functions.
+ 
+  // Generate oneof_case() functions. 
   for (auto oneof : OneOfRange(descriptor_)) {
     Formatter format(printer, variables_);
     format.Set("camel_oneof_name", UnderscoresToCamelCase(oneof->name(), true));
@@ -1658,12 +1658,12 @@ void MessageGenerator::GenerateInlineMethods(io::Printer* printer) {
         "inline $classname$::$camel_oneof_name$Case $classname$::"
         "${1$$oneof_name$_case$}$() const {\n"
         "  return $classname$::$camel_oneof_name$Case("
-        "_oneof_case_[$oneof_index$]);\n"
+        "_oneof_case_[$oneof_index$]);\n" 
         "}\n",
         oneof);
-  }
-}
-
+  } 
+} 
+ 
 bool MessageGenerator::GenerateParseTable(io::Printer* printer, size_t offset,
                                           size_t aux_offset) {
   Formatter format(printer, variables_);
@@ -1731,10 +1731,10 @@ void MessageGenerator::GenerateSchema(io::Printer* printer, int offset,
   has_offset = !has_bit_indices_.empty() || IsMapEntryMessage(descriptor_)
                    ? offset + has_offset
                    : -1;
-
+ 
   format("{ $1$, $2$, sizeof($classtype$)},\n", offset, has_offset);
-}
-
+} 
+ 
 namespace {
 
 // We need to calculate for each field what function the table driven code
@@ -1966,7 +1966,7 @@ void MessageGenerator::GenerateClassMethods(io::Printer* printer) {
     }
     return;
   }
-
+ 
   if (IsAnyMessage(descriptor_, options_)) {
     if (HasDescriptorMethods(descriptor_->file(), options_)) {
       format(
@@ -1986,8 +1986,8 @@ void MessageGenerator::GenerateClassMethods(io::Printer* printer) {
         "                                             full_type_name);\n"
         "}\n"
         "\n");
-  }
-
+  } 
+ 
   format(
       "class $classname$::_Internal {\n"
       " public:\n");
@@ -2027,9 +2027,9 @@ void MessageGenerator::GenerateClassMethods(io::Printer* printer) {
     if (!IsFieldStripped(field, options_)) {
       field_generators_.get(field).GenerateInternalAccessorDefinitions(printer);
     }
-  }
-
-  // Generate non-inline field definitions.
+  } 
+ 
+  // Generate non-inline field definitions. 
   for (auto field : FieldRange(descriptor_)) {
     if (IsFieldStripped(field, options_)) {
       continue;
@@ -2045,47 +2045,47 @@ void MessageGenerator::GenerateClassMethods(io::Printer* printer) {
       format.AddMap(vars);
       GenerateFieldClear(field, false, format);
     }
-  }
-
-  GenerateStructors(printer);
+  } 
+ 
+  GenerateStructors(printer); 
   format("\n");
-
+ 
   if (descriptor_->real_oneof_decl_count() > 0) {
-    GenerateOneofClear(printer);
+    GenerateOneofClear(printer); 
     format("\n");
-  }
-
-  if (HasGeneratedMethods(descriptor_->file(), options_)) {
-    GenerateClear(printer);
+  } 
+ 
+  if (HasGeneratedMethods(descriptor_->file(), options_)) { 
+    GenerateClear(printer); 
     format("\n");
-
+ 
     parse_function_generator_->GenerateMethodImpls(printer);
     format("\n");
-
+ 
     parse_function_generator_->GenerateDataDefinitions(printer);
 
     GenerateSerializeWithCachedSizesToArray(printer);
     format("\n");
-
-    GenerateByteSize(printer);
+ 
+    GenerateByteSize(printer); 
     format("\n");
-
-    GenerateMergeFrom(printer);
+ 
+    GenerateMergeFrom(printer); 
     format("\n");
-
+ 
     GenerateClassSpecificMergeFrom(printer);
     format("\n");
 
-    GenerateCopyFrom(printer);
+    GenerateCopyFrom(printer); 
     format("\n");
-
-    GenerateIsInitialized(printer);
+ 
+    GenerateIsInitialized(printer); 
     format("\n");
-  }
-
-  GenerateSwap(printer);
+  } 
+ 
+  GenerateSwap(printer); 
   format("\n");
-
+ 
   if (options_.table_driven_serialization) {
     format(
         "const void* $classname$::InternalGetTable() const {\n"
@@ -2094,7 +2094,7 @@ void MessageGenerator::GenerateClassMethods(io::Printer* printer) {
         "\n",
         index_in_file_messages_);
   }
-  if (HasDescriptorMethods(descriptor_->file(), options_)) {
+  if (HasDescriptorMethods(descriptor_->file(), options_)) { 
     format(
         "::$proto_ns$::Metadata $classname$::GetMetadata() const {\n"
         "  return ::$proto_ns$::internal::AssignDescriptors(\n"
@@ -2102,16 +2102,16 @@ void MessageGenerator::GenerateClassMethods(io::Printer* printer) {
         "      $file_level_metadata$[$1$]);\n"
         "}\n",
         index_in_file_messages_);
-  } else {
+  } else { 
     format(
         "TProtoStringType $classname$::GetTypeName() const {\n"
         "  return \"$full_name$\";\n"
         "}\n"
         "\n");
-  }
-
-}
-
+  } 
+ 
+} 
+ 
 size_t MessageGenerator::GenerateParseOffsets(io::Printer* printer) {
   Formatter format(printer, variables_);
 
@@ -2304,7 +2304,7 @@ size_t MessageGenerator::GenerateParseAuxTable(io::Printer* printer) {
 std::pair<size_t, size_t> MessageGenerator::GenerateOffsets(
     io::Printer* printer) {
   Formatter format(printer, variables_);
-
+ 
   if (!has_bit_indices_.empty() || IsMapEntryMessage(descriptor_)) {
     format("PROTOBUF_FIELD_OFFSET($classtype$, _has_bits_),\n");
   } else {
@@ -2341,9 +2341,9 @@ std::pair<size_t, size_t> MessageGenerator::GenerateOffsets(
       // Mark the field to prevent unintentional access through reflection.
       // Don't use the top bit because that is for unused fields.
       format("::$proto_ns$::internal::kInvalidFieldOffsetTag");
-    } else {
+    } else { 
       format("PROTOBUF_FIELD_OFFSET($classtype$, $1$_)", FieldName(field));
-    }
+    } 
 
     if (!IsFieldUsed(field, options_)) {
       format(" | 0x80000000u, // unused\n");
@@ -2352,15 +2352,15 @@ std::pair<size_t, size_t> MessageGenerator::GenerateOffsets(
     } else {
       format(",\n");
     }
-  }
-
+  } 
+ 
   int count = 0;
   for (auto oneof : OneOfRange(descriptor_)) {
     format("PROTOBUF_FIELD_OFFSET($classtype$, $1$_),\n", oneof->name());
     count++;
-  }
+  } 
   GOOGLE_CHECK_EQ(count, descriptor_->real_oneof_decl_count());
-
+ 
   if (IsMapEntryMessage(descriptor_)) {
     entries += 2;
     format(
@@ -2376,44 +2376,44 @@ std::pair<size_t, size_t> MessageGenerator::GenerateOffsets(
   }
 
   return std::make_pair(entries, offsets);
-}
-
+} 
+ 
 void MessageGenerator::GenerateSharedConstructorCode(io::Printer* printer) {
   Formatter format(printer, variables_);
-
+ 
   format("void $classname$::SharedCtor() {\n");
-
+ 
   std::vector<bool> processed(optimized_order_.size(), false);
   GenerateConstructorBody(printer, processed, false);
 
   for (auto oneof : OneOfRange(descriptor_)) {
     format("clear_has_$1$();\n", oneof->name());
-  }
-
+  } 
+ 
   format("}\n\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateSharedDestructorCode(io::Printer* printer) {
   Formatter format(printer, variables_);
-
+ 
   format("inline void $classname$::SharedDtor() {\n");
   format.Indent();
   format("$DCHK$(GetArenaForAllocation() == nullptr);\n");
-  // Write the destructors for each field except oneof members.
+  // Write the destructors for each field except oneof members. 
   // optimized_order_ does not contain oneof fields.
   for (auto field : optimized_order_) {
     field_generators_.get(field).GenerateDestructorCode(printer);
-  }
-
-  // Generate code to destruct oneofs. Clearing should do the work.
+  } 
+ 
+  // Generate code to destruct oneofs. Clearing should do the work. 
   for (auto oneof : OneOfRange(descriptor_)) {
     format(
         "if (has_$1$()) {\n"
         "  clear_$1$();\n"
-        "}\n",
+        "}\n", 
         oneof->name());
-  }
-
+  } 
+ 
   if (num_weak_fields_) {
     format("_weak_field_map_.ClearAll();\n");
   }
@@ -2421,32 +2421,32 @@ void MessageGenerator::GenerateSharedDestructorCode(io::Printer* printer) {
   format(
       "}\n"
       "\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateArenaDestructorCode(io::Printer* printer) {
   Formatter format(printer, variables_);
 
-  // Generate the ArenaDtor() method. Track whether any fields actually produced
-  // code that needs to be called.
+  // Generate the ArenaDtor() method. Track whether any fields actually produced 
+  // code that needs to be called. 
   format("void $classname$::ArenaDtor(void* object) {\n");
   format.Indent();
-
-  // This code is placed inside a static method, rather than an ordinary one,
-  // since that simplifies Arena's destructor list (ordinary function pointers
-  // rather than member function pointers). _this is the object being
-  // destructed.
+ 
+  // This code is placed inside a static method, rather than an ordinary one, 
+  // since that simplifies Arena's destructor list (ordinary function pointers 
+  // rather than member function pointers). _this is the object being 
+  // destructed. 
   format(
-      "$classname$* _this = reinterpret_cast< $classname$* >(object);\n"
-      // avoid an "unused variable" warning in case no fields have dtor code.
+      "$classname$* _this = reinterpret_cast< $classname$* >(object);\n" 
+      // avoid an "unused variable" warning in case no fields have dtor code. 
       "(void)_this;\n");
-
-  bool need_registration = false;
+ 
+  bool need_registration = false; 
   // Process non-oneof fields first.
   for (auto field : optimized_order_) {
     if (field_generators_.get(field).GenerateArenaDestructorCode(printer)) {
-      need_registration = true;
-    }
-  }
+      need_registration = true; 
+    } 
+  } 
 
   // Process oneof fields.
   //
@@ -2463,22 +2463,22 @@ void MessageGenerator::GenerateArenaDestructorCode(io::Printer* printer) {
 
   format.Outdent();
   format("}\n");
-
-  if (need_registration) {
+ 
+  if (need_registration) { 
     format(
         "inline void $classname$::RegisterArenaDtor(::$proto_ns$::Arena* "
         "arena) {\n"
         "  if (arena != nullptr) {\n"
-        "    arena->OwnCustomDestructor(this, &$classname$::ArenaDtor);\n"
-        "  }\n"
+        "    arena->OwnCustomDestructor(this, &$classname$::ArenaDtor);\n" 
+        "  }\n" 
         "}\n");
-  } else {
+  } else { 
     format(
         "void $classname$::RegisterArenaDtor(::$proto_ns$::Arena*) {\n"
         "}\n");
-  }
-}
-
+  } 
+} 
+ 
 void MessageGenerator::GenerateConstexprConstructor(io::Printer* printer) {
   Formatter format(printer, variables_);
 
@@ -2578,16 +2578,16 @@ void MessageGenerator::GenerateConstructorBody(io::Printer* printer,
 
 void MessageGenerator::GenerateStructors(io::Printer* printer) {
   Formatter format(printer, variables_);
-
+ 
   TProtoStringType superclass;
   superclass = SuperClassName(descriptor_, options_);
   TProtoStringType initializer_with_arena = superclass + "(arena, is_message_owned)";
 
-  if (descriptor_->extension_range_count() > 0) {
-    initializer_with_arena += ",\n  _extensions_(arena)";
-  }
-
-  // Initialize member variables with arena constructor.
+  if (descriptor_->extension_range_count() > 0) { 
+    initializer_with_arena += ",\n  _extensions_(arena)"; 
+  } 
+ 
+  // Initialize member variables with arena constructor. 
   for (auto field : optimized_order_) {
     GOOGLE_DCHECK(!IsFieldStripped(field, options_));
     bool has_arena_constructor = field->is_repeated();
@@ -2596,44 +2596,44 @@ void MessageGenerator::GenerateStructors(io::Printer* printer) {
          IsStringPiece(field, options_))) {
       has_arena_constructor = true;
     }
-    if (has_arena_constructor) {
+    if (has_arena_constructor) { 
       initializer_with_arena +=
           TProtoStringType(",\n  ") + FieldName(field) + TProtoStringType("_(arena)");
-    }
-  }
-
+    } 
+  } 
+ 
   if (IsAnyMessage(descriptor_, options_)) {
     initializer_with_arena += ",\n  _any_metadata_(&type_url_, &value_)";
-  }
+  } 
   if (num_weak_fields_ > 0) {
     initializer_with_arena += ", _weak_field_map_(arena)";
   }
-
+ 
   TProtoStringType initializer_null = superclass + "()";
   if (IsAnyMessage(descriptor_, options_)) {
-    initializer_null += ", _any_metadata_(&type_url_, &value_)";
-  }
+    initializer_null += ", _any_metadata_(&type_url_, &value_)"; 
+  } 
   if (num_weak_fields_ > 0) {
     initializer_null += ", _weak_field_map_(nullptr)";
   }
-
+ 
   format(
       "$classname$::$classname$(::$proto_ns$::Arena* arena,\n"
       "                         bool is_message_owned)\n"
       "  : $1$ {\n"
-      "  SharedCtor();\n"
+      "  SharedCtor();\n" 
       "  if (!is_message_owned) {\n"
       "    RegisterArenaDtor(arena);\n"
       "  }\n"
       "  // @@protoc_insertion_point(arena_constructor:$full_name$)\n"
-      "}\n",
+      "}\n", 
       initializer_with_arena);
-
+ 
   std::map<TProtoStringType, TProtoStringType> vars;
   SetUnknownFieldsVariable(descriptor_, options_, &vars);
   format.AddMap(vars);
-
-  // Generate the copy constructor.
+ 
+  // Generate the copy constructor. 
   if (UsingImplicitWeakFields(descriptor_->file(), options_)) {
     // If we are in lite mode and using implicit weak fields, we generate a
     // one-liner copy constructor that delegates to MergeFrom. This saves some
@@ -2722,10 +2722,10 @@ void MessageGenerator::GenerateStructors(io::Printer* printer) {
         "\n");
   }
 
-  // Generate the shared constructor code.
-  GenerateSharedConstructorCode(printer);
-
-  // Generate the destructor.
+  // Generate the shared constructor code. 
+  GenerateSharedConstructorCode(printer); 
+ 
+  // Generate the destructor. 
   format(
       "$classname$::~$classname$() {\n"
       "  // @@protoc_insertion_point(destructor:$full_name$)\n"
@@ -2734,20 +2734,20 @@ void MessageGenerator::GenerateStructors(io::Printer* printer) {
       "  _internal_metadata_.Delete<$unknown_fields_type$>();\n"
       "}\n"
       "\n");
-
-  // Generate the shared destructor code.
-  GenerateSharedDestructorCode(printer);
-
-  // Generate the arena-specific destructor code.
+ 
+  // Generate the shared destructor code. 
+  GenerateSharedDestructorCode(printer); 
+ 
+  // Generate the arena-specific destructor code. 
   GenerateArenaDestructorCode(printer);
-
-  // Generate SetCachedSize.
+ 
+  // Generate SetCachedSize. 
   format(
       "void $classname$::SetCachedSize(int size) const {\n"
       "  _cached_size_.Set(size);\n"
       "}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateSourceInProto2Namespace(io::Printer* printer) {
   Formatter format(printer, variables_);
   format(
@@ -2756,8 +2756,8 @@ void MessageGenerator::GenerateSourceInProto2Namespace(io::Printer* printer) {
       "$classtype$* Arena::CreateMaybeMessage< $classtype$ >(Arena* arena) {\n"
       "  return Arena::CreateMessageInternal< $classtype$ >(arena);\n"
       "}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateClear(io::Printer* printer) {
   Formatter format(printer, variables_);
 
@@ -2766,10 +2766,10 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
   const int kMaxUnconditionalPrimitiveBytesClear = 4;
 
   format(
-      "void $classname$::Clear() {\n"
+      "void $classname$::Clear() {\n" 
       "// @@protoc_insertion_point(message_clear_start:$full_name$)\n");
   format.Indent();
-
+ 
   format(
       // TODO(jwb): It would be better to avoid emitting this if it is not used,
       // rather than emitting a workaround for the resulting warning.
@@ -2777,10 +2777,10 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
       "// Prevent compiler warnings about cached_has_bits being unused\n"
       "(void) cached_has_bits;\n\n");
 
-  if (descriptor_->extension_range_count() > 0) {
+  if (descriptor_->extension_range_count() > 0) { 
     format("_extensions_.Clear();\n");
-  }
-
+  } 
+ 
   // Collect fields into chunks. Each chunk may have an if() condition that
   // checks all hasbits in the chunk and skips it if none are set.
   int zero_init_bytes = 0;
@@ -2791,7 +2791,7 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
   }
   bool merge_zero_init = zero_init_bytes > kMaxUnconditionalPrimitiveBytesClear;
   int chunk_count = 0;
-
+ 
   std::vector<std::vector<const FieldDescriptor*>> chunks = CollectFields(
       optimized_order_,
       [&](const FieldDescriptor* a, const FieldDescriptor* b) -> bool {
@@ -2823,11 +2823,11 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
         GOOGLE_CHECK(!saw_non_zero_init);
         if (!memset_start) memset_start = field;
         memset_end = field;
-      } else {
+      } else { 
         saw_non_zero_init = true;
-      }
-    }
-
+      } 
+    } 
+ 
     // Whether we wrap this chunk in:
     //   if (cached_has_bits & <chunk hasbits) { /* chunk. */ }
     // We can omit the if() for chunk size 1, or if our fields do not have
@@ -2836,13 +2836,13 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
     const bool have_outer_if = HasBitIndex(chunk.front()) != kNoHasbit &&
                                chunk.size() > 1 &&
                                (memset_end != chunk.back() || merge_zero_init);
-
+ 
     if (have_outer_if) {
       // Emit an if() that will let us skip the whole chunk if none are set.
       uint32_t chunk_mask = GenChunkMask(chunk, has_bit_indices_);
       TProtoStringType chunk_mask_str =
           StrCat(strings::Hex(chunk_mask, strings::ZERO_PAD_8));
-
+ 
       // Check (up to) 8 has_bits at a time if we have more than one field in
       // this chunk.  Due to field layout ordering, we may check
       // _has_bits_[last_chunk * 8 / 32] multiple times.
@@ -2855,8 +2855,8 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
       }
       format("if (cached_has_bits & 0x$1$u) {\n", chunk_mask_str);
       format.Indent();
-    }
-
+    } 
+ 
     if (memset_start) {
       if (memset_start == memset_end) {
         // For clarity, do not memset a single field.
@@ -2869,8 +2869,8 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
             "    reinterpret_cast<char*>(&$1$_)) + sizeof($2$_));\n",
             FieldName(memset_start), FieldName(memset_end));
       }
-    }
-
+    } 
+ 
     // Clear all non-zero-initializable fields in the chunk.
     for (const auto& field : chunk) {
       if (CanInitializeByZeroing(field)) continue;
@@ -2882,11 +2882,11 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
           HasBitIndex(field) != kNoHasbit &&
           (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE ||
            field->cpp_type() == FieldDescriptor::CPPTYPE_STRING);
-
+ 
       if (have_enclosing_if) {
         PrintPresenceCheck(format, field, has_bit_indices_, printer,
                            &cached_has_word_index);
-      }
+      } 
 
       field_generators_.get(field).GenerateMessageClearingCode(printer);
 
@@ -2904,39 +2904,39 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
     if (cold_skipper.OnEndChunk(chunk_index, printer)) {
       // Reset here as it may have been updated in just closed if statement.
       cached_has_word_index = -1;
-    }
-  }
-
-  // Step 4: Unions.
+    } 
+  } 
+ 
+  // Step 4: Unions. 
   for (auto oneof : OneOfRange(descriptor_)) {
     format("clear_$1$();\n", oneof->name());
-  }
-
+  } 
+ 
   if (num_weak_fields_) {
     format("_weak_field_map_.ClearAll();\n");
   }
 
   if (!has_bit_indices_.empty()) {
-    // Step 5: Everything else.
+    // Step 5: Everything else. 
     format("_has_bits_.Clear();\n");
-  }
-
+  } 
+ 
   std::map<TProtoStringType, TProtoStringType> vars;
   SetUnknownFieldsVariable(descriptor_, options_, &vars);
   format.AddMap(vars);
   format("_internal_metadata_.Clear<$unknown_fields_type$>();\n");
-
+ 
   format.Outdent();
   format("}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateOneofClear(io::Printer* printer) {
-  // Generated function clears the active field and union case (e.g. foo_case_).
+  // Generated function clears the active field and union case (e.g. foo_case_). 
   int i = 0;
   for (auto oneof : OneOfRange(descriptor_)) {
     Formatter format(printer, variables_);
     format.Set("oneofname", oneof->name());
-
+ 
     format(
         "void $classname$::clear_$oneofname$() {\n"
         "// @@protoc_insertion_point(one_of_clear_start:$full_name$)\n");
@@ -2946,46 +2946,46 @@ void MessageGenerator::GenerateOneofClear(io::Printer* printer) {
     for (auto field : FieldRange(oneof)) {
       format("case k$1$: {\n", UnderscoresToCamelCase(field->name(), true));
       format.Indent();
-      // We clear only allocated objects in oneofs
+      // We clear only allocated objects in oneofs 
       if (!IsStringOrMessage(field) || IsFieldStripped(field, options_)) {
         format("// No need to clear\n");
-      } else {
-        field_generators_.get(field).GenerateClearingCode(printer);
-      }
+      } else { 
+        field_generators_.get(field).GenerateClearingCode(printer); 
+      } 
       format("break;\n");
       format.Outdent();
       format("}\n");
-    }
+    } 
     format(
         "case $1$_NOT_SET: {\n"
-        "  break;\n"
-        "}\n",
+        "  break;\n" 
+        "}\n", 
         ToUpper(oneof->name()));
     format.Outdent();
     format(
-        "}\n"
+        "}\n" 
         "_oneof_case_[$1$] = $2$_NOT_SET;\n",
         i, ToUpper(oneof->name()));
     format.Outdent();
     format(
-        "}\n"
-        "\n");
+        "}\n" 
+        "\n"); 
     i++;
-  }
-}
-
+  } 
+} 
+ 
 void MessageGenerator::GenerateSwap(io::Printer* printer) {
   Formatter format(printer, variables_);
-
+ 
   format("void $classname$::InternalSwap($classname$* other) {\n");
   format.Indent();
   format("using std::swap;\n");
-
-  if (HasGeneratedMethods(descriptor_->file(), options_)) {
+ 
+  if (HasGeneratedMethods(descriptor_->file(), options_)) { 
     if (descriptor_->extension_range_count() > 0) {
       format("_extensions_.InternalSwap(&other->_extensions_);\n");
-    }
-
+    } 
+ 
     std::map<TProtoStringType, TProtoStringType> vars;
     SetUnknownFieldsVariable(descriptor_, options_, &vars);
     format.AddMap(vars);
@@ -2995,8 +2995,8 @@ void MessageGenerator::GenerateSwap(io::Printer* printer) {
       for (int i = 0; i < HasBitsSize(); ++i) {
         format("swap(_has_bits_[$1$], other->_has_bits_[$1$]);\n", i);
       }
-    }
-
+    } 
+ 
     // If possible, we swap several fields at once, including padding.
     const RunMap runs =
         FindRuns(optimized_order_, [this](const FieldDescriptor* field) {
@@ -3032,31 +3032,31 @@ void MessageGenerator::GenerateSwap(io::Printer* printer) {
         // ++i at the top of the loop.
       } else {
         field_generators_.get(field).GenerateSwappingCode(printer);
-      }
-    }
-
+      } 
+    } 
+ 
     for (auto oneof : OneOfRange(descriptor_)) {
       format("swap($1$_, other->$1$_);\n", oneof->name());
     }
-
+ 
     for (int i = 0; i < descriptor_->real_oneof_decl_count(); i++) {
       format("swap(_oneof_case_[$1$], other->_oneof_case_[$1$]);\n", i);
-    }
+    } 
 
     if (num_weak_fields_) {
       format("_weak_field_map_.UnsafeArenaSwap(&other->_weak_field_map_);\n");
     }
-  } else {
+  } else { 
     format("GetReflection()->Swap(this, other);");
-  }
-
+  } 
+ 
   format.Outdent();
   format("}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateMergeFrom(io::Printer* printer) {
   Formatter format(printer, variables_);
-  if (HasDescriptorMethods(descriptor_->file(), options_)) {
+  if (HasDescriptorMethods(descriptor_->file(), options_)) { 
     // We don't override the generalized MergeFrom (aka that which
     // takes in the Message base class as a parameter); instead we just
     // let the base Message::MergeFrom take care of it.  The base MergeFrom
@@ -3065,7 +3065,7 @@ void MessageGenerator::GenerateMergeFrom(io::Printer* printer) {
     // the fast MergeFrom overload.  Most callers avoid all this by passing
     // a "from" message that is the same type as the message being merged
     // into, rather than a generic Message.
-
+ 
     format(
         "const ::$proto_ns$::Message::ClassData "
         "$classname$::_class_data_ = {\n"
@@ -3081,31 +3081,31 @@ void MessageGenerator::GenerateMergeFrom(io::Printer* printer) {
         "      static_cast<const $classname$ &>(from));\n"
         "}\n"
         "\n");
-  } else {
-    // Generate CheckTypeAndMergeFrom().
+  } else { 
+    // Generate CheckTypeAndMergeFrom(). 
     format(
         "void $classname$::CheckTypeAndMergeFrom(\n"
         "    const ::$proto_ns$::MessageLite& from) {\n"
         "  MergeFrom(*::$proto_ns$::internal::DownCast<const $classname$*>(\n"
         "      &from));\n"
         "}\n");
-  }
+  } 
 }
-
+ 
 void MessageGenerator::GenerateClassSpecificMergeFrom(io::Printer* printer) {
-  // Generate the class-specific MergeFrom, which avoids the GOOGLE_CHECK and cast.
+  // Generate the class-specific MergeFrom, which avoids the GOOGLE_CHECK and cast. 
   Formatter format(printer, variables_);
   format(
-      "void $classname$::MergeFrom(const $classname$& from) {\n"
-      "// @@protoc_insertion_point(class_specific_merge_from_start:"
-      "$full_name$)\n"
+      "void $classname$::MergeFrom(const $classname$& from) {\n" 
+      "// @@protoc_insertion_point(class_specific_merge_from_start:" 
+      "$full_name$)\n" 
       "  $DCHK$_NE(&from, this);\n");
   format.Indent();
-
+ 
   format(
       "$uint32$ cached_has_bits = 0;\n"
       "(void) cached_has_bits;\n\n");
-
+ 
   std::vector<std::vector<const FieldDescriptor*>> chunks = CollectFields(
       optimized_order_,
       [&](const FieldDescriptor* a, const FieldDescriptor* b) -> bool {
@@ -3212,9 +3212,9 @@ void MessageGenerator::GenerateClassSpecificMergeFrom(io::Printer* printer) {
       // Reset here as it may have been updated in just closed if statement.
       cached_has_word_index = -1;
     }
-  }
-
-  // Merge oneof fields. Oneof field requires oneof case check.
+  } 
+ 
+  // Merge oneof fields. Oneof field requires oneof case check. 
   for (auto oneof : OneOfRange(descriptor_)) {
     format("switch (from.$1$_case()) {\n", oneof->name());
     format.Indent();
@@ -3227,19 +3227,19 @@ void MessageGenerator::GenerateClassSpecificMergeFrom(io::Printer* printer) {
       format("break;\n");
       format.Outdent();
       format("}\n");
-    }
+    } 
     format(
         "case $1$_NOT_SET: {\n"
-        "  break;\n"
-        "}\n",
+        "  break;\n" 
+        "}\n", 
         ToUpper(oneof->name()));
     format.Outdent();
     format("}\n");
-  }
+  } 
   if (num_weak_fields_) {
     format("_weak_field_map_.MergeFrom(from._weak_field_map_);\n");
   }
-
+ 
   // Merging of extensions and unknown fields is done last, to maximize
   // the opportunity for tail calls.
   if (descriptor_->extension_range_count() > 0) {
@@ -3252,11 +3252,11 @@ void MessageGenerator::GenerateClassSpecificMergeFrom(io::Printer* printer) {
 
   format.Outdent();
   format("}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateCopyFrom(io::Printer* printer) {
   Formatter format(printer, variables_);
-  if (HasDescriptorMethods(descriptor_->file(), options_)) {
+  if (HasDescriptorMethods(descriptor_->file(), options_)) { 
     // We don't override the generalized CopyFrom (aka that which
     // takes in the Message base class as a parameter); instead we just
     // let the base Message::CopyFrom take care of it.  The base MergeFrom
@@ -3267,17 +3267,17 @@ void MessageGenerator::GenerateCopyFrom(io::Printer* printer) {
     // when in debug builds.
     // Most callers avoid this by passing a "from" message that is the same
     // type as the message being merged into, rather than a generic Message.
-  }
-
-  // Generate the class-specific CopyFrom.
+  } 
+ 
+  // Generate the class-specific CopyFrom. 
   format(
-      "void $classname$::CopyFrom(const $classname$& from) {\n"
-      "// @@protoc_insertion_point(class_specific_copy_from_start:"
+      "void $classname$::CopyFrom(const $classname$& from) {\n" 
+      "// @@protoc_insertion_point(class_specific_copy_from_start:" 
       "$full_name$)\n");
   format.Indent();
-
+ 
   format("if (&from == this) return;\n");
-
+ 
   if (!options_.opensource_runtime) {
     // This check is disabled in the opensource release because we're
     // concerned that many users do not define NDEBUG in their release builds.
@@ -3299,8 +3299,8 @@ void MessageGenerator::GenerateCopyFrom(io::Printer* printer) {
 
   format.Outdent();
   format("}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateSerializeOneofFields(
     io::Printer* printer, const std::vector<const FieldDescriptor*>& fields) {
   Formatter format(printer, variables_);
@@ -3337,8 +3337,8 @@ void MessageGenerator::GenerateSerializeOneField(io::Printer* printer,
     // For weakfields, PrintFieldComment is called during iteration.
     PrintFieldComment(format, field);
   }
-
-  bool have_enclosing_if = false;
+ 
+  bool have_enclosing_if = false; 
   if (field->options().weak()) {
   } else if (HasHasbit(field)) {
     // Attempt to use the state of cached_has_bits, if possible.
@@ -3353,21 +3353,21 @@ void MessageGenerator::GenerateSerializeOneField(io::Printer* printer,
     }
 
     format.Indent();
-    have_enclosing_if = true;
+    have_enclosing_if = true; 
   } else if (field->is_optional() && !HasHasbit(field)) {
-    have_enclosing_if = EmitFieldNonDefaultCondition(printer, "this->", field);
-  }
-
+    have_enclosing_if = EmitFieldNonDefaultCondition(printer, "this->", field); 
+  } 
+ 
   field_generators_.get(field).GenerateSerializeWithCachedSizesToArray(printer);
-
-  if (have_enclosing_if) {
+ 
+  if (have_enclosing_if) { 
     format.Outdent();
     format("}\n");
-  }
+  } 
   format("\n");
-}
-
-void MessageGenerator::GenerateSerializeOneExtensionRange(
+} 
+ 
+void MessageGenerator::GenerateSerializeOneExtensionRange( 
     io::Printer* printer, const Descriptor::ExtensionRange* range) {
   std::map<TProtoStringType, TProtoStringType> vars = variables_;
   vars["start"] = StrCat(range->start);
@@ -3377,13 +3377,13 @@ void MessageGenerator::GenerateSerializeOneExtensionRange(
   format(
       "target = _extensions_._InternalSerialize(\n"
       "    $start$, $end$, target, stream);\n\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateSerializeWithCachedSizesToArray(
     io::Printer* printer) {
   Formatter format(printer, variables_);
-  if (descriptor_->options().message_set_wire_format()) {
-    // Special-case MessageSet.
+  if (descriptor_->options().message_set_wire_format()) { 
+    // Special-case MessageSet. 
     format(
         "$uint8$* $classname$::_InternalSerialize(\n"
         "    $uint8$* target, ::$proto_ns$::io::EpsCopyOutputStream* stream) "
@@ -3401,46 +3401,46 @@ void MessageGenerator::GenerateSerializeWithCachedSizesToArray(
     format(
         "  return target;\n"
         "}\n");
-    return;
-  }
-
+    return; 
+  } 
+ 
   format(
       "$uint8$* $classname$::_InternalSerialize(\n"
       "    $uint8$* target, ::$proto_ns$::io::EpsCopyOutputStream* stream) "
       "const {\n"
       "$annotate_serialize$");
   format.Indent();
-
+ 
   format("// @@protoc_insertion_point(serialize_to_array_start:$full_name$)\n");
-
+ 
   if (!ShouldSerializeInOrder(descriptor_, options_)) {
     format.Outdent();
     format("#ifdef NDEBUG\n");
     format.Indent();
   }
-
+ 
   GenerateSerializeWithCachedSizesBody(printer);
-
+ 
   if (!ShouldSerializeInOrder(descriptor_, options_)) {
     format.Outdent();
     format("#else  // NDEBUG\n");
     format.Indent();
-
+ 
     GenerateSerializeWithCachedSizesBodyShuffled(printer);
 
     format.Outdent();
     format("#endif  // !NDEBUG\n");
     format.Indent();
-  }
-
+  } 
+ 
   format("// @@protoc_insertion_point(serialize_to_array_end:$full_name$)\n");
-
+ 
   format.Outdent();
   format(
       "  return target;\n"
       "}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateSerializeWithCachedSizesBody(
     io::Printer* printer) {
   Formatter format(printer, variables_);
@@ -3456,7 +3456,7 @@ void MessageGenerator::GenerateSerializeWithCachedSizesBody(
           format_(printer),
           eager_(IsProto3(mg->descriptor_->file())),
           cached_has_bit_index_(kNoHasbit) {}
-
+ 
     ~LazySerializerEmitter() { Flush(); }
 
     // If conditions allow, try to accumulate a run of fields from the same
@@ -3582,22 +3582,22 @@ void MessageGenerator::GenerateSerializeWithCachedSizesBody(
 
   std::vector<const Descriptor::ExtensionRange*> sorted_extensions;
   sorted_extensions.reserve(descriptor_->extension_range_count());
-  for (int i = 0; i < descriptor_->extension_range_count(); ++i) {
-    sorted_extensions.push_back(descriptor_->extension_range(i));
-  }
-  std::sort(sorted_extensions.begin(), sorted_extensions.end(),
-            ExtensionRangeSorter());
+  for (int i = 0; i < descriptor_->extension_range_count(); ++i) { 
+    sorted_extensions.push_back(descriptor_->extension_range(i)); 
+  } 
+  std::sort(sorted_extensions.begin(), sorted_extensions.end(), 
+            ExtensionRangeSorter()); 
   if (num_weak_fields_) {
     format(
         "::$proto_ns$::internal::WeakFieldMap::FieldWriter field_writer("
         "_weak_field_map_);\n");
   }
-
+ 
   format(
       "$uint32$ cached_has_bits = 0;\n"
       "(void) cached_has_bits;\n\n");
 
-  // Merge the fields and the extension ranges, both sorted by field number.
+  // Merge the fields and the extension ranges, both sorted by field number. 
   {
     LazySerializerEmitter e(this, printer);
     LazyExtensionRangeEmitter re(this, printer);
@@ -3625,11 +3625,11 @@ void MessageGenerator::GenerateSerializeWithCachedSizesBody(
         e.Flush();
         re.AddToRange(sorted_extensions[j++]);
       }
-    }
+    } 
     re.Flush();
     e.EmitIfNotNull(largest_weak_field.Release());
-  }
-
+  } 
+ 
   std::map<TProtoStringType, TProtoStringType> vars;
   SetUnknownFieldsVariable(descriptor_, options_, &vars);
   format.AddMap(vars);
@@ -3737,11 +3737,11 @@ void MessageGenerator::GenerateSerializeWithCachedSizesBodyShuffled(
     format(
         "target = stream->WriteRaw($unknown_fields$.data(),\n"
         "    static_cast<int>($unknown_fields$.size()), target);\n");
-  }
+  } 
   format.Outdent();
   format("}\n");
-}
-
+} 
+ 
 std::vector<uint32_t> MessageGenerator::RequiredFieldsBitMask() const {
   const int array_size = HasBitsSize();
   std::vector<uint32_t> masks(array_size, 0);
@@ -3749,20 +3749,20 @@ std::vector<uint32_t> MessageGenerator::RequiredFieldsBitMask() const {
   for (auto field : FieldRange(descriptor_)) {
     if (!field->is_required()) {
       continue;
-    }
+    } 
 
     const int has_bit_index = has_bit_indices_[field->index()];
     masks[has_bit_index / 32] |= static_cast<uint32_t>(1)
                                  << (has_bit_index % 32);
-  }
+  } 
   return masks;
-}
-
+} 
+ 
 void MessageGenerator::GenerateByteSize(io::Printer* printer) {
   Formatter format(printer, variables_);
-
-  if (descriptor_->options().message_set_wire_format()) {
-    // Special-case MessageSet.
+ 
+  if (descriptor_->options().message_set_wire_format()) { 
+    // Special-case MessageSet. 
     std::map<TProtoStringType, TProtoStringType> vars;
     SetUnknownFieldsVariable(descriptor_, options_, &vars);
     format.AddMap(vars);
@@ -3780,38 +3780,38 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
         "  SetCachedSize(cached_size);\n"
         "  return total_size;\n"
         "}\n");
-    return;
-  }
-
+    return; 
+  } 
+ 
   if (num_required_fields_ > 1) {
-    // Emit a function (rarely used, we hope) that handles the required fields
-    // by checking for each one individually.
+    // Emit a function (rarely used, we hope) that handles the required fields 
+    // by checking for each one individually. 
     format(
         "size_t $classname$::RequiredFieldsByteSizeFallback() const {\n"
-        "// @@protoc_insertion_point(required_fields_byte_size_fallback_start:"
+        "// @@protoc_insertion_point(required_fields_byte_size_fallback_start:" 
         "$full_name$)\n");
     format.Indent();
     format("size_t total_size = 0;\n");
     for (auto field : optimized_order_) {
-      if (field->is_required()) {
+      if (field->is_required()) { 
         format(
             "\n"
             "if (_internal_has_$1$()) {\n",
             FieldName(field));
         format.Indent();
         PrintFieldComment(format, field);
-        field_generators_.get(field).GenerateByteSize(printer);
+        field_generators_.get(field).GenerateByteSize(printer); 
         format.Outdent();
         format("}\n");
-      }
-    }
+      } 
+    } 
     format(
         "\n"
         "return total_size;\n");
     format.Outdent();
     format("}\n");
-  }
-
+  } 
+ 
   format(
       "size_t $classname$::ByteSizeLong() const {\n"
       "$annotate_bytesize$"
@@ -3820,7 +3820,7 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
   format(
       "size_t total_size = 0;\n"
       "\n");
-
+ 
   if (descriptor_->extension_range_count() > 0) {
     format(
         "total_size += _extensions_.ByteSize();\n"
@@ -3831,11 +3831,11 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
   SetUnknownFieldsVariable(descriptor_, options_, &vars);
   format.AddMap(vars);
 
-  // Handle required fields (if any).  We expect all of them to be
-  // present, so emit one conditional that checks for that.  If they are all
-  // present then the fast path executes; otherwise the slow path executes.
+  // Handle required fields (if any).  We expect all of them to be 
+  // present, so emit one conditional that checks for that.  If they are all 
+  // present then the fast path executes; otherwise the slow path executes. 
   if (num_required_fields_ > 1) {
-    // The fast path works if all required fields are present.
+    // The fast path works if all required fields are present. 
     const std::vector<uint32_t> masks_for_has_bits = RequiredFieldsBitMask();
     format("if ($1$) {  // All required fields are present.\n",
            ConditionalToCheckBitmasks(masks_for_has_bits));
@@ -3843,29 +3843,29 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
     // Oneof fields cannot be required, so optimized_order_ contains all of the
     // fields that we need to potentially emit.
     for (auto field : optimized_order_) {
-      if (!field->is_required()) continue;
+      if (!field->is_required()) continue; 
       PrintFieldComment(format, field);
-      field_generators_.get(field).GenerateByteSize(printer);
+      field_generators_.get(field).GenerateByteSize(printer); 
       format("\n");
-    }
+    } 
     format.Outdent();
     format(
         "} else {\n"  // the slow path
         "  total_size += RequiredFieldsByteSizeFallback();\n"
         "}\n");
-  } else {
-    // num_required_fields_ <= 1: no need to be tricky
+  } else { 
+    // num_required_fields_ <= 1: no need to be tricky 
     for (auto field : optimized_order_) {
-      if (!field->is_required()) continue;
+      if (!field->is_required()) continue; 
       PrintFieldComment(format, field);
       format("if (_internal_has_$1$()) {\n", FieldName(field));
       format.Indent();
-      field_generators_.get(field).GenerateByteSize(printer);
+      field_generators_.get(field).GenerateByteSize(printer); 
       format.Outdent();
       format("}\n");
-    }
-  }
-
+    } 
+  } 
+ 
   std::vector<std::vector<const FieldDescriptor*>> chunks = CollectFields(
       optimized_order_,
       [&](const FieldDescriptor* a, const FieldDescriptor* b) -> bool {
@@ -3875,27 +3875,27 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
   // Remove chunks with required fields.
   chunks.erase(std::remove_if(chunks.begin(), chunks.end(), IsRequired),
                chunks.end());
-
+ 
   ColdChunkSkipper cold_skipper(options_, chunks, has_bit_indices_, kColdRatio);
   int cached_has_word_index = -1;
-
+ 
   format(
       "$uint32$ cached_has_bits = 0;\n"
       "// Prevent compiler warnings about cached_has_bits being unused\n"
       "(void) cached_has_bits;\n\n");
-
+ 
   for (int chunk_index = 0; chunk_index < chunks.size(); chunk_index++) {
     const std::vector<const FieldDescriptor*>& chunk = chunks[chunk_index];
     const bool have_outer_if =
         chunk.size() > 1 && HasWordIndex(chunk[0]) != kNoHasbit;
     cold_skipper.OnStartChunk(chunk_index, cached_has_word_index, "", printer);
-
+ 
     if (have_outer_if) {
       // Emit an if() that will let us skip the whole chunk if none are set.
       uint32_t chunk_mask = GenChunkMask(chunk, has_bit_indices_);
       TProtoStringType chunk_mask_str =
           StrCat(strings::Hex(chunk_mask, strings::ZERO_PAD_8));
-
+ 
       // Check (up to) 8 has_bits at a time if we have more than one field in
       // this chunk.  Due to field layout ordering, we may check
       // _has_bits_[last_chunk * 8 / 32] multiple times.
@@ -3905,20 +3905,20 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
       if (cached_has_word_index != HasWordIndex(chunk.front())) {
         cached_has_word_index = HasWordIndex(chunk.front());
         format("cached_has_bits = _has_bits_[$1$];\n", cached_has_word_index);
-      }
+      } 
       format("if (cached_has_bits & 0x$1$u) {\n", chunk_mask_str);
       format.Indent();
-    }
-
+    } 
+ 
     // Go back and emit checks for each of the fields we processed.
     for (int j = 0; j < chunk.size(); j++) {
       const FieldDescriptor* field = chunk[j];
       const FieldGenerator& generator = field_generators_.get(field);
       bool have_enclosing_if = false;
       bool need_extra_newline = false;
-
+ 
       PrintFieldComment(format, field);
-
+ 
       if (field->is_repeated()) {
         // No presence check is required.
         need_extra_newline = true;
@@ -3944,7 +3944,7 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
       if (need_extra_newline) {
         format("\n");
       }
-    }
+    } 
 
     if (have_outer_if) {
       format.Outdent();
@@ -3955,10 +3955,10 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
       // Reset here as it may have been updated in just closed if statement.
       cached_has_word_index = -1;
     }
-  }
-
-  // Fields inside a oneof don't use _has_bits_ so we count them in a separate
-  // pass.
+  } 
+ 
+  // Fields inside a oneof don't use _has_bits_ so we count them in a separate 
+  // pass. 
   for (auto oneof : OneOfRange(descriptor_)) {
     format("switch ($1$_case()) {\n", oneof->name());
     format.Indent();
@@ -3972,16 +3972,16 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
       format("break;\n");
       format.Outdent();
       format("}\n");
-    }
+    } 
     format(
         "case $1$_NOT_SET: {\n"
-        "  break;\n"
-        "}\n",
+        "  break;\n" 
+        "}\n", 
         ToUpper(oneof->name()));
     format.Outdent();
     format("}\n");
-  }
-
+  } 
+ 
   if (num_weak_fields_) {
     // TagSize + MessageSize
     format("total_size += _weak_field_map_.ByteSizeLong();\n");
@@ -3999,7 +3999,7 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
     format("  total_size += $unknown_fields$.size();\n");
   }
   format("}\n");
-
+ 
   // We update _cached_size_ even though this is a const method.  Because
   // const methods might be called concurrently this needs to be atomic
   // operations or the program is undefined.  In practice, since any concurrent
@@ -4015,13 +4015,13 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
 
   format.Outdent();
   format("}\n");
-}
-
+} 
+ 
 void MessageGenerator::GenerateIsInitialized(io::Printer* printer) {
   Formatter format(printer, variables_);
   format("bool $classname$::IsInitialized() const {\n");
   format.Indent();
-
+ 
   if (descriptor_->extension_range_count() > 0) {
     format(
         "if (!_extensions_.IsInitialized()) {\n"
@@ -4033,15 +4033,15 @@ void MessageGenerator::GenerateIsInitialized(io::Printer* printer) {
     format(
         "if (_Internal::MissingRequiredFields(_has_bits_))"
         " return false;\n");
-  }
-
+  } 
+ 
   // Now check that all non-oneof embedded messages are initialized.
   for (auto field : optimized_order_) {
     // TODO(ckennelly): Push this down into a generator?
-    if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE &&
-        !ShouldIgnoreRequiredFieldCheck(field, options_) &&
+    if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE && 
+        !ShouldIgnoreRequiredFieldCheck(field, options_) && 
         scc_analyzer_->HasRequiredFields(field->message_type())) {
-      if (field->is_repeated()) {
+      if (field->is_repeated()) { 
         if (IsImplicitWeakField(field, options_, scc_analyzer_)) {
           format(
               "if "
@@ -4064,7 +4064,7 @@ void MessageGenerator::GenerateIsInitialized(io::Printer* printer) {
             "  if (!$1$().IsInitialized()) return false;\n"
             "}\n",
             FieldName(field));
-      } else {
+      } else { 
         GOOGLE_CHECK(!field->real_containing_oneof());
         format(
             "if (_internal_has_$1$()) {\n"
@@ -4108,19 +4108,19 @@ void MessageGenerator::GenerateIsInitialized(io::Printer* printer) {
         GOOGLE_CHECK(!(field->options().weak() || !field->real_containing_oneof()));
         if (field->options().weak()) {
           // Just skip.
-        } else {
+        } else { 
           format(
               "if (has_$1$()) {\n"
               "  if (!this->$1$().IsInitialized()) return false;\n"
               "}\n",
               FieldName(field));
-        }
-      }
+        } 
+      } 
 
       format("break;\n");
       format.Outdent();
       format("}\n");
-    }
+    } 
     format(
         "case $1$_NOT_SET: {\n"
         "  break;\n"
@@ -4128,17 +4128,17 @@ void MessageGenerator::GenerateIsInitialized(io::Printer* printer) {
         ToUpper(oneof->name()));
     format.Outdent();
     format("}\n");
-  }
-
+  } 
+ 
   format.Outdent();
   format(
       "  return true;\n"
       "}\n");
-}
-
-}  // namespace cpp
-}  // namespace compiler
-}  // namespace protobuf
-}  // namespace google
+} 
+ 
+}  // namespace cpp 
+}  // namespace compiler 
+}  // namespace protobuf 
+}  // namespace google 
 
 #include <google/protobuf/port_undef.inc>

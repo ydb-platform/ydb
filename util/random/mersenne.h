@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "mersenne64.h"
 #include "mersenne32.h"

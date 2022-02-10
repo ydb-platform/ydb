@@ -214,7 +214,7 @@ namespace NKikimr {
             {
                 const char *begin = (const char *)(&v[0]);
                 const char *end = begin + sizeof(v[0]) * v.size();
-                TStringBuf src(begin, end);
+                TStringBuf src(begin, end); 
 
                 TBuffer encoded;
                 codec.Encode(src, encoded);
@@ -241,7 +241,7 @@ namespace NKikimr {
 
                 TBuffer decoded;
                 decoded.Reserve(4 * bufSize); // reserve four times more space as coded
-                codec.Decode(TStringBuf(pos, pos + bufSize), decoded);
+                codec.Decode(TStringBuf(pos, pos + bufSize), decoded); 
                 pos += bufSize;
 
                 size_t decodedSize = decoded.Size();

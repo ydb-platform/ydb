@@ -4,7 +4,7 @@
 #include "write_trie_backwards.h"
 #include "comptrie_impl.h"
 
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/generic/algorithm.h>
 
 namespace NCompactTrie {
@@ -42,7 +42,7 @@ namespace NCompactTrie {
 
                 if (Data.size() <= hikey)
                     Data.resize(hikey + 1);
-
+ 
                 TSizePairVector& sublist = Data[hikey];
 
                 for (auto& it : sublist) {
@@ -296,7 +296,7 @@ namespace NCompactTrie {
 
             if (iit == subtries.end())
                 continue; // fast forward to the next available length value
-
+ 
             TOffsetList& batch = iit->second;
             TPieceComparer comparer(trie.Data, curlen);
             Sort(batch.begin(), batch.end(), comparer);

@@ -1,47 +1,47 @@
-// Protocol Buffers - Google's data interchange format
-// Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// Author: kenton@google.com (Kenton Varda)
-//  Based on original Protocol Buffers design by
-//  Sanjay Ghemawat, Jeff Dean, and others.
-
+// Protocol Buffers - Google's data interchange format 
+// Copyright 2008 Google Inc.  All rights reserved. 
+// https://developers.google.com/protocol-buffers/ 
+// 
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions are 
+// met: 
+// 
+//     * Redistributions of source code must retain the above copyright 
+// notice, this list of conditions and the following disclaimer. 
+//     * Redistributions in binary form must reproduce the above 
+// copyright notice, this list of conditions and the following disclaimer 
+// in the documentation and/or other materials provided with the 
+// distribution. 
+//     * Neither the name of Google Inc. nor the names of its 
+// contributors may be used to endorse or promote products derived from 
+// this software without specific prior written permission. 
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ 
+// Author: kenton@google.com (Kenton Varda) 
+//  Based on original Protocol Buffers design by 
+//  Sanjay Ghemawat, Jeff Dean, and others. 
+ 
 #include <google/protobuf/compiler/cpp/cpp_helpers.h>
 
 #include <cstdint>
 #include <functional>
-#include <limits>
-#include <map>
+#include <limits> 
+#include <map> 
 #include <queue>
 #include <unordered_set>
-#include <vector>
-
+#include <vector> 
+ 
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/logging.h>
 #include <google/protobuf/compiler/cpp/cpp_options.h>
@@ -57,23 +57,23 @@
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/substitute.h>
 #include <google/protobuf/stubs/hash.h>
-
+ 
 #include <google/protobuf/port_def.inc>
-
-namespace google {
-namespace protobuf {
-namespace compiler {
-namespace cpp {
-
-namespace {
-
-static const char kAnyMessageName[] = "Any";
-static const char kAnyProtoFile[] = "google/protobuf/any.proto";
-
+ 
+namespace google { 
+namespace protobuf { 
+namespace compiler { 
+namespace cpp { 
+ 
+namespace { 
+ 
+static const char kAnyMessageName[] = "Any"; 
+static const char kAnyProtoFile[] = "google/protobuf/any.proto"; 
+ 
 TProtoStringType DotsToColons(const TProtoStringType& name) {
-  return StringReplace(name, ".", "::", true);
-}
-
+  return StringReplace(name, ".", "::", true); 
+} 
+ 
 static const char* const kKeywordList[] = {  //
     "NULL",
     "alignas",
@@ -158,17 +158,17 @@ static const char* const kKeywordList[] = {  //
     "while",
     "xor",
     "xor_eq"};
-
+ 
 static std::unordered_set<TProtoStringType>* MakeKeywordsMap() {
   auto* result = new std::unordered_set<TProtoStringType>();
   for (const auto keyword : kKeywordList) {
     result->emplace(keyword);
-  }
-  return result;
-}
-
+  } 
+  return result; 
+} 
+ 
 static std::unordered_set<TProtoStringType>& kKeywords = *MakeKeywordsMap();
-
+ 
 // Encode [0..63] as 'A'-'Z', 'a'-'z', '0'-'9', '_'
 char Base63Char(int value) {
   GOOGLE_CHECK_GE(value, 0);
@@ -189,7 +189,7 @@ TProtoStringType Base63(I n, int k) {
   while (k-- > 0) {
     res += Base63Char(static_cast<int>(n % 63));
     n /= 63;
-  }
+  } 
   return res;
 }
 
@@ -198,9 +198,9 @@ TProtoStringType IntTypeName(const Options& options, const TProtoStringType& typ
     return "::PROTOBUF_NAMESPACE_ID::" + type;
   } else {
     return "::" + type;
-  }
-}
-
+  } 
+} 
+ 
 void SetIntVar(const Options& options, const TProtoStringType& type,
                std::map<TProtoStringType, TProtoStringType>* variables) {
   (*variables)[type] = IntTypeName(options, type);
@@ -211,8 +211,8 @@ bool IsEagerlyVerifiedLazyImpl(const FieldDescriptor* field,
   return false;
 }
 
-}  // namespace
-
+}  // namespace 
+ 
 bool IsLazy(const FieldDescriptor* field, const Options& options,
             MessageSCCAnalyzer* scc_analyzer) {
   return IsLazilyVerifiedLazy(field, options) ||
@@ -284,34 +284,34 @@ void SetUnknownFieldsVariable(const Descriptor* descriptor,
 TProtoStringType UnderscoresToCamelCase(const TProtoStringType& input,
                                    bool cap_next_letter) {
   TProtoStringType result;
-  // Note:  I distrust ctype.h due to locales.
-  for (int i = 0; i < input.size(); i++) {
-    if ('a' <= input[i] && input[i] <= 'z') {
-      if (cap_next_letter) {
-        result += input[i] + ('A' - 'a');
-      } else {
-        result += input[i];
-      }
-      cap_next_letter = false;
-    } else if ('A' <= input[i] && input[i] <= 'Z') {
-      // Capital letters are left as-is.
-      result += input[i];
-      cap_next_letter = false;
-    } else if ('0' <= input[i] && input[i] <= '9') {
-      result += input[i];
-      cap_next_letter = true;
-    } else {
-      cap_next_letter = true;
-    }
-  }
-  return result;
-}
-
-const char kThickSeparator[] =
+  // Note:  I distrust ctype.h due to locales. 
+  for (int i = 0; i < input.size(); i++) { 
+    if ('a' <= input[i] && input[i] <= 'z') { 
+      if (cap_next_letter) { 
+        result += input[i] + ('A' - 'a'); 
+      } else { 
+        result += input[i]; 
+      } 
+      cap_next_letter = false; 
+    } else if ('A' <= input[i] && input[i] <= 'Z') { 
+      // Capital letters are left as-is. 
+      result += input[i]; 
+      cap_next_letter = false; 
+    } else if ('0' <= input[i] && input[i] <= '9') { 
+      result += input[i]; 
+      cap_next_letter = true; 
+    } else { 
+      cap_next_letter = true; 
+    } 
+  } 
+  return result; 
+} 
+ 
+const char kThickSeparator[] = 
     "// ===================================================================\n";
-const char kThinSeparator[] =
+const char kThinSeparator[] = 
     "// -------------------------------------------------------------------\n";
-
+ 
 bool CanInitializeByZeroing(const FieldDescriptor* field) {
   if (field->is_repeated() || field->is_extension()) return false;
   switch (field->cpp_type()) {
@@ -335,7 +335,7 @@ bool CanInitializeByZeroing(const FieldDescriptor* field) {
       return false;
   }
 }
-
+ 
 TProtoStringType ClassName(const Descriptor* descriptor) {
   const Descriptor* parent = descriptor->containing_type();
   TProtoStringType res;
@@ -344,16 +344,16 @@ TProtoStringType ClassName(const Descriptor* descriptor) {
   if (IsMapEntryMessage(descriptor)) res += "_DoNotUse";
   return ResolveKeyword(res);
 }
-
+ 
 TProtoStringType ClassName(const EnumDescriptor* enum_descriptor) {
   if (enum_descriptor->containing_type() == nullptr) {
     return ResolveKeyword(enum_descriptor->name());
-  } else {
+  } else { 
     return ClassName(enum_descriptor->containing_type()) + "_" +
            enum_descriptor->name();
-  }
-}
-
+  } 
+} 
+ 
 TProtoStringType QualifiedClassName(const Descriptor* d, const Options& options) {
   return QualifiedFileLevelSymbol(d->file(), ClassName(d), options);
 }
@@ -401,32 +401,32 @@ TProtoStringType Namespace(const FileDescriptor* d, const Options& options) {
                         "::google::"
                         "protobuf",
                         "PROTOBUF_NAMESPACE_ID", false);
-  }
+  } 
   return ret;
-}
-
+} 
+ 
 TProtoStringType Namespace(const Descriptor* d, const Options& options) {
   return Namespace(d->file(), options);
 }
-
+ 
 TProtoStringType Namespace(const FieldDescriptor* d, const Options& options) {
   return Namespace(d->file(), options);
-}
-
+} 
+ 
 TProtoStringType Namespace(const EnumDescriptor* d, const Options& options) {
   return Namespace(d->file(), options);
-}
-
+} 
+ 
 TProtoStringType DefaultInstanceType(const Descriptor* descriptor,
                                 const Options& options) {
   return ClassName(descriptor) + "DefaultTypeInternal";
-}
-
+} 
+ 
 TProtoStringType DefaultInstanceName(const Descriptor* descriptor,
                                 const Options& options) {
   return "_" + ClassName(descriptor, false) + "_default_instance_";
-}
-
+} 
+ 
 TProtoStringType DefaultInstancePtr(const Descriptor* descriptor,
                                const Options& options) {
   return DefaultInstanceName(descriptor, options) + "ptr_";
@@ -468,28 +468,28 @@ TProtoStringType ResolveKeyword(const TProtoStringType& name) {
 
 TProtoStringType FieldName(const FieldDescriptor* field) {
   TProtoStringType result = field->name();
-  LowerString(&result);
-  if (kKeywords.count(result) > 0) {
-    result.append("_");
-  }
-  return result;
-}
-
+  LowerString(&result); 
+  if (kKeywords.count(result) > 0) { 
+    result.append("_"); 
+  } 
+  return result; 
+} 
+ 
 TProtoStringType EnumValueName(const EnumValueDescriptor* enum_value) {
   TProtoStringType result = enum_value->name();
-  if (kKeywords.count(result) > 0) {
-    result.append("_");
-  }
-  return result;
-}
-
+  if (kKeywords.count(result) > 0) { 
+    result.append("_"); 
+  } 
+  return result; 
+} 
+ 
 int EstimateAlignmentSize(const FieldDescriptor* field) {
   if (field == nullptr) return 0;
   if (field->is_repeated()) return 8;
   switch (field->cpp_type()) {
     case FieldDescriptor::CPPTYPE_BOOL:
       return 1;
-
+ 
     case FieldDescriptor::CPPTYPE_INT32:
     case FieldDescriptor::CPPTYPE_UINT32:
     case FieldDescriptor::CPPTYPE_ENUM:
@@ -511,33 +511,33 @@ TProtoStringType FieldConstantName(const FieldDescriptor* field) {
   TProtoStringType field_name = UnderscoresToCamelCase(field->name(), true);
   TProtoStringType result = "k" + field_name + "FieldNumber";
 
-  if (!field->is_extension() &&
-      field->containing_type()->FindFieldByCamelcaseName(
+  if (!field->is_extension() && 
+      field->containing_type()->FindFieldByCamelcaseName( 
           field->camelcase_name()) != field) {
-    // This field's camelcase name is not unique.  As a hack, add the field
-    // number to the constant name.  This makes the constant rather useless,
-    // but what can we do?
+    // This field's camelcase name is not unique.  As a hack, add the field 
+    // number to the constant name.  This makes the constant rather useless, 
+    // but what can we do? 
     result += "_" + StrCat(field->number());
-  }
-
-  return result;
-}
-
+  } 
+ 
+  return result; 
+} 
+ 
 TProtoStringType FieldMessageTypeName(const FieldDescriptor* field,
                                  const Options& options) {
   // Note:  The Google-internal version of Protocol Buffers uses this function
   //   as a hook point for hacks to support legacy code.
   return QualifiedClassName(field->message_type(), options);
-}
-
+} 
+ 
 TProtoStringType StripProto(const TProtoStringType& filename) {
   /*
    * TODO(github/georgthegreat) remove this proxy method
    * once Google's internal codebase will become ready
    */
   return compiler::StripProto(filename);
-}
-
+} 
+ 
 const char* PrimitiveTypeName(FieldDescriptor::CppType type) {
   switch (type) {
     case FieldDescriptor::CPPTYPE_INT32:
@@ -560,18 +560,18 @@ const char* PrimitiveTypeName(FieldDescriptor::CppType type) {
       return "TProtoStringType";
     case FieldDescriptor::CPPTYPE_MESSAGE:
       return nullptr;
-
+ 
       // No default because we want the compiler to complain if any new
       // CppTypes are added.
-  }
+  } 
 
   GOOGLE_LOG(FATAL) << "Can't get here.";
   return nullptr;
-}
-
+} 
+ 
 TProtoStringType PrimitiveTypeName(const Options& options,
                               FieldDescriptor::CppType type) {
-  switch (type) {
+  switch (type) { 
     case FieldDescriptor::CPPTYPE_INT32:
       return IntTypeName(options, "int32");
     case FieldDescriptor::CPPTYPE_INT64:
@@ -592,17 +592,17 @@ TProtoStringType PrimitiveTypeName(const Options& options,
       return "TProtoStringType";
     case FieldDescriptor::CPPTYPE_MESSAGE:
       return "";
-
+ 
       // No default because we want the compiler to complain if any new
       // CppTypes are added.
-  }
-
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  } 
+ 
+  GOOGLE_LOG(FATAL) << "Can't get here."; 
   return "";
-}
-
-const char* DeclaredTypeMethodName(FieldDescriptor::Type type) {
-  switch (type) {
+} 
+ 
+const char* DeclaredTypeMethodName(FieldDescriptor::Type type) { 
+  switch (type) { 
     case FieldDescriptor::TYPE_INT32:
       return "Int32";
     case FieldDescriptor::TYPE_INT64:
@@ -627,12 +627,12 @@ const char* DeclaredTypeMethodName(FieldDescriptor::Type type) {
       return "Float";
     case FieldDescriptor::TYPE_DOUBLE:
       return "Double";
-
+ 
     case FieldDescriptor::TYPE_BOOL:
       return "Bool";
     case FieldDescriptor::TYPE_ENUM:
       return "Enum";
-
+ 
     case FieldDescriptor::TYPE_STRING:
       return "String";
     case FieldDescriptor::TYPE_BYTES:
@@ -641,33 +641,33 @@ const char* DeclaredTypeMethodName(FieldDescriptor::Type type) {
       return "Group";
     case FieldDescriptor::TYPE_MESSAGE:
       return "Message";
-
+ 
       // No default because we want the compiler to complain if any new
       // types are added.
-  }
-  GOOGLE_LOG(FATAL) << "Can't get here.";
-  return "";
-}
-
+  } 
+  GOOGLE_LOG(FATAL) << "Can't get here."; 
+  return ""; 
+} 
+ 
 TProtoStringType Int32ToString(int number) {
   if (number == std::numeric_limits<int32_t>::min()) {
     // This needs to be special-cased, see explanation here:
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52661
     return StrCat(number + 1, " - 1");
-  } else {
+  } else { 
     return StrCat(number);
-  }
-}
-
+  } 
+} 
+ 
 static TProtoStringType Int64ToString(int64_t number) {
   if (number == std::numeric_limits<int64_t>::min()) {
     // This needs to be special-cased, see explanation here:
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52661
     return StrCat("int64_t{", number + 1, "} - 1");
-  }
+  } 
   return StrCat("int64_t{", number, "}");
-}
-
+} 
+ 
 static TProtoStringType UInt64ToString(uint64_t number) {
   return StrCat("uint64_t{", number, "u}");
 }
@@ -677,27 +677,27 @@ TProtoStringType DefaultValue(const FieldDescriptor* field) {
 }
 
 TProtoStringType DefaultValue(const Options& options, const FieldDescriptor* field) {
-  switch (field->cpp_type()) {
-    case FieldDescriptor::CPPTYPE_INT32:
-      return Int32ToString(field->default_value_int32());
-    case FieldDescriptor::CPPTYPE_UINT32:
+  switch (field->cpp_type()) { 
+    case FieldDescriptor::CPPTYPE_INT32: 
+      return Int32ToString(field->default_value_int32()); 
+    case FieldDescriptor::CPPTYPE_UINT32: 
       return StrCat(field->default_value_uint32()) + "u";
-    case FieldDescriptor::CPPTYPE_INT64:
+    case FieldDescriptor::CPPTYPE_INT64: 
       return Int64ToString(field->default_value_int64());
-    case FieldDescriptor::CPPTYPE_UINT64:
+    case FieldDescriptor::CPPTYPE_UINT64: 
       return UInt64ToString(field->default_value_uint64());
-    case FieldDescriptor::CPPTYPE_DOUBLE: {
-      double value = field->default_value_double();
+    case FieldDescriptor::CPPTYPE_DOUBLE: { 
+      double value = field->default_value_double(); 
       if (value == std::numeric_limits<double>::infinity()) {
         return "std::numeric_limits<double>::infinity()";
       } else if (value == -std::numeric_limits<double>::infinity()) {
         return "-std::numeric_limits<double>::infinity()";
-      } else if (value != value) {
+      } else if (value != value) { 
         return "std::numeric_limits<double>::quiet_NaN()";
-      } else {
-        return SimpleDtoa(value);
-      }
-    }
+      } else { 
+        return SimpleDtoa(value); 
+      } 
+    } 
     case FieldDescriptor::CPPTYPE_FLOAT: {
       float value = field->default_value_float();
       if (value == std::numeric_limits<float>::infinity()) {
@@ -713,96 +713,96 @@ TProtoStringType DefaultValue(const Options& options, const FieldDescriptor* fie
         // literal.
         if (float_value.find_first_of(".eE") != TProtoStringType::npos) {
           float_value.push_back('f');
-        }
+        } 
         return float_value;
-      }
+      } 
     }
-    case FieldDescriptor::CPPTYPE_BOOL:
-      return field->default_value_bool() ? "true" : "false";
-    case FieldDescriptor::CPPTYPE_ENUM:
-      // Lazy:  Generate a static_cast because we don't have a helper function
-      //   that constructs the full name of an enum value.
-      return strings::Substitute(
+    case FieldDescriptor::CPPTYPE_BOOL: 
+      return field->default_value_bool() ? "true" : "false"; 
+    case FieldDescriptor::CPPTYPE_ENUM: 
+      // Lazy:  Generate a static_cast because we don't have a helper function 
+      //   that constructs the full name of an enum value. 
+      return strings::Substitute( 
           "static_cast< $0 >($1)", ClassName(field->enum_type(), true),
-          Int32ToString(field->default_value_enum()->number()));
-    case FieldDescriptor::CPPTYPE_STRING:
+          Int32ToString(field->default_value_enum()->number())); 
+    case FieldDescriptor::CPPTYPE_STRING: 
       return "\"" +
              EscapeTrigraphs(CEscape(field->default_value_string())) +
              "\"";
-    case FieldDescriptor::CPPTYPE_MESSAGE:
+    case FieldDescriptor::CPPTYPE_MESSAGE: 
       return "*" + FieldMessageTypeName(field, options) +
              "::internal_default_instance()";
-  }
-  // Can't actually get here; make compiler happy.  (We could add a default
-  // case above but then we wouldn't get the nice compiler warning when a
-  // new type is added.)
-  GOOGLE_LOG(FATAL) << "Can't get here.";
-  return "";
-}
-
-// Convert a file name into a valid identifier.
+  } 
+  // Can't actually get here; make compiler happy.  (We could add a default 
+  // case above but then we wouldn't get the nice compiler warning when a 
+  // new type is added.) 
+  GOOGLE_LOG(FATAL) << "Can't get here."; 
+  return ""; 
+} 
+ 
+// Convert a file name into a valid identifier. 
 TProtoStringType FilenameIdentifier(const TProtoStringType& filename) {
   TProtoStringType result;
-  for (int i = 0; i < filename.size(); i++) {
-    if (ascii_isalnum(filename[i])) {
-      result.push_back(filename[i]);
-    } else {
-      // Not alphanumeric.  To avoid any possibility of name conflicts we
-      // use the hex code for the character.
+  for (int i = 0; i < filename.size(); i++) { 
+    if (ascii_isalnum(filename[i])) { 
+      result.push_back(filename[i]); 
+    } else { 
+      // Not alphanumeric.  To avoid any possibility of name conflicts we 
+      // use the hex code for the character. 
       StrAppend(&result, "_",
                       strings::Hex(static_cast<uint8_t>(filename[i])));
-    }
-  }
-  return result;
-}
-
+    } 
+  } 
+  return result; 
+} 
+ 
 TProtoStringType UniqueName(const TProtoStringType& name, const TProtoStringType& filename,
                        const Options& options) {
   return name + "_" + FilenameIdentifier(filename);
-}
-
-// Return the qualified C++ name for a file level symbol.
+} 
+ 
+// Return the qualified C++ name for a file level symbol. 
 TProtoStringType QualifiedFileLevelSymbol(const FileDescriptor* file,
                                      const TProtoStringType& name,
                                      const Options& options) {
   if (file->package().empty()) {
-    return StrCat("::", name);
-  }
+    return StrCat("::", name); 
+  } 
   return StrCat(Namespace(file, options), "::", name);
-}
-
-// Escape C++ trigraphs by escaping question marks to \?
+} 
+ 
+// Escape C++ trigraphs by escaping question marks to \? 
 TProtoStringType EscapeTrigraphs(const TProtoStringType& to_escape) {
-  return StringReplace(to_escape, "?", "\\?", true);
-}
-
-// Escaped function name to eliminate naming conflict.
+  return StringReplace(to_escape, "?", "\\?", true); 
+} 
+ 
+// Escaped function name to eliminate naming conflict. 
 TProtoStringType SafeFunctionName(const Descriptor* descriptor,
                              const FieldDescriptor* field,
                              const TProtoStringType& prefix) {
-  // Do not use FieldName() since it will escape keywords.
+  // Do not use FieldName() since it will escape keywords. 
   TProtoStringType name = field->name();
-  LowerString(&name);
+  LowerString(&name); 
   TProtoStringType function_name = prefix + name;
-  if (descriptor->FindFieldByName(function_name)) {
-    // Single underscore will also make it conflicting with the private data
-    // member. We use double underscore to escape function names.
-    function_name.append("__");
-  } else if (kKeywords.count(name) > 0) {
-    // If the field name is a keyword, we append the underscore back to keep it
-    // consistent with other function names.
-    function_name.append("_");
-  }
-  return function_name;
-}
-
+  if (descriptor->FindFieldByName(function_name)) { 
+    // Single underscore will also make it conflicting with the private data 
+    // member. We use double underscore to escape function names. 
+    function_name.append("__"); 
+  } else if (kKeywords.count(name) > 0) { 
+    // If the field name is a keyword, we append the underscore back to keep it 
+    // consistent with other function names. 
+    function_name.append("_"); 
+  } 
+  return function_name; 
+} 
+ 
 static bool HasLazyFields(const Descriptor* descriptor, const Options& options,
                           MessageSCCAnalyzer* scc_analyzer) {
   for (int field_idx = 0; field_idx < descriptor->field_count(); field_idx++) {
     if (IsLazy(descriptor->field(field_idx), options, scc_analyzer)) {
       return true;
     }
-  }
+  } 
   for (int idx = 0; idx < descriptor->extension_count(); idx++) {
     if (IsLazy(descriptor->extension(idx), options, scc_analyzer)) {
       return true;
@@ -846,7 +846,7 @@ static bool HasRepeatedFields(const Descriptor* descriptor) {
 }
 
 bool HasRepeatedFields(const FileDescriptor* file) {
-  for (int i = 0; i < file->message_type_count(); ++i) {
+  for (int i = 0; i < file->message_type_count(); ++i) { 
     if (HasRepeatedFields(file->message_type(i))) return true;
   }
   return false;
@@ -904,12 +904,12 @@ static bool HasExtensionsOrExtendableMessage(const Descriptor* descriptor) {
   if (descriptor->extension_count() > 0) return true;
   for (int i = 0; i < descriptor->nested_type_count(); ++i) {
     if (HasExtensionsOrExtendableMessage(descriptor->nested_type(i))) {
-      return true;
-    }
-  }
-  return false;
-}
-
+      return true; 
+    } 
+  } 
+  return false; 
+} 
+ 
 bool HasExtensionsOrExtendableMessage(const FileDescriptor* file) {
   if (file->extension_count() > 0) return true;
   for (int i = 0; i < file->message_type_count(); ++i) {
@@ -917,65 +917,65 @@ bool HasExtensionsOrExtendableMessage(const FileDescriptor* file) {
   }
   return false;
 }
-
-static bool HasMapFields(const Descriptor* descriptor) {
-  for (int i = 0; i < descriptor->field_count(); ++i) {
-    if (descriptor->field(i)->is_map()) {
-      return true;
-    }
-  }
-  for (int i = 0; i < descriptor->nested_type_count(); ++i) {
-    if (HasMapFields(descriptor->nested_type(i))) return true;
-  }
-  return false;
-}
-
-bool HasMapFields(const FileDescriptor* file) {
-  for (int i = 0; i < file->message_type_count(); ++i) {
-    if (HasMapFields(file->message_type(i))) return true;
-  }
-  return false;
-}
-
-static bool HasEnumDefinitions(const Descriptor* message_type) {
-  if (message_type->enum_type_count() > 0) return true;
-  for (int i = 0; i < message_type->nested_type_count(); ++i) {
-    if (HasEnumDefinitions(message_type->nested_type(i))) return true;
-  }
-  return false;
-}
-
-bool HasEnumDefinitions(const FileDescriptor* file) {
-  if (file->enum_type_count() > 0) return true;
-  for (int i = 0; i < file->message_type_count(); ++i) {
-    if (HasEnumDefinitions(file->message_type(i))) return true;
-  }
-  return false;
-}
-
-bool IsStringOrMessage(const FieldDescriptor* field) {
-  switch (field->cpp_type()) {
-    case FieldDescriptor::CPPTYPE_INT32:
-    case FieldDescriptor::CPPTYPE_INT64:
-    case FieldDescriptor::CPPTYPE_UINT32:
-    case FieldDescriptor::CPPTYPE_UINT64:
-    case FieldDescriptor::CPPTYPE_DOUBLE:
-    case FieldDescriptor::CPPTYPE_FLOAT:
-    case FieldDescriptor::CPPTYPE_BOOL:
-    case FieldDescriptor::CPPTYPE_ENUM:
-      return false;
-    case FieldDescriptor::CPPTYPE_STRING:
-    case FieldDescriptor::CPPTYPE_MESSAGE:
-      return true;
-  }
-
-  GOOGLE_LOG(FATAL) << "Can't get here.";
-  return false;
-}
-
+ 
+static bool HasMapFields(const Descriptor* descriptor) { 
+  for (int i = 0; i < descriptor->field_count(); ++i) { 
+    if (descriptor->field(i)->is_map()) { 
+      return true; 
+    } 
+  } 
+  for (int i = 0; i < descriptor->nested_type_count(); ++i) { 
+    if (HasMapFields(descriptor->nested_type(i))) return true; 
+  } 
+  return false; 
+} 
+ 
+bool HasMapFields(const FileDescriptor* file) { 
+  for (int i = 0; i < file->message_type_count(); ++i) { 
+    if (HasMapFields(file->message_type(i))) return true; 
+  } 
+  return false; 
+} 
+ 
+static bool HasEnumDefinitions(const Descriptor* message_type) { 
+  if (message_type->enum_type_count() > 0) return true; 
+  for (int i = 0; i < message_type->nested_type_count(); ++i) { 
+    if (HasEnumDefinitions(message_type->nested_type(i))) return true; 
+  } 
+  return false; 
+} 
+ 
+bool HasEnumDefinitions(const FileDescriptor* file) { 
+  if (file->enum_type_count() > 0) return true; 
+  for (int i = 0; i < file->message_type_count(); ++i) { 
+    if (HasEnumDefinitions(file->message_type(i))) return true; 
+  } 
+  return false; 
+} 
+ 
+bool IsStringOrMessage(const FieldDescriptor* field) { 
+  switch (field->cpp_type()) { 
+    case FieldDescriptor::CPPTYPE_INT32: 
+    case FieldDescriptor::CPPTYPE_INT64: 
+    case FieldDescriptor::CPPTYPE_UINT32: 
+    case FieldDescriptor::CPPTYPE_UINT64: 
+    case FieldDescriptor::CPPTYPE_DOUBLE: 
+    case FieldDescriptor::CPPTYPE_FLOAT: 
+    case FieldDescriptor::CPPTYPE_BOOL: 
+    case FieldDescriptor::CPPTYPE_ENUM: 
+      return false; 
+    case FieldDescriptor::CPPTYPE_STRING: 
+    case FieldDescriptor::CPPTYPE_MESSAGE: 
+      return true; 
+  } 
+ 
+  GOOGLE_LOG(FATAL) << "Can't get here."; 
+  return false; 
+} 
+ 
 FieldOptions::CType EffectiveStringCType(const FieldDescriptor* field,
                                          const Options& options) {
-  GOOGLE_DCHECK(field->cpp_type() == FieldDescriptor::CPPTYPE_STRING);
+  GOOGLE_DCHECK(field->cpp_type() == FieldDescriptor::CPPTYPE_STRING); 
   if (options.opensource_runtime) {
     // Open-source protobuf release only supports STRING ctype.
     return FieldOptions::STRING;
@@ -983,17 +983,17 @@ FieldOptions::CType EffectiveStringCType(const FieldDescriptor* field,
     // Google-internal supports all ctypes.
     return field->options().ctype();
   }
-}
-
+} 
+ 
 bool IsAnyMessage(const FileDescriptor* descriptor, const Options& options) {
-  return descriptor->name() == kAnyProtoFile;
-}
-
+  return descriptor->name() == kAnyProtoFile; 
+} 
+ 
 bool IsAnyMessage(const Descriptor* descriptor, const Options& options) {
-  return descriptor->name() == kAnyMessageName &&
+  return descriptor->name() == kAnyMessageName && 
          IsAnyMessage(descriptor->file(), options);
-}
-
+} 
+ 
 bool IsWellKnownMessage(const FileDescriptor* file) {
   static const std::unordered_set<TProtoStringType> well_known_files{
       "google/protobuf/any.proto",
@@ -1010,95 +1010,95 @@ bool IsWellKnownMessage(const FileDescriptor* file) {
       "google/protobuf/wrappers.proto",
   };
   return well_known_files.find(file->name()) != well_known_files.end();
-}
-
+} 
+ 
 static bool FieldEnforceUtf8(const FieldDescriptor* field,
                              const Options& options) {
   return true;
 }
-
+ 
 static bool FileUtf8Verification(const FileDescriptor* file,
                                  const Options& options) {
   return true;
 }
 
-// Which level of UTF-8 enforcemant is placed on this file.
+// Which level of UTF-8 enforcemant is placed on this file. 
 Utf8CheckMode GetUtf8CheckMode(const FieldDescriptor* field,
                                const Options& options) {
   if (field->file()->syntax() == FileDescriptor::SYNTAX_PROTO3 &&
       FieldEnforceUtf8(field, options)) {
     return Utf8CheckMode::kStrict;
-  } else if (GetOptimizeFor(field->file(), options) !=
+  } else if (GetOptimizeFor(field->file(), options) != 
                  FileOptions::LITE_RUNTIME &&
              FileUtf8Verification(field->file(), options)) {
     return Utf8CheckMode::kVerify;
-  } else {
+  } else { 
     return Utf8CheckMode::kNone;
-  }
-}
-
-static void GenerateUtf8CheckCode(const FieldDescriptor* field,
-                                  const Options& options, bool for_parse,
-                                  const char* parameters,
-                                  const char* strict_function,
-                                  const char* verify_function,
+  } 
+} 
+ 
+static void GenerateUtf8CheckCode(const FieldDescriptor* field, 
+                                  const Options& options, bool for_parse, 
+                                  const char* parameters, 
+                                  const char* strict_function, 
+                                  const char* verify_function, 
                                   const Formatter& format) {
-  switch (GetUtf8CheckMode(field, options)) {
+  switch (GetUtf8CheckMode(field, options)) { 
     case Utf8CheckMode::kStrict: {
-      if (for_parse) {
+      if (for_parse) { 
         format("DO_(");
-      }
+      } 
       format("::$proto_ns$::internal::WireFormatLite::$1$(\n", strict_function);
       format.Indent();
       format(parameters);
-      if (for_parse) {
+      if (for_parse) { 
         format("::$proto_ns$::internal::WireFormatLite::PARSE,\n");
-      } else {
+      } else { 
         format("::$proto_ns$::internal::WireFormatLite::SERIALIZE,\n");
-      }
+      } 
       format("\"$1$\")", field->full_name());
-      if (for_parse) {
+      if (for_parse) { 
         format(")");
-      }
+      } 
       format(";\n");
       format.Outdent();
-      break;
-    }
+      break; 
+    } 
     case Utf8CheckMode::kVerify: {
       format("::$proto_ns$::internal::WireFormat::$1$(\n", verify_function);
       format.Indent();
       format(parameters);
-      if (for_parse) {
+      if (for_parse) { 
         format("::$proto_ns$::internal::WireFormat::PARSE,\n");
-      } else {
+      } else { 
         format("::$proto_ns$::internal::WireFormat::SERIALIZE,\n");
-      }
+      } 
       format("\"$1$\");\n", field->full_name());
       format.Outdent();
-      break;
-    }
+      break; 
+    } 
     case Utf8CheckMode::kNone:
-      break;
-  }
-}
-
-void GenerateUtf8CheckCodeForString(const FieldDescriptor* field,
-                                    const Options& options, bool for_parse,
-                                    const char* parameters,
+      break; 
+  } 
+} 
+ 
+void GenerateUtf8CheckCodeForString(const FieldDescriptor* field, 
+                                    const Options& options, bool for_parse, 
+                                    const char* parameters, 
                                     const Formatter& format) {
   GenerateUtf8CheckCode(field, options, for_parse, parameters,
-                        "VerifyUtf8String", "VerifyUTF8StringNamedField",
+                        "VerifyUtf8String", "VerifyUTF8StringNamedField", 
                         format);
-}
-
-void GenerateUtf8CheckCodeForCord(const FieldDescriptor* field,
-                                  const Options& options, bool for_parse,
-                                  const char* parameters,
+} 
+ 
+void GenerateUtf8CheckCodeForCord(const FieldDescriptor* field, 
+                                  const Options& options, bool for_parse, 
+                                  const char* parameters, 
                                   const Formatter& format) {
   GenerateUtf8CheckCode(field, options, for_parse, parameters, "VerifyUtf8Cord",
                         "VerifyUTF8CordNamedField", format);
-}
-
+} 
+ 
 namespace {
 
 void Flatten(const Descriptor* descriptor,
@@ -1481,7 +1481,7 @@ FileOptions_OptimizeMode GetOptimizeFor(const FileDescriptor* file,
   return FileOptions::SPEED;
 }
 
-}  // namespace cpp
-}  // namespace compiler
-}  // namespace protobuf
-}  // namespace google
+}  // namespace cpp 
+}  // namespace compiler 
+}  // namespace protobuf 
+}  // namespace google 

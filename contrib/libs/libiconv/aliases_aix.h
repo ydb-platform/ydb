@@ -1,4 +1,4 @@
-S(aix_0, "CP856", ei_cp856 )
+S(aix_0, "CP856", ei_cp856 ) 
   S(aix_1, "CP922", ei_cp922 )
   S(aix_2, "CP943", ei_cp943 )
   S(aix_3, "CP1046", ei_cp1046 )

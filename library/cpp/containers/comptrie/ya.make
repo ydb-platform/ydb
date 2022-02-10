@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(velavokr)
-
+ 
 SRCS(
     array_with_size.h
     chunked_helpers_trie.h
@@ -29,7 +29,7 @@ PEERDIR(
     library/cpp/packers
     library/cpp/containers/compact_vector
     library/cpp/on_disk/chunks
-    util/draft
+    util/draft 
 )
 
 END()

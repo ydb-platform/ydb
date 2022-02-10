@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <library/cpp/streams/zc_memory_input/zc_memory_input.h>
 

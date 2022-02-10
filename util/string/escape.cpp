@@ -3,7 +3,7 @@
 
 #include <util/system/defaults.h>
 #include <util/charset/utf8.h>
-#include <util/charset/wide.h>
+#include <util/charset/wide.h> 
 
 /// @todo: escape trigraphs (eg "??/" is "\")
 
@@ -168,10 +168,10 @@ TBasicString<TChar>& EscapeCImpl(const TChar* str, size_t len, TBasicString<TCha
     if (j > 0) {
         r.append(str + j, len - j);
     } else {
-        r.append(str, len);
+        r.append(str, len); 
     }
-
-    return r;
+ 
+    return r; 
 }
 
 template TString& EscapeCImpl<TString::TChar>(const TString::TChar* str, size_t len, TString& r);
@@ -186,23 +186,23 @@ namespace {
         WriteUTF8Char(v, sz, (ui8*)buf);
         s.AppendNoAlias(buf, sz);
     }
-
+ 
     inline void AppendUnicode(TUtf16String& s, wchar32 v) {
         WriteSymbol(v, s);
     }
-
+ 
     template <ui32 sz, typename TChar>
     inline size_t CountHex(const TChar* p, const TChar* pe) {
         auto b = p;
         auto e = Min(p + sz, pe);
-
+ 
         while (b < e && IsHexDigit(*b)) {
             ++b;
         }
 
         return b - p;
-    }
-
+    } 
+ 
     template <size_t sz, typename TChar, typename T>
     inline bool ParseHex(const TChar* p, const TChar* pe, T& t) noexcept {
         return (p + sz <= pe) && TryIntFromString<16>(p, sz, t);
@@ -211,36 +211,36 @@ namespace {
     template <ui32 sz, typename TChar>
     inline size_t CountOct(const TChar* p, const TChar* pe) {
         ui32 maxsz = Min<size_t>(sz, pe - p);
-
+ 
         if (3 == sz && 3 == maxsz && !(*p >= '0' && *p <= '3')) {
             maxsz = 2;
         }
-
+ 
         for (ui32 i = 0; i < maxsz; ++i, ++p) {
             if (!IsOctDigit(*p)) {
                 return i;
             }
         }
-
+ 
         return maxsz;
-    }
-}
-
+    } 
+} 
+ 
 template <class TChar, class TStr>
 static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
     const TChar* pe = p + sz;
-
+ 
     while (p != pe) {
-        if ('\\' == *p) {
-            ++p;
-
+        if ('\\' == *p) { 
+            ++p; 
+ 
             if (p == pe) {
-                return res;
+                return res; 
             }
-
+ 
             switch (*p) {
                 default:
-                    res.append(*p);
+                    res.append(*p); 
                     break;
                 case 'a':
                     res.append('\a');
@@ -297,7 +297,7 @@ static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
                     } else {
                         res.append(*p);
                     }
-
+ 
                     break;
                 case '0':
                 case '1':
@@ -315,7 +315,7 @@ static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
                     res.append((TChar)IntFromString<ui32, 8>(p, v));
                     p += v - 1;
                 } break;
-            }
+            } 
 
             ++p;
         } else {
@@ -325,11 +325,11 @@ static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
             res.append(p, n);
             p = n;
         }
-    }
-
-    return res;
-}
-
+    } 
+ 
+    return res; 
+} 
+ 
 template <class TChar>
 TBasicString<TChar>& UnescapeCImpl(const TChar* p, size_t sz, TBasicString<TChar>& res) {
     return DoUnescapeC(p, sz, res);
@@ -402,12 +402,12 @@ template size_t UnescapeCCharLen<TUtf16String::TChar>(const TUtf16String::TChar*
 
 TString& EscapeC(const TStringBuf str, TString& s) {
     return EscapeC(str.data(), str.size(), s);
-}
-
+} 
+ 
 TUtf16String& EscapeC(const TWtringBuf str, TUtf16String& w) {
     return EscapeC(str.data(), str.size(), w);
-}
-
+} 
+ 
 TString EscapeC(const TString& str) {
     return EscapeC(str.data(), str.size());
 }
@@ -418,16 +418,16 @@ TUtf16String EscapeC(const TUtf16String& str) {
 
 TString& UnescapeC(const TStringBuf str, TString& s) {
     return UnescapeC(str.data(), str.size(), s);
-}
-
+} 
+ 
 TUtf16String& UnescapeC(const TWtringBuf str, TUtf16String& w) {
     return UnescapeC(str.data(), str.size(), w);
-}
-
+} 
+ 
 TString UnescapeC(const TStringBuf str) {
     return UnescapeC(str.data(), str.size());
-}
-
+} 
+ 
 TUtf16String UnescapeC(const TWtringBuf str) {
     return UnescapeC(str.data(), str.size());
-}
+} 

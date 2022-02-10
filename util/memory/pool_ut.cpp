@@ -99,33 +99,33 @@ private:
         }
 
         alloc.CheckAtEnd();
-
+ 
         {
             TMemoryPool pool(150, TMemoryPool::TExpGrow::Instance(), &alloc);
-
+ 
             pool.Allocate(8);
-
+ 
             size_t memavail = pool.Available();
             size_t memwaste = pool.MemoryWaste();
             size_t memalloc = pool.MemoryAllocated();
-
+ 
             for (size_t i = 0; i < 1000; ++i) {
                 void* m = pool.Allocate(i);
                 UNIT_ASSERT(m);
                 memset(m, 0, i);
             }
-
+ 
             pool.ClearKeepFirstChunk();
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(memalloc - 8, pool.MemoryAllocated());
             UNIT_ASSERT_VALUES_EQUAL(memwaste + 8, pool.MemoryWaste());
             UNIT_ASSERT_VALUES_EQUAL(memavail + 8, pool.Available());
-
+ 
             for (size_t i = 0; i < 1000; ++i) {
                 void* m = pool.Allocate(i);
                 UNIT_ASSERT(m);
                 memset(m, 0, i);
-            }
+            } 
 
             pool.Clear();
 
@@ -133,7 +133,7 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(0, pool.MemoryWaste());
             UNIT_ASSERT_VALUES_EQUAL(0, pool.Available());
         }
-
+ 
         alloc.CheckAtEnd();
 
         struct TConstructorTest {

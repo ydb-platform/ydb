@@ -327,15 +327,15 @@ public:
 
     inline TBlob ObjectBlobByKey(const TStringBuf key) const {
         TBlob subBlob = BlobByKey(key);
-
+ 
         if (UseDecompression) {
             TArchiveInputStream st(subBlob);
             return TBlob::FromStream(st);
         } else {
             return subBlob;
-        }
+        } 
     }
-
+ 
     inline TBlob BlobByKey(const TStringBuf key) const {
         const auto it = Dict_.find(key);
 
@@ -386,9 +386,9 @@ TAutoPtr<IInputStream> TArchiveReader::ObjectByKey(const TStringBuf key) const {
 }
 
 TBlob TArchiveReader::ObjectBlobByKey(const TStringBuf key) const {
-    return Impl_->ObjectBlobByKey(key);
-}
-
+    return Impl_->ObjectBlobByKey(key); 
+} 
+ 
 TBlob TArchiveReader::BlobByKey(const TStringBuf key) const {
     return Impl_->BlobByKey(key);
 }

@@ -2,24 +2,24 @@
 
 #include "rapidjson_helpers.h"
 
-#include <contrib/libs/rapidjson/include/rapidjson/error/en.h>
-#include <contrib/libs/rapidjson/include/rapidjson/error/error.h>
+#include <contrib/libs/rapidjson/include/rapidjson/error/en.h> 
+#include <contrib/libs/rapidjson/include/rapidjson/error/error.h> 
 #include <contrib/libs/rapidjson/include/rapidjson/reader.h>
 
 #include <util/generic/stack.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 
 namespace NJson {
-    namespace {
-        TString PrintError(const rapidjson::ParseResult& result) {
+    namespace { 
+        TString PrintError(const rapidjson::ParseResult& result) { 
             return TStringBuilder() << TStringBuf("Offset: ") << result.Offset()
                                     << TStringBuf(", Code: ") << (int)result.Code()
                                     << TStringBuf(", Error: ") << GetParseError_En(result.Code());
-        }
-    }
-
+        } 
+    } 
+ 
     static const size_t DEFAULT_BUFFER_LEN = 65536;
 
     bool TParserCallbacks::OpenComplexValue(EJsonValueType type) {
@@ -355,7 +355,7 @@ namespace NJson {
 
             if (result.IsError()) {
                 if (throwOnError) {
-                    ythrow TJsonException() << PrintError(result);
+                    ythrow TJsonException() << PrintError(result); 
                 } else {
                     return false;
                 }
@@ -538,7 +538,7 @@ namespace NJson {
         auto result = Read(*config, reader, is, wrapper);
 
         if (result.IsError()) {
-            cbs->OnError(result.Offset(), PrintError(result));
+            cbs->OnError(result.Offset(), PrintError(result)); 
 
             return false;
         }

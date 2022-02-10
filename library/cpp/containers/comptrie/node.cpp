@@ -1,6 +1,6 @@
 #include "node.h"
 #include "leaf_skipper.h"
-#include "comptrie_impl.h"
+#include "comptrie_impl.h" 
 
 #include <util/system/yassert.h>
 #include <util/generic/yexception.h>
@@ -56,7 +56,7 @@ namespace NCompactTrie {
             Offsets[D_FINAL] = datapos - data;
             LeafLength = skipFunction.SkipLeaf(datapos);
         }
-
+ 
         CoreLength = 2 + leftsize + rightsize + LeafLength;
         if (flags & MT_NEXT) {
             size_t& forwardOffset = Offsets[D_NEXT];

@@ -1,9 +1,9 @@
-LIBRARY()
-
-OWNER(ivanmorozov)
-
-SRCS(
-    object_factory.cpp
-)
-
-END()
+LIBRARY() 
+ 
+OWNER(ivanmorozov) 
+ 
+SRCS( 
+    object_factory.cpp 
+) 
+ 
+END() 

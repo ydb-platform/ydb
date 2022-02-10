@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/string/cast.h>
 #include <util/generic/string.h>

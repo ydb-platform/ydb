@@ -1,7 +1,7 @@
-#pragma once
+#pragma once 
 
 #include <util/generic/string.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 #include <util/generic/set.h>
 #include <util/generic/list.h>
 #include <util/generic/vector.h>
@@ -51,7 +51,7 @@ public:
 
 // Implementation
 
-namespace NPackers {
+namespace NPackers { 
     template <class T>
     inline ui64 ConvertIntegral(const T& data);
 
@@ -131,19 +131,19 @@ namespace NPackers {
         buffer[0] = (char)(lenmask | value);
     }
 
-    extern const ui8 SkipTable[];
+    extern const ui8 SkipTable[]; 
 
-    template <>
-    inline void TIntegralPacker<ui64>::UnpackLeaf(const char* p, ui64& result) const {
-        unsigned char ch = *(p++);
-        size_t taillen = SkipTable[ch] - 1;
+    template <> 
+    inline void TIntegralPacker<ui64>::UnpackLeaf(const char* p, ui64& result) const { 
+        unsigned char ch = *(p++); 
+        size_t taillen = SkipTable[ch] - 1; 
 
-        result = (ch & (0x7F >> taillen));
+        result = (ch & (0x7F >> taillen)); 
 
-        while (taillen--)
-            result = ((result << 8) | (*(p++) & 0xFF));
-    }
-
+        while (taillen--) 
+            result = ((result << 8) | (*(p++) & 0xFF)); 
+    } 
+ 
     template <>
     inline size_t TIntegralPacker<ui64>::SkipLeaf(const char* p) const {
         return SkipTable[(ui8)*p];
@@ -197,58 +197,58 @@ namespace NPackers {
     }
 
     //-------------------------------------------
-    // TFPPacker --- for float/double
-    namespace NImpl {
-        template <class TFloat, class TUInt>
-        class TFPPackerBase {
-        protected:
-            typedef TIntegralPacker<TUInt> TPacker;
-
-            union THelper {
-                TFloat F;
-                TUInt U;
-            };
-
-            TFloat FromUInt(TUInt u) const {
-                THelper h;
+    // TFPPacker --- for float/double 
+    namespace NImpl { 
+        template <class TFloat, class TUInt> 
+        class TFPPackerBase { 
+        protected: 
+            typedef TIntegralPacker<TUInt> TPacker; 
+ 
+            union THelper { 
+                TFloat F; 
+                TUInt U; 
+            }; 
+ 
+            TFloat FromUInt(TUInt u) const { 
+                THelper h; 
                 h.U = ReverseBytes(u);
-                return h.F;
-            }
-
-            TUInt ToUInt(TFloat f) const {
-                THelper h;
-                h.F = f;
+                return h.F; 
+            } 
+ 
+            TUInt ToUInt(TFloat f) const { 
+                THelper h; 
+                h.F = f; 
                 return ReverseBytes(h.U);
-            }
+            } 
 
-        public:
-            void UnpackLeaf(const char* c, TFloat& t) const {
-                TUInt u = 0;
-                TPacker().UnpackLeaf(c, u);
-                t = FromUInt(u);
-            }
-
-            void PackLeaf(char* c, const TFloat& t, size_t sz) const {
-                TPacker().PackLeaf(c, ToUInt(t), sz);
-            }
-
-            size_t MeasureLeaf(const TFloat& t) const {
-                return TPacker().MeasureLeaf(ToUInt(t));
-            }
-
-            size_t SkipLeaf(const char* c) const {
-                return TPacker().SkipLeaf(c);
-            }
-        };
-    }
-
+        public: 
+            void UnpackLeaf(const char* c, TFloat& t) const { 
+                TUInt u = 0; 
+                TPacker().UnpackLeaf(c, u); 
+                t = FromUInt(u); 
+            } 
+ 
+            void PackLeaf(char* c, const TFloat& t, size_t sz) const { 
+                TPacker().PackLeaf(c, ToUInt(t), sz); 
+            } 
+ 
+            size_t MeasureLeaf(const TFloat& t) const { 
+                return TPacker().MeasureLeaf(ToUInt(t)); 
+            } 
+ 
+            size_t SkipLeaf(const char* c) const { 
+                return TPacker().SkipLeaf(c); 
+            } 
+        }; 
+    } 
+ 
     class TFloatPacker: public NImpl::TFPPackerBase<float, ui32> {
-    };
-
+    }; 
+ 
     class TDoublePacker: public NImpl::TFPPackerBase<double, ui64> {
-    };
-
-    //-------------------------------------------
+    }; 
+ 
+    //------------------------------------------- 
     // TStringPacker --- for TString/TUtf16String and TStringBuf.
 
     template <class TStringType>
@@ -480,7 +480,7 @@ namespace NPackers {
     }
 
     template <class T1, class T2, class TPacker1, class TPacker2>
-    inline size_t TPairPacker<T1, T2, TPacker1, TPacker2>::SkipLeaf(const char* buffer) const {
+    inline size_t TPairPacker<T1, T2, TPacker1, TPacker2>::SkipLeaf(const char* buffer) const { 
         size_t size1 = TPacker1().SkipLeaf(buffer);
         size_t size2 = TPacker2().SkipLeaf(buffer + size1);
         return size1 + size2;
@@ -539,10 +539,10 @@ namespace NPackers {
 
     //------------------------------------
     // TPacker --- the generic packer.
-
+ 
     template <class T, bool IsIntegral>
     class TPackerImpl;
-
+ 
     template <class T>
     class TPackerImpl<T, true>: public TIntegralPacker<T> {
     };

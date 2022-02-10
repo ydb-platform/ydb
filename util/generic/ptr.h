@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "fwd.h"
 #include "utility.h"
@@ -41,13 +41,13 @@ inline void CheckedArrayDelete(T* t) {
     delete[] t;
 }
 
-class TNoAction {
+class TNoAction { 
 public:
     template <class T>
     static inline void Destroy(T*) noexcept {
     }
-};
-
+}; 
+ 
 class TDelete {
 public:
     template <class T>

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/generic/noncopyable.h>
 #include <util/system/yassert.h>

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "utility.h"
 
@@ -8,7 +8,7 @@
 
 #include <cstring>
 
-class TBuffer {
+class TBuffer { 
 public:
     using TIterator = char*;
     using TConstIterator = const char*;
@@ -23,7 +23,7 @@ public:
     {
         *this = b;
     }
-
+ 
     TBuffer(TBuffer&& b) noexcept;
 
     TBuffer& operator=(TBuffer&& b) noexcept;
@@ -34,7 +34,7 @@ public:
         }
         return *this;
     }
-
+ 
     ~TBuffer();
 
     inline void Clear() noexcept {

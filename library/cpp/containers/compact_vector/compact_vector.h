@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/generic/yexception.h>
 #include <util/generic/utility.h>

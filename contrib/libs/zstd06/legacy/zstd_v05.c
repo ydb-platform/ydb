@@ -2375,9 +2375,9 @@ size_t HUFv05_decompress4X2_usingDTable(
     BYTE* op4 = opStart4;
     U32 endSignal;
 
-    /* Check */
-    if (cSrcSize < 10) return ERROR(corruption_detected);   /* strict minimum : jump table + 1 byte per stream */
-
+    /* Check */ 
+    if (cSrcSize < 10) return ERROR(corruption_detected);   /* strict minimum : jump table + 1 byte per stream */ 
+ 
     length4 = cSrcSize - (length1 + length2 + length3 + 6);
     if (length4 > cSrcSize) return ERROR(corruption_detected);   /* overflow */
     errorCode = BITv05_initDStream(&bitD1, istart1, length1);
@@ -2860,7 +2860,7 @@ typedef size_t (*decompressionAlgo)(void* dst, size_t dstSize, const void* cSrc,
 
 size_t HUFv05_decompress (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
 {
-    static const decompressionAlgo decompress[3] = { HUFv05_decompress4X2, HUFv05_decompress4X4, NULL };
+    static const decompressionAlgo decompress[3] = { HUFv05_decompress4X2, HUFv05_decompress4X4, NULL }; 
     /* estimate decompression time */
     U32 Q;
     const U32 D256 = (U32)(dstSize >> 8);
@@ -2870,7 +2870,7 @@ size_t HUFv05_decompress (void* dst, size_t dstSize, const void* cSrc, size_t cS
 
     /* validation checks */
     if (dstSize == 0) return ERROR(dstSize_tooSmall);
-    if (cSrcSize >= dstSize) return ERROR(corruption_detected);   /* invalid, or not compressed, but not compressed already dealt with */
+    if (cSrcSize >= dstSize) return ERROR(corruption_detected);   /* invalid, or not compressed, but not compressed already dealt with */ 
     if (cSrcSize == 1) { memset(dst, *(const BYTE*)cSrc, dstSize); return dstSize; }   /* RLE */
 
     /* decoder timing evaluation */
@@ -3872,17 +3872,17 @@ size_t ZSTDv05_decompressContinue(ZSTDv05_DCtx* dctx, void* dst, size_t maxDstSi
     switch (dctx->stage)
     {
     case ZSTDv05ds_getFrameHeaderSize :
-        /* get frame header size */
-        if (srcSize != ZSTDv05_frameHeaderSize_min) return ERROR(srcSize_wrong);   /* impossible */
-        dctx->headerSize = ZSTDv05_decodeFrameHeader_Part1(dctx, src, ZSTDv05_frameHeaderSize_min);
-        if (ZSTDv05_isError(dctx->headerSize)) return dctx->headerSize;
-        memcpy(dctx->headerBuffer, src, ZSTDv05_frameHeaderSize_min);
-        if (dctx->headerSize > ZSTDv05_frameHeaderSize_min) return ERROR(GENERIC); /* should never happen */
-        dctx->expected = 0;   /* not necessary to copy more */
-        /* fallthrough */
+        /* get frame header size */ 
+        if (srcSize != ZSTDv05_frameHeaderSize_min) return ERROR(srcSize_wrong);   /* impossible */ 
+        dctx->headerSize = ZSTDv05_decodeFrameHeader_Part1(dctx, src, ZSTDv05_frameHeaderSize_min); 
+        if (ZSTDv05_isError(dctx->headerSize)) return dctx->headerSize; 
+        memcpy(dctx->headerBuffer, src, ZSTDv05_frameHeaderSize_min); 
+        if (dctx->headerSize > ZSTDv05_frameHeaderSize_min) return ERROR(GENERIC); /* should never happen */ 
+        dctx->expected = 0;   /* not necessary to copy more */ 
+        /* fallthrough */ 
     case ZSTDv05ds_decodeFrameHeader:
-        /* get frame header */
-        {   size_t const result = ZSTDv05_decodeFrameHeader_Part2(dctx, dctx->headerBuffer, dctx->headerSize);
+        /* get frame header */ 
+        {   size_t const result = ZSTDv05_decodeFrameHeader_Part2(dctx, dctx->headerBuffer, dctx->headerSize); 
             if (ZSTDv05_isError(result)) return result;
             dctx->expected = ZSTDv05_blockHeaderSize;
             dctx->stage = ZSTDv05ds_decodeBlockHeader;
@@ -4306,7 +4306,7 @@ size_t ZBUFFv05_decompressContinue(ZBUFFv05_DCtx* zbc, void* dst, size_t* maxDst
     *srcSizePtr = ip-istart;
     *maxDstSizePtr = op-ostart;
 
-    {   size_t nextSrcSizeHint = ZSTDv05_nextSrcSizeToDecompress(zbc->zc);
+    {   size_t nextSrcSizeHint = ZSTDv05_nextSrcSizeToDecompress(zbc->zc); 
         if (nextSrcSizeHint > ZBUFFv05_blockHeaderSize) nextSrcSizeHint+= ZBUFFv05_blockHeaderSize;   /* get next block header too */
         nextSrcSizeHint -= zbc->inPos;   /* already loaded*/
         return nextSrcSizeHint;

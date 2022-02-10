@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/folder/path.h>
 #include <util/system/defaults.h>

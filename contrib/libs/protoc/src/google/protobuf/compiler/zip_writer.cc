@@ -1,48 +1,48 @@
-// Protocol Buffers - Google's data interchange format
-// Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// Author: ambrose@google.com (Ambrose Feinstein),
-//         kenton@google.com (Kenton Varda)
-//
-// Based on http://www.pkware.com/documents/casestudies/APPNOTE.TXT
-
+// Protocol Buffers - Google's data interchange format 
+// Copyright 2008 Google Inc.  All rights reserved. 
+// https://developers.google.com/protocol-buffers/ 
+// 
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions are 
+// met: 
+// 
+//     * Redistributions of source code must retain the above copyright 
+// notice, this list of conditions and the following disclaimer. 
+//     * Redistributions in binary form must reproduce the above 
+// copyright notice, this list of conditions and the following disclaimer 
+// in the documentation and/or other materials provided with the 
+// distribution. 
+//     * Neither the name of Google Inc. nor the names of its 
+// contributors may be used to endorse or promote products derived from 
+// this software without specific prior written permission. 
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ 
+// Author: ambrose@google.com (Ambrose Feinstein), 
+//         kenton@google.com (Kenton Varda) 
+// 
+// Based on http://www.pkware.com/documents/casestudies/APPNOTE.TXT 
+ 
 #include <google/protobuf/compiler/zip_writer.h>
 
 #include <cstdint>
 
 #include <google/protobuf/io/coded_stream.h>
-
-namespace google {
-namespace protobuf {
-namespace compiler {
-
+ 
+namespace google { 
+namespace protobuf { 
+namespace compiler { 
+ 
 // January 1, 1980 as a DOS date.
 // see https://msdn.microsoft.com/en-us/library/9kkf9tah.aspx
 static const uint16_t kDosEpoch = 1 << 5 | 1;
@@ -91,72 +91,72 @@ static const uint32_t kCRC32Table[256] = {
     0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6, 0xbad03605, 0xcdd70693,
     0x54de5729, 0x23d967bf, 0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94,
     0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d};
-
+ 
 static uint32_t ComputeCRC32(const TProtoStringType& buf) {
   uint32_t x = ~0U;
-  for (int i = 0; i < buf.size(); ++i) {
-    unsigned char c = buf[i];
-    x = kCRC32Table[(x ^ c) & 0xff] ^ (x >> 8);
-  }
-  return ~x;
-}
-
+  for (int i = 0; i < buf.size(); ++i) { 
+    unsigned char c = buf[i]; 
+    x = kCRC32Table[(x ^ c) & 0xff] ^ (x >> 8); 
+  } 
+  return ~x; 
+} 
+ 
 static void WriteShort(io::CodedOutputStream* out, uint16_t val) {
   uint8_t p[2];
   p[0] = static_cast<uint8_t>(val);
   p[1] = static_cast<uint8_t>(val >> 8);
-  out->WriteRaw(p, 2);
-}
-
-ZipWriter::ZipWriter(io::ZeroCopyOutputStream* raw_output)
+  out->WriteRaw(p, 2); 
+} 
+ 
+ZipWriter::ZipWriter(io::ZeroCopyOutputStream* raw_output) 
     : raw_output_(raw_output) {}
-ZipWriter::~ZipWriter() {}
-
+ZipWriter::~ZipWriter() {} 
+ 
 bool ZipWriter::Write(const TProtoStringType& filename,
                       const TProtoStringType& contents) {
-  FileInfo info;
-
-  info.name = filename;
+  FileInfo info; 
+ 
+  info.name = filename; 
   uint16_t filename_size = filename.size();
-  info.offset = raw_output_->ByteCount();
-  info.size = contents.size();
-  info.crc32 = ComputeCRC32(contents);
-
-  files_.push_back(info);
-
-  // write file header
-  io::CodedOutputStream output(raw_output_);
-  output.WriteLittleEndian32(0x04034b50);  // magic
+  info.offset = raw_output_->ByteCount(); 
+  info.size = contents.size(); 
+  info.crc32 = ComputeCRC32(contents); 
+ 
+  files_.push_back(info); 
+ 
+  // write file header 
+  io::CodedOutputStream output(raw_output_); 
+  output.WriteLittleEndian32(0x04034b50);  // magic 
   WriteShort(&output, 10);                 // version needed to extract
   WriteShort(&output, 0);                  // flags
   WriteShort(&output, 0);                  // compression method: stored
   WriteShort(&output, 0);                  // last modified time
   WriteShort(&output, kDosEpoch);          // last modified date
-  output.WriteLittleEndian32(info.crc32);  // crc-32
+  output.WriteLittleEndian32(info.crc32);  // crc-32 
   output.WriteLittleEndian32(info.size);   // compressed size
   output.WriteLittleEndian32(info.size);   // uncompressed size
   WriteShort(&output, filename_size);      // file name length
   WriteShort(&output, 0);                  // extra field length
   output.WriteString(filename);            // file name
   output.WriteString(contents);            // file data
-
-  return !output.HadError();
-}
-
-bool ZipWriter::WriteDirectory() {
+ 
+  return !output.HadError(); 
+} 
+ 
+bool ZipWriter::WriteDirectory() { 
   uint16_t num_entries = files_.size();
   uint32_t dir_ofs = raw_output_->ByteCount();
-
-  // write central directory
-  io::CodedOutputStream output(raw_output_);
-  for (int i = 0; i < num_entries; ++i) {
+ 
+  // write central directory 
+  io::CodedOutputStream output(raw_output_); 
+  for (int i = 0; i < num_entries; ++i) { 
     const TProtoStringType& filename = files_[i].name;
     uint16_t filename_size = filename.size();
     uint32_t crc32 = files_[i].crc32;
     uint32_t size = files_[i].size;
     uint32_t offset = files_[i].offset;
-
-    output.WriteLittleEndian32(0x02014b50);  // magic
+ 
+    output.WriteLittleEndian32(0x02014b50);  // magic 
     WriteShort(&output, 10);                 // version made by
     WriteShort(&output, 10);                 // version needed to extract
     WriteShort(&output, 0);                  // flags
@@ -174,22 +174,22 @@ bool ZipWriter::WriteDirectory() {
     output.WriteLittleEndian32(0);           // external file attributes
     output.WriteLittleEndian32(offset);      // local header offset
     output.WriteString(filename);            // file name
-  }
+  } 
   uint32_t dir_len = output.ByteCount();
-
-  // write end of central directory marker
-  output.WriteLittleEndian32(0x06054b50);  // magic
+ 
+  // write end of central directory marker 
+  output.WriteLittleEndian32(0x06054b50);  // magic 
   WriteShort(&output, 0);                  // disk number
   WriteShort(&output, 0);               // disk with start of central directory
   WriteShort(&output, num_entries);     // central directory entries (this disk)
   WriteShort(&output, num_entries);     // central directory entries (total)
-  output.WriteLittleEndian32(dir_len);  // central directory byte size
-  output.WriteLittleEndian32(dir_ofs);  // central directory offset
+  output.WriteLittleEndian32(dir_len);  // central directory byte size 
+  output.WriteLittleEndian32(dir_ofs);  // central directory offset 
   WriteShort(&output, 0);               // comment length
-
-  return output.HadError();
-}
-
-}  // namespace compiler
-}  // namespace protobuf
-}  // namespace google
+ 
+  return output.HadError(); 
+} 
+ 
+}  // namespace compiler 
+}  // namespace protobuf 
+}  // namespace google 

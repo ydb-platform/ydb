@@ -11,11 +11,11 @@ extern "C" void PrintProgramSvnVersion() {
     puts(GetProgramSvnVersion());
 }
 
-extern "C" void PrintSvnVersionAndExit0() {
-    PrintProgramSvnVersion();
-    exit(0);
-}
-
+extern "C" void PrintSvnVersionAndExit0() { 
+    PrintProgramSvnVersion(); 
+    exit(0); 
+} 
+ 
 extern "C" void PrintSvnVersionAndExitEx(int argc, char* argv[], const char* opts) {
     if (2 == argc) {
         for (TStringBuf all = opts, versionOpt; all.NextTok(';', versionOpt);) {

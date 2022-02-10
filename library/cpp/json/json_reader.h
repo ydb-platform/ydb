@@ -1,15 +1,15 @@
 #pragma once
 
-#include "json_value.h"
-
+#include "json_value.h" 
+ 
 #include <library/cpp/json/common/defs.h>
 #include <library/cpp/json/fast_sax/parser.h>
 
-#include <util/generic/yexception.h>
-
+#include <util/generic/yexception.h> 
+ 
 #include <util/stream/input.h>
-#include <util/stream/str.h>
-#include <util/stream/mem.h>
+#include <util/stream/str.h> 
+#include <util/stream/mem.h> 
 
 namespace NJson {
     struct TJsonReaderConfig {
@@ -22,7 +22,7 @@ namespace NJson {
 
         void SetBufferSize(size_t bufferSize);
         size_t GetBufferSize() const;
-
+ 
     private:
         size_t BufferSize;
     };
@@ -34,7 +34,7 @@ namespace NJson {
     bool ReadJsonTree(IInputStream* in, TJsonValue* out, bool throwOnError = false);
     bool ReadJsonTree(IInputStream* in, bool allowComments, TJsonValue* out, bool throwOnError = false);
     bool ReadJsonTree(IInputStream* in, const TJsonReaderConfig* config, TJsonValue* out, bool throwOnError = false);
-
+ 
     TJsonValue ReadJsonTree(IInputStream* in, bool throwOnError = false);
     TJsonValue ReadJsonTree(IInputStream* in, bool allowComments, bool throwOnError);
     TJsonValue ReadJsonTree(IInputStream* in, const TJsonReaderConfig* config, bool throwOnError = false);
@@ -73,11 +73,11 @@ namespace NJson {
     inline bool ValidateJsonThrow(IInputStream* in, const TJsonReaderConfig* config) {
         return ValidateJson(in, config, true);
     }
-
+ 
     inline bool ValidateJsonThrow(TStringBuf in, const TJsonReaderConfig& config = TJsonReaderConfig()) {
         return ValidateJson(in, config, true);
     }
-
+ 
     class TParserCallbacks: public TJsonCallbacks {
     public:
         TParserCallbacks(TJsonValue& value, bool throwOnError = false, bool notClosedBracketIsError = false);
@@ -93,13 +93,13 @@ namespace NJson {
         bool OnCloseMap() override;
         bool OnMapKey(const TStringBuf& val) override;
         bool OnEnd() override;
-
+ 
     protected:
         TJsonValue& Value;
         TString Key;
         TVector<TJsonValue*> ValuesStack;
         bool NotClosedBracketIsError;
-
+ 
         enum {
             START,
             AFTER_MAP_KEY,
@@ -137,4 +137,4 @@ namespace NJson {
     //// relaxed json, used in library/cpp/scheme
     bool ReadJsonFastTree(TStringBuf in, TJsonValue* out, bool throwOnError = false, bool notClosedBracketIsError = false);
     TJsonValue ReadJsonFastTree(TStringBuf in, bool notClosedBracketIsError = false);
-}
+} 

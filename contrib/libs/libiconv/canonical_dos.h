@@ -1,4 +1,4 @@
-(int)(long)&((struct stringpool2_t *)0)->stringpool_dos_0,
+(int)(long)&((struct stringpool2_t *)0)->stringpool_dos_0, 
   (int)(long)&((struct stringpool2_t *)0)->stringpool_dos_4,
   (int)(long)&((struct stringpool2_t *)0)->stringpool_dos_5,
   (int)(long)&((struct stringpool2_t *)0)->stringpool_dos_8,

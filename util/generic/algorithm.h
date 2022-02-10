@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "is_in.h"
 #include "utility.h"
@@ -308,11 +308,11 @@ static inline T Unique(T f, T l, P p) {
     return std::unique(f, l, p);
 }
 
-template <class T, class TGetKey>
-static inline T UniqueBy(T f, T l, const TGetKey& getKey) {
-    return Unique(f, l, [&](auto&& left, auto&& right) { return getKey(left) == getKey(right); });
-}
-
+template <class T, class TGetKey> 
+static inline T UniqueBy(T f, T l, const TGetKey& getKey) { 
+    return Unique(f, l, [&](auto&& left, auto&& right) { return getKey(left) == getKey(right); }); 
+} 
+ 
 template <class C>
 void SortUnique(C& c) {
     Sort(c.begin(), c.end());
@@ -325,18 +325,18 @@ void SortUnique(C& c, Cmp cmp) {
     c.erase(Unique(c.begin(), c.end()), c.end());
 }
 
-template <class C, class TGetKey>
-void SortUniqueBy(C& c, const TGetKey& getKey) {
-    SortBy(c, getKey);
+template <class C, class TGetKey> 
+void SortUniqueBy(C& c, const TGetKey& getKey) { 
+    SortBy(c, getKey); 
     c.erase(UniqueBy(c.begin(), c.end(), getKey), c.end());
-}
-
-template <class C, class TGetKey>
-void StableSortUniqueBy(C& c, const TGetKey& getKey) {
-    StableSortBy(c, getKey);
+} 
+ 
+template <class C, class TGetKey> 
+void StableSortUniqueBy(C& c, const TGetKey& getKey) { 
+    StableSortBy(c, getKey); 
     c.erase(UniqueBy(c.begin(), c.end(), getKey), c.end());
-}
-
+} 
+ 
 template <class C, class TValue>
 void Erase(C& c, const TValue& value) {
     c.erase(std::remove(c.begin(), c.end(), value), c.end());

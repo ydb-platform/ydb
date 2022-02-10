@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "unicode_table.h"
 

@@ -32,7 +32,7 @@ namespace NCompactTrie {
         size_t GetOffset() const {
             return Offset;
         }
-
+ 
         size_t GetLeafOffset() const {
             return Offsets[D_FINAL];
         }

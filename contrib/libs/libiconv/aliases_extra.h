@@ -1,4 +1,4 @@
-S(extra_0, "EUC-JISX0213", ei_euc_jisx0213 )
+S(extra_0, "EUC-JISX0213", ei_euc_jisx0213 ) 
   S(extra_1, "EUC-JIS-2004", ei_euc_jisx0213 )
   S(extra_2, "SHIFT_JISX0213", ei_shift_jisx0213 )
   S(extra_3, "SHIFT_JIS-2004", ei_shift_jisx0213 )

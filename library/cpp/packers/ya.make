@@ -1,11 +1,11 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(velavokr)
-
-SRCS(
-    packers.cpp
+ 
+SRCS( 
+    packers.cpp 
     proto_packer.cpp
     region_packer.cpp
-)
-
-END()
+) 
+ 
+END() 

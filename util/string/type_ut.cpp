@@ -20,11 +20,11 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(IsTrue("true"));
         UNIT_ASSERT(IsTrue("t"));
         UNIT_ASSERT(IsTrue("da"));
-
+ 
         UNIT_ASSERT(!IsTrue(""));
         UNIT_ASSERT(!IsTrue("tr"));
         UNIT_ASSERT(!IsTrue("foobar"));
-    }
+    } 
 
     Y_UNIT_TEST(TestIsFalse) {
         UNIT_ASSERT(IsFalse("0"));

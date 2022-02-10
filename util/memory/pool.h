@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "alloc.h"
 
@@ -7,7 +7,7 @@
 #include <util/generic/bitops.h>
 #include <util/generic/utility.h>
 #include <util/generic/intrlist.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 #include <util/generic/singleton.h>
 
 #include <new>
@@ -79,7 +79,7 @@ private:
         inline char* Data() noexcept {
             return (char*)(this + 1);
         }
-
+ 
         inline size_t DataSize() const noexcept {
             return Cur_ - Data();
         }
@@ -157,22 +157,22 @@ public:
 
     template <typename T>
     inline T* Allocate() {
-        return (T*)this->Allocate(sizeof(T), alignof(T));
+        return (T*)this->Allocate(sizeof(T), alignof(T)); 
     }
 
     template <typename T>
     inline T* Allocate(size_t align) {
-        return (T*)this->Allocate(sizeof(T), Max(align, alignof(T)));
+        return (T*)this->Allocate(sizeof(T), Max(align, alignof(T))); 
     }
 
     template <typename T>
     inline T* AllocateArray(size_t count) {
-        return (T*)this->Allocate(sizeof(T) * count, alignof(T));
+        return (T*)this->Allocate(sizeof(T) * count, alignof(T)); 
     }
 
     template <typename T>
     inline T* AllocateArray(size_t count, size_t align) {
-        return (T*)this->Allocate(sizeof(T) * count, Max(align, alignof(T)));
+        return (T*)this->Allocate(sizeof(T) * count, Max(align, alignof(T))); 
     }
 
     template <typename T>
@@ -196,7 +196,7 @@ public:
 
     template <typename T>
     inline T* NewArray(size_t count) {
-        T* arr = (T*)AllocateArray<T>(count);
+        T* arr = (T*)AllocateArray<T>(count); 
 
         for (T *ptr = arr, *end = arr + count; ptr != end; ++ptr) {
             new (ptr) T;
@@ -217,12 +217,12 @@ public:
         std::char_traits<TChar>::copy(ret, str, len);
         return ret;
     }
-
+ 
     template <typename TChar>
     inline TBasicStringBuf<TChar> AppendString(const TBasicStringBuf<TChar>& buf) {
         return TBasicStringBuf<TChar>(Append(buf.data(), buf.size()), buf.size());
     }
-
+ 
     template <typename TChar>
     inline TBasicStringBuf<TChar> AppendCString(const TBasicStringBuf<TChar>& buf) {
         TChar* ret = static_cast<TChar*>(Allocate((buf.size() + 1) * sizeof(TChar)));
@@ -292,7 +292,7 @@ protected:
 private:
     void AddChunk(size_t hint);
     void DoClear(bool keepfirst) noexcept;
-
+ 
 private:
     TChunk Empty_;
     TChunk* Current_;
@@ -321,9 +321,9 @@ struct TPoolableBase {
 
     inline void operator delete(void*, TPool&) noexcept {
     }
-
-private:
-    inline void* operator new(size_t); // disallow default allocation
+ 
+private: 
+    inline void* operator new(size_t); // disallow default allocation 
 };
 
 struct TPoolable: public TPoolableBase<TMemoryPool> {
@@ -371,7 +371,7 @@ public:
         : Pool_(o.GetPool())
     {
     }
-
+ 
     inline T* allocate(size_t n) {
         return (T*)Pool_->Allocate(n * sizeof(T), alignof(T));
     }
@@ -401,7 +401,7 @@ public:
     inline TPool* GetPool() const {
         return Pool_;
     }
-
+ 
     inline friend bool operator==(const TPoolAllocBase& l, const TPoolAllocBase& r) {
         return l.Pool_ == r.Pool_;
     }

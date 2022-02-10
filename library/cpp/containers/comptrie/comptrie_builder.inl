@@ -1,6 +1,6 @@
-#pragma once
+#pragma once 
 
-#include "comptrie_impl.h"
+#include "comptrie_impl.h" 
 #include "comptrie_trie.h"
 #include "make_fast_layout.h"
 #include "array_with_size.h"
@@ -26,7 +26,7 @@
 
 template <class T, class D, class S>
 class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl {
-protected:
+protected: 
     TMemoryPool Pool;
     size_t PayloadSize;
     THolder<TFixedSizeAllocator> NodeAllocator;
@@ -45,7 +45,7 @@ protected:
         DATA_IN_MEMPOOL,
     };
 
-protected:
+protected: 
     void ConvertSymbolArrayToChar(const TSymbol* key, size_t keylen, TTempBuf& buf, size_t ckeylen) const;
     void NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node);
     TNode* NodeForwardAdd(TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount);
@@ -335,10 +335,10 @@ public:
 
     union {
         char ArcsData[CONSTEXPR_MAX3(sizeof(TArcSet), sizeof(TBufferedSubtree), sizeof(TSubtreeInFile))];
-        union {
-            void* Data1;
-            long long int Data2;
-        } Aligner;
+        union { 
+            void* Data1; 
+            long long int Data2; 
+        } Aligner; 
     };
 
     inline ISubtree* Subtree() {
@@ -451,7 +451,7 @@ bool TCompactTrieBuilder<T, D, S>::Find(const TSymbol* key, size_t keylen, TData
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::FindLongestPrefix(
+bool TCompactTrieBuilder<T, D, S>::FindLongestPrefix( 
                 const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const {
     return Impl->FindLongestPrefix(key, keylen, prefixlen, value);
 }
@@ -502,8 +502,8 @@ TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::~TCompactTrieBuilderImpl(
 }
 
 template <class T, class D, class S>
-void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ConvertSymbolArrayToChar(
-                const TSymbol* key, size_t keylen, TTempBuf& buf, size_t buflen) const {
+void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ConvertSymbolArrayToChar( 
+                const TSymbol* key, size_t keylen, TTempBuf& buf, size_t buflen) const { 
     char* ckeyptr = buf.Data();
 
     for (size_t i = 0; i < keylen; ++i) {
@@ -544,7 +544,7 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeReleasePayload(T
 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntry(
-                const TSymbol* key, size_t keylen, const TData& value) {
+                const TSymbol* key, size_t keylen, const TData& value) { 
     size_t datalen = Packer.MeasureLeaf(value);
 
     bool isNewAddition = false;
@@ -555,7 +555,7 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntry(
 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryPtr(
-                const TSymbol* key, size_t keylen, const char* value) {
+                const TSymbol* key, size_t keylen, const char* value) { 
     size_t datalen = Packer.SkipLeaf(value);
 
     bool isNewAddition = false;
@@ -597,8 +597,8 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInBuffer(
 }
 
 template <class T, class D, class S>
-typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
-                TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForSomething(
+typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode* 
+                TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForSomething( 
                                 const TSymbol* key, size_t keylen, bool& isNewAddition) {
     using namespace NCompactTrie;
 
@@ -684,7 +684,7 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntryImpl(const 
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefix(
+bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefix( 
                 const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const {
     using namespace NCompactTrie;
 
@@ -778,8 +778,8 @@ size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::GetNodeCount() con
 }
 
 template <class T, class D, class S>
-typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
-                TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeForwardAdd(
+typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode* 
+                TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeForwardAdd( 
                                 TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount) {
     typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree());
     if (!arcSet)
@@ -892,8 +892,8 @@ TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TArc::TArc(const TBlob& l
 {}
 
 template <class T, class D, class S>
-ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure(
-                const TArc* thiz, size_t leftsize, size_t rightsize) const {
+ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure( 
+                const TArc* thiz, size_t leftsize, size_t rightsize) const { 
     using namespace NCompactTrie;
 
     size_t coresize = 2 + NodeMeasureLeafValue(thiz->Node); // 2 == (char + flags)
@@ -978,8 +978,8 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveAndDestroy(co
 // TCompactTrieBuilder::TCompactTrieBuilderImpl::TNode::TArcSet
 
 template <class T, class D, class S>
-typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::iterator
-                    TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(char ch) {
+typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::iterator 
+                    TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(char ch) { 
     using namespace NCompTriePrivate;
     iterator it = LowerBound(this->begin(), this->end(), ch, TCmp());
 
@@ -1083,12 +1083,12 @@ size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool 
 // by Maxim Babenko and Ivan Puzyrevsky. The difference is that when we cut the tree into levels
 // two nodes connected by a forward link are put into the same level (because they usually lie near each other in the original tree).
 // The original paper (describing the layout in Section 2.1) is:
-// Michael A. Bender, Erik D. Demaine, Martin Farach-Colton. Cache-Oblivious B-Trees
-//      SIAM Journal on Computing, volume 35, number 2, 2005, pages 341-358.
+// Michael A. Bender, Erik D. Demaine, Martin Farach-Colton. Cache-Oblivious B-Trees 
+//      SIAM Journal on Computing, volume 35, number 2, 2005, pages 341-358. 
 // Available on the web: http://erikdemaine.org/papers/CacheObliviousBTrees_SICOMP/
-// Or: Michael A. Bender, Erik D. Demaine, and Martin Farach-Colton. Cache-Oblivious B-Trees
-//      Proceedings of the 41st Annual Symposium
-//      on Foundations of Computer Science (FOCS 2000), Redondo Beach, California, November 12-14, 2000, pages 399-409.
+// Or: Michael A. Bender, Erik D. Demaine, and Martin Farach-Colton. Cache-Oblivious B-Trees 
+//      Proceedings of the 41st Annual Symposium 
+//      on Foundations of Computer Science (FOCS 2000), Redondo Beach, California, November 12-14, 2000, pages 399-409. 
 // Available on the web: http://erikdemaine.org/papers/FOCS2000b/
 // (there is not much difference between these papers, actually).
 //

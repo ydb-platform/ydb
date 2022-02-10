@@ -68,7 +68,7 @@ namespace NJson {
         ~TJsonValue() {
             Clear();
         }
-
+ 
         EJsonValueType GetType() const noexcept;
         TJsonValue& SetType(EJsonValueType type);
 
@@ -143,7 +143,7 @@ namespace NJson {
         bool GetDouble(double* value) const noexcept;
         bool GetMapPointer(const TMapType** value) const noexcept;
         bool GetArrayPointer(const TArray** value) const noexcept;
-
+ 
         bool GetString(TString* value) const;
         bool GetMap(TMapType* value) const;
         bool GetArray(TArray* value) const;

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 enum ELogPriority {
     TLOG_EMERG = 0 /* "EMERG" */,

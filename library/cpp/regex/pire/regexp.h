@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "pire.h"
 
@@ -35,16 +35,16 @@ namespace NRegExp {
                 return *this;
             }
 
-            inline TOptions& SetAndNotSupport(bool andNotSupport) noexcept {
-                AndNotSupport = andNotSupport;
-                return *this;
-            }
-
-            bool CaseInsensitive = false;
-            bool Surround = false;
+            inline TOptions& SetAndNotSupport(bool andNotSupport) noexcept { 
+                AndNotSupport = andNotSupport; 
+                return *this; 
+            } 
+ 
+            bool CaseInsensitive = false; 
+            bool Surround = false; 
             TMaybe<size_t> CapturePos;
-            ECharset Charset = CODES_UNKNOWN;
-            bool AndNotSupport = false;
+            ECharset Charset = CODES_UNKNOWN; 
+            bool AndNotSupport = false; 
         };
 
         static inline NPire::TFsm Parse(const TStringBuf& regexp,
@@ -74,10 +74,10 @@ namespace NRegExp {
                 lexer.AddFeature(NPire::NFeatures::Capture(*opts.CapturePos));
             }
 
-            if (opts.AndNotSupport) {
-                lexer.AddFeature(NPire::NFeatures::AndNotSupport());
-            }
-
+            if (opts.AndNotSupport) { 
+                lexer.AddFeature(NPire::NFeatures::AndNotSupport()); 
+            } 
+ 
             switch (opts.Charset) {
                 case CODES_UNKNOWN:
                     break;

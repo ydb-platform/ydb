@@ -6,7 +6,7 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
 
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/generic/maybe.h>
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
@@ -378,10 +378,10 @@ namespace NProtobufJson {
         }
 
         Y_ENSURE(json.IsMap(), "expected json map");
-
+ 
         const google::protobuf::Descriptor* descriptor = proto.GetDescriptor();
         Y_ASSERT(!!descriptor);
-
+ 
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
             const google::protobuf::FieldDescriptor* field = descriptor->field(f);
             Y_ASSERT(!!field);
@@ -391,8 +391,8 @@ namespace NProtobufJson {
             } else {
                 Json2SingleField(json, proto, *field, config);
             }
-        }
-
+        } 
+ 
         if (!config.AllowUnknownFields) {
             THashMap<TString, bool> knownFields;
             for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
@@ -402,8 +402,8 @@ namespace NProtobufJson {
             for (const auto& f : json.GetMap()) {
                 Y_ENSURE(knownFields.contains(f.first), "unknown field " << f.first);
             }
-        }
-    }
+        } 
+    } 
 
     void MergeJson2Proto(const TStringBuf& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
         NJson::TJsonReaderConfig jsonCfg;

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "codecs.h"
 
@@ -17,7 +17,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/mem_copy.h>
 
-namespace NBlockCodecs {
+namespace NBlockCodecs { 
     struct TDecompressError: public TDataError {
         TDecompressError(int code) {
             *this << "cannot decompress (errcode " << code << ")";
@@ -26,14 +26,14 @@ namespace NBlockCodecs {
         TDecompressError(size_t exp, size_t real) {
             *this << "broken input (expected len: " << exp << ", got: " << real << ")";
         }
-    };
-
+    }; 
+ 
     struct TCompressError: public TDataError {
         TCompressError(int code) {
             *this << "cannot compress (errcode " << code << ")";
         }
-    };
-
+    }; 
+ 
     struct TNullCodec: public ICodec {
         size_t DecompressedLength(const TData& in) const override {
             return in.size();
@@ -92,8 +92,8 @@ namespace NBlockCodecs {
             const auto len = ReadUnaligned<ui64>(in.data());
 
             if (!len)
-                return 0;
-
+                return 0; 
+ 
             Base()->DoDecompress(TData(in).Skip(sizeof(len)), out, len);
             return len;
         }

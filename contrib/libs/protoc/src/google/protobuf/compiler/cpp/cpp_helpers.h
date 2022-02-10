@@ -1,44 +1,44 @@
-// Protocol Buffers - Google's data interchange format
-// Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// Author: kenton@google.com (Kenton Varda)
-//  Based on original Protocol Buffers design by
-//  Sanjay Ghemawat, Jeff Dean, and others.
-
-#ifndef GOOGLE_PROTOBUF_COMPILER_CPP_HELPERS_H__
-#define GOOGLE_PROTOBUF_COMPILER_CPP_HELPERS_H__
-
+// Protocol Buffers - Google's data interchange format 
+// Copyright 2008 Google Inc.  All rights reserved. 
+// https://developers.google.com/protocol-buffers/ 
+// 
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions are 
+// met: 
+// 
+//     * Redistributions of source code must retain the above copyright 
+// notice, this list of conditions and the following disclaimer. 
+//     * Redistributions in binary form must reproduce the above 
+// copyright notice, this list of conditions and the following disclaimer 
+// in the documentation and/or other materials provided with the 
+// distribution. 
+//     * Neither the name of Google Inc. nor the names of its 
+// contributors may be used to endorse or promote products derived from 
+// this software without specific prior written permission. 
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ 
+// Author: kenton@google.com (Kenton Varda) 
+//  Based on original Protocol Buffers design by 
+//  Sanjay Ghemawat, Jeff Dean, and others. 
+ 
+#ifndef GOOGLE_PROTOBUF_COMPILER_CPP_HELPERS_H__ 
+#define GOOGLE_PROTOBUF_COMPILER_CPP_HELPERS_H__ 
+ 
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
-#include <map>
+#include <map> 
 #include <string>
 
 #include <google/protobuf/compiler/cpp/cpp_options.h>
@@ -50,23 +50,23 @@
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/port.h>
 #include <google/protobuf/stubs/strutil.h>
-
+ 
 // Must be included last.
 #include <google/protobuf/port_def.inc>
 
-namespace google {
-namespace protobuf {
+namespace google { 
+namespace protobuf { 
 namespace compiler {
 namespace cpp {
-
+ 
 inline TProtoStringType ProtobufNamespace(const Options& /* options */) {
   return "PROTOBUF_NAMESPACE_ID";
-}
-
+} 
+ 
 inline TProtoStringType MacroPrefix(const Options& options) {
   return options.opensource_runtime ? "GOOGLE_PROTOBUF" : "GOOGLE_PROTOBUF";
 }
-
+ 
 inline TProtoStringType DeprecatedAttribute(const Options& /* options */,
                                        const FieldDescriptor* d) {
   return d->options().deprecated() ? "PROTOBUF_DEPRECATED " : "";
@@ -77,11 +77,11 @@ inline TProtoStringType DeprecatedAttribute(const Options& /* options */,
   return d->options().deprecated() ? "PROTOBUF_DEPRECATED_ENUM " : "";
 }
 
-// Commonly-used separator comments.  Thick is a line of '=', thin is a line
-// of '-'.
-extern const char kThickSeparator[];
-extern const char kThinSeparator[];
-
+// Commonly-used separator comments.  Thick is a line of '=', thin is a line 
+// of '-'. 
+extern const char kThickSeparator[]; 
+extern const char kThinSeparator[]; 
+ 
 void SetCommonVars(const Options& options,
                    std::map<TProtoStringType, TProtoStringType>* variables);
 
@@ -118,19 +118,19 @@ TProtoStringType QualifiedClassName(const EnumDescriptor* d);
 
 // DEPRECATED just use ClassName or QualifiedClassName, a boolean is very
 // unreadable at the callsite.
-// Returns the non-nested type name for the given type.  If "qualified" is
-// true, prefix the type with the full namespace.  For example, if you had:
-//   package foo.bar;
-//   message Baz { message Qux {} }
-// Then the qualified ClassName for Qux would be:
-//   ::foo::bar::Baz_Qux
-// While the non-qualified version would be:
-//   Baz_Qux
+// Returns the non-nested type name for the given type.  If "qualified" is 
+// true, prefix the type with the full namespace.  For example, if you had: 
+//   package foo.bar; 
+//   message Baz { message Qux {} } 
+// Then the qualified ClassName for Qux would be: 
+//   ::foo::bar::Baz_Qux 
+// While the non-qualified version would be: 
+//   Baz_Qux 
 inline TProtoStringType ClassName(const Descriptor* descriptor, bool qualified) {
   return qualified ? QualifiedClassName(descriptor, Options())
                    : ClassName(descriptor);
 }
-
+ 
 inline TProtoStringType ClassName(const EnumDescriptor* descriptor, bool qualified) {
   return qualified ? QualifiedClassName(descriptor, Options())
                    : ClassName(descriptor);
@@ -164,15 +164,15 @@ TProtoStringType QualifiedDefaultInstanceName(const Descriptor* descriptor,
 // Fully qualified name of the default instance pointer.
 TProtoStringType QualifiedDefaultInstancePtr(const Descriptor* descriptor,
                                         const Options& options);
-
+ 
 // DescriptorTable variable name.
 TProtoStringType DescriptorTableName(const FileDescriptor* file,
                                 const Options& options);
-
+ 
 // When declaring symbol externs from another file, this macro will supply the
 // dllexport needed for the target file, if any.
 TProtoStringType FileDllExport(const FileDescriptor* file, const Options& options);
-
+ 
 // Name of the base class: google::protobuf::Message or google::protobuf::MessageLite.
 TProtoStringType SuperClassName(const Descriptor* descriptor,
                            const Options& options);
@@ -180,55 +180,55 @@ TProtoStringType SuperClassName(const Descriptor* descriptor,
 // Adds an underscore if necessary to prevent conflicting with a keyword.
 TProtoStringType ResolveKeyword(const TProtoStringType& name);
 
-// Get the (unqualified) name that should be used for this field in C++ code.
-// The name is coerced to lower-case to emulate proto1 behavior.  People
-// should be using lowercase-with-underscores style for proto field names
-// anyway, so normally this just returns field->name().
+// Get the (unqualified) name that should be used for this field in C++ code. 
+// The name is coerced to lower-case to emulate proto1 behavior.  People 
+// should be using lowercase-with-underscores style for proto field names 
+// anyway, so normally this just returns field->name(). 
 TProtoStringType FieldName(const FieldDescriptor* field);
-
+ 
 // Returns an estimate of the compiler's alignment for the field.  This
 // can't guarantee to be correct because the generated code could be compiled on
 // different systems with different alignment rules.  The estimates below assume
 // 64-bit pointers.
 int EstimateAlignmentSize(const FieldDescriptor* field);
 
-// Get the unqualified name that should be used for a field's field
-// number constant.
+// Get the unqualified name that should be used for a field's field 
+// number constant. 
 TProtoStringType FieldConstantName(const FieldDescriptor* field);
-
-// Returns the scope where the field was defined (for extensions, this is
-// different from the message type to which the field applies).
-inline const Descriptor* FieldScope(const FieldDescriptor* field) {
+ 
+// Returns the scope where the field was defined (for extensions, this is 
+// different from the message type to which the field applies). 
+inline const Descriptor* FieldScope(const FieldDescriptor* field) { 
   return field->is_extension() ? field->extension_scope()
                                : field->containing_type();
-}
-
-// Returns the fully-qualified type name field->message_type().  Usually this
-// is just ClassName(field->message_type(), true);
+} 
+ 
+// Returns the fully-qualified type name field->message_type().  Usually this 
+// is just ClassName(field->message_type(), true); 
 TProtoStringType FieldMessageTypeName(const FieldDescriptor* field,
                                  const Options& options);
-
-// Get the C++ type name for a primitive type (e.g. "double", "::google::protobuf::int32", etc.).
-const char* PrimitiveTypeName(FieldDescriptor::CppType type);
+ 
+// Get the C++ type name for a primitive type (e.g. "double", "::google::protobuf::int32", etc.). 
+const char* PrimitiveTypeName(FieldDescriptor::CppType type); 
 TProtoStringType PrimitiveTypeName(const Options& options,
                               FieldDescriptor::CppType type);
-
-// Get the declared type name in CamelCase format, as is used e.g. for the
-// methods of WireFormat.  For example, TYPE_INT32 becomes "Int32".
-const char* DeclaredTypeMethodName(FieldDescriptor::Type type);
-
-// Return the code that evaluates to the number when compiled.
+ 
+// Get the declared type name in CamelCase format, as is used e.g. for the 
+// methods of WireFormat.  For example, TYPE_INT32 becomes "Int32". 
+const char* DeclaredTypeMethodName(FieldDescriptor::Type type); 
+ 
+// Return the code that evaluates to the number when compiled. 
 TProtoStringType Int32ToString(int number);
-
-// Get code that evaluates to the field's default value.
+ 
+// Get code that evaluates to the field's default value. 
 TProtoStringType DefaultValue(const Options& options, const FieldDescriptor* field);
-
+ 
 // Compatibility function for callers outside proto2.
 TProtoStringType DefaultValue(const FieldDescriptor* field);
 
-// Convert a file name into a valid identifier.
+// Convert a file name into a valid identifier. 
 TProtoStringType FilenameIdentifier(const TProtoStringType& filename);
-
+ 
 // For each .proto file generates a unique name. To prevent collisions of
 // symbols in the global namespace
 TProtoStringType UniqueName(const TProtoStringType& name, const TProtoStringType& filename,
@@ -250,7 +250,7 @@ inline TProtoStringType UniqueName(const TProtoStringType& name,
                               const Options& options) {
   return UniqueName(name, d->file(), options);
 }
-
+ 
 // Versions for call sites that only support the internal runtime (like proto1
 // support).
 inline Options InternalRuntimeOptions() {
@@ -278,35 +278,35 @@ inline TProtoStringType UniqueName(const TProtoStringType& name,
   return UniqueName(name, d->file(), InternalRuntimeOptions());
 }
 
-// Return the qualified C++ name for a file level symbol.
+// Return the qualified C++ name for a file level symbol. 
 TProtoStringType QualifiedFileLevelSymbol(const FileDescriptor* file,
                                      const TProtoStringType& name,
                                      const Options& options);
-
-// Escape C++ trigraphs by escaping question marks to \?
+ 
+// Escape C++ trigraphs by escaping question marks to \? 
 TProtoStringType EscapeTrigraphs(const TProtoStringType& to_escape);
-
-// Escaped function name to eliminate naming conflict.
+ 
+// Escaped function name to eliminate naming conflict. 
 TProtoStringType SafeFunctionName(const Descriptor* descriptor,
                              const FieldDescriptor* field,
                              const TProtoStringType& prefix);
-
+ 
 // Returns true if generated messages have public unknown fields accessors
 inline bool PublicUnknownFieldsAccessors(const Descriptor* message) {
-  return message->file()->syntax() != FileDescriptor::SYNTAX_PROTO3;
-}
-
-// Returns the optimize mode for <file>, respecting <options.enforce_lite>.
+  return message->file()->syntax() != FileDescriptor::SYNTAX_PROTO3; 
+} 
+ 
+// Returns the optimize mode for <file>, respecting <options.enforce_lite>. 
 FileOptions_OptimizeMode GetOptimizeFor(const FileDescriptor* file,
                                         const Options& options);
-
+ 
 // Determines whether unknown fields will be stored in an UnknownFieldSet or
 // a string.
-inline bool UseUnknownFieldSet(const FileDescriptor* file,
-                               const Options& options) {
-  return GetOptimizeFor(file, options) != FileOptions::LITE_RUNTIME;
-}
-
+inline bool UseUnknownFieldSet(const FileDescriptor* file, 
+                               const Options& options) { 
+  return GetOptimizeFor(file, options) != FileOptions::LITE_RUNTIME; 
+} 
+ 
 inline bool IsWeak(const FieldDescriptor* field, const Options& options) {
   if (field->options().weak()) {
     GOOGLE_CHECK(!options.opensource_runtime);
@@ -314,7 +314,7 @@ inline bool IsWeak(const FieldDescriptor* field, const Options& options) {
   }
   return false;
 }
-
+ 
 // For a string field, returns the effective ctype.  If the actual ctype is
 // not supported, returns the default of STRING.
 FieldOptions::CType EffectiveStringCType(const FieldDescriptor* field,
@@ -382,34 +382,34 @@ bool HasStringPieceFields(const FileDescriptor* file, const Options& options);
 // include extensions, since ctype is ignored for extensions.
 bool HasCordFields(const FileDescriptor* file, const Options& options);
 
-// Does the file have any map fields, necessitating the file to include
-// map_field_inl.h and map.h.
-bool HasMapFields(const FileDescriptor* file);
-
-// Does this file have any enum type definitions?
-bool HasEnumDefinitions(const FileDescriptor* file);
-
-// Does this file have generated parsing, serialization, and other
-// standard methods for which reflection-based fallback implementations exist?
-inline bool HasGeneratedMethods(const FileDescriptor* file,
-                                const Options& options) {
-  return GetOptimizeFor(file, options) != FileOptions::CODE_SIZE;
-}
-
-// Do message classes in this file have descriptor and reflection methods?
-inline bool HasDescriptorMethods(const FileDescriptor* file,
-                                 const Options& options) {
-  return GetOptimizeFor(file, options) != FileOptions::LITE_RUNTIME;
-}
-
-// Should we generate generic services for this file?
-inline bool HasGenericServices(const FileDescriptor* file,
-                               const Options& options) {
-  return file->service_count() > 0 &&
-         GetOptimizeFor(file, options) != FileOptions::LITE_RUNTIME &&
-         file->options().cc_generic_services();
-}
-
+// Does the file have any map fields, necessitating the file to include 
+// map_field_inl.h and map.h. 
+bool HasMapFields(const FileDescriptor* file); 
+ 
+// Does this file have any enum type definitions? 
+bool HasEnumDefinitions(const FileDescriptor* file); 
+ 
+// Does this file have generated parsing, serialization, and other 
+// standard methods for which reflection-based fallback implementations exist? 
+inline bool HasGeneratedMethods(const FileDescriptor* file, 
+                                const Options& options) { 
+  return GetOptimizeFor(file, options) != FileOptions::CODE_SIZE; 
+} 
+ 
+// Do message classes in this file have descriptor and reflection methods? 
+inline bool HasDescriptorMethods(const FileDescriptor* file, 
+                                 const Options& options) { 
+  return GetOptimizeFor(file, options) != FileOptions::LITE_RUNTIME; 
+} 
+ 
+// Should we generate generic services for this file? 
+inline bool HasGenericServices(const FileDescriptor* file, 
+                               const Options& options) { 
+  return file->service_count() > 0 && 
+         GetOptimizeFor(file, options) != FileOptions::LITE_RUNTIME && 
+         file->options().cc_generic_services(); 
+} 
+ 
 inline bool IsProto2MessageSet(const Descriptor* descriptor,
                                const Options& options) {
   return !options.opensource_runtime &&
@@ -417,22 +417,22 @@ inline bool IsProto2MessageSet(const Descriptor* descriptor,
          !options.lite_implicit_weak_fields &&
          descriptor->options().message_set_wire_format() &&
          descriptor->full_name() == "google.protobuf.bridge.MessageSet";
-}
-
-inline bool IsMapEntryMessage(const Descriptor* descriptor) {
-  return descriptor->options().map_entry();
-}
-
-// Returns true if the field's CPPTYPE is string or message.
-bool IsStringOrMessage(const FieldDescriptor* field);
-
+} 
+ 
+inline bool IsMapEntryMessage(const Descriptor* descriptor) { 
+  return descriptor->options().map_entry(); 
+} 
+ 
+// Returns true if the field's CPPTYPE is string or message. 
+bool IsStringOrMessage(const FieldDescriptor* field); 
+ 
 TProtoStringType UnderscoresToCamelCase(const TProtoStringType& input,
                                    bool cap_next_letter);
-
+ 
 inline bool IsProto3(const FileDescriptor* file) {
   return file->syntax() == FileDescriptor::SYNTAX_PROTO3;
-}
-
+} 
+ 
 inline bool HasHasbit(const FieldDescriptor* field) {
   // This predicate includes proto3 message fields only if they have "optional".
   //   Foo submsg1 = 1;           // HasHasbit() == false
@@ -449,34 +449,34 @@ inline bool HasHasbit(const FieldDescriptor* field) {
          !field->options().weak();
 }
 
-// Returns true if 'enum' semantics are such that unknown values are preserved
-// in the enum field itself, rather than going to the UnknownFieldSet.
+// Returns true if 'enum' semantics are such that unknown values are preserved 
+// in the enum field itself, rather than going to the UnknownFieldSet. 
 inline bool HasPreservingUnknownEnumSemantics(const FieldDescriptor* field) {
   return field->file()->syntax() == FileDescriptor::SYNTAX_PROTO3;
-}
-
+} 
+ 
 inline bool IsCrossFileMessage(const FieldDescriptor* field) {
   return field->type() == FieldDescriptor::TYPE_MESSAGE &&
          field->message_type()->file() != field->file();
-}
-
+} 
+ 
 inline TProtoStringType MakeDefaultName(const FieldDescriptor* field) {
   return "_i_give_permission_to_break_this_code_default_" + FieldName(field) +
          "_";
-}
-
+} 
+ 
 bool IsAnyMessage(const FileDescriptor* descriptor, const Options& options);
 bool IsAnyMessage(const Descriptor* descriptor, const Options& options);
-
-bool IsWellKnownMessage(const FileDescriptor* descriptor);
-
+ 
+bool IsWellKnownMessage(const FileDescriptor* descriptor); 
+ 
 inline TProtoStringType IncludeGuard(const FileDescriptor* file, bool pb_h,
                                 const Options& options) {
   // If we are generating a .pb.h file and the proto_h option is enabled, then
   // the .pb.h gets an extra suffix.
   TProtoStringType filename_identifier = FilenameIdentifier(
       file->name() + (pb_h && options.proto_h ? ".pb.h" : ""));
-
+ 
   if (IsWellKnownMessage(file)) {
     // For well-known messages we need third_party/protobuf and net/proto2 to
     // have distinct include guards, because some source files include both and
@@ -493,7 +493,7 @@ inline TProtoStringType IncludeGuard(const FileDescriptor* file, bool pb_h,
     return "GOOGLE_PROTOBUF_INCLUDED_" + filename_identifier;
   }
 }
-
+ 
 // Returns the OptimizeMode for this file, furthermore it updates a status
 // bool if has_opt_codesize_extension is non-null. If this status bool is true
 // it means this file contains an extension that itself is defined as
@@ -504,7 +504,7 @@ FileOptions_OptimizeMode GetOptimizeFor(const FileDescriptor* file,
 inline FileOptions_OptimizeMode GetOptimizeFor(const FileDescriptor* file,
                                                const Options& options) {
   return GetOptimizeFor(file, options, nullptr);
-}
+} 
 inline bool NeedsEagerDescriptorAssignment(const FileDescriptor* file,
                                            const Options& options) {
   bool has_opt_codesize_extension;
@@ -522,7 +522,7 @@ inline bool NeedsEagerDescriptorAssignment(const FileDescriptor* file,
     return false;
   }
 }
-
+ 
 // This orders the messages in a .pb.cc as it's outputted by file.cc
 void FlattenMessagesInFile(const FileDescriptor* file,
                            std::vector<const Descriptor*>* result);
@@ -886,11 +886,11 @@ PROTOC_EXPORT TProtoStringType StripProto(const TProtoStringType& filename);
 
 inline bool EnableMessageOwnedArena(const Descriptor* /* desc */ ) { return false; }
 
-}  // namespace cpp
-}  // namespace compiler
-}  // namespace protobuf
+}  // namespace cpp 
+}  // namespace compiler 
+}  // namespace protobuf 
 }  // namespace google
-
+ 
 #include <google/protobuf/port_undef.inc>
 
-#endif  // GOOGLE_PROTOBUF_COMPILER_CPP_HELPERS_H__
+#endif  // GOOGLE_PROTOBUF_COMPILER_CPP_HELPERS_H__ 

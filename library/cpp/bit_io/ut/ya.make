@@ -1,7 +1,7 @@
 UNITTEST_FOR(library/cpp/bit_io)
 
 OWNER(
-    velavokr
+    velavokr 
     g:util
 )
 

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "recode_result.h"
 #include "unidata.h"
@@ -298,7 +298,7 @@ namespace NDetail {
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar32*& dest) noexcept;
 }
 
-//! @return len if robust and position where encoding stopped if not
+//! @return len if robust and position where encoding stopped if not 
 template <bool robust, typename TCharType>
 inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
     const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
@@ -309,7 +309,7 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
         ::NDetail::UTF8ToWideImplSSE41(cur, last, p);
     }
 #endif
-
+ 
     ::NDetail::UTF8ToWideImplScalar<robust>(cur, last, p);
     written = p - dest;
     return cur - reinterpret_cast<const unsigned char*>(text);
@@ -317,9 +317,9 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
 
 template <typename TCharType>
 inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size_t& written) {
-    return UTF8ToWideImpl<false>(text, len, dest, written);
-}
-
+    return UTF8ToWideImpl<false>(text, len, dest, written); 
+} 
+ 
 template <bool robust>
 inline TUtf16String UTF8ToWide(const char* text, size_t len) {
     TUtf16String w = TUtf16String::Uninitialized(len);
@@ -334,19 +334,19 @@ inline TUtf16String UTF8ToWide(const char* text, size_t len) {
 
 template <bool robust, typename TCharType>
 inline bool UTF8ToWide(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
-    return UTF8ToWideImpl<robust>(text, len, dest, written) == len;
-}
-
+    return UTF8ToWideImpl<robust>(text, len, dest, written) == len; 
+} 
+ 
 //! converts text from UTF8 to unicode, stops immediately it UTF8 byte sequence is wrong
 //! @attention destination buffer must be long enough to fit all characters of the text,
 //!            conversion stops if a broken symbol is met
 //! @return @c true if all the text converted successfully, @c false - a broken symbol was found
 template <typename TCharType>
 inline bool UTF8ToWide(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
-    return UTF8ToWide<false>(text, len, dest, written);
+    return UTF8ToWide<false>(text, len, dest, written); 
 }
 
-template <bool robust>
+template <bool robust> 
 inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) {
     dst.ReserveAndResize(src.size());
     size_t written = 0;
@@ -367,17 +367,17 @@ inline TUtf32StringBuf UTF8ToUTF32(const TStringBuf src, TUtf32String& dst) {
 
 inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) {
     return UTF8ToWide<false>(src, dst);
-}
-
+} 
+ 
 inline TUtf16String UTF8ToWide(const char* text, size_t len) {
     return UTF8ToWide<false>(text, len);
 }
 
-template <bool robust>
+template <bool robust> 
 inline TUtf16String UTF8ToWide(const TStringBuf s) {
     return UTF8ToWide<robust>(s.data(), s.size());
-}
-
+} 
+ 
 template <bool robust>
 inline TUtf32String UTF8ToUTF32(const TStringBuf s) {
     TUtf32String r;

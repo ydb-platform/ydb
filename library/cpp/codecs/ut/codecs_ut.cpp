@@ -4,15 +4,15 @@
 #include <library/cpp/codecs/solar_codec.h>
 #include <library/cpp/codecs/zstd_dict_codec.h>
 #include <library/cpp/codecs/comptable_codec.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/generic/buffer.h>
-#include <util/string/util.h>
-#include <util/string/hex.h>
+ 
+#include <util/generic/buffer.h> 
+#include <util/string/util.h> 
+#include <util/string/hex.h> 
 #include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h>
-
-namespace {
+ 
+namespace { 
     const char* TextValues[] = {
         "! сентября газета",
         "!(возмездие это)!",
@@ -855,328 +855,328 @@ namespace {
         "lymphomatoid papulosis",
         "sez.com",
     };
-}
-
-class TCodecsTest: public TTestBase {
+} 
+ 
+class TCodecsTest: public TTestBase { 
     UNIT_TEST_SUITE(TCodecsTest);
-    UNIT_TEST(TestPipeline)
-    UNIT_TEST(TestDelta)
-    UNIT_TEST(TestHuffman)
-    UNIT_TEST(TestZStdDict)
-    UNIT_TEST(TestCompTable)
+    UNIT_TEST(TestPipeline) 
+    UNIT_TEST(TestDelta) 
+    UNIT_TEST(TestHuffman) 
+    UNIT_TEST(TestZStdDict) 
+    UNIT_TEST(TestCompTable) 
     UNIT_TEST(TestHuffmanLearnByFreqs)
-    UNIT_TEST(TestSolar)
-    UNIT_TEST(TestPFor)
-    UNIT_TEST(TestRegistry)
-
+    UNIT_TEST(TestSolar) 
+    UNIT_TEST(TestPFor) 
+    UNIT_TEST(TestRegistry) 
+ 
     UNIT_TEST_SUITE_END();
-
-private:
+ 
+private: 
     TString PrintError(TStringBuf learn, TStringBuf test, TStringBuf codec, ui32 i) {
         TString s;
-        TStringOutput sout(s);
+        TStringOutput sout(s); 
         sout << codec << ": " << i << ", "
              << "\n";
         sout << HexEncode(learn.data(), learn.size()); //NEscJ::EscapeJ<true>(learn, sout);
-        sout << " != \n";
+        sout << " != \n"; 
         sout << HexEncode(test.data(), test.size()); //NEscJ::EscapeJ<true>(test, sout);
-
-        if (s.Size() > 1536) {
+ 
+        if (s.Size() > 1536) { 
             TString res = s.substr(0, 512);
-            res.append("...<skipped ").append(ToString(s.size() - 1024)).append(">...");
-            res.append(s.substr(s.size() - 512));
-        }
-
-        return s;
-    }
-
-    TStringBuf AsStrBuf(const TBuffer& b) {
+            res.append("...<skipped ").append(ToString(s.size() - 1024)).append(">..."); 
+            res.append(s.substr(s.size() - 512)); 
+        } 
+ 
+        return s; 
+    } 
+ 
+    TStringBuf AsStrBuf(const TBuffer& b) { 
         return TStringBuf(b.data(), b.size());
-    }
-
-    template <typename TCodec, bool testsaveload>
+    } 
+ 
+    template <typename TCodec, bool testsaveload> 
     void TestCodec(const TVector<TBuffer>& inlearn = TVector<TBuffer>(), const TVector<TBuffer>& in = TVector<TBuffer>(), NCodecs::TCodecPtr c = new TCodec) {
-        using namespace NCodecs;
-
-        TBuffer buff;
-
-        {
+        using namespace NCodecs; 
+ 
+        TBuffer buff; 
+ 
+        { 
             TVector<TBuffer> out;
-
-            c->Learn(inlearn.begin(), inlearn.end());
-
-            if (testsaveload) {
-                {
-                    TBufferOutput bout(buff);
-                    ICodec::Store(&bout, c);
-                }
-
-                {
-                    TBufferInput bin(buff);
-                    c = ICodec::Restore(&bin);
+ 
+            c->Learn(inlearn.begin(), inlearn.end()); 
+ 
+            if (testsaveload) { 
+                { 
+                    TBufferOutput bout(buff); 
+                    ICodec::Store(&bout, c); 
+                } 
+ 
+                { 
+                    TBufferInput bin(buff); 
+                    c = ICodec::Restore(&bin); 
                     UNIT_ASSERT(c->AlreadyTrained());
-                }
-            }
-
-            {
-                size_t insz = 0;
-                size_t outsz = buff.Size();
-
-                for (ui32 i = 0; i < inlearn.size(); ++i) {
+                } 
+            } 
+ 
+            { 
+                size_t insz = 0; 
+                size_t outsz = buff.Size(); 
+ 
+                for (ui32 i = 0; i < inlearn.size(); ++i) { 
                     out.emplace_back();
-                    c->Encode(AsStrBuf(inlearn[i]), out[i]);
-
-                    insz += inlearn[i].Size();
-                    outsz += out[i].Size();
-                }
-
-                TBuffer vecl;
-                for (ui32 i = 0; i < out.size(); ++i) {
-                    vecl.Clear();
-                    c->Decode(AsStrBuf(out[i]), vecl);
-
-                    UNIT_ASSERT_EQUAL_C(AsStrBuf(inlearn[i]), AsStrBuf(vecl),
+                    c->Encode(AsStrBuf(inlearn[i]), out[i]); 
+ 
+                    insz += inlearn[i].Size(); 
+                    outsz += out[i].Size(); 
+                } 
+ 
+                TBuffer vecl; 
+                for (ui32 i = 0; i < out.size(); ++i) { 
+                    vecl.Clear(); 
+                    c->Decode(AsStrBuf(out[i]), vecl); 
+ 
+                    UNIT_ASSERT_EQUAL_C(AsStrBuf(inlearn[i]), AsStrBuf(vecl), 
                                         PrintError(TStringBuf(inlearn[i].data(), inlearn[i].size()),
                                                    TStringBuf(vecl.data(), vecl.size()), c->GetName(), i));
-                }
-            }
-        }
-
-        {
-            if (testsaveload) {
-                TBufferInput bin(buff);
-                c = ICodec::Restore(&bin);
-            }
-
-            size_t insz = 0;
-            size_t outsz = buff.Size();
-
-            TBuffer out, in1;
-            for (ui32 i = 0; i < in.size(); ++i) {
-                out.Clear();
-                in1.Clear();
-                c->Encode(AsStrBuf(in[i]), out);
-                insz += in[i].Size();
-                outsz += out.Size();
-                c->Decode(AsStrBuf(out), in1);
-                UNIT_ASSERT_EQUAL_C(AsStrBuf(in[i]), AsStrBuf(in1),
+                } 
+            } 
+        } 
+ 
+        { 
+            if (testsaveload) { 
+                TBufferInput bin(buff); 
+                c = ICodec::Restore(&bin); 
+            } 
+ 
+            size_t insz = 0; 
+            size_t outsz = buff.Size(); 
+ 
+            TBuffer out, in1; 
+            for (ui32 i = 0; i < in.size(); ++i) { 
+                out.Clear(); 
+                in1.Clear(); 
+                c->Encode(AsStrBuf(in[i]), out); 
+                insz += in[i].Size(); 
+                outsz += out.Size(); 
+                c->Decode(AsStrBuf(out), in1); 
+                UNIT_ASSERT_EQUAL_C(AsStrBuf(in[i]), AsStrBuf(in1), 
                                     PrintError(TStringBuf(in[i].data(), in[i].size()),
                                                TStringBuf(in1.data(), in1.size()), c->GetName(), i));
-            }
-        }
-    }
-
-    template <class T>
-    void AppendTo(TBuffer& b, T t) {
-        b.Append((char*)&t, sizeof(t));
-    }
-
-    void TestDelta() {
-        using namespace NCodecs;
+            } 
+        } 
+    } 
+ 
+    template <class T> 
+    void AppendTo(TBuffer& b, T t) { 
+        b.Append((char*)&t, sizeof(t)); 
+    } 
+ 
+    void TestDelta() { 
+        using namespace NCodecs; 
         TVector<TBuffer> d;
-
-        // 1. common case
+ 
+        // 1. common case 
         d.emplace_back();
-        AppendTo(d.back(), 1ULL);
-        AppendTo(d.back(), 10ULL);
-        AppendTo(d.back(), 100ULL);
-        AppendTo(d.back(), 1000ULL);
-        AppendTo(d.back(), 10000ULL);
-        AppendTo(d.back(), 100000ULL);
-
-        // 2. delta overflow
+        AppendTo(d.back(), 1ULL); 
+        AppendTo(d.back(), 10ULL); 
+        AppendTo(d.back(), 100ULL); 
+        AppendTo(d.back(), 1000ULL); 
+        AppendTo(d.back(), 10000ULL); 
+        AppendTo(d.back(), 100000ULL); 
+ 
+        // 2. delta overflow 
         d.emplace_back();
-        AppendTo(d.back(), 1ULL);
-        AppendTo(d.back(), 10ULL);
-        AppendTo(d.back(), 100ULL);
-        AppendTo(d.back(), 1000ULL);
-        AppendTo(d.back(), (ui64)-100LL);
-        AppendTo(d.back(), (ui64)-10ULL);
-
-        // 3. bad sorting
+        AppendTo(d.back(), 1ULL); 
+        AppendTo(d.back(), 10ULL); 
+        AppendTo(d.back(), 100ULL); 
+        AppendTo(d.back(), 1000ULL); 
+        AppendTo(d.back(), (ui64)-100LL); 
+        AppendTo(d.back(), (ui64)-10ULL); 
+ 
+        // 3. bad sorting 
         d.emplace_back();
-        AppendTo(d.back(), 1ULL);
-        AppendTo(d.back(), 10ULL);
-        AppendTo(d.back(), 1000ULL);
-        AppendTo(d.back(), 100ULL);
-        AppendTo(d.back(), 10000ULL);
-        AppendTo(d.back(), 100000ULL);
-
-        // all bad
+        AppendTo(d.back(), 1ULL); 
+        AppendTo(d.back(), 10ULL); 
+        AppendTo(d.back(), 1000ULL); 
+        AppendTo(d.back(), 100ULL); 
+        AppendTo(d.back(), 10000ULL); 
+        AppendTo(d.back(), 100000ULL); 
+ 
+        // all bad 
         d.emplace_back();
-        AppendTo(d.back(), -1LL);
-        AppendTo(d.back(), -1LL);
-        AppendTo(d.back(), -1LL);
-        AppendTo(d.back(), -1LL);
-
+        AppendTo(d.back(), -1LL); 
+        AppendTo(d.back(), -1LL); 
+        AppendTo(d.back(), -1LL); 
+        AppendTo(d.back(), -1LL); 
+ 
         TestCodec<TDeltaCodec<ui64, true>, false>(d);
         TestCodec<TDeltaCodec<ui64, false>, false>(d);
-    }
-
-    void TestPFor() {
-        using namespace NCodecs;
-        {
+    } 
+ 
+    void TestPFor() { 
+        using namespace NCodecs; 
+        { 
             TVector<TBuffer> d;
             d.emplace_back();
-            AppendTo(d.back(), -1LL);
-            AppendTo(d.back(), -1LL);
-            AppendTo(d.back(), -1LL);
-            AppendTo(d.back(), -1LL);
+            AppendTo(d.back(), -1LL); 
+            AppendTo(d.back(), -1LL); 
+            AppendTo(d.back(), -1LL); 
+            AppendTo(d.back(), -1LL); 
             d.emplace_back();
-            AppendTo(d.back(), 0LL);
-            AppendTo(d.back(), 1LL);
-            AppendTo(d.back(), 2LL);
-            AppendTo(d.back(), 1LL);
-            AppendTo(d.back(), 0LL);
-            AppendTo(d.back(), 1LL);
-            AppendTo(d.back(), 2LL);
+            AppendTo(d.back(), 0LL); 
+            AppendTo(d.back(), 1LL); 
+            AppendTo(d.back(), 2LL); 
+            AppendTo(d.back(), 1LL); 
+            AppendTo(d.back(), 0LL); 
+            AppendTo(d.back(), 1LL); 
+            AppendTo(d.back(), 2LL); 
             d.emplace_back();
-            AppendTo(d.back(), 0LL);
-            AppendTo(d.back(), 1LL);
-            AppendTo(d.back(), 2LL);
-            AppendTo(d.back(), 1LL);
-            AppendTo(d.back(), -1LL);
-            AppendTo(d.back(), 0LL);
-            AppendTo(d.back(), 1LL);
-            AppendTo(d.back(), 2LL);
+            AppendTo(d.back(), 0LL); 
+            AppendTo(d.back(), 1LL); 
+            AppendTo(d.back(), 2LL); 
+            AppendTo(d.back(), 1LL); 
+            AppendTo(d.back(), -1LL); 
+            AppendTo(d.back(), 0LL); 
+            AppendTo(d.back(), 1LL); 
+            AppendTo(d.back(), 2LL); 
             d.emplace_back();
-            AppendTo(d.back(), 0LL);
-            AppendTo(d.back(), -1LL);
-            AppendTo(d.back(), -2LL);
-            AppendTo(d.back(), -1LL);
-            AppendTo(d.back(), -2LL);
-            AppendTo(d.back(), -1LL);
-            AppendTo(d.back(), 0LL);
-            AppendTo(d.back(), -1LL);
-            AppendTo(d.back(), -2LL);
-
+            AppendTo(d.back(), 0LL); 
+            AppendTo(d.back(), -1LL); 
+            AppendTo(d.back(), -2LL); 
+            AppendTo(d.back(), -1LL); 
+            AppendTo(d.back(), -2LL); 
+            AppendTo(d.back(), -1LL); 
+            AppendTo(d.back(), 0LL); 
+            AppendTo(d.back(), -1LL); 
+            AppendTo(d.back(), -2LL); 
+ 
             TestCodec<TPForCodec<ui64>, false>(d);
-            TestCodec<TPForCodec<ui64, true>, true>(d);
-        }
-        {
+            TestCodec<TPForCodec<ui64, true>, true>(d); 
+        } 
+        { 
             TVector<TBuffer> d;
             d.emplace_back();
-            AppendTo(d.back(), -1);
-            AppendTo(d.back(), -1);
-            AppendTo(d.back(), -1);
-            AppendTo(d.back(), -1);
+            AppendTo(d.back(), -1); 
+            AppendTo(d.back(), -1); 
+            AppendTo(d.back(), -1); 
+            AppendTo(d.back(), -1); 
             d.emplace_back();
-            AppendTo(d.back(), 0);
-            AppendTo(d.back(), 1);
-            AppendTo(d.back(), 2);
-            AppendTo(d.back(), 1);
-            AppendTo(d.back(), -1);
-            AppendTo(d.back(), 0);
-            AppendTo(d.back(), 1);
-            AppendTo(d.back(), 2);
+            AppendTo(d.back(), 0); 
+            AppendTo(d.back(), 1); 
+            AppendTo(d.back(), 2); 
+            AppendTo(d.back(), 1); 
+            AppendTo(d.back(), -1); 
+            AppendTo(d.back(), 0); 
+            AppendTo(d.back(), 1); 
+            AppendTo(d.back(), 2); 
             d.emplace_back();
-            AppendTo(d.back(), 0);
-            AppendTo(d.back(), -1);
-            AppendTo(d.back(), -2);
-            AppendTo(d.back(), -1);
-            AppendTo(d.back(), -2);
-            AppendTo(d.back(), -1);
-            AppendTo(d.back(), 0);
-            AppendTo(d.back(), -1);
-            AppendTo(d.back(), -2);
-
+            AppendTo(d.back(), 0); 
+            AppendTo(d.back(), -1); 
+            AppendTo(d.back(), -2); 
+            AppendTo(d.back(), -1); 
+            AppendTo(d.back(), -2); 
+            AppendTo(d.back(), -1); 
+            AppendTo(d.back(), 0); 
+            AppendTo(d.back(), -1); 
+            AppendTo(d.back(), -2); 
+ 
             TestCodec<TPForCodec<ui32>, false>(d);
-            TestCodec<TPForCodec<ui32, true>, false>(d);
-        }
-        {
+            TestCodec<TPForCodec<ui32, true>, false>(d); 
+        } 
+        { 
             TVector<TBuffer> d;
             d.emplace_back();
-            for (auto& textValue : TextValues) {
-                AppendTo(d.back(), (ui32)strlen(textValue));
-            }
-
-            TestCodec<TPForCodec<ui32>, false>(d);
-            TestCodec<TPForCodec<ui32, true>, false>(d);
-        }
-        {
+            for (auto& textValue : TextValues) { 
+                AppendTo(d.back(), (ui32)strlen(textValue)); 
+            } 
+ 
+            TestCodec<TPForCodec<ui32>, false>(d); 
+            TestCodec<TPForCodec<ui32, true>, false>(d); 
+        } 
+        { 
             TVector<TBuffer> d;
             d.emplace_back();
-            for (auto& textValue : TextValues) {
-                AppendTo(d.back(), (ui64)strlen(textValue));
-            }
-
-            TestCodec<TPForCodec<ui64>, false>(d);
-            TestCodec<TPForCodec<ui64, true>, false>(d);
-        }
-    }
-
-    template <class TCodec>
-    void DoTestSimpleCodec() {
-        using namespace NCodecs;
-        {
+            for (auto& textValue : TextValues) { 
+                AppendTo(d.back(), (ui64)strlen(textValue)); 
+            } 
+ 
+            TestCodec<TPForCodec<ui64>, false>(d); 
+            TestCodec<TPForCodec<ui64, true>, false>(d); 
+        } 
+    } 
+ 
+    template <class TCodec> 
+    void DoTestSimpleCodec() { 
+        using namespace NCodecs; 
+        { 
             TVector<TBuffer> learn;
-
+ 
             for (auto& textValue : TextValues) {
                 learn.emplace_back(textValue, strlen(textValue));
-            }
-
-            TestCodec<TCodec, true>(learn);
-        }
-        {
-            TestCodec<TCodec, true>();
-        }
-
-        {
+            } 
+ 
+            TestCodec<TCodec, true>(learn); 
+        } 
+        { 
+            TestCodec<TCodec, true>(); 
+        } 
+ 
+        { 
             TVector<TBuffer> learn;
             learn.emplace_back();
-            learn.back().Append('a');
-
+            learn.back().Append('a'); 
+ 
             TVector<TBuffer> test;
             test.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                test.back().Append((ui8)i);
-            }
-
-            TestCodec<TCodec, true>(learn, test);
-        }
-
-        {
+            for (ui32 i = 0; i < 256; ++i) { 
+                test.back().Append((ui8)i); 
+            } 
+ 
+            TestCodec<TCodec, true>(learn, test); 
+        } 
+ 
+        { 
             TVector<TBuffer> learn;
             learn.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                for (ui32 j = 0; j < i; ++j) {
+            for (ui32 i = 0; i < 256; ++i) { 
+                for (ui32 j = 0; j < i; ++j) { 
                     learn.back().Append((ui8)i);
-                }
-            }
-
+                } 
+            } 
+ 
             TVector<TBuffer> test;
             test.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                test.back().Append((ui8)i);
-            }
-
-            TestCodec<TCodec, true>(learn, test);
-        }
-
-        {
+            for (ui32 i = 0; i < 256; ++i) { 
+                test.back().Append((ui8)i); 
+            } 
+ 
+            TestCodec<TCodec, true>(learn, test); 
+        } 
+ 
+        { 
             TVector<TBuffer> learn;
             learn.emplace_back();
-            for (ui32 i = 0; i < 128; ++i) {
-                for (ui32 j = 0; j < i; ++j) {
-                    learn.back().Append((ui8)i);
-                }
-            }
-
+            for (ui32 i = 0; i < 128; ++i) { 
+                for (ui32 j = 0; j < i; ++j) { 
+                    learn.back().Append((ui8)i); 
+                } 
+            } 
+ 
             TVector<TBuffer> test;
             test.emplace_back();
-            for (ui32 i = 128; i < 256; ++i) {
-                test.back().Append((ui8)i);
-            }
-
-            TestCodec<TCodec, true>(learn, test);
-        }
-    }
-
-    void TestHuffman() {
-        DoTestSimpleCodec<NCodecs::THuffmanCodec>();
-    }
-
-    void TestZStdDict() {
+            for (ui32 i = 128; i < 256; ++i) { 
+                test.back().Append((ui8)i); 
+            } 
+ 
+            TestCodec<TCodec, true>(learn, test); 
+        } 
+    } 
+ 
+    void TestHuffman() { 
+        DoTestSimpleCodec<NCodecs::THuffmanCodec>(); 
+    } 
+ 
+    void TestZStdDict() { 
         using namespace NCodecs;
         {
             TVector<TBuffer> learn;
@@ -1188,12 +1188,12 @@ private:
             TestCodec<TZStdDictCodec, true>(learn);
         }
 
-    }
-
-    void TestCompTable() {
-        DoTestSimpleCodec<NCodecs::TCompTableCodec>();
-    }
-
+    } 
+ 
+    void TestCompTable() { 
+        DoTestSimpleCodec<NCodecs::TCompTableCodec>(); 
+    } 
+ 
     void TestHuffmanLearnByFreqs() {
         using namespace NCodecs;
 
@@ -1211,7 +1211,7 @@ private:
 
             for (ui32 i = 0; i < data.size(); ++i) {
                 outLearn.emplace_back();
-                codec.Encode(AsStrBuf(data[i]), outLearn[i]);
+                codec.Encode(AsStrBuf(data[i]), outLearn[i]); 
             }
         }
 
@@ -1228,133 +1228,133 @@ private:
 
             for (auto& textValue : TextValues) {
                 size_t len = strlen(textValue);
-                for (size_t j = 0; j < len; ++j) {
+                for (size_t j = 0; j < len; ++j) { 
                     ++freqs[(ui32)(0xFF & textValue[j])].second;
-                }
+                } 
             }
 
             codec.LearnByFreqs(TArrayRef<std::pair<char, ui64>>(freqs, Y_ARRAY_SIZE(freqs)));
 
             for (ui32 i = 0; i < data.size(); ++i) {
                 outLearnByFreqs.emplace_back();
-                codec.Encode(AsStrBuf(data[i]), outLearnByFreqs[i]);
+                codec.Encode(AsStrBuf(data[i]), outLearnByFreqs[i]); 
             }
         }
 
-        UNIT_ASSERT_EQUAL(outLearn.size(), outLearnByFreqs.size());
-        const size_t sz = outLearn.size();
-        for (size_t n = 0; n < sz; ++n) {
-            UNIT_ASSERT_EQUAL(AsStrBuf(outLearn[n]), AsStrBuf(outLearnByFreqs[n]));
-        }
+        UNIT_ASSERT_EQUAL(outLearn.size(), outLearnByFreqs.size()); 
+        const size_t sz = outLearn.size(); 
+        for (size_t n = 0; n < sz; ++n) { 
+            UNIT_ASSERT_EQUAL(AsStrBuf(outLearn[n]), AsStrBuf(outLearnByFreqs[n])); 
+        } 
     }
 
-    void TestSolar() {
-        using namespace NCodecs;
-        {
+    void TestSolar() { 
+        using namespace NCodecs; 
+        { 
             TVector<TBuffer> learn;
-
+ 
             for (auto& textValue : TextValues) {
                 learn.emplace_back(textValue, strlen(textValue));
-            }
-
+            } 
+ 
             TestCodec<TSolarCodec, true>(learn, TVector<TBuffer>(), new TSolarCodec(512, 8));
             TestCodec<TAdaptiveSolarCodec, false>(learn, TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8));
             TestCodec<TAdaptiveSolarCodec, true>(learn, TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8));
             TestCodec<TSolarCodecShortInt, true>(learn, TVector<TBuffer>(), new TSolarCodecShortInt(512, 8));
-        }
-        {
+        } 
+        { 
             TestCodec<TSolarCodec, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TSolarCodec(512, 8));
             TestCodec<TAdaptiveSolarCodec, false>(TVector<TBuffer>(), TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8));
             TestCodec<TAdaptiveSolarCodec, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8));
             TestCodec<TSolarCodecShortInt, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TSolarCodecShortInt(512, 8));
-        }
-
-        {
+        } 
+ 
+        { 
             TVector<TBuffer> learn;
             learn.emplace_back();
-            learn.back().Append('a');
-
+            learn.back().Append('a'); 
+ 
             TVector<TBuffer> test;
             test.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                test.back().Append((ui8)i);
-            }
-
-            TestCodec<TSolarCodec, true>(learn, test, new TSolarCodec(512, 8));
+            for (ui32 i = 0; i < 256; ++i) { 
+                test.back().Append((ui8)i); 
+            } 
+ 
+            TestCodec<TSolarCodec, true>(learn, test, new TSolarCodec(512, 8)); 
             TestCodec<TAdaptiveSolarCodec, false>(learn, test, new TAdaptiveSolarCodec(512, 8));
             TestCodec<TAdaptiveSolarCodec, true>(learn, test, new TAdaptiveSolarCodec(512, 8));
             TestCodec<TSolarCodecShortInt, true>(learn, test, new TSolarCodecShortInt(512, 8));
-        }
-
-        {
+        } 
+ 
+        { 
             TVector<TBuffer> learn;
             learn.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                for (ui32 j = 0; j < i; ++j) {
-                    learn.back().Append((ui8)i);
-                }
-            }
-
+            for (ui32 i = 0; i < 256; ++i) { 
+                for (ui32 j = 0; j < i; ++j) { 
+                    learn.back().Append((ui8)i); 
+                } 
+            } 
+ 
             TVector<TBuffer> test;
             test.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                test.back().Append((ui8)i);
-            }
-
-            TestCodec<TSolarCodec, true>(learn, test, new TSolarCodec(512, 8));
+            for (ui32 i = 0; i < 256; ++i) { 
+                test.back().Append((ui8)i); 
+            } 
+ 
+            TestCodec<TSolarCodec, true>(learn, test, new TSolarCodec(512, 8)); 
             TestCodec<TAdaptiveSolarCodec, false>(learn, test, new TAdaptiveSolarCodec(512, 8));
             TestCodec<TAdaptiveSolarCodec, true>(learn, test, new TAdaptiveSolarCodec(512, 8));
             TestCodec<TSolarCodecShortInt, true>(learn, test, new TSolarCodecShortInt(512, 8));
-        }
-    }
-
-    void TestPipeline() {
-        using namespace NCodecs;
-        {
+        } 
+    } 
+ 
+    void TestPipeline() { 
+        using namespace NCodecs; 
+        { 
             TVector<TBuffer> learn;
             learn.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                for (i32 j = i; j >= 0; --j) {
-                    learn.back().Append((ui8)j);
-                }
-            }
-
+            for (ui32 i = 0; i < 256; ++i) { 
+                for (i32 j = i; j >= 0; --j) { 
+                    learn.back().Append((ui8)j); 
+                } 
+            } 
+ 
             TVector<TBuffer> test;
             test.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                test.back().Append((ui8)i);
-            }
-
-            TestCodec<TPipelineCodec, true>(learn, test,
+            for (ui32 i = 0; i < 256; ++i) { 
+                test.back().Append((ui8)i); 
+            } 
+ 
+            TestCodec<TPipelineCodec, true>(learn, test, 
                                             new TPipelineCodec(new TSolarCodec(512, 8), new TSolarCodec(512, 8), new THuffmanCodec));
-        }
-        {
+        } 
+        { 
             TVector<TBuffer> d;
             d.emplace_back();
-            for (ui32 i = 0; i < 256; ++i) {
-                for (i32 j = i; j >= 0; --j) {
-                    d.back().Append(i * i);
-                }
-            }
-
+            for (ui32 i = 0; i < 256; ++i) { 
+                for (i32 j = i; j >= 0; --j) { 
+                    d.back().Append(i * i); 
+                } 
+            } 
+ 
             TestCodec<TPipelineCodec, false>(d, TVector<TBuffer>(),
                                              new TPipelineCodec(new TDeltaCodec<ui32, false>, new TPForCodec<ui32>));
-        }
-    }
-
-    void TestRegistry() {
-        using namespace NCodecs;
+        } 
+    } 
+ 
+    void TestRegistry() { 
+        using namespace NCodecs; 
         TVector<TString> vs = ICodec::GetCodecsList();
         for (const auto& v : vs) {
             TCodecPtr p = ICodec::GetInstance(v);
             if (v == "none") {
-                UNIT_ASSERT(!p);
-                continue;
-            }
+                UNIT_ASSERT(!p); 
+                continue; 
+            } 
             UNIT_ASSERT_C(!!p, v);
             UNIT_ASSERT_C(TStringBuf(v).Head(3) == TStringBuf(p->GetName()).Head(3), v + " " + p->GetName());
-        }
-    }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TCodecsTest)
+        } 
+    } 
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TCodecsTest) 

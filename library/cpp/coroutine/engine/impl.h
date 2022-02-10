@@ -1,25 +1,25 @@
-#pragma once
+#pragma once 
 
 #include "callbacks.h"
-#include "cont_poller.h"
-#include "iostatus.h"
+#include "cont_poller.h" 
+#include "iostatus.h" 
 #include "poller.h"
 #include "stack/stack_common.h"
-#include "trampoline.h"
+#include "trampoline.h" 
 #include "custom_time.h"
 
 #include <library/cpp/containers/intrusive_rb_tree/rb_tree.h>
-
+ 
 #include <util/system/error.h>
 #include <util/generic/ptr.h>
 #include <util/generic/intrlist.h>
 #include <util/datetime/base.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/function.h>
 
-
-#define EWAKEDUP 34567
-
+ 
+#define EWAKEDUP 34567 
+ 
 class TCont;
 struct TContRep;
 class TContExecutor;
@@ -28,97 +28,97 @@ class TContPollEvent;
 namespace NCoro::NStack {
     class IAllocator;
 }
+ 
+class TCont : private TIntrusiveListItem<TCont> { 
+    struct TJoinWait: public TIntrusiveListItem<TJoinWait> { 
+        TJoinWait(TCont& c) noexcept; 
 
-class TCont : private TIntrusiveListItem<TCont> {
-    struct TJoinWait: public TIntrusiveListItem<TJoinWait> {
-        TJoinWait(TCont& c) noexcept;
+        void Wake() noexcept; 
 
-        void Wake() noexcept;
+    public: 
+        TCont& Cont_; 
+    }; 
 
-    public:
-        TCont& Cont_;
-    };
+    friend class TContExecutor; 
+    friend class TIntrusiveListItem<TCont>; 
+    friend class NCoro::TEventWaitQueue; 
+    friend class NCoro::TTrampoline; 
 
-    friend class TContExecutor;
-    friend class TIntrusiveListItem<TCont>;
-    friend class NCoro::TEventWaitQueue;
-    friend class NCoro::TTrampoline;
-
-private:
-    TCont(
+private: 
+    TCont( 
         NCoro::NStack::IAllocator& allocator,
         uint32_t stackSize,
-        TContExecutor& executor,
+        TContExecutor& executor, 
         NCoro::TTrampoline::TFunc func,
-        const char* name
-    ) noexcept;
+        const char* name 
+    ) noexcept; 
 
-public:
-    TContExecutor* Executor() noexcept {
-        return &Executor_;
+public: 
+    TContExecutor* Executor() noexcept { 
+        return &Executor_; 
     }
 
-    const TContExecutor* Executor() const noexcept {
-        return &Executor_;
+    const TContExecutor* Executor() const noexcept { 
+        return &Executor_; 
     }
 
-    const char* Name() const noexcept {
+    const char* Name() const noexcept { 
         return Name_;
     }
 
     void PrintMe(IOutputStream& out) const noexcept;
 
-    void Yield() noexcept;
+    void Yield() noexcept; 
 
-    void ReScheduleAndSwitch() noexcept;
+    void ReScheduleAndSwitch() noexcept; 
 
     /// @return ETIMEDOUT on success
-    int SleepD(TInstant deadline) noexcept;
+    int SleepD(TInstant deadline) noexcept; 
 
-    int SleepT(TDuration timeout) noexcept {
+    int SleepT(TDuration timeout) noexcept { 
         return SleepD(timeout.ToDeadLine());
     }
 
-    int SleepI() noexcept {
+    int SleepI() noexcept { 
         return SleepD(TInstant::Max());
     }
 
-    bool IAmRunning() const noexcept;
+    bool IAmRunning() const noexcept; 
 
-    void Cancel() noexcept;
+    void Cancel() noexcept; 
 
-    bool Cancelled() const noexcept {
+    bool Cancelled() const noexcept { 
         return Cancelled_;
     }
 
-    bool Scheduled() const noexcept {
+    bool Scheduled() const noexcept { 
         return Scheduled_;
     }
 
-    bool Join(TCont* c, TInstant deadLine = TInstant::Max()) noexcept;
+    bool Join(TCont* c, TInstant deadLine = TInstant::Max()) noexcept; 
 
-    void ReSchedule() noexcept;
+    void ReSchedule() noexcept; 
 
     void Switch() noexcept;
 
-    void SwitchTo(TExceptionSafeContext* ctx) {
-        Trampoline_.SwitchTo(ctx);
-    }
+    void SwitchTo(TExceptionSafeContext* ctx) { 
+        Trampoline_.SwitchTo(ctx); 
+    } 
 
 private:
-    void Terminate();
-
+    void Terminate(); 
+ 
 private:
-    TContExecutor& Executor_;
-
-    // TODO(velavokr): allow name storage owning (for generated names backed by TString)
-    const char* Name_ = nullptr;
+    TContExecutor& Executor_; 
+ 
+    // TODO(velavokr): allow name storage owning (for generated names backed by TString) 
+    const char* Name_ = nullptr; 
 
     NCoro::TTrampoline Trampoline_;
 
     TIntrusiveList<TJoinWait> Waiters_;
-    bool Cancelled_ = false;
-    bool Scheduled_ = false;
+    bool Cancelled_ = false; 
+    bool Scheduled_ = false; 
 };
 
 TCont* RunningCont();
@@ -147,60 +147,60 @@ public:
 /// Note, coroutines are single-threaded, and all methods must be called from the single thread
 class TContExecutor {
     friend class TCont;
-    using TContList = TIntrusiveList<TCont>;
+    using TContList = TIntrusiveList<TCont>; 
 
 public:
-    TContExecutor(
+    TContExecutor( 
         uint32_t defaultStackSize,
-        THolder<IPollerFace> poller = IPollerFace::Default(),
-        NCoro::IScheduleCallback* = nullptr,
+        THolder<IPollerFace> poller = IPollerFace::Default(), 
+        NCoro::IScheduleCallback* = nullptr, 
         NCoro::IEnterPollerCallback* = nullptr,
         NCoro::NStack::EGuard stackGuard = NCoro::NStack::EGuard::Canary,
         TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings = Nothing(),
         NCoro::ITime* time = nullptr
-    );
+    ); 
 
     ~TContExecutor();
 
-    // if we already have a coroutine to run
-    void Execute() noexcept;
+    // if we already have a coroutine to run 
+    void Execute() noexcept; 
 
-    void Execute(TContFunc func, void* arg = nullptr) noexcept;
+    void Execute(TContFunc func, void* arg = nullptr) noexcept; 
 
     template <class Functor>
-    void Execute(Functor& f) noexcept {
+    void Execute(Functor& f) noexcept { 
         Execute((TContFunc)ContHelperFunc<Functor>, (void*)&f);
     }
 
     template <typename T, void (T::*M)(TCont*)>
-    void Execute(T* obj) noexcept {
+    void Execute(T* obj) noexcept { 
         Execute(ContHelperMemberFunc<T, M>, obj);
     }
 
     template <class Functor>
-    TCont* Create(
-        Functor& f,
-        const char* name,
-        TMaybe<ui32> customStackSize = Nothing()
-    ) noexcept {
-        return Create((TContFunc)ContHelperFunc<Functor>, (void*)&f, name, customStackSize);
+    TCont* Create( 
+        Functor& f, 
+        const char* name, 
+        TMaybe<ui32> customStackSize = Nothing() 
+    ) noexcept { 
+        return Create((TContFunc)ContHelperFunc<Functor>, (void*)&f, name, customStackSize); 
     }
 
     template <typename T, void (T::*M)(TCont*)>
-    TCont* Create(
-        T* obj,
-        const char* name,
-        TMaybe<ui32> customStackSize = Nothing()
-    ) noexcept {
-        return Create(ContHelperMemberFunc<T, M>, obj, name, customStackSize);
+    TCont* Create( 
+        T* obj, 
+        const char* name, 
+        TMaybe<ui32> customStackSize = Nothing() 
+    ) noexcept { 
+        return Create(ContHelperMemberFunc<T, M>, obj, name, customStackSize); 
     }
 
-    TCont* Create(
-        TContFunc func,
-        void* arg,
-        const char* name,
-        TMaybe<ui32> customStackSize = Nothing()
-    ) noexcept;
+    TCont* Create( 
+        TContFunc func, 
+        void* arg, 
+        const char* name, 
+        TMaybe<ui32> customStackSize = Nothing() 
+    ) noexcept; 
 
     TCont* CreateOwned(
         NCoro::TTrampoline::TFunc func,
@@ -208,44 +208,44 @@ public:
         TMaybe<ui32> customStackSize = Nothing()
     ) noexcept;
 
-    NCoro::TContPoller* Poller() noexcept {
+    NCoro::TContPoller* Poller() noexcept { 
         return &Poller_;
     }
 
-    TCont* Running() noexcept {
+    TCont* Running() noexcept { 
         return Current_;
     }
 
-    const TCont* Running() const noexcept {
+    const TCont* Running() const noexcept { 
         return Current_;
     }
 
-    size_t TotalReadyConts() const noexcept {
-        return Ready_.Size() + TotalScheduledConts();
-    }
-
-    size_t TotalScheduledConts() const noexcept {
-        return ReadyNext_.Size();
-    }
-
-    size_t TotalConts() const noexcept {
-        return Allocated_;
-    }
-
-    size_t TotalWaitingConts() const noexcept {
-        return TotalConts() - TotalReadyConts();
-    }
-
+    size_t TotalReadyConts() const noexcept { 
+        return Ready_.Size() + TotalScheduledConts(); 
+    } 
+ 
+    size_t TotalScheduledConts() const noexcept { 
+        return ReadyNext_.Size(); 
+    } 
+ 
+    size_t TotalConts() const noexcept { 
+        return Allocated_; 
+    } 
+ 
+    size_t TotalWaitingConts() const noexcept { 
+        return TotalConts() - TotalReadyConts(); 
+    } 
+ 
     NCoro::NStack::TAllocatorStats GetAllocatorStats() const noexcept;
 
-    // TODO(velavokr): rename, it is just CancelAll actually
-    void Abort() noexcept;
+    // TODO(velavokr): rename, it is just CancelAll actually 
+    void Abort() noexcept; 
 
-    void SetFailOnError(bool fail) noexcept {
+    void SetFailOnError(bool fail) noexcept { 
         FailOnError_ = fail;
     }
 
-    bool FailOnError() const noexcept {
+    bool FailOnError() const noexcept { 
         return FailOnError_;
     }
 
@@ -253,12 +253,12 @@ public:
         WaitQueue_.Register(event);
     }
 
-    void ScheduleIoWait(TFdEvent* event) {
+    void ScheduleIoWait(TFdEvent* event) { 
         RegisterInWaitQueue(event);
         Poller_.Schedule(event);
     }
 
-    void ScheduleIoWait(TTimerEvent* event) noexcept {
+    void ScheduleIoWait(TTimerEvent* event) noexcept { 
         RegisterInWaitQueue(event);
     }
 
@@ -269,45 +269,45 @@ public:
     void Pause();
     TInstant Now();
 private:
-    void Release(TCont* cont) noexcept;
+    void Release(TCont* cont) noexcept; 
 
-    void Exit(TCont* cont) noexcept;
+    void Exit(TCont* cont) noexcept; 
 
     void RunScheduler() noexcept;
 
-    void ScheduleToDelete(TCont* cont) noexcept;
+    void ScheduleToDelete(TCont* cont) noexcept; 
 
-    void ScheduleExecution(TCont* cont) noexcept;
+    void ScheduleExecution(TCont* cont) noexcept; 
 
-    void ScheduleExecutionNow(TCont* cont) noexcept;
-
-    void DeleteScheduled() noexcept;
+    void ScheduleExecutionNow(TCont* cont) noexcept; 
+ 
+    void DeleteScheduled() noexcept; 
 
     void WaitForIO();
 
     void Poll(TInstant deadline);
-
+ 
 private:
     NCoro::IScheduleCallback* const ScheduleCallback_ = nullptr;
     NCoro::IEnterPollerCallback* const EnterPollerCallback_ = nullptr;
     const uint32_t DefaultStackSize_;
     THolder<NCoro::NStack::IAllocator> StackAllocator_;
-
-    TExceptionSafeContext SchedContext_;
-
+ 
+    TExceptionSafeContext SchedContext_; 
+ 
     TContList ToDelete_;
     TContList Ready_;
-    TContList ReadyNext_;
-    NCoro::TEventWaitQueue WaitQueue_;
-    NCoro::TContPoller Poller_;
+    TContList ReadyNext_; 
+    NCoro::TEventWaitQueue WaitQueue_; 
+    NCoro::TContPoller Poller_; 
     NCoro::TContPoller::TEvents PollerEvents_;
     TInstant LastPoll_;
-
+ 
     TIntrusiveList<IUserEvent> UserEvents_;
 
-    size_t Allocated_ = 0;
-    TCont* Current_ = nullptr;
-    bool FailOnError_ = false;
+    size_t Allocated_ = 0; 
+    TCont* Current_ = nullptr; 
+    bool FailOnError_ = false; 
     bool Paused_ = false;
     NCoro::ITime* Time_ = nullptr;
 };

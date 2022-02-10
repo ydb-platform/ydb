@@ -1,6 +1,6 @@
-#pragma once
+#pragma once 
 
-#include "comptrie_impl.h"
+#include "comptrie_impl.h" 
 #include "node.h"
 #include "key_selector.h"
 #include "leaf_skipper.h"

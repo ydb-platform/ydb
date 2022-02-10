@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/memory/segmented_string_pool.h>
 #include <util/generic/map.h>

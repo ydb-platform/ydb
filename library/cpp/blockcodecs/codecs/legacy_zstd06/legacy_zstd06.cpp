@@ -2,14 +2,14 @@
 #include <library/cpp/blockcodecs/core/common.h>
 #include <library/cpp/blockcodecs/core/register.h>
 
-#include <contrib/libs/zstd06/common/zstd.h>
-#include <contrib/libs/zstd06/common/zstd_static.h>
+#include <contrib/libs/zstd06/common/zstd.h> 
+#include <contrib/libs/zstd06/common/zstd_static.h> 
 
 using namespace NBlockCodecs;
 
 namespace {
-    struct TZStd06Codec: public TAddLengthCodec<TZStd06Codec> {
-        inline TZStd06Codec(unsigned level)
+    struct TZStd06Codec: public TAddLengthCodec<TZStd06Codec> { 
+        inline TZStd06Codec(unsigned level) 
             : Level(level)
             , MyName(TStringBuf("zstd06_") + ToString(Level))
         {

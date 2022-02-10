@@ -1266,11 +1266,11 @@ typedef U32 DTable_max_t[FSE_DTABLE_SIZE_U32(FSE_MAX_TABLELOG)];
 
 /* Function templates */
 
-#define FSE_DECODE_TYPE FSE_decode_t
+#define FSE_DECODE_TYPE FSE_decode_t 
 
 static U32 FSE_tableStep(U32 tableSize) { return (tableSize>>1) + (tableSize>>3) + 3; }
 
-static size_t FSE_buildDTable
+static size_t FSE_buildDTable 
 (FSE_DTable* dt, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog)
 {
     void* ptr = dt+1;
@@ -1350,7 +1350,7 @@ static unsigned FSE_isError(size_t code) { return ERR_isError(code); }
 ****************************************************************/
 static short FSE_abs(short a)
 {
-    return (short)(a<0 ? -a : a);
+    return (short)(a<0 ? -a : a); 
 }
 
 static size_t FSE_readNCount (short* normalizedCounter, unsigned* maxSVPtr, unsigned* tableLogPtr,

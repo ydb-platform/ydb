@@ -1,9 +1,9 @@
-#include "fuzz_json.h"
+#include "fuzz_json.h" 
 #include "util/generic/fwd.h"
-
+ 
 #include <library/cpp/scheme/scheme.h>
-#include <util/stream/null.h>
-
+#include <util/stream/null.h> 
+ 
 namespace {
     static constexpr size_t MAX_DEPTH = 4;
     static constexpr size_t MAX_PATH_LEN = 256;
@@ -75,25 +75,25 @@ namespace {
     }
 }
 
-namespace NSc::NUt {
+namespace NSc::NUt { 
 
 
-    void FuzzJson(TStringBuf wire) {
+    void FuzzJson(TStringBuf wire) { 
         if (wire.size() < 2) {
-            return;
-        }
-
+            return; 
+        } 
+ 
 
         ProcessPath("[123][1234][12][2134][12312312][1][12]");
-        ui8 len1 = wire[0];
-        ui8 len2 = wire[1];
-        wire.Skip(2);
-        auto json1 = wire.NextTokAt(len1);
-        auto json2 = wire.NextTokAt(len2);
-        NSc::TValue val1 = NSc::TValue::FromJson(json1);
-        NSc::TValue val2 = NSc::TValue::FromJson(json2);
-        NSc::TValue val3;
-        val3.MergeUpdate(val1);
+        ui8 len1 = wire[0]; 
+        ui8 len2 = wire[1]; 
+        wire.Skip(2); 
+        auto json1 = wire.NextTokAt(len1); 
+        auto json2 = wire.NextTokAt(len2); 
+        NSc::TValue val1 = NSc::TValue::FromJson(json1); 
+        NSc::TValue val2 = NSc::TValue::FromJson(json2); 
+        NSc::TValue val3; 
+        val3.MergeUpdate(val1); 
 
         size_t i = 0;
         while (!wire.empty()) {
@@ -110,6 +110,6 @@ namespace NSc::NUt {
                 val3 = NSc::TValue();
             }
         }
-        Cnull << val3.ToJson();
-    }
-}
+        Cnull << val3.ToJson(); 
+    } 
+} 

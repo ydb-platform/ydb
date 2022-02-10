@@ -55,9 +55,9 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
     template <typename TSignedInt>
     void TestCornerCasesImpl(int maxPow) {
         for (int i = 0; i <= maxPow; ++i) {
-            TestOneValue<TSignedInt>((TSignedInt)(1ull << i));
-            TestOneValue<TSignedInt>((TSignedInt)((1ull << i) - 1));
-            TestOneValue<TSignedInt>((TSignedInt)((1ull << i) + 1));
+            TestOneValue<TSignedInt>((TSignedInt)(1ull << i)); 
+            TestOneValue<TSignedInt>((TSignedInt)((1ull << i) - 1)); 
+            TestOneValue<TSignedInt>((TSignedInt)((1ull << i) + 1)); 
         }
     }
 

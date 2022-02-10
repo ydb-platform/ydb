@@ -1,7 +1,7 @@
-#pragma once
+#pragma once 
 
 #include "impl.h"
-#include "network.h"
+#include "network.h" 
 
 #include <util/network/address.h>
 #include <util/network/socket.h>
@@ -14,7 +14,7 @@ class TSocketPool;
 class TPooledSocket {
     class TImpl: public TIntrusiveListItem<TImpl>, public TSimpleRefCount<TImpl, TImpl> {
     public:
-        TImpl(SOCKET fd, TSocketPool* pool) noexcept
+        TImpl(SOCKET fd, TSocketPool* pool) noexcept 
             : Pool_(pool)
             , IsKeepAlive_(false)
             , Fd_(fd)
@@ -22,11 +22,11 @@ class TPooledSocket {
             Touch();
         }
 
-        static void Destroy(TImpl* impl) noexcept {
+        static void Destroy(TImpl* impl) noexcept { 
             impl->DoDestroy();
         }
 
-        void DoDestroy() noexcept {
+        void DoDestroy() noexcept { 
             if (!Closed() && IsKeepAlive() && IsInGoodState()) {
                 ReturnToPool();
             } else {
@@ -34,28 +34,28 @@ class TPooledSocket {
             }
         }
 
-        bool IsKeepAlive() const noexcept {
+        bool IsKeepAlive() const noexcept { 
             return IsKeepAlive_;
         }
 
-        void SetKeepAlive(bool ka) {
+        void SetKeepAlive(bool ka) { 
             ::SetKeepAlive(Fd_, ka);
             IsKeepAlive_ = ka;
         }
 
-        SOCKET Socket() const noexcept {
+        SOCKET Socket() const noexcept { 
             return Fd_;
         }
 
-        bool Closed() const noexcept {
+        bool Closed() const noexcept { 
             return Fd_.Closed();
         }
 
-        void Close() noexcept {
+        void Close() noexcept { 
             Fd_.Close();
         }
 
-        bool IsInGoodState() const noexcept {
+        bool IsInGoodState() const noexcept { 
             int err = 0;
             socklen_t len = sizeof(err);
 
@@ -64,15 +64,15 @@ class TPooledSocket {
             return !err;
         }
 
-        bool IsOpen() const noexcept {
-            return IsInGoodState() && IsNotSocketClosedByOtherSide(Fd_);
+        bool IsOpen() const noexcept { 
+            return IsInGoodState() && IsNotSocketClosedByOtherSide(Fd_); 
         }
 
-        void Touch() noexcept {
+        void Touch() noexcept { 
             TouchTime_ = TInstant::Now();
         }
 
-        const TInstant& LastTouch() const noexcept {
+        const TInstant& LastTouch() const noexcept { 
             return TouchTime_;
         }
 
@@ -89,31 +89,31 @@ class TPooledSocket {
     friend class TSocketPool;
 
 public:
-    TPooledSocket()
+    TPooledSocket() 
         : Impl_(nullptr)
     {
     }
 
-    TPooledSocket(TImpl* impl)
+    TPooledSocket(TImpl* impl) 
         : Impl_(impl)
     {
     }
 
-    ~TPooledSocket() {
+    ~TPooledSocket() { 
         if (UncaughtException() && !!Impl_) {
             Close();
         }
     }
 
-    operator SOCKET() const noexcept {
+    operator SOCKET() const noexcept { 
         return Impl_->Socket();
     }
 
-    void SetKeepAlive(bool ka) {
+    void SetKeepAlive(bool ka) { 
         Impl_->SetKeepAlive(ka);
     }
 
-    void Close() noexcept {
+    void Close() noexcept { 
         Impl_->Close();
     }
 
@@ -122,13 +122,13 @@ private:
 };
 
 struct TConnectData {
-    TConnectData(TCont* cont, const TInstant& deadLine)
+    TConnectData(TCont* cont, const TInstant& deadLine) 
         : Cont(cont)
         , DeadLine(deadLine)
     {
     }
 
-    TConnectData(TCont* cont, const TDuration& timeOut)
+    TConnectData(TCont* cont, const TDuration& timeOut) 
         : Cont(cont)
         , DeadLine(TInstant::Now() + timeOut)
     {
@@ -144,17 +144,17 @@ class TSocketPool {
 public:
     typedef TAtomicSharedPtr<NAddr::IRemoteAddr> TAddrRef;
 
-    TSocketPool(int ip, int port)
+    TSocketPool(int ip, int port) 
         : Addr_(new NAddr::TIPv4Addr(TIpAddress((ui32)ip, (ui16)port)))
     {
     }
 
-    TSocketPool(const TAddrRef& addr)
+    TSocketPool(const TAddrRef& addr) 
         : Addr_(addr)
     {
     }
 
-    void EraseStale(const TInstant& maxAge) noexcept {
+    void EraseStale(const TInstant& maxAge) noexcept { 
         TSockets toDelete;
 
         {
@@ -170,7 +170,7 @@ public:
         }
     }
 
-    TPooledSocket Get(TConnectData* conn) {
+    TPooledSocket Get(TConnectData* conn) { 
         TPooledSocket ret;
 
         if (TPooledSocket::TImpl* alive = GetImpl()) {
@@ -184,7 +184,7 @@ public:
         return ret;
     }
 
-    bool GetAlive(TPooledSocket& socket) {
+    bool GetAlive(TPooledSocket& socket) { 
         if (TPooledSocket::TImpl* alive = GetImpl()) {
             alive->Touch();
             socket = TPooledSocket(alive);
@@ -194,7 +194,7 @@ public:
     }
 
 private:
-    TPooledSocket::TImpl* GetImpl() {
+    TPooledSocket::TImpl* GetImpl() { 
         TGuard<TMutex> guard(Mutex_);
 
         while (!Pool_.Empty()) {
@@ -207,7 +207,7 @@ private:
         return nullptr;
     }
 
-    void Release(TPooledSocket::TImpl* impl) noexcept {
+    void Release(TPooledSocket::TImpl* impl) noexcept { 
         TGuard<TMutex> guard(Mutex_);
 
         Pool_.PushFront(impl);
@@ -217,7 +217,7 @@ private:
 
 private:
     TAddrRef Addr_;
-    using TSockets = TIntrusiveListWithAutoDelete<TPooledSocket::TImpl, TDelete>;
+    using TSockets = TIntrusiveListWithAutoDelete<TPooledSocket::TImpl, TDelete>; 
     TSockets Pool_;
     TMutex Mutex_;
 };
@@ -226,24 +226,24 @@ inline void TPooledSocket::TImpl::ReturnToPool() noexcept {
     Pool_->Release(this);
 }
 
-
+ 
 class TContIO: public IInputStream, public IOutputStream {
 public:
-    TContIO(SOCKET fd, TCont* cont)
+    TContIO(SOCKET fd, TCont* cont) 
         : Fd_(fd)
         , Cont_(cont)
     {
     }
 
     void DoWrite(const void* buf, size_t len) override {
-        NCoro::WriteI(Cont_, Fd_, buf, len).Checked();
+        NCoro::WriteI(Cont_, Fd_, buf, len).Checked(); 
     }
 
     size_t DoRead(void* buf, size_t len) override {
-        return NCoro::ReadI(Cont_, Fd_, buf, len).Checked();
+        return NCoro::ReadI(Cont_, Fd_, buf, len).Checked(); 
     }
 
-    SOCKET Fd() const noexcept {
+    SOCKET Fd() const noexcept { 
         return Fd_;
     }
 

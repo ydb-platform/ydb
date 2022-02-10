@@ -17,16 +17,16 @@ namespace NJson {
         int ArrayCounter;
 
         TPathElemImpl(NImpl::EType type)
-            : Type(type)
-            , ArrayCounter()
-        {
+            : Type(type) 
+            , ArrayCounter() 
+        { 
         }
 
         TPathElemImpl(const TStringType& key)
             : Type(NImpl::MAP_KEY)
-            , Key(key)
-            , ArrayCounter()
-        {
+            , Key(key) 
+            , ArrayCounter() 
+        { 
         }
 
         TPathElemImpl(int arrayCounter)

@@ -2,26 +2,26 @@
 #include "file.h"
 
 #include <sys/stat.h>
-
+ 
 #include <util/folder/path.h>
 
 #include <cerrno>
 
-#if defined(_win_)
+#if defined(_win_) 
     #include "fs_win.h"
-
+ 
     #ifdef _S_IFLNK
         #undef _S_IFLNK
     #endif
     #define _S_IFLNK 0x80000000
-
+ 
 ui32 GetFileMode(DWORD fileAttributes) {
     ui32 mode = 0;
     if (fileAttributes == 0xFFFFFFFF)
         return mode;
-    if (fileAttributes & FILE_ATTRIBUTE_DEVICE)
+    if (fileAttributes & FILE_ATTRIBUTE_DEVICE) 
         mode |= _S_IFCHR;
-    if (fileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+    if (fileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) 
         mode |= _S_IFLNK; // todo: was undefined by the moment of writing this code
     if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         mode |= _S_IFDIR;
@@ -31,95 +31,95 @@ ui32 GetFileMode(DWORD fileAttributes) {
         mode |= _S_IWRITE;
     return mode;
 }
-
+ 
     #define S_ISDIR(st_mode) (st_mode & _S_IFDIR)
     #define S_ISREG(st_mode) (st_mode & _S_IFREG)
     #define S_ISLNK(st_mode) (st_mode & _S_IFLNK)
-
+ 
 using TSystemFStat = BY_HANDLE_FILE_INFORMATION;
-
-#else
-
+ 
+#else 
+ 
 using TSystemFStat = struct stat;
-
+ 
 #endif
 
-static void MakeStat(TFileStat& st, const TSystemFStat& fs) {
-#ifdef _unix_
-    st.Mode = fs.st_mode;
-    st.NLinks = fs.st_nlink;
-    st.Uid = fs.st_uid;
-    st.Gid = fs.st_gid;
-    st.Size = fs.st_size;
+static void MakeStat(TFileStat& st, const TSystemFStat& fs) { 
+#ifdef _unix_ 
+    st.Mode = fs.st_mode; 
+    st.NLinks = fs.st_nlink; 
+    st.Uid = fs.st_uid; 
+    st.Gid = fs.st_gid; 
+    st.Size = fs.st_size; 
     st.AllocationSize = fs.st_blocks * 512;
-    st.ATime = fs.st_atime;
-    st.MTime = fs.st_mtime;
-    st.CTime = fs.st_ctime;
+    st.ATime = fs.st_atime; 
+    st.MTime = fs.st_mtime; 
+    st.CTime = fs.st_ctime; 
     st.INode = fs.st_ino;
-#else
+#else 
     timeval tv;
-    FileTimeToTimeval(&fs.ftCreationTime, &tv);
+    FileTimeToTimeval(&fs.ftCreationTime, &tv); 
     st.CTime = tv.tv_sec;
-    FileTimeToTimeval(&fs.ftLastAccessTime, &tv);
+    FileTimeToTimeval(&fs.ftLastAccessTime, &tv); 
     st.ATime = tv.tv_sec;
-    FileTimeToTimeval(&fs.ftLastWriteTime, &tv);
+    FileTimeToTimeval(&fs.ftLastWriteTime, &tv); 
     st.MTime = tv.tv_sec;
-    st.NLinks = fs.nNumberOfLinks;
-    st.Mode = GetFileMode(fs.dwFileAttributes);
+    st.NLinks = fs.nNumberOfLinks; 
+    st.Mode = GetFileMode(fs.dwFileAttributes); 
     st.Uid = 0;
     st.Gid = 0;
-    st.Size = ((ui64)fs.nFileSizeHigh << 32) | fs.nFileSizeLow;
+    st.Size = ((ui64)fs.nFileSizeHigh << 32) | fs.nFileSizeLow; 
     st.AllocationSize = st.Size; // FIXME
     st.INode = ((ui64)fs.nFileIndexHigh << 32) | fs.nFileIndexLow;
 #endif
-}
-
-static bool GetStatByHandle(TSystemFStat& fs, FHANDLE f) {
-#ifdef _win_
-    return GetFileInformationByHandle(f, &fs);
-#else
-    return !fstat(f, &fs);
-#endif
-}
-
+} 
+ 
+static bool GetStatByHandle(TSystemFStat& fs, FHANDLE f) { 
+#ifdef _win_ 
+    return GetFileInformationByHandle(f, &fs); 
+#else 
+    return !fstat(f, &fs); 
+#endif 
+} 
+ 
 static bool GetStatByName(TSystemFStat& fs, const char* fileName, bool nofollow) {
-#ifdef _win_
+#ifdef _win_ 
     TFileHandle h = NFsPrivate::CreateFileWithUtf8Name(fileName, FILE_READ_ATTRIBUTES | FILE_READ_EA, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                                        OPEN_EXISTING,
                                                        (nofollow ? FILE_FLAG_OPEN_REPARSE_POINT : 0) | FILE_FLAG_BACKUP_SEMANTICS, true);
     if (!h.IsOpen()) {
         return false;
     }
-    return GetStatByHandle(fs, h);
-#else
+    return GetStatByHandle(fs, h); 
+#else 
     return !(nofollow ? lstat : stat)(fileName, &fs);
-#endif
-}
-
+#endif 
+} 
+ 
 TFileStat::TFileStat() = default;
-
+ 
 TFileStat::TFileStat(const TFile& f) {
-    *this = TFileStat(f.GetHandle());
-}
-
+    *this = TFileStat(f.GetHandle()); 
+} 
+ 
 TFileStat::TFileStat(FHANDLE f) {
-    TSystemFStat st;
-    if (GetStatByHandle(st, f)) {
-        MakeStat(*this, st);
-    } else {
-        *this = TFileStat();
-    }
-}
-
+    TSystemFStat st; 
+    if (GetStatByHandle(st, f)) { 
+        MakeStat(*this, st); 
+    } else { 
+        *this = TFileStat(); 
+    } 
+} 
+ 
 void TFileStat::MakeFromFileName(const char* fileName, bool nofollow) {
-    TSystemFStat st;
+    TSystemFStat st; 
     if (GetStatByName(st, fileName, nofollow)) {
-        MakeStat(*this, st);
-    } else {
-        *this = TFileStat();
-    }
-}
-
+        MakeStat(*this, st); 
+    } else { 
+        *this = TFileStat(); 
+    } 
+} 
+ 
 TFileStat::TFileStat(const TFsPath& fileName, bool nofollow) {
     MakeFromFileName(fileName.GetPath().data(), nofollow);
 }
@@ -137,16 +137,16 @@ bool TFileStat::IsNull() const noexcept {
 }
 
 bool TFileStat::IsFile() const noexcept {
-    return S_ISREG(Mode);
-}
-
+    return S_ISREG(Mode); 
+} 
+ 
 bool TFileStat::IsDir() const noexcept {
-    return S_ISDIR(Mode);
-}
-
+    return S_ISDIR(Mode); 
+} 
+ 
 bool TFileStat::IsSymlink() const noexcept {
-    return S_ISLNK(Mode);
-}
+    return S_ISLNK(Mode); 
+} 
 
 bool operator==(const TFileStat& l, const TFileStat& r) noexcept {
     return l.Mode == r.Mode &&

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "codepage.h"
 #include "iconv.h"
@@ -182,21 +182,21 @@ namespace NDetail {
         return TBasicStringBuf<TCharTo>(dstbuf, dstFinalSize);
     }
 
-    // special implementation for robust utf8 functions
-    template <typename TResult>
+    // special implementation for robust utf8 functions 
+    template <typename TResult> 
     TWtringBuf RecodeUTF8Robust(const TStringBuf src, TResult& dst) {
-        // make enough room for re-coded string
+        // make enough room for re-coded string 
         wchar16* dstbuf = TRecodeResultOps<TResult>::Reserve(dst, src.size() * TRecodeTraits<wchar16>::ReserveSize);
-
-        // do re-coding
-        size_t written = 0;
+ 
+        // do re-coding 
+        size_t written = 0; 
         UTF8ToWide<true>(src.data(), src.size(), dstbuf, written);
-
-        // truncate result back to proper size
-        TRecodeResultOps<TResult>::Truncate(dst, written);
-        return TWtringBuf(dstbuf, written);
-    }
-
+ 
+        // truncate result back to proper size 
+        TRecodeResultOps<TResult>::Truncate(dst, written); 
+        return TWtringBuf(dstbuf, written); 
+    } 
+ 
     template <typename TCharFrom>
     inline typename TRecodeTraits<TCharFrom>::TStringTo Recode(const TBasicStringBuf<TCharFrom> src, ECharset encoding) {
         typename TRecodeTraits<TCharFrom>::TStringTo res;
@@ -207,17 +207,17 @@ namespace NDetail {
 
 // Write result into @dst. Return string-buffer pointing to re-coded content of @dst.
 
-template <bool robust>
+template <bool robust> 
 inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) {
-    if (robust && CODES_UTF8 == encoding)
+    if (robust && CODES_UTF8 == encoding) 
         return ::NDetail::RecodeUTF8Robust(src, dst);
     return ::NDetail::Recode<char>(src, dst, encoding);
 }
 
 inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) {
     return ::NDetail::Recode<char>(src, dst, encoding);
-}
-
+} 
+ 
 inline TStringBuf WideToChar(const TWtringBuf src, TString& dst, ECharset encoding) {
     return ::NDetail::Recode<wchar16>(src, dst, encoding);
 }
@@ -251,11 +251,11 @@ inline TUtf16String CharToWide(const char* text, size_t len, const CodePage& cp)
 }
 
 //! calls either to @c UTF8ToWide or @c CharToWide depending on the encoding type
-template <bool robust>
+template <bool robust> 
 inline TUtf16String CharToWide(const char* text, size_t len, ECharset enc) {
     if (NCodepagePrivate::NativeCodepage(enc)) {
         if (enc == CODES_UTF8)
-            return UTF8ToWide<robust>(text, len);
+            return UTF8ToWide<robust>(text, len); 
 
         return CharToWide(text, len, *CodePageByCharset(enc));
     }

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <util/system/defaults.h> // _BIDSCLASS _EXPCLASS
 #include <util/system/yassert.h>

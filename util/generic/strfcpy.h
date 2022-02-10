@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 /*
  * strfcpy is a faster version of strlcpy().

@@ -5,30 +5,30 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/singleton.h>
 #include <util/system/env.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 
 namespace {
-    using TChange = IPollerFace::TChange;
-    using TEvent = IPollerFace::TEvent;
-    using TEvents = IPollerFace::TEvents;
+    using TChange = IPollerFace::TChange; 
+    using TEvent = IPollerFace::TEvent; 
+    using TEvents = IPollerFace::TEvents; 
 
     template <class T>
     class TUnsafeBuf {
     public:
-        TUnsafeBuf() noexcept
+        TUnsafeBuf() noexcept 
             : L_(0)
         {
         }
 
-        T* operator~() const noexcept {
+        T* operator~() const noexcept { 
             return B_.Get();
         }
 
-        size_t operator+() const noexcept {
+        size_t operator+() const noexcept { 
             return L_;
         }
 
-        void Reserve(size_t len) {
+        void Reserve(size_t len) { 
             len = FastClp2(len);
 
             if (len > L_) {
@@ -42,7 +42,7 @@ namespace {
         size_t L_;
     };
 
-
+ 
     template <class T>
     class TVirtualize: public IPollerFace {
     public:
@@ -67,25 +67,25 @@ namespace {
         const EContPoller PollerEngine_;
     };
 
-
+ 
     template <class T>
     class TPoller {
-        using TInternalEvent = typename T::TEvent;
+        using TInternalEvent = typename T::TEvent; 
 
     public:
-        TPoller() {
+        TPoller() { 
             E_.Reserve(1);
         }
 
-        void Set(const TChange& c) {
+        void Set(const TChange& c) { 
             P_.Set(c.Data, c.Fd, c.Flags);
         }
 
-        void Reserve(size_t size) {
+        void Reserve(size_t size) { 
             E_.Reserve(size);
         }
 
-        void Wait(TEvents& events, TInstant deadLine) {
+        void Wait(TEvents& events, TInstant deadLine) { 
             const size_t ret = P_.WaitD(~E_, +E_, deadLine);
 
             events.reserve(ret);
@@ -110,21 +110,21 @@ namespace {
         TUnsafeBuf<TInternalEvent> E_;
     };
 
-
+ 
     template <class T>
     class TIndexedArray {
-        struct TVal:
-            public T,
-            public TIntrusiveListItem<TVal>,
-            public TObjectFromPool<TVal>
-        {
+        struct TVal: 
+            public T, 
+            public TIntrusiveListItem<TVal>, 
+            public TObjectFromPool<TVal> 
+        { 
             // NOTE Constructor must be user-defined (and not =default) here
             // because TVal objects are created in the UB-capable placement
             // TObjectFromPool::new operator that stores data in a memory
             // allocated for the object. Without user defined constructor
             // zero-initialization takes place in TVal() expression and the
             // data is overwritten.
-            TVal() {
+            TVal() { 
             }
         };
 
@@ -134,32 +134,32 @@ namespace {
         typedef typename TListType::TIterator TIterator;
         typedef typename TListType::TConstIterator TConstIterator;
 
-        TIndexedArray()
+        TIndexedArray() 
             : P_(TMemoryPool::TExpGrow::Instance(), TDefaultAllocator::Instance())
         {
         }
 
-        TIterator Begin() noexcept {
+        TIterator Begin() noexcept { 
             return I_.Begin();
         }
 
-        TIterator End() noexcept {
+        TIterator End() noexcept { 
             return I_.End();
         }
 
-        TConstIterator Begin() const noexcept {
+        TConstIterator Begin() const noexcept { 
             return I_.Begin();
         }
 
-        TConstIterator End() const noexcept {
+        TConstIterator End() const noexcept { 
             return I_.End();
         }
 
-        T& operator[](size_t i) {
+        T& operator[](size_t i) { 
             return *Get(i);
         }
 
-        T* Get(size_t i) {
+        T* Get(size_t i) { 
             TValRef& v = V_.Get(i);
 
             if (Y_UNLIKELY(!v)) {
@@ -172,22 +172,22 @@ namespace {
             return v.Get();
         }
 
-        void Erase(size_t i) noexcept {
+        void Erase(size_t i) noexcept { 
             V_.Get(i).Destroy();
         }
 
-        size_t Size() const noexcept {
+        size_t Size() const noexcept { 
             return I_.Size();
         }
 
     private:
-        using TValRef = THolder<TVal>;
+        using TValRef = THolder<TVal>; 
         typename TVal::TPool P_;
         TSocketMap<TValRef> V_;
         TListType I_;
     };
 
-
+ 
     inline short PollFlags(ui16 flags) noexcept {
         short ret = 0;
 
@@ -208,15 +208,15 @@ namespace {
         return ret;
     }
 
-
+ 
     class TPollPoller {
     public:
-        size_t Size() const noexcept {
+        size_t Size() const noexcept { 
             return S_.Size();
         }
 
         template <class T>
-        void Build(T& t) const {
+        void Build(T& t) const { 
             for (TFds::TConstIterator it = S_.Begin(); it != S_.End(); ++it) {
                 t.Set(*it);
             }
@@ -224,7 +224,7 @@ namespace {
             t.Reserve(Size());
         }
 
-        void Set(const TChange& c) {
+        void Set(const TChange& c) { 
             if (c.Flags) {
                 S_[c.Fd] = c;
             } else {
@@ -232,7 +232,7 @@ namespace {
             }
         }
 
-        void Wait(TEvents& events, TInstant deadLine) {
+        void Wait(TEvents& events, TInstant deadLine) { 
             T_.clear();
             T_.reserve(Size());
 
@@ -265,8 +265,8 @@ namespace {
                 int status = 0;
                 ui16 filter = 0;
 
-                // We are perfectly fine with an EOF while reading a pipe or a unix socket
-                if ((ev & POLLIN) || (ev & POLLHUP) && (pfd.events & POLLIN)) {
+                // We are perfectly fine with an EOF while reading a pipe or a unix socket 
+                if ((ev & POLLIN) || (ev & POLLHUP) && (pfd.events & POLLIN)) { 
                     filter |= CONT_POLL_READ;
                 }
 
@@ -310,16 +310,16 @@ namespace {
         TPollVec T_;
     };
 
-
+ 
     class TCombinedPoller {
         typedef TPoller<TPollerImpl<TWithoutLocking>> TDefaultPoller;
 
     public:
-        TCombinedPoller() {
+        TCombinedPoller() { 
             P_.Reset(new TPollPoller());
         }
 
-        void Set(const TChange& c) {
+        void Set(const TChange& c) { 
             if (!P_) {
                 D_->Set(c);
             } else {
@@ -327,7 +327,7 @@ namespace {
             }
         }
 
-        void Wait(TEvents& events, TInstant deadLine) {
+        void Wait(TEvents& events, TInstant deadLine) { 
             if (!P_) {
                 D_->Wait(events, deadLine);
             } else {
@@ -343,48 +343,48 @@ namespace {
         }
 
     private:
-        THolder<TPollPoller> P_;
-        THolder<TDefaultPoller> D_;
+        THolder<TPollPoller> P_; 
+        THolder<TDefaultPoller> D_; 
     };
 
     struct TUserPoller: public TString {
-        TUserPoller()
+        TUserPoller() 
             : TString(GetEnv("USER_POLLER"))
         {
         }
     };
 }
 
-THolder<IPollerFace> IPollerFace::Default() {
+THolder<IPollerFace> IPollerFace::Default() { 
     return Construct(*SingletonWithPriority<TUserPoller, 0>());
 }
 
-THolder<IPollerFace> IPollerFace::Construct(TStringBuf name) {
-    return Construct(name ? FromString<EContPoller>(name) : EContPoller::Default);
-}
+THolder<IPollerFace> IPollerFace::Construct(TStringBuf name) { 
+    return Construct(name ? FromString<EContPoller>(name) : EContPoller::Default); 
+} 
 
-THolder<IPollerFace> IPollerFace::Construct(EContPoller poller) {
-    switch (poller) {
-    case EContPoller::Default:
+THolder<IPollerFace> IPollerFace::Construct(EContPoller poller) { 
+    switch (poller) { 
+    case EContPoller::Default: 
     case EContPoller::Combined:
         return MakeHolder<TVirtualize<TCombinedPoller>>(EContPoller::Combined);
-    case EContPoller::Select:
+    case EContPoller::Select: 
         return MakeHolder<TVirtualize<TPoller<TGenericPoller<TSelectPoller<TWithoutLocking>>>>>(poller);
-    case EContPoller::Poll:
+    case EContPoller::Poll: 
         return MakeHolder<TVirtualize<TPollPoller>>(poller);
-    case EContPoller::Epoll:
+    case EContPoller::Epoll: 
 #if defined(HAVE_EPOLL_POLLER)
         return MakeHolder<TVirtualize<TPoller<TGenericPoller<TEpollPoller<TWithoutLocking>>>>>(poller);
-#else
-        return nullptr;
+#else 
+        return nullptr; 
 #endif
-    case EContPoller::Kqueue:
-#if defined(HAVE_KQUEUE_POLLER)
+    case EContPoller::Kqueue: 
+#if defined(HAVE_KQUEUE_POLLER) 
         return MakeHolder<TVirtualize<TPoller<TGenericPoller<TKqueuePoller<TWithoutLocking>>>>>(poller);
-#else
-        return nullptr;
+#else 
+        return nullptr; 
 #endif
-    default:
-        Y_FAIL("bad poller type");
+    default: 
+        Y_FAIL("bad poller type"); 
     }
 }

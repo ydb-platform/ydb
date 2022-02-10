@@ -148,8 +148,8 @@ namespace NJsonWriter {
         IOutputStream* Stream;
         THolder<TStringStream> StringStream;
         typedef TVector<const TString*> TKeys;
-        TKeys Keys;
-
+        TKeys Keys; 
+ 
         TVector<EJsonEntity> Stack;
         bool NeedComma;
         bool NeedNewline;

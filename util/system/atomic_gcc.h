@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #define ATOMIC_COMPILER_BARRIER() __asm__ __volatile__("" \
                                                        :  \

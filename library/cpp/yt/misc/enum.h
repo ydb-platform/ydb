@@ -22,15 +22,15 @@ namespace NYT {
  * (unittests/enum_ut.cpp).
  */
 
-// Actual overload must be provided with defines DEFINE_ENUM_XXX (see below).
-template <class T>
-void GetEnumTraitsImpl(T);
-
+// Actual overload must be provided with defines DEFINE_ENUM_XXX (see below). 
+template <class T> 
+void GetEnumTraitsImpl(T); 
+ 
 template <
     class T,
-    bool = std::is_enum<T>::value &&
-        !std::is_convertible<T, int>::value &&
-        !std::is_same<void, decltype(GetEnumTraitsImpl(T()))>::value
+    bool = std::is_enum<T>::value && 
+        !std::is_convertible<T, int>::value && 
+        !std::is_same<void, decltype(GetEnumTraitsImpl(T()))>::value 
 >
 struct TEnumTraits
 {

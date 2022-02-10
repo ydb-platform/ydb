@@ -6,8 +6,8 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
-#include <library/cpp/actors/core/memory_track.h> 
- 
+#include <library/cpp/actors/core/memory_track.h>
+
 #include <util/generic/deque.h>
 #include <util/generic/intrlist.h>
 
@@ -16,8 +16,8 @@
 namespace NKikimr {
 namespace NTable {
 
-static constexpr char MemoryLabelKeyRangeCache[] = "Tablet/TKeyRangeCache"; 
- 
+static constexpr char MemoryLabelKeyRangeCache[] = "Tablet/TKeyRangeCache";
+
 struct TKeyRangeEntry {
     TArrayRef<TCell> FromKey;
     TArrayRef<TCell> ToKey;
@@ -190,10 +190,10 @@ private:
             return Used() == 0;
         }
 
-        size_t AllocSize() const noexcept { 
-            return Next_ - (char*)this + Left_; 
-        } 
- 
+        size_t AllocSize() const noexcept {
+            return Next_ - (char*)this + Left_;
+        }
+
     private:
         char* Next_;
         size_t Left_;
@@ -288,12 +288,12 @@ private:
         void* ptr = ::operator new(allocSize);
         TChunk* chunk = new(ptr) TChunk(allocSize - sizeof(TChunk));
         TotalAllocated_ += allocSize;
-        NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Add(allocSize); 
+        NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Add(allocSize);
         return chunk;
     }
 
     void DeallocateChunk(TChunk* chunk) {
-        NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Sub(chunk->AllocSize()); 
+        NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Sub(chunk->AllocSize());
         chunk->~TChunk();
         ::operator delete((void*)chunk);
     }
@@ -335,17 +335,17 @@ private:
         { }
 
         T* allocate(size_t n) {
-            auto size = sizeof(T) * n; 
-            *UsedMemory += size; 
-            NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Add(size); 
+            auto size = sizeof(T) * n;
+            *UsedMemory += size;
+            NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Add(size);
             return TBase::allocate(n);
         }
 
         void deallocate(T* ptr, size_t n) noexcept {
-            auto size = sizeof(T) * n; 
-            Y_VERIFY_DEBUG(*UsedMemory >= size); 
-            *UsedMemory -= size; 
-            NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Sub(size); 
+            auto size = sizeof(T) * n;
+            Y_VERIFY_DEBUG(*UsedMemory >= size);
+            *UsedMemory -= size;
+            NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Sub(size);
             return TBase::deallocate(ptr, n);
         }
 

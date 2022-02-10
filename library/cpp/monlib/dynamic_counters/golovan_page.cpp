@@ -39,7 +39,7 @@ public:
         out << "\"," << counter->Val() << "]";
     }
 
-    void OnHistogram(const TString&, const TString&, IHistogramSnapshotPtr, bool) override { 
+    void OnHistogram(const TString&, const TString&, IHistogramSnapshotPtr, bool) override {
     }
 
     void OnGroupBegin(const TString&, const TString& value, const TDynamicCounters*) override {

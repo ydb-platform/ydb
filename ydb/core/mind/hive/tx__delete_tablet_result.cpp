@@ -27,7 +27,7 @@ public:
         if (Tablet != nullptr) {
             if (msg->Status == NKikimrProto::OK) {
                 NIceDb::TNiceDb db(txc.DB);
-                db.Table<Schema::Metrics>().Key(Tablet->Id, 0).Delete(); 
+                db.Table<Schema::Metrics>().Key(Tablet->Id, 0).Delete();
                 for (const TTabletChannelInfo& channelInfo : Tablet->TabletStorageInfo->Channels) {
                     for (const TTabletChannelInfo::THistoryEntry& historyInfo : channelInfo.History) {
                         db.Table<Schema::TabletChannelGen>().Key(Tablet->Id, channelInfo.Channel, historyInfo.FromGeneration).Delete();
@@ -37,7 +37,7 @@ public:
                 for (TFollowerTabletInfo& follower : Tablet->Followers) {
                     auto fullTabletId = follower.GetFullTabletId();
                     db.Table<Schema::TabletFollowerTablet>().Key(fullTabletId).Delete();
-                    db.Table<Schema::Metrics>().Key(fullTabletId).Delete(); 
+                    db.Table<Schema::Metrics>().Key(fullTabletId).Delete();
                 }
                 for (TFollowerGroup& group : Tablet->FollowerGroups) {
                     db.Table<Schema::TabletFollowerGroup>().Key(Tablet->Id, group.Id).Delete();

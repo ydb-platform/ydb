@@ -421,14 +421,14 @@ TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubque
 class TCreateTableNode final: public TAstListNode {
 public:
     TCreateTableNode(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns,
-        const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns, 
-        const TVector<std::pair<TIdentifier, bool>>& orderByColumns) 
+        const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns,
+        const TVector<std::pair<TIdentifier, bool>>& orderByColumns)
         : TAstListNode(pos)
         , Table(tr)
         , Columns(columns)
         , PkColumns(pkColumns)
-        , PartitionByColumns(partitionByColumns) 
-        , OrderByColumns(orderByColumns) 
+        , PartitionByColumns(partitionByColumns)
+        , OrderByColumns(orderByColumns)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -442,7 +442,7 @@ public:
         }
         keys = ctx.GroundBlockShortcutsForExpr(keys);
 
-        if (!PkColumns.empty() || !PartitionByColumns.empty() || !OrderByColumns.empty()) { 
+        if (!PkColumns.empty() || !PartitionByColumns.empty() || !OrderByColumns.empty()) {
             THashSet<TString> columnsSet;
             for (auto& col : Columns) {
                 columnsSet.insert(col.Name);
@@ -454,23 +454,23 @@ public:
                     return false;
                 }
             }
-            for (auto& keyColumn : PartitionByColumns) { 
-                if (!columnsSet.contains(keyColumn.Name)) { 
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name; 
-                    return false; 
-                } 
-            } 
-            for (auto& keyColumn : OrderByColumns) { 
-                if (!columnsSet.contains(keyColumn.first.Name)) { 
-                    ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name; 
-                    return false; 
-                } 
-            } 
+            for (auto& keyColumn : PartitionByColumns) {
+                if (!columnsSet.contains(keyColumn.Name)) {
+                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
+                    return false;
+                }
+            }
+            for (auto& keyColumn : OrderByColumns) {
+                if (!columnsSet.contains(keyColumn.first.Name)) {
+                    ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name;
+                    return false;
+                }
+            }
         }
 
         auto columns = Y();
         for (auto& col: Columns) {
-            auto type = ParseType(TypeByAlias(col.Type, !col.IsTypeString), *ctx.Pool, ctx.Issues, col.Pos); 
+            auto type = ParseType(TypeByAlias(col.Type, !col.IsTypeString), *ctx.Pool, ctx.Issues, col.Pos);
             if (!type) {
                 return false;
             }
@@ -507,45 +507,45 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q("create"))));
         opts = L(opts, Q(Y(Q("columns"), Q(columns))));
 
-        const auto serviceName = to_lower(Table.ServiceName(ctx)); 
-        if (serviceName == RtmrProviderName) { 
-            if (!PkColumns.empty() && !PartitionByColumns.empty()) { 
-                ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified"; 
-                return false; 
-            } 
-        } else { 
-            if (!PartitionByColumns.empty() || !OrderByColumns.empty()) { 
-                ctx.Error() << "PARTITION BY and ORDER BY are supported only for " << RtmrProviderName << " provider"; 
-                return false; 
-            } 
-        } 
- 
+        const auto serviceName = to_lower(Table.ServiceName(ctx));
+        if (serviceName == RtmrProviderName) {
+            if (!PkColumns.empty() && !PartitionByColumns.empty()) {
+                ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified";
+                return false;
+            }
+        } else {
+            if (!PartitionByColumns.empty() || !OrderByColumns.empty()) {
+                ctx.Error() << "PARTITION BY and ORDER BY are supported only for " << RtmrProviderName << " provider";
+                return false;
+            }
+        }
+
         if (!PkColumns.empty()) {
-            auto primaryKey = Y(); 
-            for (auto& col : PkColumns) { 
-                primaryKey = L(primaryKey, BuildQuotedAtom(col.Pos, col.Name)); 
-            } 
+            auto primaryKey = Y();
+            for (auto& col : PkColumns) {
+                primaryKey = L(primaryKey, BuildQuotedAtom(col.Pos, col.Name));
+            }
             opts = L(opts, Q(Y(Q("primarykey"), Q(primaryKey))));
-            if (!OrderByColumns.empty()) { 
-                ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead"; 
-                return false; 
-            } 
-        } else { 
-            if (!PartitionByColumns.empty()) { 
-                auto partitionBy = Y(); 
-                for (auto& col : PartitionByColumns) { 
-                    partitionBy = L(partitionBy, BuildQuotedAtom(col.Pos, col.Name)); 
-                } 
-                opts = L(opts, Q(Y(Q("partitionby"), Q(partitionBy)))); 
-            } 
-            if (!OrderByColumns.empty()) { 
-                auto orderBy = Y(); 
-                for (auto& col : OrderByColumns) { 
-                    orderBy = L(orderBy, Q(Y(BuildQuotedAtom(col.first.Pos, col.first.Name), col.second ? Q("1") : Q("0")))); 
-                } 
-                opts = L(opts, Q(Y(Q("orderby"), Q(orderBy)))); 
-            } 
-        } 
+            if (!OrderByColumns.empty()) {
+                ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead";
+                return false;
+            }
+        } else {
+            if (!PartitionByColumns.empty()) {
+                auto partitionBy = Y();
+                for (auto& col : PartitionByColumns) {
+                    partitionBy = L(partitionBy, BuildQuotedAtom(col.Pos, col.Name));
+                }
+                opts = L(opts, Q(Y(Q("partitionby"), Q(partitionBy))));
+            }
+            if (!OrderByColumns.empty()) {
+                auto orderBy = Y();
+                for (auto& col : OrderByColumns) {
+                    orderBy = L(orderBy, Q(Y(BuildQuotedAtom(col.first.Pos, col.first.Name), col.second ? Q("1") : Q("0"))));
+                }
+                opts = L(opts, Q(Y(Q("orderby"), Q(orderBy))));
+            }
+        }
 
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
@@ -564,15 +564,15 @@ private:
     TTableRef Table;
     TVector<TColumnSchema> Columns;
     TVector<TIdentifier> PkColumns;
-    TVector<TIdentifier> PartitionByColumns; 
-    TVector<std::pair<TIdentifier, bool>> OrderByColumns; // column, is desc? 
+    TVector<TIdentifier> PartitionByColumns;
+    TVector<std::pair<TIdentifier, bool>> OrderByColumns; // column, is desc?
 };
 
 TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns,
-    const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns, 
-    const TVector<std::pair<TIdentifier, bool>>& orderByColumns) 
+    const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns,
+    const TVector<std::pair<TIdentifier, bool>>& orderByColumns)
 {
-    return new TCreateTableNode(pos, tr, columns, pkColumns, partitionByColumns, orderByColumns); 
+    return new TCreateTableNode(pos, tr, columns, pkColumns, partitionByColumns, orderByColumns);
 }
 
 class TAlterTableNode final: public TAstListNode {
@@ -606,7 +606,7 @@ public:
         } else {
             auto columns = Y();
             for (auto& col: Columns) {
-                auto type = ParseType(TypeByAlias(col.Type, !col.IsTypeString), *ctx.Pool, ctx.Issues, col.Pos); 
+                auto type = ParseType(TypeByAlias(col.Type, !col.IsTypeString), *ctx.Pool, ctx.Issues, col.Pos);
                 if (!type) {
                     return false;
                 }

@@ -65,7 +65,7 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
             ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("data_streams", #NAME))->Run(); 
+        #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
 
     ADD_REQUEST(DescribeStream, DescribeStreamRequest, DescribeStreamResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDescribeStreamRequest(ctx));

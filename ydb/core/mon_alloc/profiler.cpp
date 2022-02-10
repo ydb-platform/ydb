@@ -1,13 +1,13 @@
 #include "profiler.h"
-#include "tcmalloc.h" 
+#include "tcmalloc.h"
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/prof/tag.h>
 #include <library/cpp/html/pcdata/pcdata.h>
-#include <library/cpp/malloc/api/malloc.h> 
+#include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
@@ -49,8 +49,8 @@ namespace NActors {
                 NAllocProfiler::StartAllocationSampling(true);
             }
 
-            void Stop(IOutputStream& out, size_t limit, bool forLog) override { 
-                Y_UNUSED(forLog); 
+            void Stop(IOutputStream& out, size_t limit, bool forLog) override {
+                Y_UNUSED(forLog);
                 TAllocDumper dumper(out);
                 NAllocProfiler::StopAllocationSampling(dumper, limit);
             }
@@ -66,8 +66,8 @@ namespace NActors {
                 SetEnabled(true);
             }
 
-            void Stop(IOutputStream& out, size_t limit, bool forLog) override { 
-                Y_UNUSED(forLog); 
+            void Stop(IOutputStream& out, size_t limit, bool forLog) override {
+                Y_UNUSED(forLog);
                 DumpStats(out, limit);
                 SetEnabled(false);
             }
@@ -165,9 +165,9 @@ namespace NActors {
                 BeginProfiling();
             }
 
-            void Stop(IOutputStream& out, size_t limit, bool forLog) override { 
+            void Stop(IOutputStream& out, size_t limit, bool forLog) override {
                 Y_UNUSED(limit);
-                Y_UNUSED(forLog); 
+                Y_UNUSED(forLog);
 
                 char* buf = nullptr;
                 size_t len = 0;
@@ -188,35 +188,35 @@ namespace NActors {
             void Start() override {
             }
 
-            void Stop(IOutputStream& out, size_t limit, bool forLog) override { 
+            void Stop(IOutputStream& out, size_t limit, bool forLog) override {
                 Y_UNUSED(out);
                 Y_UNUSED(limit);
-                Y_UNUSED(forLog); 
+                Y_UNUSED(forLog);
             }
         };
 
         std::unique_ptr<IProfilerLogic> CreateProfiler() {
             const auto& info = NMalloc::MallocInfo();
-            TStringBuf name(info.Name); 
+            TStringBuf name(info.Name);
 
-            std::unique_ptr<IProfilerLogic> profiler; 
- 
-#if defined(PROFILE_MEMORY_ALLOCATIONS) 
+            std::unique_ptr<IProfilerLogic> profiler;
+
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
             if (name.StartsWith("lf")) {
-                profiler = std::make_unique<TLfAllocProfiler>(); 
+                profiler = std::make_unique<TLfAllocProfiler>();
             } else if (name.StartsWith("yt")) {
-                profiler = std::make_unique<TYtAllocProfiler>(); 
+                profiler = std::make_unique<TYtAllocProfiler>();
             }
 #endif // PROFILE_MEMORY_ALLOCATIONS
 
-            if (name.StartsWith("tc")) { 
-                profiler = std::move(NKikimr::CreateTcMallocProfiler()); 
-            } 
- 
-            if (profiler) { 
-                return std::move(profiler); 
-            } 
- 
+            if (name.StartsWith("tc")) {
+                profiler = std::move(NKikimr::CreateTcMallocProfiler());
+            }
+
+            if (profiler) {
+                return std::move(profiler);
+            }
+
 #if defined(EXEC_PROFILER_ENABLED)
             return std::make_unique<TExecProfiler>();
 #endif // EXEC_PROFILER_ENABLED
@@ -265,8 +265,8 @@ namespace NActors {
                 }
             }
 
-            void DumpProfilingTimes(IOutputStream& out); 
- 
+            void DumpProfilingTimes(IOutputStream& out);
+
             void HandleStart(TEvProfiler::TEvStart::TPtr& ev, const TActorContext& ctx);
             void HandleStop(TEvProfiler::TEvStop::TPtr& ev, const TActorContext& ctx);
             void HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx);
@@ -274,18 +274,18 @@ namespace NActors {
             bool StartProfiler();
             bool StopProfiler(TString& profile);
             bool StopProfilerFile(TString& outFileName, TString& err);
-            bool StopProfilerDumpToLog(const TActorContext& ctx); 
+            bool StopProfilerDumpToLog(const TActorContext& ctx);
 
             void OutputControlHtml(IOutputStream& os, const TString& action, bool isOk);
             void OutputResultHtml(IOutputStream& os, const TString& action, const TString& profile, const TString& fileName, bool isOk, const TString& err);
         };
 
-        void TProfilerActor::DumpProfilingTimes(IOutputStream& out) { 
-            out << "Profiling started: " << StartTime << Endl 
-                << "Profiling stopped: " << StopTime << Endl 
-                << Endl; 
-        } 
- 
+        void TProfilerActor::DumpProfilingTimes(IOutputStream& out) {
+            out << "Profiling started: " << StartTime << Endl
+                << "Profiling stopped: " << StopTime << Endl
+                << Endl;
+        }
+
         void TProfilerActor::HandleStart(TEvProfiler::TEvStart::TPtr& ev, const NActors::TActorContext& ctx) {
             bool isOk = StartProfiler();
             ctx.Send(ev->Sender, new TEvProfiler::TEvStartResult(ev->Get()->Cookie(), isOk));
@@ -310,8 +310,8 @@ namespace NActors {
                 isOk = StopProfiler(profile);
             } else if (action == "stop-save") {
                 isOk = StopProfilerFile(fileName, err);
-            } else if (action == "stop-log") { 
-                isOk = StopProfilerDumpToLog(ctx); 
+            } else if (action == "stop-log") {
+                isOk = StopProfilerDumpToLog(ctx);
             }
 
             TStringStream out;
@@ -359,34 +359,34 @@ namespace NActors {
             }
 
             TStringOutput out(profile);
-            DumpProfilingTimes(out); 
-            Profiler->Stop(out, 256, false); 
+            DumpProfilingTimes(out);
+            Profiler->Stop(out, 256, false);
             return true;
         }
 
-        bool TProfilerActor::StopProfilerDumpToLog(const TActorContext& ctx) { 
-            if (!IsProfiling) { 
-                return false; 
-            } 
- 
-            IsProfiling = false; 
-            StopTime = TInstant::Now(); 
-            if (DynamicCounters) { 
-                *Counters.IsProfiling = 0; 
-            } 
- 
-            TStringStream out; 
-            DumpProfilingTimes(out); 
-            Profiler->Stop(out, 2048, true); 
- 
-            TVector<TString> split; 
-            Split(out.Str(), "\n", split); 
-            for (const auto& line : split) { 
-                LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, line); 
-            } 
-            return true; 
-        } 
- 
+        bool TProfilerActor::StopProfilerDumpToLog(const TActorContext& ctx) {
+            if (!IsProfiling) {
+                return false;
+            }
+
+            IsProfiling = false;
+            StopTime = TInstant::Now();
+            if (DynamicCounters) {
+                *Counters.IsProfiling = 0;
+            }
+
+            TStringStream out;
+            DumpProfilingTimes(out);
+            Profiler->Stop(out, 2048, true);
+
+            TVector<TString> split;
+            Split(out.Str(), "\n", split);
+            for (const auto& line : split) {
+                LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, line);
+            }
+            return true;
+        }
+
         bool TProfilerActor::StopProfilerFile(TString& outFileName, TString& err) {
             if (!IsProfiling) {
                 outFileName.clear();
@@ -404,8 +404,8 @@ namespace NActors {
 
             try {
                 TFileOutput out(outFileName);
-                DumpProfilingTimes(out); 
-                Profiler->Stop(out, 4096, false); 
+                DumpProfilingTimes(out);
+                Profiler->Stop(out, 4096, false);
             } catch (const yexception& e) {
                 err = "Failed to dump profile: ";
                 err += e.what();
@@ -420,7 +420,7 @@ namespace NActors {
             os << "<p>";
             if (IsProfiling) {
                 os << "<a class=\"btn btn-primary\" href=\"?action=stop-display\">Stop & display</a> \n";
-                os << "<a class=\"btn btn-primary\" href=\"?action=stop-log\">Stop & dump to log</a>\n"; 
+                os << "<a class=\"btn btn-primary\" href=\"?action=stop-log\">Stop & dump to log</a>\n";
                 os << "<a class=\"btn btn-primary\" href=\"?action=stop-save\">Stop & save to file</a>\n";
             } else {
                 os << "<a class=\"btn btn-primary\" href=\"?action=start\">Start</a>\n";
@@ -450,12 +450,12 @@ namespace NActors {
                     os << "filename: " << fileName;
                     os << "</p><p>Error: " << err << "</p>";
                 }
-            } else if (action == "stop-log") { 
-                if (isOk) { 
-                    os << "<p>Output dumped to log</p>"; 
-                } else { 
-                    os << "<p>Error stopping profiling.</p>"; 
-                } 
+            } else if (action == "stop-log") {
+                if (isOk) {
+                    os << "<p>Output dumped to log</p>";
+                } else {
+                    os << "<p>Error stopping profiling.</p>";
+                }
             } else if (action == "start") {
                 if (isOk) {
                     os << "<p>Profiling started OK.</p>";

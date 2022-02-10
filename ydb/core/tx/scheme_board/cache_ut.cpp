@@ -47,9 +47,9 @@ public:
     UNIT_TEST(RacyRecreateAndSync);
     UNIT_TEST(RacyCreateAndSync);
     UNIT_TEST(CheckAccess);
-    UNIT_TEST(CheckSystemViewAccess); 
-    UNIT_TEST(SystemView); 
-    UNIT_TEST(SysLocks); 
+    UNIT_TEST(CheckSystemViewAccess);
+    UNIT_TEST(SystemView);
+    UNIT_TEST(SysLocks);
     UNIT_TEST(TableSchemaVersion);
     UNIT_TEST(MigrationCommon);
     UNIT_TEST(MigrationCommit);
@@ -66,9 +66,9 @@ public:
     void RacyRecreateAndSync();
     void RacyCreateAndSync();
     void CheckAccess();
-    void CheckSystemViewAccess(); 
-    void SystemView(); 
-    void SysLocks(); 
+    void CheckSystemViewAccess();
+    void SystemView();
+    void SysLocks();
     void TableSchemaVersion();
     void MigrationCommon();
     void MigrationCommit();
@@ -78,18 +78,18 @@ public:
     void WatchRoot();
 
 protected:
-    TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus, 
+    TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
         const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired);
- 
+
     TNavigate::TEntry TestNavigate(const TString& path, TNavigate::EStatus expectedStatus = TNavigate::EStatus::Ok,
         const TString& sid = TString(), TNavigate::EOp op = TNavigate::EOp::OpPath,
         bool showPrivatePath = false, bool redirectRequired = true, bool syncVersion = false);
 
-    TNavigate::TEntry TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus, 
-        const TString& expectedPath, const TString& sid = TString(), 
+    TNavigate::TEntry TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus,
+        const TString& expectedPath, const TString& sid = TString(),
         TNavigate::EOp op = TNavigate::EOp::OpPath, bool showPrivatePath = false);
- 
-    TResolve::TEntry TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus = TResolve::EStatus::OkData, 
+
+    TResolve::TEntry TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus = TResolve::EStatus::OkData,
         const TString& sid = TString());
 
     TActorId TestWatch(const TPathId& pathId, const TActorId& watcher = {}, ui64 key = 0);
@@ -108,15 +108,15 @@ UNIT_TEST_SUITE_REGISTRATION(TCacheTest);
 
 void TCacheTest::Navigate() {
     TestNavigate("/Root", TNavigate::EStatus::Ok);
- 
-    ui64 txId = 100; 
- 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
+
+    ui64 txId = 100;
+
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
- 
-    auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok); 
- 
-    TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA"); 
+
+    auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
+
+    TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA");
     TestNavigateByTableId(TTableId(1ull << 56, 1), TNavigate::EStatus::RootUnknown, "");
 }
 
@@ -166,9 +166,9 @@ void TCacheTest::Recreate() {
     TestRmDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyDelete>(edge);
-    auto pathId = ev->Get()->PathId; 
-    TTableId tableId(pathId.OwnerId, pathId.LocalPathId); 
-    TestResolve(tableId, TResolve::EStatus::PathErrorNotExist); 
+    auto pathId = ev->Get()->PathId;
+    TTableId tableId(pathId.OwnerId, pathId.LocalPathId);
+    TestResolve(tableId, TResolve::EStatus::PathErrorNotExist);
 
     TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
@@ -293,49 +293,49 @@ void TCacheTest::CheckAccess() {
     TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA", "user0@builtin");
 }
 
-void TCacheTest::CheckSystemViewAccess() { 
-    ui64 txId = 100; 
-    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomainA\""); 
+void TCacheTest::CheckSystemViewAccess() {
+    ui64 txId = 100;
+    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomainA\"");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    TestModifyACL(*Context, ++txId, "/Root", "SubDomainA", TString(), "user0@builtin"); 
- 
-    auto entry = TestNavigate("/Root/SubDomainA/.sys/partition_stats", 
-        TNavigate::EStatus::Ok, TString(), TNavigate::OpTable); 
- 
-    auto tableId = entry.TableId; 
-    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats"); 
- 
-    TestNavigate("/Root/SubDomainA/.sys/partition_stats", 
-        TNavigate::EStatus::Ok, "user0@builtin", TNavigate::OpTable); 
- 
-    TestNavigate("/Root/SubDomainA/.sys/partition_stats", 
-        TNavigate::EStatus::PathErrorUnknown, "user1@builtin", TNavigate::OpTable); 
- 
-    TestResolve(tableId, TResolve::EStatus::OkData); 
-    TestResolve(tableId, TResolve::EStatus::OkData, "user0@builtin"); 
-    TestResolve(tableId, TResolve::EStatus::PathErrorNotExist, "user1@builtin"); 
-} 
- 
-void TCacheTest::SystemView() {
-    auto entry = TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable); 
- 
-    auto tableId = entry.TableId; 
-    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats"); 
- 
-    TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys/partition_stats", TString(), TNavigate::OpTable); 
+    TestModifyACL(*Context, ++txId, "/Root", "SubDomainA", TString(), "user0@builtin");
+
+    auto entry = TestNavigate("/Root/SubDomainA/.sys/partition_stats",
+        TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
+
+    auto tableId = entry.TableId;
+    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
+
+    TestNavigate("/Root/SubDomainA/.sys/partition_stats",
+        TNavigate::EStatus::Ok, "user0@builtin", TNavigate::OpTable);
+
+    TestNavigate("/Root/SubDomainA/.sys/partition_stats",
+        TNavigate::EStatus::PathErrorUnknown, "user1@builtin", TNavigate::OpTable);
+
+    TestResolve(tableId, TResolve::EStatus::OkData);
+    TestResolve(tableId, TResolve::EStatus::OkData, "user0@builtin");
+    TestResolve(tableId, TResolve::EStatus::PathErrorNotExist, "user1@builtin");
 }
 
-void TCacheTest::SysLocks() { 
-    { 
-        auto entry = TestNavigate("/sys/locks", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable, true); 
-        TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/sys/locks", TString(), TNavigate::OpTable, true); 
-    } 
-    { 
-        auto entry = TestNavigate("/sys/locks2", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable, true); 
-        TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/sys/locks2", TString(), TNavigate::OpTable, true); 
-    } 
-} 
- 
+void TCacheTest::SystemView() {
+    auto entry = TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
+
+    auto tableId = entry.TableId;
+    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
+
+    TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys/partition_stats", TString(), TNavigate::OpTable);
+}
+
+void TCacheTest::SysLocks() {
+    {
+        auto entry = TestNavigate("/sys/locks", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable, true);
+        TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/sys/locks", TString(), TNavigate::OpTable, true);
+    }
+    {
+        auto entry = TestNavigate("/sys/locks2", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable, true);
+        TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/sys/locks2", TString(), TNavigate::OpTable, true);
+    }
+}
+
 void TCacheTest::TableSchemaVersion() {
     ui64 txId = 100;
     TestCreateTable(*Context, ++txId, "/Root", R"(
@@ -366,11 +366,11 @@ void TCacheTest::TableSchemaVersion() {
     }
 }
 
-TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus, 
+TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
     const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired)
-{ 
+{
     auto& entry = request->ResultSet.back();
-    entry.Operation = op; 
+    entry.Operation = op;
     entry.ShowPrivatePath = showPrivatePath;
     entry.RedirectRequired = redirectRequired;
 
@@ -390,40 +390,40 @@ TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavi
     return result;
 }
 
-TNavigate::TEntry TCacheTest::TestNavigate(const TString& path, TNavigate::EStatus expectedStatus, 
+TNavigate::TEntry TCacheTest::TestNavigate(const TString& path, TNavigate::EStatus expectedStatus,
     const TString& sid, TNavigate::EOp op, bool showPrivatePath,  bool redirectRequired, bool syncVersion)
-{ 
-    auto request = MakeHolder<TNavigate>(); 
-    request->ResultSet.push_back({}); 
-    auto& entry = request->ResultSet.back(); 
- 
-    entry.Path = SplitPath(path); 
+{
+    auto request = MakeHolder<TNavigate>();
+    request->ResultSet.push_back({});
+    auto& entry = request->ResultSet.back();
+
+    entry.Path = SplitPath(path);
     entry.SyncVersion = syncVersion;
- 
+
     auto result = TestNavigateImpl(std::move(request), expectedStatus, sid, op, showPrivatePath, redirectRequired);
-    return result; 
-} 
- 
-TNavigate::TEntry TCacheTest::TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus, 
+    return result;
+}
+
+TNavigate::TEntry TCacheTest::TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus,
     const TString& expectedPath, const TString& sid, TNavigate::EOp op, bool showPrivatePath)
-{ 
-    auto request = MakeHolder<TNavigate>(); 
-    request->ResultSet.push_back({}); 
-    auto& entry = request->ResultSet.back(); 
- 
-    entry.TableId = tableId; 
-    entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId; 
- 
+{
+    auto request = MakeHolder<TNavigate>();
+    request->ResultSet.push_back({});
+    auto& entry = request->ResultSet.back();
+
+    entry.TableId = tableId;
+    entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+
     auto result = TestNavigateImpl(std::move(request), expectedStatus, sid, op, showPrivatePath, true);
-    UNIT_ASSERT_VALUES_EQUAL(CanonizePath(result.Path), expectedPath); 
-    return result; 
-} 
- 
-TResolve::TEntry TCacheTest::TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus, const TString& sid) { 
+    UNIT_ASSERT_VALUES_EQUAL(CanonizePath(result.Path), expectedPath);
+    return result;
+}
+
+TResolve::TEntry TCacheTest::TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus, const TString& sid) {
     auto request = MakeHolder<TResolve>();
 
     auto keyDesc = MakeHolder<TKeyDesc>(
-        tableId, 
+        tableId,
         TTableRange({}),
         TKeyDesc::ERowOperation::Unknown,
         TVector<NScheme::TTypeId>(), TVector<TKeyDesc::TColumnOp>()

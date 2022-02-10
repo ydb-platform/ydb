@@ -122,11 +122,11 @@ class TLocalSessionsRegistry {
 public:
     TLocalSessionsRegistry()  = default;
 
-    TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId, 
-        const TString& database, TKqpDbCountersPtr dbCounters) 
-    { 
+    TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
+        const TString& database, TKqpDbCountersPtr dbCounters)
+    {
         RecentUsedSessions.push_front(sessionId);
-        auto result = LocalSessions.emplace(sessionId, TKqpSessionInfo(sessionId, workerId, database, dbCounters)); 
+        auto result = LocalSessions.emplace(sessionId, TKqpSessionInfo(sessionId, workerId, database, dbCounters));
         Links.emplace(sessionId, RecentUsedSessions.begin());
         Y_VERIFY(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
@@ -434,7 +434,7 @@ public:
 
         KQP_PROXY_LOG_I("Received tenant pool status, serving tenants: " << JoinRange(", ", Tenants.begin(), Tenants.end()));
         for (auto& [_, sessionInfo] : LocalSessions) {
-            if (!sessionInfo.Database.empty() && !Tenants.contains(sessionInfo.Database)) { 
+            if (!sessionInfo.Database.empty() && !Tenants.contains(sessionInfo.Database)) {
                 auto closeSessionEv = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
                 closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo.SessionId);
                 Send(sessionInfo.WorkerId, closeSessionEv.Release());
@@ -514,7 +514,7 @@ public:
         auto responseEv = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
 
         TProcessResult<TKqpSessionInfo*> result;
-        TKqpDbCountersPtr dbCounters; 
+        TKqpDbCountersPtr dbCounters;
 
         const auto deadline = TInstant::MicroSeconds(event.GetDeadlineUs());
 
@@ -523,18 +523,18 @@ public:
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
-            dbCounters = result.Value->DbCounters; 
-        } else { 
-            dbCounters = Counters->GetDbCounters(request.GetDatabase()); 
+            dbCounters = result.Value->DbCounters;
+        } else {
+            dbCounters = Counters->GetDbCounters(request.GetDatabase());
         }
 
-        LogRequest(request, requestInfo, ev->Sender, dbCounters); 
- 
+        LogRequest(request, requestInfo, ev->Sender, dbCounters);
+
         responseEv->Record.SetResourceExhausted(result.ResourceExhausted);
         responseEv->Record.SetYdbStatus(result.YdbStatus);
         responseEv->Record.SetError(result.Error);
 
-        LogResponse(event.GetTraceId(), responseEv->Record, dbCounters); 
+        LogResponse(event.GetTraceId(), responseEv->Record, dbCounters);
         Send(ev->Sender, responseEv.Release(), 0, ev->Cookie);
     }
 
@@ -543,20 +543,20 @@ public:
         auto& request = *event.MutableRequest();
         TString traceId = event.GetTraceId();
         TKqpRequestInfo requestInfo(traceId);
-        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest); 
+        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
 
-        auto dbCounters = GetDbCountersForSession(request.GetSessionId()); 
- 
+        auto dbCounters = GetDbCountersForSession(request.GetSessionId());
+
         auto queryLimitBytes = TableServiceConfig.GetQueryLimitBytes();
         if (queryLimitBytes && IsSqlQuery(request.GetType())) {
             auto querySizeBytes = request.GetQuery().size();
             if (querySizeBytes > queryLimitBytes) {
                 TString error = TStringBuilder() << "Query text size exceeds limit (" << querySizeBytes << "b > " << queryLimitBytes << "b)";
                 ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
-                if (!dbCounters) { 
-                    dbCounters = Counters->GetDbCounters(request.GetDatabase()); 
-                } 
-                LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters); 
+                if (!dbCounters) {
+                    dbCounters = Counters->GetDbCounters(request.GetDatabase());
+                }
+                LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
                 return;
             }
         }
@@ -565,11 +565,11 @@ public:
         if (paramsLimitBytes) {
             auto paramsBytes = request.GetParameters().ByteSizeLong();
             if (paramsBytes > paramsLimitBytes) {
-                if (!dbCounters) { 
-                    dbCounters = Counters->GetDbCounters(request.GetDatabase()); 
-                } 
-                LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters); 
- 
+                if (!dbCounters) {
+                    dbCounters = Counters->GetDbCounters(request.GetDatabase());
+                }
+                LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
+
                 TString error = TStringBuilder() << "Parameters size exceeds limit (" << paramsBytes << "b > " << paramsLimitBytes << "b)";
                 ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
                 return;
@@ -580,17 +580,17 @@ public:
         if (!request.GetSessionId().empty()) {
             TProcessResult<TActorId> result;
             if (!TryGetSessionTargetActor(request.GetSessionId(), requestInfo, result)) {
-                if (!dbCounters) { 
-                    dbCounters = Counters->GetDbCounters(request.GetDatabase()); 
-                } 
-                LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters); 
+                if (!dbCounters) {
+                    dbCounters = Counters->GetDbCounters(request.GetDatabase());
+                }
+                LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
             }
 
             targetId = result.Value;
- 
-            LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters); 
+
+            LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
         } else {
             TString cluster = request.GetCluster();
             if (cluster.empty()) {
@@ -599,23 +599,23 @@ public:
 
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, cluster, false, request.GetDatabase(), result)) {
-                if (!dbCounters) { 
-                    dbCounters = Counters->GetDbCounters(request.GetDatabase()); 
-                } 
-                LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters); 
+                if (!dbCounters) {
+                    dbCounters = Counters->GetDbCounters(request.GetDatabase());
+                }
+                LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
             }
 
             targetId = result.Value->WorkerId;
             request.SetSessionId(result.Value->SessionId);
-            dbCounters = result.Value->DbCounters; 
- 
-            LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters); 
+            dbCounters = result.Value->DbCounters;
+
+            LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
         }
 
         TString sessionId = request.GetSessionId();
-        PendingRequests.SetSessionId(requestId, sessionId, dbCounters); 
+        PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
         // We add extra milliseconds to the user-specified timeout, so it means we give additional priority for worker replies,
         // because it is much better to give detailed error message rather than generic timeout.
         // For example, it helps to avoid race in event order when worker and proxy recieve timeout at the same moment.
@@ -633,10 +633,10 @@ public:
         TKqpRequestInfo requestInfo(event.GetTraceId());
 
         TString sessionId = request.GetSessionId();
-        auto dbCounters = GetDbCountersForSession(sessionId); 
- 
-        LogRequest(request, requestInfo, ev->Sender, dbCounters); 
- 
+        auto dbCounters = GetDbCountersForSession(sessionId);
+
+        LogRequest(request, requestInfo, ev->Sender, dbCounters);
+
         if (!sessionId.empty()) {
             TProcessResult<TActorId> result;
             if (TryGetSessionTargetActor(sessionId, requestInfo, result)) {
@@ -651,15 +651,15 @@ public:
 
         auto traceId = event.GetTraceId();
         TKqpRequestInfo requestInfo(traceId);
-        auto sessionId = request.GetSessionId(); 
-        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest); 
+        auto sessionId = request.GetSessionId();
+        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
 
-        auto dbCounters = GetDbCountersForSession(sessionId); 
- 
-        LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters); 
- 
+        auto dbCounters = GetDbCountersForSession(sessionId);
+
+        LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
+
         TProcessResult<TActorId> result;
-        if (!TryGetSessionTargetActor(sessionId, requestInfo, result)) { 
+        if (!TryGetSessionTargetActor(sessionId, requestInfo, result)) {
             ReplyProcessError(result.YdbStatus, result.Error, requestId);
             return;
         }
@@ -669,7 +669,7 @@ public:
             timeout = TDuration::MilliSeconds(Min(timeout.MilliSeconds(), (ui64)request.GetTimeoutMs()));
         }
 
-        PendingRequests.SetSessionId(requestId, sessionId, dbCounters); 
+        PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
         StartQueryTimeout(requestId, timeout);
         Send(result.Value, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
     }
@@ -685,7 +685,7 @@ public:
             return;
         }
 
-        LogResponse(proxyRequest->TraceId, ev->Get()->Record, proxyRequest->DbCounters); 
+        LogResponse(proxyRequest->TraceId, ev->Get()->Record, proxyRequest->DbCounters);
         Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
@@ -993,7 +993,7 @@ public:
 
 private:
     void LogResponse(const TKqpRequestInfo& requestInfo,
-        const NKikimrKqp::TEvProcessResponse& event, TKqpDbCountersPtr dbCounters) 
+        const NKikimrKqp::TEvProcessResponse& event, TKqpDbCountersPtr dbCounters)
     {
         auto status = event.GetYdbStatus();
         if (status != Ydb::StatusIds::SUCCESS) {
@@ -1004,74 +1004,74 @@ private:
     }
 
     void LogResponse(const TKqpRequestInfo& requestInfo,
-        const TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& holder, 
-        TKqpDbCountersPtr dbCounters) 
+        const TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& holder,
+        TKqpDbCountersPtr dbCounters)
     {
         Y_UNUSED(requestInfo);
         const auto& event = holder.GetRef();
 
-        Counters->ReportResponseStatus(dbCounters, event.ByteSize(), 
+        Counters->ReportResponseStatus(dbCounters, event.ByteSize(),
             event.GetYdbStatus());
- 
+
         for (auto& issue : event.GetResponse().GetQueryIssues()) {
-            Counters->ReportIssues(dbCounters, issue); 
+            Counters->ReportIssues(dbCounters, issue);
         }
 
-        ui64 resultsBytes = 0; 
+        ui64 resultsBytes = 0;
         for (auto& result : event.GetResponse().GetResults()) {
-            resultsBytes += result.ByteSize(); 
+            resultsBytes += result.ByteSize();
         }
-        Counters->ReportResultsBytes(dbCounters, resultsBytes); 
+        Counters->ReportResultsBytes(dbCounters, resultsBytes);
     }
 
     void LogResponse(const TKqpRequestInfo& requestInfo,
-        const NKikimrKqp::TEvCreateSessionResponse& event, TKqpDbCountersPtr dbCounters) 
+        const NKikimrKqp::TEvCreateSessionResponse& event, TKqpDbCountersPtr dbCounters)
     {
         Y_UNUSED(requestInfo);
- 
-        Counters->ReportResponseStatus(dbCounters, event.ByteSize(), 
+
+        Counters->ReportResponseStatus(dbCounters, event.ByteSize(),
             event.GetYdbStatus());
     }
 
     void LogResponse(const TKqpRequestInfo& requestInfo,
-        const NKikimrKqp::TEvPingSessionResponse& event, TKqpDbCountersPtr dbCounters) 
+        const NKikimrKqp::TEvPingSessionResponse& event, TKqpDbCountersPtr dbCounters)
     {
         Y_UNUSED(requestInfo);
- 
-        Counters->ReportResponseStatus(dbCounters, event.ByteSize(), event.GetStatus()); 
+
+        Counters->ReportResponseStatus(dbCounters, event.ByteSize(), event.GetStatus());
     }
 
     void LogRequest(const NKikimrKqp::TCloseSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender, 
-        TKqpDbCountersPtr dbCounters) 
+        const TKqpRequestInfo& requestInfo, const TActorId& sender,
+        TKqpDbCountersPtr dbCounters)
     {
         KQP_PROXY_LOG_D(requestInfo << "Received close session request, sender: " << sender << ", SessionId: " << request.GetSessionId());
-        Counters->ReportCloseSession(dbCounters, request.ByteSize()); 
+        Counters->ReportCloseSession(dbCounters, request.ByteSize());
     }
 
     void LogRequest(const NKikimrKqp::TQueryRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId, 
-        TKqpDbCountersPtr dbCounters) 
+        const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId,
+        TKqpDbCountersPtr dbCounters)
     {
         KQP_PROXY_LOG_D(requestInfo << "Received new query request, sender: " << sender << ", RequestId: " << requestId
             << ", Query: \"" << request.GetQuery().substr(0, 10000) << "\"");
-        Counters->ReportQueryRequest(dbCounters, request); 
+        Counters->ReportQueryRequest(dbCounters, request);
     }
 
     void LogRequest(const NKikimrKqp::TCreateSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender, 
-        TKqpDbCountersPtr dbCounters) 
+        const TKqpRequestInfo& requestInfo, const TActorId& sender,
+        TKqpDbCountersPtr dbCounters)
     {
         KQP_PROXY_LOG_D(requestInfo << "Received create session request, sender: " << sender);
-        Counters->ReportCreateSession(dbCounters, request.ByteSize()); 
+        Counters->ReportCreateSession(dbCounters, request.ByteSize());
     }
 
     void LogRequest(const NKikimrKqp::TPingSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId, 
-        TKqpDbCountersPtr dbCounters) 
+        const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId,
+        TKqpDbCountersPtr dbCounters)
     {
         KQP_PROXY_LOG_D(requestInfo << "Received ping session request, sender: " << sender << " selfID: " << SelfId() << ", RequestId: " << requestId);
-        Counters->ReportPingSession(dbCounters, request.ByteSize()); 
+        Counters->ReportPingSession(dbCounters, request.ByteSize());
     }
 
     bool ReplyProcessError(Ydb::StatusIds::StatusCode ydbStatus, const TString& message, ui64 requestId)
@@ -1155,16 +1155,16 @@ private:
 
         auto sessionId = EncodeSessionId(SelfId().NodeId(), CreateGuidAsString());
 
-        auto dbCounters = Counters->GetDbCounters(database); 
- 
-        TKqpWorkerSettings workerSettings(cluster, database, TableServiceConfig, dbCounters); 
+        auto dbCounters = Counters->GetDbCounters(database);
+
+        TKqpWorkerSettings workerSettings(cluster, database, TableServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
         IActor* workerActor = AppData()->FeatureFlags.GetEnableKqpSessionActor()
                 ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters)
                 : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(workerActor, TMailboxType::HTSwap, AppData()->UserPoolId);
-        TKqpSessionInfo* sessionInfo = LocalSessions.Create(sessionId, workerId, database, dbCounters); 
+        TKqpSessionInfo* sessionInfo = LocalSessions.Create(sessionId, workerId, database, dbCounters);
 
         KQP_PROXY_LOG_D(requestInfo << "Created new session"
             << ", sessionId: " << sessionInfo->SessionId
@@ -1256,11 +1256,11 @@ private:
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
-    TKqpDbCountersPtr GetDbCountersForSession(const TString& sessionId) const { 
-        auto localSession = LocalSessions.FindPtr(sessionId); 
-        return localSession ? localSession->DbCounters : nullptr; 
-    } 
- 
+    TKqpDbCountersPtr GetDbCountersForSession(const TString& sessionId) const {
+        auto localSession = LocalSessions.FindPtr(sessionId);
+        return localSession ? localSession->DbCounters : nullptr;
+    }
+
 private:
     NYql::NLog::YqlLoggerScope YqlLoggerScope;
     NKikimrConfig::TLogConfig LogConfig;
@@ -1281,7 +1281,7 @@ private:
 
     TIntrusivePtr<TKqpCounters> Counters;
     TLocalSessionsRegistry LocalSessions;
- 
+
     bool ServerWorkerBalancerComplete = false;
     std::optional<TString> SelfDataCenterId;
     TVector<NKikimrKqp::TKqpProxyNodeResources> PeerProxyNodeResources;

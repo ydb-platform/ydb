@@ -16,9 +16,9 @@ class TBalanceCoverageBuilder;
 
 namespace NDataShard {
 
-static constexpr char MemoryLabelValidatedDataTx[] = "Datashard/TValidatedDataTx"; 
-static constexpr char MemoryLabelActiveTransactionBody[] = "Datashard/TActiveTransaction/TxBody"; 
- 
+static constexpr char MemoryLabelValidatedDataTx[] = "Datashard/TValidatedDataTx";
+static constexpr char MemoryLabelActiveTransactionBody[] = "Datashard/TActiveTransaction/TxBody";
+
 using NTabletFlatExecutor::TTransactionContext;
 using NTabletFlatExecutor::TTableSnapshotContext;
 
@@ -122,8 +122,8 @@ public:
                      TInstant receivedAt,
                      const TString &txBody);
 
-    ~TValidatedDataTx(); 
- 
+    ~TValidatedDataTx();
+
     static constexpr ui64 MaxReorderTxKeys() { return 100; }
 
     NKikimrTxDataShard::TError::EKind Code() const { return ErrCode; }
@@ -321,9 +321,9 @@ public:
         , SchemeTxType(TSchemaOperation::ETypeUnknown)
         , ScanSnapshotId(0)
         , ScanTask(0)
-    { 
-        TrackMemory(); 
-    } 
+    {
+        TrackMemory();
+    }
 
     TActiveTransaction(const TBasicOpInfo &op,
                        TValidatedDataTx::TPtr savedTx);
@@ -336,8 +336,8 @@ public:
                        const TVector<TSysTables::TLocksTable::TLock> &locks,
                        ui64 artifactFlags);
 
-    ~TActiveTransaction(); 
- 
+    ~TActiveTransaction();
+
     void FillTxData(TValidatedDataTx::TPtr dataTx);
     void FillTxData(TDataShard *self,
                     TTransactionContext &txc,
@@ -348,16 +348,16 @@ public:
                     ui64 artifactFlags);
 
     const TString &GetTxBody() const { return TxBody; }
-    void SetTxBody(const TString &txBody) { 
-        UntrackMemory(); 
-        TxBody = txBody; 
-        TrackMemory(); 
-    } 
-    void ClearTxBody() { 
-        UntrackMemory(); 
-        TxBody.clear(); 
-        TrackMemory(); 
-    } 
+    void SetTxBody(const TString &txBody) {
+        UntrackMemory();
+        TxBody = txBody;
+        TrackMemory();
+    }
+    void ClearTxBody() {
+        UntrackMemory();
+        TxBody.clear();
+        TrackMemory();
+    }
 
     ui64 GetSchemeShardId() const { return SchemeShardId; }
     void SetSchemeShardId(ui64 id) { SchemeShardId = id; }
@@ -534,10 +534,10 @@ public:
     }
 
 private:
-    void TrackMemory() const; 
-    void UntrackMemory() const; 
- 
-private: 
+    void TrackMemory() const;
+    void UntrackMemory() const;
+
+private:
     TValidatedDataTx::TPtr DataTx;
     THolder<NKikimrTxDataShard::TFlatSchemeTransaction> SchemeTx;
     THolder<NKikimrTxDataShard::TSnapshotTransaction> SnapshotTx;

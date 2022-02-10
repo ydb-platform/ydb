@@ -205,15 +205,15 @@ protected:
         }
 
     private:
-        ui32 GetTraverseCount() const override { 
-            return 1; 
-        } 
- 
-        NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override { 
-            Y_UNUSED(index); 
-            return Stream; 
-        } 
- 
+        ui32 GetTraverseCount() const override {
+            return 1;
+        }
+
+        NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
+            Y_UNUSED(index);
+            return Stream;
+        }
+
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             if (FilterWorkFinished) {
                 return SkipOrTake ? Stream.Fetch(result) : NUdf::EFetchStatus::Finish;

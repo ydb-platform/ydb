@@ -131,15 +131,15 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 }
 
 TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken,
-    const TString& domainRoot, ui32 nodeCount) 
+    const TString& domainRoot, ui32 nodeCount)
     : TKikimrRunner(TKikimrSettings()
         .SetKqpSettings(kqpSettings)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
 
-TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TString& authToken, 
-    const TString& domainRoot, ui32 nodeCount) 
+TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TString& authToken,
+    const TString& domainRoot, ui32 nodeCount)
     : TKikimrRunner(TKikimrSettings()
         .SetAppConfig(appConfig)
         .SetAuthToken(authToken)

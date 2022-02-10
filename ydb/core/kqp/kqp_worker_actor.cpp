@@ -179,7 +179,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Worker bootstrapped, workerId: " << ctx.SelfID);
-        Counters->ReportWorkerCreated(Settings.DbCounters); 
+        Counters->ReportWorkerCreated(Settings.DbCounters);
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), false);
         Gateway = CreateKikimrIcGateway(Settings.Cluster, Settings.Database, std::move(loader),
@@ -200,7 +200,7 @@ public:
         auto requestInfo = TKqpRequestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
         if (CheckRequest(requestInfo, ev->Sender, proxyRequestId, ctx)) {
             LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, requestInfo << "Session closed due to explicit close event");
-            Counters->ReportWorkerClosedRequest(Settings.DbCounters); 
+            Counters->ReportWorkerClosedRequest(Settings.DbCounters);
             FinalCleanup(ctx);
         }
     }
@@ -448,7 +448,7 @@ public:
         if (timerId == IdleTimerId) {
             LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
                 << "Worker idle timeout, worker destroyed");
-            Counters->ReportWorkerClosedIdle(Settings.DbCounters); 
+            Counters->ReportWorkerClosedIdle(Settings.DbCounters);
             FinalCleanup(ctx);
         }
     }
@@ -527,7 +527,7 @@ public:
             TKqpRequestInfo(QueryState->TraceId, SessionId), Ydb::StatusIds::BAD_SESSION,
                 "Session is being closed", ctx);
 
-        Counters->ReportWorkerClosedError(Settings.DbCounters); 
+        Counters->ReportWorkerClosedError(Settings.DbCounters);
         FinalCleanup(ctx);
     }
 
@@ -876,7 +876,7 @@ private:
         }
 
         auto compileRequestActor = CreateKqpCompileRequestActor(ctx.SelfID, QueryState->UserToken, uid,
-            std::move(query), keepInCache, compileDeadline, Settings.DbCounters); 
+            std::move(query), keepInCache, compileDeadline, Settings.DbCounters);
         ctx.ExecutorThread.RegisterActor(compileRequestActor);
 
         Become(&TKqpWorkerActor::CompileQueryState);
@@ -907,7 +907,7 @@ private:
                 if (Settings.LongSession) {
                     QueryState.Reset();
                 } else {
-                    Counters->ReportWorkerClosedError(Settings.DbCounters); 
+                    Counters->ReportWorkerClosedError(Settings.DbCounters);
                     FinalCleanup(ctx);
                 }
             };
@@ -931,11 +931,11 @@ private:
                 case Ydb::Table::TransactionControl::kBeginTx: {
                     beginTxResult = BeginTransaction(txControl.begin_tx());
 
-                    Counters->ReportBeginTransaction(Settings.DbCounters, 
-                        beginTxResult.EvictedTx, 
-                        beginTxResult.CurrentActiveTx, 
-                        beginTxResult.CurrentAbortedTx); 
- 
+                    Counters->ReportBeginTransaction(Settings.DbCounters,
+                        beginTxResult.EvictedTx,
+                        beginTxResult.CurrentActiveTx,
+                        beginTxResult.CurrentAbortedTx);
+
                     if (!beginTxResult.Success()) {
                         QueryState->AsyncQueryResult = MakeKikimrResultHolder(
                             NCommon::ResultFromErrors<TQueryResult>(beginTxResult.Issues()));
@@ -944,7 +944,7 @@ private:
                         return;
                     }
 
-                    Counters->ReportTxCreated(Settings.DbCounters); 
+                    Counters->ReportTxCreated(Settings.DbCounters);
 
                     QueryState->TxId = beginTxResult.TxId;
                     if (commit) {
@@ -1206,7 +1206,7 @@ private:
 
         if (isFinal) {
             StopIdleTimer(ctx);
-            Counters->ReportQueriesPerWorker(Settings.DbCounters, QueryId); 
+            Counters->ReportQueriesPerWorker(Settings.DbCounters, QueryId);
 
             MakeNewQueryState();
         }
@@ -1214,7 +1214,7 @@ private:
         if (Settings.LongSession) {
             if (isFinal) {
                 auto abortedCount = KqpHost->AbortAll();
-                Counters->ReportTxAborted(Settings.DbCounters, abortedCount); 
+                Counters->ReportTxAborted(Settings.DbCounters, abortedCount);
             }
             CleanupState->AsyncResult = KqpHost->RollbackAborted();
         } else {
@@ -1234,16 +1234,16 @@ private:
         Y_VERIFY(CleanupState);
 
         if (CleanupState->AsyncResult) {
-            auto cleanupTime = TInstant::Now() - CleanupState->Start; 
-            Counters->ReportWorkerCleanupLatency(Settings.DbCounters, cleanupTime); 
+            auto cleanupTime = TInstant::Now() - CleanupState->Start;
+            Counters->ReportWorkerCleanupLatency(Settings.DbCounters, cleanupTime);
         }
 
         bool isFinal = CleanupState->Final;
         CleanupState.Reset();
 
         if (isFinal) {
-            auto lifeSpan = TInstant::Now() - CreationTime; 
-            Counters->ReportWorkerFinished(Settings.DbCounters, lifeSpan); 
+            auto lifeSpan = TInstant::Now() - CreationTime;
+            Counters->ReportWorkerFinished(Settings.DbCounters, lifeSpan);
 
             auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionResponse>();
             closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
@@ -1523,20 +1523,20 @@ private:
             if (status == Ydb::StatusIds::INTERNAL_ERROR) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
                     << "Worker destroyed due to internal error");
-                Counters->ReportWorkerClosedError(Settings.DbCounters); 
+                Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
             if (status == Ydb::StatusIds::BAD_SESSION) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
                     << "Worker destroyed due to session error");
-                Counters->ReportWorkerClosedError(Settings.DbCounters); 
+                Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
         } else {
             if (status != Ydb::StatusIds::SUCCESS) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
                     << "Worker destroyed due to query error");
-                Counters->ReportWorkerClosedError(Settings.DbCounters); 
+                Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
         }
@@ -1544,7 +1544,7 @@ private:
         if (!keepSession) {
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
                 << "Worker destroyed due to negative keep session flag");
-            Counters->ReportWorkerClosedRequest(Settings.DbCounters); 
+            Counters->ReportWorkerClosedRequest(Settings.DbCounters);
             return false;
         }
 
@@ -1616,17 +1616,17 @@ private:
         auto& record = responseEv->Record.GetRef();
         auto status = record.GetYdbStatus();
 
-        auto now = TInstant::Now(); 
-        auto queryDuration = now - QueryState->StartTime; 
+        auto now = TInstant::Now();
+        auto queryDuration = now - QueryState->StartTime;
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            Counters->ReportQueryLatency(Settings.DbCounters, queryRequest.GetAction(), queryDuration); 
+            Counters->ReportQueryLatency(Settings.DbCounters, queryRequest.GetAction(), queryDuration);
 
             auto maxReadType = ExtractMostHeavyReadType(queryResult.QueryPlan);
             if (maxReadType == ETableReadType::FullScan) {
-                Counters->ReportQueryWithFullScan(Settings.DbCounters); 
+                Counters->ReportQueryWithFullScan(Settings.DbCounters);
             } else if (maxReadType == ETableReadType::Scan) {
-                Counters->ReportQueryWithRangeScan(Settings.DbCounters); 
+                Counters->ReportQueryWithRangeScan(Settings.DbCounters);
             }
 
             ui32 affectedShardsCount = 0;
@@ -1640,12 +1640,12 @@ private:
                 }
             }
 
-            Counters->ReportQueryAffectedShards(Settings.DbCounters, affectedShardsCount); 
-            Counters->ReportQueryReadRows(Settings.DbCounters, readRowsCount); 
-            Counters->ReportQueryReadBytes(Settings.DbCounters, readBytesCount); 
-            Counters->ReportQueryReadSets(Settings.DbCounters, queryResult.QueryStats.GetReadSetsCount()); 
-            Counters->ReportQueryMaxShardReplySize(Settings.DbCounters, queryResult.QueryStats.GetMaxShardReplySize()); 
-            Counters->ReportQueryMaxShardProgramSize(Settings.DbCounters, queryResult.QueryStats.GetMaxShardProgramSize()); 
+            Counters->ReportQueryAffectedShards(Settings.DbCounters, affectedShardsCount);
+            Counters->ReportQueryReadRows(Settings.DbCounters, readRowsCount);
+            Counters->ReportQueryReadBytes(Settings.DbCounters, readBytesCount);
+            Counters->ReportQueryReadSets(Settings.DbCounters, queryResult.QueryStats.GetReadSetsCount());
+            Counters->ReportQueryMaxShardReplySize(Settings.DbCounters, queryResult.QueryStats.GetMaxShardReplySize());
+            Counters->ReportQueryMaxShardProgramSize(Settings.DbCounters, queryResult.QueryStats.GetMaxShardProgramSize());
 
             if (QueryState->QueryCompileResult && QueryState->QueryCompileResult->PreparedQueryNewEngine
                 && QueryState->NewEngineCompatibleQuery)
@@ -1665,7 +1665,7 @@ private:
         }
 
         if (queryResult.SqlVersion) {
-            Counters->ReportSqlVersion(Settings.DbCounters, *queryResult.SqlVersion); 
+            Counters->ReportSqlVersion(Settings.DbCounters, *queryResult.SqlVersion);
         }
 
         if (Settings.LongSession && status != Ydb::StatusIds::SUCCESS) {
@@ -1712,7 +1712,7 @@ private:
         if (IsExecuteAction(queryRequest.GetAction())) {
             auto ru = CalcRequestUnit(stats);
             record.SetConsumedRu(ru);
-            CollectSystemViewQueryStats(ctx, &stats, queryDuration, queryRequest.GetDatabase(), ru); 
+            CollectSystemViewQueryStats(ctx, &stats, queryDuration, queryRequest.GetDatabase(), ru);
             SlowLogQuery(ctx, requestInfo, queryDuration, status, [&record](){
                 ui64 resultsSize = 0;
                 for (auto& result : record.GetResponse().GetResults()) {
@@ -1796,38 +1796,38 @@ private:
             "Pending previous query completion", ctx);
     }
 
-    void CollectSystemViewQueryStats(const TActorContext& ctx, 
-        const NKqpProto::TKqpStatsQuery* stats, TDuration queryDuration, 
-        const TString& database, ui64 requestUnits) 
-    { 
-        auto type = QueryState->Request.GetType(); 
-        switch (type) { 
-            case NKikimrKqp::QUERY_TYPE_SQL_DML: 
-            case NKikimrKqp::QUERY_TYPE_PREPARED_DML: 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCAN: 
+    void CollectSystemViewQueryStats(const TActorContext& ctx,
+        const NKqpProto::TKqpStatsQuery* stats, TDuration queryDuration,
+        const TString& database, ui64 requestUnits)
+    {
+        auto type = QueryState->Request.GetType();
+        switch (type) {
+            case NKikimrKqp::QUERY_TYPE_SQL_DML:
+            case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
+            case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
-                auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID(); 
-                NSysView::CollectQueryStats(ctx, stats, queryDuration, ExtractQueryText(), 
-                    userSID, QueryState->ParametersSize, database, type, requestUnits); 
+                auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
+                NSysView::CollectQueryStats(ctx, stats, queryDuration, ExtractQueryText(),
+                    userSID, QueryState->ParametersSize, database, type, requestUnits);
                 break;
-            } 
-            default: 
-                break; 
-        } 
-    } 
- 
-    TString ExtractQueryText() const { 
-        auto compileResult = QueryState->QueryCompileResult; 
-        if (compileResult) { 
-            if (compileResult->Query) { 
-                return compileResult->Query->Text; 
-            } 
-            return {}; 
-        } 
-        return QueryState->Request.GetQuery(); 
-    } 
- 
+            }
+            default:
+                break;
+        }
+    }
+
+    TString ExtractQueryText() const {
+        auto compileResult = QueryState->QueryCompileResult;
+        if (compileResult) {
+            if (compileResult->Query) {
+                return compileResult->Query->Text;
+            }
+            return {};
+        }
+        return QueryState->Request.GetQuery();
+    }
+
     void SlowLogQuery(const TActorContext &ctx, const TKqpRequestInfo& requestInfo, const TDuration& duration,
         Ydb::StatusIds::StatusCode status, const std::function<ui64()>& resultsSizeFunc)
     {
@@ -1858,7 +1858,7 @@ private:
                 username = "UNAUTHENTICATED";
             }
 
-            auto queryText = ExtractQueryText(); 
+            auto queryText = ExtractQueryText();
 
             auto paramsText = TStringBuilder()
                 << ToString(QueryState->ParametersSize)
@@ -2037,7 +2037,7 @@ private:
 
         TString replyTxId;
         if (txInfo) {
-            Counters->ReportTransaction(Settings.DbCounters, *txInfo); 
+            Counters->ReportTransaction(Settings.DbCounters, *txInfo);
 
             switch (txInfo->Status) {
                 case TKqpTransactionInfo::EStatus::Active:
@@ -2057,7 +2057,7 @@ private:
     }
 
     TString InvalidateQuery(const TKqpCompileResult& compileResult, const TActorContext& ctx) {
-        auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(compileResult.Uid, Settings.DbCounters); 
+        auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(compileResult.Uid, Settings.DbCounters);
         ctx.Send(MakeKqpCompileServiceID(ctx.SelfID.NodeId()), invalidateEv.Release());
 
         return compileResult.Uid;

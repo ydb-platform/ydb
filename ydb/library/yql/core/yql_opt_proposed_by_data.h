@@ -18,7 +18,7 @@ TAutoPtr<IGraphTransformer> CreateLogicalDataProposalsInspector(const TTypeAnnot
 TAutoPtr<IGraphTransformer> CreatePhysicalDataProposalsInspector(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreatePhysicalFinalizers(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateTableMetadataLoader(const TTypeAnnotationContext& types);
-TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnnotationContext& types); 
+TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationContext& types);
 
 }

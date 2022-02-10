@@ -278,11 +278,11 @@ namespace {
                 InflyLimitReach = AdaptiveCounters->GetCounter("InflyLimitReach", true);
                 InflightDataAmount = AdaptiveCounters->GetCounter("Inflight_Data");
 
-                LegacyPingTimeHist = {}; 
-                LegacyPingTimeHist.Init(AdaptiveCounters.Get(), "PingTimeHist", "mks", 125, 18); 
- 
-                PingTimeHistogram = AdaptiveCounters->GetHistogram( 
-                    "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125)); 
+                LegacyPingTimeHist = {};
+                LegacyPingTimeHist.Init(AdaptiveCounters.Get(), "PingTimeHist", "mks", 125, 18);
+
+                PingTimeHistogram = AdaptiveCounters->GetHistogram(
+                    "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
             }
 
             if (updateGlobal) {
@@ -299,7 +299,7 @@ namespace {
 
                 auto disconnectReasonGroup = Counters->GetSubgroup("subsystem", "disconnectReason");
                 for (const char *reason : TDisconnectReason::Reasons) {
-                    DisconnectByReason[reason] = disconnectReasonGroup->GetCounter(reason, true); 
+                    DisconnectByReason[reason] = disconnectReasonGroup->GetCounter(reason, true);
                 }
             }
 
@@ -329,9 +329,9 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousReadWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr UsefulWriteWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousWriteWakeups;
-        NMon::THistogramCounterHelper LegacyPingTimeHist; 
-        NMonitoring::THistogramPtr PingTimeHistogram; 
- 
+        NMon::THistogramCounterHelper LegacyPingTimeHist;
+        NMonitoring::THistogramPtr PingTimeHistogram;
+
         std::unordered_map<ui16, TOutputChannel> OutputChannels;
         TOutputChannel OtherOutputChannel;
         TInputChannels InputChannels;

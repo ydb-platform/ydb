@@ -60,7 +60,7 @@ namespace NLs {
     TCheckFunc IsExternalSubDomain(const TString& name);
     void InExternalSubdomain(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc ExtractTenantSchemeshard(ui64* tenantSchemeShard);
-    TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVP); 
+    TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVP);
 
     void NotFinished(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void Finished(const NKikimrScheme::TEvDescribeSchemeResult& record);

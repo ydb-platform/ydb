@@ -243,7 +243,7 @@ struct TEvLogResult;
 // LOG
 ////////////////////////////////////////////////////////////////////////////
 struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
-    struct ICallback { 
+    struct ICallback {
         virtual ~ICallback() = default;
         virtual void operator ()(TActorSystem *actorSystem, const TEvLogResult &ev) = 0;
     };

@@ -224,10 +224,10 @@ public:
         return &Arena_;
     }
 
-    void UseDatabase(const TString& database) override { 
-        Counters_->UseDatabase(database); 
-    } 
- 
+    void UseDatabase(const TString& database) override {
+        Counters_->UseDatabase(database);
+    }
+
 private:
     void Clone() {
         if (!Server_->IsShuttingDown()) {

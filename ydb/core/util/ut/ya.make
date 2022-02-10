@@ -26,7 +26,7 @@ SRCS(
     btree_ut.cpp
     cache_ut.cpp
     circular_queue_ut.cpp
-    concurrent_rw_hash_ut.cpp 
+    concurrent_rw_hash_ut.cpp
     fast_tls_ut.cpp
     fragmented_buffer_ut.cpp
     hazard_ut.cpp

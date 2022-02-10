@@ -156,8 +156,8 @@ public:
 
     TFutureStatus ContinueAsync();
 
-    bool HasActiveProcesses(); 
- 
+    bool HasActiveProcesses();
+
     void Abort();
 
     inline TIssues Issues() {
@@ -215,8 +215,8 @@ public:
     TMaybe<TString> GetDiagnostics();
     IGraphTransformer::TStatistics GetRawDiagnostics();
 
-    TMaybe<TString> GetTasksInfo(); 
- 
+    TMaybe<TString> GetTasksInfo();
+
     TMaybe<TString> GetStatistics(bool totalOnly = false);
 
     TMaybe<TString> GetDiscoveredData();

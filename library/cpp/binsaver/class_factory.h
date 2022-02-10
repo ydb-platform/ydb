@@ -15,12 +15,12 @@ public:
     typedef const std::type_info* VFT;
 
 private:
-    typedef T* (*newFunc)(); 
+    typedef T* (*newFunc)();
     typedef THashMap<int, newFunc> CTypeNewHash;           // typeID->newFunc()
     typedef THashMap<VFT, int> CTypeIndexHash; // vftable->typeID
 
-    CTypeIndexHash typeIndex; 
-    CTypeNewHash typeInfo; 
+    CTypeIndexHash typeIndex;
+    CTypeNewHash typeInfo;
 
     void RegisterTypeBase(int nTypeID, newFunc func, VFT vft);
     static VFT GetObjectType(T* pObject) {
@@ -29,15 +29,15 @@ private:
     int VFT2TypeID(VFT t) {
         CTypeIndexHash::iterator i = typeIndex.find(t);
         if (i != typeIndex.end())
-            return i->second; 
+            return i->second;
         for (i = typeIndex.begin(); i != typeIndex.end(); ++i) {
             if (*i->first == *t) {
-                typeIndex[t] = i->second; 
-                return i->second; 
-            } 
-        } 
-        return -1; 
-    } 
+                typeIndex[t] = i->second;
+                return i->second;
+            }
+        }
+        return -1;
+    }
 
 public:
     template <class TT>
@@ -45,10 +45,10 @@ public:
         RegisterTypeBase(nTypeID, func, &typeid(TT));
     }
     void RegisterTypeSafe(int nTypeID, newFunc func) {
-        TPtr<T> pObj = func(); 
+        TPtr<T> pObj = func();
         VFT vft = GetObjectType(pObj);
         RegisterTypeBase(nTypeID, func, vft);
-    } 
+    }
     T* CreateObject(int nTypeID) {
         newFunc f = typeInfo[nTypeID];
         if (f)

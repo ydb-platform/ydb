@@ -798,7 +798,7 @@ protected:
         if (ProcessStats.CGroupMemLim != 0) {
             systemStatsUpdate->Record.SetMemoryLimit(ProcessStats.CGroupMemLim);
         }
-        systemStatsUpdate->Record.SetMemoryUsedInAlloc(TAllocState::GetAllocatedMemoryEstimate()); 
+        systemStatsUpdate->Record.SetMemoryUsedInAlloc(TAllocState::GetAllocatedMemoryEstimate());
         ctx.Send(ctx.SelfID, systemStatsUpdate.Release());
         ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvUpdateRuntimeStats());
     }

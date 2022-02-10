@@ -27,7 +27,7 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
 private:
-    virtual TStatus HandleClusterConfig(NNodes::TKiClusterConfig, TExprContext& ctx) = 0; 
+    virtual TStatus HandleClusterConfig(NNodes::TKiClusterConfig, TExprContext& ctx) = 0;
     virtual TStatus HandleWriteTable(NNodes::TKiWriteTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleUpdateTable(NNodes::TKiUpdateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDeleteTable(NNodes::TKiDeleteTable node, TExprContext& ctx) = 0;

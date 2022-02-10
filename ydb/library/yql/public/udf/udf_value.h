@@ -127,7 +127,7 @@ private:
     virtual bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) = 0;
 
     virtual void Apply(IApplyContext& context) const = 0;
- 
+
 public:
     // reference counting
     inline void Ref() noexcept;
@@ -147,19 +147,19 @@ private:
     const ui8 Reserved_ = 0;
 };
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3) 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
 class IBoxedValue2 : public IBoxedValue1 {
 friend struct TBoxedValueAccessor;
 friend class TBlock;
 private:
-    // Save/Load state 
-    virtual ui32 GetTraverseCount() const = 0; 
-    virtual TUnboxedValue GetTraverseItem(ui32 index) const = 0; 
-    virtual TUnboxedValue Save() const = 0; 
-    virtual void Load(const TStringRef& state) = 0; 
+    // Save/Load state
+    virtual ui32 GetTraverseCount() const = 0;
+    virtual TUnboxedValue GetTraverseItem(ui32 index) const = 0;
+    virtual TUnboxedValue Save() const = 0;
+    virtual void Load(const TStringRef& state) = 0;
 };
-#endif 
- 
+#endif
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
 class IBoxedValue3 : public IBoxedValue2 {
 friend struct TBoxedValueAccessor;
@@ -391,7 +391,7 @@ UDF_ASSERT_TYPE_SIZE(TFlatDataBlockPtr, 8);
 struct TBoxedValueAccessor
 {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
- 
+
 #define METHOD_MAP(xx) \
     xx(HasFastListLength) \
     xx(GetListLength) \
@@ -421,10 +421,10 @@ struct TBoxedValueAccessor
     xx(Skip) \
     xx(Next) \
     xx(NextPair) \
-    xx(Apply) \ 
-    xx(GetTraverseCount) \ 
-    xx(GetTraverseItem) \ 
-    xx(Save) \ 
+    xx(Apply) \
+    xx(GetTraverseCount) \
+    xx(GetTraverseItem) \
+    xx(Save) \
     xx(Load) \
     xx(Push) \
     xx(IsSortedDict) \
@@ -547,43 +547,43 @@ struct TBoxedValueAccessor
     xx(GetTraverseCount) \
     xx(GetTraverseItem) \
     xx(Save) \
-    xx(Load) 
- 
-#else 
- 
-#define METHOD_MAP(xx) \ 
-    xx(HasFastListLength) \ 
-    xx(GetListLength) \ 
-    xx(GetEstimatedListLength) \ 
-    xx(GetListIterator) \ 
-    xx(GetListRepresentation) \ 
-    xx(ReverseListImpl) \ 
-    xx(SkipListImpl) \ 
-    xx(TakeListImpl) \ 
-    xx(ToIndexDictImpl) \ 
-    xx(GetDictLength) \ 
-    xx(GetDictIterator) \ 
-    xx(GetKeysIterator) \ 
-    xx(GetPayloadsIterator) \ 
-    xx(Contains) \ 
-    xx(Lookup) \ 
-    xx(GetElement) \ 
-    xx(GetElements) \ 
-    xx(Run) \ 
-    xx(GetResourceTag) \ 
-    xx(GetResource) \ 
-    xx(HasListItems) \ 
-    xx(HasDictItems) \ 
-    xx(GetVariantIndex) \ 
-    xx(GetVariantItem) \ 
-    xx(Fetch) \ 
-    xx(Skip) \ 
-    xx(Next) \ 
-    xx(NextPair) \ 
+    xx(Load)
+
+#else
+
+#define METHOD_MAP(xx) \
+    xx(HasFastListLength) \
+    xx(GetListLength) \
+    xx(GetEstimatedListLength) \
+    xx(GetListIterator) \
+    xx(GetListRepresentation) \
+    xx(ReverseListImpl) \
+    xx(SkipListImpl) \
+    xx(TakeListImpl) \
+    xx(ToIndexDictImpl) \
+    xx(GetDictLength) \
+    xx(GetDictIterator) \
+    xx(GetKeysIterator) \
+    xx(GetPayloadsIterator) \
+    xx(Contains) \
+    xx(Lookup) \
+    xx(GetElement) \
+    xx(GetElements) \
+    xx(Run) \
+    xx(GetResourceTag) \
+    xx(GetResource) \
+    xx(HasListItems) \
+    xx(HasDictItems) \
+    xx(GetVariantIndex) \
+    xx(GetVariantItem) \
+    xx(Fetch) \
+    xx(Skip) \
+    xx(Next) \
+    xx(NextPair) \
     xx(Apply)
 
-#endif 
- 
+#endif
+
     enum class EMethod : ui32 {
 #define MAP_HANDLER(xx) xx,
         METHOD_MAP(MAP_HANDLER)
@@ -657,14 +657,14 @@ struct TBoxedValueAccessor
     static inline bool NextPair(IBoxedValue& value, TUnboxedValue& key, TUnboxedValue& payload);
 
     static inline void Apply(IBoxedValue& value, IApplyContext& context);
- 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3) 
-    // Save/Load state 
-    static inline ui32 GetTraverseCount(const IBoxedValue& value); 
-    static inline TUnboxedValue GetTraverseItem(const IBoxedValue& value, ui32 index); 
-    static inline TUnboxedValue Save(const IBoxedValue& value); 
-    static inline void Load(IBoxedValue& value, const TStringRef& state); 
-#endif 
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
+    // Save/Load state
+    static inline ui32 GetTraverseCount(const IBoxedValue& value);
+    static inline TUnboxedValue GetTraverseItem(const IBoxedValue& value, ui32 index);
+    static inline TUnboxedValue Save(const IBoxedValue& value);
+    static inline void Load(IBoxedValue& value, const TStringRef& state);
+#endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
     static inline void Push(IBoxedValue& value, const TUnboxedValuePod& data);
@@ -741,15 +741,15 @@ private:
     bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) override;
 
     void Apply(IApplyContext& context) const override;
- 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3) 
-    // Save/Load state 
-    ui32 GetTraverseCount() const override; 
-    TUnboxedValue GetTraverseItem(ui32 index) const override; 
-    TUnboxedValue Save() const override; 
-    void Load(const TStringRef& state) override; 
-#endif 
- 
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
+    // Save/Load state
+    ui32 GetTraverseCount() const override;
+    TUnboxedValue GetTraverseItem(ui32 index) const override;
+    TUnboxedValue Save() const override;
+    void Load(const TStringRef& state) override;
+#endif
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
     void Push(const TUnboxedValuePod& value) override;
 #endif
@@ -919,14 +919,14 @@ public:
 
     inline void Apply(IApplyContext& context) const;
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3) 
-    // Save/Load state 
-    inline ui32 GetTraverseCount() const; 
-    inline TUnboxedValue GetTraverseItem(ui32 index) const; 
-    inline TUnboxedValue Save() const; 
-    inline void Load(const TStringRef& state); 
-#endif 
- 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
+    // Save/Load state
+    inline ui32 GetTraverseCount() const;
+    inline TUnboxedValue GetTraverseItem(ui32 index) const;
+    inline TUnboxedValue Save() const;
+    inline void Load(const TStringRef& state);
+#endif
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
     inline bool IsSortedDict() const;
 #endif

@@ -22,44 +22,44 @@ static ui64 GetIops(const T& c) {
 }
 
 void TSchemeShard::Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(ev->Forward(SysPartitionStatsCollector)); 
-} 
- 
+    ctx.Send(ev->Forward(SysPartitionStatsCollector));
+}
+
 auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TTabletId datashardId,
-    TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TTableInfo::TPartitionStats& stats) 
-{ 
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvSendPartitionStats>( 
-        GetDomainKey(pathId), pathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()))); 
- 
-    auto& sysStats = ev->Stats; 
-    sysStats.SetDataSize(stats.DataSize); 
-    sysStats.SetRowCount(stats.RowCount); 
-    sysStats.SetIndexSize(stats.IndexSize); 
+    TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TTableInfo::TPartitionStats& stats)
+{
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvSendPartitionStats>(
+        GetDomainKey(pathId), pathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId())));
+
+    auto& sysStats = ev->Stats;
+    sysStats.SetDataSize(stats.DataSize);
+    sysStats.SetRowCount(stats.RowCount);
+    sysStats.SetIndexSize(stats.IndexSize);
     sysStats.SetCPUCores(std::min(stats.GetCurrentRawCpuUsage() / 1000000., 1.0));
     sysStats.SetTabletId(ui64(datashardId));
-    sysStats.SetAccessTime(stats.LastAccessTime.MilliSeconds()); 
-    sysStats.SetUpdateTime(stats.LastUpdateTime.MilliSeconds()); 
-    sysStats.SetInFlightTxCount(stats.InFlightTxCount); 
-    sysStats.SetRowUpdates(stats.RowUpdates); 
-    sysStats.SetRowDeletes(stats.RowDeletes); 
-    sysStats.SetRowReads(stats.RowReads); 
-    sysStats.SetRangeReads(stats.RangeReads); 
-    sysStats.SetRangeReadRows(stats.RangeReadRows); 
-    sysStats.SetImmediateTxCompleted(stats.ImmediateTxCompleted); 
-    sysStats.SetPlannedTxCompleted(stats.PlannedTxCompleted); 
-    sysStats.SetTxRejectedByOverload(stats.TxRejectedByOverload); 
-    sysStats.SetTxRejectedBySpace(stats.TxRejectedBySpace); 
- 
-    if (nodeId) { 
-        sysStats.SetNodeId(*nodeId); 
-    } 
-    if (startTime) { 
-        sysStats.SetStartTime(*startTime); 
-    } 
- 
+    sysStats.SetAccessTime(stats.LastAccessTime.MilliSeconds());
+    sysStats.SetUpdateTime(stats.LastUpdateTime.MilliSeconds());
+    sysStats.SetInFlightTxCount(stats.InFlightTxCount);
+    sysStats.SetRowUpdates(stats.RowUpdates);
+    sysStats.SetRowDeletes(stats.RowDeletes);
+    sysStats.SetRowReads(stats.RowReads);
+    sysStats.SetRangeReads(stats.RangeReads);
+    sysStats.SetRangeReadRows(stats.RangeReadRows);
+    sysStats.SetImmediateTxCompleted(stats.ImmediateTxCompleted);
+    sysStats.SetPlannedTxCompleted(stats.PlannedTxCompleted);
+    sysStats.SetTxRejectedByOverload(stats.TxRejectedByOverload);
+    sysStats.SetTxRejectedBySpace(stats.TxRejectedBySpace);
+
+    if (nodeId) {
+        sysStats.SetNodeId(*nodeId);
+    }
+    if (startTime) {
+        sysStats.SetStartTime(*startTime);
+    }
+
     return ev;
-} 
- 
+}
+
 class TTxStorePartitionStats: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvDataShard::TEvPeriodicTableStats::TPtr Ev;
 
@@ -219,17 +219,17 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     Self->PersistTablePartitionStats(db, tableId, shardIdx, table);
 
     if (AppData(ctx)->FeatureFlags.GetEnableSystemViews()) {
-        TMaybe<ui32> nodeId; 
-        if (rec.HasNodeId()) { 
-            nodeId = rec.GetNodeId(); 
-        } 
-        TMaybe<ui64> startTime; 
-        if (rec.HasStartTime()) { 
-            startTime = rec.GetStartTime(); 
-        } 
+        TMaybe<ui32> nodeId;
+        if (rec.HasNodeId()) {
+            nodeId = rec.GetNodeId();
+        }
+        TMaybe<ui64> startTime;
+        if (rec.HasStartTime()) {
+            startTime = rec.GetStartTime();
+        }
         StatsCollectorEv = Self->BuildStatsForCollector(tableId, shardIdx, datashardId, nodeId, startTime, newStats);
-    } 
- 
+    }
+
     const auto& shardToPartition = table->GetShard2PartitionIdx();
     if (table->IsTTLEnabled() && shardToPartition.contains(shardIdx)) {
         const ui64 partitionIdx = shardToPartition.at(shardIdx);

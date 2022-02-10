@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "defs.h"
 #include "immediate_control_board_wrapper.h"
 
@@ -8,8 +8,8 @@
 namespace NKikimr {
 
 class TControlBoard : public TThrRefBase {
-private: 
-    TConcurrentRWHashMap<TString, TIntrusivePtr<TControl>, 16> Board; 
+private:
+    TConcurrentRWHashMap<TString, TIntrusivePtr<TControl>, 16> Board;
 
 public:
     bool RegisterLocalControl(TControlWrapper control, TString name);

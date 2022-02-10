@@ -1265,7 +1265,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Kind = TNavigate::KindPath;
             Created = true;
             PathId = TPathId(TSysTables::SysSchemeShard, 0);
-            Path = "/sys"; 
+            Path = "/sys";
 
             IsVirtual = true;
         }
@@ -1278,7 +1278,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Kind = TNavigate::KindTable;
             Created = true;
             PathId = TPathId(TSysTables::SysSchemeShard, v2 ? TSysTables::SysTableLocks2 : TSysTables::SysTableLocks);
-            Path = v2 ? "/sys/locks2" : "/sys/locks"; 
+            Path = v2 ? "/sys/locks2" : "/sys/locks";
 
             TVector<ui32> keyColumnTypes;
             TSysTables::TLocksTable::GetInfo(Columns, keyColumnTypes, v2);
@@ -1309,9 +1309,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Y_VERIFY(notify.DescribeSchemeResult.HasPathDescription());
             auto& pathDesc = *notify.DescribeSchemeResult.MutablePathDescription();
 
-            Y_VERIFY(notify.DescribeSchemeResult.HasPath()); 
-            Path = notify.DescribeSchemeResult.GetPath(); 
- 
+            Y_VERIFY(notify.DescribeSchemeResult.HasPath());
+            Path = notify.DescribeSchemeResult.GetPath();
+
             const auto& abandoned = pathDesc.GetAbandonedTenantsSchemeShards();
             AbandonedSchemeShardsIds = TSet<ui64>(abandoned.begin(), abandoned.end());
 
@@ -1523,38 +1523,38 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return AbandonedSchemeShardsIds;
         }
 
-        void FillSystemViewEntry(TNavigateContext* context, TNavigate::TEntry& entry, 
-            NSysView::ISystemViewResolver::ETarget target) const 
-        { 
-            auto sysViewInfo = entry.TableId.SysViewInfo; 
- 
-            if (sysViewInfo == NSysView::SysPathName) { 
-                if (entry.Operation == TNavigate::OpTable) { 
+        void FillSystemViewEntry(TNavigateContext* context, TNavigate::TEntry& entry,
+            NSysView::ISystemViewResolver::ETarget target) const
+        {
+            auto sysViewInfo = entry.TableId.SysViewInfo;
+
+            if (sysViewInfo == NSysView::SysPathName) {
+                if (entry.Operation == TNavigate::OpTable) {
                     return SetError(context, entry, TNavigate::EStatus::PathNotTable);
-                } 
- 
-                auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>(); 
- 
-                auto names = Owner->SystemViewResolver->GetSystemViewNames(target); 
-                std::sort(names.begin(), names.end()); 
- 
-                listNodeEntry->Kind = TNavigate::KindPath; 
-                listNodeEntry->Children.reserve(names.size()); 
-                for (const auto& name : names) { 
+                }
+
+                auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>();
+
+                auto names = Owner->SystemViewResolver->GetSystemViewNames(target);
+                std::sort(names.begin(), names.end());
+
+                listNodeEntry->Kind = TNavigate::KindPath;
+                listNodeEntry->Children.reserve(names.size());
+                for (const auto& name : names) {
                     listNodeEntry->Children.emplace_back(name, TPathId(), TNavigate::KindTable);
-                } 
- 
-                entry.Kind = TNavigate::KindPath; 
-                entry.ListNodeEntry = listNodeEntry; 
-                entry.TableId = TTableId(PathId.OwnerId, InvalidLocalPathId, sysViewInfo); 
- 
-            } else { 
-                auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target); 
-                if (!schema) { 
+                }
+
+                entry.Kind = TNavigate::KindPath;
+                entry.ListNodeEntry = listNodeEntry;
+                entry.TableId = TTableId(PathId.OwnerId, InvalidLocalPathId, sysViewInfo);
+
+            } else {
+                auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target);
+                if (!schema) {
                     return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
-                } 
- 
-                entry.Kind = TNavigate::KindTable; 
+                }
+
+                entry.Kind = TNavigate::KindTable;
                 if (target == NSysView::ISystemViewResolver::ETarget::OlapStore ||
                     target == NSysView::ISystemViewResolver::ETarget::OlapTable)
                 {
@@ -1562,23 +1562,23 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     entry.Kind =TNavigate::KindOlapTable;
                 }
 
-                entry.Columns = std::move(schema->Columns); 
- 
-                if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) { 
-                    entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId, sysViewInfo); 
-                } else { 
-                    entry.Path = SplitPath(Path); 
-                    entry.Path.emplace_back(NKikimr::NSysView::SysPathName); 
-                    entry.Path.emplace_back(sysViewInfo); 
-                } 
-            } 
- 
-            entry.Status = TNavigate::EStatus::Ok; 
- 
-            entry.SecurityObject = SecurityObject; 
-            entry.DomainInfo = DomainInfo; 
-        } 
- 
+                entry.Columns = std::move(schema->Columns);
+
+                if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
+                    entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId, sysViewInfo);
+                } else {
+                    entry.Path = SplitPath(Path);
+                    entry.Path.emplace_back(NKikimr::NSysView::SysPathName);
+                    entry.Path.emplace_back(sysViewInfo);
+                }
+            }
+
+            entry.Status = TNavigate::EStatus::Ok;
+
+            entry.SecurityObject = SecurityObject;
+            entry.DomainInfo = DomainInfo;
+        }
+
         void FillEntry(TNavigateContext* context, TNavigate::TEntry& entry, const TResponseProps& props = TResponseProps()) const {
             SBC_LOG_D("FillEntry for TNavigate"
                 << ": self# " << Owner->SelfId()
@@ -1598,13 +1598,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SetError(context, entry, TNavigate::EStatus::LookupError);
             }
 
-            if (!entry.TableId.SysViewInfo.empty()) { 
-                if (Kind == TNavigate::KindPath) { 
-                    auto split = SplitPath(Path); 
-                    if (split.size() == 1) { 
+            if (!entry.TableId.SysViewInfo.empty()) {
+                if (Kind == TNavigate::KindPath) {
+                    auto split = SplitPath(Path);
+                    if (split.size() == 1) {
                         return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::Domain);
-                    } 
-                } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) { 
+                    }
+                } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) {
                     return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain);
                 } else if (Kind == TNavigate::KindOlapStore) {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
@@ -1615,11 +1615,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     entry.OlapStoreInfo = OlapStoreInfo;
                     entry.OlapTableInfo = OlapTableInfo;
                     return;
-                } 
+                }
 
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
-            } 
- 
+            }
+
             const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindOlapTable;
             if (entry.Operation == TNavigate::OpTable && !isTable) {
                 return SetError(context, entry, TNavigate::EStatus::PathNotTable);
@@ -1647,14 +1647,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.Kind = Kind;
             entry.CreateStep = CreateStep;
 
-            if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) { 
-                if (Kind == TNavigate::KindTable) { 
+            if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
+                if (Kind == TNavigate::KindTable) {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId, SchemaVersion);
-                } else { 
+                } else {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId);
-                } 
+                }
             } else {
-                entry.Path = SplitPath(Path); 
+                entry.Path = SplitPath(Path);
                 // update schema version
                 entry.TableId.SchemaVersion = SchemaVersion;
 
@@ -1683,25 +1683,25 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
-            const TVector<NScheme::TTypeId>& keyColumnTypes, 
-            const THashMap<ui32, TSysTables::TTableColumnInfo>& columns) const 
-        { 
+            const TVector<NScheme::TTypeId>& keyColumnTypes,
+            const THashMap<ui32, TSysTables::TTableColumnInfo>& columns) const
+        {
             TKeyDesc& keyDesc = *entry.KeyDescription;
 
-            // check key types 
-            if (keyDesc.KeyColumnTypes.size() > keyColumnTypes.size()) { 
+            // check key types
+            if (keyDesc.KeyColumnTypes.size() > keyColumnTypes.size()) {
                 SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::TypeCheckFailed);
-                return false; 
+                return false;
             }
 
             for (ui32 i : xrange(keyDesc.KeyColumnTypes.size())) {
-                if (keyDesc.KeyColumnTypes[i] != keyColumnTypes[i]) { 
+                if (keyDesc.KeyColumnTypes[i] != keyColumnTypes[i]) {
                     SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::TypeCheckFailed);
-                    return false; 
+                    return false;
                 }
             }
 
-            // check operations 
+            // check operations
             keyDesc.ColumnInfos.clear();
             keyDesc.ColumnInfos.reserve(keyDesc.Columns.size());
             for (auto& columnOp : keyDesc.Columns) {
@@ -1711,10 +1711,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
                 if (IsSysTable() && columnOp.Operation == TKeyDesc::EColumnOperation::InplaceUpdate) {
                     SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::OperationNotSupported);
-                    return false; 
+                    return false;
                 }
 
-                const auto* column = columns.FindPtr(columnOp.Column); 
+                const auto* column = columns.FindPtr(columnOp.Column);
 
                 if (!column) {
                     entry.Status = TResolve::EStatus::TypeCheckError;
@@ -1744,36 +1744,36 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
-            return true; 
-        } 
- 
-        void FillSystemViewEntry(TResolveContext* context, TResolve::TEntry& entry, 
-            NSysView::ISystemViewResolver::ETarget target) const 
-        { 
-            TKeyDesc& keyDesc = *entry.KeyDescription; 
-            auto sysViewInfo = keyDesc.TableId.SysViewInfo; 
- 
-            auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target); 
-            if (!schema) { 
+            return true;
+        }
+
+        void FillSystemViewEntry(TResolveContext* context, TResolve::TEntry& entry,
+            NSysView::ISystemViewResolver::ETarget target) const
+        {
+            TKeyDesc& keyDesc = *entry.KeyDescription;
+            auto sysViewInfo = keyDesc.TableId.SysViewInfo;
+
+            auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target);
+            if (!schema) {
                 return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
-            } 
- 
+            }
+
             if (!CheckColumns(context, entry, schema->KeyColumnTypes, schema->Columns)) {
-                return; 
-            } 
- 
-            if (keyDesc.Status != TKeyDesc::EStatus::Unknown) { 
-                ++context->Request->ErrorCount; 
-                return; 
-            } 
- 
-            entry.DomainInfo = DomainInfo; 
-            keyDesc.SecurityObject = SecurityObject; 
- 
-            entry.Status = TResolve::EStatus::OkData; 
-            keyDesc.Status = TKeyDesc::EStatus::Ok; 
-        } 
- 
+                return;
+            }
+
+            if (keyDesc.Status != TKeyDesc::EStatus::Unknown) {
+                ++context->Request->ErrorCount;
+                return;
+            }
+
+            entry.DomainInfo = DomainInfo;
+            keyDesc.SecurityObject = SecurityObject;
+
+            entry.Status = TResolve::EStatus::OkData;
+            keyDesc.Status = TKeyDesc::EStatus::Ok;
+        }
+
         void FillEntry(TResolveContext* context, TResolve::TEntry& entry, const TResponseProps& props = TResponseProps()) const {
             SBC_LOG_D("FillEntry for TResolve"
                 << ": self# " << Owner->SelfId()
@@ -1781,27 +1781,27 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 << ", entry# " << entry.ToString()
                 << ", props# " << props.ToString());
 
-            TKeyDesc& keyDesc = *entry.KeyDescription; 
- 
+            TKeyDesc& keyDesc = *entry.KeyDescription;
+
             if (props.IsSync && props.Partial) {
                 return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
             }
 
             if (Status && Status == NKikimrScheme::StatusPathDoesNotExist) {
                 return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
-            } 
- 
+            }
+
             if (!Status || Status != NKikimrScheme::StatusSuccess) {
                 return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
-            } 
- 
+            }
+
             if (!keyDesc.TableId.SysViewInfo.empty()) {
-                if (Kind == TNavigate::KindPath) { 
-                    auto split = SplitPath(Path); 
-                    if (split.size() == 1) { 
+                if (Kind == TNavigate::KindPath) {
+                    auto split = SplitPath(Path);
+                    if (split.size() == 1) {
                         return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::Domain);
-                    } 
-                } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) { 
+                    }
+                } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) {
                     return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain);
                 } else if (Kind == TNavigate::KindOlapStore) {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
@@ -1819,23 +1819,23 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
                     }
                     return;
-                } 
+                }
 
                 return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
-            } 
- 
-            if (!Created) { 
+            }
+
+            if (!Created) {
                 return SetError(context, entry, TResolve::EStatus::NotMaterialized, TKeyDesc::EStatus::NotExists);
-            } 
- 
+            }
+
             entry.Kind = TableKind;
-            entry.DomainInfo = DomainInfo; 
- 
+            entry.DomainInfo = DomainInfo;
+
             if (!CheckColumns(context, entry, KeyColumnTypes, Columns)) {
-                return; 
-            } 
- 
-            // fill partition info 
+                return;
+            }
+
+            // fill partition info
             if (IsSysTable()) {
                 if (keyDesc.Range.Point) {
                     ui64 shard = 0;
@@ -1866,7 +1866,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
             }
 
-            // fill ACL info 
+            // fill ACL info
             keyDesc.SecurityObject = SecurityObject;
 
             if (keyDesc.Status != TKeyDesc::EStatus::Unknown) {
@@ -1893,7 +1893,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         bool Created;
         ui64 CreateStep;
         TPathId PathId;
-        TString Path; 
+        TString Path;
         TSet<ui64> AbandonedSchemeShardsIds;
         TIntrusivePtr<TSecurityObject> SecurityObject;
         NSchemeCache::TDomainInfo::TPtr DomainInfo;
@@ -2010,19 +2010,19 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         return CreateSubscriber(pathId, pathId.OwnerId, domainOwnerId);
     }
 
-    template <typename TContextPtr, typename TEntry, typename TPathExtractor, typename TTabletIdExtractor> 
-    void HandleEntry(TContextPtr context, TEntry& entry, size_t index, 
-        TPathExtractor pathExtractor, TTabletIdExtractor tabletIdExtractor) 
-    { 
-        auto path = pathExtractor(entry); 
-        TCacheItem* cacheItem = Cache.FindPtr(path); 
+    template <typename TContextPtr, typename TEntry, typename TPathExtractor, typename TTabletIdExtractor>
+    void HandleEntry(TContextPtr context, TEntry& entry, size_t index,
+        TPathExtractor pathExtractor, TTabletIdExtractor tabletIdExtractor)
+    {
+        auto path = pathExtractor(entry);
+        TCacheItem* cacheItem = Cache.FindPtr(path);
 
-        if (!cacheItem) { 
-            const EPathType pathType = PathType(path); 
-            switch (pathType) { 
-            case EPathType::RegularPath: 
-            { 
-                const ui64 tabletId = tabletIdExtractor(entry); 
+        if (!cacheItem) {
+            const EPathType pathType = PathType(path);
+            switch (pathType) {
+            case EPathType::RegularPath:
+            {
+                const ui64 tabletId = tabletIdExtractor(entry);
                 const ui32 domainId = AppData()->DomainsInfo->GetDomainUidByTabletId(tabletId);
                 if (tabletId == ui64(NSchemeShard::InvalidTabletId) || domainId == TDomainsInfo::BadDomainId) {
                     return SetRootUnknown(context.Get(), entry);
@@ -2053,33 +2053,33 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
 
                 cacheItem = &Cache.Upsert(path, TCacheItem(this, CreateSubscriber(path, tabletId, domainOwnerId), false));
-                break; 
+                break;
             }
-            case EPathType::SysPath: 
-                cacheItem = &Cache.Upsert(path, TCacheItem(this, TSubscriber(), true)); 
-                cacheItem->FillAsSysPath(); 
-                break; 
-            case EPathType::SysLocksV1: 
-            case EPathType::SysLocksV2: 
-                cacheItem = &Cache.Upsert(path, TCacheItem(this, TSubscriber(), true)); 
-                cacheItem->FillAsSysLocks(pathType == EPathType::SysLocksV2); 
-                break; 
+            case EPathType::SysPath:
+                cacheItem = &Cache.Upsert(path, TCacheItem(this, TSubscriber(), true));
+                cacheItem->FillAsSysPath();
+                break;
+            case EPathType::SysLocksV1:
+            case EPathType::SysLocksV2:
+                cacheItem = &Cache.Upsert(path, TCacheItem(this, TSubscriber(), true));
+                cacheItem->FillAsSysLocks(pathType == EPathType::SysLocksV2);
+                break;
             }
         }
 
-        Cache.Promote(path); 
- 
+        Cache.Promote(path);
+
         if (cacheItem->IsFilled() && !entry.SyncVersion) {
             cacheItem->FillEntry(context.Get(), entry);
         }
 
-        if (entry.SyncVersion) { 
-            cacheItem->AddInFlight(context, index, true); 
+        if (entry.SyncVersion) {
+            cacheItem->AddInFlight(context, index, true);
         }
- 
-        if (!cacheItem->IsFilled()) { 
-            cacheItem->AddInFlight(context, index, false); 
-        } 
+
+        if (!cacheItem->IsFilled()) {
+            cacheItem->AddInFlight(context, index, false);
+        }
     }
 
     TCacheItem* SwapSubscriberAndUpsert(TCacheItem* byPath, const TPathId& notifyPathId, const TString& notifyPath) {
@@ -2369,59 +2369,59 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
         SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySet"
             << ": self# " << SelfId()
-            << ", request# " << ev->Get()->Request->ToString(*AppData()->TypeRegistry)); 
+            << ", request# " << ev->Get()->Request->ToString(*AppData()->TypeRegistry));
 
         if (MaybeRunDbResolver(ev)) {
             return;
         }
 
         TIntrusivePtr<TNavigateContext> context(new TNavigateContext(ev->Sender, ev->Get()->Request, Now()));
- 
-        for (size_t i = 0; i < context->Request->ResultSet.size(); ++i) { 
-            auto& entry = context->Request->ResultSet[i]; 
 
-            if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) { 
-                auto pathExtractor = [this](TNavigate::TEntry& entry) { 
+        for (size_t i = 0; i < context->Request->ResultSet.size(); ++i) {
+            auto& entry = context->Request->ResultSet[i];
+
+            if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
+                auto pathExtractor = [this](TNavigate::TEntry& entry) {
                     if (AppData()->FeatureFlags.GetEnableSystemViews()
-                        && (entry.Operation == TNavigate::OpPath || entry.Operation == TNavigate::OpTable)) 
-                    { 
-                        NSysView::ISystemViewResolver::TSystemViewPath sysViewPath; 
-                        if (SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) { 
-                            entry.TableId.SysViewInfo = sysViewPath.ViewName; 
-                            return CanonizePath(sysViewPath.Parent); 
-                        } 
-                    } 
+                        && (entry.Operation == TNavigate::OpPath || entry.Operation == TNavigate::OpTable))
+                    {
+                        NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
+                        if (SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
+                            entry.TableId.SysViewInfo = sysViewPath.ViewName;
+                            return CanonizePath(sysViewPath.Parent);
+                        }
+                    }
 
-                    TString path = CanonizePath(entry.Path); 
-                    return path ? path : TString("/"); 
-                }; 
- 
-                auto tabletIdExtractor = [this](const TNavigate::TEntry& entry) { 
-                    if (entry.Path.empty()) { 
+                    TString path = CanonizePath(entry.Path);
+                    return path ? path : TString("/");
+                };
+
+                auto tabletIdExtractor = [this](const TNavigate::TEntry& entry) {
+                    if (entry.Path.empty()) {
                         return ui64(NSchemeShard::InvalidTabletId);
-                    } 
- 
-                    auto it = Roots.find(entry.Path.front()); 
-                    if (it == Roots.end()) { 
+                    }
+
+                    auto it = Roots.find(entry.Path.front());
+                    if (it == Roots.end()) {
                         return ui64(NSchemeShard::InvalidTabletId);
-                    } 
- 
-                    return it->second; 
-                }; 
- 
-                HandleEntry(context, entry, i, pathExtractor, tabletIdExtractor); 
-            } else { 
-                auto pathExtractor = [](const TNavigate::TEntry& entry) { 
-                    return entry.TableId.PathId; 
-                }; 
- 
-                auto tabletIdExtractor = [](const TNavigate::TEntry& entry) { 
-                    return entry.TableId.PathId.OwnerId; 
-                }; 
- 
-                HandleEntry(context, entry, i, pathExtractor, tabletIdExtractor); 
+                    }
+
+                    return it->second;
+                };
+
+                HandleEntry(context, entry, i, pathExtractor, tabletIdExtractor);
+            } else {
+                auto pathExtractor = [](const TNavigate::TEntry& entry) {
+                    return entry.TableId.PathId;
+                };
+
+                auto tabletIdExtractor = [](const TNavigate::TEntry& entry) {
+                    return entry.TableId.PathId.OwnerId;
+                };
+
+                HandleEntry(context, entry, i, pathExtractor, tabletIdExtractor);
             }
-        } 
+        }
 
         MaybeComplete(context);
     }
@@ -2436,22 +2436,22 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         TIntrusivePtr<TResolveContext> context(new TResolveContext(ev->Sender, ev->Get()->Request, Now()));
- 
+
         auto pathExtractor = [](const TResolve::TEntry& entry) {
             const TKeyDesc* keyDesc = entry.KeyDescription.Get();
             Y_VERIFY(keyDesc != nullptr);
-            return TPathId(keyDesc->TableId.PathId); 
+            return TPathId(keyDesc->TableId.PathId);
         };
 
         auto tabletIdExtractor = [](const TResolve::TEntry& entry) {
-            return entry.KeyDescription->TableId.PathId.OwnerId; 
+            return entry.KeyDescription->TableId.PathId.OwnerId;
         };
 
-        for (size_t i = 0; i < context->Request->ResultSet.size(); ++i) { 
-            auto& entry = context->Request->ResultSet[i]; 
-            HandleEntry(context, entry, i, pathExtractor, tabletIdExtractor); 
-        } 
- 
+        for (size_t i = 0; i < context->Request->ResultSet.size(); ++i) {
+            auto& entry = context->Request->ResultSet[i];
+            HandleEntry(context, entry, i, pathExtractor, tabletIdExtractor);
+        }
+
         MaybeComplete(context);
     }
 
@@ -2538,7 +2538,7 @@ public:
     TSchemeCache(NSchemeCache::TSchemeCacheConfig* config)
         : Counters(config->Counters)
         , Cache(TDuration::Minutes(2), TThis::Now)
-        , SystemViewResolver(NSysView::CreateSystemViewResolver()) 
+        , SystemViewResolver(NSysView::CreateSystemViewResolver())
     {
         for (const auto& root : config->Roots) {
             Roots.emplace(root.Name, root.RootSchemeShard);
@@ -2578,7 +2578,7 @@ private:
     TCounters Counters;
 
     TDoubleIndexedCache<TString, TPathId, TCacheItem, TMerger, TEvicter> Cache;
-    THolder<NSysView::ISystemViewResolver> SystemViewResolver; 
+    THolder<NSysView::ISystemViewResolver> SystemViewResolver;
 
     TActorId WatchCache;
 

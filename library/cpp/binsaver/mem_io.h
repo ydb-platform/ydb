@@ -6,7 +6,7 @@ namespace NMemIoInternals {
     class TMemoryStream: public IBinaryStream {
         TVector<char>& Data;
         ui64 Pos;
- 
+
     public:
         TMemoryStream(TVector<char>* data, ui64 pos = 0)
             : Data(*data)
@@ -15,7 +15,7 @@ namespace NMemIoInternals {
         }
         ~TMemoryStream() override {
         } // keep gcc happy
- 
+
         bool IsValid() const override {
             return true;
         }

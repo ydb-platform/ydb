@@ -1,11 +1,11 @@
-#include "kqp_read_table.h" 
-#include "kqp_scan_data.h" 
- 
+#include "kqp_read_table.h"
+#include "kqp_scan_data.h"
+
 #include <ydb/core/engine/mkql_keys.h>
- 
+
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 
 namespace NKqp {
 
@@ -32,43 +32,43 @@ NUdf::TDataTypeId UnwrapDataTypeFromStruct(const TStructType& structType, ui32 i
 
 } // namespace NKqp
 
-namespace NMiniKQL { 
- 
-using namespace NTable; 
-using namespace NUdf; 
- 
-static TCell BuildKeyTupleCell(const TType* type, const TUnboxedValue& value, const TTypeEnvironment& env) { 
-    MKQL_ENSURE_S(type); 
- 
-    auto keyType = type; 
-    auto keyValue = value; 
- 
-    if (type->IsOptional()) { 
-        if (!value) { 
-            return TCell(); 
-        } 
- 
-        keyType = AS_TYPE(TOptionalType, type)->GetItemType(); 
-        keyValue = value.GetOptionalValue(); 
-    } 
- 
-    return MakeCell(AS_TYPE(TDataType, keyType)->GetSchemeType(), keyValue, env, true); 
-} 
- 
-void BuildKeyTupleCells(const TTupleType* tupleType, const TUnboxedValue& tupleValue, TVector<TCell>& cells, 
-    const TTypeEnvironment& env) 
-{ 
-    MKQL_ENSURE_S(tupleType); 
- 
-    cells.resize(tupleType->GetElementsCount()); 
- 
-    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) { 
-        auto keyType = tupleType->GetElementType(i); 
-        auto keyValue = tupleValue.GetElement(i); 
-        cells[i] = BuildKeyTupleCell(keyType, keyValue, env); 
-    } 
-} 
- 
+namespace NMiniKQL {
+
+using namespace NTable;
+using namespace NUdf;
+
+static TCell BuildKeyTupleCell(const TType* type, const TUnboxedValue& value, const TTypeEnvironment& env) {
+    MKQL_ENSURE_S(type);
+
+    auto keyType = type;
+    auto keyValue = value;
+
+    if (type->IsOptional()) {
+        if (!value) {
+            return TCell();
+        }
+
+        keyType = AS_TYPE(TOptionalType, type)->GetItemType();
+        keyValue = value.GetOptionalValue();
+    }
+
+    return MakeCell(AS_TYPE(TDataType, keyType)->GetSchemeType(), keyValue, env, true);
+}
+
+void BuildKeyTupleCells(const TTupleType* tupleType, const TUnboxedValue& tupleValue, TVector<TCell>& cells,
+    const TTypeEnvironment& env)
+{
+    MKQL_ENSURE_S(tupleType);
+
+    cells.resize(tupleType->GetElementsCount());
+
+    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+        auto keyType = tupleType->GetElementType(i);
+        auto keyValue = tupleValue.GetElement(i);
+        cells[i] = BuildKeyTupleCell(keyType, keyValue, env);
+    }
+}
+
 void ParseReadColumns(const TType* readType, const TRuntimeNode& tagsNode,
     TSmallVec<TKqpComputeContextBase::TColumn>& columns, TSmallVec<TKqpComputeContextBase::TColumn>& systemColumns)
 {
@@ -106,37 +106,37 @@ void ParseWideReadColumns(const TCallable& callable, const TRuntimeNode& tagsNod
 {
     auto tags = AS_VALUE(TStructLiteral, tagsNode);
     MKQL_ENSURE_S(tags);
- 
+
     TType* returnType = callable.GetType()->GetReturnType();
     MKQL_ENSURE_S(returnType->GetKind() == TType::EKind::Flow);
- 
+
     auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType();
     MKQL_ENSURE_S(itemType->GetKind() == TType::EKind::Tuple);
- 
+
     auto tupleType = AS_TYPE(TTupleType, itemType);
     MKQL_ENSURE_S(tags->GetValuesCount() == tupleType->GetElementsCount());
- 
+
     columns.reserve(tupleType->GetElementsCount());
- 
+
     for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
         auto memberType = tupleType->GetElementType(i);
- 
+
         if (memberType->GetKind() == TType::EKind::Optional) {
             memberType = AS_TYPE(TOptionalType, memberType)->GetItemType();
         }
- 
+
         MKQL_ENSURE_S(memberType->GetKind() == TType::EKind::Data);
- 
+
         NTable::TTag columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();
- 
+
         if (IsSystemColumn(columnId)) {
             systemColumns.push_back({columnId, AS_TYPE(TDataType, memberType)->GetSchemeType()});
         } else {
             columns.push_back({columnId, AS_TYPE(TDataType, memberType)->GetSchemeType()});
         }
     }
-} 
- 
+}
+
 TParseReadTableResult ParseWideReadTable(TCallable& callable) {
     MKQL_ENSURE_S(callable.GetInputsCount() >= 4);
 
@@ -230,7 +230,7 @@ TParseReadTableRangesResult ParseWideReadTableRanges(TCallable& callable) {
 }
 
 namespace {
- 
+
 class TKqpScanWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorNode<TKqpScanWideReadTableWrapperBase> {
     using TBase = TStatelessWideFlowCodegeneratorNode<TKqpScanWideReadTableWrapperBase>;
 public:

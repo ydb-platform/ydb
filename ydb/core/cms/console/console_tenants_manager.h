@@ -518,7 +518,7 @@ public:
         TDomainId SharedDomainId;
         bool IsExternalSubdomain;
         bool IsExternalHive;
-        bool IsExternalSysViewProcessor; 
+        bool IsExternalSysViewProcessor;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 

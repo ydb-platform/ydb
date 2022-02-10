@@ -475,7 +475,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, const TMaybe<bool>& useNewEngine, T
 
     TKiExploreTxResults txExplore;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore)) {
-        return node.Ptr(); 
+        return node.Ptr();
     }
 
     if (txExplore.HasExecute) {
@@ -484,7 +484,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, const TMaybe<bool>& useNewEngine, T
 
     auto txSyncSet = txExplore.GetSyncSet();
     if (!CheckTx(commit.World(), kiDataSink, txExplore.Ops, txSyncSet)) {
-        return node.Ptr(); 
+        return node.Ptr();
     }
 
     bool hasScheme;
@@ -578,7 +578,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprCont
     auto resFill = node.Cast<TResFill>();
 
     if (resFill.DelegatedSource().Value() != KikimrProviderName) {
-        return node.Ptr(); 
+        return node.Ptr();
     }
 
     if (resFill.Data().Maybe<TCoNth>().Tuple().Maybe<TCoRight>().Input().Maybe<TKiExecDataQuery>()) {

@@ -66,7 +66,7 @@ namespace NMonitoring {
 
         virtual void OnHistogram(
             const TString& labelName, const TString& labelValue,
-            IHistogramSnapshotPtr snapshot, bool derivative) = 0; 
+            IHistogramSnapshotPtr snapshot, bool derivative) = 0;
 
         virtual void OnGroupBegin(
             const TString& labelName, const TString& labelValue,
@@ -93,8 +93,8 @@ namespace NMonitoring {
             Visibility_ = vis;
         }
 
-        TCounterForPtr(const TCounterForPtr&) = delete; 
-        TCounterForPtr& operator=(const TCounterForPtr& other) = delete; 
+        TCounterForPtr(const TCounterForPtr&) = delete;
+        TCounterForPtr& operator=(const TCounterForPtr& other) = delete;
 
         void Accept(
             const TString& labelName, const TString& labelValue,
@@ -129,10 +129,10 @@ namespace NMonitoring {
     };
 
     struct THistogramCounter: public TCountableBase {
-        explicit THistogramCounter( 
-            IHistogramCollectorPtr collector, bool derivative = true, EVisibility vis = EVisibility::Public) 
+        explicit THistogramCounter(
+            IHistogramCollectorPtr collector, bool derivative = true, EVisibility vis = EVisibility::Public)
             : Collector_(std::move(collector))
-            , Derivative_(derivative) 
+            , Derivative_(derivative)
         {
             Visibility_ = vis;
         }
@@ -145,34 +145,34 @@ namespace NMonitoring {
             Collector_->Collect(value, count);
         }
 
-        void Collect(double value, ui32 count) { 
-            Collector_->Collect(value, count); 
-        } 
- 
-        void Collect(const IHistogramSnapshot& snapshot) { 
-            Collector_->Collect(snapshot); 
-        } 
- 
+        void Collect(double value, ui32 count) {
+            Collector_->Collect(value, count);
+        }
+
+        void Collect(const IHistogramSnapshot& snapshot) {
+            Collector_->Collect(snapshot);
+        }
+
         void Accept(
             const TString& labelName, const TString& labelValue,
             ICountableConsumer& consumer) const override
         {
             if (IsVisible(Visibility(), consumer.Visibility())) {
-                consumer.OnHistogram(labelName, labelValue, Collector_->Snapshot(), Derivative_); 
+                consumer.OnHistogram(labelName, labelValue, Collector_->Snapshot(), Derivative_);
             }
         }
 
-        void Reset() { 
-            Collector_->Reset(); 
-        } 
- 
+        void Reset() {
+            Collector_->Reset();
+        }
+
         IHistogramSnapshotPtr Snapshot() const {
             return Collector_->Snapshot();
         }
 
     private:
         IHistogramCollectorPtr Collector_;
-        bool Derivative_; 
+        bool Derivative_;
     };
 
     struct TExpiringHistogramCounter: public THistogramCounter {
@@ -284,14 +284,14 @@ namespace NMonitoring {
         THistogramPtr GetHistogram(
             const TString& value,
             IHistogramCollectorPtr collector,
-            bool derivative = true, 
+            bool derivative = true,
             TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
         THistogramPtr GetNamedHistogram(
             const TString& name,
             const TString& value,
             IHistogramCollectorPtr collector,
-            bool derivative = true, 
+            bool derivative = true,
             TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
         // These counters will be automatically removed from the registry
@@ -310,22 +310,22 @@ namespace NMonitoring {
         THistogramPtr GetExpiringHistogram(
             const TString& value,
             IHistogramCollectorPtr collector,
-            bool derivative = true, 
+            bool derivative = true,
             TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
         THistogramPtr GetExpiringNamedHistogram(
             const TString& name,
             const TString& value,
             IHistogramCollectorPtr collector,
-            bool derivative = true, 
+            bool derivative = true,
             TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
-        TCounterPtr FindCounter(const TString& value) const; 
-        TCounterPtr FindNamedCounter(const TString& name, const TString& value) const; 
- 
-        THistogramPtr FindHistogram(const TString& value) const; 
-        THistogramPtr FindNamedHistogram(const TString& name,const TString& value) const; 
- 
+        TCounterPtr FindCounter(const TString& value) const;
+        TCounterPtr FindNamedCounter(const TString& name, const TString& value) const;
+
+        THistogramPtr FindHistogram(const TString& value) const;
+        THistogramPtr FindNamedHistogram(const TString& name,const TString& value) const;
+
         void RemoveCounter(const TString &value);
         void RemoveNamedCounter(const TString& name, const TString &value);
 
@@ -366,9 +366,9 @@ namespace NMonitoring {
 
         template <bool expiring, class TCounterType, class... TArgs>
         TCountablePtr GetNamedCounterImpl(const TString& name, const TString& value, TArgs&&... args);
- 
-        template <class TCounterType> 
-        TCountablePtr FindNamedCounterImpl(const TString& name, const TString& value) const; 
+
+        template <class TCounterType>
+        TCountablePtr FindNamedCounterImpl(const TString& name, const TString& value) const;
     };
 
 }

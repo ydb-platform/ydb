@@ -155,10 +155,10 @@ private:
     }
 
     void PrepareStageOne() final {
-        if (!Stateless) { 
+        if (!Stateless) {
             Stateless = std::accumulate(this->Dependencies.cbegin(), this->Dependencies.cend(), 0,
                 std::bind(std::plus<i32>(), std::placeholders::_1, std::bind(&IComputationNode::GetDependencyWeight, std::placeholders::_2))) <= 1;
-        } 
+        }
     }
 
     void PrepareStageTwo() final {}
@@ -960,27 +960,27 @@ private:
         return NUdf::EFetchStatus::Finish;
     }
 
-    ui32 GetTraverseCount() const override { 
+    ui32 GetTraverseCount() const override {
         ThrowNotSupported(__func__);
-        return 0; 
-    } 
- 
-    NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override { 
-        Y_UNUSED(index); 
+        return 0;
+    }
+
+    NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
+        Y_UNUSED(index);
         ThrowNotSupported(__func__);
-        return {}; 
-    } 
- 
-    NUdf::TUnboxedValue Save() const override { 
+        return {};
+    }
+
+    NUdf::TUnboxedValue Save() const override {
         ThrowNotSupported(__func__);
-        return NUdf::TUnboxedValue::Zero(); 
-    } 
- 
-    void Load(const NUdf::TStringRef& state) override { 
-        Y_UNUSED(state); 
+        return NUdf::TUnboxedValue::Zero();
+    }
+
+    void Load(const NUdf::TStringRef& state) override {
+        Y_UNUSED(state);
         ThrowNotSupported(__func__);
-    } 
- 
+    }
+
     void Push(const NUdf::TUnboxedValuePod& value) override {
         Y_UNUSED(value);
         ThrowNotSupported(__func__);

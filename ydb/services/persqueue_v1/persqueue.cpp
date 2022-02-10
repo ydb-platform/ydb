@@ -86,7 +86,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQWriteRequest(context));
                     },
-                    *ActorSystem, "PersQueueService/CreateWriteSession", getCounterBlock("persistent_queue", "WriteSession", true, true), nullptr 
+                    *ActorSystem, "PersQueueService/CreateWriteSession", getCounterBlock("persistent_queue", "WriteSession", true, true), nullptr
                 );
     }
 
@@ -106,7 +106,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQReadRequest(context));
                     },
-                    *ActorSystem, "PersQueueService/CreateReadSession", getCounterBlock("persistent_queue", "ReadSession", true, true), nullptr 
+                    *ActorSystem, "PersQueueService/CreateReadSession", getCounterBlock("persistent_queue", "ReadSession", true, true), nullptr
                 );
     }
 
@@ -119,7 +119,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::PersQueue::V1::SVC::AsyncService::Request ## NAME, \
-        "PersQueueService/"#NAME, logger, getCounterBlock("persistent_queue", #NAME))->Run(); 
+        "PersQueueService/"#NAME, logger, getCounterBlock("persistent_queue", #NAME))->Run();
 
     ADD_REQUEST(GetReadSessionsInfo, PersQueueService, ReadInfoRequest, ReadInfoResponse, {
             ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQReadInfoRequest(ctx));

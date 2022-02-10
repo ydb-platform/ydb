@@ -36,7 +36,7 @@
 #include "mkql_group.h"
 #include "mkql_heap.h"
 #include "mkql_hasitems.h"
-#include "mkql_hopping.h" 
+#include "mkql_hopping.h"
 #include "mkql_if.h"
 #include "mkql_ifpresent.h"
 #include "mkql_invoke.h"

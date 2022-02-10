@@ -210,7 +210,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
 struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
- 
+
     TProposeRequest::TPtr Request;
     THolder<TProposeResponse> Response = nullptr;
 
@@ -538,14 +538,14 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
     return result;
 }
 
-TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) { 
-    TSplitTransactionsResult result; 
- 
+TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
+    TSplitTransactionsResult result;
+
     const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     {
         TPath::TChecker checks = parentPath.Check();
         checks
-            .NotUnderDomainUpgrade() 
+            .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
             .NotDeleted()
@@ -554,8 +554,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             .IsLikeDirectory();
 
         if (!checks) {
-            result.Transactions.push_back(tx); 
-            return result; 
+            result.Transactions.push_back(tx);
+            return result;
         }
     }
 
@@ -567,8 +567,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         if (tx.GetCreateTable().HasCopyFromTable()) {
-            result.Transactions.push_back(tx); 
-            return result; 
+            result.Transactions.push_back(tx);
+            return result;
         }
         targetName = tx.GetCreateTable().GetName();
         break;
@@ -604,13 +604,13 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         targetName = tx.GetCreateColumnTable().GetName();
         break;
     default:
-        result.Transactions.push_back(tx); 
-        return result; 
+        result.Transactions.push_back(tx);
+        return result;
     }
 
     if (!targetName || targetName.StartsWith('/') || targetName.EndsWith('/')) {
-        result.Transactions.push_back(tx); 
-        return result; 
+        result.Transactions.push_back(tx);
+        return result;
     }
 
     TPath path = TPath::Resolve(JoinPath(tx.GetWorkingDir(), targetName), context.SS);
@@ -640,9 +640,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         }
 
         if (!checks) {
-            result.Status = checks.GetStatus(&result.Reason); 
-            result.Transactions.push_back(tx); 
-            return result; 
+            result.Status = checks.GetStatus(&result.Reason);
+            result.Transactions.push_back(tx);
+            return result;
         }
 
         const TString name = path.LeafName();
@@ -694,7 +694,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             Y_UNREACHABLE();
         }
 
-        result.Transactions.push_back(create); 
+        result.Transactions.push_back(create);
 
         if (exists) {
             return result;
@@ -703,9 +703,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 
     while (path != parentPath) {
         TPath::TChecker checks = path.Check();
-        checks 
-            .NotUnderDomainUpgrade() 
-            .IsAtLocalSchemeShard(); 
+        checks
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard();
 
         if (path.IsResolved()) {
             checks.IsResolved();
@@ -733,7 +733,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             checks
                 .IsValidLeafName()
                 .DepthLimit()
-                .PathsLimit(result.Transactions.size() + 1); 
+                .PathsLimit(result.Transactions.size() + 1);
         }
 
         if (checks && path.Parent().IsResolved()) {
@@ -741,10 +741,10 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         }
 
         if (!checks) {
-            result.Status = checks.GetStatus(&result.Reason); 
-            result.Transactions.clear(); 
-            result.Transactions.push_back(tx); 
-            return result; 
+            result.Status = checks.GetStatus(&result.Reason);
+            result.Transactions.clear();
+            result.Transactions.push_back(tx);
+            return result;
         }
 
         const TString name = path.LeafName();
@@ -755,10 +755,10 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         mkdir.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         mkdir.SetWorkingDir(path.PathString());
         mkdir.MutableMkDir()->SetName(name);
-        result.Transactions.push_back(mkdir); 
+        result.Transactions.push_back(mkdir);
     }
 
-    Reverse(result.Transactions.begin(), result.Transactions.end()); 
+    Reverse(result.Transactions.begin(), result.Transactions.end());
     return result;
 }
 

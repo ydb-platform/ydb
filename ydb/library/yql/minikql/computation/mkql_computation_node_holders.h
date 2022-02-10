@@ -56,11 +56,11 @@ inline int CompareValues(NUdf::EDataSlot type,
             cmp = 1;
         }
         else {
-            cmp = NUdf::CompareValues(type, lhs, rhs); 
+            cmp = NUdf::CompareValues(type, lhs, rhs);
         }
     }
     else {
-        cmp = NUdf::CompareValues(type, lhs, rhs); 
+        cmp = NUdf::CompareValues(type, lhs, rhs);
     }
 
     if (!asc) {

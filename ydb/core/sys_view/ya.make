@@ -1,16 +1,16 @@
-LIBRARY() 
- 
-OWNER( 
-    monster 
-    g:kikimr 
-) 
- 
-SRCS( 
-    scan.h 
-    scan.cpp 
-) 
- 
-PEERDIR( 
+LIBRARY()
+
+OWNER(
+    monster
+    g:kikimr
+)
+
+SRCS(
+    scan.h
+    scan.cpp
+)
+
+PEERDIR(
     ydb/core/base
     ydb/core/kqp/runtime
     ydb/core/sys_view/common
@@ -20,8 +20,8 @@ PEERDIR(
     ydb/core/sys_view/service
     ydb/core/sys_view/storage
     ydb/core/sys_view/tablets
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

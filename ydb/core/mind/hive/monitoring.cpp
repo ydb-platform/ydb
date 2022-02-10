@@ -1084,8 +1084,8 @@ public:
             return "BP";
         case TTabletTypes::Kesus:
             return "K";
-        case TTabletTypes::SysViewProcessor: 
-            return "SV"; 
+        case TTabletTypes::SysViewProcessor:
+            return "SV";
         case TTabletTypes::FileStore:
             return "FS";
         case TTabletTypes::TestShard:

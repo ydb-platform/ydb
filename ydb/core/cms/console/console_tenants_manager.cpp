@@ -455,9 +455,9 @@ public:
             if (Tenant->IsExternalHive) {
                 subdomain.SetExternalHive(true);
             }
-            if (Tenant->IsExternalSysViewProcessor) { 
-                subdomain.SetExternalSysViewProcessor(true); 
-            } 
+            if (Tenant->IsExternalSysViewProcessor) {
+                subdomain.SetExternalSysViewProcessor(true);
+            }
         }
 
         if (SharedTenant) {
@@ -483,9 +483,9 @@ public:
             if (Tenant->IsExternalHive) {
                 subdomain.SetExternalHive(true);
             }
-            if (Tenant->IsExternalSysViewProcessor) { 
-                subdomain.SetExternalSysViewProcessor(true); 
-            } 
+            if (Tenant->IsExternalSysViewProcessor) {
+                subdomain.SetExternalSysViewProcessor(true);
+            }
         }
 
         for (auto &pr : (SharedTenant ? SharedTenant->StoragePools : Tenant->StoragePools)) {
@@ -1183,7 +1183,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , Generation(0)
     , IsExternalSubdomain(false)
     , IsExternalHive(false)
-    , IsExternalSysViewProcessor(false) 
+    , IsExternalSysViewProcessor(false)
     , AreResourcesShared(false)
 {
 }
@@ -2248,7 +2248,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 << " errorcode=" << tenant->ErrorCode
                 << " isExternalSubDomain=" << tenant->IsExternalSubdomain
                 << " isExternalHive=" << tenant->IsExternalHive
-                << " isExternalSysViewProcessor=" << tenant->IsExternalSysViewProcessor 
+                << " isExternalSysViewProcessor=" << tenant->IsExternalSysViewProcessor
                 << " areResourcesShared=" << tenant->AreResourcesShared
                 << " sharedDomainId=" << tenant->SharedDomainId);
 
@@ -2269,7 +2269,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 NIceDb::TUpdate<Schema::Tenants::ErrorCode>(tenant->ErrorCode),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSubDomain>(tenant->IsExternalSubdomain),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalHive>(tenant->IsExternalHive),
-                NIceDb::TUpdate<Schema::Tenants::IsExternalSysViewProcessor>(tenant->IsExternalSysViewProcessor), 
+                NIceDb::TUpdate<Schema::Tenants::IsExternalSysViewProcessor>(tenant->IsExternalSysViewProcessor),
                 NIceDb::TUpdate<Schema::Tenants::AreResourcesShared>(tenant->AreResourcesShared),
                 NIceDb::TUpdate<Schema::Tenants::CreateIdempotencyKey>(tenant->CreateIdempotencyKey));
 
@@ -2373,7 +2373,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
             = static_cast<Ydb::StatusIds::StatusCode>(tenantRowset.GetValueOrDefault<Schema::Tenants::ErrorCode>(0));
         bool isExternalSubDomain = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSubDomain>(false);
         bool isExternalHive = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalHive>(false);
-        bool isExternalSysViewProcessor = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSysViewProcessor>(false); 
+        bool isExternalSysViewProcessor = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSysViewProcessor>(false);
         const bool areResourcesShared = tenantRowset.GetValueOrDefault<Schema::Tenants::AreResourcesShared>(false);
 
         TTenant::TPtr tenant = new TTenant(path, state, userToken);
@@ -2392,7 +2392,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         tenant->Issue = issue;
         tenant->IsExternalSubdomain = isExternalSubDomain;
         tenant->IsExternalHive = isExternalHive;
-        tenant->IsExternalSysViewProcessor = isExternalSysViewProcessor; 
+        tenant->IsExternalSysViewProcessor = isExternalSysViewProcessor;
         tenant->AreResourcesShared = areResourcesShared;
 
         if (tenantRowset.HaveValue<Schema::Tenants::SchemaOperationQuotas>()) {

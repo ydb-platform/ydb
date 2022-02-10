@@ -1,47 +1,47 @@
-#pragma once 
- 
-#include "public.h" 
-#include "zigzag.h" 
- 
-#include <util/generic/vector.h> 
-#include <util/generic/maybe.h> 
-#include <util/generic/buffer.h> 
-#include <util/string/escape.h> 
-#include <util/string/cast.h> 
-#include <util/stream/input.h> 
- 
+#pragma once
+
+#include "public.h"
+#include "zigzag.h"
+
+#include <util/generic/vector.h>
+#include <util/generic/maybe.h>
+#include <util/generic/buffer.h>
+#include <util/string/escape.h>
+#include <util/string/cast.h>
+#include <util/stream/input.h>
+
 namespace NYson {
     namespace NDetail {
         ////////////////////////////////////////////////////////////////////////////////
- 
+
         //! Indicates the beginning of a list.
         const char BeginListSymbol = '[';
         //! Indicates the end of a list.
         const char EndListSymbol = ']';
- 
+
         //! Indicates the beginning of a map.
         const char BeginMapSymbol = '{';
         //! Indicates the end of a map.
         const char EndMapSymbol = '}';
- 
+
         //! Indicates the beginning of an attribute map.
         const char BeginAttributesSymbol = '<';
         //! Indicates the end of an attribute map.
         const char EndAttributesSymbol = '>';
- 
+
         //! Separates items in lists.
         const char ListItemSeparatorSymbol = ';';
         //! Separates items in maps, attributes.
         const char KeyedItemSeparatorSymbol = ';';
         //! Separates keys from values in maps.
         const char KeyValueSeparatorSymbol = '=';
- 
+
         //! Indicates an entity.
         const char EntitySymbol = '#';
- 
+
         //! Indicates end of stream.
         const char EndSymbol = '\0';
- 
+
         //! Marks the beginning of a binary string literal.
         const char StringMarker = '\x01';
         //! Marks the beginning of a binary i64 literal.
@@ -53,19 +53,19 @@ namespace NYson {
         const char TrueMarker = '\x05';
         //! Marks the beginning of a binary ui64 literal.
         const char Uint64Marker = '\x06';
- 
+
         ////////////////////////////////////////////////////////////////////////////////
- 
+
         template <bool EnableLinePositionInfo>
         class TPositionInfo;
- 
+
         template <>
         class TPositionInfo<true> {
         private:
             int Offset;
             int Line;
             int Column;
- 
+
         public:
             TPositionInfo()
                 : Offset(0)
@@ -73,7 +73,7 @@ namespace NYson {
                 , Column(1)
             {
             }
- 
+
             void OnRangeConsumed(const char* begin, const char* end) {
                 Offset += end - begin;
                 for (auto current = begin; current != end; ++current) {
@@ -85,7 +85,7 @@ namespace NYson {
                 }
             }
         };
- 
+
         template <>
         class TPositionInfo<false> {
         private:
@@ -95,13 +95,13 @@ namespace NYson {
             TPositionInfo()
                 : Offset(0)
             {
-            } 
- 
+            }
+
             void OnRangeConsumed(const char* begin, const char* end) {
                 Offset += end - begin;
             }
         };
- 
+
         template <class TBlockStream, class TPositionBase>
         class TCharStream
            : public TBlockStream,
@@ -111,11 +111,11 @@ namespace NYson {
                 : TBlockStream(blockStream)
             {
             }
- 
+
             bool IsEmpty() const {
                 return TBlockStream::Begin() == TBlockStream::End();
             }
- 
+
             template <bool AllowFinish>
             void Refresh() {
                 while (IsEmpty() && !TBlockStream::IsFinished()) {
@@ -125,46 +125,46 @@ namespace NYson {
                     ythrow TYsonException() << "Premature end of yson stream";
                 }
             }
- 
+
             void Refresh() {
                 return Refresh<false>();
             }
- 
+
             template <bool AllowFinish>
             char GetChar() {
                 Refresh<AllowFinish>();
                 return !IsEmpty() ? *TBlockStream::Begin() : '\0';
             }
- 
+
             char GetChar() {
                 return GetChar<false>();
             }
- 
+
             void Advance(size_t bytes) {
                 TPositionBase::OnRangeConsumed(TBlockStream::Begin(), TBlockStream::Begin() + bytes);
                 TBlockStream::Advance(bytes);
             }
- 
+
             size_t Length() const {
                 return TBlockStream::End() - TBlockStream::Begin();
             }
         };
- 
+
         template <class TBaseStream>
         class TCodedStream
            : public TBaseStream {
         private:
             static const int MaxVarintBytes = 10;
             static const int MaxVarint32Bytes = 5;
- 
+
             const ui8* BeginByte() const {
                 return reinterpret_cast<const ui8*>(TBaseStream::Begin());
             }
- 
+
             const ui8* EndByte() const {
                 return reinterpret_cast<const ui8*>(TBaseStream::End());
             }
- 
+
             // Following functions is an adaptation Protobuf code from coded_stream.cc
             bool ReadVarint32FromArray(ui32* value) {
                 // Fast path:  We have enough bytes left in the buffer to guarantee that
@@ -172,7 +172,7 @@ namespace NYson {
                 const ui8* ptr = BeginByte();
                 ui32 b;
                 ui32 result;
- 
+
                 b = *(ptr++);
                 result = (b & 0x7F);
                 if (!(b & 0x80))
@@ -193,26 +193,26 @@ namespace NYson {
                 result |= b << 28;
                 if (!(b & 0x80))
                     goto done;
- 
+
                 // If the input is larger than 32 bits, we still need to read it all
                 // and discard the high-order bits.
- 
+
                 for (int i = 0; i < MaxVarintBytes - MaxVarint32Bytes; i++) {
                     b = *(ptr++);
                     if (!(b & 0x80))
                         goto done;
                 }
- 
+
                 // We have overrun the maximum size of a Varint (10 bytes).  Assume
                 // the data is corrupt.
                 return false;
- 
+
             done:
                 TBaseStream::Advance(ptr - BeginByte());
                 *value = result;
                 return true;
             }
- 
+
             bool ReadVarint32Fallback(ui32* value) {
                 if (BeginByte() + MaxVarint32Bytes <= EndByte() ||
                     // Optimization:  If the Varint ends at exactly the end of the buffer,
@@ -227,7 +227,7 @@ namespace NYson {
                     return ReadVarint32Slow(value);
                 }
             }
- 
+
             bool ReadVarint32Slow(ui32* value) {
                 ui64 result;
                 // Directly invoke ReadVarint64Fallback, since we already tried to optimize
@@ -239,15 +239,15 @@ namespace NYson {
                     return false;
                 }
             }
- 
+
             bool ReadVarint64Slow(ui64* value) {
                 // Slow path:  This read might cross the end of the buffer, so we
                 // need to check and refresh the buffer if and when it does.
- 
+
                 ui64 result = 0;
                 int count = 0;
                 ui32 b;
- 
+
                 do {
                     if (count == MaxVarintBytes) {
                         return false;
@@ -260,11 +260,11 @@ namespace NYson {
                     TBaseStream::Advance(1);
                     ++count;
                 } while (b & 0x80);
- 
+
                 *value = result;
                 return true;
-            } 
- 
+            }
+
             bool ReadVarint64Fallback(ui64* value) {
                 if (BeginByte() + MaxVarintBytes <= EndByte() ||
                     // Optimization:  If the Varint ends at exactly the end of the buffer,
@@ -273,14 +273,14 @@ namespace NYson {
                 {
                     // Fast path:  We have enough bytes left in the buffer to guarantee that
                     // this read won't cross the end, so we can skip the checks.
- 
+
                     const ui8* ptr = BeginByte();
                     ui32 b;
- 
+
                     // Splitting into 32-bit pieces gives better performance on 32-bit
                     // processors.
                     ui32 part0 = 0, part1 = 0, part2 = 0;
- 
+
                     b = *(ptr++);
                     part0 = (b & 0x7F);
                     if (!(b & 0x80))
@@ -321,11 +321,11 @@ namespace NYson {
                     part2 |= (b & 0x7F) << 7;
                     if (!(b & 0x80))
                         goto done;
- 
+
                     // We have overrun the maximum size of a Varint (10 bytes).  The data
                     // must be corrupt.
                     return false;
- 
+
                 done:
                     TBaseStream::Advance(ptr - BeginByte());
                     *value = (static_cast<ui64>(part0)) |
@@ -336,13 +336,13 @@ namespace NYson {
                     return ReadVarint64Slow(value);
                 }
             }
- 
+
         public:
             TCodedStream(const TBaseStream& baseStream)
                 : TBaseStream(baseStream)
             {
             }
- 
+
             bool ReadVarint64(ui64* value) {
                 if (BeginByte() < EndByte() && *BeginByte() < 0x80) {
                     *value = *BeginByte();
@@ -352,7 +352,7 @@ namespace NYson {
                     return ReadVarint64Fallback(value);
                 }
             }
- 
+
             bool ReadVarint32(ui32* value) {
                 if (BeginByte() < EndByte() && *BeginByte() < 0x80) {
                     *value = *BeginByte();
@@ -363,13 +363,13 @@ namespace NYson {
                 }
             }
         };
- 
+
         enum ENumericResult {
             Int64 = 0,
             Uint64 = 1,
             Double = 2
         };
- 
+
         template <class TBlockStream, bool EnableLinePositionInfo>
         class TLexerBase
            : public TCodedStream<TCharStream<TBlockStream, TPositionInfo<EnableLinePositionInfo>>> {
@@ -377,7 +377,7 @@ namespace NYson {
             using TBaseStream = TCodedStream<TCharStream<TBlockStream, TPositionInfo<EnableLinePositionInfo>>>;
             TVector<char> Buffer_;
             TMaybe<ui64> MemoryLimit_;
- 
+
             void CheckMemoryLimit() {
                 if (MemoryLimit_ && Buffer_.capacity() > *MemoryLimit_) {
                     ythrow TYsonException()
@@ -385,17 +385,17 @@ namespace NYson {
                         << Buffer_.capacity() << ", limit " << (*MemoryLimit_);
                 }
             }
- 
+
         public:
             TLexerBase(const TBlockStream& blockStream, TMaybe<ui64> memoryLimit)
                 : TBaseStream(blockStream)
                 , MemoryLimit_(memoryLimit)
             {
             }
- 
+
         protected:
             /// Lexer routines
- 
+
             template <bool AllowFinish>
             ENumericResult ReadNumeric(TStringBuf* value) {
                 Buffer_.clear();
@@ -418,18 +418,18 @@ namespace NYson {
                     CheckMemoryLimit();
                     TBaseStream::Advance(1);
                 }
- 
+
                 *value = TStringBuf(Buffer_.data(), Buffer_.size());
                 return result;
-            } 
- 
+            }
+
             template <bool AllowFinish>
             double ReadNanOrInf() {
                 static const TStringBuf nanString = "nan";
                 static const TStringBuf infString = "inf";
                 static const TStringBuf plusInfString = "+inf";
                 static const TStringBuf minusInfString = "-inf";
- 
+
                 TStringBuf expectedString;
                 double expectedValue;
                 char ch = TBaseStream::template GetChar<AllowFinish>();
@@ -515,25 +515,25 @@ namespace NYson {
                     }
                     CheckMemoryLimit();
                     TBaseStream::Advance(1);
-                } 
+                }
                 *value = TStringBuf(Buffer_.data(), Buffer_.size());
-            } 
- 
+            }
+
             void ReadUnquotedString(TStringBuf* value) {
                 return ReadUnquotedString<false>(value);
-            } 
- 
+            }
+
             void ReadBinaryString(TStringBuf* value) {
                 ui32 ulength = 0;
                 if (!TBaseStream::ReadVarint32(&ulength)) {
                     ythrow TYsonException() << "Error parsing varint value";
                 }
- 
+
                 i32 length = ZigZagDecode32(ulength);
                 if (length < 0) {
                     ythrow TYsonException() << "Negative binary string literal length " << length;
                 }
- 
+
                 if (TBaseStream::Begin() + length <= TBaseStream::End()) {
                     *value = TStringBuf(TBaseStream::Begin(), length);
                     TBaseStream::Advance(length);
@@ -546,29 +546,29 @@ namespace NYson {
                             continue;
                         }
                         size_t readingBytes = Min(needToRead, TBaseStream::Length());
- 
+
                         Buffer_.insert(Buffer_.end(), TBaseStream::Begin(), TBaseStream::Begin() + readingBytes);
                         CheckMemoryLimit();
                         needToRead -= readingBytes;
                         TBaseStream::Advance(readingBytes);
                     }
                     *value = TStringBuf(Buffer_.data(), Buffer_.size());
-                } 
-            } 
- 
+                }
+            }
+
             template <bool AllowFinish>
             bool ReadBoolean() {
                 Buffer_.clear();
- 
+
                 static TStringBuf trueString = "true";
                 static TStringBuf falseString = "false";
- 
+
                 auto throwIncorrectBoolean = [&]() {
                     ythrow TYsonException() << "Incorrect boolean string " << TString(Buffer_.data(), Buffer_.size());
                 };
- 
-                Buffer_.push_back(TBaseStream::template GetChar<AllowFinish>()); 
-                TBaseStream::Advance(1); 
+
+                Buffer_.push_back(TBaseStream::template GetChar<AllowFinish>());
+                TBaseStream::Advance(1);
                 if (Buffer_[0] == trueString[0]) {
                     for (size_t i = 1; i < trueString.size(); ++i) {
                         Buffer_.push_back(TBaseStream::template GetChar<AllowFinish>());
@@ -588,21 +588,21 @@ namespace NYson {
                     }
                     return false;
                 } else {
-                    throwIncorrectBoolean(); 
-                } 
+                    throwIncorrectBoolean();
+                }
 
                 Y_FAIL("unreachable");
                 ;
-            } 
+            }
 
             void ReadBinaryInt64(i64* result) {
                 ui64 uvalue;
                 if (!TBaseStream::ReadVarint64(&uvalue)) {
                     ythrow TYsonException() << "Error parsing varint value";
-                } 
+                }
                 *result = ZigZagDecode64(uvalue);
-            } 
- 
+            }
+
             void ReadBinaryUint64(ui64* result) {
                 ui64 uvalue;
                 if (!TBaseStream::ReadVarint64(&uvalue)) {
@@ -610,16 +610,16 @@ namespace NYson {
                 }
                 *result = uvalue;
             }
- 
+
             void ReadBinaryDouble(double* value) {
                 size_t needToRead = sizeof(double);
- 
+
                 while (needToRead != 0) {
                     if (TBaseStream::IsEmpty()) {
                         TBaseStream::Refresh();
                         continue;
                     }
- 
+
                     size_t chunkSize = Min(needToRead, TBaseStream::Length());
                     if (chunkSize == 0) {
                         ythrow TYsonException() << "Error parsing binary double literal";
@@ -631,8 +631,8 @@ namespace NYson {
                     needToRead -= chunkSize;
                     TBaseStream::Advance(chunkSize);
                 }
-            } 
- 
+            }
+
             /// Helpers
             void SkipCharToken(char symbol) {
                 char ch = SkipSpaceAndGetChar();
@@ -641,8 +641,8 @@ namespace NYson {
                 }
 
                 TBaseStream::Advance(1);
-            } 
- 
+            }
+
             static bool IsSpaceFast(char ch) {
                 static const ui8 lookupTable[] =
                     {
@@ -650,24 +650,24 @@ namespace NYson {
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 
+
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 
+
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 
+
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
                 return lookupTable[static_cast<ui8>(ch)];
             }
- 
+
             template <bool AllowFinish>
             char SkipSpaceAndGetChar() {
                 if (!TBaseStream::IsEmpty()) {
@@ -678,11 +678,11 @@ namespace NYson {
                 }
                 return SkipSpaceAndGetCharFallback<AllowFinish>();
             }
- 
+
             char SkipSpaceAndGetChar() {
                 return SkipSpaceAndGetChar<false>();
-            } 
- 
+            }
+
             template <bool AllowFinish>
             char SkipSpaceAndGetCharFallback() {
                 while (true) {
@@ -697,63 +697,63 @@ namespace NYson {
                         break;
                     }
                     TBaseStream::Advance(1);
-                } 
+                }
                 return TBaseStream::template GetChar<AllowFinish>();
-            } 
+            }
         };
- 
+
         ////////////////////////////////////////////////////////////////////////////////
- 
+
     }
- 
+
     ////////////////////////////////////////////////////////////////////////////////
- 
+
     class TStringReader {
     private:
         const char* BeginPtr;
         const char* EndPtr;
- 
+
     public:
         TStringReader()
             : BeginPtr(nullptr)
             , EndPtr(nullptr)
         {
         }
- 
+
         TStringReader(const char* begin, const char* end)
             : BeginPtr(begin)
             , EndPtr(end)
         {
         }
- 
+
         const char* Begin() const {
             return BeginPtr;
         }
- 
+
         const char* End() const {
             return EndPtr;
         }
- 
+
         void RefreshBlock() {
             Y_FAIL("unreachable");
         }
- 
+
         void Advance(size_t bytes) {
             BeginPtr += bytes;
         }
- 
+
         bool IsFinished() const {
             return true;
         }
- 
+
         void SetBuffer(const char* begin, const char* end) {
             BeginPtr = begin;
             EndPtr = end;
         }
     };
- 
+
     ////////////////////////////////////////////////////////////////////////////////
- 
+
     class TStreamReader {
     public:
         TStreamReader(
@@ -767,40 +767,40 @@ namespace NYson {
             BeginPtr = EndPtr = Buffer;
             FinishFlag = false;
         }
- 
+
         const char* Begin() const {
             return BeginPtr;
         }
- 
+
         const char* End() const {
             return EndPtr;
         }
- 
+
         void RefreshBlock() {
             size_t bytes = Stream->Read(Buffer, BufferSize);
             BeginPtr = Buffer;
             EndPtr = Buffer + bytes;
             FinishFlag = (bytes == 0);
         }
- 
+
         void Advance(size_t bytes) {
             BeginPtr += bytes;
         }
- 
+
         bool IsFinished() const {
             return FinishFlag;
         }
- 
+
     private:
         IInputStream* Stream;
         char* Buffer;
         size_t BufferSize;
- 
+
         const char* BeginPtr;
         const char* EndPtr;
         bool FinishFlag;
     };
- 
+
     ////////////////////////////////////////////////////////////////////////////////
- 
+
 } // namespace NYson

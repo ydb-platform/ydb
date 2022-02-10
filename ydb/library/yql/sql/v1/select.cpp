@@ -366,11 +366,11 @@ protected:
         return Source->ShouldUseSourceAsColumn(source);
     }
 
-    bool IsStream() const override { 
-        Y_VERIFY_DEBUG(Source); 
-        return Source->IsStream(); 
-    } 
- 
+    bool IsStream() const override {
+        Y_VERIFY_DEBUG(Source);
+        return Source->IsStream();
+    }
+
     EOrderKind GetOrderKind() const override {
         Y_VERIFY_DEBUG(Source);
         return Source->GetOrderKind();
@@ -614,9 +614,9 @@ public:
         return SetSamplingRate(ctx, samplingRate);
     }
 
-    bool IsStream() const override { 
-        return Subquery->GetSource()->IsStream(); 
-    } 
+    bool IsStream() const override {
+        return Subquery->GetSource()->IsStream();
+    }
 
     void DoUpdateState() const override {
         State.Set(ENodeState::Const, true);
@@ -739,10 +739,10 @@ public:
         return AstNode(Table.RefName);
     }
 
-    bool IsStream() const override { 
+    bool IsStream() const override {
         return IsStreamingService(Table.Service);
-    } 
- 
+    }
+
     TPtr DoClone() const final {
         return new TTableSource(Pos, Table, GetLabel());
     }
@@ -1400,7 +1400,7 @@ public:
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
         TWinSpecs& winSpecs,
-        THoppingWindowSpecPtr hoppingWindowSpec, 
+        THoppingWindowSpecPtr hoppingWindowSpec,
         const TVector<TNodePtr>& terms,
         bool distinct,
         const TVector<TNodePtr>& without,
@@ -1445,9 +1445,9 @@ public:
             return false;
         }
         if (SelectStream && !Source->IsStream()) {
-            ctx.Error(Pos) << "SELECT STREAM is unsupported for non-streaming sources"; 
-            return false; 
-        } 
+            ctx.Error(Pos) << "SELECT STREAM is unsupported for non-streaming sources";
+            return false;
+        }
 
         auto src = Source.Get();
         bool hasError = false;
@@ -2091,7 +2091,7 @@ private:
     TVector<TNodePtr> Without;
     const bool Distinct;
     bool OrderByInit = false;
-    THoppingWindowSpecPtr HoppingWindowSpec; 
+    THoppingWindowSpecPtr HoppingWindowSpec;
     const bool SelectStream;
     const TWriteSettings Settings;
 };
@@ -2461,7 +2461,7 @@ TSourcePtr DoBuildSelectCore(
     const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
     TWinSpecs&& winSpecs,
-    THoppingWindowSpecPtr hoppingWindowSpec, 
+    THoppingWindowSpecPtr hoppingWindowSpec,
     TVector<TNodePtr>&& terms,
     bool distinct,
     TVector<TNodePtr>&& without,

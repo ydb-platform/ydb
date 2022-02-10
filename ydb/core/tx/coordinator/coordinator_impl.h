@@ -64,7 +64,7 @@ struct TTransactionProposal {
 };
 
 struct TCoordinatorStepConfirmations {
-    struct TEntry { 
+    struct TEntry {
         TTxId TxId;
         TActorId ProxyId;
         TEvTxProxy::TEvProposeTransactionStatus::EStatus Status;
@@ -396,10 +396,10 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr StepPlannedTx;
         NMonitoring::TDynamicCounters::TCounterPtr StepDeclinedNoSpaceTx;
 
-        NMon::THistogramCounterHelper LegacyTxFromReceiveToPlan; 
-        NMonitoring::THistogramPtr TxFromReceiveToPlan; 
-        NMon::THistogramCounterHelper LegacyTxPlanLatency; 
-        NMonitoring::THistogramPtr TxPlanLatency; 
+        NMon::THistogramCounterHelper LegacyTxFromReceiveToPlan;
+        NMonitoring::THistogramPtr TxFromReceiveToPlan;
+        NMon::THistogramCounterHelper LegacyTxPlanLatency;
+        NMonitoring::THistogramPtr TxPlanLatency;
 
         i64 CurrentTxInFly;
     };

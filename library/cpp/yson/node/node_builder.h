@@ -1,23 +1,23 @@
-#pragma once 
- 
+#pragma once
+
 #include "node.h"
- 
+
 #include <library/cpp/json/json_reader.h>
 
 #include <library/cpp/yson/consumer.h>
 
-#include <util/generic/stack.h> 
- 
-namespace NYT { 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-class TNodeBuilder 
+#include <util/generic/stack.h>
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TNodeBuilder
     : public ::NYson::TYsonConsumerBase
-{ 
-public: 
-    TNodeBuilder(TNode* node); 
- 
+{
+public:
+    TNodeBuilder(TNode* node);
+
     void OnStringScalar(TStringBuf) override;
     void OnInt64Scalar(i64) override;
     void OnUint64Scalar(ui64) override;
@@ -33,14 +33,14 @@ public:
     void OnBeginAttributes() override;
     void OnEndAttributes() override;
     void OnNode(TNode node);
- 
-private: 
+
+private:
     TStack<TNode*> Stack_;
- 
-private: 
-    inline void AddNode(TNode node, bool pop); 
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-} // namespace NYT 
+
+private:
+    inline void AddNode(TNode node, bool pop);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

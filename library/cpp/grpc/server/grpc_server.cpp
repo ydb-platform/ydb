@@ -147,7 +147,7 @@ void TGRpcServer::Start() {
 
     Server_ = builder.BuildAndStart();
     if (!Server_) {
-        ythrow yexception() << "can't start grpc server on " << server_address; 
+        ythrow yexception() << "can't start grpc server on " << server_address;
     }
 
     size_t index = 0;

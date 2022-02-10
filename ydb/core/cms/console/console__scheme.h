@@ -42,7 +42,7 @@ struct Schema : NIceDb::Schema {
         // SharedDomainId {
         struct SharedDomainSchemeShardId : Column<21, NScheme::NTypeIds::Uint64> {};
         struct SharedDomainPathId : Column<22, NScheme::NTypeIds::Uint64> {};
-        struct IsExternalSysViewProcessor : Column<23, NScheme::NTypeIds::Bool> {}; 
+        struct IsExternalSysViewProcessor : Column<23, NScheme::NTypeIds::Bool> {};
         // } // SharedDomainId
         struct SchemaOperationQuotas : Column<24, NScheme::NTypeIds::String> {};
         struct CreateIdempotencyKey : Column<25, NScheme::NTypeIds::Utf8> {};

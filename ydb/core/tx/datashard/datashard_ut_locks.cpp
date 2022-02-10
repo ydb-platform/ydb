@@ -88,7 +88,7 @@ using namespace NDataShard;
 namespace NTest {
 
     bool TFakeDataShard::IsUserTable(const TTableId& tableId) const {
-        return tableId.PathId.LocalPathId >= NumSysTables(); 
+        return tableId.PathId.LocalPathId >= NumSysTables();
     }
 
     ///
@@ -140,7 +140,7 @@ namespace NTest {
             : TableId(tableId)
             , Locks(&DataShard)
         {
-            ui64 tid = tableId.PathId.LocalPathId; 
+            ui64 tid = tableId.PathId.LocalPathId;
             ui64 sid = tableId.PathId.OwnerId;
 
             TmpLock.PathId = tid;

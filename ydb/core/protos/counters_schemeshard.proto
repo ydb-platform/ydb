@@ -85,7 +85,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterSolomonVolume = 71       [(CounterOpts) = {Name: "InFlightOps/AlterSolomonVolume"}];
     COUNTER_IN_FLIGHT_OPS_TxDropLock = 72                 [(CounterOpts) = {Name: "InFlightOps/DropLock"}];
     COUNTER_IN_FLIGHT_OPS_TxDropTableIndexAtMainTable = 73 [(CounterOpts) = {Name: "InFlightOps/DropTableIndexAtMainTable"}];
-    COUNTER_SYS_VIEW_PROCESSOR_COUNT = 74                 [(CounterOpts) = {Name: "SysViewProcessors"}]; 
+    COUNTER_SYS_VIEW_PROCESSOR_COUNT = 74                 [(CounterOpts) = {Name: "SysViewProcessors"}];
 
     COUNTER_FILESTORE_COUNT = 75                          [(CounterOpts) = {Name: "FileStores"}];
     COUNTER_FILESTORE_SHARD_COUNT = 76                    [(CounterOpts) = {Name: "FileStoreShards"}];

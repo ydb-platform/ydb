@@ -1,23 +1,23 @@
 #include "storage_pools.h"
 #include "base.h"
- 
+
 namespace NKikimr::NSysView {
- 
+
 template<> void SetField<0>(NKikimrSysView::TStoragePoolKey& key, ui64 value) { key.SetBoxId(value); }
 template<> void SetField<1>(NKikimrSysView::TStoragePoolKey& key, ui64 value) { key.SetStoragePoolId(value); }
 
 class TStoragePoolsScan : public TStorageScanBase<TStoragePoolsScan, TEvSysView::TEvGetStoragePoolsResponse> {
-public: 
+public:
     using TStorageScanBase::TStorageScanBase;
- 
+
     static constexpr const char *GetName() { return "TStoragePoolsScan"; }
- 
+
     TEvSysView::TEvGetStoragePoolsRequest *CreateQuery() {
-        auto request = MakeHolder<TEvSysView::TEvGetStoragePoolsRequest>(); 
-        ConvertKeyRange<NKikimrSysView::TEvGetStoragePoolsRequest, ui64, ui64>(request->Record, TableRange); 
+        auto request = MakeHolder<TEvSysView::TEvGetStoragePoolsRequest>();
+        ConvertKeyRange<NKikimrSysView::TEvGetStoragePoolsRequest, ui64, ui64>(request->Record, TableRange);
         return request.Release();
-    } 
- 
+    }
+
     static const TFieldMap& GetFieldMap() {
         using T = Schema::StoragePools;
         using E = NKikimrSysView::TStoragePoolEntry;
@@ -35,15 +35,15 @@ public:
             {T::EncryptionMode::ColumnId, {E::kInfoFieldNumber, V::kEncryptionModeFieldNumber}},
             {T::SchemeshardId::ColumnId, {E::kInfoFieldNumber, V::kSchemeshardIdFieldNumber}},
             {T::PathId::ColumnId, {E::kInfoFieldNumber, V::kPathIdFieldNumber}},
-        }; 
+        };
         return fieldMap;
-    } 
-}; 
- 
+    }
+};
+
 THolder<IActor> CreateStoragePoolsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns) 
-{ 
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+{
     return MakeHolder<TStoragePoolsScan>(ownerId, scanId, tableId, tableRange, columns);
-} 
- 
+}
+
 } // NKikimr::NSysView

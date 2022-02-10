@@ -364,13 +364,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TMemoryTrackerInitializer : public IKikimrServicesInitializer { 
-public: 
+class TMemoryTrackerInitializer : public IKikimrServicesInitializer {
+public:
     TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-}; 
- 
+};
+
 class TQuoterServiceInitializer : public IKikimrServicesInitializer {
 public:
     TQuoterServiceInitializer(const TKikimrRunConfig& runConfig);
@@ -451,13 +451,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TSysViewServiceInitializer : public IKikimrServicesInitializer { 
-public: 
-    TSysViewServiceInitializer(const TKikimrRunConfig& runConfig); 
+class TSysViewServiceInitializer : public IKikimrServicesInitializer {
+public:
+    TSysViewServiceInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
-}; 
- 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TMeteringWriterInitializer : public IKikimrServicesInitializer {
 public:
     TMeteringWriterInitializer(const TKikimrRunConfig& runConfig);

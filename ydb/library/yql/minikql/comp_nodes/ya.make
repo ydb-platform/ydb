@@ -82,8 +82,8 @@ SRCS(
     mkql_hasitems.h
     mkql_heap.cpp
     mkql_heap.h
-    mkql_hopping.cpp 
-    mkql_hopping.h 
+    mkql_hopping.cpp
+    mkql_hopping.h
     mkql_if.cpp
     mkql_if.h
     mkql_ifpresent.cpp
@@ -144,7 +144,7 @@ SRCS(
     mkql_round.h
     mkql_safe_circular_buffer.cpp
     mkql_safe_circular_buffer.h
-    mkql_saveload.h 
+    mkql_saveload.h
     mkql_seq.cpp
     mkql_seq.h
     mkql_size.cpp

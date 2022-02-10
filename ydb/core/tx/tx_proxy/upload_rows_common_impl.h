@@ -475,11 +475,11 @@ private:
         TableKind = request.ResultSet.front().Kind;
         bool isOlapTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindOlapTable);
 
-        if (request.ResultSet.front().TableId.IsSystemView()) { 
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, 
+        if (request.ResultSet.front().TableId.IsSystemView()) {
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
                 Sprintf("Table '%s' is a system view. Bulk upsert is not supported.", GetTable().c_str()), ctx);
-        } 
- 
+        }
+
         ResolveNamesResult = ev->Get()->Request;
 
         bool makeYdbSchema = isOlapTable || (GetSourceType() != EUploadSource::ProtoValues);

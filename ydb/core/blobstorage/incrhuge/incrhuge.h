@@ -54,7 +54,7 @@ namespace NKikimr {
 
         // TWritePayload structure contains user fields needed by VDisk when receiving write confirmation. It is
         // simply moved from request to response.
-        struct TWritePayload { 
+        struct TWritePayload {
             virtual ~TWritePayload() = default;
         };
 

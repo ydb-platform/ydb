@@ -203,9 +203,9 @@ public:
 
     {%- for child in node.aux.allChildren %}
     TBuilder<TParent, TDerived>& {{child.Name}}(const TStringBuf& argName) { {{child.aux.holderName}} = {{child.Type}}(this->GetArgFunc(argName)); return *static_cast<TBuilder<TParent, TDerived>*>(this); }
-        {% if child.Optional %} 
-    TBuilder<TParent, TDerived>& {{child.Name}}(const TMaybe<{{child.Type}}>& node) { {{child.aux.holderName}} = node; return *static_cast<TBuilder<TParent, TDerived>*>(this); } 
-        {% endif %} 
+        {% if child.Optional %}
+    TBuilder<TParent, TDerived>& {{child.Name}}(const TMaybe<{{child.Type}}>& node) { {{child.aux.holderName}} = node; return *static_cast<TBuilder<TParent, TDerived>*>(this); }
+        {% endif %}
     TBuilder<TParent, TDerived>& {{child.Name}}(const {{child.Type}}& node) { {{child.aux.holderName}} = node; return *static_cast<TBuilder<TParent, TDerived>*>(this); }
 
     TBuilder<TParent, TDerived>& {{child.Name}}(const TExprNode::TPtr& node) { {{child.aux.holderName}} = {{child.Type}}(node); return *static_cast<TBuilder<TParent, TDerived>*>(this); }

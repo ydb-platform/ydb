@@ -21,7 +21,7 @@ Tests::TServer StartupKikimr(NMsgBusProxy::TMsgBusClientConfig& clientConfig,
     const ui32 port = pm.GetPort(12001);
     auto settings = Tests::TServerSettings(port);
     settings.SetLogBackend(logBackend);
-    settings.SetEnableSystemViews(false); 
+    settings.SetEnableSystemViews(false);
     Tests::TServer Server(settings);
     Tests::TClient Client(settings);
     Client.InitRootScheme();
@@ -40,7 +40,7 @@ Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig,
     auto settings = Tests::TServerSettings(msgbusPort);
     settings.SetLogBackend(logBackend);
     settings.AppConfig.CopyFrom(config);
-    settings.SetEnableSystemViews(false); 
+    settings.SetEnableSystemViews(false);
     settings.SetEnableMvcc(false);
 
     Tests::TServer Server(settings);

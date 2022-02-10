@@ -2,7 +2,7 @@
 
 #include "schemeshard_types.h"
 #include "schemeshard_effective_acl.h"
-#include "schemeshard_user_attr_limits.h" 
+#include "schemeshard_user_attr_limits.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/aclib/aclib.h>
@@ -170,7 +170,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
 
     bool CheckLimits(TString& errStr) const {
         const ui64 bytes = Bytes();
-        if (bytes > TUserAttributesLimits::MaxBytes) { 
+        if (bytes > TUserAttributesLimits::MaxBytes) {
             errStr = Sprintf("UserArttibutes::CheckLimits: user attributes too big: %" PRIu64, bytes);
             return false;
         }
@@ -184,13 +184,13 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
             return true;
         }
 
-        if (name.size() > TUserAttributesLimits::MaxNameLen) { 
+        if (name.size() > TUserAttributesLimits::MaxNameLen) {
             errStr = Sprintf("UserArttibutes: name too long, name# '%s' value# '%s'"
                              , name.c_str(), value.c_str());
             return false;
         }
 
-        if (value.size() > TUserAttributesLimits::MaxValueLen) { 
+        if (value.size() > TUserAttributesLimits::MaxValueLen) {
             errStr = Sprintf("UserArttibutes: value too long, name# '%s' value# '%s'"
                              , name.c_str(), value.c_str());
             return false;

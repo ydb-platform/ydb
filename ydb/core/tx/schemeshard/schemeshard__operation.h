@@ -51,12 +51,12 @@ struct TOperation: TSimpleRefCount<TOperation> {
         TString Reason;
     };
 
-    struct TSplitTransactionsResult { 
+    struct TSplitTransactionsResult {
         NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
-        TString Reason; 
-        TVector<TTxTransaction> Transactions; 
-    }; 
- 
+        TString Reason;
+        TVector<TTxTransaction> Transactions;
+    };
+
     TOperation(TTxId txId)
         : TxId(txId)
     {}
@@ -66,7 +66,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
 
     static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, const TOperationContext& context);
 
-    static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context); 
+    static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
 
     ISubOperationBase::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState);
 

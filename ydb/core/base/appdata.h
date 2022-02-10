@@ -98,7 +98,7 @@ struct TAppData {
         TTabletTypes::EType Mediator;
         TTabletTypes::EType Kesus;
         TTabletTypes::EType Hive;
-        TTabletTypes::EType SysViewProcessor; 
+        TTabletTypes::EType SysViewProcessor;
         TTabletTypes::EType ColumnShard;
         TTabletTypes::EType TestShard;
         TTabletTypes::EType SequenceShard;

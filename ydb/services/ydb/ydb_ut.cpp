@@ -663,7 +663,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
     }
 
     Y_UNIT_TEST(CreateAlterUpsertDrop) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server; 
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -891,7 +891,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
     }
 
     Y_UNIT_TEST(MakeListRemoveDirectory) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server; 
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
         ui16 grpc = server.GetPort();
 
         std::shared_ptr<grpc::Channel> Channel_;

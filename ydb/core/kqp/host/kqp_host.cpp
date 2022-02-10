@@ -217,13 +217,13 @@ public:
 
         TVector<const TString> queryPlans;
         for (auto id : SessionCtx->Query().ExecutionOrder) {
-            auto result = SessionCtx->Query().Results.FindPtr(id); 
+            auto result = SessionCtx->Query().Results.FindPtr(id);
             if (result) {
                 queryPlans.push_back(SerializeAnalyzePlan(result->QueryStats));
                 AddQueryStats(queryResult.QueryStats, std::move(result->QueryStats));
-            } 
-        } 
- 
+            }
+        }
+
         FillAstAndPlan(queryResult, GetExprRoot().Get(), GetExprContext(), PlanBuilder);
         queryResult.SqlVersion = SqlVersion;
         queryResult.QueryPlan = SerializeScriptPlan(queryPlans);
@@ -291,8 +291,8 @@ public:
             auto& execResult = ExecuteCtx->QueryResults[0];
             queryResult.QueryStats.Swap(&execResult.QueryStats);
             queryResult.QueryPlan = SerializeAnalyzePlan(queryResult.QueryStats);
-        } 
- 
+        }
+
         queryResult.SqlVersion = SqlVersion;
     }
 

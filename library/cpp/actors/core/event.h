@@ -46,8 +46,8 @@ namespace NActors {
     };
 
     // fat handle
-    class IEventHandle : TNonCopyable { 
-        struct TOnNondelivery { 
+    class IEventHandle : TNonCopyable {
+        struct TOnNondelivery {
             TActorId Recipient;
 
             TOnNondelivery(const TActorId& recipient)

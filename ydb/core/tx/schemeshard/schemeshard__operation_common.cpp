@@ -436,9 +436,9 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
     TShardInfo datashardInfo = TShardInfo::DataShardInfo(operationId.GetTxId(), txState.TargetPathId);
     datashardInfo.BindedChannels = channelsBinding;
 
-    context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo, 
-        ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS)); 
- 
+    context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo,
+        ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS));
+
     ui32 newShardCout = dstTableInfo->GetPartitions().size();
 
     dstPath->SetShardsInside(newShardCout);

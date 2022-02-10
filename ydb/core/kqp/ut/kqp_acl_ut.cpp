@@ -1,126 +1,126 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
- 
+
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
- 
-namespace NKikimr { 
-namespace NKqp { 
- 
-using namespace NYdb; 
-using namespace NYdb::NTable; 
- 
-Y_UNIT_TEST_SUITE(KqpNewEngineAcl) { 
-    Y_UNIT_TEST(FailNavigate) { 
+
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
+Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
+    Y_UNIT_TEST(FailNavigate) {
         TKikimrRunner kikimr("user0@builtin");
- 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard`;
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
-    } 
- 
-    Y_UNIT_TEST(FailResolve) { 
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(FailResolve) {
         TKikimrRunner kikimr;
-        { 
-            NYdb::NScheme::TPermissions permissions("user0@builtin", 
-                {"ydb.deprecated.describe_schema"} 
-            ); 
-            auto schemeClient = kikimr.GetSchemeClient(); 
-            auto result = schemeClient.ModifyPermissions("/Root/TwoShard", 
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions) 
-            ).ExtractValueSync(); 
-            AssertSuccessResult(result); 
-        } 
- 
-        auto driverConfig = TDriverConfig() 
-            .SetEndpoint(kikimr.GetEndpoint()) 
-            .SetAuthToken("user0@builtin"); 
-        auto driver = TDriver(driverConfig); 
+        {
+            NYdb::NScheme::TPermissions permissions("user0@builtin",
+                {"ydb.deprecated.describe_schema"}
+            );
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
+                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin");
+        auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
- 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        { 
-            auto result = session.ExecuteDataQuery(R"( 
-                PRAGMA kikimr.UseNewEngine = "true"; 
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                PRAGMA kikimr.UseNewEngine = "true";
                 SELECT * FROM `/Root/TwoShard`;
-            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        } 
-        { 
-            auto result = session.ExecuteDataQuery(R"( 
-                PRAGMA kikimr.UseNewEngine = "true"; 
+        }
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                PRAGMA kikimr.UseNewEngine = "true";
                 UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
-                    (10u, "One", -10); 
-            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+                    (10u, "One", -10);
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        } 
+        }
 
         driver.Stop(true);
-    } 
- 
-    Y_UNIT_TEST(ReadSuccess) { 
+    }
+
+    Y_UNIT_TEST(ReadSuccess) {
         TKikimrRunner kikimr;
-        { 
-            NYdb::NScheme::TPermissions permissions("user0@builtin", 
-                {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"} 
-            ); 
-            auto schemeClient = kikimr.GetSchemeClient(); 
-            auto result = schemeClient.ModifyPermissions("/Root/TwoShard", 
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions) 
-            ).ExtractValueSync(); 
-            AssertSuccessResult(result); 
-        } 
- 
-        auto driverConfig = TDriverConfig() 
-            .SetEndpoint(kikimr.GetEndpoint()) 
-            .SetAuthToken("user0@builtin"); 
-        auto driver = TDriver(driverConfig); 
+        {
+            NYdb::NScheme::TPermissions permissions("user0@builtin",
+                {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
+            );
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
+                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin");
+        auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
- 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard`;
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
-        AssertSuccessResult(result); 
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
         driver.Stop(true);
-    } 
- 
-    Y_UNIT_TEST(WriteSuccess) { 
+    }
+
+    Y_UNIT_TEST(WriteSuccess) {
         TKikimrRunner kikimr;
-        { 
-            NYdb::NScheme::TPermissions permissions("user0@builtin", 
-                {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"} 
-            ); 
-            auto schemeClient = kikimr.GetSchemeClient(); 
-            auto result = schemeClient.ModifyPermissions("/Root/TwoShard", 
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions) 
-            ).ExtractValueSync(); 
-            AssertSuccessResult(result); 
-        } 
- 
-        auto driverConfig = TDriverConfig() 
-            .SetEndpoint(kikimr.GetEndpoint()) 
-            .SetAuthToken("user0@builtin"); 
-        auto driver = TDriver(driverConfig); 
+        {
+            NYdb::NScheme::TPermissions permissions("user0@builtin",
+                {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"}
+            );
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
+                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin");
+        auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
- 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
-                (10u, "One", -10); 
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
-        AssertSuccessResult(result); 
+                (10u, "One", -10);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
         driver.Stop(true);
-    } 
+    }
 
     Y_UNIT_TEST(RecursiveCreateTableShouldSuccess) {
         TKikimrRunner kikimr;
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
 
         driver.Stop(true);
     }
-} 
- 
+}
+
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

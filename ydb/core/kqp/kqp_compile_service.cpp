@@ -10,7 +10,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/cache/cache.h> 
+#include <library/cpp/cache/cache.h>
 
 #include <util/string/escape.h>
 
@@ -180,14 +180,14 @@ private:
 
 struct TKqpCompileRequest {
     TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
-        const TString& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters) 
+        const TString& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
         , KeepInCache(keepInCache)
         , UserToken(userToken)
-        , Deadline(deadline) 
-        , DbCounters(dbCounters) {} 
+        , Deadline(deadline)
+        , DbCounters(dbCounters) {}
 
     TActorId Sender;
     TKqpQueryId Query;
@@ -195,7 +195,7 @@ struct TKqpCompileRequest {
     bool KeepInCache = false;
     TString UserToken;
     TInstant Deadline;
-    TKqpDbCountersPtr DbCounters; 
+    TKqpDbCountersPtr DbCounters;
     TActorId CompileActor;
 };
 
@@ -417,16 +417,16 @@ private:
         *Counters->CompileQueryCacheBytes = QueryCache.Bytes();
 
         auto userSid = NACLib::TUserToken(request.UserToken).GetUserSID();
-        auto dbCounters = request.DbCounters; 
+        auto dbCounters = request.DbCounters;
 
         if (request.Uid) {
-            Counters->ReportCompileRequestGet(dbCounters); 
+            Counters->ReportCompileRequestGet(dbCounters);
 
             auto compileResult = QueryCache.FindByUid(*request.Uid, request.KeepInCache);
             if (compileResult) {
                 Y_ENSURE(compileResult->Query);
                 if (compileResult->Query->UserSid == userSid) {
-                    Counters->ReportQueryCacheHit(dbCounters, true); 
+                    Counters->ReportQueryCacheHit(dbCounters, true);
 
                     LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache by uid"
                         << ", sender: " << ev->Sender
@@ -444,7 +444,7 @@ private:
                 }
             }
 
-            Counters->ReportQueryCacheHit(dbCounters, false); 
+            Counters->ReportQueryCacheHit(dbCounters, false);
 
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Query not found"
                 << ", sender: " << ev->Sender
@@ -455,7 +455,7 @@ private:
             return;
         }
 
-        Counters->ReportCompileRequestCompile(dbCounters); 
+        Counters->ReportCompileRequestCompile(dbCounters);
 
         Y_ENSURE(request.Query);
         auto& query = *request.Query;
@@ -468,7 +468,7 @@ private:
 
         auto compileResult = QueryCache.FindByQuery(query, request.KeepInCache);
         if (compileResult) {
-            Counters->ReportQueryCacheHit(dbCounters, true); 
+            Counters->ReportQueryCacheHit(dbCounters, true);
 
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache"
                 << ", sender: " << ev->Sender
@@ -478,13 +478,13 @@ private:
             return;
         }
 
-        Counters->ReportQueryCacheHit(dbCounters, false); 
+        Counters->ReportQueryCacheHit(dbCounters, false);
 
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
-            request.KeepInCache, request.UserToken, request.Deadline, dbCounters); 
+            request.KeepInCache, request.UserToken, request.Deadline, dbCounters);
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
-            Counters->ReportCompileRequestRejected(dbCounters); 
+            Counters->ReportCompileRequestRejected(dbCounters);
 
             LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
                 << ", sender: " << ev->Sender
@@ -519,18 +519,18 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received recompile request"
             << ", sender: " << ev->Sender);
 
-        auto dbCounters = request.DbCounters; 
-        Counters->ReportRecompileRequestGet(dbCounters); 
+        auto dbCounters = request.DbCounters;
+        Counters->ReportRecompileRequestGet(dbCounters);
 
         auto compileResult = QueryCache.FindByUid(request.Uid, false);
         if (compileResult || request.Query) {
-            Counters->ReportCompileRequestCompile(dbCounters); 
+            Counters->ReportCompileRequestCompile(dbCounters);
 
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
-                true, request.UserToken, request.Deadline, dbCounters); 
+                true, request.UserToken, request.Deadline, dbCounters);
 
             if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
-                Counters->ReportCompileRequestRejected(dbCounters); 
+                Counters->ReportCompileRequestRejected(dbCounters);
 
                 LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
                     << ", sender: " << ev->Sender
@@ -623,10 +623,10 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received invalidate request"
             << ", sender: " << ev->Sender
-            << ", queryUid: " << request.Uid); 
+            << ", queryUid: " << request.Uid);
 
-        auto dbCounters = request.DbCounters; 
-        Counters->ReportCompileRequestInvalidate(dbCounters); 
+        auto dbCounters = request.DbCounters;
+        Counters->ReportCompileRequestInvalidate(dbCounters);
 
         QueryCache.EraseByUid(request.Uid);
     }
@@ -657,7 +657,7 @@ private:
                     << ", sender: " << request->Sender
                     << ", deadline: " << request->Deadline);
 
-                Counters->ReportCompileRequestTimeout(request->DbCounters); 
+                Counters->ReportCompileRequestTimeout(request->DbCounters);
 
                 NYql::TIssue issue(NYql::TPosition(), "Compilation timed out.");
                 ReplyError(request->Sender, "", Ydb::StatusIds::TIMEOUT, {issue}, ctx);

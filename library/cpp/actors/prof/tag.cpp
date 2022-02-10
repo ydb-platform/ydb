@@ -1,9 +1,9 @@
 #include "tag.h"
-#include "tcmalloc.h" 
+#include "tcmalloc.h"
 
 #include <library/cpp/charset/ci_string.h>
 #include <library/cpp/containers/atomizer/atomizer.h>
-#include <library/cpp/malloc/api/malloc.h> 
+#include <library/cpp/malloc/api/malloc.h>
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
 #include <library/cpp/lfalloc/dbg_info/dbg_info.h>
@@ -76,11 +76,11 @@ namespace NProfiling {
         return TStringAtoms::Instance().GetTagsCount();
     }
 
-    static ui32 SetThreadAllocTag_Default(ui32 tag) { 
-        Y_UNUSED(tag); 
-        return 0; 
-    } 
- 
+    static ui32 SetThreadAllocTag_Default(ui32 tag) {
+        Y_UNUSED(tag);
+        return 0;
+    }
+
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
     static ui32 SetThreadAllocTag_YT(ui32 tag) {
         auto prev = NYT::NYTAlloc::GetCurrentMemoryTag();
@@ -96,24 +96,24 @@ namespace NProfiling {
             return (TSetThreadAllocTag*)NAllocDbg::SetThreadAllocTag;
         } else if (name.StartsWith("yt")) {
             return SetThreadAllocTag_YT;
-        } else if (name.StartsWith("tc")) { 
-            return SetTCMallocThreadAllocTag; 
+        } else if (name.StartsWith("tc")) {
+            return SetTCMallocThreadAllocTag;
         } else {
             return SetThreadAllocTag_Default;
         }
     }
-#else 
-    static TSetThreadAllocTag* SetThreadAllocTagFn() { 
-        const auto& info = NMalloc::MallocInfo(); 
+#else
+    static TSetThreadAllocTag* SetThreadAllocTagFn() {
+        const auto& info = NMalloc::MallocInfo();
 
-        TStringBuf name(info.Name); 
-        if (name.StartsWith("tc")) { 
-            return SetTCMallocThreadAllocTag; 
-        } else { 
-            return SetThreadAllocTag_Default; 
-        } 
-    } 
-#endif 
- 
+        TStringBuf name(info.Name);
+        if (name.StartsWith("tc")) {
+            return SetTCMallocThreadAllocTag;
+        } else {
+            return SetThreadAllocTag_Default;
+        }
+    }
+#endif
+
     TSetThreadAllocTag* SetThreadAllocTag = SetThreadAllocTagFn();
 }

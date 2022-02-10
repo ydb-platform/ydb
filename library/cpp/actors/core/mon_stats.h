@@ -2,13 +2,13 @@
 
 #include "defs.h"
 #include "actor.h"
-#include <library/cpp/monlib/metrics/histogram_snapshot.h> 
+#include <library/cpp/monlib/metrics/histogram_snapshot.h>
 #include <util/system/hp_timer.h>
 
 namespace NActors {
-    struct TLogHistogram : public NMonitoring::IHistogramSnapshot { 
+    struct TLogHistogram : public NMonitoring::IHistogramSnapshot {
         TLogHistogram() {
-            memset(Buckets, 0, sizeof(Buckets)); 
+            memset(Buckets, 0, sizeof(Buckets));
         }
 
         inline void Add(ui64 val, ui64 inc = 1) {
@@ -17,8 +17,8 @@ namespace NActors {
             asm volatile("" ::
                              : "memory");
 #endif
-            if (val > 1) { 
-                ind = GetValueBitCount(val - 1); 
+            if (val > 1) {
+                ind = GetValueBitCount(val - 1);
             }
 #if defined(__clang__) && __clang_major__ == 3 && __clang_minor__ == 7
             asm volatile("" ::
@@ -36,25 +36,25 @@ namespace NActors {
             }
         }
 
-        // IHistogramSnapshot 
-        ui32 Count() const override { 
-            return Y_ARRAY_SIZE(Buckets); 
-        } 
- 
-        NMonitoring::TBucketBound UpperBound(ui32 index) const override { 
-            Y_ASSERT(index < Y_ARRAY_SIZE(Buckets)); 
-            if (index == 0) { 
-                return 1; 
-            } 
-            return NMonitoring::TBucketBound(1ull << (index - 1)) * 2.0; 
-        } 
- 
-        NMonitoring::TBucketValue Value(ui32 index) const override { 
-            Y_ASSERT(index < Y_ARRAY_SIZE(Buckets)); 
-            return Buckets[index]; 
-        } 
- 
-        ui64 TotalSamples = 0; 
+        // IHistogramSnapshot
+        ui32 Count() const override {
+            return Y_ARRAY_SIZE(Buckets);
+        }
+
+        NMonitoring::TBucketBound UpperBound(ui32 index) const override {
+            Y_ASSERT(index < Y_ARRAY_SIZE(Buckets));
+            if (index == 0) {
+                return 1;
+            }
+            return NMonitoring::TBucketBound(1ull << (index - 1)) * 2.0;
+        }
+
+        NMonitoring::TBucketValue Value(ui32 index) const override {
+            Y_ASSERT(index < Y_ARRAY_SIZE(Buckets));
+            return Buckets[index];
+        }
+
+        ui64 TotalSamples = 0;
         ui64 Buckets[65];
     };
 

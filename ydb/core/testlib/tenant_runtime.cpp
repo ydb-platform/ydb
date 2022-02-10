@@ -431,8 +431,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &CreateFlatTxSchemeShard, DataGroupErasure);
             } else if (type == defaultTabletTypes.Hive) {
                 bootstrapperActorId = Boot(ctx, type, &CreateDefaultHive, DataGroupErasure);
-            } else if (type == defaultTabletTypes.SysViewProcessor) { 
-                bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure); 
+            } else if (type == defaultTabletTypes.SysViewProcessor) {
+                bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
             } else if (type == defaultTabletTypes.SequenceShard) {
                 bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
             } else if (type == defaultTabletTypes.ReplicationController) {

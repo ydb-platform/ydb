@@ -43,7 +43,7 @@ message TExecutorSettings {
         optional TCompactionPolicy CompactionPolicy = 10;
         repeated TLocalityGroupPolicy LocalityGroupPolicy = 11;
 
-        reserved 100; //optional bool ExposeCounters = 100; 
+        reserved 100; //optional bool ExposeCounters = 100;
     }
 
     message TRuntimeSettings {

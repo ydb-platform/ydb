@@ -1,31 +1,31 @@
-#include "yql_solomon_provider_impl.h" 
- 
+#include "yql_solomon_provider_impl.h"
+
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
- 
+
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <ydb/library/yql/utils/log/log.h>
- 
+
 #include <util/string/split.h>
 
-namespace NYql { 
- 
-using namespace NNodes; 
- 
-class TSolomonDataSinkExecTransformer : public TExecTransformerBase { 
-public: 
+namespace NYql {
+
+using namespace NNodes;
+
+class TSolomonDataSinkExecTransformer : public TExecTransformerBase {
+public:
     explicit TSolomonDataSinkExecTransformer(TSolomonState::TPtr state)
-        : State_(state) 
-    { 
+        : State_(state)
+    {
         AddHandler({TCoCommit::CallableName()}, RequireFirst(), Hndl(&TSolomonDataSinkExecTransformer::HandleCommit));
         AddHandler({TSoWriteToShard::CallableName()}, RequireFirst(), Hndl(&TSolomonDataSinkExecTransformer::HandleSoWriteToShard));
-    } 
- 
+    }
+
     TStatusCallbackPair HandleCommit(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (!State_->IsRtmrMode() && TDqQuery::Match(input->Child(TCoCommit::idx_World))) {
             return DelegateExecutionToDqProvider(input->ChildPtr(TCoCommit::idx_World), input, ctx);
@@ -42,7 +42,7 @@ public:
         return DelegateExecutionToDqProvider(input->ChildPtr(TSoWriteToShard::idx_Input), input, ctx);
     }
 
-private: 
+private:
     TStatusCallbackPair DelegateExecutionToDqProvider(
         const TExprNode::TPtr& input,
         const TExprNode::TPtr& originInput,
@@ -128,11 +128,11 @@ private:
     }
 
 private:
-    TSolomonState::TPtr State_; 
-}; 
- 
-THolder<TExecTransformerBase> CreateSolomonDataSinkExecTransformer(TSolomonState::TPtr state) { 
+    TSolomonState::TPtr State_;
+};
+
+THolder<TExecTransformerBase> CreateSolomonDataSinkExecTransformer(TSolomonState::TPtr state) {
     return THolder(new TSolomonDataSinkExecTransformer(state));
-} 
- 
-} // namespace NYql 
+}
+
+} // namespace NYql

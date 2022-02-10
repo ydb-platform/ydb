@@ -16,7 +16,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <util/string/join.h> 
+#include <util/string/join.h>
 
 namespace NKikimr {
 namespace NKqp {

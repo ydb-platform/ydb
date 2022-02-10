@@ -13,7 +13,7 @@ namespace NActors {
             ISchedulerCookie* Cookie;
         };
 
-        struct TChunk : TQueueChunkDerived<TEntry, 512, TChunk> {}; 
+        struct TChunk : TQueueChunkDerived<TEntry, 512, TChunk> {};
 
         class TReader;
         class TWriter;

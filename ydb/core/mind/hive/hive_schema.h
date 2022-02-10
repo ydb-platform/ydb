@@ -214,19 +214,19 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TabletID, CPU, Memory, Network, Metrics>;
     };
 
-    struct Metrics : Table<16> { 
-        struct TabletID : Column<1, Tablet::ID::ColumnType> {}; 
+    struct Metrics : Table<16> {
+        struct TabletID : Column<1, Tablet::ID::ColumnType> {};
         struct FollowerID : Column<2, TabletFollowerTablet::FollowerID::ColumnType> {};
-        struct ProtoMetrics : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrTabletBase::TMetrics; }; 
- 
+        struct ProtoMetrics : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrTabletBase::TMetrics; };
+
         struct MaximumCPU : Column<100 + (int)NMetrics::EResource::CPU, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
         struct MaximumMemory : Column<100 + (int)NMetrics::EResource::Memory, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
         struct MaximumNetwork : Column<100 + (int)NMetrics::EResource::Network, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
 
         using TKey = TableKey<TabletID, FollowerID>;
         using TColumns = TableColumns<TabletID, FollowerID, ProtoMetrics, MaximumCPU, MaximumMemory, MaximumNetwork>;
-    }; 
- 
+    };
+
     struct TabletTypeMetrics : Table<13> {
         struct TabletType : Column<1, Tablet::TabletType::ColumnType> { using Type = TTabletTypes::EType; };
         struct AllowedMetricIDs : Column<2, NScheme::NTypeIds::String> { using Type = TVector<i64>; };
@@ -294,7 +294,7 @@ struct Schema : NIceDb::Schema {
                                 TabletFollowerGroup,
                                 TabletFollowerTablet,
                                 TabletTypeMetrics,
-                                Sequences, 
+                                Sequences,
                                 Metrics,
                                 SubDomain,
                                 BlockedOwner,

@@ -260,8 +260,8 @@ private:
         apply = L(apply, Limit);
     }
 
-    std::vector<ui32> GetFactoryColumnIndices() const final { 
-        return {1u, 0u}; 
+    std::vector<ui32> GetFactoryColumnIndices() const final {
+        return {1u, 0u};
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -338,8 +338,8 @@ private:
         return Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), Payload), BuildLambda(Pos, Y("row"), Predicate));
     }
 
-    std::vector<ui32> GetFactoryColumnIndices() const final { 
-        return {0u, 1u}; 
+    std::vector<ui32> GetFactoryColumnIndices() const final {
+        return {0u, 1u};
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -517,8 +517,8 @@ private:
         apply = L(apply, Intervals);
     }
 
-    std::vector<ui32> GetFactoryColumnIndices() const final { 
-        return {0u, 1u}; 
+    std::vector<ui32> GetFactoryColumnIndices() const final {
+        return {0u, 1u};
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -862,118 +862,118 @@ TAggregationPtr BuildTopFreqFactoryAggregation(TPosition pos, const TString& nam
     return new TTopFreqFactory(pos, name, factory, aggMode);
 }
 
-template <bool HasKey> 
-class TTopAggregationFactory final : public TAggregationFactory { 
-public: 
-    TTopAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
-        : TAggregationFactory(pos, name, factory, aggMode) 
+template <bool HasKey>
+class TTopAggregationFactory final : public TAggregationFactory {
+public:
+    TTopAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+        : TAggregationFactory(pos, name, factory, aggMode)
         , FakeSource(BuildFakeSource(pos))
-    {} 
- 
-private: 
-    bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final { 
-        ui32 adjustArgsCount = isFactory ? 1 : (HasKey ? 3 : 2); 
-        if (exprs.size() != adjustArgsCount) { 
-            ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires " 
-                << adjustArgsCount << " arguments, given: " << exprs.size(); 
-            return false; 
-        } 
- 
-        if (!isFactory) { 
-            Payload = exprs[0]; 
-            if (HasKey) { 
-                Key = exprs[1]; 
-            } 
-        } 
- 
-        Count = exprs.back(); 
- 
-        if (!isFactory) { 
+    {}
+
+private:
+    bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
+        ui32 adjustArgsCount = isFactory ? 1 : (HasKey ? 3 : 2);
+        if (exprs.size() != adjustArgsCount) {
+            ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires "
+                << adjustArgsCount << " arguments, given: " << exprs.size();
+            return false;
+        }
+
+        if (!isFactory) {
+            Payload = exprs[0];
+            if (HasKey) {
+                Key = exprs[1];
+            }
+        }
+
+        Count = exprs.back();
+
+        if (!isFactory) {
             Name = src->MakeLocalName(Name);
-        } 
- 
-        if (!Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        if (!isFactory) { 
-            node.Add("Member", "row", Q(Name)); 
-        } 
- 
-        return true; 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TTopAggregationFactory(Pos, Name, Func, AggMode); 
-    } 
- 
-    TNodePtr GetApply(const TNodePtr& type) const final { 
-        TNodePtr apply; 
-        if (HasKey) { 
-            apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), Key), BuildLambda(Pos, Y("row"), Payload)); 
-        } else { 
-            apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), Payload)); 
-        } 
-        AddFactoryArguments(apply); 
-        return apply; 
-    } 
- 
-    void AddFactoryArguments(TNodePtr& apply) const final { 
-        apply = L(apply, Count); 
-    } 
- 
-    std::vector<ui32> GetFactoryColumnIndices() const final { 
-        if (HasKey) { 
-            return {1u, 0u}; 
-        } else { 
-            return {0u}; 
-        } 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) final { 
+        }
+
+        if (!Init(ctx, src)) {
+            return false;
+        }
+
+        if (!isFactory) {
+            node.Add("Member", "row", Q(Name));
+        }
+
+        return true;
+    }
+
+    TNodePtr DoClone() const final {
+        return new TTopAggregationFactory(Pos, Name, Func, AggMode);
+    }
+
+    TNodePtr GetApply(const TNodePtr& type) const final {
+        TNodePtr apply;
+        if (HasKey) {
+            apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), Key), BuildLambda(Pos, Y("row"), Payload));
+        } else {
+            apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), Payload));
+        }
+        AddFactoryArguments(apply);
+        return apply;
+    }
+
+    void AddFactoryArguments(TNodePtr& apply) const final {
+        apply = L(apply, Count);
+    }
+
+    std::vector<ui32> GetFactoryColumnIndices() const final {
+        if (HasKey) {
+            return {1u, 0u};
+        } else {
+            return {0u};
+        }
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
         ctx.PushBlockShortcuts();
         if (!Count->Init(ctx, FakeSource.Get())) {
-            return false; 
-        } 
+            return false;
+        }
         Count = ctx.GroundBlockShortcutsForExpr(Count);
- 
-        if (!Payload) { 
-            return true; 
-        } 
- 
-        if (HasKey) { 
-            ctx.PushBlockShortcuts(); 
-            if (!Key->Init(ctx, src)) { 
-                return false; 
-            } 
-            Key = ctx.GroundBlockShortcutsForExpr(Key); 
-        } 
- 
-        ctx.PushBlockShortcuts(); 
-        if (!Payload->Init(ctx, src)) { 
-            return false; 
-        } 
-        Payload = ctx.GroundBlockShortcutsForExpr(Payload); 
- 
-        if ((HasKey && Key->IsAggregated()) || (!HasKey && Payload->IsAggregated())) { 
-            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden"; 
-            return false; 
-        } 
-        return true; 
-    } 
- 
+
+        if (!Payload) {
+            return true;
+        }
+
+        if (HasKey) {
+            ctx.PushBlockShortcuts();
+            if (!Key->Init(ctx, src)) {
+                return false;
+            }
+            Key = ctx.GroundBlockShortcutsForExpr(Key);
+        }
+
+        ctx.PushBlockShortcuts();
+        if (!Payload->Init(ctx, src)) {
+            return false;
+        }
+        Payload = ctx.GroundBlockShortcutsForExpr(Payload);
+
+        if ((HasKey && Key->IsAggregated()) || (!HasKey && Payload->IsAggregated())) {
+            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+            return false;
+        }
+        return true;
+    }
+
     TSourcePtr FakeSource;
-    TNodePtr Key, Payload, Count; 
-}; 
- 
-template <bool HasKey> 
-TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
-    return new TTopAggregationFactory<HasKey>(pos, name, factory, aggMode); 
-} 
- 
-template TAggregationPtr BuildTopFactoryAggregation<false>(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode); 
-template TAggregationPtr BuildTopFactoryAggregation<true >(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode); 
- 
+    TNodePtr Key, Payload, Count;
+};
+
+template <bool HasKey>
+TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+    return new TTopAggregationFactory<HasKey>(pos, name, factory, aggMode);
+}
+
+template TAggregationPtr BuildTopFactoryAggregation<false>(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
+template TAggregationPtr BuildTopFactoryAggregation<true >(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
+
 class TCountDistinctEstimateAggregationFactory final : public TAggregationFactory {
 public:
     TCountDistinctEstimateAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)

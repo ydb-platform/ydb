@@ -207,19 +207,19 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kMemoryLoadStart: { 
-                const auto& cmd = record.GetMemoryLoadStart(); 
-                const ui64 tag = GetOrGenerateTag(cmd); 
-                if (LoadActors.count(tag) != 0) { 
-                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag); 
-                } 
- 
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new memory load actor with tag# " << tag); 
-                LoadActors.emplace(tag, ctx.Register(CreateMemoryTestLoad( 
-                            cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag))); 
-                break; 
-            } 
- 
+            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kMemoryLoadStart: {
+                const auto& cmd = record.GetMemoryLoadStart();
+                const ui64 tag = GetOrGenerateTag(cmd);
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
+
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new memory load actor with tag# " << tag);
+                LoadActors.emplace(tag, ctx.Register(CreateMemoryTestLoad(
+                            cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                break;
+            }
+
             default: {
                 TString protoTxt;
                 google::protobuf::TextFormat::PrintToString(record, &protoTxt);

@@ -26,7 +26,7 @@ THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg
                                                                     Self->ParentDomainEffectiveACLVersion,
                                                                     rootSubdomain->GetVersion(),
                                                                     rootPath->UserAttrs->AlterVersion,
-                                                                    ui64(rootSubdomain->GetTenantHiveID()), 
+                                                                    ui64(rootSubdomain->GetTenantHiveID()),
                                                                     ui64(rootSubdomain->GetTenantSysViewProcessorID()),
                                                                     rootPath->ACL);
 }
@@ -106,7 +106,7 @@ void TSubDomainsLinks::TLink::Out(IOutputStream& stream) const {
            << ", SubdomainVersion: " << SubdomainVersion
            << ", UserAttributesVersion: " << UserAttributesVersion
            << ", TenantHive: " << TenantHive
-           << ", TenantSysViewProcessor: " << TenantSysViewProcessor 
+           << ", TenantSysViewProcessor: " << TenantSysViewProcessor
            << ", TenantRootACL: " << TenantRootACL
            << "}";
 }
@@ -119,8 +119,8 @@ TSubDomainsLinks::TLink::TLink(const NKikimrScheme::TEvSyncTenantSchemeShard &re
     , SubdomainVersion(record.GetSubdomainVersion())
     , UserAttributesVersion(record.GetUserAttributesVersion())
     , TenantHive(record.HasTenantHive() ? TTabletId(record.GetTenantHive()) : InvalidTabletId)
-    , TenantSysViewProcessor(record.HasTenantSysViewProcessor() ? 
-        TTabletId(record.GetTenantSysViewProcessor()) : InvalidTabletId) 
+    , TenantSysViewProcessor(record.HasTenantSysViewProcessor() ?
+        TTabletId(record.GetTenantSysViewProcessor()) : InvalidTabletId)
     , TenantRootACL(record.GetTenantRootACL())
 {}
 

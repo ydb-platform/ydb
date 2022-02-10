@@ -1,14 +1,14 @@
-#include "kqp_scan_data.h" 
- 
+#include "kqp_scan_data.h"
+
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
- 
+
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 struct TBytesStatistics {
@@ -248,15 +248,15 @@ std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& val
     return {sizes.AllocatedBytes, sizes.DataBytes};
 }
 
-TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTableRange& range, 
+TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTableRange& range,
     const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys)
-    : TableId(tableId) 
-    , Range(range) 
+    : TableId(tableId)
+    , Range(range)
     , SkipNullKeys(skipNullKeys)
-    , Columns(columns) 
+    , Columns(columns)
     , SystemColumns(systemColumns)
-{} 
- 
+{}
+
 TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
     NYql::NDqProto::EDqStatsMode statsMode)
 {
@@ -378,8 +378,8 @@ ui64 TKqpScanComputeContext::TScanData::AddRows(const arrow::RecordBatch& batch,
     }
 
     return stats.AllocatedBytes;
-} 
- 
+}
+
 NUdf::TUnboxedValue TKqpScanComputeContext::TScanData::TakeRow() {
     YQL_ENSURE(!RowBatches.empty());
     auto& batch = RowBatches.front();
@@ -396,7 +396,7 @@ NUdf::TUnboxedValue TKqpScanComputeContext::TScanData::TakeRow() {
 
 void TKqpScanComputeContext::AddTableScan(ui32, const TTableId& tableId, const TTableRange& range,
     const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys)
-{ 
+{
     auto scanData = TKqpScanComputeContext::TScanData(tableId, range, columns, systemColumns, skipNullKeys);
 
     if (Y_UNLIKELY(StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC)) {
@@ -408,9 +408,9 @@ void TKqpScanComputeContext::AddTableScan(ui32, const TTableId& tableId, const T
     }
 
     auto result = Scans.emplace(0, std::move(scanData));
-    Y_ENSURE(result.second); 
-} 
- 
+    Y_ENSURE(result.second);
+}
+
 void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
     NYql::NDqProto::EDqStatsMode statsMode)
 {
@@ -422,15 +422,15 @@ void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTr
 
 TKqpScanComputeContext::TScanData& TKqpScanComputeContext::GetTableScan(ui32) {
     auto scanData = Scans.FindPtr(0);
-    Y_ENSURE(scanData); 
- 
-    return *scanData; 
-} 
- 
-TMap<ui32, TKqpScanComputeContext::TScanData>& TKqpScanComputeContext::GetTableScans() { 
-    return Scans; 
-} 
- 
+    Y_ENSURE(scanData);
+
+    return *scanData;
+}
+
+TMap<ui32, TKqpScanComputeContext::TScanData>& TKqpScanComputeContext::GetTableScans() {
+    return Scans;
+}
+
 const TMap<ui32, TKqpScanComputeContext::TScanData>& TKqpScanComputeContext::GetTableScans() const {
     return Scans;
 }
@@ -438,29 +438,29 @@ const TMap<ui32, TKqpScanComputeContext::TScanData>& TKqpScanComputeContext::Get
 TIntrusivePtr<IKqpTableReader> TKqpScanComputeContext::ReadTable(ui32) const {
     auto scanData = Scans.FindPtr(0);
     Y_ENSURE(scanData);
-    Y_ENSURE(scanData->TableReader); 
- 
-    return scanData->TableReader; 
-} 
- 
-class TKqpTableReader : public IKqpTableReader { 
-public: 
+    Y_ENSURE(scanData->TableReader);
+
+    return scanData->TableReader;
+}
+
+class TKqpTableReader : public IKqpTableReader {
+public:
     TKqpTableReader(TKqpScanComputeContext::TScanData& scanData)
         : ScanData(scanData)
     {}
- 
+
     NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) override {
         if (ScanData.IsEmpty()) {
             if (ScanData.IsFinished()) {
-                return NUdf::EFetchStatus::Finish; 
-            } 
-            return NUdf::EFetchStatus::Yield; 
-        } 
- 
+                return NUdf::EFetchStatus::Finish;
+            }
+            return NUdf::EFetchStatus::Yield;
+        }
+
         result = std::move(ScanData.TakeRow());
-        return NUdf::EFetchStatus::Ok; 
-    } 
- 
+        return NUdf::EFetchStatus::Ok;
+    }
+
     EFetchResult Next(NUdf::TUnboxedValue* const* result) override {
         if (ScanData.IsEmpty()) {
             if (ScanData.IsFinished()) {
@@ -479,13 +479,13 @@ public:
         return EFetchResult::One;
     }
 
-private: 
-    TKqpScanComputeContext::TScanData& ScanData; 
-}; 
- 
+private:
+    TKqpScanComputeContext::TScanData& ScanData;
+};
+
 TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData) {
     return MakeIntrusive<TKqpTableReader>(scanData);
-} 
- 
+}
+
 } // namespace NMiniKQL
-} // namespace NKikimr 
+} // namespace NKikimr

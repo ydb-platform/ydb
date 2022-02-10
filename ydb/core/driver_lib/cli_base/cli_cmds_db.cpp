@@ -1127,17 +1127,17 @@ public:
             }
 
             const TString& key = items.at(0);
-            if (key.size() > TUserAttributesLimits::MaxNameLen) { 
+            if (key.size() > TUserAttributesLimits::MaxNameLen) {
                 Cerr << "Key '" << key << "' too long"
-                     << ", max: " << TUserAttributesLimits::MaxNameLen 
+                     << ", max: " << TUserAttributesLimits::MaxNameLen
                      << ", actual: " << key.size() << Endl;
                 exit(1);
             }
 
             const TString& value = items.at(1);
-            if (value.size() > TUserAttributesLimits::MaxValueLen) { 
+            if (value.size() > TUserAttributesLimits::MaxValueLen) {
                 Cerr << "Value '" << value << "' too long"
-                     << ", max: " << TUserAttributesLimits::MaxValueLen 
+                     << ", max: " << TUserAttributesLimits::MaxValueLen
                      << ", actual: " << value.size() << Endl;
                 exit(1);
             }

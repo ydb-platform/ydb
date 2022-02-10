@@ -211,7 +211,7 @@ namespace NUdf {
 namespace NYql {
 namespace NUdf {
 
-template<bool CheckOptional, const char* TFuncName, template<class> class TFunc, typename... TUserTypes> 
+template<bool CheckOptional, const char* TFuncName, template<class> class TFunc, typename... TUserTypes>
 class TUserDataTypeFuncFactory : public ::NYql::NUdf::TBoxedValue {
 public:
     typedef bool TTypeAwareMarker;
@@ -223,37 +223,37 @@ public:
     }
 
     template<typename TUserType>
-    static bool DeclareSignatureImpl( 
-        TDataTypeId typeId, 
+    static bool DeclareSignatureImpl(
+        TDataTypeId typeId,
         ::NYql::NUdf::TType* userType,
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
-        bool typesOnly) 
-    { 
+        bool typesOnly)
+    {
         if (TDataType<TUserType>::Id != typeId) {
             return false;
         }
-        TFunc<TUserType>::DeclareSignature(userType, builder, typesOnly); 
+        TFunc<TUserType>::DeclareSignature(userType, builder, typesOnly);
         return true;
     }
 
     template<typename TUserType, typename THead, typename... TTail>
-    static bool DeclareSignatureImpl( 
-        TDataTypeId typeId, 
+    static bool DeclareSignatureImpl(
+        TDataTypeId typeId,
         ::NYql::NUdf::TType* userType,
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
-        bool typesOnly) 
-    { 
-        if (DeclareSignatureImpl<TUserType>(typeId, userType, builder, typesOnly)) { 
+        bool typesOnly)
+    {
+        if (DeclareSignatureImpl<TUserType>(typeId, userType, builder, typesOnly)) {
             return true;
         }
-        return DeclareSignatureImpl<THead, TTail...>(typeId, userType, builder, typesOnly); 
+        return DeclareSignatureImpl<THead, TTail...>(typeId, userType, builder, typesOnly);
     }
 
     static bool DeclareSignature(
         const ::NYql::NUdf::TStringRef& name,
         ::NYql::NUdf::TType* userType,
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
-        bool typesOnly) 
+        bool typesOnly)
     {
         if (Name() != name) {
             // the only case when we return false
@@ -265,37 +265,37 @@ public:
             return true;
         }
 
-        auto typeHelper = builder.TypeInfoHelper(); 
-        auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType); 
-        if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) { 
-            builder.SetError("Missing or invalid user type"); 
+        auto typeHelper = builder.TypeInfoHelper();
+        auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+        if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
+            builder.SetError("Missing or invalid user type");
             return true;
         }
 
-        auto argsTypeInspector = TTupleTypeInspector(*typeHelper, userTypeInspector.GetElementType(0)); 
-        if (!argsTypeInspector || argsTypeInspector.GetElementsCount() < 1) { 
-            builder.SetError("Missing or invalid user type arguments"); 
-            return true; 
-        } 
- 
-        auto argType = argsTypeInspector.GetElementType(0); 
-        if (CheckOptional) { 
-            TOptionalTypeInspector optionalTypeInspector(*typeHelper, argType); 
-            if (optionalTypeInspector) { 
-                argType = optionalTypeInspector.GetItemType(); 
-            } 
-        } 
- 
-        TDataTypeInspector dataTypeInspector(*typeHelper, argType); 
-        if (!dataTypeInspector) { 
-            builder.SetError("User type must be a data type"); 
-            return true; 
-        } 
- 
-        builder.UserType(userType); 
- 
-        auto typeId = dataTypeInspector.GetTypeId(); 
-        if (!DeclareSignatureImpl<TUserTypes...>(typeId, userType, builder, typesOnly)) { 
+        auto argsTypeInspector = TTupleTypeInspector(*typeHelper, userTypeInspector.GetElementType(0));
+        if (!argsTypeInspector || argsTypeInspector.GetElementsCount() < 1) {
+            builder.SetError("Missing or invalid user type arguments");
+            return true;
+        }
+
+        auto argType = argsTypeInspector.GetElementType(0);
+        if (CheckOptional) {
+            TOptionalTypeInspector optionalTypeInspector(*typeHelper, argType);
+            if (optionalTypeInspector) {
+                argType = optionalTypeInspector.GetItemType();
+            }
+        }
+
+        TDataTypeInspector dataTypeInspector(*typeHelper, argType);
+        if (!dataTypeInspector) {
+            builder.SetError("User type must be a data type");
+            return true;
+        }
+
+        builder.UserType(userType);
+
+        auto typeId = dataTypeInspector.GetTypeId();
+        if (!DeclareSignatureImpl<TUserTypes...>(typeId, userType, builder, typesOnly)) {
             TStringBuilder sb;
             sb << "User type " << NYql::NUdf::GetDataTypeInfo(NYql::NUdf::GetDataSlot(typeId)).Name << " is not supported";
             builder.SetError(sb);

@@ -23,11 +23,11 @@ IF (PROFILE_MEMORY_ALLOCATIONS)
     )
 ENDIF()
 
-IF(ALLOCATOR == "TCMALLOC_256K") 
-    SRCS(tcmalloc.cpp) 
-    PEERDIR(contrib/libs/tcmalloc) 
-ELSE() 
-    SRCS(tcmalloc_null.cpp) 
-ENDIF() 
- 
+IF(ALLOCATOR == "TCMALLOC_256K")
+    SRCS(tcmalloc.cpp)
+    PEERDIR(contrib/libs/tcmalloc)
+ELSE()
+    SRCS(tcmalloc_null.cpp)
+ENDIF()
+
 END()

@@ -135,7 +135,7 @@ void TExecutor::Broken() {
         BootLogic->Cancel();
 
     if (Owner) {
-        TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(), 
+        TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
             Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
         Owner->Detach(OwnerCtx());
     }
@@ -332,7 +332,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     CounterCacheMemTable = new NMonitoring::TCounterForPtr;
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher);
- 
+
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();
     PendingBlobQueue.Config.Follower = true;
@@ -617,9 +617,9 @@ TExecutorCaches TExecutor::CleanupState() {
 
 void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower) {
-        TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(), 
+        TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
             Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
-    } 
+    }
 
     RegisterTabletFlatProbes();
 
@@ -696,7 +696,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 }
 
 void TExecutor::DetachTablet(const TActorContext &) {
-    TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(), 
+    TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
         Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
     return PassAway();
 }
@@ -3342,11 +3342,11 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         // tablet id + tablet type
         ui64 tabletId = Owner->TabletID();
         auto tabletType = Owner->TabletType();
-        auto tenantPathId = Owner->Info()->TenantPathId; 
+        auto tenantPathId = Owner->Info()->TenantPathId;
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower);
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters)); 
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);

@@ -23,7 +23,7 @@ private:
 
     void OnHistogram(
         const TString& labelName, const TString& labelValue,
-        IHistogramSnapshotPtr snapshot, bool /*derivative*/) override { 
+        IHistogramSnapshotPtr snapshot, bool /*derivative*/) override {
         Indent(Out_, Level_)
             << labelName << ':' << labelValue
             << " = " << *snapshot << '\n';
@@ -311,32 +311,32 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
         UNIT_ASSERT_VALUES_EQUAL(subGroupLookups->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 5);
     }
- 
-    Y_UNIT_TEST(FindCounters) { 
-        TDynamicCounterPtr rootGroup(new TDynamicCounters()); 
- 
-        auto counter = rootGroup->FindCounter("counter1"); 
-        UNIT_ASSERT(!counter); 
-        rootGroup->GetCounter("counter1"); 
-        counter = rootGroup->FindCounter("counter1"); 
-        UNIT_ASSERT(counter); 
- 
-        counter = rootGroup->FindNamedCounter("name", "counter2"); 
-        UNIT_ASSERT(!counter); 
-        rootGroup->GetNamedCounter("name", "counter2"); 
-        counter = rootGroup->FindNamedCounter("name", "counter2"); 
-        UNIT_ASSERT(counter); 
- 
-        auto histogram = rootGroup->FindHistogram("histogram1"); 
-        UNIT_ASSERT(!histogram); 
-        rootGroup->GetHistogram("histogram1", ExponentialHistogram(4, 2)); 
-        histogram = rootGroup->FindHistogram("histogram1"); 
-        UNIT_ASSERT(histogram); 
- 
-        histogram = rootGroup->FindNamedHistogram("name", "histogram2"); 
-        UNIT_ASSERT(!histogram); 
-        rootGroup->GetNamedHistogram("name", "histogram2", ExponentialHistogram(4, 2)); 
-        histogram = rootGroup->FindNamedHistogram("name", "histogram2"); 
-        UNIT_ASSERT(histogram); 
-    } 
+
+    Y_UNIT_TEST(FindCounters) {
+        TDynamicCounterPtr rootGroup(new TDynamicCounters());
+
+        auto counter = rootGroup->FindCounter("counter1");
+        UNIT_ASSERT(!counter);
+        rootGroup->GetCounter("counter1");
+        counter = rootGroup->FindCounter("counter1");
+        UNIT_ASSERT(counter);
+
+        counter = rootGroup->FindNamedCounter("name", "counter2");
+        UNIT_ASSERT(!counter);
+        rootGroup->GetNamedCounter("name", "counter2");
+        counter = rootGroup->FindNamedCounter("name", "counter2");
+        UNIT_ASSERT(counter);
+
+        auto histogram = rootGroup->FindHistogram("histogram1");
+        UNIT_ASSERT(!histogram);
+        rootGroup->GetHistogram("histogram1", ExponentialHistogram(4, 2));
+        histogram = rootGroup->FindHistogram("histogram1");
+        UNIT_ASSERT(histogram);
+
+        histogram = rootGroup->FindNamedHistogram("name", "histogram2");
+        UNIT_ASSERT(!histogram);
+        rootGroup->GetNamedHistogram("name", "histogram2", ExponentialHistogram(4, 2));
+        histogram = rootGroup->FindNamedHistogram("name", "histogram2");
+        UNIT_ASSERT(histogram);
+    }
 }

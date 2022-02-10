@@ -75,12 +75,12 @@ bool TTableRef::Check(TContext& ctx) const {
     return true;
 }
 
-TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TString& type, bool nullable, bool isTypeString) 
+TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TString& type, bool nullable, bool isTypeString)
     : Pos(pos)
     , Name(name)
     , Type(type)
     , Nullable(nullable)
-    , IsTypeString(isTypeString) 
+    , IsTypeString(isTypeString)
 {
 }
 
@@ -794,9 +794,9 @@ TWindowSpecificationPtr TWindowSpecification::Clone() const {
 THoppingWindowSpecPtr THoppingWindowSpec::Clone() const {
     auto res = MakeIntrusive<THoppingWindowSpec>();
     res->TimeExtractor = TimeExtractor->Clone();
-    res->Hop = Hop->Clone(); 
-    res->Interval = Interval->Clone(); 
-    res->Delay = Delay->Clone(); 
+    res->Hop = Hop->Clone();
+    res->Interval = Interval->Clone();
+    res->Delay = Delay->Clone();
     return res;
 }
 
@@ -1018,8 +1018,8 @@ void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
     Y_UNUSED(apply);
 }
 
-std::vector<ui32> IAggregation::GetFactoryColumnIndices() const { 
-    return {0u}; 
+std::vector<ui32> IAggregation::GetFactoryColumnIndices() const {
+    return {0u};
 }
 
 TNodePtr IAggregation::WindowTraits(const TNodePtr& type) const {
@@ -1190,14 +1190,14 @@ const TVector<TString>& ISource::GetTmpWindowColumns() const {
     return TmpWindowColumns;
 }
 
-void ISource::SetHoppingWindowSpec(THoppingWindowSpecPtr spec) { 
-    HoppingWindowSpec = spec; 
-} 
- 
-THoppingWindowSpecPtr ISource::GetHoppingWindowSpec() const { 
-    return HoppingWindowSpec; 
-} 
- 
+void ISource::SetHoppingWindowSpec(THoppingWindowSpecPtr spec) {
+    HoppingWindowSpec = spec;
+}
+
+THoppingWindowSpecPtr ISource::GetHoppingWindowSpec() const {
+    return HoppingWindowSpec;
+}
+
 TWindowSpecificationPtr ISource::FindWindowSpecification(TContext& ctx, const TString& windowName) const {
     auto winIter = WinSpecs.find(windowName);
     if (winIter == WinSpecs.end()) {
@@ -1321,10 +1321,10 @@ bool ISource::IsOverWindowSource() const {
     return !WinSpecs.empty();
 }
 
-bool ISource::IsStream() const { 
-    return false; 
-} 
- 
+bool ISource::IsStream() const {
+    return false;
+}
+
 bool ISource::IsOrdered() const {
     return false;
 }
@@ -1452,20 +1452,20 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
             aggrArgs = L(aggrArgs, traits);
     }
 
-    if (HoppingWindowSpec) { 
-        auto hoppingTraits = Y( 
-            "HoppingTraits", 
-            Y("ListItemType", listType), 
-            BuildLambda(Pos, Y("row"), HoppingWindowSpec->TimeExtractor), 
-            HoppingWindowSpec->Hop, 
-            HoppingWindowSpec->Interval, 
+    if (HoppingWindowSpec) {
+        auto hoppingTraits = Y(
+            "HoppingTraits",
+            Y("ListItemType", listType),
+            BuildLambda(Pos, Y("row"), HoppingWindowSpec->TimeExtractor),
+            HoppingWindowSpec->Hop,
+            HoppingWindowSpec->Interval,
             HoppingWindowSpec->Delay,
             Q("False"));
- 
-        return Y("Aggregate", label, Q(keysTuple), Q(aggrArgs), 
-            Q(Y(Q(Y(BuildQuotedAtom(Pos, "hopping"), hoppingTraits))))); 
-    } 
- 
+
+        return Y("Aggregate", label, Q(keysTuple), Q(aggrArgs),
+            Q(Y(Q(Y(BuildQuotedAtom(Pos, "hopping"), hoppingTraits)))));
+    }
+
     return Y("Aggregate", label, Q(keysTuple), Q(aggrArgs));
 }
 

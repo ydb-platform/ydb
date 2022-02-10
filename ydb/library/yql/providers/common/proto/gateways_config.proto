@@ -112,7 +112,7 @@ message TKikimrClusterConfig {
     repeated THostPort MessageBus = 3;
     optional TKikimrGrpcData Grpc = 4;
     optional string Database = 5;
-    optional uint32 TvmId = 6 [default = 0]; 
+    optional uint32 TvmId = 6 [default = 0];
     optional string Token = 7;
     optional string ProxyUrl = 8;
     optional string Location = 9;
@@ -132,7 +132,7 @@ message TKikimrMvpProxyConfig {
     optional string Host = 1;
     optional uint32 Port = 2;
     optional string BasePath = 3;
-    optional uint32 TvmId = 4 [default = 0]; 
+    optional uint32 TvmId = 4 [default = 0];
 }
 
 message TKikimrMvpGatewayConfig {
@@ -187,13 +187,13 @@ message TClickHouseGatewayConfig {
     repeated TAttr DefaultSettings = 2;
 }
 
-///////////////////////////// RTMR ///////////////////////////// 
+///////////////////////////// RTMR /////////////////////////////
 enum EYfArtifactType {
     AT_NONE  = 0;
     AT_FILE  = 1;
     AT_LAYER = 2;
 };
- 
+
 enum ERtmrOperationType {
     OT_NONE        = 0;
     OT_LF_PARSE    = 1;
@@ -218,16 +218,16 @@ message TRtmrPqConsumerInfo {
     optional string Consumer = 2;
 }
 
-message TRtmrClusterConfig { 
-    optional string Name = 1; 
-    optional bool Default = 2 [default = false]; 
-    optional string Cluster = 3; 
-    optional string RemoteName = 4; 
-    optional string YfCluster = 5; 
-    optional string S3TokenPath = 6; 
-    optional string S3FileCachePath = 7; 
-    optional uint32 TvmId = 8 [default = 0]; 
-    optional string TvmSecretPath = 9; 
+message TRtmrClusterConfig {
+    optional string Name = 1;
+    optional bool Default = 2 [default = false];
+    optional string Cluster = 3;
+    optional string RemoteName = 4;
+    optional string YfCluster = 5;
+    optional string S3TokenPath = 6;
+    optional string S3FileCachePath = 7;
+    optional uint32 TvmId = 8 [default = 0];
+    optional string TvmSecretPath = 9;
     repeated string Users = 10;
     optional bool UploadViaYfClient = 11 [default = false];
     optional string MdsTorrentUrl = 12;
@@ -236,20 +236,20 @@ message TRtmrClusterConfig {
     repeated TRtmrPqConsumerInfo PqConsumerMapping = 15;
     optional uint32 MaxPqPartitions = 16;
     optional uint32 PreviewCollectTimeoutMs = 17;
-    repeated TAttr Settings = 101; 
-} 
- 
-message TRtmrGatewayConfig { 
-    repeated TRtmrClusterConfig ClusterMapping = 1; 
-    repeated TAttr DefaultSettings = 2; 
-    optional string YqlRtmrDynLib = 3; // path to libyql-dynlib.so 
+    repeated TAttr Settings = 101;
+}
+
+message TRtmrGatewayConfig {
+    repeated TRtmrClusterConfig ClusterMapping = 1;
+    repeated TAttr DefaultSettings = 2;
+    optional string YqlRtmrDynLib = 3; // path to libyql-dynlib.so
     optional bool UseFakeYfUpload = 4 [default = false]; // use in tests only to speedup upload
     repeated string Artifacts = 5;  /// default artifacts to put into every function
     repeated TRtmrOperationArtifactsInfo CommonArtifacts = 6; // common artifacts for all clusters
     optional uint32 MaxPqPartitions = 7 [default = 10];
     optional uint32 PreviewCollectTimeoutMs = 8 [default = 2000];
-} 
- 
+}
+
 ///////////////////////////// Pq //////////////////////////////
 
 message TPqClusterConfig {
@@ -331,9 +331,9 @@ message TS3GatewayConfig {
     repeated TAttr DefaultSettings = 100;
 }
 
-///////////////////////////// Solomon ///////////////////////////// 
- 
-message TSolomonClusterConfig { 
+///////////////////////////// Solomon /////////////////////////////
+
+message TSolomonClusterConfig {
     enum ESolomonClusterType {
         SCT_UNSPECIFIED = 0;
         SCT_SOLOMON = 1;
@@ -345,23 +345,23 @@ message TSolomonClusterConfig {
         required string Cluster = 2; // FolderId for YC
     }
 
-    optional string Name = 1; 
-    optional string Cluster = 2; 
+    optional string Name = 1;
+    optional string Cluster = 2;
     optional bool UseSsl = 3;
     optional ESolomonClusterType ClusterType = 4 [default = SCT_SOLOMON];
     optional string Token = 5;
     optional string ServiceAccountId = 6;
     optional string ServiceAccountIdSignature = 7;
     optional TShardPath Path = 8;
- 
-    repeated TAttr Settings = 100; 
-} 
- 
-message TSolomonGatewayConfig { 
-    repeated TSolomonClusterConfig ClusterMapping = 1; 
-    repeated TAttr DefaultSettings = 2; 
-} 
- 
+
+    repeated TAttr Settings = 100;
+}
+
+message TSolomonGatewayConfig {
+    repeated TSolomonClusterConfig ClusterMapping = 1;
+    repeated TAttr DefaultSettings = 2;
+}
+
 message TFileStorageAdditionalConfig {
     repeated string AllowedUrlPatterns = 1;
 }
@@ -439,11 +439,11 @@ message TGatewaysConfig {
     optional TYtGatewayConfig Yt = 1;
     optional TKikimrGatewayConfig Kikimr = 2;
     optional TClickHouseGatewayConfig ClickHouse = 3;
-    optional TRtmrGatewayConfig Rtmr = 4; 
+    optional TRtmrGatewayConfig Rtmr = 4;
     optional TKikimrMvpGatewayConfig KikimrMvp = 5;
     optional TStatGatewayConfig Stat = 6;
     optional TChytGatewayConfig Chyt = 7;
-    optional TSolomonGatewayConfig Solomon = 8; 
+    optional TSolomonGatewayConfig Solomon = 8;
     optional TFileStorageAdditionalConfig Fs = 9;
     optional TYqlCoreConfig YqlCore = 10;
     optional TPostgresqlGatewayConfig Postgresql = 11;

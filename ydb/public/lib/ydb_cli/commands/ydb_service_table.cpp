@@ -344,7 +344,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     TTableCommand::Config(config);
     AddExamplesOption(config);
 
-    config.Opts->AddLongOption('t', "type", "Query type [data, scheme, scan]") 
+    config.Opts->AddLongOption('t', "type", "Query type [data, scheme, scan]")
         .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
     config.Opts->AddLongOption("stats", "Collect statistics mode (for data & scan queries) [none, basic, full]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
@@ -354,7 +354,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
- 
+
     AddParametersOption(config, "(for data & scan queries)");
 
     AddInputFormats(config, {
@@ -363,22 +363,22 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     });
 
 
-    AddFormats(config, { 
-        EOutputFormat::Pretty, 
-        EOutputFormat::JsonUnicode, 
+    AddFormats(config, {
+        EOutputFormat::Pretty,
+        EOutputFormat::JsonUnicode,
         EOutputFormat::JsonUnicodeArray,
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array
-    }); 
- 
+    });
+
     CheckExamples(config);
- 
+
     config.SetFreeArgsNum(0);
 }
 
 void TCommandExecuteQuery::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats(); 
+    ParseFormats();
     if (BasicStats && CollectStatsMode) {
         throw TMissUseException() << "Both mutually exclusive options \"--stats\" and \"-s\" are provided.";
     }
@@ -398,9 +398,9 @@ int TCommandExecuteQuery::Run(TConfig& config) {
         if (QueryType == "scheme") {
             return ExecuteSchemeQuery(config);
         }
-        if (QueryType == "scan") { 
-            return ExecuteScanQuery(config); 
-        } 
+        if (QueryType == "scan") {
+            return ExecuteScanQuery(config);
+        }
     }
     throw TMissUseException() << "Unknown query type.";
 }
@@ -476,13 +476,13 @@ int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) { 
-    NTable::TTableClient client(CreateDriver(config)); 
+int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
+    NTable::TTableClient client(CreateDriver(config));
 
     auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None;
-    NTable::TStreamExecScanQuerySettings settings; 
+    NTable::TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode));
- 
+
     NTable::TAsyncScanQueryPartIterator asyncResult;
     if (Parameters.size()) {
         auto validateResult = ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate);
@@ -496,17 +496,17 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
     }
 
     auto result = asyncResult.GetValueSync();
-    ThrowOnError(result); 
-    PrintScanQueryResponse(result); 
-    return EXIT_SUCCESS; 
-} 
- 
-void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator& result) { 
-    SetInterruptHandlers(); 
+    ThrowOnError(result);
+    PrintScanQueryResponse(result);
+    return EXIT_SUCCESS;
+}
+
+void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator& result) {
+    SetInterruptHandlers();
     TStringStream statsStr;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
- 
+
         while (!IsInterrupted()) {
             auto streamPart = result.ReadNext().GetValueSync();
             if (!streamPart.IsSuccess()) {
@@ -514,7 +514,7 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
                     break;
                 }
                 ThrowOnError(streamPart);
-            } 
+            }
 
             if (streamPart.HasResultSet()) {
                 printer.Print(streamPart.GetResultSet());
@@ -534,13 +534,13 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
 
     if (statsStr.Size()) {
         Cout << Endl << "Statistics:" << statsStr.Str();
-    } 
- 
+    }
+
     if (IsInterrupted()) {
         Cerr << "<INTERRUPTED>" << Endl;
     }
-} 
- 
+}
+
 TCommandExplain::TCommandExplain()
     : TTableCommand("explain", {}, "Explain query")
 {}
@@ -688,13 +688,13 @@ void TCommandReadTable::Config(TConfig& config) {
         EOutputFormat::JsonBase64
     });
 
-    AddFormats(config, { 
-        EOutputFormat::Pretty, 
-        EOutputFormat::JsonUnicode, 
+    AddFormats(config, {
+        EOutputFormat::Pretty,
+        EOutputFormat::JsonUnicode,
         EOutputFormat::JsonUnicodeArray,
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array
-    }); 
+    });
 
     // TODO: KIKIMR-8675
     // Add csv format
@@ -809,7 +809,7 @@ int TCommandReadTable::Run(TConfig& config) {
 
 void TCommandReadTable::PrintResponse(NTable::TTablePartIterator& result) {
     size_t totalRows = 0;
-    SetInterruptHandlers(); 
+    SetInterruptHandlers();
     TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
     while (!IsInterrupted()) {

@@ -45,7 +45,7 @@ public:
 
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-        TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken, 
+        TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
         TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
@@ -53,7 +53,7 @@ public:
         , Uid(uid)
         , Query(query)
         , UserToken(userToken)
-        , DbCounters(dbCounters) 
+        , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , CompilationTimeout(TDuration::MilliSeconds(serviceConfig.GetCompileTimeoutMs()))
         , RecompileWithNewEngine(recompileWithNewEngine)
@@ -72,8 +72,8 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         StartTime = TInstant::Now();
 
-        Counters->ReportCompileStart(DbCounters); 
- 
+        Counters->ReportCompileStart(DbCounters);
+
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Start compilation"
             << ", self: " << ctx.SelfID
             << ", cluster: " << Query.Cluster
@@ -211,7 +211,7 @@ private:
         stats.SetCpuTimeUs(CompileCpuTime.MicroSeconds());
         ctx.Send(Owner, responseEv.Release());
 
-        Counters->ReportCompileFinish(DbCounters); 
+        Counters->ReportCompileFinish(DbCounters);
 
         Die(ctx);
     }
@@ -251,9 +251,9 @@ private:
         auto kqpResult = std::move(AsyncCompileResult->GetResult());
         auto status = GetYdbStatus(kqpResult);
 
-        auto database = Query.Database; 
+        auto database = Query.Database;
         if (kqpResult.SqlVersion) {
-            Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion); 
+            Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion);
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -269,7 +269,7 @@ private:
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
-            Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime); 
+            Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime);
 
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation successful"
                 << ", self: " << ctx.SelfID
@@ -301,7 +301,7 @@ private:
                 << ", self: " << ctx.SelfID
                 << ", status: " << Ydb::StatusIds_StatusCode_Name(status)
                 << ", issues: " << kqpResult.Issues().ToString());
-            Counters->ReportCompileError(DbCounters); 
+            Counters->ReportCompileError(DbCounters);
         }
 
         Reply(KqpCompileResult, ctx);
@@ -338,13 +338,13 @@ private:
             KqpCompileResult->PreparedQueryNewEngine.reset(kqpResult.PreparingQuery.release());
 
             auto duration = TInstant::Now() - RecompileStartTime;
-            Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime); 
+            Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime);
 
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "ReCompilation successful"
                 << ", self: " << ctx.SelfID
                 << ", duration: " << duration);
         } else {
-            Counters->ReportCompileError(DbCounters); 
+            Counters->ReportCompileError(DbCounters);
             Counters->ForceNewEngineCompileErrors->Inc();
 
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "ReCompilation failed"
@@ -375,7 +375,7 @@ private:
     TString Uid;
     TKqpQueryId Query;
     TString UserToken;
-    TKqpDbCountersPtr DbCounters; 
+    TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
     TDuration CompilationTimeout;
     bool RecompileWithNewEngine;
@@ -402,7 +402,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken, 
+    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
     TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine)
 {
     return new TKqpCompileActor(owner, kqpSettings, serviceConfig, moduleResolverState, counters, uid,

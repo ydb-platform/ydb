@@ -13,7 +13,7 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template<typename T, ui32 TSize>
 class TCountedQueueManyOne {
-    NThreading::TObstructiveConsumerAuxQueue<T> Queue; 
+    NThreading::TObstructiveConsumerAuxQueue<T> Queue;
     TAtomic SizeLowerEstimate;
     TMutex ProducedMutex;
     TCondVar ProducedCondVar;

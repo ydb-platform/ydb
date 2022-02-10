@@ -585,7 +585,7 @@ public:
     virtual bool HasCluster(const TString& cluster) = 0;
     virtual TVector<TString> GetClusters() = 0;
     virtual TString GetDefaultCluster() = 0;
-    virtual TMaybe<TKikimrClusterConfig> GetClusterConfig(const TString& cluster) = 0; 
+    virtual TMaybe<TKikimrClusterConfig> GetClusterConfig(const TString& cluster) = 0;
     virtual TMaybe<TString> GetSetting(const TString& cluster, const TString& name) = 0;
 
     virtual void SetToken(const TString& cluster, const TString& token) = 0;

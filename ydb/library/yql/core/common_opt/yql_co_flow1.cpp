@@ -1291,8 +1291,8 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
     auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
     if (hoppingSetting) {
         return node.Ptr();
-    } 
- 
+    }
+
     if (GetSetting(settings.Ref(), "session")) {
         // TODO: support
         return node.Ptr();

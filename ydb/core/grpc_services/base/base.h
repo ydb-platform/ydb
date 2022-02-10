@@ -330,7 +330,7 @@ public:
     virtual void ReplyUnavaliable() = 0;
 
     virtual bool Validate(TString& error) = 0;
-    virtual void UseDatabase(const TString& database) = 0; 
+    virtual void UseDatabase(const TString& database) = 0;
 
     // This method allows to set hook for unary call.
     // The hook will be called at the reply time
@@ -479,10 +479,10 @@ public:
         return true;
     }
 
-    void UseDatabase(const TString& database) override { 
-        Y_UNUSED(database); 
-    } 
- 
+    void UseDatabase(const TString& database) override {
+        Y_UNUSED(database);
+    }
+
     TActorId GetFromId() const {
         return From_;
     }
@@ -638,10 +638,10 @@ public:
         return true;
     }
 
-    void UseDatabase(const TString& database) override { 
-        Ctx_->UseDatabase(database); 
-    } 
- 
+    void UseDatabase(const TString& database) override {
+        Ctx_->UseDatabase(database);
+    }
+
     IStreamCtx* GetStreamCtx() {
         return Ctx_.Get();
     }
@@ -863,10 +863,10 @@ public:
         return true;
     }
 
-    void UseDatabase(const TString& database) override { 
-        Ctx_->UseDatabase(database); 
-    } 
- 
+    void UseDatabase(const TString& database) override {
+        Ctx_->UseDatabase(database);
+    }
+
     void ReplyUnavaliable() override {
         TResponse* resp = CreateResponseMessage();
         TCommonResponseFiller<TResp, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, Ydb::StatusIds::UNAVAILABLE);

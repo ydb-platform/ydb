@@ -1,49 +1,49 @@
 #pragma once
 
 #include <ydb/core/control/immediate_control_board_impl.h>
- 
+
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NActors { 
-    class TMon; 
-} 
- 
+namespace NActors {
+    class TMon;
+}
+
 namespace NKikimr {
     inline NActors::TActorId MakeMemProfMonitorID(ui32 node = 0) {
         char x[12] = {'m', 'e', 'm', 'p', 'r', 'o', 'f', 'm', 'o', 'n', 'i', 't'};
         return NActors::TActorId(node, TStringBuf(x, 12));
     }
 
-    struct IAllocMonitor { 
-        virtual ~IAllocMonitor() = default; 
- 
-        virtual void RegisterPages( 
-            NActors::TMon* mon, 
-            NActors::TActorSystem* actorSystem, 
-            NActors::TActorId actorId) 
-        { 
-            Y_UNUSED(mon); 
-            Y_UNUSED(actorSystem); 
-            Y_UNUSED(actorId); 
-        } 
- 
-        virtual void RegisterControls(TIntrusivePtr<TControlBoard> icb) { 
-            Y_UNUSED(icb); 
-        } 
- 
-        virtual void Update() = 0; 
- 
-        virtual void Dump(IOutputStream& out, const TString& relPath) = 0; 
- 
-        virtual void DumpForLog(IOutputStream& out, size_t limit) { 
-            Y_UNUSED(out); 
-            Y_UNUSED(limit); 
-        } 
-    }; 
- 
+    struct IAllocMonitor {
+        virtual ~IAllocMonitor() = default;
+
+        virtual void RegisterPages(
+            NActors::TMon* mon,
+            NActors::TActorSystem* actorSystem,
+            NActors::TActorId actorId)
+        {
+            Y_UNUSED(mon);
+            Y_UNUSED(actorSystem);
+            Y_UNUSED(actorId);
+        }
+
+        virtual void RegisterControls(TIntrusivePtr<TControlBoard> icb) {
+            Y_UNUSED(icb);
+        }
+
+        virtual void Update() = 0;
+
+        virtual void Dump(IOutputStream& out, const TString& relPath) = 0;
+
+        virtual void DumpForLog(IOutputStream& out, size_t limit) {
+            Y_UNUSED(out);
+            Y_UNUSED(limit);
+        }
+    };
+
     NActors::IActor* CreateMemProfMonitor(
         ui32 intervalSec,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters);

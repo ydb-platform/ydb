@@ -1335,10 +1335,10 @@ private:
     friend class TConfigState;
 
     class TNodeWardenUpdateNotifier;
- 
-    struct TEvPrivate { 
-        enum EEv { 
-            EvUpdateSystemViews = EventSpaceBegin(TEvents::ES_PRIVATE), 
+
+    struct TEvPrivate {
+        enum EEv {
+            EvUpdateSystemViews = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvUpdateSelfHealCounters,
             EvHostRecordsTimeToLiveExceeded,
             EvDropDonor,
@@ -1346,9 +1346,9 @@ private:
             EvVSlotReadyUpdate,
             EvVSlotNotReadyHistogramUpdate,
             EvProcessIncomingEvent,
-        }; 
- 
-        struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {}; 
+        };
+
+        struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
         struct TEvUpdateSelfHealCounters : TEventLocal<TEvUpdateSelfHealCounters, EvUpdateSelfHealCounters> {};
         struct TEvHostRecordsTimeToLiveExceeded : TEventLocal<TEvHostRecordsTimeToLiveExceeded, EvHostRecordsTimeToLiveExceeded> {};
 
@@ -1359,10 +1359,10 @@ private:
         struct TEvScrub : TEventLocal<TEvScrub, EvScrub> {};
         struct TEvVSlotReadyUpdate : TEventLocal<TEvVSlotReadyUpdate, EvVSlotReadyUpdate> {};
         struct TEvVSlotNotReadyHistogramUpdate : TEventLocal<TEvVSlotNotReadyHistogramUpdate, EvVSlotNotReadyHistogramUpdate> {};
-    }; 
- 
-    static constexpr TDuration UpdateSystemViewsPeriod = TDuration::Seconds(5); 
- 
+    };
+
+    static constexpr TDuration UpdateSystemViewsPeriod = TDuration::Seconds(5);
+
     std::unordered_set<TPDiskId, THash<TPDiskId>> SysViewChangedPDisks;
     std::unordered_set<TVSlotId, THash<TVSlotId>> SysViewChangedVSlots;
     std::unordered_set<TGroupId, THash<TGroupId>> SysViewChangedGroups;
@@ -1371,7 +1371,7 @@ private:
 
     IActor* CreateSystemViewsCollector();
     void UpdateSystemViews();
- 
+
     bool CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
         TTransactionContext& txc, TString *errorDescription);
 

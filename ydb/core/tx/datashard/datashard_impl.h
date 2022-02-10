@@ -1188,7 +1188,7 @@ public:
 
     ui64 GetLocalTableId(const TTableId& tableId) const {
         Y_VERIFY(!TSysTables::IsSystemTable(tableId));
-        auto it = TableInfos.find(tableId.PathId.LocalPathId); 
+        auto it = TableInfos.find(tableId.PathId.LocalPathId);
         return it == TableInfos.end() ? 0 : it->second->LocalTid;
     }
 
@@ -2398,9 +2398,9 @@ protected:
                 ev->Record.AddSysTablesPartOwners(pi);
             }
 
-            ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId); 
-            ev->Record.SetStartTime(StartTime().MilliSeconds()); 
- 
+            ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+            ev->Record.SetStartTime(StartTime().MilliSeconds());
+
             NTabletPipe::SendData(ctx, DbStatsReportPipe, ev.Release());
         }
 

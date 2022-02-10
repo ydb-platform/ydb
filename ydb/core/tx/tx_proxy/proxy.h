@@ -164,8 +164,8 @@ struct TEvTxUserProxy {
     struct TEvInvalidateTable : public TEventPB<TEvInvalidateTable, NKikimrTxUserProxy::TEvInvalidateTable, EvInvalidateTable> {
         TEvInvalidateTable() = default;
         TEvInvalidateTable(const TTableId& tableId) {
-            Record.SetSchemeShardId(tableId.PathId.OwnerId); 
-            Record.SetTableId(tableId.PathId.LocalPathId); 
+            Record.SetSchemeShardId(tableId.PathId.OwnerId);
+            Record.SetTableId(tableId.PathId.LocalPathId);
         }
     };
 

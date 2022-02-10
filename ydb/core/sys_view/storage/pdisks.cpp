@@ -1,23 +1,23 @@
-#include "pdisks.h" 
+#include "pdisks.h"
 #include "base.h"
- 
+
 namespace NKikimr::NSysView {
- 
+
 template<> void SetField<0>(NKikimrSysView::TPDiskKey& key, ui32 value) { key.SetNodeId(value); }
 template<> void SetField<1>(NKikimrSysView::TPDiskKey& key, ui32 value) { key.SetPDiskId(value); }
 
 class TPDisksScan : public TStorageScanBase<TPDisksScan, TEvSysView::TEvGetPDisksResponse> {
-public: 
+public:
     using TStorageScanBase::TStorageScanBase;
- 
+
     static constexpr const char *GetName() { return "TPDisksScan"; }
- 
+
     TEvSysView::TEvGetPDisksRequest *CreateQuery() {
-        auto request = MakeHolder<TEvSysView::TEvGetPDisksRequest>(); 
-        ConvertKeyRange<NKikimrSysView::TEvGetPDisksRequest, ui32, ui32>(request->Record, TableRange); 
+        auto request = MakeHolder<TEvSysView::TEvGetPDisksRequest>();
+        ConvertKeyRange<NKikimrSysView::TEvGetPDisksRequest, ui32, ui32>(request->Record, TableRange);
         return request.Release();
-    } 
- 
+    }
+
     static const TFieldMap& GetFieldMap() {
         using T = Schema::PDisks;
         using E = NKikimrSysView::TPDiskEntry;
@@ -39,15 +39,15 @@ public:
             {T::StatusChangeTimestamp::ColumnId, {E::kInfoFieldNumber, V::kStatusChangeTimestampFieldNumber}},
             {T::ExpectedSlotCount::ColumnId, {E::kInfoFieldNumber, V::kExpectedSlotCountFieldNumber}},
             {T::NumActiveSlots::ColumnId, {E::kInfoFieldNumber, V::kNumActiveSlotsFieldNumber}},
-        }; 
+        };
         return fieldMap;
-    } 
-}; 
- 
+    }
+};
+
 THolder<IActor> CreatePDisksScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns) 
-{ 
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+{
     return MakeHolder<TPDisksScan>(ownerId, scanId, tableId, tableRange, columns);
-} 
- 
+}
+
 } // NKikimr::NSysView

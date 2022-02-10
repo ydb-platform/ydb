@@ -332,8 +332,8 @@ namespace NActors {
         TActorId LookupLocalService(const TActorId& x) const;
         TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId);
 
-        ui32 GetMaxActivityType() const { 
-            return SystemSetup ? SystemSetup->MaxActivityType : 1; 
+        ui32 GetMaxActivityType() const {
+            return SystemSetup ? SystemSetup->MaxActivityType : 1;
         }
 
         TInstant Timestamp() const {

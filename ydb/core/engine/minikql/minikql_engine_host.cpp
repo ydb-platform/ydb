@@ -933,7 +933,7 @@ ui64 TEngineHost::GetTableSchemaVersion(const TTableId&) const {
 }
 
 ui64 TEngineHost::LocalTableId(const TTableId& tableId) const {
-    return tableId.PathId.LocalPathId; 
+    return tableId.PathId.LocalPathId;
 }
 
 void TEngineHost::ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row,

@@ -1469,14 +1469,14 @@ message TEvTestLoadRequest {
             TStockWorkload Stock = 13;
         }
     }
- 
-    message TMemoryLoadStart { 
-        optional uint64 Tag = 1; 
-        optional uint32 DurationSeconds = 2; 
-        optional uint64 BlockSize = 3; 
-        optional uint64 IntervalUs = 4; 
-    } 
- 
+
+    message TMemoryLoadStart {
+        optional uint64 Tag = 1;
+        optional uint32 DurationSeconds = 2;
+        optional uint64 BlockSize = 3;
+        optional uint64 IntervalUs = 4;
+    }
+
     optional uint64 Cookie = 1;
     oneof Command {
         TLoadStart LoadStart = 2;
@@ -1487,7 +1487,7 @@ message TEvTestLoadRequest {
         TPDiskLogLoadStart PDiskLogLoadStart = 7;
         TKeyValueLoadStart KeyValueLoadStart = 8;
         TKqpLoadStart KqpLoadStart = 9;
-        TMemoryLoadStart MemoryLoadStart = 10; 
+        TMemoryLoadStart MemoryLoadStart = 10;
     }
 }
 

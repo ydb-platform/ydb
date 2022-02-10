@@ -36,7 +36,7 @@ public:
     static constexpr EType TENANT_SLOT_BROKER = TenantSlotBroker;
     static constexpr EType CONSOLE = Console;
     static constexpr EType KESUS = Kesus;
-    static constexpr EType SYS_VIEW_PROCESSOR = SysViewProcessor; 
+    static constexpr EType SYS_VIEW_PROCESSOR = SysViewProcessor;
     static constexpr EType FILESTORE = FileStore;
     static constexpr EType TESTSHARD = TestShard;
     static constexpr EType SEQUENCESHARD = SequenceShard;

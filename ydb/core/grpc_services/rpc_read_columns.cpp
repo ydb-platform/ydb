@@ -86,7 +86,7 @@ public:
         , ShardRequestCount(0)
         , ShardReplyCount(0)
         , SysViewMaxRows(100000)
-        , SysViewMaxBytes(10*1024*1024) 
+        , SysViewMaxBytes(10*1024*1024)
         , SysViewRowsReceived(0)
     {}
 
@@ -237,11 +237,11 @@ private:
                     "Snapshots are ignored when scanning system views"));
         }
 
-        if (auto maxRows = Request->GetProtoRequest()->max_rows(); maxRows && maxRows <= 100) 
-            SysViewMaxRows = maxRows; 
+        if (auto maxRows = Request->GetProtoRequest()->max_rows(); maxRows && maxRows <= 100)
+            SysViewMaxRows = maxRows;
 
-        if (auto maxBytes = Request->GetProtoRequest()->max_bytes(); maxBytes && maxBytes <= 10000) 
-            SysViewMaxBytes = maxBytes; 
+        if (auto maxBytes = Request->GetProtoRequest()->max_bytes(); maxBytes && maxBytes <= 10000)
+            SysViewMaxBytes = maxBytes;
 
         // List of columns requested by user
         TVector<std::pair<TString, NScheme::TTypeId>> valueColumnNamesAndTypes;
@@ -315,7 +315,7 @@ private:
                                       ctx);
             }
 
-            SysViewScanActor = ctx.Register(tableScanActor.Release()); 
+            SysViewScanActor = ctx.Register(tableScanActor.Release());
 
             auto ackEv = MakeHolder<NKqp::TEvKqpCompute::TEvScanDataAck>(0);
             ctx.Send(SysViewScanActor, ackEv.Release());
@@ -428,18 +428,18 @@ private:
         }
     }
 
-    void Handle(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev, const TActorContext& ctx) {
         NYql::TIssues issues;
         Ydb::StatusIds::StatusCode status = ev->Get()->Record.GetStatus();
         NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
 
-        ReplyWithError(status, issues, ctx); 
-    } 
- 
+        ReplyWithError(status, issues, ctx);
+    }
+
     STFUNC(StateSysViewScan) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqpCompute::TEvScanData, Handle);
-            HFunc(NKqp::TEvKqpCompute::TEvScanError, Handle); 
+            HFunc(NKqp::TEvKqpCompute::TEvScanError, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
 
             default:
@@ -616,7 +616,7 @@ private:
         // Send request to the first shard
         std::unique_ptr<TEvDataShard::TEvReadColumnsRequest> ev =
                 std::make_unique<TEvDataShard::TEvReadColumnsRequest>();
-        ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId); 
+        ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
         for (TString col : Request->GetProtoRequest()->columns()) {
             ev->Record.AddColumns(col);
         }
@@ -754,16 +754,16 @@ private:
         }
     }
 
-    void ReplyWithError(StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) { 
-        Finished = true; 
-        Request->RaiseIssues(issues); 
+    void ReplyWithError(StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
+        Finished = true;
+        Request->RaiseIssues(issues);
         Request->ReplyWithYdbStatus(status);
- 
-        if (!WaitingResolveReply) { 
-            Die(ctx); 
-        } 
-    } 
- 
+
+        if (!WaitingResolveReply) {
+            Die(ctx);
+        }
+    }
+
     void ReplyWithResult(StatusIds::StatusCode status,
                          const Ydb::ClickhouseInternal::ScanResult& result,
                          const TActorContext& ctx) {

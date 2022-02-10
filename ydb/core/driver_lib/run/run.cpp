@@ -114,7 +114,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
 
-#include <library/cpp/actors/core/memory_track.h> 
+#include <library/cpp/actors/core/memory_track.h>
 #include <library/cpp/actors/prof/tag.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
@@ -1264,10 +1264,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));
 
-#if defined(ENABLE_MEMORY_TRACKING) 
-    sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig)); 
-#endif 
- 
+#if defined(ENABLE_MEMORY_TRACKING)
+    sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));
+#endif
+
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories));
     }
@@ -1299,10 +1299,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TQuoterServiceInitializer(runConfig));
     }
 
-    if (serviceMask.EnableSysViewService) { 
-        sil->AddServiceInitializer(new TSysViewServiceInitializer(runConfig)); 
-    } 
- 
+    if (serviceMask.EnableSysViewService) {
+        sil->AddServiceInitializer(new TSysViewServiceInitializer(runConfig));
+    }
+
     if (serviceMask.EnableMeteringWriter) {
         sil->AddServiceInitializer(new TMeteringWriterInitializer(runConfig));
     }

@@ -368,9 +368,9 @@ struct TEvKqp {
             : UserToken(userToken)
             , Uid(uid)
             , Query(std::move(query))
-            , KeepInCache(keepInCache) 
+            , KeepInCache(keepInCache)
             , Deadline(deadline)
-            , DbCounters(dbCounters) 
+            , DbCounters(dbCounters)
         {
             Y_ENSURE(Uid.Defined() != Query.Defined());
         }
@@ -381,7 +381,7 @@ struct TEvKqp {
         bool KeepInCache = false;
         // it is allowed for local event to use absolute time (TInstant) instead of time interval (TDuration)
         TInstant Deadline;
-        TKqpDbCountersPtr DbCounters; 
+        TKqpDbCountersPtr DbCounters;
         TMaybe<bool> DocumentApiRestricted;
     };
 
@@ -392,14 +392,14 @@ struct TEvKqp {
             , Uid(uid)
             , Query(query)
             , Deadline(deadline)
-            , DbCounters(dbCounters) {} 
+            , DbCounters(dbCounters) {}
 
         TString UserToken;
         TString Uid;
         TMaybe<TKqpQueryId> Query;
 
         TInstant Deadline;
-        TKqpDbCountersPtr DbCounters; 
+        TKqpDbCountersPtr DbCounters;
     };
 
     struct TEvCompileResponse : public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
@@ -417,12 +417,12 @@ struct TEvKqp {
     struct TEvCompileInvalidateRequest : public TEventLocal<TEvCompileInvalidateRequest,
         TKqpEvents::EvCompileInvalidateRequest>
     {
-        TEvCompileInvalidateRequest(const TString& uid, TKqpDbCountersPtr dbCounters) 
-            : Uid(uid) 
-            , DbCounters(dbCounters) {} 
+        TEvCompileInvalidateRequest(const TString& uid, TKqpDbCountersPtr dbCounters)
+            : Uid(uid)
+            , DbCounters(dbCounters) {}
 
         TString Uid;
-        TKqpDbCountersPtr DbCounters; 
+        TKqpDbCountersPtr DbCounters;
     };
 
     struct TEvInitiateShutdownRequest : public TEventLocal<TEvInitiateShutdownRequest, TKqpEvents::EvInitiateShutdownRequest> {

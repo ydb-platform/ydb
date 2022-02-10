@@ -19,13 +19,13 @@ struct TDqEvents {
 struct TDqComputeEvents {
     enum EDqComputeEvents {
         Unused0 = EventSpaceBegin(TDqEvents::ES_DQ_COMPUTE_KQP_COMPATIBLE) + 200,
-        EvState, 
-        EvResumeExecution, 
-        EvChannelData, 
+        EvState,
+        EvResumeExecution,
+        EvChannelData,
         ReservedKqp_EvScanData,
         ReservedKqp_EvScanDataAck,
         EvChannelsInfo,
-        EvChannelDataAck, 
+        EvChannelDataAck,
         ReservedKqp_EvScanError,
         Unused1,
         EvRetryChannelData,

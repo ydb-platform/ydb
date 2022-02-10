@@ -3,7 +3,7 @@
 #include "mkql_node_builder.h"
 
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
- 
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 
@@ -598,13 +598,13 @@ private:
     TVector<NMiniKQL::TArgInfo>& Args_;
 };
 
-////////////////////////////////////////////////////////////////////////////// 
-// THash 
-////////////////////////////////////////////////////////////////////////////// 
- 
-struct TTypeNotSupported : public yexception 
-{}; 
- 
+//////////////////////////////////////////////////////////////////////////////
+// THash
+//////////////////////////////////////////////////////////////////////////////
+
+struct TTypeNotSupported : public yexception
+{};
+
 class TEmptyHash final : public NUdf::IHash {
 public:
     ui64 Hash(NUdf::TUnboxedValuePod value) const override {
@@ -613,35 +613,35 @@ public:
     }
 };
 
-template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool> 
-class THash; 
- 
-template <NUdf::EDataSlot Slot> 
-class THash<NMiniKQL::TType::EKind::Data, Slot> final : public NUdf::IHash { 
-public: 
-    ui64 Hash(NUdf::TUnboxedValuePod value) const override { 
+template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool>
+class THash;
+
+template <NUdf::EDataSlot Slot>
+class THash<NMiniKQL::TType::EKind::Data, Slot> final : public NUdf::IHash {
+public:
+    ui64 Hash(NUdf::TUnboxedValuePod value) const override {
         return NUdf::GetValueHash<Slot>(std::move(value));
-    } 
-}; 
- 
-template <> 
-class THash<NMiniKQL::TType::EKind::Optional> final : public NUdf::IHash { 
-public: 
+    }
+};
+
+template <>
+class THash<NMiniKQL::TType::EKind::Optional> final : public NUdf::IHash {
+public:
     explicit THash(const NMiniKQL::TType* type)
         : Hash_(MakeHashImpl(static_cast<const NMiniKQL::TOptionalType*>(type)->GetItemType()))
     {}
- 
-    ui64 Hash(NUdf::TUnboxedValuePod value) const override { 
-        if (!value) { 
-            return 0; 
-        } 
+
+    ui64 Hash(NUdf::TUnboxedValuePod value) const override {
+        if (!value) {
+            return 0;
+        }
         return CombineHashes(ui64(1), Hash_->Hash(value.GetOptionalValue()));
-    } 
- 
-private: 
+    }
+
+private:
     const NUdf::IHash::TPtr Hash_;
-}; 
- 
+};
+
 template <>
 class THash<NMiniKQL::TType::EKind::List> final : public NUdf::IHash {
 public:
@@ -711,9 +711,9 @@ private:
     NUdf::IHash::TPtr PayloadHash_;
 };
 
-class TVectorHash : public NUdf::IHash { 
-public: 
-    ui64 Hash(NUdf::TUnboxedValuePod value) const override { 
+class TVectorHash : public NUdf::IHash {
+public:
+    ui64 Hash(NUdf::TUnboxedValuePod value) const override {
         ui64 result = 0ULL;
         auto elements = value.GetElements();
         if (elements) {
@@ -727,39 +727,39 @@ public:
             }
         }
 
-        return result; 
-    } 
- 
-protected: 
+        return result;
+    }
+
+protected:
     std::vector<NUdf::IHash::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::IHash::TPtr>> Hash_;
-}; 
- 
-template <> 
-class THash<NMiniKQL::TType::EKind::Tuple> final : public TVectorHash { 
-public: 
-    explicit THash(const NMiniKQL::TType* type) { 
-        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type); 
-        auto count = tupleType->GetElementsCount(); 
-        Hash_.reserve(count); 
-        for (ui32 i = 0; i < count; ++i) { 
-            Hash_.push_back(MakeHashImpl(tupleType->GetElementType(i))); 
-        } 
-    } 
-}; 
- 
-template <> 
-class THash<NMiniKQL::TType::EKind::Struct> final : public TVectorHash { 
-public: 
-    explicit THash(const NMiniKQL::TType* type) { 
-        auto structType = static_cast<const NMiniKQL::TStructType*>(type); 
-        auto count = structType->GetMembersCount(); 
-        Hash_.reserve(count); 
-        for (ui32 i = 0; i < count; ++i) { 
-            Hash_.push_back(MakeHashImpl(structType->GetMemberType(i))); 
-        } 
-    } 
-}; 
- 
+};
+
+template <>
+class THash<NMiniKQL::TType::EKind::Tuple> final : public TVectorHash {
+public:
+    explicit THash(const NMiniKQL::TType* type) {
+        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
+        auto count = tupleType->GetElementsCount();
+        Hash_.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
+            Hash_.push_back(MakeHashImpl(tupleType->GetElementType(i)));
+        }
+    }
+};
+
+template <>
+class THash<NMiniKQL::TType::EKind::Struct> final : public TVectorHash {
+public:
+    explicit THash(const NMiniKQL::TType* type) {
+        auto structType = static_cast<const NMiniKQL::TStructType*>(type);
+        auto count = structType->GetMembersCount();
+        Hash_.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
+            Hash_.push_back(MakeHashImpl(structType->GetMemberType(i)));
+        }
+    }
+};
+
 template <>
 class THash<NMiniKQL::TType::EKind::Variant> final : public NUdf::IHash {
 public:
@@ -793,9 +793,9 @@ private:
     std::vector<NUdf::IHash::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::IHash::TPtr>> Hash_;
 };
 
-////////////////////////////////////////////////////////////////////////////// 
-// TEquate 
-////////////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////////////
+// TEquate
+//////////////////////////////////////////////////////////////////////////////
 class TEmptyEquate final : public NUdf::IEquate {
 public:
     bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
@@ -806,42 +806,42 @@ public:
 };
 
 
-template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool> 
-class TEquate; 
- 
-template <NUdf::EDataSlot Slot> 
-class TEquate<NMiniKQL::TType::EKind::Data, Slot> final : public NUdf::IEquate { 
-public: 
-    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
+template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool>
+class TEquate;
+
+template <NUdf::EDataSlot Slot>
+class TEquate<NMiniKQL::TType::EKind::Data, Slot> final : public NUdf::IEquate {
+public:
+    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         return NUdf::EquateValues<Slot>(std::move(lhs), std::move(rhs));
-    } 
-}; 
- 
-template <> 
-class TEquate<NMiniKQL::TType::EKind::Optional> final : public NUdf::IEquate { 
-public: 
+    }
+};
+
+template <>
+class TEquate<NMiniKQL::TType::EKind::Optional> final : public NUdf::IEquate {
+public:
     explicit TEquate(const NMiniKQL::TType* type)
         : Equate_(MakeEquateImpl(static_cast<const NMiniKQL::TOptionalType*>(type)->GetItemType()))
     {}
- 
-    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        if (!lhs) { 
-            if (!rhs) { 
-                return true; 
-            } 
-            return false; 
-        } else { 
-            if (!rhs) { 
-                return false; 
-            } 
+
+    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        if (!lhs) {
+            if (!rhs) {
+                return true;
+            }
+            return false;
+        } else {
+            if (!rhs) {
+                return false;
+            }
             return Equate_->Equals(lhs.GetOptionalValue(), rhs.GetOptionalValue());
-        } 
-    } 
- 
-private: 
+        }
+    }
+
+private:
     const NUdf::IEquate::TPtr Equate_;
-}; 
- 
+};
+
 template <>
 class TEquate<NMiniKQL::TType::EKind::List> final : public NUdf::IEquate {
 public:
@@ -944,49 +944,49 @@ private:
 };
 
 
-class TVectorEquate : public NUdf::IEquate { 
-public: 
-    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        for (size_t i = 0; i < Equate_.size(); ++i) { 
+class TVectorEquate : public NUdf::IEquate {
+public:
+    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        for (size_t i = 0; i < Equate_.size(); ++i) {
             if (!Equate_[i]->Equals(
                 static_cast<const NUdf::TUnboxedValuePod&>(lhs.GetElement(i)),
                 static_cast<const NUdf::TUnboxedValuePod&>(rhs.GetElement(i)))) {
-                return false; 
-            } 
-        } 
-        return true; 
-    } 
- 
-protected: 
+                return false;
+            }
+        }
+        return true;
+    }
+
+protected:
     std::vector<NUdf::IEquate::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::IEquate::TPtr>> Equate_;
-}; 
- 
-template <> 
-class TEquate<NMiniKQL::TType::EKind::Tuple> final : public TVectorEquate { 
-public: 
-    explicit TEquate(const NMiniKQL::TType* type) { 
-        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type); 
-        auto count = tupleType->GetElementsCount(); 
-        Equate_.reserve(count); 
-        for (ui32 i = 0; i < count; ++i) { 
-            Equate_.push_back(MakeEquateImpl(tupleType->GetElementType(i))); 
-        } 
-    } 
-}; 
- 
-template <> 
-class TEquate<NMiniKQL::TType::EKind::Struct> final : public TVectorEquate { 
-public: 
-    explicit TEquate(const NMiniKQL::TType* type) { 
-        auto structType = static_cast<const NMiniKQL::TStructType*>(type); 
-        auto count = structType->GetMembersCount(); 
-        Equate_.reserve(count); 
-        for (ui32 i = 0; i < count; ++i) { 
-            Equate_.push_back(MakeEquateImpl(structType->GetMemberType(i))); 
-        } 
-    } 
-}; 
- 
+};
+
+template <>
+class TEquate<NMiniKQL::TType::EKind::Tuple> final : public TVectorEquate {
+public:
+    explicit TEquate(const NMiniKQL::TType* type) {
+        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
+        auto count = tupleType->GetElementsCount();
+        Equate_.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
+            Equate_.push_back(MakeEquateImpl(tupleType->GetElementType(i)));
+        }
+    }
+};
+
+template <>
+class TEquate<NMiniKQL::TType::EKind::Struct> final : public TVectorEquate {
+public:
+    explicit TEquate(const NMiniKQL::TType* type) {
+        auto structType = static_cast<const NMiniKQL::TStructType*>(type);
+        auto count = structType->GetMembersCount();
+        Equate_.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
+            Equate_.push_back(MakeEquateImpl(structType->GetMemberType(i)));
+        }
+    }
+};
+
 template <>
 class TEquate<NMiniKQL::TType::EKind::Variant> final : public NUdf::IEquate {
 public:
@@ -1027,9 +1027,9 @@ private:
     std::vector<NUdf::IEquate::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::IEquate::TPtr>> Equate_;
 };
 
-////////////////////////////////////////////////////////////////////////////// 
-// TCompare 
-////////////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////////////
+// TCompare
+//////////////////////////////////////////////////////////////////////////////
 class TEmptyCompare final : public NUdf::ICompare {
 public:
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
@@ -1045,92 +1045,92 @@ public:
     }
 };
 
-template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool> 
-class TCompare; 
- 
-template <NUdf::EDataSlot Slot> 
-class TCompare<NMiniKQL::TType::EKind::Data, Slot> final : public NUdf::ICompare { 
-public: 
-    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
+template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool>
+class TCompare;
+
+template <NUdf::EDataSlot Slot>
+class TCompare<NMiniKQL::TType::EKind::Data, Slot> final : public NUdf::ICompare {
+public:
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         return NUdf::CompareValues<Slot>(std::move(lhs), std::move(rhs)) < 0;
-    } 
- 
-    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         return NUdf::CompareValues<Slot>(std::move(lhs), std::move(rhs));
-    } 
-}; 
- 
-template <> 
-class TCompare<NMiniKQL::TType::EKind::Optional> final : public NUdf::ICompare { 
-public: 
+    }
+};
+
+template <>
+class TCompare<NMiniKQL::TType::EKind::Optional> final : public NUdf::ICompare {
+public:
     explicit TCompare(const NMiniKQL::TType* type)
         : Compare_(MakeCompareImpl(static_cast<const NMiniKQL::TOptionalType*>(type)->GetItemType()))
     {}
- 
-    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        if (!lhs) { 
-            if (!rhs) { 
-                return false; 
-            } 
-            return true; 
-        } else { 
-            if (!rhs) { 
-                return false; 
-            } 
+
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        if (!lhs) {
+            if (!rhs) {
+                return false;
+            }
+            return true;
+        } else {
+            if (!rhs) {
+                return false;
+            }
             return Compare_->Less(lhs.GetOptionalValue(), rhs.GetOptionalValue());
-        } 
-    } 
- 
-    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        if (!lhs) { 
-            if (!rhs) { 
-                return 0; 
-            } 
-            return -1; 
-        } else { 
-            if (!rhs) { 
-                return 1; 
-            } 
+        }
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        if (!lhs) {
+            if (!rhs) {
+                return 0;
+            }
+            return -1;
+        } else {
+            if (!rhs) {
+                return 1;
+            }
             return Compare_->Compare(lhs.GetOptionalValue(), rhs.GetOptionalValue());
-        } 
-    } 
- 
-private: 
+        }
+    }
+
+private:
     const NUdf::ICompare::TPtr Compare_;
-}; 
- 
-template <> 
-class TCompare<NMiniKQL::TType::EKind::Tuple> final : public NUdf::ICompare { 
-public: 
+};
+
+template <>
+class TCompare<NMiniKQL::TType::EKind::Tuple> final : public NUdf::ICompare {
+public:
     explicit TCompare(const NMiniKQL::TType* type) {
-        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type); 
-        auto count = tupleType->GetElementsCount(); 
-        Compare_.reserve(count); 
-        for (ui32 i = 0; i < count; ++i) { 
+        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
+        auto count = tupleType->GetElementsCount();
+        Compare_.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
             Compare_.push_back(MakeCompareImpl(tupleType->GetElementType(i)));
-        } 
-    } 
- 
-    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        return Compare(lhs, rhs) < 0; 
-    } 
- 
-    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        for (size_t i = 0; i < Compare_.size(); ++i) { 
+        }
+    }
+
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        return Compare(lhs, rhs) < 0;
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        for (size_t i = 0; i < Compare_.size(); ++i) {
             auto cmp = Compare_[i]->Compare(
                 static_cast<const NUdf::TUnboxedValuePod&>(lhs.GetElement(i)),
                 static_cast<const NUdf::TUnboxedValuePod&>(rhs.GetElement(i)));
-            if (cmp != 0) { 
-                return cmp; 
-            } 
-        } 
-        return 0; 
-    } 
- 
-private: 
+            if (cmp != 0) {
+                return cmp;
+            }
+        }
+        return 0;
+    }
+
+private:
     std::vector<NUdf::ICompare::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::ICompare::TPtr>> Compare_;
-}; 
- 
+};
+
 template <>
 class TCompare<NMiniKQL::TType::EKind::Variant> final : public NUdf::ICompare {
 public:
@@ -1517,36 +1517,36 @@ NUdf::TSourcePosition TFunctionTypeInfoBuilder::GetSourcePosition() {
     return Pos_;
 }
 
-NUdf::IHash::TPtr TFunctionTypeInfoBuilder::MakeHash(const NUdf::TType* type) { 
-    try { 
-        auto mkqlType = static_cast<const NMiniKQL::TType*>(type); 
-        return MakeHashImpl(mkqlType); 
-    } catch (const TTypeNotSupported& ex) { 
-        SetError(TStringBuf(ex.what())); 
-        return nullptr; 
-    } 
-} 
- 
-NUdf::IEquate::TPtr TFunctionTypeInfoBuilder::MakeEquate(const NUdf::TType* type) { 
-    try { 
-        auto mkqlType = static_cast<const NMiniKQL::TType*>(type); 
-        return MakeEquateImpl(mkqlType); 
-    } catch (const TTypeNotSupported& ex) { 
-        SetError(TStringBuf(ex.what())); 
-        return nullptr; 
-    } 
-} 
- 
-NUdf::ICompare::TPtr TFunctionTypeInfoBuilder::MakeCompare(const NUdf::TType* type) { 
-    try { 
-        auto mkqlType = static_cast<const NMiniKQL::TType*>(type); 
+NUdf::IHash::TPtr TFunctionTypeInfoBuilder::MakeHash(const NUdf::TType* type) {
+    try {
+        auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
+        return MakeHashImpl(mkqlType);
+    } catch (const TTypeNotSupported& ex) {
+        SetError(TStringBuf(ex.what()));
+        return nullptr;
+    }
+}
+
+NUdf::IEquate::TPtr TFunctionTypeInfoBuilder::MakeEquate(const NUdf::TType* type) {
+    try {
+        auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
+        return MakeEquateImpl(mkqlType);
+    } catch (const TTypeNotSupported& ex) {
+        SetError(TStringBuf(ex.what()));
+        return nullptr;
+    }
+}
+
+NUdf::ICompare::TPtr TFunctionTypeInfoBuilder::MakeCompare(const NUdf::TType* type) {
+    try {
+        auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
         return MakeCompareImpl(mkqlType);
-    } catch (const TTypeNotSupported& ex) { 
-        SetError(TStringBuf(ex.what())); 
-        return nullptr; 
-    } 
-} 
- 
+    } catch (const TTypeNotSupported& ex) {
+        SetError(TStringBuf(ex.what()));
+        return nullptr;
+    }
+}
+
 NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
     if (!type) {
         return NUdf::ETypeKind::Unknown;

@@ -49,7 +49,7 @@ SRCS(
     counters_replication.proto
     counters_schemeshard.proto
     counters_sequenceshard.proto
-    counters_sysview_processor.proto 
+    counters_sysview_processor.proto
     counters_testshard.proto
     counters_tx_proxy.proto
     counters_mediator.proto
@@ -128,7 +128,7 @@ SRCS(
     ydb_table_impl.proto
     scheme_board.proto
     scheme_board_mon.proto
-    sys_view.proto 
+    sys_view.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)

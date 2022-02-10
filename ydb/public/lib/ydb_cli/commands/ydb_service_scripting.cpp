@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
- 
+
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 
@@ -28,7 +28,7 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "file", "[Required] Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
     config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain);
     config.Opts->AddLongOption("show-response-metadata", ResponseHeadersHelp).Optional().StoreTrue(&ShowHeaders);
- 
+
     AddParametersOption(config);
 
     AddInputFormats(config, {
@@ -36,14 +36,14 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
         EOutputFormat::JsonBase64
     });
 
-    AddFormats(config, { 
-        EOutputFormat::Pretty, 
-        EOutputFormat::JsonUnicode, 
+    AddFormats(config, {
+        EOutputFormat::Pretty,
+        EOutputFormat::JsonUnicode,
         EOutputFormat::JsonUnicodeArray,
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array
-    }); 
- 
+    });
+
     config.SetFreeArgsNum(0);
 
     AddCommandExamples(
@@ -64,7 +64,7 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
 
 void TCommandExecuteYqlScript::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats(); 
+    ParseFormats();
     if (!Script && !ScriptFile) {
         throw TMissUseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
             << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided.";

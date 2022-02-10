@@ -1,17 +1,17 @@
-#pragma once 
- 
-#include "public.h" 
-#include "token.h" 
-#include "consumer.h" 
- 
-#include <util/generic/noncopyable.h> 
- 
+#pragma once
+
+#include "public.h"
+#include "token.h"
+#include "consumer.h"
+
+#include <util/generic/noncopyable.h>
+
 class IOutputStream;
 class IZeroCopyInput;
- 
+
 namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////
- 
+
     class TYsonWriter
        : public TYsonConsumerBase,
           private TNonCopyable {
@@ -20,7 +20,7 @@ namespace NYson {
         private:
             int Depth;
             bool BeforeFirstItem;
- 
+
             friend class TYsonWriter;
         };
 
@@ -37,23 +37,23 @@ namespace NYson {
         void OnDoubleScalar(double value) override;
         void OnBooleanScalar(bool value) override;
         void OnEntity() override;
- 
+
         void OnBeginList() override;
         void OnListItem() override;
         void OnEndList() override;
- 
+
         void OnBeginMap() override;
         void OnKeyedItem(TStringBuf key) override;
         void OnEndMap() override;
- 
+
         void OnBeginAttributes() override;
         void OnEndAttributes() override;
- 
+
         void OnRaw(TStringBuf yson, EYsonType type = ::NYson::EYsonType::Node) override;
- 
+
         TState State() const;
         void Reset(const TState& state);
- 
+
     protected:
         IOutputStream* Stream;
         EYsonFormat Format;
@@ -62,28 +62,28 @@ namespace NYson {
 
         int Depth;
         bool BeforeFirstItem;
- 
+
         static const int IndentSize = 4;
- 
+
         void WriteIndent();
         void WriteStringScalar(const TStringBuf& value);
- 
+
         void BeginCollection(ETokenType beginToken);
         void CollectionItem(ETokenType separatorToken);
         void EndCollection(ETokenType endToken);
- 
+
         bool IsTopLevelFragmentContext() const;
         void EndNode();
     };
- 
+
     ////////////////////////////////////////////////////////////////////////////////
- 
+
     void ReformatYsonStream(
         IInputStream* input,
         IOutputStream* output,
         EYsonFormat format = EYsonFormat::Binary,
         EYsonType type = ::NYson::EYsonType::Node);
- 
+
     ////////////////////////////////////////////////////////////////////////////////
- 
+
 } // namespace NYson

@@ -1,24 +1,24 @@
-#include "vslots.h" 
+#include "vslots.h"
 #include "base.h"
- 
+
 namespace NKikimr::NSysView {
- 
+
 template<> void SetField<0>(NKikimrSysView::TVSlotKey& key, ui32 value) { key.SetNodeId(value); }
 template<> void SetField<1>(NKikimrSysView::TVSlotKey& key, ui32 value) { key.SetPDiskId(value); }
 template<> void SetField<2>(NKikimrSysView::TVSlotKey& key, ui32 value) { key.SetVSlotId(value); }
 
 class TVSlotsScan : public TStorageScanBase<TVSlotsScan, TEvSysView::TEvGetVSlotsResponse> {
-public: 
+public:
     using TStorageScanBase::TStorageScanBase;
- 
+
     static constexpr const char *GetName() { return "TVSlotsScan"; }
- 
+
     TEvSysView::TEvGetVSlotsRequest *CreateQuery() {
-        auto request = MakeHolder<TEvSysView::TEvGetVSlotsRequest>(); 
-        ConvertKeyRange<NKikimrSysView::TEvGetVSlotsRequest, ui32, ui32, ui32>(request->Record, TableRange); 
+        auto request = MakeHolder<TEvSysView::TEvGetVSlotsRequest>();
+        ConvertKeyRange<NKikimrSysView::TEvGetVSlotsRequest, ui32, ui32, ui32>(request->Record, TableRange);
         return request.Release();
-    } 
- 
+    }
+
     static const TFieldMap& GetFieldMap() {
         using T = Schema::VSlots;
         using E = NKikimrSysView::TVSlotEntry;
@@ -37,15 +37,15 @@ public:
             {T::AvailableSize::ColumnId, {E::kInfoFieldNumber, V::kAvailableSizeFieldNumber}},
             {T::Status::ColumnId, {E::kInfoFieldNumber, V::kStatusV2FieldNumber}},
             {T::Kind::ColumnId, {E::kInfoFieldNumber, V::kKindFieldNumber}},
-        }; 
+        };
         return fieldMap;
-    } 
-}; 
- 
+    }
+};
+
 THolder<IActor> CreateVSlotsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns) 
-{ 
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+{
     return MakeHolder<TVSlotsScan>(ownerId, scanId, tableId, tableRange, columns);
-} 
- 
+}
+
 } // NKikimr::NSysView

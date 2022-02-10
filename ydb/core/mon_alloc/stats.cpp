@@ -1,11 +1,11 @@
 #include "stats.h"
-#include "tcmalloc.h" 
+#include "tcmalloc.h"
 
 #include <ydb/core/base/counters.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/process_stats.h> 
+#include <library/cpp/actors/core/process_stats.h>
 #include <library/cpp/lfalloc/dbg_info/dbg_info.h>
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -203,18 +203,18 @@ namespace NKikimr {
 
         std::unique_ptr<IAllocStats> CreateAllocStats(TDynamicCountersPtr group) {
             const auto& info = NMalloc::MallocInfo();
-            TStringBuf name(info.Name); 
+            TStringBuf name(info.Name);
 
-            std::unique_ptr<IAllocStats> stats; 
+            std::unique_ptr<IAllocStats> stats;
             if (name.StartsWith("lf")) {
-                stats = std::make_unique<TLfAllocStats>(std::move(group)); 
+                stats = std::make_unique<TLfAllocStats>(std::move(group));
             } else if (name.StartsWith("yt")) {
-                stats = std::make_unique<TYtAllocStats>(std::move(group)); 
-            } else if (name.StartsWith("tc")) { 
-                stats = std::move(CreateTcMallocStats(std::move(group))); 
+                stats = std::make_unique<TYtAllocStats>(std::move(group));
+            } else if (name.StartsWith("tc")) {
+                stats = std::move(CreateTcMallocStats(std::move(group)));
             }
- 
-            return stats ? std::move(stats) : std::make_unique<TFakeAllocStats>(); 
+
+            return stats ? std::move(stats) : std::make_unique<TFakeAllocStats>();
         }
 
         class TMemStatsCollector: public TActorBootstrapped<TMemStatsCollector> {
@@ -250,39 +250,39 @@ namespace NKikimr {
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
             }
         };
- 
-        struct TLfAllocState: public IAllocState { 
-            ui64 GetAllocatedMemoryEstimate() const override { 
-                ui64 result = 0; 
-                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SYSTEM_ALLOC); 
-                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SYSTEM_FREE); 
-                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SMALL_ALLOC); 
-                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SMALL_FREE); 
-                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_LARGE_ALLOC); 
-                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_LARGE_FREE); 
-                return result; 
-            } 
-        }; 
- 
-        struct TFakeAllocState: public IAllocState { 
-            ui64 GetAllocatedMemoryEstimate() const override { 
-                return 0; 
-            } 
-        }; 
- 
-        std::unique_ptr<IAllocState> CreateAllocState() { 
-            const auto& info = NMalloc::MallocInfo(); 
-            TStringBuf name(info.Name); 
- 
-            std::unique_ptr<IAllocState> state; 
-            if (name.StartsWith("lf")) { 
-                state = std::make_unique<TLfAllocState>(); 
-            } else if (name.StartsWith("tc")) { 
-                state = std::move(CreateTcMallocState()); 
-            } 
- 
-            return state ? std::move(state) : std::make_unique<TFakeAllocState>(); 
-        } 
+
+        struct TLfAllocState: public IAllocState {
+            ui64 GetAllocatedMemoryEstimate() const override {
+                ui64 result = 0;
+                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SYSTEM_ALLOC);
+                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SYSTEM_FREE);
+                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SMALL_ALLOC);
+                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_SMALL_FREE);
+                result += NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_LARGE_ALLOC);
+                result -= NAllocDbg::GetAllocationCounterFast(NAllocDbg::CT_LARGE_FREE);
+                return result;
+            }
+        };
+
+        struct TFakeAllocState: public IAllocState {
+            ui64 GetAllocatedMemoryEstimate() const override {
+                return 0;
+            }
+        };
+
+        std::unique_ptr<IAllocState> CreateAllocState() {
+            const auto& info = NMalloc::MallocInfo();
+            TStringBuf name(info.Name);
+
+            std::unique_ptr<IAllocState> state;
+            if (name.StartsWith("lf")) {
+                state = std::make_unique<TLfAllocState>();
+            } else if (name.StartsWith("tc")) {
+                state = std::move(CreateTcMallocState());
+            }
+
+            return state ? std::move(state) : std::make_unique<TFakeAllocState>();
+        }
     }
 
     IActor* CreateMemStatsCollector(ui32 intervalSec, TDynamicCountersPtr counters) {
@@ -290,19 +290,19 @@ namespace NKikimr {
             TDuration::Seconds(intervalSec),
             CreateAllocStats(GetServiceCounters(counters, "utils")));
     }
- 
-    std::unique_ptr<IAllocState> TAllocState::AllocState = CreateAllocState(); 
- 
-    ui64 TAllocState::GetAllocatedMemoryEstimate() { 
-        return AllocState->GetAllocatedMemoryEstimate(); 
-    } 
- 
-    double TAllocState::GetMemoryUsage() { 
-        NActors::TProcStat procStat; 
-        procStat.Fill(getpid()); 
-        if (!procStat.CGroupMemLim) { 
-            return 0; 
-        } 
-        return (double)procStat.AnonRss / procStat.CGroupMemLim; 
-    } 
+
+    std::unique_ptr<IAllocState> TAllocState::AllocState = CreateAllocState();
+
+    ui64 TAllocState::GetAllocatedMemoryEstimate() {
+        return AllocState->GetAllocatedMemoryEstimate();
+    }
+
+    double TAllocState::GetMemoryUsage() {
+        NActors::TProcStat procStat;
+        procStat.Fill(getpid());
+        if (!procStat.CGroupMemLim) {
+            return 0;
+        }
+        return (double)procStat.AnonRss / procStat.CGroupMemLim;
+    }
 }

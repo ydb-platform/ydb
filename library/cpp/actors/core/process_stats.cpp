@@ -181,9 +181,9 @@ namespace {
     class TDynamicCounterCollector: public TProcStatCollectingActor<TDynamicCounterCollector> {
         using TBase = TProcStatCollectingActor<TDynamicCounterCollector>;
     public:
-        TDynamicCounterCollector( 
-            ui32 intervalSeconds, 
-            NMonitoring::TDynamicCounterPtr counters) 
+        TDynamicCounterCollector(
+            ui32 intervalSeconds,
+            NMonitoring::TDynamicCounterPtr counters)
             : TBase{TDuration::Seconds(intervalSeconds)}
         {
             ProcStatGroup = counters->GetSubgroup("counters", "utils");
@@ -218,7 +218,7 @@ namespace {
         }
 
     private:
-        NMonitoring::TDynamicCounterPtr ProcStatGroup; 
+        NMonitoring::TDynamicCounterPtr ProcStatGroup;
         NMonitoring::TDynamicCounters::TCounterPtr VmSize;
         NMonitoring::TDynamicCounters::TCounterPtr AnonRssSize;
         NMonitoring::TDynamicCounters::TCounterPtr FileRssSize;
@@ -293,8 +293,8 @@ namespace {
     };
 } // namespace
 
-    IActor* CreateProcStatCollector(ui32 intervalSec, NMonitoring::TDynamicCounterPtr counters) { 
-        return new TDynamicCounterCollector(intervalSec, counters); 
+    IActor* CreateProcStatCollector(ui32 intervalSec, NMonitoring::TDynamicCounterPtr counters) {
+        return new TDynamicCounterCollector(intervalSec, counters);
     }
 
     IActor* CreateProcStatCollector(TDuration interval, NMonitoring::TMetricRegistry& registry) {

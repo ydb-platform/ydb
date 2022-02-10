@@ -31,9 +31,9 @@ struct TSysTables {
         SysTableMAX = 999
     };
 
-    static bool IsSystemTable(const TTableId& table) { return table.PathId.OwnerId == SysSchemeShard; } 
-    static bool IsLocksTable(const TTableId& table) { 
-        return IsSystemTable(table) && (table.PathId.LocalPathId == SysTableLocks || table.PathId.LocalPathId == SysTableLocks2); 
+    static bool IsSystemTable(const TTableId& table) { return table.PathId.OwnerId == SysSchemeShard; }
+    static bool IsLocksTable(const TTableId& table) {
+        return IsSystemTable(table) && (table.PathId.LocalPathId == SysTableLocks || table.PathId.LocalPathId == SysTableLocks2);
     }
 
     struct TLocksTable {

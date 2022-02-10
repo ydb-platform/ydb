@@ -21,7 +21,7 @@ protected:
 
     TTabletExecutedFlat(TTabletStorageInfo *info, const TActorId &tablet, IMiniKQLFactory *factory);
     IExecutor* Executor() const { return Executor0; }
-    const TInstant StartTime() const { return StartTime0; } 
+    const TInstant StartTime() const { return StartTime0; }
 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);

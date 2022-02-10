@@ -1,6 +1,6 @@
 #include "mkql_condense.h"
 #include "mkql_squeeze_state.h"
- 
+
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -175,35 +175,35 @@ public:
     public:
         using TBase = TComputationValue<TValue>;
 
-        TValue( 
-            TMemoryUsageInfo* memInfo, 
-            NUdf::TUnboxedValue&& stream, 
+        TValue(
+            TMemoryUsageInfo* memInfo,
+            NUdf::TUnboxedValue&& stream,
             const TSqueezeState& state,
-            TComputationContext& ctx) 
+            TComputationContext& ctx)
             : TBase(memInfo)
             , Stream(std::move(stream))
-            , Ctx(ctx) 
+            , Ctx(ctx)
             , State(state)
         {}
 
     private:
         ui32 GetTraverseCount() const final {
-            return 1; 
-        } 
- 
+            return 1;
+        }
+
         NUdf::TUnboxedValue GetTraverseItem(ui32 index) const final {
-            Y_UNUSED(index); 
-            return Stream; 
-        } 
- 
+            Y_UNUSED(index);
+            return Stream;
+        }
+
         NUdf::TUnboxedValue Save() const final {
             return State.Save(Ctx);
-        } 
- 
+        }
+
         void Load(const NUdf::TStringRef& state) final {
             State.Load(Ctx, state);
-        } 
- 
+        }
+
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             if (ESqueezeState::Finished == State.Stage)
                 return NUdf::EFetchStatus::Finish;
@@ -246,13 +246,13 @@ public:
         }
 
         const NUdf::TUnboxedValue Stream;
-        TComputationContext& Ctx; 
+        TComputationContext& Ctx;
         TSqueezeState State;
     };
 
     TCondenseWrapper(
-        TComputationMutables& mutables, 
-        IComputationNode* stream, 
+        TComputationMutables& mutables,
+        IComputationNode* stream,
         IComputationExternalNode* item,
         IComputationExternalNode* state,
         IComputationNode* outSwitch,
@@ -266,9 +266,9 @@ public:
         : TBaseComputation(mutables)
         , Stream(stream)
         , State(item, state, outSwitch, initState, updateState, inSave, outSave, inLoad, outLoad, stateType)
-    { 
+    {
         this->Stateless = false;
-    } 
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
@@ -298,13 +298,13 @@ private:
         FetchFunc = GenerateFetch(codegen);
         codegen->ExportSymbol(FetchFunc);
     }
- 
+
     void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
         if (FetchFunc) {
             Fetch = reinterpret_cast<TFetchPtr>(codegen->GetPointerToFunction(FetchFunc));
         }
     }
- 
+
     Function* GenerateFetch(const NYql::NCodegen::ICodegen::TPtr& codegen) const {
         auto& module = codegen->GetModule();
         auto& context = codegen->GetContext();
@@ -473,28 +473,28 @@ IComputationNode* WrapCondense(TCallable& callable, const TComputationNodeFactor
 }
 
 IComputationNode* WrapSqueeze(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 9, "Expected 9 args"); 
- 
+    MKQL_ENSURE(callable.GetInputsCount() == 9, "Expected 9 args");
+
     const auto stream = LocateNode(ctx.NodeLocator, callable, 0);
     const auto initState = LocateNode(ctx.NodeLocator, callable, 1);
     const auto updateState = LocateNode(ctx.NodeLocator, callable, 4);
     const auto item = LocateExternalNode(ctx.NodeLocator, callable, 2);
     const auto state = LocateExternalNode(ctx.NodeLocator, callable, 3);
- 
+
     IComputationExternalNode* inSave = nullptr;
-    IComputationNode* outSave = nullptr; 
+    IComputationNode* outSave = nullptr;
     IComputationExternalNode* inLoad = nullptr;
-    IComputationNode* outLoad = nullptr; 
- 
+    IComputationNode* outLoad = nullptr;
+
     const auto hasSaveLoad = !callable.GetInput(6).GetStaticType()->IsVoid();
-    if (hasSaveLoad) { 
-        outSave = LocateNode(ctx.NodeLocator, callable, 6); 
-        outLoad = LocateNode(ctx.NodeLocator, callable, 8); 
+    if (hasSaveLoad) {
+        outSave = LocateNode(ctx.NodeLocator, callable, 6);
+        outLoad = LocateNode(ctx.NodeLocator, callable, 8);
         inSave = LocateExternalNode(ctx.NodeLocator, callable, 5);
         inLoad = LocateExternalNode(ctx.NodeLocator, callable, 7);
-    } 
+    }
     const auto stateType = hasSaveLoad ? callable.GetInput(6).GetStaticType() : nullptr;
- 
+
     return new TCondenseWrapper<false>(ctx.Mutables, stream, item, state, nullptr, initState, updateState, inSave, outSave, inLoad, outLoad, stateType);
 }
 

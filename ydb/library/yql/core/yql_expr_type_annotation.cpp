@@ -180,7 +180,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Add(1, std::move(node))
                 .Seal()
                 .Build();
- 
+
             return IGraphTransformer::TStatus::Repeat;
         } else if ((fromSlot == EDataSlot::Yson || fromSlot == EDataSlot::Json) && to == "Yson.Node") {
             node = ctx.Builder(node->Pos())
@@ -206,31 +206,31 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
- 
+
         } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && to == "DateTime2.TM") {
-            node = ctx.Builder(node->Pos()) 
-                .Callable("Apply") 
-                    .Callable(0, "Udf") 
+            node = ctx.Builder(node->Pos())
+                .Callable("Apply")
+                    .Callable(0, "Udf")
                         .Atom(0, "DateTime2.Split", TNodeFlags::Default)
-                        .Callable(1, "Void") 
-                        .Seal() 
-                        .Callable(2, "TupleType") 
-                            .Callable(0, "TupleType") 
-                                .Callable(0, "DataType") 
+                        .Callable(1, "Void")
+                        .Seal()
+                        .Callable(2, "TupleType")
+                            .Callable(0, "TupleType")
+                                .Callable(0, "DataType")
                                     .Atom(0, sourceType.Cast<TDataExprType>()->GetName(), TNodeFlags::Default)
-                                .Seal() 
-                            .Seal() 
-                            .Callable(1, "StructType") 
-                            .Seal() 
-                            .Callable(2, "TupleType") 
-                            .Seal() 
-                        .Seal() 
-                    .Seal() 
+                                .Seal()
+                            .Seal()
+                            .Callable(1, "StructType")
+                            .Seal()
+                            .Callable(2, "TupleType")
+                            .Seal()
+                        .Seal()
+                    .Seal()
                     .Add(1, std::move(node))
-                .Seal() 
-                .Build(); 
- 
-            return IGraphTransformer::TStatus::Repeat; 
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
         } else if (fromSlot == EDataSlot::Json && to == "JsonNode") {
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
@@ -2778,11 +2778,11 @@ bool EnsureComparableType(TPositionHandle position, const TTypeAnnotationNode& t
     if (!type.IsComparable()) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder()
             << "Expected comparable type, i.e. combination of Data, Optional, List or Tuple, but got:" << type));
-        return false; 
-    } 
+        return false;
+    }
     return true;
-} 
- 
+}
+
 bool EnsureEquatableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
     if (HasError(&type, ctx)) {
         return false;

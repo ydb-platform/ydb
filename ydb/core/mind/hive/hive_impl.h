@@ -496,8 +496,8 @@ protected:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
-    void Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev); 
-    void Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev); 
+    void Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev);
+    void Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

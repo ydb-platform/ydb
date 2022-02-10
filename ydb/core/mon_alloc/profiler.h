@@ -107,7 +107,7 @@ namespace NActors {
     struct IProfilerLogic {
         virtual ~IProfilerLogic() = default;
         virtual void Start() = 0;
-        virtual void Stop(IOutputStream& out, size_t limit, bool forLog) = 0; 
+        virtual void Stop(IOutputStream& out, size_t limit, bool forLog) = 0;
     };
 
     inline TActorId MakeProfilerID(ui32 nodeId) {

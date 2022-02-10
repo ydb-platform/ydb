@@ -231,7 +231,7 @@ public:
     void Bootstrap() {
         ActorSystem = TlsActivationContext->ActorSystem();
         if (!Counters) {
-            Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters); 
+            Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters);
         }
 
         LOG_D("Start KqpResourceManagerActor at " << SelfId() << " with ResourceBroker at " << ResourceBrokerId);

@@ -641,7 +641,7 @@ protected:
     }
 
     Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
-        if (*this->Stateless) { 
+        if (*this->Stateless) {
             const auto newValue = static_cast<const TDerived*>(this)->DoGenerateGetValue(ctx, block);
             if (newValue->getType()->isPointerTy()) {
                 ValueRelease(this->GetRepresentation(), newValue, ctx, block);

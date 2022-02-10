@@ -11,8 +11,8 @@ SRCS(
     cache.h
     cache_cache.h
     circular_queue.h
-    concurrent_rw_hash.cpp 
-    concurrent_rw_hash.h 
+    concurrent_rw_hash.cpp
+    concurrent_rw_hash.h
     console.cpp
     console.h
     counted_leaky_bucket.h
@@ -33,8 +33,8 @@ SRCS(
     intrusive_heap.h
     intrusive_stack.h
     log_priority_mute_checker.h
-    memory_tracker.cpp 
-    memory_tracker.h 
+    memory_tracker.cpp
+    memory_tracker.h
     operation_queue.h
     page_map.cpp
     pb.h
@@ -65,7 +65,7 @@ PEERDIR(
     library/cpp/actors/interconnect/mock
     library/cpp/actors/util
     library/cpp/containers/stack_vector
-    library/cpp/html/escape 
+    library/cpp/html/escape
     library/cpp/ipmath
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters

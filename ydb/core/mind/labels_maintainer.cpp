@@ -246,26 +246,26 @@ private:
                     oldGroup = oldGroup->GetSubgroup("subsystem", subSvc);
                 TIntrusivePtr<NMonitoring::TDynamicCounters> serviceGroup = new NMonitoring::TDynamicCounters;
                 TIntrusivePtr<NMonitoring::TDynamicCounters> curGroup = serviceGroup;
- 
-                const auto* actualLabels = &labels; 
- 
-                TSmallVec<std::pair<TString, TString>> ydbLabels; 
-                if (DatabaseAttributeSensorServices.contains(service)) { 
-                    // explicitly remove "slot" label for external services ("ydb") 
-                    ydbLabels = labels; 
-                    if (auto it = std::find_if(ydbLabels.begin(), ydbLabels.end(), [](auto& el){ return el.first == SLOT_LABEL; }); 
-                        it != ydbLabels.end()) 
-                    { 
-                        ydbLabels.erase(it); 
-                        actualLabels = &ydbLabels; 
-                    } 
-                } 
- 
-                for (size_t i = 0; i < actualLabels->size() - 1; ++i) { 
-                    curGroup = curGroup->GetSubgroup((*actualLabels)[i].first, (*actualLabels)[i].second); 
-                } 
-                curGroup->RegisterSubgroup(actualLabels->back().first, actualLabels->back().second, oldGroup); 
- 
+
+                const auto* actualLabels = &labels;
+
+                TSmallVec<std::pair<TString, TString>> ydbLabels;
+                if (DatabaseAttributeSensorServices.contains(service)) {
+                    // explicitly remove "slot" label for external services ("ydb")
+                    ydbLabels = labels;
+                    if (auto it = std::find_if(ydbLabels.begin(), ydbLabels.end(), [](auto& el){ return el.first == SLOT_LABEL; });
+                        it != ydbLabels.end())
+                    {
+                        ydbLabels.erase(it);
+                        actualLabels = &ydbLabels;
+                    }
+                }
+
+                for (size_t i = 0; i < actualLabels->size() - 1; ++i) {
+                    curGroup = curGroup->GetSubgroup((*actualLabels)[i].first, (*actualLabels)[i].second);
+                }
+                curGroup->RegisterSubgroup(actualLabels->back().first, actualLabels->back().second, oldGroup);
+
                 auto rt = GetServiceCountersRoot(root, service);
                 rt->ReplaceSubgroup(subSvc.empty() ? "counters" : "subsystem", subSvc.empty() ? svc : subSvc, serviceGroup);
             }

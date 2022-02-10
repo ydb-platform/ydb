@@ -45,7 +45,7 @@ public:
             auto tabletRowset = db.Table<Schema::Tablet>().Range().Select();
             auto tabletChannelRowset = db.Table<Schema::TabletChannel>().Range().Select();
             auto tabletChannelGenRowset = db.Table<Schema::TabletChannelGen>().Range().Select();
-            auto metrics = db.Table<Schema::Metrics>().Range().Select(); 
+            auto metrics = db.Table<Schema::Metrics>().Range().Select();
             auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Range().Select();
             auto tabletFollowerRowset = db.Table<Schema::TabletFollowerTablet>().Range().Select();
             auto tabletTypeAllowedMetrics = db.Table<Schema::TabletTypeMetrics>().Range().Select();
@@ -57,7 +57,7 @@ public:
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
-                    || !metrics.IsReady() 
+                    || !metrics.IsReady()
                     || !tabletFollowerGroupRowset.IsReady()
                     || !tabletFollowerRowset.IsReady()
                     || !tabletTypeAllowedMetrics.IsReady()
@@ -470,10 +470,10 @@ public:
                         return false;
                 }
 
-                auto metricsRowset = db.Table<Schema::Metrics>().Range(tabletId).Select(); 
-                if (!metricsRowset.IsReady()) 
-                    return false; 
-                while (!metricsRowset.EndOfSet()) { 
+                auto metricsRowset = db.Table<Schema::Metrics>().Range(tabletId).Select();
+                if (!metricsRowset.IsReady())
+                    return false;
+                while (!metricsRowset.EndOfSet()) {
                     TFollowerId followerId = metricsRowset.GetValue<Schema::Metrics::FollowerID>();
                     auto* leaderOrFollower = tablet.FindTablet(followerId);
                     if (leaderOrFollower) {
@@ -482,11 +482,11 @@ public:
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
-                    } 
-                    if (!metricsRowset.Next()) 
-                        return false; 
-                } 
- 
+                    }
+                    if (!metricsRowset.Next())
+                        return false;
+                }
+
                 for (auto& pr : followersPerGroup) {
                     TFollowerGroup& followerGroup(*pr.first);
                     while (followerGroup.GetComputedFollowerCount(Self->GetDataCenters()) > pr.second) {

@@ -7,49 +7,49 @@
 namespace NKikimr {
 
 bool TControlBoard::RegisterLocalControl(TControlWrapper control, TString name) {
-    bool result = true; 
-    if (Board.Has(name)) { 
-        result = false; 
+    bool result = true;
+    if (Board.Has(name)) {
+        result = false;
     }
-    Board.Insert(name, control.Control); 
-    return result; 
+    Board.Insert(name, control.Control);
+    return result;
 }
 
 void TControlBoard::RegisterSharedControl(TControlWrapper& control, TString name) {
-    control.Control = Board.InsertIfAbsent(name, control.Control); 
+    control.Control = Board.InsertIfAbsent(name, control.Control);
 }
 
 void TControlBoard::RestoreDefaults() {
-    for (auto& bucket : Board.Buckets) { 
-        TReadGuard guard(bucket.GetLock()); 
-        for (auto &control : bucket.GetMap()) { 
-            control.second->RestoreDefault(); 
-        } 
+    for (auto& bucket : Board.Buckets) {
+        TReadGuard guard(bucket.GetLock());
+        for (auto &control : bucket.GetMap()) {
+            control.second->RestoreDefault();
+        }
     }
 }
 
 void TControlBoard::RestoreDefault(TString name) {
-    TIntrusivePtr<TControl> control; 
-    if (Board.Get(name, control)) { 
-        control->RestoreDefault(); 
-    } 
+    TIntrusivePtr<TControl> control;
+    if (Board.Get(name, control)) {
+        control->RestoreDefault();
+    }
 }
 
 bool TControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {
-    TIntrusivePtr<TControl> control; 
-    if (Board.Get(name, control)) { 
-        outPrevValue = control->SetFromHtmlRequest(value); 
-        return control->IsDefault(); 
+    TIntrusivePtr<TControl> control;
+    if (Board.Get(name, control)) {
+        outPrevValue = control->SetFromHtmlRequest(value);
+        return control->IsDefault();
     }
     return true;
 }
 
 // Only for tests
 void TControlBoard::GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const {
-    TIntrusivePtr<TControl> control; 
-    outIsControlExists = Board.Get(name, control); 
+    TIntrusivePtr<TControl> control;
+    outIsControlExists = Board.Get(name, control);
     if (outIsControlExists) {
-        outValue = control->Get(); 
+        outValue = control->Get();
     }
 }
 
@@ -68,34 +68,34 @@ TString TControlBoard::RenderAsHtml() const {
                 }
             }
             TABLEBODY() {
-                for (const auto& bucket : Board.Buckets) { 
-                    TReadGuard guard(bucket.GetLock()); 
-                    for (const auto &item : bucket.GetMap()) { 
-                        TABLER() { 
-                            TABLED() { str << item.first; } 
-                            TABLED() { str << item.second->RangeAsString(); } 
-                            TABLED() { 
-                                if (item.second->IsDefault()) { 
-                                    str << "<p>" << item.second->Get() << "</p>"; 
-                                } else { 
-                                    str << "<p style='color:red;'><b>" << item.second->Get() << " </b></p>"; 
-                                } 
+                for (const auto& bucket : Board.Buckets) {
+                    TReadGuard guard(bucket.GetLock());
+                    for (const auto &item : bucket.GetMap()) {
+                        TABLER() {
+                            TABLED() { str << item.first; }
+                            TABLED() { str << item.second->RangeAsString(); }
+                            TABLED() {
+                                if (item.second->IsDefault()) {
+                                    str << "<p>" << item.second->Get() << "</p>";
+                                } else {
+                                    str << "<p style='color:red;'><b>" << item.second->Get() << " </b></p>";
+                                }
                             }
-                            TABLED() { 
-                                if (item.second->IsDefault()) { 
-                                    str << "<p>" << item.second->GetDefault() << "</p>"; 
-                                } else { 
-                                    str << "<p style='color:red;'><b>" << item.second->GetDefault() << " </b></p>"; 
-                                } 
+                            TABLED() {
+                                if (item.second->IsDefault()) {
+                                    str << "<p>" << item.second->GetDefault() << "</p>";
+                                } else {
+                                    str << "<p style='color:red;'><b>" << item.second->GetDefault() << " </b></p>";
+                                }
                             }
-                            TABLED() { 
-                                str << "<form class='form_horizontal' method='post'>"; 
-                                str << "<input name='" << item.first << "' type='text' value='" 
-                                    << item.second->Get() << "'/>"; 
-                                str << "<button type='submit' style='color:red;'><b>Change</b></button>"; 
-                                str << "</form>"; 
-                            } 
-                            TABLED() { str << !item.second->IsDefault(); } 
+                            TABLED() {
+                                str << "<form class='form_horizontal' method='post'>";
+                                str << "<input name='" << item.first << "' type='text' value='"
+                                    << item.second->Get() << "'/>";
+                                str << "<button type='submit' style='color:red;'><b>Change</b></button>";
+                                str << "</form>";
+                            }
+                            TABLED() { str << !item.second->IsDefault(); }
                         }
                     }
                 }
@@ -108,4 +108,4 @@ TString TControlBoard::RenderAsHtml() const {
     return str.Str();
 }
 
-} 
+}

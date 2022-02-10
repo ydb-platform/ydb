@@ -21,7 +21,7 @@ private:
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override
     {
         Y_UNUSED(row);
-        return (tableId.PathId.OwnerId == GetShardId()); 
+        return (tableId.PathId.OwnerId == GetShardId());
     }
 
     TRowVersion GetWriteVersion(const TTableId& tableId) const override

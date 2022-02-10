@@ -173,7 +173,7 @@ private:
 
     void HandleExecute(TEvDqCompute::TEvState::TPtr& ev) {
         TActorId computeActor = ev->Sender;
-        auto& state = ev->Get()->Record; 
+        auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
 
         LOG_D("Got execution state from compute actor: " << computeActor
@@ -978,8 +978,8 @@ private:
         }
 
         TBase::ReplyErrorAndDie(status, issues);
-    } 
- 
+    }
+
     void PassAway() override {
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());

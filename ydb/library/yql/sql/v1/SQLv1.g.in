@@ -46,8 +46,8 @@ sql_stmt_core:
   | drop_role_stmt
 ;
 
-expr: 
-    or_subexpr (OR or_subexpr)* 
+expr:
+    or_subexpr (OR or_subexpr)*
   | type_name_composite;
 
 or_subexpr: and_subexpr (AND and_subexpr)*;
@@ -70,15 +70,15 @@ match_op: LIKE | ILIKE | GLOB | REGEXP | RLIKE | MATCH;
 
 eq_subexpr: neq_subexpr ((LESS | LESS_OR_EQ | GREATER | GREATER_OR_EQ) neq_subexpr)*;
 
-// workaround for recursive types, '??' and closing '>>' 
-shift_right: GREATER GREATER; 
-rot_right: GREATER GREATER PIPE; 
-double_question: QUESTION QUESTION; 
+// workaround for recursive types, '??' and closing '>>'
+shift_right: GREATER GREATER;
+rot_right: GREATER GREATER PIPE;
+double_question: QUESTION QUESTION;
 
 neq_subexpr: bit_subexpr ((SHIFT_LEFT | shift_right | ROT_LEFT | rot_right | AMPERSAND | PIPE | CARET) bit_subexpr)*
   // trailing QUESTIONs are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x)
   ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
- 
+
 bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*;
 
 add_subexpr: mul_subexpr ((ASTERISK | SLASH | PERCENT) mul_subexpr)*;
@@ -117,7 +117,7 @@ atom_expr:
   | exists_expr
   | case_expr
   | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
-  | value_constructor 
+  | value_constructor
   | bitcast_expr
   | list_literal
   | dict_literal
@@ -134,7 +134,7 @@ in_atom_expr:
   | LPAREN select_stmt RPAREN
 // TODO: resolve ANTLR error: rule in_atom_expr has non-LL(*) decision due to recursive rule invocations reachable from alts 3,8
 //  | LPAREN values_stmt RPAREN
-  | value_constructor 
+  | value_constructor
   | bitcast_expr
   | list_literal
   | dict_literal
@@ -228,7 +228,7 @@ when_expr: WHEN expr THEN expr;
 literal_value:
     integer
   | real
-  | STRING_VALUE 
+  | STRING_VALUE
   | BLOB // it's unused right now
   | NULL
   | CURRENT_TIME // it's unused right now
@@ -249,61 +249,61 @@ signed_number: (PLUS | MINUS)? (integer | real);
 
 type_name_simple: an_id_pure;
 
-integer_or_bind: integer | bind_parameter; 
-type_name_tag: id | STRING_VALUE | bind_parameter; 
- 
-struct_arg: type_name_tag COLON type_name_or_bind; 
+integer_or_bind: integer | bind_parameter;
+type_name_tag: id | STRING_VALUE | bind_parameter;
+
+struct_arg: type_name_tag COLON type_name_or_bind;
 struct_arg_as: type_name_or_bind AS type_name_tag;
-variant_arg: (type_name_tag COLON)? type_name_or_bind; 
-callable_arg: variant_arg (LBRACE_CURLY AUTOMAP RBRACE_CURLY)?; 
-callable_arg_list: callable_arg (COMMA callable_arg)*; 
- 
-type_name_decimal: DECIMAL LPAREN integer_or_bind COMMA integer_or_bind RPAREN; 
-type_name_optional: OPTIONAL LESS type_name_or_bind GREATER; 
+variant_arg: (type_name_tag COLON)? type_name_or_bind;
+callable_arg: variant_arg (LBRACE_CURLY AUTOMAP RBRACE_CURLY)?;
+callable_arg_list: callable_arg (COMMA callable_arg)*;
+
+type_name_decimal: DECIMAL LPAREN integer_or_bind COMMA integer_or_bind RPAREN;
+type_name_optional: OPTIONAL LESS type_name_or_bind GREATER;
 type_name_tuple: TUPLE (LESS (type_name_or_bind (COMMA type_name_or_bind)* COMMA?)? GREATER | NOT_EQUALS2);
 type_name_struct: STRUCT (LESS (struct_arg (COMMA struct_arg)* COMMA?)? GREATER | NOT_EQUALS2);
 type_name_variant: VARIANT LESS variant_arg (COMMA variant_arg)* COMMA? GREATER;
-type_name_list: LIST LESS type_name_or_bind GREATER; 
-type_name_stream: STREAM LESS type_name_or_bind GREATER; 
-type_name_flow: FLOW LESS type_name_or_bind GREATER; 
-type_name_dict: DICT LESS type_name_or_bind COMMA type_name_or_bind GREATER; 
-type_name_set: SET LESS type_name_or_bind GREATER; 
+type_name_list: LIST LESS type_name_or_bind GREATER;
+type_name_stream: STREAM LESS type_name_or_bind GREATER;
+type_name_flow: FLOW LESS type_name_or_bind GREATER;
+type_name_dict: DICT LESS type_name_or_bind COMMA type_name_or_bind GREATER;
+type_name_set: SET LESS type_name_or_bind GREATER;
 type_name_enum: ENUM LESS type_name_tag (COMMA type_name_tag)* COMMA? GREATER;
-type_name_resource: RESOURCE LESS type_name_tag GREATER; 
-type_name_tagged: TAGGED LESS type_name_or_bind COMMA type_name_tag GREATER; 
-type_name_callable: CALLABLE LESS LPAREN callable_arg_list? COMMA? (LBRACE_SQUARE callable_arg_list RBRACE_SQUARE)? RPAREN ARROW type_name_or_bind GREATER; 
- 
+type_name_resource: RESOURCE LESS type_name_tag GREATER;
+type_name_tagged: TAGGED LESS type_name_or_bind COMMA type_name_tag GREATER;
+type_name_callable: CALLABLE LESS LPAREN callable_arg_list? COMMA? (LBRACE_SQUARE callable_arg_list RBRACE_SQUARE)? RPAREN ARROW type_name_or_bind GREATER;
+
 type_name_composite:
   ( type_name_optional
-  | type_name_tuple 
-  | type_name_struct 
-  | type_name_variant 
-  | type_name_list 
-  | type_name_stream 
-  | type_name_flow 
-  | type_name_dict 
-  | type_name_set 
-  | type_name_enum 
-  | type_name_resource 
-  | type_name_tagged 
-  | type_name_callable 
-  ) QUESTION*; 
- 
+  | type_name_tuple
+  | type_name_struct
+  | type_name_variant
+  | type_name_list
+  | type_name_stream
+  | type_name_flow
+  | type_name_dict
+  | type_name_set
+  | type_name_enum
+  | type_name_resource
+  | type_name_tagged
+  | type_name_callable
+  ) QUESTION*;
+
 type_name:
     type_name_composite
   | (type_name_decimal | type_name_simple) QUESTION*;
 
-type_name_or_bind: type_name | bind_parameter; 
- 
+type_name_or_bind: type_name | bind_parameter;
+
 value_constructor_literal: STRING_VALUE;
-value_constructor: 
+value_constructor:
     VARIANT LPAREN expr COMMA expr COMMA expr RPAREN
   | ENUM LPAREN expr COMMA expr RPAREN
   | CALLABLE LPAREN expr COMMA expr RPAREN
 ;
- 
-declare_stmt: DECLARE bind_parameter AS type_name (EQUALS literal_value)?; 
- 
+
+declare_stmt: DECLARE bind_parameter AS type_name (EQUALS literal_value)?;
+
 module_path: DOT? an_id (DOT an_id)*;
 import_stmt: IMPORT module_path SYMBOLS named_bind_parameter_list;
 export_stmt: EXPORT bind_parameter_list;
@@ -316,7 +316,7 @@ pragma_stmt: PRAGMA opt_id_prefix_or_type an_id (EQUALS pragma_value | LPAREN pr
 pragma_value:
     signed_number
   | id
-  | STRING_VALUE 
+  | STRING_VALUE
   | bool_value
   | bind_parameter
 ;
@@ -376,7 +376,7 @@ grouping_element:
   | cube_list
   | grouping_sets_specification
 //empty_grouping_set inside smart_parenthesis
-  | hopping_window_specification 
+  | hopping_window_specification
 ;
 
 /// expect column (named column), or parenthesis list columns, or expression (named expression), or list expression
@@ -389,8 +389,8 @@ cube_list: CUBE LPAREN ordinary_grouping_set_list RPAREN;
 /// SQL2003 grouping_set_list == grouping_element_list
 grouping_sets_specification: GROUPING SETS LPAREN grouping_element_list RPAREN;
 
-hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN; 
- 
+hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN;
+
 result_column:
     opt_id_prefix ASTERISK
   | expr ((AS an_id_or_type) | an_id_pure)?
@@ -498,11 +498,11 @@ column_schema: an_id_schema type_name_or_bind family_relation? (NOT? NULL)?;
 family_relation: FAMILY an_id;
 column_order_by_specification: an_id (ASC | DESC)?;
 
-table_constraint: 
+table_constraint:
     PRIMARY KEY LPAREN an_id (COMMA an_id)* RPAREN
   | PARTITION BY LPAREN an_id (COMMA an_id)* RPAREN
-  | ORDER BY LPAREN column_order_by_specification (COMMA column_order_by_specification)* RPAREN 
-; 
+  | ORDER BY LPAREN column_order_by_specification (COMMA column_order_by_specification)* RPAREN
+;
 
 table_index: INDEX an_id table_index_type
     (WITH LPAREN an_id EQUALS an_id COMMA (an_id EQUALS an_id)* RPAREN)?
@@ -763,12 +763,12 @@ an_id_pure: identifier | STRING_VALUE;
 opt_id_prefix: (an_id DOT)?;
 cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);
 
-id_or_type: id | type_id; 
+id_or_type: id | type_id;
 opt_id_prefix_or_type: (an_id_or_type DOT)?;
 id_or_at: AT? an_id_or_type;
 id_table_or_type: an_id_table | type_id;
-id_table_or_at: AT? id_table_or_type; 
- 
+id_table_or_at: AT? id_table_or_type;
+
 keyword:
     keyword_compat
   | keyword_expr_uncompat
@@ -794,7 +794,7 @@ keyword_expr_uncompat:
   | EXISTS
   | FROM
   | FULL
-  | HOP 
+  | HOP
   | JSON_EXISTS
   | JSON_VALUE
   | JSON_QUERY
@@ -1016,22 +1016,22 @@ keyword_compat: (
   | XOR
   );
 
-type_id: 
+type_id:
     OPTIONAL
-  | TUPLE 
-  | STRUCT 
-  | VARIANT 
-  | LIST 
-//  | STREAM 
-  | FLOW 
-  | DICT 
-  | SET 
-  | ENUM 
-  | RESOURCE 
-  | TAGGED 
-  | CALLABLE 
-; 
- 
+  | TUPLE
+  | STRUCT
+  | VARIANT
+  | LIST
+//  | STREAM
+  | FLOW
+  | DICT
+  | SET
+  | ENUM
+  | RESOURCE
+  | TAGGED
+  | CALLABLE
+;
+
 bool_value: (TRUE | FALSE);
 real: REAL;
 integer: DIGITS | INTEGER_VALUE;
@@ -1128,14 +1128,14 @@ ASSUME: A S S U M E;
 ASYNC: A S Y N C;
 ATTACH: A T T A C H;
 AUTOINCREMENT: A U T O I N C R E M E N T;
-AUTOMAP: A U T O M A P; 
+AUTOMAP: A U T O M A P;
 BEFORE: B E F O R E;
 BEGIN: B E G I N;
 BERNOULLI: B E R N O U L L I;
 BETWEEN: B E T W E E N;
 BITCAST: B I T C A S T;
 BY: B Y;
-CALLABLE: C A L L A B L E; 
+CALLABLE: C A L L A B L E;
 CASCADE: C A S C A D E;
 CASE: C A S E;
 CAST: C A S T;
@@ -1158,7 +1158,7 @@ CURRENT_TIME: C U R R E N T '_' T I M E;
 CURRENT_DATE: C U R R E N T '_' D A T E;
 CURRENT_TIMESTAMP: C U R R E N T '_' T I M E S T A M P;
 DATABASE: D A T A B A S E;
-DECIMAL: D E C I M A L; 
+DECIMAL: D E C I M A L;
 DECLARE: D E C L A R E;
 DEFAULT: D E F A U L T;
 DEFERRABLE: D E F E R R A B L E;
@@ -1180,7 +1180,7 @@ EMPTY: E M P T Y;
 EMPTY_ACTION: E M P T Y '_' A C T I O N;
 ENCRYPTED: E N C R Y P T E D;
 END: E N D;
-ENUM: E N U M; 
+ENUM: E N U M;
 ERASE: E R A S E;
 ESCAPE: E S C A P E;
 EVALUATE: E V A L U A T E;
@@ -1196,7 +1196,7 @@ FAIL: F A I L;
 FAMILY: F A M I L Y;
 FILTER: F I L T E R;
 FLATTEN: F L A T T E N;
-FLOW: F L O W; 
+FLOW: F L O W;
 FOLLOWING: F O L L O W I N G;
 FOR: F O R;
 FOREIGN: F O R E I G N;
@@ -1209,7 +1209,7 @@ GROUP: G R O U P;
 GROUPING: G R O U P I N G;
 GROUPS: G R O U P S;
 HAVING: H A V I N G;
-HOP: H O P; 
+HOP: H O P;
 IF: I F;
 IGNORE: I G N O R E;
 ILIKE: I L I K E;
@@ -1275,7 +1275,7 @@ RENAME: R E N A M E;
 REPEATABLE: R E P E A T A B L E;
 REPLACE: R E P L A C E;
 RESET: R E S E T;
-RESOURCE: R E S O U R C E; 
+RESOURCE: R E S O U R C E;
 RESPECT: R E S P E C T;
 RESTRICT: R E S T R I C T;
 RESULT: R E S U L T;
@@ -1296,15 +1296,15 @@ SEMI: S E M I;
 SET: S E T;
 SETS: S E T S;
 SORTED: S O R T E D;
-STREAM: S T R E A M; 
-STRUCT: S T R U C T; 
+STREAM: S T R E A M;
+STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
 SYMBOLS: S Y M B O L S;
 SYNC: S Y N C;
 SYSTEM: S Y S T E M;
 TABLE: T A B L E;
 TABLESAMPLE: T A B L E S A M P L E;
-TAGGED: T A G G E D; 
+TAGGED: T A G G E D;
 TEMP: T E M P;
 TEMPORARY: T E M P O R A R Y;
 THEN: T H E N;
@@ -1312,7 +1312,7 @@ TIES: T I E S;
 TO: T O;
 TRANSACTION: T R A N S A C T I O N;
 TRIGGER: T R I G G E R;
-TUPLE: T U P L E; 
+TUPLE: T U P L E;
 UNBOUNDED: U N B O U N D E D;
 UNCONDITIONAL: U N C O N D I T I O N A L;
 UNION: U N I O N;
@@ -1325,7 +1325,7 @@ USER: U S E R;
 USING: U S I N G;
 VACUUM: V A C U U M;
 VALUES: V A L U E S;
-VARIANT: V A R I A N T; 
+VARIANT: V A R I A N T;
 VIEW: V I E W;
 VIRTUAL: V I R T U A L;
 WHEN: W H E N;
@@ -1368,7 +1368,7 @@ fragment BINDIGITS: '0' B ('0' | '1')+;
 fragment DECDIGITS: DIGIT+;
 DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
 
-INTEGER_VALUE: DIGITS (U? (L | S | T)?); 
+INTEGER_VALUE: DIGITS (U? (L | S | T)?);
 
 fragment FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
 REAL:

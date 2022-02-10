@@ -16,7 +16,7 @@ namespace NKikimr {
                     std::make_pair(&VPutUserDataLatencyHistogram,  "PutUserData" ),
                     std::make_pair(&VPutAsyncBlobLatencyHistogram, "PutAsyncBlob")
                     }) {
-                *item.first = std::make_shared<NVDiskMon::TLtcHisto>(counters, "sensor", item.second, type); 
+                *item.first = std::make_shared<NVDiskMon::TLtcHisto>(counters, "sensor", item.second, type);
             }
         }
 

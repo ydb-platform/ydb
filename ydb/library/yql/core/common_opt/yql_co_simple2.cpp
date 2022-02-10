@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_expr_csee.h>
- 
+
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -198,8 +198,8 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                     .Atom(1, "_yql_time", TNodeFlags::Default)
                                 .Seal()
                             .Seal();
-                    } 
- 
+                    }
+
                     return structObj.Seal();
                 })
             .Seal()

@@ -196,7 +196,7 @@ namespace NActors {
             if (AtomicGet(Context->ControlPacketId) <= HeaderConfirm && !NewPingProtocol) {
                 ui64 sendTime = AtomicGet(Context->ControlPacketSendTimer);
                 TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime);
-                const auto durationUs = duration.MicroSeconds(); 
+                const auto durationUs = duration.MicroSeconds();
                 Metrics->UpdateLegacyPingTimeHist(durationUs);
                 PingQ.push_back(duration);
                 if (PingQ.size() > 16) {
@@ -448,8 +448,8 @@ namespace NActors {
             PingQ.pop_front();
         }
         const TDuration ping = *std::min_element(PingQ.begin(), PingQ.end());
-        const auto pingUs = ping.MicroSeconds(); 
-        Context->PingRTT_us = pingUs; 
+        const auto pingUs = ping.MicroSeconds();
+        Context->PingRTT_us = pingUs;
         NewPingProtocol = true;
         Metrics->UpdateLegacyPingTimeHist(pingUs);
     }

@@ -387,7 +387,7 @@ private:
 void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::TTxStats& txStats) {
     auto& dstExec = *dst.AddExecutions();
     NKqpProto::TKqpExecutionExtraStats executionExtraStats;
- 
+
     dstExec.SetDurationUs(txStats.GetDurationUs());
     dstExec.SetCpuTimeUs(txStats.GetComputeCpuTimeUsec());
 
@@ -444,18 +444,18 @@ void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::
         // NOTE: This might be incorrect in case when single shard has several
         // tables, i.e. collocated tables.
         affectedShards += table.GetShardCount();
-    } 
- 
+    }
+
     executionExtraStats.SetAffectedShards(affectedShards);
 
     dstExec.MutableExtra()->PackFrom(executionExtraStats);
-} 
- 
+}
+
 } // namespace
 
 void TKqlTransformContext::AddMkqlStats(const TString& program, NKikimrQueryStats::TTxStats&& txStats) {
     Y_UNUSED(program);
- 
+
     ExtractQueryStats(QueryStats, txStats);
 }
 

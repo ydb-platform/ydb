@@ -99,10 +99,10 @@ public:
     TKikimrRunner(const TKikimrSettings& settings);
 
     TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken = "",
-        const TString& domainRoot = KikimrDefaultUtDomainRoot, ui32 nodeCount = 1); 
+        const TString& domainRoot = KikimrDefaultUtDomainRoot, ui32 nodeCount = 1);
 
     TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TString& authToken = "",
-        const TString& domainRoot = KikimrDefaultUtDomainRoot, ui32 nodeCount = 1); 
+        const TString& domainRoot = KikimrDefaultUtDomainRoot, ui32 nodeCount = 1);
 
     TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TVector<NKikimrKqp::TKqpSetting>& kqpSettings,
         const TString& authToken = "", const TString& domainRoot = KikimrDefaultUtDomainRoot, ui32 nodeCount = 1);
@@ -110,7 +110,7 @@ public:
     TKikimrRunner(const NKikimrConfig::TFeatureFlags& featureFlags, const TString& authToken = "",
         const TString& domainRoot = KikimrDefaultUtDomainRoot, ui32 nodeCount = 1);
 
-    TKikimrRunner(const TString& authToken = "", const TString& domainRoot = KikimrDefaultUtDomainRoot, 
+    TKikimrRunner(const TString& authToken = "", const TString& domainRoot = KikimrDefaultUtDomainRoot,
         ui32 nodeCount = 1);
 
     ~TKikimrRunner() {
@@ -119,7 +119,7 @@ public:
         Client.Reset();
     }
 
-    const TString& GetEndpoint() const { return Endpoint; } 
+    const TString& GetEndpoint() const { return Endpoint; }
     const NYdb::TDriver& GetDriver() const { return *Driver; }
     NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); }
     Tests::TClient& GetTestClient() const { return *Client; }

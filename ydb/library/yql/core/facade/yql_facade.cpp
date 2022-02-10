@@ -1085,40 +1085,40 @@ IGraphTransformer::TStatistics TProgram::GetRawDiagnostics() {
     return Transformer_ ? Transformer_->GetStatistics() : IGraphTransformer::TStatistics::NotPresent();
 }
 
-TMaybe<TString> TProgram::GetTasksInfo() { 
-    if (!TypeCtx_) { 
-        return Nothing(); 
-    } 
- 
-    bool hasTasks = false; 
- 
-    TStringStream out; 
+TMaybe<TString> TProgram::GetTasksInfo() {
+    if (!TypeCtx_) {
+        return Nothing();
+    }
+
+    bool hasTasks = false;
+
+    TStringStream out;
     NYson::TYsonWriter writer(&out, ResultFormat_);
- 
-    writer.OnBeginMap(); 
-    writer.OnKeyedItem("Write"); 
-    writer.OnBeginList(); 
-    writer.OnListItem(); 
-    writer.OnBeginMap(); 
-    writer.OnKeyedItem("Tasks"); 
-    writer.OnBeginList(); 
- 
-    for (auto& datasink : TypeCtx_->DataSinks) { 
+
+    writer.OnBeginMap();
+    writer.OnKeyedItem("Write");
+    writer.OnBeginList();
+    writer.OnListItem();
+    writer.OnBeginMap();
+    writer.OnKeyedItem("Tasks");
+    writer.OnBeginList();
+
+    for (auto& datasink : TypeCtx_->DataSinks) {
         hasTasks = hasTasks || datasink->GetTasksInfo(writer);
-    } 
- 
-    writer.OnEndList(); 
-    writer.OnEndMap(); 
-    writer.OnEndList(); 
-    writer.OnEndMap(); 
- 
-    if (hasTasks) { 
-        return out.Str(); 
-    } else { 
-        return Nothing(); 
-    } 
-} 
- 
+    }
+
+    writer.OnEndList();
+    writer.OnEndMap();
+    writer.OnEndList();
+    writer.OnEndMap();
+
+    if (hasTasks) {
+        return out.Str();
+    } else {
+        return Nothing();
+    }
+}
+
 TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
     if (!TypeCtx_) {
         return Nothing();
@@ -1311,9 +1311,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     if (providerNames.contains(RtmrProviderName)) {
-        resultProviderDataSources.push_back(TString(RtmrProviderName)); 
-    } 
- 
+        resultProviderDataSources.push_back(TString(RtmrProviderName));
+    }
+
     if (providerNames.contains(PqProviderName)) {
         resultProviderDataSources.push_back(TString(PqProviderName));
     }
@@ -1384,13 +1384,13 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
     InstantTransform(*compositeTransformer, ExprRoot_, *ExprCtx_);
 }
 
-bool TProgram::HasActiveProcesses() { 
-    for (const auto& dp : DataProviders_) { 
-        if (dp.HasActiveProcesses && dp.HasActiveProcesses()) { 
-            return true; 
-        } 
-    } 
-    return false; 
-} 
- 
+bool TProgram::HasActiveProcesses() {
+    for (const auto& dp : DataProviders_) {
+        if (dp.HasActiveProcesses && dp.HasActiveProcesses()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace NYql

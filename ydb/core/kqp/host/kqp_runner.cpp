@@ -409,16 +409,16 @@ private:
         // OldEngine only
         YQL_ENSURE(!engine.has_value() || *engine == TKqpTransactionInfo::EEngine::OldEngine);
 
-        for (const auto& [name, table] : TransformCtx->Tables->GetTables()) { 
-            if (!table.Metadata->SysView.empty()) { 
+        for (const auto& [name, table] : TransformCtx->Tables->GetTables()) {
+            if (!table.Metadata->SysView.empty()) {
                 ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), TStringBuilder()
-                    << "Table " << table.Metadata->Name << " is a system view. " 
-                    << "System views are not supported by data queries." 
-                )); 
+                    << "Table " << table.Metadata->Name << " is a system view. "
+                    << "System views are not supported by data queries."
+                ));
                 return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
-            } 
-        } 
- 
+            }
+        }
+
         auto program = BuildKiProgram(dataQuery, *TransformCtx->Tables, ctx, sysColumnsEnabled);
 
         KqlOptimizeTransformer->Rewind();

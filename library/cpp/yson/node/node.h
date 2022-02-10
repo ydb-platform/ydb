@@ -1,11 +1,11 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/generic/bt_exception.h>
 #include <util/generic/cast.h>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/variant.h>
-#include <util/generic/vector.h> 
-#include <util/generic/yexception.h> 
+#include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>
 #include <util/string/cast.h>
 
@@ -14,23 +14,23 @@
 
 class IInputStream;
 class IOutputStream;
- 
-namespace NYT { 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-class TNode 
-{ 
-public: 
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TNode
+{
+public:
     class TLookupError
         : public TWithBackTrace<yexception>
     { };
 
-    class TTypeError 
+    class TTypeError
         : public TWithBackTrace<yexception>
-    { }; 
- 
-    enum EType { 
+    { };
+
+    enum EType {
         Undefined = 0   /*"undefined"*/,
 
         // NOTE: string representation of all node types
@@ -43,20 +43,20 @@ public:
         List = 6    /*"list_node"*/,
         Map = 7     /*"map_node"*/,
         Null = 8    /*"null"*/,
-    }; 
- 
+    };
+
     using TListType = TVector<TNode>;
     using TMapType = THashMap<TString, TNode>;
- 
+
 private:
     struct TNull {
         bool operator==(const TNull&) const;
     };
- 
+
     struct TUndefined {
         bool operator==(const TUndefined&) const;
     };
- 
+
     using TValue = std::variant<
         bool,
         i64,
@@ -68,9 +68,9 @@ private:
         TNull,
         TUndefined
         >;
- 
+
 public:
- 
+
     TNode();
     TNode(const char* s);
     TNode(TStringBuf s);
@@ -78,7 +78,7 @@ public:
     explicit TNode(const std::string& s);
     TNode(TString s);
     TNode(int i);
- 
+
     //this case made speccially for prevent mess cast of EType into TNode through TNode(int) constructor
     //usual case of error SomeNode == TNode::Undefined <-- SomeNode indeed will be compared with TNode(0) without this method
     //correct way is SomeNode.GetType() == TNode::Undefined
@@ -102,17 +102,17 @@ public:
     TNode(double d);
     TNode(bool b);
     TNode(TMapType map);
- 
+
     TNode(const TNode& rhs);
     TNode& operator=(const TNode& rhs);
- 
+
     TNode(TNode&& rhs) noexcept;
     TNode& operator=(TNode&& rhs) noexcept;
- 
+
     ~TNode();
- 
+
     void Clear();
- 
+
     bool IsString() const;
     bool IsInt64() const;
     bool IsUint64() const;
@@ -127,7 +127,7 @@ public:
     bool IsUndefined() const;
     // Returns true if TNode is neither Null, nor Undefined
     bool HasValue() const;
- 
+
     template<typename T>
     bool IsOfType() const noexcept;
 
@@ -136,9 +136,9 @@ public:
 
     bool Empty() const;
     size_t Size() const;
- 
+
     EType GetType() const;
- 
+
     const TString& AsString() const;
     i64 AsInt64() const;
     ui64 AsUint64() const;
@@ -148,7 +148,7 @@ public:
     const TMapType& AsMap() const;
     TListType& AsList();
     TMapType& AsMap();
- 
+
     const TString& UncheckedAsString() const noexcept;
     i64 UncheckedAsInt64() const noexcept;
     ui64 UncheckedAsUint64() const noexcept;
@@ -180,31 +180,31 @@ public:
     static TNode CreateMap();
     static TNode CreateMap(TMapType map);
     static TNode CreateEntity();
- 
+
     const TNode& operator[](size_t index) const;
     TNode& operator[](size_t index);
     const TNode& At(size_t index) const;
     TNode& At(size_t index);
- 
+
     TNode& Add() &;
     TNode Add() &&;
     TNode& Add(const TNode& node) &;
     TNode Add(const TNode& node) &&;
     TNode& Add(TNode&& node) &;
     TNode Add(TNode&& node) &&;
- 
+
     bool HasKey(const TStringBuf key) const;
 
     TNode& operator()(const TString& key, const TNode& value) &;
     TNode operator()(const TString& key, const TNode& value) &&;
     TNode& operator()(const TString& key, TNode&& value) &;
     TNode operator()(const TString& key, TNode&& value) &&;
- 
+
     const TNode& operator[](const TStringBuf key) const;
     TNode& operator[](const TStringBuf key);
     const TNode& At(const TStringBuf key) const;
     TNode& At(const TStringBuf key);
- 
+
     // map getters
     // works the same way like simple getters
     const TString& ChildAsString(const TStringBuf key) const;
@@ -254,42 +254,42 @@ public:
     T& ChildAs(size_t index);
 
 
-    // attributes 
+    // attributes
     bool HasAttributes() const;
     void ClearAttributes();
     const TNode& GetAttributes() const;
     TNode& Attributes();
- 
+
     void MoveWithoutAttributes(TNode&& rhs);
- 
+
     // Serialize TNode using binary yson format.
     // Methods for ysaveload.
     void Save(IOutputStream* output) const;
     void Load(IInputStream* input);
 
-private: 
+private:
     void Move(TNode&& rhs);
- 
+
     void CheckType(EType type) const;
- 
+
     void AssureMap();
     void AssureList();
- 
+
     void CreateAttributes();
- 
-private: 
+
+private:
     TValue Value_;
     THolder<TNode> Attributes_;
- 
-    friend bool operator==(const TNode& lhs, const TNode& rhs); 
-    friend bool operator!=(const TNode& lhs, const TNode& rhs); 
-}; 
- 
+
+    friend bool operator==(const TNode& lhs, const TNode& rhs);
+    friend bool operator!=(const TNode& lhs, const TNode& rhs);
+};
+
 bool operator==(const TNode& lhs, const TNode& rhs);
 bool operator!=(const TNode& lhs, const TNode& rhs);
- 
+
 bool GetBool(const TNode& node);
- 
+
 inline bool TNode::IsArithmetic() const {
     return IsInt64() || IsUint64() || IsDouble() || IsBool();
 }
@@ -508,8 +508,8 @@ inline const T& TNode::As() const {
     return std::get<T>(Value_);
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NNodeCmp {
     bool operator<(const TNode& lhs, const TNode& rhs);
     bool operator<=(const TNode& lhs, const TNode& rhs);
@@ -520,4 +520,4 @@ namespace NNodeCmp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT 
+} // namespace NYT

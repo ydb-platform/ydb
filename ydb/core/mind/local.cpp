@@ -631,15 +631,15 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 const auto& poolStats(info.GetPoolStats(AppData()->UserPoolId));
                 UserPoolUsage = poolStats.usage() * poolStats.threads() * 1000000; // uS
             }
-            if (info.HasMemoryUsedInAlloc()) { 
-                MemUsage = info.GetMemoryUsedInAlloc(); 
+            if (info.HasMemoryUsedInAlloc()) {
+                MemUsage = info.GetMemoryUsedInAlloc();
             }
             /*if (info.HasMemoryUsed()) {
                 MemUsage = info.GetMemoryUsed();
             }*/
- 
+
             double usage = 0;
- 
+
             if (info.HasMemoryLimit()) {
                 if (MemLimit != info.GetMemoryLimit()) {
                     MemLimit = info.GetMemoryLimit();

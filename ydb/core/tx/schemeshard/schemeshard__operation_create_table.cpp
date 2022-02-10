@@ -122,7 +122,7 @@ void ApplyPartitioning(TTxId txId,
         partitions[i].ShardIdx = idx;
     }
 
-    ss->SetPartitioning(pathId, tableInfo, std::move(partitions)); 
+    ss->SetPartitioning(pathId, tableInfo, std::move(partitions));
 }
 
 

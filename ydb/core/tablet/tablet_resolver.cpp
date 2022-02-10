@@ -88,7 +88,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
         }
 
-        struct TQueueEntry { 
+        struct TQueueEntry {
             TInstant AddInstant;
             TEvTabletResolver::TEvForward::TPtr Ev;
 

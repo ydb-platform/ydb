@@ -1,68 +1,68 @@
-{ 
-    "NodeRootType": "TExprBase", 
-    "NodeBuilderBase": "TNodeBuilderBase", 
-    "ListBuilderBase": "TListBuilderBase", 
-    "FreeArgCallableBase": "TFreeArgCallable", 
-    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase", 
-    "Nodes": [ 
-        { 
-            "Name": "TSoDataSource", 
-            "Base": "TCallable", 
-            "Definition": "Custom", 
-            "Match": {"Type": "Callable", "Name": "DataSource"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Category", "Type": "TCoAtom"}, 
-                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"} 
-            ] 
-        }, 
-        { 
-            "Name": "TSoDataSink", 
-            "Base": "TCallable", 
-            "Definition": "Custom", 
-            "Match": {"Type": "Callable", "Name": "DataSink"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Category", "Type": "TCoAtom"}, 
-                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"} 
-            ] 
-        }, 
-        { 
-            "Name": "TSoRead", 
-            "Base": "TFreeArgCallable", 
-            "Match": {"Type": "Callable", "Name": "Read!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSource", "Type": "TSoDataSource"} 
-            ] 
-        }, 
-        { 
-            "Name": "TSoWrite", 
-            "Base": "TFreeArgCallable", 
-            "Match": {"Type": "Callable", "Name": "Write!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSink", "Type": "TSoDataSink"} 
-            ] 
-        }, 
-        { 
-            "Name": "TSoReadShardMeta", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "SoReadShardMeta!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSource", "Type": "TSoDataSource"}, 
-                {"Index": 2, "Name": "Shard", "Type": "TCoAtom"} 
-            ] 
-        }, 
-        { 
-            "Name": "TSoWriteToShard", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "SoWriteToShard!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSink", "Type": "TSoDataSink"}, 
-                {"Index": 2, "Name": "Shard", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Input", "Type": "TExprBase"} 
-            ] 
+{
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
+        {
+            "Name": "TSoDataSource",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Match": {"Type": "Callable", "Name": "DataSource"},
+            "Children": [
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TSoDataSink",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Match": {"Type": "Callable", "Name": "DataSink"},
+            "Children": [
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TSoRead",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "Read!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSource", "Type": "TSoDataSource"}
+            ]
+        },
+        {
+            "Name": "TSoWrite",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "Write!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TSoDataSink"}
+            ]
+        },
+        {
+            "Name": "TSoReadShardMeta",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "SoReadShardMeta!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSource", "Type": "TSoDataSource"},
+                {"Index": 2, "Name": "Shard", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TSoWriteToShard",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "SoWriteToShard!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TSoDataSink"},
+                {"Index": 2, "Name": "Shard", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Input", "Type": "TExprBase"}
+            ]
         },
         {
             "Name": "TSoShard",
@@ -85,6 +85,6 @@
                 {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"},
                 {"Index": 2, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
-        } 
-    ] 
-} 
+        }
+    ]
+}

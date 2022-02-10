@@ -125,7 +125,7 @@ bool GetGuid(const TStringBuf s, TGUID& result) {
     }
     result.dw[partId] = static_cast<ui32>(partValue);
     return true;
-} 
+}
 
 // Parses GUID from s and checks that it's valid.
 // In case of error returns TGUID().

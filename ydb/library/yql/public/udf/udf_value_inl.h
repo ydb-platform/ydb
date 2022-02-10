@@ -263,28 +263,28 @@ inline void TBoxedValueAccessor::Apply(IBoxedValue& value, IApplyContext& contex
     return value.Apply(context);
 }
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3) 
-inline ui32 TBoxedValueAccessor::GetTraverseCount(const IBoxedValue& value) { 
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3))); 
-    return value.GetTraverseCount(); 
-} 
- 
-inline TUnboxedValue TBoxedValueAccessor::GetTraverseItem(const IBoxedValue& value, ui32 index) { 
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3))); 
-    return value.GetTraverseItem(index); 
-} 
- 
-inline TUnboxedValue TBoxedValueAccessor::Save(const IBoxedValue& value) { 
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3))); 
-    return value.Save(); 
-} 
- 
-inline void TBoxedValueAccessor::Load(IBoxedValue& value, const TStringRef& state) { 
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3))); 
-    value.Load(state); 
-} 
-#endif 
- 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
+inline ui32 TBoxedValueAccessor::GetTraverseCount(const IBoxedValue& value) {
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
+    return value.GetTraverseCount();
+}
+
+inline TUnboxedValue TBoxedValueAccessor::GetTraverseItem(const IBoxedValue& value, ui32 index) {
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
+    return value.GetTraverseItem(index);
+}
+
+inline TUnboxedValue TBoxedValueAccessor::Save(const IBoxedValue& value) {
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
+    return value.Save();
+}
+
+inline void TBoxedValueAccessor::Load(IBoxedValue& value, const TStringRef& state) {
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
+    value.Load(state);
+}
+#endif
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
 inline void TBoxedValueAccessor::Push(IBoxedValue& value, const TUnboxedValuePod& data) {
     Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 11)));
@@ -624,28 +624,28 @@ inline void TUnboxedValuePod::Apply(IApplyContext& context) const {
     return TBoxedValueAccessor::Apply(*Raw.Boxed.Value, context);
 }
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3) 
-inline ui32 TUnboxedValuePod::GetTraverseCount() const { 
-    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
-    return TBoxedValueAccessor::GetTraverseCount(*Raw.Boxed.Value); 
-} 
- 
-inline TUnboxedValue TUnboxedValuePod::GetTraverseItem(ui32 index) const { 
-    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
-    return TBoxedValueAccessor::GetTraverseItem(*Raw.Boxed.Value, index); 
-} 
- 
-inline TUnboxedValue TUnboxedValuePod::Save() const { 
-    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
-    return TBoxedValueAccessor::Save(*Raw.Boxed.Value); 
-} 
- 
-inline void TUnboxedValuePod::Load(const TStringRef& state) { 
-    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
-    return TBoxedValueAccessor::Load(*Raw.Boxed.Value, state); 
-} 
-#endif 
- 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
+inline ui32 TUnboxedValuePod::GetTraverseCount() const {
+    UDF_VERIFY(IsBoxed(), "Value is not boxed");
+    return TBoxedValueAccessor::GetTraverseCount(*Raw.Boxed.Value);
+}
+
+inline TUnboxedValue TUnboxedValuePod::GetTraverseItem(ui32 index) const {
+    UDF_VERIFY(IsBoxed(), "Value is not boxed");
+    return TBoxedValueAccessor::GetTraverseItem(*Raw.Boxed.Value, index);
+}
+
+inline TUnboxedValue TUnboxedValuePod::Save() const {
+    UDF_VERIFY(IsBoxed(), "Value is not boxed");
+    return TBoxedValueAccessor::Save(*Raw.Boxed.Value);
+}
+
+inline void TUnboxedValuePod::Load(const TStringRef& state) {
+    UDF_VERIFY(IsBoxed(), "Value is not boxed");
+    return TBoxedValueAccessor::Load(*Raw.Boxed.Value, state);
+}
+#endif
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
 inline bool TUnboxedValuePod::IsSortedDict() const {
     UDF_VERIFY(IsBoxed(), "Value is not boxed");

@@ -127,7 +127,7 @@ struct TKqlTransformContext : TThrRefBase {
         ReplyTarget = {};
         AnalyzeResults = {};
         MkqlResults.clear();
-        QueryStats = {}; 
+        QueryStats = {};
         PreparingKql = nullptr;
         PreparedKql = nullptr;
         PhysicalQuery = nullptr;

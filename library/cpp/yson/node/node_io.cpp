@@ -1,8 +1,8 @@
 #include "node_io.h"
- 
-#include "node_builder.h" 
-#include "node_visitor.h" 
- 
+
+#include "node_builder.h"
+#include "node_visitor.h"
+
 #include <library/cpp/yson/json/json_writer.h>
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/writer.h>
@@ -11,13 +11,13 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 
-#include <util/stream/input.h> 
-#include <util/stream/output.h> 
-#include <util/stream/str.h> 
+#include <util/stream/input.h>
+#include <util/stream/output.h>
+#include <util/stream/str.h>
 #include <util/stream/mem.h>
- 
-namespace NYT { 
- 
+
+namespace NYT {
+
 static void WalkJsonTree(const NJson::TJsonValue& jsonValue, NJson::TJsonCallbacks* callbacks)
 {
     using namespace NJson;
@@ -68,20 +68,20 @@ static void WalkJsonTree(const NJson::TJsonValue& jsonValue, NJson::TJsonCallbac
 
 static TNode CreateEmptyNodeByType(::NYson::EYsonType type)
 {
-    TNode result; 
-    switch (type) { 
+    TNode result;
+    switch (type) {
         case ::NYson::EYsonType::ListFragment:
-            result = TNode::CreateList(); 
-            break; 
+            result = TNode::CreateList();
+            break;
         case ::NYson::EYsonType::MapFragment:
-            result = TNode::CreateMap(); 
-            break; 
-        default: 
-            break; 
-    } 
+            result = TNode::CreateMap();
+            break;
+        default:
+            break;
+    }
     return result;
 }
- 
+
 TNode NodeFromYsonString(const TStringBuf input, ::NYson::EYsonType type)
 {
     TMemoryInput stream(input);
@@ -106,19 +106,19 @@ TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type)
 {
     TNode result = CreateEmptyNodeByType(type);
 
-    TNodeBuilder builder(&result); 
+    TNodeBuilder builder(&result);
     ::NYson::TYsonParser parser(&builder, input, type);
-    parser.Parse(); 
-    return result; 
-} 
- 
+    parser.Parse();
+    return result;
+}
+
 void NodeToYsonStream(const TNode& node, IOutputStream* output, NYson::EYsonFormat format)
-{ 
+{
     ::NYson::TYsonWriter writer(output, format);
-    TNodeVisitor visitor(&writer); 
-    visitor.Visit(node); 
-} 
- 
+    TNodeVisitor visitor(&writer);
+    visitor.Visit(node);
+}
+
 void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, NYson::EYsonFormat format)
 {
     ::NYson::TYsonWriter writer(output, format);
@@ -149,6 +149,6 @@ TNode NodeFromJsonValue(const NJson::TJsonValue& input)
     return result;
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-} // namespace NYT 
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

@@ -51,11 +51,11 @@ IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& servic
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const NKikimrConfig::TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken, 
+    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
     TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TString& userToken, const TMaybe<TString>& uid,
-    TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters); 
+    TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters);
 
 struct TKqpWorkerSettings {
     TString Cluster;
@@ -64,14 +64,14 @@ struct TKqpWorkerSettings {
 
     NKikimrConfig::TTableServiceConfig Service;
 
-    TKqpDbCountersPtr DbCounters; 
- 
+    TKqpDbCountersPtr DbCounters;
+
     TKqpWorkerSettings(const TString& cluster, const TString& database,
-        const NKikimrConfig::TTableServiceConfig& serviceConfig, TKqpDbCountersPtr dbCounters) 
+        const NKikimrConfig::TTableServiceConfig& serviceConfig, TKqpDbCountersPtr dbCounters)
         : Cluster(cluster)
         , Database(database)
-        , Service(serviceConfig) 
-        , DbCounters(dbCounters) {} 
+        , Service(serviceConfig)
+        , DbCounters(dbCounters) {}
 };
 
 IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,

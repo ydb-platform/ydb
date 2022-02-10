@@ -7,8 +7,8 @@
 #include <util/generic/string.h>
 #include <util/network/sock.h>
 
-class TInet6StreamSocket;
-
+class TInet6StreamSocket; 
+ 
 // set two options: SO_REUSEADDR and SO_REUSEPORT, both are required for
 // correct implementation of TPortManager because of different operating systems
 // incompatibility: singe SO_REUSEADDR is enough for Linux, but not enough for Darwin
@@ -34,7 +34,7 @@ public:
 
     // Gets free TCP port
     ui16 GetPort(ui16 port = 0);
-
+ 
     // Gets free TCP port
     ui16 GetTcpPort(ui16 port = 0);
 
@@ -49,6 +49,6 @@ public:
 private:
     class TPortManagerImpl;
     THolder<TPortManagerImpl> Impl_;
-};
+}; 
 
 ui16 GetRandomPort();

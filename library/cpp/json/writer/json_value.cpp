@@ -257,13 +257,13 @@ namespace NJson {
         BackChecks();
         return Value.Array->back();
     }
-
+ 
     TJsonValue& TJsonValue::AppendValue(const TJsonValue& value) {
         SetType(JSON_ARRAY);
         Value.Array->push_back(value);
         return Value.Array->back();
     }
-
+ 
     TJsonValue& TJsonValue::AppendValue(TJsonValue&& value) {
         SetType(JSON_ARRAY);
         Value.Array->push_back(std::move(value));

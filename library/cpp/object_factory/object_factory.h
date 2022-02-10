@@ -113,7 +113,7 @@ namespace NObjectFactory {
             return keysStr;
         }
 
-        static TProduct* Construct(const TKey& key, const TKey& defKey) {
+        static TProduct* Construct(const TKey& key, const TKey& defKey) { 
             TProduct* result = Singleton<TObjectFactory<TProduct, TKey>>()->Create(key);
             if (!result && !!defKey) {
                 result = Singleton<TObjectFactory<TProduct, TKey>>()->Create(defKey);
@@ -121,11 +121,11 @@ namespace NObjectFactory {
             return result;
         }
 
-        static TProduct* Construct(const TKey& key) {
-            TProduct* result = Singleton<TObjectFactory<TProduct, TKey>>()->Create(key);
-            return result;
-        }
-
+        static TProduct* Construct(const TKey& key) { 
+            TProduct* result = Singleton<TObjectFactory<TProduct, TKey>>()->Create(key); 
+            return result; 
+        } 
+ 
         static THolder<TProduct> VerifiedConstruct(const TKey& key) {
             auto result = MakeHolder(key);
             Y_VERIFY(result, "Construct by factory failed");
@@ -141,7 +141,7 @@ namespace NObjectFactory {
             return Singleton<TObjectFactory<TProduct, TKey>>()->HasImpl(key);
         }
 
-        static void GetRegisteredKeys(TSet<TKey>& keys) {
+        static void GetRegisteredKeys(TSet<TKey>& keys) { 
             return Singleton<TObjectFactory<TProduct, TKey>>()->GetKeys(keys);
         }
 

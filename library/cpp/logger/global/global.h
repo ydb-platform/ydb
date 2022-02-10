@@ -71,7 +71,7 @@ public:
 #define RESOURCES_LOG SINGLETON_CHECKED_GENERIC_LOG(TGlobalLog, TRTYLogPreprocessor, TLOG_RESOURCES, "RESOURCES")
 
 #define TEMPLATE_LOG(logLevel) SINGLETON_CHECKED_GENERIC_LOG(TGlobalLog, TRTYLogPreprocessor, logLevel, ToString(logLevel).data())
-
+ 
 #define IS_LOG_ACTIVE(logLevel) (TLoggerOperator<TGlobalLog>::Log().FiltrationLevel() >= logLevel)
 
 #define RTY_MEM_LOG(Action) \

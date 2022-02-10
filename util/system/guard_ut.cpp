@@ -1,5 +1,5 @@
 #include "guard.h"
-#include "rwlock.h"
+#include "rwlock.h" 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -12,7 +12,7 @@ struct TTestGuard: public TTestBase {
     UNIT_TEST(TestMove)
     UNIT_TEST(TestSync)
     UNIT_TEST(TestUnguard)
-    UNIT_TEST(TestTryReadGuard)
+    UNIT_TEST(TestTryReadGuard) 
     UNIT_TEST(TestWithLock)
     UNIT_TEST(TestWithLockScope);
     UNIT_TEST_SUITE_END();
@@ -129,29 +129,29 @@ struct TTestGuard: public TTestBase {
         }
         UNIT_ASSERT(!checker.guarded);
     }
-
-    void TestTryReadGuard() {
-        TRWMutex mutex;
-        {
-            TTryReadGuard tryGuard(mutex);
-            UNIT_ASSERT(tryGuard.WasAcquired());
-            TReadGuard readGuard(mutex);
-            TTryReadGuard anotherTryGuard(mutex);
-            UNIT_ASSERT(tryGuard.WasAcquired());
-        }
-        {
-            TReadGuard readGuard(mutex);
-            TTryReadGuard tryGuard(mutex);
-            UNIT_ASSERT(tryGuard.WasAcquired());
-        }
-        {
-            TWriteGuard writeGuard(mutex);
-            TTryReadGuard tryGuard(mutex);
-            UNIT_ASSERT(!tryGuard.WasAcquired());
-        }
-        TTryReadGuard tryGuard(mutex);
-        UNIT_ASSERT(tryGuard.WasAcquired());
-    }
+ 
+    void TestTryReadGuard() { 
+        TRWMutex mutex; 
+        { 
+            TTryReadGuard tryGuard(mutex); 
+            UNIT_ASSERT(tryGuard.WasAcquired()); 
+            TReadGuard readGuard(mutex); 
+            TTryReadGuard anotherTryGuard(mutex); 
+            UNIT_ASSERT(tryGuard.WasAcquired()); 
+        } 
+        { 
+            TReadGuard readGuard(mutex); 
+            TTryReadGuard tryGuard(mutex); 
+            UNIT_ASSERT(tryGuard.WasAcquired()); 
+        } 
+        { 
+            TWriteGuard writeGuard(mutex); 
+            TTryReadGuard tryGuard(mutex); 
+            UNIT_ASSERT(!tryGuard.WasAcquired()); 
+        } 
+        TTryReadGuard tryGuard(mutex); 
+        UNIT_ASSERT(tryGuard.WasAcquired()); 
+    } 
 
     int WithLockIncrement(TGuardChecker& m, int n) {
         with_lock (m) {

@@ -93,7 +93,7 @@ ui16 TPortManager::GetUdpPort(ui16 port) {
 ui16 TPortManager::GetTcpAndUdpPort(ui16 port) {
     return Impl_->GetTcpAndUdpPort(port);
 }
-
+ 
 ui16 TPortManager::GetPortsRange(const ui16 startPort, const ui16 range) {
     return Impl_->GetPortsRange(startPort, range);
 }

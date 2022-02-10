@@ -7,8 +7,8 @@ OWNER(
 
 LIBRARY()
 
-GENERATE_ENUM_SERIALIZATION(priority.h)
-
+GENERATE_ENUM_SERIALIZATION(priority.h) 
+ 
 PEERDIR (
     library/cpp/json
 )

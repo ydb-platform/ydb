@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
         const TActorId edge = runtime.AllocateEdgeActor();
         runtime.Send(new IEventHandle(MakeTabletResolverID(), edge, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(edge);
-        return std::move(ev->Release());
+        return std::move(ev->Release()); 
     }
 
     void DoSendNodeProblem(TTestBasicRuntime& runtime, ui32 nodeId, ui64 problemEpoch) {

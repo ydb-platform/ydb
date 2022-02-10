@@ -501,7 +501,7 @@ void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {
     auto& domain = AppData()->DomainsInfo->Domains.begin()->second;
     ui64 domainOwnerId = domain->SchemeRoot;
     ui32 schemeBoardGroup = domain->DefaultSchemeBoardGroup;
-    THolder<IActor> subscriber{CreateSchemeBoardSubscriber(SelfId(), database, schemeBoardGroup, domainOwnerId)};
+    THolder<IActor> subscriber{CreateSchemeBoardSubscriber(SelfId(), database, schemeBoardGroup, domainOwnerId)}; 
     TActorId subscriberId = Register(subscriber.Release());
     auto itSubscriber = Subscribers.emplace(database, subscriberId);
     if (!itSubscriber.second) {

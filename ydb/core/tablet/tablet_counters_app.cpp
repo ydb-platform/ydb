@@ -12,29 +12,29 @@ namespace NKikimr {
 THolder<TTabletCountersBase> CreateAppCountersByTabletType(TTabletTypes::EType type) {
     switch (type) {
     case TTabletTypes::SchemeShard:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return MakeHolder<TAppProtobufTabletCounters< 
             NSchemeShard::ESimpleCounters_descriptor,
             NSchemeShard::ECumulativeCounters_descriptor,
             NSchemeShard::EPercentileCounters_descriptor
-        >>();
+        >>(); 
     case TTabletTypes::DataShard:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return MakeHolder<TAppProtobufTabletCounters< 
             NDataShard::ESimpleCounters_descriptor,
             NDataShard::ECumulativeCounters_descriptor,
             NDataShard::EPercentileCounters_descriptor
-        >>();
+        >>(); 
     case TTabletTypes::Hive:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return MakeHolder<TAppProtobufTabletCounters< 
             NHive::ESimpleCounters_descriptor,
             NHive::ECumulativeCounters_descriptor,
             NHive::EPercentileCounters_descriptor
-        >>();
+        >>(); 
     case TTabletTypes::Kesus:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return MakeHolder<TAppProtobufTabletCounters< 
             NKesus::ESimpleCounters_descriptor,
             NKesus::ECumulativeCounters_descriptor,
             NKesus::EPercentileCounters_descriptor
-        >>();
+        >>(); 
     default:
         return {};
     }

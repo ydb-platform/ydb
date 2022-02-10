@@ -1,6 +1,6 @@
 #include "json_easy_parser.h"
 #include <library/cpp/json/json_reader.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
@@ -13,7 +13,7 @@ namespace NJson {
         TVector<const char*> parts;
         Split(path.begin(), '/', &parts);
         for (size_t n = 0; n < parts.size(); ++n) {
-            TString part = Strip(parts[n]);
+            TString part = Strip(parts[n]); 
             if (!part.empty()) {
                 if (part[0] != '[') {
                     res->push_back(TPathElem(NImpl::MAP));

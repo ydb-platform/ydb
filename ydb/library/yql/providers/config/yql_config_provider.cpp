@@ -168,7 +168,7 @@ namespace {
         }
 
         bool CanParse(const TExprNode& node) override {
-            if (ConfigProviderFunctions().contains(node.Content()) ||
+            if (ConfigProviderFunctions().contains(node.Content()) || 
                 node.Content() == ConfigureName)
             {
                 return MatchCategory(node);
@@ -373,7 +373,7 @@ namespace {
         }
 
         bool CanExecute(const TExprNode& node) override {
-            if (ConfigProviderFunctions().contains(node.Content()) ||
+            if (ConfigProviderFunctions().contains(node.Content()) || 
                 node.Content() == ConfigureName)
             {
                 return MatchCategory(node);

@@ -130,10 +130,10 @@
 #endif
 
 #if defined( BOOST_NO_CXX11_NUMERIC_LIMITS )
-#  define BOOST_CHRONO_LIB_NOEXCEPT_OR_THROW noexcept
+#  define BOOST_CHRONO_LIB_NOEXCEPT_OR_THROW noexcept 
 #else
 #ifdef BOOST_NO_CXX11_NOEXCEPT
-#  define BOOST_CHRONO_LIB_NOEXCEPT_OR_THROW noexcept
+#  define BOOST_CHRONO_LIB_NOEXCEPT_OR_THROW noexcept 
 #else
 #  define BOOST_CHRONO_LIB_NOEXCEPT_OR_THROW noexcept
 #endif

@@ -370,10 +370,10 @@ template <>
 class TSerializer<TUtf16String>: public TVectorSerializer<TUtf16String> {
 };
 
-template <class TChar>
-class TSerializer<std::basic_string<TChar>>: public TVectorSerializer<std::basic_string<TChar>> {
-};
-
+template <class TChar> 
+class TSerializer<std::basic_string<TChar>>: public TVectorSerializer<std::basic_string<TChar>> { 
+}; 
+ 
 template <class T, class A>
 class TSerializer<TDeque<T, A>>: public TVectorSerializer<TDeque<T, A>> {
 };
@@ -640,7 +640,7 @@ public:
 };
 
 #ifndef __NVCC__
-
+ 
 namespace NPrivate {
     template <class Variant, class T, size_t I>
     void LoadVariantAlternative(IInputStream* is, Variant& v) {
@@ -651,14 +651,14 @@ namespace NPrivate {
 }
 
 template <typename... Args>
-struct TSerializer<std::variant<Args...>> {
-    using TVar = std::variant<Args...>;
+struct TSerializer<std::variant<Args...>> { 
+    using TVar = std::variant<Args...>; 
 
     static_assert(sizeof...(Args) < 256, "We use ui8 to store tag");
 
     static void Save(IOutputStream* os, const TVar& v) {
-        ::Save<ui8>(os, v.index());
-        std::visit([os](const auto& data) {
+        ::Save<ui8>(os, v.index()); 
+        std::visit([os](const auto& data) { 
             ::Save(os, data);
         }, v);
     }
@@ -681,8 +681,8 @@ private:
     }
 };
 
-#endif
-
+#endif 
+ 
 template <class T>
 static inline void SaveLoad(IOutputStream* out, const T& t) {
     Save(out, t);
@@ -711,15 +711,15 @@ static inline void LoadMany(S* s, Ts&... t) {
     inline void Load(IInputStream* s) {        \
         ::LoadMany(s, __VA_ARGS__);            \
     }
-
-#define Y_SAVELOAD_DEFINE_OVERRIDE(...)          \
-    void Save(IOutputStream* s) const override { \
-        ::SaveMany(s, __VA_ARGS__);              \
-    }                                            \
-                                                 \
-    void Load(IInputStream* s) override {        \
-        ::LoadMany(s, __VA_ARGS__);              \
-    }
+ 
+#define Y_SAVELOAD_DEFINE_OVERRIDE(...)          \ 
+    void Save(IOutputStream* s) const override { \ 
+        ::SaveMany(s, __VA_ARGS__);              \ 
+    }                                            \ 
+                                                 \ 
+    void Load(IInputStream* s) override {        \ 
+        ::LoadMany(s, __VA_ARGS__);              \ 
+    } 
 
 template <class T>
 struct TNonVirtualSaver {

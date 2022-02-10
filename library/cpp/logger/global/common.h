@@ -68,12 +68,12 @@ namespace NLoggingImpl {
 
     TString GetLocalTimeSSimple();
 
-    // Returns correct log type to use
+    // Returns correct log type to use 
     TString PrepareToOpenLog(TString logType, int logLevel, bool rotation, bool startAsDaemon);
 
     template <class TLoggerType>
     void InitLogImpl(TString logType, const int logLevel, const bool rotation, const bool startAsDaemon) {
-        TLoggerOperator<TLoggerType>::Set(new TLoggerType(PrepareToOpenLog(logType, logLevel, rotation, startAsDaemon), (ELogPriority)logLevel));
+        TLoggerOperator<TLoggerType>::Set(new TLoggerType(PrepareToOpenLog(logType, logLevel, rotation, startAsDaemon), (ELogPriority)logLevel)); 
     }
 }
 

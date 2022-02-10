@@ -167,32 +167,32 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
     }
 
     Y_UNIT_TEST(TestCompress) {
-        const auto codedFactors = fh::Encode(Factors);
+        const auto codedFactors = fh::Encode(Factors); 
         UNIT_ASSERT_VALUES_EQUAL(codedFactors.size(), CodedSize);
         for (size_t i = 0; i < Min(codedFactors.size(), CodedSize); ++i)
-            UNIT_ASSERT_VALUES_EQUAL((ui8)codedFactors[i], CodedFactors[i]);
+            UNIT_ASSERT_VALUES_EQUAL((ui8)codedFactors[i], CodedFactors[i]); 
         //PrintCompressed(codedFactors);
     }
 
     Y_UNIT_TEST(TestSimpleDecompress) {
-        TVector<float> factors = fh::Decode(CodedFactorsBuf);
+        TVector<float> factors = fh::Decode(CodedFactorsBuf); 
         UNIT_ASSERT_VALUES_EQUAL(factors.size(), FactorCount);
         for (size_t i = 0; i < Min(factors.size(), FactorCount); ++i)
             UNIT_ASSERT_VALUES_EQUAL(factors[i], Factors[i]);
         //PrintDecompressed(factors);
     }
 
-    Y_UNIT_TEST(TestDecompressInParts) {
+    Y_UNIT_TEST(TestDecompressInParts) { 
         float factors[FactorCount];
         FillWithGarbage(factors, FactorCount);
-        fh::TDecoder decoder(CodedFactorsBuf);
+        fh::TDecoder decoder(CodedFactorsBuf); 
         const size_t firstPack = 100;
         // unpack first pack
-        UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors, firstPack}), firstPack);
+        UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors, firstPack}), firstPack); 
         // unpack all the rest
-        UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors + firstPack, FactorCount - firstPack}), FactorCount - firstPack);
+        UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors + firstPack, FactorCount - firstPack}), FactorCount - firstPack); 
 
-        for (size_t i = 0; i < FactorCount; ++i)
+        for (size_t i = 0; i < FactorCount; ++i) 
             UNIT_ASSERT_VALUES_EQUAL(factors[i], Factors[i]);
         //PrintDecompressed(factors);
     }
@@ -200,18 +200,18 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
     Y_UNIT_TEST(TestSkip) {
         float factors[FactorCount];
         FillWithGarbage(factors, FactorCount);
-        fh::TDecoder decoder(CodedFactorsBuf);
+        fh::TDecoder decoder(CodedFactorsBuf); 
         const size_t firstPack = 100;
         // unpack first pack
-        UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors, firstPack}), firstPack);
+        UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors, firstPack}), firstPack); 
         // skip some factors
         const size_t skipCount = 60;
-        UNIT_ASSERT_VALUES_EQUAL(decoder.Skip(skipCount / 2), skipCount / 2);
+        UNIT_ASSERT_VALUES_EQUAL(decoder.Skip(skipCount / 2), skipCount / 2); 
         // unpack all, except some factors in the end
-        const auto toDecode = FactorCount - firstPack - skipCount;
-        UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors + firstPack, toDecode}), toDecode);
-        UNIT_ASSERT_VALUES_EQUAL(decoder.Skip(skipCount / 2), skipCount / 2);
-        for (size_t i = 0; i < FactorCount - skipCount; ++i) {
+        const auto toDecode = FactorCount - firstPack - skipCount; 
+        UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors + firstPack, toDecode}), toDecode); 
+        UNIT_ASSERT_VALUES_EQUAL(decoder.Skip(skipCount / 2), skipCount / 2); 
+        for (size_t i = 0; i < FactorCount - skipCount; ++i) { 
             size_t correctedI = i < firstPack ? i : i + skipCount / 2;
             UNIT_ASSERT_VALUES_EQUAL(factors[i], Factors[correctedI]);
         }
@@ -227,11 +227,11 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
             "d4ZfQZrETm3B+OxxB8bbnTPM5+qtbQ92mJ3fHPGj+iH5+8tzcnJuamry1tWUw"
             "MBD693f07+9+DQQEkIGAgIgPetzN5yEbAGxWpbCNxXK/0JGTKRz2KkIoR7aM";
         UNIT_ASSERT_EXCEPTION(
-            fh::Decode(Base64Decode(brokenBase64Encoded)),
+            fh::Decode(Base64Decode(brokenBase64Encoded)), 
             yexception);
     }
-
-    Y_UNIT_TEST(TestDecompressEmpty) {
-        UNIT_ASSERT_EXCEPTION(fh::Decode({}), yexception);
-    }
+ 
+    Y_UNIT_TEST(TestDecompressEmpty) { 
+        UNIT_ASSERT_EXCEPTION(fh::Decode({}), yexception); 
+    } 
 };

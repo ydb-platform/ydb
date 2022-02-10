@@ -26,7 +26,7 @@ public:
         Y_VERIFY_S(AtomicGet(SizeLowerEstimate) == 0, "Unexpected SizeLowerEstimate# " << AtomicGet(SizeLowerEstimate));
     }
 
-    void Push(T *x) noexcept {
+    void Push(T *x) noexcept { 
         Queue.Push(x);
         AtomicIncrement(SizeLowerEstimate);
         WakeUp();

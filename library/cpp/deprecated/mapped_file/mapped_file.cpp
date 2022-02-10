@@ -2,13 +2,13 @@
 
 #include <util/generic/yexception.h>
 #include <util/system/defaults.h>
-#include <util/system/hi_lo.h>
+#include <util/system/hi_lo.h> 
 #include <util/system/filemap.h>
 
 TMappedFile::TMappedFile(TFileMap* map, const char* dbgName) {
     Map_ = map;
     i64 len = Map_->Length();
-    if (Hi32(len) != 0 && sizeof(size_t) <= sizeof(ui32))
+    if (Hi32(len) != 0 && sizeof(size_t) <= sizeof(ui32)) 
         ythrow yexception() << "File '" << dbgName << "' mapping error: " << len << " too large";
 
     Map_->Map(0, static_cast<size_t>(len));

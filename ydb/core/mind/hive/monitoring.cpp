@@ -732,7 +732,7 @@ public:
             Self->BuildCurrentConfig();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
         }
-        if (params.contains("allowedMetrics")) {
+        if (params.contains("allowedMetrics")) { 
             TVector<TString> allowedMetrics = SplitString(params.Get("allowedMetrics"), ";");
             for (TStringBuf tabletAllowedMetrics : allowedMetrics) {
                 TStringBuf tabletType = tabletAllowedMetrics.NextTok(':');

@@ -3,7 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/thread/pool.h>
+#include <util/thread/pool.h> 
 
 namespace {
     struct TSharedData {
@@ -85,7 +85,7 @@ namespace {
 Y_UNIT_TEST_SUITE(EventTest) {
     Y_UNIT_TEST(WaitAndSignalTest) {
         TSharedData data;
-        TThreadPool queue;
+        TThreadPool queue; 
         queue.Start(5);
         for (size_t i = 0; i < 5; ++i) {
             UNIT_ASSERT(queue.Add(new TThreadTask(data, i)));
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(EventTest) {
         // test for problem detected by thread-sanitizer (signal/wait race) SEARCH-2113
         const size_t limit = 200;
         TManualEvent event[limit];
-        TThreadPool queue;
+        TThreadPool queue; 
         queue.Start(limit);
         TVector<THolder<IObjectInQueue>> tasks;
         for (size_t i = 0; i < limit; ++i) {
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(EventTest) {
             tasks.emplace_back(std::move(owner));
         }
 
-        TThreadPool queue;
+        TThreadPool queue; 
         queue.Start(4);
         for (auto& task : tasks) {
             UNIT_ASSERT(queue.Add(task.Get()));

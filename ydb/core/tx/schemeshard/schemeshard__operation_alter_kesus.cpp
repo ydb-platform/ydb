@@ -362,7 +362,7 @@ public:
             return result;
         }
 
-        kesus->AlterConfig.Reset(new Ydb::Coordination::Config);
+        kesus->AlterConfig.Reset(new Ydb::Coordination::Config); 
         kesus->AlterConfig->CopyFrom(kesus->Config);
         kesus->AlterConfig->MergeFrom(*alterConfig);
         kesus->AlterVersion = kesus->Version + 1;

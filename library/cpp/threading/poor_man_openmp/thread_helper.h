@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/thread/pool.h>
+#include <util/thread/pool.h> 
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 #include <util/system/info.h>
@@ -17,7 +17,7 @@ public:
     TMtpQueueHelper() {
         SetThreadCount(NSystemInfo::CachedNumberOfCpus());
     }
-    IThreadPool* Get() {
+    IThreadPool* Get() { 
         return q.Get();
     }
     size_t GetThreadCount() {
@@ -25,14 +25,14 @@ public:
     }
     void SetThreadCount(size_t threads) {
         ThreadCount = threads;
-        q = CreateThreadPool(ThreadCount);
+        q = CreateThreadPool(ThreadCount); 
     }
 
     static TMtpQueueHelper& Instance();
 
 private:
     size_t ThreadCount;
-    TAutoPtr<IThreadPool> q;
+    TAutoPtr<IThreadPool> q; 
 };
 
 namespace NYmp {
@@ -49,7 +49,7 @@ namespace NYmp {
         chunkSize = Max<size_t>(chunkSize, 1);
 
         size_t threadCount = TMtpQueueHelper::Instance().GetThreadCount();
-        IThreadPool* queue = TMtpQueueHelper::Instance().Get();
+        IThreadPool* queue = TMtpQueueHelper::Instance().Get(); 
         TCondVar cv;
         TMutex mutex;
         TAtomic counter = threadCount;

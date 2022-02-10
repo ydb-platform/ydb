@@ -152,7 +152,7 @@ private:
 }
 
 THolder<IDqIntegration> CreateYdbDqIntegration(TYdbState::TPtr state) {
-    return MakeHolder<TYdbDqIntegration>(state);
+    return MakeHolder<TYdbDqIntegration>(state); 
 }
 
 }

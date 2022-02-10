@@ -6,7 +6,7 @@ namespace NHive {
 
 class TTxSeizeTablets : public TTransactionBase<THive> {
     THolder<TEvHive::TEvSeizeTablets::THandle> Request;
-    THolder<TEvHive::TEvSeizeTabletsReply> Response = MakeHolder<TEvHive::TEvSeizeTabletsReply>();
+    THolder<TEvHive::TEvSeizeTabletsReply> Response = MakeHolder<TEvHive::TEvSeizeTabletsReply>(); 
 
 public:
     TTxSeizeTablets(THolder<TEvHive::TEvSeizeTablets::THandle> event, THive *hive)
@@ -157,7 +157,7 @@ public:
 };
 
 ITransaction* THive::CreateSeizeTablets(TEvHive::TEvSeizeTablets::TPtr event) {
-    return new TTxSeizeTablets(THolder(std::move(event.Release())), this);
+    return new TTxSeizeTablets(THolder(std::move(event.Release())), this); 
 }
 
 } // NHive

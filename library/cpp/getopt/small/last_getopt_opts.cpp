@@ -260,7 +260,7 @@ namespace NLastGetopt {
     }
 
     TStringBuf TOpts::GetFreeArgTitle(size_t pos) const {
-        if (FreeArgSpecs_.contains(pos)) {
+        if (FreeArgSpecs_.contains(pos)) { 
             return FreeArgSpecs_.at(pos).GetTitle(DefaultFreeArgTitle_);
         }
         return DefaultFreeArgTitle_;

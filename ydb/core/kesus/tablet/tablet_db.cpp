@@ -96,7 +96,7 @@ void TKesusTablet::DoDeleteSessionSemaphore(
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
         "[" << TabletID() << "] Deleting session " << sessionId << " / semaphore " << semaphoreId << " " << semaphore->Name.Quote()
             << " owner link");
-    Y_VERIFY(semaphore->Owners.contains(owner));
+    Y_VERIFY(semaphore->Owners.contains(owner)); 
     semaphore->Count -= owner->Count;
     semaphore->Owners.erase(owner);
     PersistDeleteSessionSemaphore(db, sessionId, semaphoreId);
@@ -156,7 +156,7 @@ void TKesusTablet::DoProcessSemaphoreQueue(
             "Semaphore %s points to missing session: %" PRIu64 " (wait order %" PRIu64 ")",
             semaphore->Name.Quote().data(), sessionId, orderId);
 
-        Y_VERIFY(!session->OwnedSemaphores.contains(semaphoreId));
+        Y_VERIFY(!session->OwnedSemaphores.contains(semaphoreId)); 
         auto* owner = &session->OwnedSemaphores[semaphoreId];
         owner->OrderId = orderId;
         owner->SessionId = sessionId;

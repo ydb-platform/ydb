@@ -15,11 +15,11 @@ public:
     {
     }
 
-    void Release() noexcept {
+    void Release() noexcept { 
         AtomicUi32Increment(&TicketOut);
     }
 
-    ui32 Acquire() noexcept {
+    ui32 Acquire() noexcept { 
         ui32 revolves = 0;
         const ui32 ticket = AtomicUi32Increment(&TicketIn) - 1;
         while (ticket != AtomicLoad(&TicketOut)) {
@@ -30,7 +30,7 @@ public:
         return revolves;
     }
 
-    bool TryAcquire() noexcept {
+    bool TryAcquire() noexcept { 
         const ui32 x = AtomicLoad(&TicketOut);
         if (x == AtomicLoad(&TicketIn) && AtomicUi32Cas(&TicketIn, x + 1, x))
             return true;
@@ -38,7 +38,7 @@ public:
             return false;
     }
 
-    bool IsLocked() noexcept {
+    bool IsLocked() noexcept { 
         const ui32 ticketIn = AtomicLoad(&TicketIn);
         const ui32 ticketOut = AtomicLoad(&TicketOut);
         return (ticketIn != ticketOut);

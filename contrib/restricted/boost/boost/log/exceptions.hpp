@@ -83,12 +83,12 @@ public:
     /*!
      * Destructor
      */
-    ~bad_alloc();
+    ~bad_alloc(); 
 
     /*!
      * Error message accessor.
      */
-    const char* what() const noexcept;
+    const char* what() const noexcept; 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line, const char* descr);
@@ -114,7 +114,7 @@ public:
     /*!
      * Destructor
      */
-    ~capacity_limit_reached();
+    ~capacity_limit_reached(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line, const char* descr);
@@ -140,7 +140,7 @@ public:
     /*!
      * Destructor
      */
-    ~runtime_error();
+    ~runtime_error(); 
 };
 
 /*!
@@ -161,7 +161,7 @@ public:
     /*!
      * Destructor
      */
-    ~missing_value();
+    ~missing_value(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);
@@ -190,7 +190,7 @@ public:
     /*!
      * Destructor
      */
-    ~invalid_type();
+    ~invalid_type(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);
@@ -223,7 +223,7 @@ public:
     /*!
      * Destructor
      */
-    ~invalid_value();
+    ~invalid_value(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);
@@ -250,7 +250,7 @@ public:
     /*!
      * Destructor
      */
-    ~parse_error();
+    ~parse_error(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);
@@ -281,7 +281,7 @@ public:
     /*!
      * Destructor
      */
-    ~conversion_error();
+    ~conversion_error(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);
@@ -304,7 +304,7 @@ public:
     /*!
      * Destructor
      */
-    ~system_error();
+    ~system_error(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line, const char* descr, int system_error_code);
@@ -331,7 +331,7 @@ public:
     /*!
      * Destructor
      */
-    ~logic_error();
+    ~logic_error(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line, const char* descr);
@@ -357,7 +357,7 @@ public:
     /*!
      * Destructor
      */
-    ~odr_violation();
+    ~odr_violation(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);
@@ -384,7 +384,7 @@ public:
     /*!
      * Destructor
      */
-    ~unexpected_call();
+    ~unexpected_call(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);
@@ -411,7 +411,7 @@ public:
     /*!
      * Destructor
      */
-    ~setup_error();
+    ~setup_error(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);
@@ -438,7 +438,7 @@ public:
     /*!
      * Destructor
      */
-    ~limitation_error();
+    ~limitation_error(); 
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
     static BOOST_LOG_NORETURN void throw_(const char* file, std::size_t line);

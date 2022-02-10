@@ -106,7 +106,7 @@ TUtf16String PunycodeToHostName(const TStringBuf& punycodeHost) {
     CheckIdnaResult(rc);
 
     TUtf16String decoded;
-    AppendUtf32ToWide(out.Data, std::char_traits<ui32>::length(out.Data), decoded);
+    AppendUtf32ToWide(out.Data, std::char_traits<ui32>::length(out.Data), decoded); 
     return decoded;
 }
 

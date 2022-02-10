@@ -68,13 +68,13 @@ OpenSSLException& OpenSSLException::operator = (const OpenSSLException& exc)
 }
 
 
-const char* OpenSSLException::name() const noexcept
+const char* OpenSSLException::name() const noexcept 
 {
 	return "OpenSSLException";
 }
 
 
-const char* OpenSSLException::className() const noexcept
+const char* OpenSSLException::className() const noexcept 
 {
 	return typeid(*this).name();
 }

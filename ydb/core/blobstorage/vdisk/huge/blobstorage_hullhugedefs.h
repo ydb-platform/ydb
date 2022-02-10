@@ -367,7 +367,7 @@ namespace NKikimr {
 
 template<>
 struct THash<NKikimr::NHuge::THugeSlot> {
-    inline ui64 operator()(const NKikimr::NHuge::THugeSlot& x) const noexcept {
+    inline ui64 operator()(const NKikimr::NHuge::THugeSlot& x) const noexcept { 
         return x.Hash();
     }
 };

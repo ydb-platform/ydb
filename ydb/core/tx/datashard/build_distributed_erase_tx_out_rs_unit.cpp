@@ -97,7 +97,7 @@ public:
         Y_VERIFY(DataShard.GetUserTables().contains(tableId));
         const TUserTable& tableInfo = *DataShard.GetUserTables().at(tableId);
 
-        THolder<IEraseRowsCondition> condition{CreateEraseRowsCondition(request)};
+        THolder<IEraseRowsCondition> condition{CreateEraseRowsCondition(request)}; 
         Y_VERIFY(condition.Get());
         condition->Prepare(txc.DB.GetRowScheme(tableInfo.LocalTid), 0);
 

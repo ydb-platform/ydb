@@ -14,7 +14,7 @@ TCustomActionExecutor* TCustomActionFactory::Create(TProbe* probe, const TCustom
 }
 
 void TCustomActionFactory::Register(const TString& name, const TCustomActionFactory::TCallback& callback) {
-    if (Callbacks.contains(name)) {
+    if (Callbacks.contains(name)) { 
         ythrow yexception() << "duplicate custom action '" << name << "'";
     }
     Callbacks[name] = callback;

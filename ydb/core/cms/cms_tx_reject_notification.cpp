@@ -53,7 +53,7 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRejectNotification Complete");
 
-        Self->Reply(Event, std::move(Response), ctx);
+        Self->Reply(Event, std::move(Response), ctx); 
     }
 
 private:

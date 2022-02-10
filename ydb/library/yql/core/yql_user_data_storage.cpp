@@ -66,7 +66,7 @@ bool TUserDataStorage::ContainsUserDataBlock(const TStringBuf& name) const {
 }
 
 bool TUserDataStorage::ContainsUserDataBlock(const TUserDataKey& key) const {
-    return UserData_.contains(key);
+    return UserData_.contains(key); 
 }
 
 const TUserDataBlock& TUserDataStorage::GetUserDataBlock(const TUserDataKey& key) const {
@@ -357,7 +357,7 @@ NThreading::TFuture<std::function<TUserDataTable()>> FreezeUserDataTableIfNeeded
 
             for (auto func : futures) {
                 std::pair<TUserDataKey, TUserDataBlock> p = func.GetValue()();
-                Y_ENSURE(files.contains(p.first));
+                Y_ENSURE(files.contains(p.first)); 
                 files[p.first].FrozenFile = p.second.FrozenFile;
             }
 

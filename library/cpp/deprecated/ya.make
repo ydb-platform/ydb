@@ -39,7 +39,7 @@ RECURSE(
     iterators_heap
     parse_utils
     parse_utils/ut
-    small_array
+    small_array 
     solartrie
     solartrie/indexed_region/ut
     solartrie/test

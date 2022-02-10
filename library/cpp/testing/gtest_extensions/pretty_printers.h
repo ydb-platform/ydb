@@ -71,7 +71,7 @@ inline void PrintTo(TNothing /* value */, std::ostream* stream) {
     *stream << "nothing";
 }
 
-inline void PrintTo(std::monostate /* value */, std::ostream* stream) {
+inline void PrintTo(std::monostate /* value */, std::ostream* stream) { 
     *stream << "monostate";
 }
 

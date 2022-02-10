@@ -25,29 +25,29 @@ using namespace Tests;
 using NClient::TValue;
 
 namespace {
-    class TFailingMtpQueue: public TSimpleThreadPool {
+    class TFailingMtpQueue: public TSimpleThreadPool { 
     private:
         bool FailOnAdd_ = false;
     public:
         void SetFailOnAdd(bool fail = true) {
             FailOnAdd_ = fail;
         }
-        [[nodiscard]] bool Add(IObjectInQueue* pObj) override {
+        [[nodiscard]] bool Add(IObjectInQueue* pObj) override { 
             if (FailOnAdd_) {
                 return false;
             }
 
-            return TSimpleThreadPool::Add(pObj);
+            return TSimpleThreadPool::Add(pObj); 
         }
         TFailingMtpQueue() = default;
-        TFailingMtpQueue(IThreadFactory* pool)
-            : TSimpleThreadPool(pool)
+        TFailingMtpQueue(IThreadFactory* pool) 
+            : TSimpleThreadPool(pool) 
         {
         }
     };
 
     using TFailingServerMtpQueue =
-        TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
+        TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>; 
 
     class THTTP200OkServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {

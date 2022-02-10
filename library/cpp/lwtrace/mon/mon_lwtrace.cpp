@@ -819,9 +819,9 @@ private:
 #if defined(_linux_)
         TStringStream linuxName;
         linuxName << TStringBuf(GetExecPath()).RNextTok('/') << "." << name;
-        TThread::SetCurrentThreadName(linuxName.Str().data());
+        TThread::SetCurrentThreadName(linuxName.Str().data()); 
 #else
-        TThread::SetCurrentThreadName(name.data());
+        TThread::SetCurrentThreadName(name.data()); 
 #endif
         static_cast<TTraceCleaner*>(_this)->Exec();
         return nullptr;
@@ -1394,7 +1394,7 @@ void RequireMultipleSelection(TStringStream& ss, const TCgiParameters& e, const 
     for (const TString& subvalue : Subvalues(e, param)) {
         DropdownSelector<Erasable, true>(ss, e, param, subvalue, "", variants);
     }
-    if (selectedValues.contains("")) {
+    if (selectedValues.contains("")) { 
         throw TPageGen<TSelectorsContainer>(ss.Str());
     } else {
         BtnHref<Button|ExtraSmall>(ss, "+", MakeUrlAddSub(e, param, ""));
@@ -1435,7 +1435,7 @@ void OptionalMultipleSelection(TStringStream& ss, const TCgiParameters& e, const
     for (const TString& subvalue : Subvalues(e, param)) {
         DropdownSelector<Erasable, true>(ss, e, param, subvalue, "", variants);
     }
-    if (selectedValues.contains("")) {
+    if (selectedValues.contains("")) { 
         throw TPageGen<TSelectorsContainer>(ss.Str());
     } else {
         BtnHref<Button|ExtraSmall>(ss, selectedValues.empty()? text: "+", MakeUrlAddSub(e, param, ""));
@@ -2116,7 +2116,7 @@ public:
 
     bool IsFiltered(const TString& paramName) const
     {
-        return FilteredParamValues.contains(paramName);
+        return FilteredParamValues.contains(paramName); 
     }
 
 private:
@@ -3550,7 +3550,7 @@ private:
                     const NLWTrace::TSignature* sgn = &probe->Event.Signature;
                     for (size_t pi = 0; pi < sgn->ParamCount; pi++) {
                         TString param = sgn->ParamNames[pi];
-                        if (TrackIds.contains(param) || IsFiltered(param)) {
+                        if (TrackIds.contains(param) || IsFiltered(param)) { 
                             continue;
                         }
                         os << "<li><a href=\""

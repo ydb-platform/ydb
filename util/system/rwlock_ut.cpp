@@ -3,7 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/thread/pool.h>
+#include <util/thread/pool.h> 
 #include <util/random/random.h>
 
 class TRWMutexTest: public TTestBase {
@@ -118,7 +118,7 @@ private:
 #undef RUN_CYCLE
 private:
     TSharedData Data_;
-    TThreadPool Q_;
+    TThreadPool Q_; 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TRWMutexTest)

@@ -122,7 +122,7 @@ public:
         ++*Mon->NodeMon->RestartPatch;
         TEvBlobStorage::TEvPatch *patch;
         std::unique_ptr<IEventBase> ev(patch = new TEvBlobStorage::TEvPatch(OriginalGroupId, OriginalId, PatchedId,
-                MaskForCookieBruteForcing, std::move(Diffs), DiffCount, Deadline));
+                MaskForCookieBruteForcing, std::move(Diffs), DiffCount, Deadline)); 
         patch->RestartCounter = counter;
         patch->Orbit = std::move(Orbit);
         return std::move(ev);

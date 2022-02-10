@@ -6,7 +6,7 @@
 #include <util/system/compiler.h>
 #include <util/generic/utility.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/cast.h>
+#include <util/generic/cast.h> 
 
 #ifdef _win_
 #include <windows.h>
@@ -48,7 +48,7 @@ inline void SecureWipeBuffer(ui8* buf, size_t size)
 
 inline void SecureWipeBuffer(char* buf, size_t size)
 {
-    SecureWipeBuffer(reinterpret_cast<ui8*>(buf), size);
+    SecureWipeBuffer(reinterpret_cast<ui8*>(buf), size); 
 }
 
 class TAlignedAllocator
@@ -254,7 +254,7 @@ public:
     }
 
     TStringBuf AsStringBuf() const {
-        return { reinterpret_cast<const char*>(Data()), Size() };
+        return { reinterpret_cast<const char*>(Data()), Size() }; 
     }
 
 private:
@@ -275,7 +275,7 @@ public:
         : TBaseBlock<A>(data, size) {}
 
     TSecuredBlock(const char* data, size_t size)
-        : TBaseBlock<A>(reinterpret_cast<const ui8*>(data), size) {}
+        : TBaseBlock<A>(reinterpret_cast<const ui8*>(data), size) {} 
 
     template<typename U>
     void Append(const TBaseBlock<U>& other) {
@@ -303,5 +303,5 @@ public:
         : TBaseBlock<A>(data, nbytes) {}
 
     explicit TFixedSecuredBlock(const char* data)
-        : TBaseBlock<A>(reinterpret_cast<const ui8*>(data), nbytes) {}
+        : TBaseBlock<A>(reinterpret_cast<const ui8*>(data), nbytes) {} 
 };

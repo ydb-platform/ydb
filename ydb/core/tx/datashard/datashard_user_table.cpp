@@ -488,7 +488,7 @@ void TUserTable::ApplyAlter(
         ui32 colId = col.first;
         const TUserColumn& column = col.second;
 
-        if (!oldTable.Columns.contains(colId)) {
+        if (!oldTable.Columns.contains(colId)) { 
             for (ui32 tid : tids) {
                 alter.AddColumn(tid, column.Name, colId, column.Type, column.NotNull);
             }
@@ -504,7 +504,7 @@ void TUserTable::ApplyAlter(
         const TUserTable::TUserColumn * oldCol = oldTable.Columns.FindPtr(colId);
         Y_VERIFY(oldCol);
         Y_VERIFY(oldCol->Name == col.GetName());
-        Y_VERIFY(!Columns.contains(colId));
+        Y_VERIFY(!Columns.contains(colId)); 
 
         for (ui32 tid : tids) {
             alter.DropColumn(tid, colId);

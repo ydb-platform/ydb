@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         while (!ids.empty()) {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvResourceBroker::TEvResourceAllocated>(handle);
-            UNIT_ASSERT(ids.contains(reply->TaskId));
+            UNIT_ASSERT(ids.contains(reply->TaskId)); 
             ids.erase(reply->TaskId);
             now += TDuration::MilliSeconds(RandomNumber<ui32>(20000));
             runtime.UpdateCurrentTime(now);

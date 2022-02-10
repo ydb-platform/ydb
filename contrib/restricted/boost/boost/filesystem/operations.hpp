@@ -66,8 +66,8 @@ namespace boost
 
       // all functions are inline to avoid issues with crossing dll boundaries
 
-      // functions previously noexcept are now BOOST_NOEXCEPT_OR_NOTHROW
-      // functions previously without noexcept are now BOOST_NOEXCEPT
+      // functions previously noexcept are now BOOST_NOEXCEPT_OR_NOTHROW 
+      // functions previously without noexcept are now BOOST_NOEXCEPT 
 
     public:
       // compiler generates copy constructor and copy assignment

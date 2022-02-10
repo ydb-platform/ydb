@@ -78,11 +78,11 @@ bool TUsageScope::HasConflict(const TUsageScope &other,
 
     if (!NodeIds.empty()) {
         for (auto id : NodeIds)
-            if (other.NodeIds.contains(id))
+            if (other.NodeIds.contains(id)) 
                 return true;
     } else if (!Hosts.empty()) {
         for (auto &host : Hosts)
-            if (other.Hosts.contains(host))
+            if (other.Hosts.contains(host)) 
                 return true;
     } else if (Tenant == other.Tenant && NodeType == other.NodeType)
         return true;
@@ -278,7 +278,7 @@ TConfigItem::TPtr TConfigIndex::GetItem(ui64 id) const
 
 void TConfigIndex::AddItem(TConfigItem::TPtr item)
 {
-    Y_VERIFY(!ConfigItems.contains(item->Id));
+    Y_VERIFY(!ConfigItems.contains(item->Id)); 
     ConfigItems.emplace(item->Id, item);
 
     if (!item->UsageScope.NodeIds.empty()) {
@@ -535,7 +535,7 @@ void TConfigIndex::CollectTenantAndNodeTypeUsageScopes(const TDynBitMap &kinds,
         if (!kinds.Empty()) {
             bool found = false;
             Y_FOR_EACH_BIT(kind, kinds) {
-                if (pr.second.contains(kind)) {
+                if (pr.second.contains(kind)) { 
                     found = true;
                     break;
                 }
@@ -668,7 +668,7 @@ const THashMap<ui64, TSubscription::TPtr> &TSubscriptionIndex::GetSubscriptions(
 
 void TSubscriptionIndex::AddSubscription(TSubscription::TPtr subscription)
 {
-    Y_VERIFY(!Subscriptions.contains(subscription->Id));
+    Y_VERIFY(!Subscriptions.contains(subscription->Id)); 
     Subscriptions.emplace(subscription->Id, subscription);
     SubscriptionsBySubscriber[subscription->Subscriber].insert(subscription);
     SubscriptionsByNodeId[subscription->NodeId].insert(subscription);
@@ -794,7 +794,7 @@ void TSubscriptionIndex::CollectAffectedSubscriptions(const TUsageScope &scope,
         auto it = SubscriptionsByNodeId.find(nodeId);
         if (it != SubscriptionsByNodeId.end()) {
             for (auto & subscription : it->second)
-                if (subscription->ItemKinds.contains(kind))
+                if (subscription->ItemKinds.contains(kind)) 
                     subscriptions.insert(subscription);
         }
         hasFilter = true;
@@ -804,7 +804,7 @@ void TSubscriptionIndex::CollectAffectedSubscriptions(const TUsageScope &scope,
         auto it = SubscriptionsByHost.find(host);
         if (it != SubscriptionsByHost.end()) {
             for (auto & subscription : it->second)
-                if (subscription->ItemKinds.contains(kind))
+                if (subscription->ItemKinds.contains(kind)) 
                     subscriptions.insert(subscription);
         }
         hasFilter = true;
@@ -814,7 +814,7 @@ void TSubscriptionIndex::CollectAffectedSubscriptions(const TUsageScope &scope,
         auto it = SubscriptionsByTenant.find(scope.Tenant);
         if (it != SubscriptionsByTenant.end()) {
             for (auto & subscription : it->second)
-                if (subscription->ItemKinds.contains(kind))
+                if (subscription->ItemKinds.contains(kind)) 
                     subscriptions.insert(subscription);
         }
         hasFilter = true;
@@ -824,7 +824,7 @@ void TSubscriptionIndex::CollectAffectedSubscriptions(const TUsageScope &scope,
         auto it = SubscriptionsByNodeType.find(scope.NodeType);
         if (it != SubscriptionsByNodeType.end()) {
             for (auto & subscription : it->second)
-                if (subscription->ItemKinds.contains(kind))
+                if (subscription->ItemKinds.contains(kind)) 
                     subscriptions.insert(subscription);
         }
         hasFilter = true;

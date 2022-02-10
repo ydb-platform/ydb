@@ -801,7 +801,7 @@ public:
         }
 
         TEvWhiteboardReportResult *response = new TEvWhiteboardReportResult();
-        response->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+        response->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>(); 
         response->VDiskStateVect.reserve(16); // Pessimistic upper estimate of a number of owners
         THolder<TWhiteboardReport> request(PDisk->ReqCreator.CreateFromArgs<TWhiteboardReport>(SelfId(), response));
         ui64 whiteboardReportCycles = 0;

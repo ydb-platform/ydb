@@ -71,7 +71,7 @@ public:
     struct THash {
         size_t operator()(const TUserDataKey& key) {
             auto type = static_cast<size_t>(key.Type_);
-            return CombineHashes(type, ComputeHash(key.Alias_));
+            return CombineHashes(type, ComputeHash(key.Alias_)); 
         }
     };
 

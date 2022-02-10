@@ -50,7 +50,7 @@ namespace NUdf {
 typedef void(*TBackTraceCallback)();
 static TBackTraceCallback BackTraceCallback;
 
-static void UdfBackTraceFn(IOutputStream*, void* const*, size_t) {
+static void UdfBackTraceFn(IOutputStream*, void* const*, size_t) { 
     BackTraceCallback();
 }
 

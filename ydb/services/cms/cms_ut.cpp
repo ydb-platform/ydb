@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
         UNIT_ASSERT(res);
         UNIT_ASSERT_VALUES_EQUAL(result.storage_units_size(), poolKinds.size());
         for (auto &pool : result.storage_units()) {
-            UNIT_ASSERT(poolKinds.contains(pool.kind()));
+            UNIT_ASSERT(poolKinds.contains(pool.kind())); 
             UNIT_ASSERT_VALUES_EQUAL(pool.labels().size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(pool.labels().at("disk_type"), "ROT");
             UNIT_ASSERT_VALUES_EQUAL(pool.labels().at("erasure"), "none");
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
         THashSet<TString> zones = {{TString("dc-1"), TString("any")}};
         UNIT_ASSERT_VALUES_EQUAL(result.availability_zones_size(), zones.size());
         for (auto &zone: result.availability_zones()) {
-            UNIT_ASSERT(zones.contains(zone.name()));
+            UNIT_ASSERT(zones.contains(zone.name())); 
             if (zone.name() == "dc-1") {
                 UNIT_ASSERT_VALUES_EQUAL(zone.labels().size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(zone.labels().at("fixed_data_center"), "DC-1");
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(unit.kind(), "slot");
         UNIT_ASSERT_VALUES_EQUAL(unit.allowed_availability_zones_size(), unitZones.size());
         for (auto &zone : unit.allowed_availability_zones()) {
-            UNIT_ASSERT(unitZones.contains(zone));
+            UNIT_ASSERT(unitZones.contains(zone)); 
             unitZones.erase(zone);
         }
         UNIT_ASSERT_VALUES_EQUAL(unit.labels().size(), 2);

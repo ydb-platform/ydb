@@ -558,8 +558,8 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
                     if (CheckUnit(column->second.Type, record.GetExpiration().GetColumnUnit(), error)) {
                         localTxId = ++NextTieBreakerIndex;
                         const auto tableId = TTableId(PathOwnerId, localPathId, record.GetSchemaVersion());
-                        scan.Reset(CreateCondEraseScan(this, ev->Sender, tableId, localTxId,
-                            THolder(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record)));
+                        scan.Reset(CreateCondEraseScan(this, ev->Sender, tableId, localTxId, 
+                            THolder(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record))); 
                     } else {
                         badRequest(error);
                     }

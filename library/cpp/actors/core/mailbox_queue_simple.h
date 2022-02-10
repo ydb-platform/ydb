@@ -12,7 +12,7 @@ namespace NActors {
         TTicketLock Lock;
 
     public:
-        ui32 Push(T x) noexcept {
+        ui32 Push(T x) noexcept { 
             const ui32 spins = Lock.Acquire();
             Queue.Push(x);
             Lock.Release();

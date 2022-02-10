@@ -8,7 +8,7 @@ class TGenericCastsTest: public TTestBase {
     UNIT_TEST(TestIntegralCast)
     UNIT_TEST(TestEnumCast)
     UNIT_TEST(TestToUnderlying)
-    UNIT_TEST(TestBitCast)
+    UNIT_TEST(TestBitCast) 
     UNIT_TEST_SUITE_END();
 
 private:
@@ -81,32 +81,32 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(static_cast<std::underlying_type_t<B>>(BM1), ToUnderlying(BM1));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<std::underlying_type_t<C>>(C::CM1), ToUnderlying(C::CM1));
     }
-
-    void TestBitCast() {
-        // Change sign of float
-        {
+ 
+    void TestBitCast() { 
+        // Change sign of float 
+        { 
             const float floatValue = 17.33f;
-            ui32 ui32Value = BitCast<ui32>(floatValue);
-            ui32Value ^= (ui32)1 << 31;
-            UNIT_ASSERT_VALUES_EQUAL(-floatValue, BitCast<float>(ui32Value));
-        }
-
-        // Unpack ui64 into a struct
-        {
-            const ui64 value = 0x1122334455667788;
-            struct TStruct {
-                ui32 a;
-                ui16 b;
-                ui8 c;
-                ui8 d;
-            };
-            auto structValue = BitCast<TStruct>(value);
-            UNIT_ASSERT_VALUES_EQUAL(structValue.a, 0x55667788);
-            UNIT_ASSERT_VALUES_EQUAL(structValue.b, 0x3344);
-            UNIT_ASSERT_VALUES_EQUAL(structValue.c, 0x22);
-            UNIT_ASSERT_VALUES_EQUAL(structValue.d, 0x11);
-        }
-    }
+            ui32 ui32Value = BitCast<ui32>(floatValue); 
+            ui32Value ^= (ui32)1 << 31; 
+            UNIT_ASSERT_VALUES_EQUAL(-floatValue, BitCast<float>(ui32Value)); 
+        } 
+ 
+        // Unpack ui64 into a struct 
+        { 
+            const ui64 value = 0x1122334455667788; 
+            struct TStruct { 
+                ui32 a; 
+                ui16 b; 
+                ui8 c; 
+                ui8 d; 
+            }; 
+            auto structValue = BitCast<TStruct>(value); 
+            UNIT_ASSERT_VALUES_EQUAL(structValue.a, 0x55667788); 
+            UNIT_ASSERT_VALUES_EQUAL(structValue.b, 0x3344); 
+            UNIT_ASSERT_VALUES_EQUAL(structValue.c, 0x22); 
+            UNIT_ASSERT_VALUES_EQUAL(structValue.d, 0x11); 
+        } 
+    } 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TGenericCastsTest);

@@ -63,7 +63,7 @@ public:
                 if (import->Modules) {
                     bool needLibrary = false;
                     for (auto& m : *import->Modules) {
-                        if (requiredModules.contains(m)) {
+                        if (requiredModules.contains(m)) { 
                             needLibrary = true;
                             break;
                         }

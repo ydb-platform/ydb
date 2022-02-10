@@ -126,7 +126,7 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
     UNIT_ASSERT(response->ErrorCount == 0);
     UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
 
-    return THolder(response);
+    return THolder(response); 
 }
 
 using TStructKey = TVector<std::pair<TString, ui32>>;

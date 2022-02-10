@@ -462,7 +462,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         TBufferPoolCommon pool(512, 10, TBufferPool::TPDiskParams{});
 
         for (ui32 i = 0; i < 100; ++i) {
-            TBuffer::TPtr buffers{pool.Pop()};
+            TBuffer::TPtr buffers{pool.Pop()}; 
         }
 
         std::vector<TBuffer::TPtr> buffers;

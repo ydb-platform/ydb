@@ -4,8 +4,8 @@
 
 #include <library/cpp/yson/writer.h>
 
-#include <util/generic/overloaded.h>
-
+#include <util/generic/overloaded.h> 
+ 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -279,17 +279,17 @@ size_t TNode::Size() const
 
 TNode::EType TNode::GetType() const
 {
-    return std::visit(TOverloaded{
-        [](const TUndefined&) { return Undefined; },
-        [](const TString&) { return String; },
-        [](i64) { return Int64; },
-        [](ui64) { return Uint64; },
-        [](double) { return Double; },
-        [](bool) { return Bool; },
-        [](const TListType&) { return List; },
-        [](const TMapType&) { return Map; },
-        [](const TNull&) { return Null; }
-    }, Value_);
+    return std::visit(TOverloaded{ 
+        [](const TUndefined&) { return Undefined; }, 
+        [](const TString&) { return String; }, 
+        [](i64) { return Int64; }, 
+        [](ui64) { return Uint64; }, 
+        [](double) { return Double; }, 
+        [](bool) { return Bool; }, 
+        [](const TListType&) { return List; }, 
+        [](const TMapType&) { return Map; }, 
+        [](const TNull&) { return Null; } 
+    }, Value_); 
 }
 
 const TString& TNode::AsString() const

@@ -451,26 +451,26 @@ THashMap<TActorId, TTestContext::TSimpleProxyInfo> TTestContext::DescribeProxies
 
 void TTestContext::VerifyProxyRegistered(const TActorId& proxy, ui64 generation) {
     auto proxies = DescribeProxies();
-    UNIT_ASSERT_C(proxies.contains(proxy), "Proxy " << proxy << " is not registered");
+    UNIT_ASSERT_C(proxies.contains(proxy), "Proxy " << proxy << " is not registered"); 
     const auto& proxyInfo = proxies.at(proxy);
     UNIT_ASSERT_VALUES_EQUAL(proxyInfo.Generation, generation);
 }
 
 void TTestContext::VerifyProxyNotRegistered(const TActorId& proxy) {
     auto proxies = DescribeProxies();
-    UNIT_ASSERT_C(!proxies.contains(proxy), "Proxy " << proxy << " is registered");
+    UNIT_ASSERT_C(!proxies.contains(proxy), "Proxy " << proxy << " is registered"); 
 }
 
 void TTestContext::VerifyProxyHasSessions(const TActorId& proxy, ui64 generation, const THashSet<ui64>& expectedSessions) {
     auto proxies = DescribeProxies();
-    UNIT_ASSERT_C(proxies.contains(proxy), "Proxy " << proxy << " is not registered");
+    UNIT_ASSERT_C(proxies.contains(proxy), "Proxy " << proxy << " is not registered"); 
     const auto& proxyInfo = proxies.at(proxy);
     UNIT_ASSERT_VALUES_EQUAL(proxyInfo.Generation, generation);
     for (ui64 sessionId : expectedSessions) {
-        UNIT_ASSERT_C(proxyInfo.AttachedSessions.contains(sessionId), "Proxy " << proxy << " does not own session " << sessionId);
+        UNIT_ASSERT_C(proxyInfo.AttachedSessions.contains(sessionId), "Proxy " << proxy << " does not own session " << sessionId); 
     }
     for (ui64 sessionId : proxyInfo.AttachedSessions) {
-        UNIT_ASSERT_C(expectedSessions.contains(sessionId), "Proxy " << proxy << " owns unexpected session " << sessionId);
+        UNIT_ASSERT_C(expectedSessions.contains(sessionId), "Proxy " << proxy << " owns unexpected session " << sessionId); 
     }
 }
 
@@ -481,7 +481,7 @@ THashMap<ui64, TTestContext::TSimpleSessionInfo> TTestContext::DescribeSessions(
     auto result = ExpectEdgeEvent<TEvKesus::TEvDescribeSessionsResult>(edge, cookie);
     THashMap<ui64, TSimpleSessionInfo> sessions;
     for (const auto& sessionInfo : result->Record.GetSessions()) {
-        Y_VERIFY(!sessions.contains(sessionInfo.GetSessionId()));
+        Y_VERIFY(!sessions.contains(sessionInfo.GetSessionId())); 
         auto& session = sessions[sessionInfo.GetSessionId()];
         session.TimeoutMillis = sessionInfo.GetTimeoutMillis();
         session.Description = sessionInfo.GetDescription();
@@ -492,12 +492,12 @@ THashMap<ui64, TTestContext::TSimpleSessionInfo> TTestContext::DescribeSessions(
 
 void TTestContext::VerifySessionNotFound(ui64 sessionId) {
     auto sessions = DescribeSessions();
-    UNIT_ASSERT_C(!sessions.contains(sessionId), "Session " << sessionId << " actually exist");
+    UNIT_ASSERT_C(!sessions.contains(sessionId), "Session " << sessionId << " actually exist"); 
 }
 
 void TTestContext::VerifySessionExists(ui64 sessionId) {
     auto sessions = DescribeSessions();
-    UNIT_ASSERT_C(sessions.contains(sessionId), "Session " << sessionId << " does not exist");
+    UNIT_ASSERT_C(sessions.contains(sessionId), "Session " << sessionId << " does not exist"); 
 }
 
 TTestContext::TSimpleLockDescription TTestContext::DescribeLock(const TString& lockName, bool includeWaiters) {
@@ -559,21 +559,21 @@ void TTestContext::VerifyLockExclusive(const TString& lockName, ui64 sessionId) 
 void TTestContext::VerifyLockShared(const TString& lockName, const THashSet<ui64>& sessionIds) {
     auto desc = DescribeLock(lockName);
     for (ui64 sessionId : sessionIds) {
-        UNIT_ASSERT_C(desc.SharedOwners.contains(sessionId), "Session " << sessionId << " is not a shared owner of " << lockName);
+        UNIT_ASSERT_C(desc.SharedOwners.contains(sessionId), "Session " << sessionId << " is not a shared owner of " << lockName); 
     }
     for (ui64 sessionId : desc.SharedOwners) {
-        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected shared owner of " << lockName);
+        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected shared owner of " << lockName); 
     }
 }
 
 void TTestContext::VerifyLockWaiters(const TString& lockName, const THashSet<ui64>& sessionIds) {
     auto desc = DescribeLock(lockName, true);
     for (ui64 sessionId : sessionIds) {
-        UNIT_ASSERT_C(desc.Waiters.contains(sessionId), "Session " << sessionId << " is not a waiter of " << lockName);
+        UNIT_ASSERT_C(desc.Waiters.contains(sessionId), "Session " << sessionId << " is not a waiter of " << lockName); 
     }
     for (const auto& kv : desc.Waiters) {
         ui64 sessionId = kv.first;
-        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected waiter of " << lockName);
+        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected waiter of " << lockName); 
     }
 }
 
@@ -617,11 +617,11 @@ void TTestContext::VerifySemaphoreOwners(const TString& name, const THashSet<ui6
     auto desc = DescribeSemaphore(name);
     UNIT_ASSERT_VALUES_EQUAL(desc.Ephemeral, ephemeral);
     for (ui64 sessionId : sessionIds) {
-        UNIT_ASSERT_C(desc.Owners.contains(sessionId), "Session " << sessionId << " is not an owner of " << name);
+        UNIT_ASSERT_C(desc.Owners.contains(sessionId), "Session " << sessionId << " is not an owner of " << name); 
     }
     for (const auto& kv : desc.Owners) {
         ui64 sessionId = kv.first;
-        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected owner of " << name);
+        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected owner of " << name); 
     }
 }
 
@@ -629,11 +629,11 @@ void TTestContext::VerifySemaphoreWaiters(const TString& name, const THashSet<ui
     auto desc = DescribeSemaphore(name, true);
     UNIT_ASSERT_VALUES_EQUAL(desc.Ephemeral, ephemeral);
     for (ui64 sessionId : sessionIds) {
-        UNIT_ASSERT_C(desc.Waiters.contains(sessionId), "Session " << sessionId << " is not a waiter of " << name);
+        UNIT_ASSERT_C(desc.Waiters.contains(sessionId), "Session " << sessionId << " is not a waiter of " << name); 
     }
     for (const auto& kv : desc.Waiters) {
         ui64 sessionId = kv.first;
-        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected waiter of " << name);
+        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected waiter of " << name); 
     }
 }
 

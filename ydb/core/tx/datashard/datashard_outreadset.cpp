@@ -34,8 +34,8 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
 
         TReadSetKey rsInfo(txId, origin, source, target);
 
-        Y_VERIFY(!CurrentReadSets.contains(seqNo));
-        Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo));
+        Y_VERIFY(!CurrentReadSets.contains(seqNo)); 
+        Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo)); 
 
         CurrentReadSets[seqNo] = rsInfo;
         CurrentReadSetInfos[rsInfo] = seqNo;
@@ -51,8 +51,8 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
 void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsInfo, TString body) {
     using Schema = TDataShard::Schema;
 
-    Y_VERIFY(!CurrentReadSets.contains(seqNo));
-    Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo));
+    Y_VERIFY(!CurrentReadSets.contains(seqNo)); 
+    Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo)); 
 
     CurrentReadSetInfos[rsInfo] = seqNo;
     CurrentReadSets[seqNo] = rsInfo;
@@ -103,7 +103,7 @@ void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::T
     ReadSetAcks.emplace_back(ev.Release());
     AckedSeqno.insert(seqno);
 
-    if (CurrentReadSets.contains(seqno)) {
+    if (CurrentReadSets.contains(seqno)) { 
         TReadSetKey rsInfo(txId, Self->TabletID(), sender, dest);
         Y_VERIFY(CurrentReadSetInfos[rsInfo] == seqno);
 
@@ -152,7 +152,7 @@ bool TOutReadSets::ResendRS(NTabletFlatExecutor::TTransactionContext &txc, const
     using Schema = TDataShard::Schema;
 
     NIceDb::TNiceDb db(txc.DB);
-    if (AckedSeqno.contains(seqNo)) {
+    if (AckedSeqno.contains(seqNo)) { 
         // Do not resend if we've already got ACK back, but not applied it to DB
         // Also, it is a good place to actually apply ACK(s)
 

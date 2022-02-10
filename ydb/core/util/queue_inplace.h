@@ -38,7 +38,7 @@ public:
     }
 
     struct TPtrCleanDestructor {
-        static inline void Destroy(TQueueInplace<T, TSize> *x) noexcept {
+        static inline void Destroy(TQueueInplace<T, TSize> *x) noexcept { 
             while (const T *head = x->Head()) {
                 delete *head;
                 x->Pop();
@@ -48,7 +48,7 @@ public:
     };
 
     struct TCleanDestructor {
-        static inline void Destroy(TQueueInplace<T, TSize> *x) noexcept {
+        static inline void Destroy(TQueueInplace<T, TSize> *x) noexcept { 
             while (x->Head()) {
                 x->Pop();
             }
@@ -60,7 +60,7 @@ public:
         }
     };
 
-    void Push(const T &x) noexcept {
+    void Push(const T &x) noexcept { 
         ++Size;
         if (WritePosition != TChunk::EntriesCount) {
             WriteTo->Entries[WritePosition] = x;
@@ -74,7 +74,7 @@ public:
         }
     }
 
-    void Push(T &&x) noexcept {
+    void Push(T &&x) noexcept { 
         ++Size;
         if (WritePosition != TChunk::EntriesCount) {
             WriteTo->Entries[WritePosition] = std::move(x);

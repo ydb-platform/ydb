@@ -1,11 +1,11 @@
-OWNER(
-    g:util
-)
-
-LIBRARY()
-
-SRCS(
-    scan.cpp
-)
-
-END()
+OWNER( 
+    g:util 
+) 
+ 
+LIBRARY() 
+ 
+SRCS( 
+    scan.cpp 
+) 
+ 
+END() 

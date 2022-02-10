@@ -389,17 +389,17 @@ public:
             auto fields = Y("Void");
             auto source = Y("DataSource", BuildQuotedAtom(Pos, service), BuildQuotedAtom(Pos, tr.Cluster));
             auto options = tr.Options ? Q(tr.Options) : Q(Y());
-            Add(Y("let", "x", keys->Y(TString(ReadName), "world", source, keys, fields, options)));
+            Add(Y("let", "x", keys->Y(TString(ReadName), "world", source, keys, fields, options))); 
             if (service != YtProviderName) {
                 if (InSubquery) {
                     ctx.Error() << "Using of system '" << service << "' is not allowed in SUBQUERY";
                     return false;
                 }
 
-                Add(Y("let", "world", Y(TString(LeftName), "x")));
+                Add(Y("let", "world", Y(TString(LeftName), "x"))); 
             }
 
-            Add(Y("let", tr.RefName, Y(TString(RightName), "x")));
+            Add(Y("let", tr.RefName, Y(TString(RightName), "x"))); 
             ctx.UsedClusters.insert(tr.Cluster);
         }
         return TAstListNode::DoInit(ctx, src);
@@ -449,7 +449,7 @@ public:
             }
 
             for (auto& keyColumn : PkColumns) {
-                if (!columnsSet.contains(keyColumn.Name)) {
+                if (!columnsSet.contains(keyColumn.Name)) { 
                     ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
                     return false;
                 }
@@ -549,8 +549,8 @@ public:
 
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
-            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))), 
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")) 
         )));
 
         ctx.UsedClusters.insert(Table.Cluster);
@@ -642,8 +642,8 @@ public:
 
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
-            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))), 
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")) 
         )));
 
         ctx.UsedClusters.insert(Table.Cluster);
@@ -686,8 +686,8 @@ public:
 
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(Y(Q(Y(Q("mode"), Q("drop"))))))),
-            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(Y(Q(Y(Q("mode"), Q("drop"))))))), 
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")) 
         )));
 
         ctx.UsedClusters.insert(Table.Cluster);
@@ -780,8 +780,8 @@ public:
 
         Add("block", Q((Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Label, Q(options))),
-            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Label, Q(options))), 
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")) 
         ))));
 
         ctx.UsedClusters.insert(Table.Cluster);
@@ -862,7 +862,7 @@ public:
     TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) override {
         Y_UNUSED(ctx);
         Y_UNUSED(service);
-        return Y("let", "world", Y(TString(CommitName), "world", sinkName));
+        return Y("let", "world", Y(TString(CommitName), "world", sinkName)); 
     }
 };
 
@@ -881,7 +881,7 @@ public:
             return nullptr;
         }
 
-        return Y("let", "world", Y(TString(CommitName), "world", sinkName, Q(Y(Q(Y(Q("mode"), Q("rollback")))))));
+        return Y("let", "world", Y(TString(CommitName), "world", sinkName, Q(Y(Q(Y(Q("mode"), Q("rollback"))))))); 
     }
 };
 
@@ -901,13 +901,13 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         auto block(Y(
             Y("let", "result_sink", Y("DataSink", Q(TString(ResultProviderName)))),
-            Y("let", "world", Y(TString(WriteName), "world", "result_sink", Y("Key"), Label, Q(Settings)))
+            Y("let", "world", Y(TString(WriteName), "world", "result_sink", Y("Key"), Label, Q(Settings))) 
         ));
         if (ctx.PragmaAutoCommit) {
             block = L(block, Y("let", "world", CommitClusters));
         }
 
-        block = L(block, Y("return", Y(TString(CommitName), "world", "result_sink")));
+        block = L(block, Y("return", Y(TString(CommitName), "world", "result_sink"))); 
         Add("block", Q(block));
         return TAstListNode::DoInit(ctx, src);
     }
@@ -965,7 +965,7 @@ public:
             }
 
             for (auto& nodes: ctx.NamedNodes) {
-                if (src || ctx.Exports.contains(nodes.first)) {
+                if (src || ctx.Exports.contains(nodes.first)) { 
                     auto& node = nodes.second.top();
                     ctx.PushBlockShortcuts();
                     if (!node->Init(ctx, src)) {
@@ -975,7 +975,7 @@ public:
 
                     node = ctx.GroundBlockShortcutsForExpr(node);
                     // Some constants may be used directly by YQL code and need to be translated without reference from SQL AST
-                    if (node->IsConstant() || ctx.Exports.contains(nodes.first)) {
+                    if (node->IsConstant() || ctx.Exports.contains(nodes.first)) { 
                         Add(Y("let", BuildAtom(node->GetPos(), nodes.first), node));
                     }
                 }
@@ -986,18 +986,18 @@ public:
                 auto resultSink = Y("DataSink", BuildQuotedAtom(Pos, TString(ResultProviderName)));
 
                 for (const auto& warningPragma : ctx.WarningPolicy.GetRules()) {
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, 
                         BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()),
                             BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
                 }
 
                 if (ctx.ResultSizeLimit > 0) {
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", resultSink,
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", resultSink, 
                         BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit)))));
                 }
 
                 if (!ctx.PragmaPullUpFlatMapOverJoin) {
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, 
                         BuildQuotedAtom(Pos, "DisablePullUpFlatMapOverJoin"))));
                 }
             }
@@ -1092,7 +1092,7 @@ public:
         }
 
         Node = Y();
-        Node = L(Node, AstNode(TString(ConfigureName)));
+        Node = L(Node, AstNode(TString(ConfigureName))); 
         Node = L(Node, AstNode(TString(TStringBuf("world"))));
         Node = L(Node, datasource);
 

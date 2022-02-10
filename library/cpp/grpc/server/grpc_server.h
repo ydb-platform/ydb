@@ -13,7 +13,7 @@
 #include <util/generic/hash_set.h>
 #include <util/system/types.h>
 #include <util/system/mutex.h>
-#include <util/thread/factory.h>
+#include <util/thread/factory.h> 
 
 #include <grpc++/grpc++.h>
 
@@ -342,7 +342,7 @@ public:
     TString GetHost() const;
 
 private:
-    using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
+    using IThreadRef = TAutoPtr<IThreadFactory::IThread>; 
 
     const TServerOptions Options_;
     std::unique_ptr<grpc::Server> Server_;

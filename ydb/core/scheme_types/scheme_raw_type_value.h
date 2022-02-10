@@ -38,7 +38,7 @@ public:
     // we must distinguish empty raw type value (nothing, buffer == nullptr)
     // and zero-length string (value exists, but zero-length)
     bool IsEmpty() const { return Buffer == nullptr; }
-    explicit operator bool() const noexcept { return !IsEmpty(); }
+    explicit operator bool() const noexcept { return !IsEmpty(); } 
 
     TString ToString() const {
         TStringBuilder builder;

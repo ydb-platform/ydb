@@ -284,9 +284,9 @@ private:
             }
 
             UNIT_ASSERT_EQUAL(values.size(), 3);
-            UNIT_ASSERT_EQUAL(values.contains(3), true);
-            UNIT_ASSERT_EQUAL(values.contains(4), true);
-            UNIT_ASSERT_EQUAL(values.contains(5), true);
+            UNIT_ASSERT_EQUAL(values.contains(3), true); 
+            UNIT_ASSERT_EQUAL(values.contains(4), true); 
+            UNIT_ASSERT_EQUAL(values.contains(5), true); 
         }
 
         {
@@ -413,11 +413,11 @@ private:
         TBufferStream s;
         ::Save(&s, v);
         ::Load(&s, v);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<T>(v), expected);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<T>(v), expected); 
     }
 
     void TestVariant() {
-        std::variant<int, bool, TString, TVector<char>> v(1);
+        std::variant<int, bool, TString, TVector<char>> v(1); 
         TestVariantImpl(v, 42);
         TestVariantImpl(v, true);
         TestVariantImpl(v, TString("foo"));
@@ -427,7 +427,7 @@ private:
         TBufferStream s;
         ::Save(&s, v);
 
-        std::variant<char, bool> v2 = false;
+        std::variant<char, bool> v2 = false; 
         UNIT_ASSERT_EXCEPTION(::Load(&s, v2), TLoadEOF);
     }
 

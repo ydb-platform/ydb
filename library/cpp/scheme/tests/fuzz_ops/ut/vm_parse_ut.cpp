@@ -32,14 +32,14 @@ Y_UNIT_TEST_SUITE(TestParseNextAction) {
         UNIT_ASSERT(!ParsePos(st));
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     ui32 DoTestParsePosSuccess(TVMState& st) {
         const auto pos = ParsePos(st);
         UNIT_ASSERT(pos);
         return pos->Pos;
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     ui32 DoTestParsePosSuccess(const TStringBuf inp, const ui32 memSz, const ui32 curPos) {
         TVMState st{inp, memSz, curPos};
         return DoTestParsePosSuccess(st);
@@ -81,14 +81,14 @@ Y_UNIT_TEST_SUITE(TestParseNextAction) {
         UNIT_ASSERT(!ParseRef(st));
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     auto DoTestParseRefSuccess(TVMState& st) {
         const auto ref = ParseRef(st);
         UNIT_ASSERT(ref);
         return std::make_pair(ref->Pos, ref->Type);
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     auto DoTestParseRefSuccess(const TStringBuf inp, const ui32 memSz, const ui32 curPos) {
         TVMState st{inp, memSz, curPos};
         return DoTestParseRefSuccess(st);
@@ -118,14 +118,14 @@ Y_UNIT_TEST_SUITE(TestParseNextAction) {
         UNIT_ASSERT(!ParseSrc(st));
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     auto DoTestParseSrcSuccess(TVMState& st) {
         const auto src = ParseSrc(st);
         UNIT_ASSERT(src);
         return std::make_pair(src->Pos, src->Type);
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     auto DoTestParseSrcSuccess(const TStringBuf inp, const ui32 memSz, const ui32 curPos) {
         TVMState st{inp, memSz, curPos};
         return DoTestParseSrcSuccess(st);
@@ -153,14 +153,14 @@ Y_UNIT_TEST_SUITE(TestParseNextAction) {
         UNIT_ASSERT(!ParseDst(st));
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     auto DoTestParseDstSuccess(TVMState& st) {
         const auto dst = ParseDst(st);
         UNIT_ASSERT(dst);
         return std::make_pair(dst->Pos, dst->Type);
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     auto DoTestParseDstSuccess(const TStringBuf inp, const ui32 memSz, const ui32 curPos) {
         TVMState st{inp, memSz, curPos};
         return DoTestParseDstSuccess(st);
@@ -201,14 +201,14 @@ Y_UNIT_TEST_SUITE(TestParseNextAction) {
         UNIT_ASSERT(!ParsePath(st));
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     auto DoTestParsePathSuccess(TVMState& st) {
         const auto path = ParsePath(st);
         UNIT_ASSERT(path);
         return path->Path;
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     auto DoTestParsePathSuccess(const TStringBuf inp, const ui32 memSz, const ui32 curPos) {
         TVMState st{inp, memSz, curPos};
         return DoTestParsePathSuccess(st);

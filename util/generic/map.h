@@ -22,9 +22,9 @@ public:
         return !this->empty();
     }
 
-    inline bool contains(const K& key) const {
-        return this->find(key) != this->end();
-    }
+    inline bool contains(const K& key) const { 
+        return this->find(key) != this->end(); 
+    } 
 };
 
 template <class K, class V, class Less, class A>
@@ -38,7 +38,7 @@ public:
         return !this->empty();
     }
 
-    inline bool contains(const K& key) const {
-        return this->find(key) != this->end();
-    }
+    inline bool contains(const K& key) const { 
+        return this->find(key) != this->end(); 
+    } 
 };

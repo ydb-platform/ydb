@@ -277,7 +277,7 @@ private:
 
 template <typename TFunctor>
 THolder<IGraphTransformer> CreateFunctorTransformer(TFunctor functor) {
-    return MakeHolder<TFunctorTransformer<TFunctor>>(std::move(functor));
+    return MakeHolder<TFunctorTransformer<TFunctor>>(std::move(functor)); 
 }
 
 typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)> TAsyncTransformCallback;

@@ -262,12 +262,12 @@ public:
             }
 
             auto configure = TCoConfigure(input);
-            auto clusterName = TString(configure.DataSource().Arg(1).Cast<TCoAtom>().Value());
+            auto clusterName = TString(configure.DataSource().Arg(1).Cast<TCoAtom>().Value()); 
             if (configure.Arg(2).Cast<TCoAtom>().Value() == TStringBuf("Attr")) {
-                auto name = TString(configure.Arg(3).Cast<TCoAtom>().Value());
+                auto name = TString(configure.Arg(3).Cast<TCoAtom>().Value()); 
                 TMaybe<TString> value;
                 if (configure.Args().Count() == 5) {
-                    value = TString(configure.Arg(4).Cast<TCoAtom>().Value());
+                    value = TString(configure.Arg(4).Cast<TCoAtom>().Value()); 
                 }
 
                 SessionCtx->Config().Dispatch(clusterName, name, value, NCommon::TSettingDispatcher::EStage::RUNTIME);

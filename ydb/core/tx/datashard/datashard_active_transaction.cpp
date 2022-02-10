@@ -428,7 +428,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
 bool TActiveTransaction::BuildSchemeTx()
 {
     Y_VERIFY(TxBody);
-    SchemeTx.Reset(new NKikimrTxDataShard::TFlatSchemeTransaction);
+    SchemeTx.Reset(new NKikimrTxDataShard::TFlatSchemeTransaction); 
     bool res = SchemeTx->ParseFromArray(TxBody.data(), TxBody.size());
     if (!res)
         return false;
@@ -490,7 +490,7 @@ bool TActiveTransaction::BuildSchemeTx()
 bool TActiveTransaction::BuildSnapshotTx()
 {
     Y_VERIFY(TxBody);
-    SnapshotTx.Reset(new NKikimrTxDataShard::TSnapshotTransaction);
+    SnapshotTx.Reset(new NKikimrTxDataShard::TSnapshotTransaction); 
     if (!SnapshotTx->ParseFromArray(TxBody.data(), TxBody.size())) {
         return false;
     }
@@ -515,7 +515,7 @@ bool TDistributedEraseTx::TryParse(const TString& serialized) {
 
 bool TActiveTransaction::BuildDistributedEraseTx() {
     Y_VERIFY(TxBody);
-    DistributedEraseTx.Reset(new TDistributedEraseTx);
+    DistributedEraseTx.Reset(new TDistributedEraseTx); 
     return DistributedEraseTx->TryParse(TxBody);
 }
 

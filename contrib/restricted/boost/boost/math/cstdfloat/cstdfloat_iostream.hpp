@@ -35,8 +35,8 @@
   #if defined(__GNUC__)
 
   // Forward declarations of quadruple-precision string functions.
-  extern "C" int quadmath_snprintf(char *str, size_t size, const char *format, ...) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t strtoflt128(const char*, char **) noexcept;
+  extern "C" int quadmath_snprintf(char *str, size_t size, const char *format, ...) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t strtoflt128(const char*, char **) noexcept; 
 
   namespace std
   {

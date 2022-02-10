@@ -1224,9 +1224,9 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         IEventBase* MakeRequest() const override {
             switch (Path.index()) {
             case 0:
-                return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TString>(Path));
+                return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TString>(Path)); 
             case 1:
-                return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TPathId>(Path));
+                return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TPathId>(Path)); 
             default:
                 Y_FAIL("unreachable");
             }
@@ -1246,7 +1246,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         }
 
     private:
-        std::variant<TString, TPathId> Path;
+        std::variant<TString, TPathId> Path; 
 
     }; // TDescriber
 

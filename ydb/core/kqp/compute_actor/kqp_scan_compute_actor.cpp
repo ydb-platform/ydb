@@ -117,7 +117,7 @@ public:
         SetTaskRunner(taskRunner);
 
         auto wakeup = [this]{ ContinueExecute(); };
-        PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup),
+        PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup), 
                                                          TlsActivationContext->AsActorContext()));
 
         ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
@@ -830,7 +830,7 @@ private:
         }
         ev->Record.SetStatsMode(RuntimeSettings.StatsMode);
         ev->Record.SetScanId(0);
-        ev->Record.SetTxId(std::get<ui64>(TxId));
+        ev->Record.SetTxId(std::get<ui64>(TxId)); 
         ev->Record.SetTablePath(ScanData->TablePath);
         ev->Record.SetSchemaVersion(ScanData->TableId.SchemaVersion);
 

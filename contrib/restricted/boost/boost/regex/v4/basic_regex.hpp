@@ -502,7 +502,7 @@ public:
    }
    //
    // swap:
-   void BOOST_REGEX_CALL swap(basic_regex& that)noexcept
+   void BOOST_REGEX_CALL swap(basic_regex& that)noexcept 
    {
       m_pimpl.swap(that.m_pimpl);
    }

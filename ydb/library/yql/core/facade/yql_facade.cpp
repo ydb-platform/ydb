@@ -1302,15 +1302,15 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     TVector<TString> resultProviderDataSources;
-    if (providerNames.contains(YtProviderName)) {
+    if (providerNames.contains(YtProviderName)) { 
         resultProviderDataSources.push_back(TString(YtProviderName));
     }
 
-    if (providerNames.contains(KikimrProviderName)) {
+    if (providerNames.contains(KikimrProviderName)) { 
         resultProviderDataSources.push_back(TString(KikimrProviderName));
     }
 
-    if (providerNames.contains(RtmrProviderName)) {
+    if (providerNames.contains(RtmrProviderName)) { 
         resultProviderDataSources.push_back(TString(RtmrProviderName));
     }
 

@@ -70,7 +70,7 @@ namespace NDatetime {
             return GetFixedTimeZone(offset);
         }
         TTimeZone result;
-        if (!cctz::load_time_zone(static_cast<std::string>(name), &result)) {
+        if (!cctz::load_time_zone(static_cast<std::string>(name), &result)) { 
             ythrow TInvalidTimezone() << "Failed to load time zone " << name << ", " << result.name();
         }
         return result;

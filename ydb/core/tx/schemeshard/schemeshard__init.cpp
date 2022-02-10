@@ -2815,7 +2815,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString name = rowset.GetValue<Schema::StoragePools::PoolName>();
                 TString kind = rowset.GetValue<Schema::StoragePools::PoolKind>();
 
-                Y_VERIFY(Self->SubDomains.contains(pathId));
+                Y_VERIFY(Self->SubDomains.contains(pathId)); 
                 Self->SubDomains[pathId]->AddStoragePool(TStoragePool(name, kind));
 
                 if (!rowset.Next())
@@ -2835,7 +2835,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TString name = rowset.GetValue<Schema::StoragePoolsAlterData::PoolName>();
                     TString kind = rowset.GetValue<Schema::StoragePoolsAlterData::PoolKind>();
 
-                    Y_VERIFY(Self->SubDomains.contains(pathId));
+                    Y_VERIFY(Self->SubDomains.contains(pathId)); 
                     auto subdomainInfo = Self->SubDomains[pathId];
                     Y_VERIFY(subdomainInfo->GetAlter());
                     subdomainInfo->GetAlter()->AddStoragePool(TStoragePool(name, kind));
@@ -3017,7 +3017,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY(fs);
 
                     {
-                        fs->AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
+                        fs->AlterConfig = MakeHolder<NKikimrFileStore::TConfig>(); 
                         auto cfg = rowset.GetValue<Schema::FileStoreAlters::Config>();
                         bool parseOk = ParseFromStringNoSizeLimit(*fs->AlterConfig, cfg);
                         Y_VERIFY(parseOk);
@@ -3088,7 +3088,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TKesusInfo::TPtr kesus = it->second;
                 Y_VERIFY(kesus);
                 {
-                    kesus->AlterConfig.Reset(new Ydb::Coordination::Config);
+                    kesus->AlterConfig.Reset(new Ydb::Coordination::Config); 
                     bool parseOk = ParseFromStringNoSizeLimit(*kesus->AlterConfig, config);
                     Y_VERIFY(parseOk);
                     kesus->AlterVersion = version;
@@ -3155,7 +3155,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 if (txState.TxType == TTxState::TxCreateSubDomain) {
-                    Y_VERIFY(Self->SubDomains.contains(txState.TargetPathId));
+                    Y_VERIFY(Self->SubDomains.contains(txState.TargetPathId)); 
                     auto subDomainInfo = Self->SubDomains.at(txState.TargetPathId);
                     if (txState.State <= TTxState::Propose) {
                         Y_VERIFY(subDomainInfo->GetAlter());
@@ -3362,7 +3362,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
             for (TTxState::TShardOperation& shardOp : txState->Shards) {
                 if (shardOp.Operation == TTxState::CreateParts) {
-                    Y_VERIFY(shardIdxToRangeEnd.contains(shardOp.Idx));
+                    Y_VERIFY(shardIdxToRangeEnd.contains(shardOp.Idx)); 
                     shardOp.RangeEnd = shardIdxToRangeEnd.at(shardOp.Idx);
                 }
             }

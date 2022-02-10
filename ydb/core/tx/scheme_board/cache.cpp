@@ -53,7 +53,7 @@ using TResolve = NSchemeCache::TSchemeCacheRequest;
 using TResolveContext = NSchemeCache::TSchemeCacheRequestContext;
 using TResolveContextPtr = TIntrusivePtr<TResolveContext>;
 
-using TVariantContextPtr = std::variant<TNavigateContextPtr, TResolveContextPtr>;
+using TVariantContextPtr = std::variant<TNavigateContextPtr, TResolveContextPtr>; 
 
 namespace {
 
@@ -1139,9 +1139,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             for (const auto& [contextVariant, requests] : InFlight) {
-                if (auto* context = std::get_if<TNavigateContextPtr>(&contextVariant)) {
+                if (auto* context = std::get_if<TNavigateContextPtr>(&contextVariant)) { 
                     ProcessInFlightNoCheck(*context, requests);
-                } else if (auto* context = std::get_if<TResolveContextPtr>(&contextVariant)) {
+                } else if (auto* context = std::get_if<TResolveContextPtr>(&contextVariant)) { 
                     ProcessInFlightNoCheck(*context, requests);
                 } else {
                     Y_FAIL("unknown context type");
@@ -1169,7 +1169,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         void MoveInFlightNavigateByPathRequests(TCacheItem& recipient) {
             EraseNodesIf(InFlight, [&recipient](auto& kv) {
-                auto* context = std::get_if<TNavigateContextPtr>(&kv.first);
+                auto* context = std::get_if<TNavigateContextPtr>(&kv.first); 
                 if (!context) {
                     return false;
                 }
@@ -1243,9 +1243,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             EraseNodesIf(InFlight, [this, &processed, response](auto& kv) {
                 processed.push_back(kv.first);
 
-                if (auto* context = std::get_if<TNavigateContextPtr>(&kv.first)) {
+                if (auto* context = std::get_if<TNavigateContextPtr>(&kv.first)) { 
                     ProcessInFlight(context->Get(), kv.second, response);
-                } else if (auto* context = std::get_if<TResolveContextPtr>(&kv.first)) {
+                } else if (auto* context = std::get_if<TResolveContextPtr>(&kv.first)) { 
                     ProcessInFlight(context->Get(), kv.second, response);
                 } else {
                     Y_FAIL("unknown context type");
@@ -2295,11 +2295,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         for (const auto& x : cacheItem->ProcessInFlight(response)) {
-            if (auto* context = std::get_if<TNavigateContextPtr>(&x)) {
+            if (auto* context = std::get_if<TNavigateContextPtr>(&x)) { 
                 if (!context->Get()->WaitCounter) {
                     Complete(*context);
                 }
-            } else if (auto* context = std::get_if<TResolveContextPtr>(&x)) {
+            } else if (auto* context = std::get_if<TResolveContextPtr>(&x)) { 
                 if (!context->Get()->WaitCounter) {
                     Complete(*context);
                 }

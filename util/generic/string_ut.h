@@ -1,513 +1,513 @@
-#pragma once
-
+#pragma once 
+ 
 #include "string.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/string/reverse.h>
+#include <util/string/reverse.h> 
+ 
+template <typename CharT, size_t N> 
+struct TCharBuffer { 
+    CharT Data[N]; 
+    //! copies characters from string to the internal buffer without any conversion 
+    //! @param s    a string that must contain only characters less than 0x7F 
+    explicit TCharBuffer(const char* s) { 
+        // copy all symbols including null terminated symbol 
+        for (size_t i = 0; i < N; ++i) { 
+            Data[i] = s[i]; 
+        } 
+    } 
+    const CharT* GetData() const { 
+        return Data; 
+    } 
+}; 
 
-template <typename CharT, size_t N>
-struct TCharBuffer {
-    CharT Data[N];
-    //! copies characters from string to the internal buffer without any conversion
-    //! @param s    a string that must contain only characters less than 0x7F
-    explicit TCharBuffer(const char* s) {
-        // copy all symbols including null terminated symbol
-        for (size_t i = 0; i < N; ++i) {
-            Data[i] = s[i];
-        }
-    }
-    const CharT* GetData() const {
-        return Data;
-    }
-};
+template <> 
+struct TCharBuffer<char, 0> { 
+    const char* Data; 
+    //! stores pointer to string 
+    explicit TCharBuffer(const char* s) 
+        : Data(s) 
+    { 
+    } 
+    const char* GetData() const { 
+        return Data; 
+    } 
+}; 
 
-template <>
-struct TCharBuffer<char, 0> {
-    const char* Data;
-    //! stores pointer to string
-    explicit TCharBuffer(const char* s)
-        : Data(s)
-    {
-    }
-    const char* GetData() const {
-        return Data;
-    }
-};
+#define DECLARE_AND_RETURN_BUFFER(s)             \ 
+    static TCharBuffer<CharT, sizeof(s)> buf(s); \ 
+    return buf.GetData(); 
 
-#define DECLARE_AND_RETURN_BUFFER(s)             \
-    static TCharBuffer<CharT, sizeof(s)> buf(s); \
-    return buf.GetData();
-
-//! @attention this class can process characters less than 0x7F only (the low half of ASCII table)
-template <typename CharT>
-struct TTestData {
-    // words
-    const CharT* str1() {
-        DECLARE_AND_RETURN_BUFFER("str1");
-    }
-    const CharT* str2() {
-        DECLARE_AND_RETURN_BUFFER("str2");
-    }
-    const CharT* str__________________________________________________1() {
-        DECLARE_AND_RETURN_BUFFER("str                                                  1");
-    }
-    const CharT* str__________________________________________________2() {
-        DECLARE_AND_RETURN_BUFFER("str                                                  2");
-    }
-    const CharT* one() {
-        DECLARE_AND_RETURN_BUFFER("one");
-    }
-    const CharT* two() {
-        DECLARE_AND_RETURN_BUFFER("two");
-    }
-    const CharT* three() {
-        DECLARE_AND_RETURN_BUFFER("three");
-    }
-    const CharT* thrii() {
-        DECLARE_AND_RETURN_BUFFER("thrii");
-    }
-    const CharT* four() {
-        DECLARE_AND_RETURN_BUFFER("four");
-    }
-    const CharT* enotw_() {
-        DECLARE_AND_RETURN_BUFFER("enotw ");
-    }
-    const CharT* foo() {
-        DECLARE_AND_RETURN_BUFFER("foo");
-    }
-    const CharT* abcdef() {
-        DECLARE_AND_RETURN_BUFFER("abcdef");
-    }
-    const CharT* abcdefg() {
-        DECLARE_AND_RETURN_BUFFER("abcdefg");
-    }
-    const CharT* aba() {
-        DECLARE_AND_RETURN_BUFFER("aba");
-    }
-    const CharT* hr() {
-        DECLARE_AND_RETURN_BUFFER("hr");
-    }
-    const CharT* hrt() {
-        DECLARE_AND_RETURN_BUFFER("hrt");
-    }
-    const CharT* thr() {
-        DECLARE_AND_RETURN_BUFFER("thr");
-    }
-    const CharT* tw() {
-        DECLARE_AND_RETURN_BUFFER("tw");
-    }
-    const CharT* ow() {
-        DECLARE_AND_RETURN_BUFFER("ow");
-    }
-    const CharT* opq() {
-        DECLARE_AND_RETURN_BUFFER("opq");
-    }
-    const CharT* xyz() {
-        DECLARE_AND_RETURN_BUFFER("xyz");
-    }
-    const CharT* abc() {
-        DECLARE_AND_RETURN_BUFFER("abc");
-    }
-    const CharT* abcd() {
-        DECLARE_AND_RETURN_BUFFER("abcd");
-    }
-    const CharT* abcde() {
-        DECLARE_AND_RETURN_BUFFER("abcde");
-    }
-    const CharT* abcc() {
-        DECLARE_AND_RETURN_BUFFER("abcc");
-    }
-    const CharT* abce() {
-        DECLARE_AND_RETURN_BUFFER("abce");
-    }
-    const CharT* qwe() {
-        DECLARE_AND_RETURN_BUFFER("qwe");
-    }
-    const CharT* cd() {
-        DECLARE_AND_RETURN_BUFFER("cd");
-    }
-    const CharT* cde() {
-        DECLARE_AND_RETURN_BUFFER("cde");
-    }
-    const CharT* cdef() {
-        DECLARE_AND_RETURN_BUFFER("cdef");
-    }
-    const CharT* cdefgh() {
-        DECLARE_AND_RETURN_BUFFER("cdefgh");
-    }
-    const CharT* ehortw_() {
-        DECLARE_AND_RETURN_BUFFER("ehortw ");
-    }
-    const CharT* fg() {
-        DECLARE_AND_RETURN_BUFFER("fg");
-    }
-    const CharT* abcdefgh() {
-        DECLARE_AND_RETURN_BUFFER("abcdefgh");
-    }
-
-    // phrases
-    const CharT* Hello_World() {
-        DECLARE_AND_RETURN_BUFFER("Hello World");
-    }
-    const CharT* This_is_test_string_for_string_calls() {
-        DECLARE_AND_RETURN_BUFFER("This is test string for string calls");
-    }
-    const CharT* This_is_teis_test_string_st_string_for_string_calls() {
-        DECLARE_AND_RETURN_BUFFER("This is teis test string st string for string calls");
-    }
-    const CharT* This_is_test_stis_test_string_for_stringring_for_string_calls() {
-        DECLARE_AND_RETURN_BUFFER("This is test stis test string for stringring for string calls");
-    }
-    const CharT* allsThis_is_test_string_for_string_calls() {
-        DECLARE_AND_RETURN_BUFFER("allsThis is test string for string calls");
-    }
-    const CharT* ng_for_string_callsThis_is_test_string_for_string_calls() {
-        DECLARE_AND_RETURN_BUFFER("ng for string callsThis is test string for string calls");
-    }
-    const CharT* one_two_three_one_two_three() {
-        DECLARE_AND_RETURN_BUFFER("one two three one two three");
-    }
-    const CharT* test_string_for_assign() {
-        DECLARE_AND_RETURN_BUFFER("test string for assign");
-    }
-    const CharT* other_test_string() {
-        DECLARE_AND_RETURN_BUFFER("other test string");
-    }
-    const CharT* This_This_is_tefor_string_calls() {
-        DECLARE_AND_RETURN_BUFFER("This This is tefor string calls");
-    }
-    const CharT* This_This_is_test_string_for_string_calls() {
-        DECLARE_AND_RETURN_BUFFER("This This is test string for string calls");
-    }
-
-    const CharT* _0123456x() {
-        DECLARE_AND_RETURN_BUFFER("0123456x");
-    }
-    const CharT* _0123456xy() {
-        DECLARE_AND_RETURN_BUFFER("0123456xy");
-    }
-    const CharT* _0123456xyz() {
-        DECLARE_AND_RETURN_BUFFER("0123456xyz");
-    }
-    const CharT* _0123456xyzZ() {
-        DECLARE_AND_RETURN_BUFFER("0123456xyzZ");
-    }
-    const CharT* _0123456xyzZ0() {
-        DECLARE_AND_RETURN_BUFFER("0123456xyzZ0");
-    }
-    const CharT* abc0123456xyz() {
-        DECLARE_AND_RETURN_BUFFER("abc0123456xyz");
-    }
-    const CharT* BCabc0123456xyz() {
-        DECLARE_AND_RETURN_BUFFER("BCabc0123456xyz");
-    }
-    const CharT* qweBCabc0123456xyz() {
-        DECLARE_AND_RETURN_BUFFER("qweBCabc0123456xyz");
-    }
-    const CharT* _1qweBCabc0123456xyz() {
-        DECLARE_AND_RETURN_BUFFER("1qweBCabc0123456xyz");
-    }
-    const CharT* _01abc23456() {
-        DECLARE_AND_RETURN_BUFFER("01abc23456");
-    }
-    const CharT* _01ABCabc23456() {
-        DECLARE_AND_RETURN_BUFFER("01ABCabc23456");
-    }
-    const CharT* ABC() {
-        DECLARE_AND_RETURN_BUFFER("ABC");
-    }
-    const CharT* ABCD() {
-        DECLARE_AND_RETURN_BUFFER("ABCD");
-    }
-    const CharT* QWE() {
-        DECLARE_AND_RETURN_BUFFER("QWE");
-    }
-    const CharT* XYZ() {
-        DECLARE_AND_RETURN_BUFFER("XYZ");
-    }
-    const CharT* W01ABCabc23456() {
-        DECLARE_AND_RETURN_BUFFER("W01ABCabc23456");
-    }
-    const CharT* abcd456() {
-        DECLARE_AND_RETURN_BUFFER("abcd456");
-    }
-    const CharT* abcdABCD() {
-        DECLARE_AND_RETURN_BUFFER("abcdABCD");
-    }
-    const CharT* abcdABC123() {
-        DECLARE_AND_RETURN_BUFFER("abcdABC123");
-    }
-    const CharT* z123z123() {
-        DECLARE_AND_RETURN_BUFFER("z123z123");
-    }
-    const CharT* ASDF1234QWER() {
-        DECLARE_AND_RETURN_BUFFER("ASDF1234QWER");
-    }
-    const CharT* asdf1234qwer() {
-        DECLARE_AND_RETURN_BUFFER("asdf1234qwer");
-    }
-    const CharT* asDF1234qWEr() {
-        DECLARE_AND_RETURN_BUFFER("asDF1234qWEr");
-    }
-    const CharT* AsDF1234qWEr() {
-        DECLARE_AND_RETURN_BUFFER("AsDF1234qWEr");
-    }
-    const CharT* Asdf1234qwer() {
-        DECLARE_AND_RETURN_BUFFER("Asdf1234qwer");
-    }
-    const CharT* Asdf1234qwerWWWW() {
-        DECLARE_AND_RETURN_BUFFER("Asdf1234qwerWWWW");
-    }
-    const CharT* Asdf() {
-        DECLARE_AND_RETURN_BUFFER("Asdf");
-    }
-    const CharT* orig() {
-        DECLARE_AND_RETURN_BUFFER("orig");
-    }
-    const CharT* fdfdsfds() {
-        DECLARE_AND_RETURN_BUFFER("fdfdsfds");
-    }
-
-    // numbers
-    const CharT* _0() {
-        DECLARE_AND_RETURN_BUFFER("0");
-    }
-    const CharT* _00() {
-        DECLARE_AND_RETURN_BUFFER("00");
-    }
-    const CharT* _0000000000() {
-        DECLARE_AND_RETURN_BUFFER("0000000000");
-    }
-    const CharT* _00000() {
-        DECLARE_AND_RETURN_BUFFER("00000");
-    }
-    const CharT* _0123() {
-        DECLARE_AND_RETURN_BUFFER("0123");
-    }
-    const CharT* _01230123() {
-        DECLARE_AND_RETURN_BUFFER("01230123");
-    }
-    const CharT* _01234() {
-        DECLARE_AND_RETURN_BUFFER("01234");
-    }
-    const CharT* _0123401234() {
-        DECLARE_AND_RETURN_BUFFER("0123401234");
-    }
-    const CharT* _012345() {
-        DECLARE_AND_RETURN_BUFFER("012345");
-    }
-    const CharT* _0123456() {
-        DECLARE_AND_RETURN_BUFFER("0123456");
-    }
-    const CharT* _1() {
-        DECLARE_AND_RETURN_BUFFER("1");
-    }
-    const CharT* _11() {
-        DECLARE_AND_RETURN_BUFFER("11");
-    }
-    const CharT* _1100000() {
-        DECLARE_AND_RETURN_BUFFER("1100000");
-    }
-    const CharT* _110000034() {
-        DECLARE_AND_RETURN_BUFFER("110000034");
-    }
-    const CharT* _12() {
-        DECLARE_AND_RETURN_BUFFER("12");
-    }
-    const CharT* _123() {
-        DECLARE_AND_RETURN_BUFFER("123");
-    }
-    const CharT* _1233321() {
-        DECLARE_AND_RETURN_BUFFER("1233321");
-    }
-    const CharT* _1221() {
-        DECLARE_AND_RETURN_BUFFER("1221");
-    }
-    const CharT* _1234123456() {
-        DECLARE_AND_RETURN_BUFFER("1234123456");
-    }
-    const CharT* _12334444321() {
-        DECLARE_AND_RETURN_BUFFER("12334444321");
-    }
-    const CharT* _123344544321() {
-        DECLARE_AND_RETURN_BUFFER("123344544321");
-    }
-    const CharT* _1234567890123456789012345678901234567890() {
-        DECLARE_AND_RETURN_BUFFER("1234567890123456789012345678901234567890");
-    }
-    const CharT* _1234() {
-        DECLARE_AND_RETURN_BUFFER("1234");
-    }
-    const CharT* _12345() {
-        DECLARE_AND_RETURN_BUFFER("12345");
-    }
-    const CharT* _123456() {
-        DECLARE_AND_RETURN_BUFFER("123456");
-    }
-    const CharT* _1234567() {
-        DECLARE_AND_RETURN_BUFFER("1234567");
-    }
-    const CharT* _1234561234() {
-        DECLARE_AND_RETURN_BUFFER("1234561234");
-    }
-    const CharT* _12356() {
-        DECLARE_AND_RETURN_BUFFER("12356");
-    }
-    const CharT* _1345656() {
-        DECLARE_AND_RETURN_BUFFER("1345656");
-    }
-    const CharT* _15656() {
-        DECLARE_AND_RETURN_BUFFER("15656");
-    }
-    const CharT* _17856() {
-        DECLARE_AND_RETURN_BUFFER("17856");
-    }
-    const CharT* _1783456() {
-        DECLARE_AND_RETURN_BUFFER("1783456");
-    }
-    const CharT* _2() {
-        DECLARE_AND_RETURN_BUFFER("2");
-    }
-    const CharT* _2123456() {
-        DECLARE_AND_RETURN_BUFFER("2123456");
-    }
-    const CharT* _23() {
-        DECLARE_AND_RETURN_BUFFER("23");
-    }
-    const CharT* _2345() {
-        DECLARE_AND_RETURN_BUFFER("2345");
-    }
-    const CharT* _3() {
-        DECLARE_AND_RETURN_BUFFER("3");
-    }
-    const CharT* _345() {
-        DECLARE_AND_RETURN_BUFFER("345");
-    }
-    const CharT* _3456() {
-        DECLARE_AND_RETURN_BUFFER("3456");
-    }
-    const CharT* _333333() {
-        DECLARE_AND_RETURN_BUFFER("333333");
-    }
-    const CharT* _389() {
-        DECLARE_AND_RETURN_BUFFER("389");
-    }
-    const CharT* _4294967295() {
-        DECLARE_AND_RETURN_BUFFER("4294967295");
-    }
-    const CharT* _4444() {
-        DECLARE_AND_RETURN_BUFFER("4444");
-    }
-    const CharT* _5() {
-        DECLARE_AND_RETURN_BUFFER("5");
-    }
-    const CharT* _6() {
-        DECLARE_AND_RETURN_BUFFER("6");
-    }
-    const CharT* _6543210() {
-        DECLARE_AND_RETURN_BUFFER("6543210");
-    }
-    const CharT* _7() {
-        DECLARE_AND_RETURN_BUFFER("7");
-    }
-    const CharT* _78() {
-        DECLARE_AND_RETURN_BUFFER("78");
-    }
-    const CharT* _2004_01_01() {
-        DECLARE_AND_RETURN_BUFFER("2004-01-01");
-    }
-    const CharT* _1234562004_01_01() {
-        DECLARE_AND_RETURN_BUFFER("1234562004-01-01");
-    }
-    const CharT* _0123456_12345() {
-        DECLARE_AND_RETURN_BUFFER("0123456_12345");
-    }
-
-    // letters
-    const CharT* a() {
-        DECLARE_AND_RETURN_BUFFER("a");
-    }
-    const CharT* b() {
-        DECLARE_AND_RETURN_BUFFER("b");
-    }
-    const CharT* c() {
-        DECLARE_AND_RETURN_BUFFER("c");
-    }
-    const CharT* d() {
-        DECLARE_AND_RETURN_BUFFER("d");
-    }
-    const CharT* e() {
-        DECLARE_AND_RETURN_BUFFER("e");
-    }
-    const CharT* f() {
-        DECLARE_AND_RETURN_BUFFER("f");
-    }
-    const CharT* h() {
-        DECLARE_AND_RETURN_BUFFER("h");
-    }
-    const CharT* o() {
-        DECLARE_AND_RETURN_BUFFER("o");
-    }
-    const CharT* p() {
-        DECLARE_AND_RETURN_BUFFER("p");
-    }
-    const CharT* q() {
-        DECLARE_AND_RETURN_BUFFER("q");
-    }
-    const CharT* r() {
-        DECLARE_AND_RETURN_BUFFER("r");
-    }
-    const CharT* s() {
-        DECLARE_AND_RETURN_BUFFER("s");
-    }
-    const CharT* t() {
-        DECLARE_AND_RETURN_BUFFER("t");
-    }
-    const CharT* w() {
-        DECLARE_AND_RETURN_BUFFER("w");
-    }
-    const CharT* x() {
-        DECLARE_AND_RETURN_BUFFER("x");
-    }
-    const CharT* y() {
-        DECLARE_AND_RETURN_BUFFER("y");
-    }
-    const CharT* z() {
-        DECLARE_AND_RETURN_BUFFER("z");
-    }
-    const CharT* H() {
-        DECLARE_AND_RETURN_BUFFER("H");
-    }
-    const CharT* I() {
-        DECLARE_AND_RETURN_BUFFER("I");
-    }
-    const CharT* W() {
-        DECLARE_AND_RETURN_BUFFER("W");
-    }
-
-    const CharT* Space() {
-        DECLARE_AND_RETURN_BUFFER(" ");
-    }
-    const CharT* Empty() {
-        DECLARE_AND_RETURN_BUFFER("");
-    }
-
-    size_t HashOf_0123456() {
-        return 0;
-    }
-};
-
-template <>
-size_t TTestData<char>::HashOf_0123456() {
-    return 1229863857ul;
-}
-
-template <>
-size_t TTestData<wchar16>::HashOf_0123456() {
-    return 2775195331ul;
-}
-
+//! @attention this class can process characters less than 0x7F only (the low half of ASCII table) 
+template <typename CharT> 
+struct TTestData { 
+    // words 
+    const CharT* str1() { 
+        DECLARE_AND_RETURN_BUFFER("str1"); 
+    } 
+    const CharT* str2() { 
+        DECLARE_AND_RETURN_BUFFER("str2"); 
+    } 
+    const CharT* str__________________________________________________1() { 
+        DECLARE_AND_RETURN_BUFFER("str                                                  1"); 
+    } 
+    const CharT* str__________________________________________________2() { 
+        DECLARE_AND_RETURN_BUFFER("str                                                  2"); 
+    } 
+    const CharT* one() { 
+        DECLARE_AND_RETURN_BUFFER("one"); 
+    } 
+    const CharT* two() { 
+        DECLARE_AND_RETURN_BUFFER("two"); 
+    } 
+    const CharT* three() { 
+        DECLARE_AND_RETURN_BUFFER("three"); 
+    } 
+    const CharT* thrii() { 
+        DECLARE_AND_RETURN_BUFFER("thrii"); 
+    } 
+    const CharT* four() { 
+        DECLARE_AND_RETURN_BUFFER("four"); 
+    } 
+    const CharT* enotw_() { 
+        DECLARE_AND_RETURN_BUFFER("enotw "); 
+    } 
+    const CharT* foo() { 
+        DECLARE_AND_RETURN_BUFFER("foo"); 
+    } 
+    const CharT* abcdef() { 
+        DECLARE_AND_RETURN_BUFFER("abcdef"); 
+    } 
+    const CharT* abcdefg() { 
+        DECLARE_AND_RETURN_BUFFER("abcdefg"); 
+    } 
+    const CharT* aba() { 
+        DECLARE_AND_RETURN_BUFFER("aba"); 
+    } 
+    const CharT* hr() { 
+        DECLARE_AND_RETURN_BUFFER("hr"); 
+    } 
+    const CharT* hrt() { 
+        DECLARE_AND_RETURN_BUFFER("hrt"); 
+    } 
+    const CharT* thr() { 
+        DECLARE_AND_RETURN_BUFFER("thr"); 
+    } 
+    const CharT* tw() { 
+        DECLARE_AND_RETURN_BUFFER("tw"); 
+    } 
+    const CharT* ow() { 
+        DECLARE_AND_RETURN_BUFFER("ow"); 
+    } 
+    const CharT* opq() { 
+        DECLARE_AND_RETURN_BUFFER("opq"); 
+    } 
+    const CharT* xyz() { 
+        DECLARE_AND_RETURN_BUFFER("xyz"); 
+    } 
+    const CharT* abc() { 
+        DECLARE_AND_RETURN_BUFFER("abc"); 
+    } 
+    const CharT* abcd() { 
+        DECLARE_AND_RETURN_BUFFER("abcd"); 
+    } 
+    const CharT* abcde() { 
+        DECLARE_AND_RETURN_BUFFER("abcde"); 
+    } 
+    const CharT* abcc() { 
+        DECLARE_AND_RETURN_BUFFER("abcc"); 
+    } 
+    const CharT* abce() { 
+        DECLARE_AND_RETURN_BUFFER("abce"); 
+    } 
+    const CharT* qwe() { 
+        DECLARE_AND_RETURN_BUFFER("qwe"); 
+    } 
+    const CharT* cd() { 
+        DECLARE_AND_RETURN_BUFFER("cd"); 
+    } 
+    const CharT* cde() { 
+        DECLARE_AND_RETURN_BUFFER("cde"); 
+    } 
+    const CharT* cdef() { 
+        DECLARE_AND_RETURN_BUFFER("cdef"); 
+    } 
+    const CharT* cdefgh() { 
+        DECLARE_AND_RETURN_BUFFER("cdefgh"); 
+    } 
+    const CharT* ehortw_() { 
+        DECLARE_AND_RETURN_BUFFER("ehortw "); 
+    } 
+    const CharT* fg() { 
+        DECLARE_AND_RETURN_BUFFER("fg"); 
+    } 
+    const CharT* abcdefgh() { 
+        DECLARE_AND_RETURN_BUFFER("abcdefgh"); 
+    } 
+ 
+    // phrases 
+    const CharT* Hello_World() { 
+        DECLARE_AND_RETURN_BUFFER("Hello World"); 
+    } 
+    const CharT* This_is_test_string_for_string_calls() { 
+        DECLARE_AND_RETURN_BUFFER("This is test string for string calls"); 
+    } 
+    const CharT* This_is_teis_test_string_st_string_for_string_calls() { 
+        DECLARE_AND_RETURN_BUFFER("This is teis test string st string for string calls"); 
+    } 
+    const CharT* This_is_test_stis_test_string_for_stringring_for_string_calls() { 
+        DECLARE_AND_RETURN_BUFFER("This is test stis test string for stringring for string calls"); 
+    } 
+    const CharT* allsThis_is_test_string_for_string_calls() { 
+        DECLARE_AND_RETURN_BUFFER("allsThis is test string for string calls"); 
+    } 
+    const CharT* ng_for_string_callsThis_is_test_string_for_string_calls() { 
+        DECLARE_AND_RETURN_BUFFER("ng for string callsThis is test string for string calls"); 
+    } 
+    const CharT* one_two_three_one_two_three() { 
+        DECLARE_AND_RETURN_BUFFER("one two three one two three"); 
+    } 
+    const CharT* test_string_for_assign() { 
+        DECLARE_AND_RETURN_BUFFER("test string for assign"); 
+    } 
+    const CharT* other_test_string() { 
+        DECLARE_AND_RETURN_BUFFER("other test string"); 
+    } 
+    const CharT* This_This_is_tefor_string_calls() { 
+        DECLARE_AND_RETURN_BUFFER("This This is tefor string calls"); 
+    } 
+    const CharT* This_This_is_test_string_for_string_calls() { 
+        DECLARE_AND_RETURN_BUFFER("This This is test string for string calls"); 
+    } 
+ 
+    const CharT* _0123456x() { 
+        DECLARE_AND_RETURN_BUFFER("0123456x"); 
+    } 
+    const CharT* _0123456xy() { 
+        DECLARE_AND_RETURN_BUFFER("0123456xy"); 
+    } 
+    const CharT* _0123456xyz() { 
+        DECLARE_AND_RETURN_BUFFER("0123456xyz"); 
+    } 
+    const CharT* _0123456xyzZ() { 
+        DECLARE_AND_RETURN_BUFFER("0123456xyzZ"); 
+    } 
+    const CharT* _0123456xyzZ0() { 
+        DECLARE_AND_RETURN_BUFFER("0123456xyzZ0"); 
+    } 
+    const CharT* abc0123456xyz() { 
+        DECLARE_AND_RETURN_BUFFER("abc0123456xyz"); 
+    } 
+    const CharT* BCabc0123456xyz() { 
+        DECLARE_AND_RETURN_BUFFER("BCabc0123456xyz"); 
+    } 
+    const CharT* qweBCabc0123456xyz() { 
+        DECLARE_AND_RETURN_BUFFER("qweBCabc0123456xyz"); 
+    } 
+    const CharT* _1qweBCabc0123456xyz() { 
+        DECLARE_AND_RETURN_BUFFER("1qweBCabc0123456xyz"); 
+    } 
+    const CharT* _01abc23456() { 
+        DECLARE_AND_RETURN_BUFFER("01abc23456"); 
+    } 
+    const CharT* _01ABCabc23456() { 
+        DECLARE_AND_RETURN_BUFFER("01ABCabc23456"); 
+    } 
+    const CharT* ABC() { 
+        DECLARE_AND_RETURN_BUFFER("ABC"); 
+    } 
+    const CharT* ABCD() { 
+        DECLARE_AND_RETURN_BUFFER("ABCD"); 
+    } 
+    const CharT* QWE() { 
+        DECLARE_AND_RETURN_BUFFER("QWE"); 
+    } 
+    const CharT* XYZ() { 
+        DECLARE_AND_RETURN_BUFFER("XYZ"); 
+    } 
+    const CharT* W01ABCabc23456() { 
+        DECLARE_AND_RETURN_BUFFER("W01ABCabc23456"); 
+    } 
+    const CharT* abcd456() { 
+        DECLARE_AND_RETURN_BUFFER("abcd456"); 
+    } 
+    const CharT* abcdABCD() { 
+        DECLARE_AND_RETURN_BUFFER("abcdABCD"); 
+    } 
+    const CharT* abcdABC123() { 
+        DECLARE_AND_RETURN_BUFFER("abcdABC123"); 
+    } 
+    const CharT* z123z123() { 
+        DECLARE_AND_RETURN_BUFFER("z123z123"); 
+    } 
+    const CharT* ASDF1234QWER() { 
+        DECLARE_AND_RETURN_BUFFER("ASDF1234QWER"); 
+    } 
+    const CharT* asdf1234qwer() { 
+        DECLARE_AND_RETURN_BUFFER("asdf1234qwer"); 
+    } 
+    const CharT* asDF1234qWEr() { 
+        DECLARE_AND_RETURN_BUFFER("asDF1234qWEr"); 
+    } 
+    const CharT* AsDF1234qWEr() { 
+        DECLARE_AND_RETURN_BUFFER("AsDF1234qWEr"); 
+    } 
+    const CharT* Asdf1234qwer() { 
+        DECLARE_AND_RETURN_BUFFER("Asdf1234qwer"); 
+    } 
+    const CharT* Asdf1234qwerWWWW() { 
+        DECLARE_AND_RETURN_BUFFER("Asdf1234qwerWWWW"); 
+    } 
+    const CharT* Asdf() { 
+        DECLARE_AND_RETURN_BUFFER("Asdf"); 
+    } 
+    const CharT* orig() { 
+        DECLARE_AND_RETURN_BUFFER("orig"); 
+    } 
+    const CharT* fdfdsfds() { 
+        DECLARE_AND_RETURN_BUFFER("fdfdsfds"); 
+    } 
+ 
+    // numbers 
+    const CharT* _0() { 
+        DECLARE_AND_RETURN_BUFFER("0"); 
+    } 
+    const CharT* _00() { 
+        DECLARE_AND_RETURN_BUFFER("00"); 
+    } 
+    const CharT* _0000000000() { 
+        DECLARE_AND_RETURN_BUFFER("0000000000"); 
+    } 
+    const CharT* _00000() { 
+        DECLARE_AND_RETURN_BUFFER("00000"); 
+    } 
+    const CharT* _0123() { 
+        DECLARE_AND_RETURN_BUFFER("0123"); 
+    } 
+    const CharT* _01230123() { 
+        DECLARE_AND_RETURN_BUFFER("01230123"); 
+    } 
+    const CharT* _01234() { 
+        DECLARE_AND_RETURN_BUFFER("01234"); 
+    } 
+    const CharT* _0123401234() { 
+        DECLARE_AND_RETURN_BUFFER("0123401234"); 
+    } 
+    const CharT* _012345() { 
+        DECLARE_AND_RETURN_BUFFER("012345"); 
+    } 
+    const CharT* _0123456() { 
+        DECLARE_AND_RETURN_BUFFER("0123456"); 
+    } 
+    const CharT* _1() { 
+        DECLARE_AND_RETURN_BUFFER("1"); 
+    } 
+    const CharT* _11() { 
+        DECLARE_AND_RETURN_BUFFER("11"); 
+    } 
+    const CharT* _1100000() { 
+        DECLARE_AND_RETURN_BUFFER("1100000"); 
+    } 
+    const CharT* _110000034() { 
+        DECLARE_AND_RETURN_BUFFER("110000034"); 
+    } 
+    const CharT* _12() { 
+        DECLARE_AND_RETURN_BUFFER("12"); 
+    } 
+    const CharT* _123() { 
+        DECLARE_AND_RETURN_BUFFER("123"); 
+    } 
+    const CharT* _1233321() { 
+        DECLARE_AND_RETURN_BUFFER("1233321"); 
+    } 
+    const CharT* _1221() { 
+        DECLARE_AND_RETURN_BUFFER("1221"); 
+    } 
+    const CharT* _1234123456() { 
+        DECLARE_AND_RETURN_BUFFER("1234123456"); 
+    } 
+    const CharT* _12334444321() { 
+        DECLARE_AND_RETURN_BUFFER("12334444321"); 
+    } 
+    const CharT* _123344544321() { 
+        DECLARE_AND_RETURN_BUFFER("123344544321"); 
+    } 
+    const CharT* _1234567890123456789012345678901234567890() { 
+        DECLARE_AND_RETURN_BUFFER("1234567890123456789012345678901234567890"); 
+    } 
+    const CharT* _1234() { 
+        DECLARE_AND_RETURN_BUFFER("1234"); 
+    } 
+    const CharT* _12345() { 
+        DECLARE_AND_RETURN_BUFFER("12345"); 
+    } 
+    const CharT* _123456() { 
+        DECLARE_AND_RETURN_BUFFER("123456"); 
+    } 
+    const CharT* _1234567() { 
+        DECLARE_AND_RETURN_BUFFER("1234567"); 
+    } 
+    const CharT* _1234561234() { 
+        DECLARE_AND_RETURN_BUFFER("1234561234"); 
+    } 
+    const CharT* _12356() { 
+        DECLARE_AND_RETURN_BUFFER("12356"); 
+    } 
+    const CharT* _1345656() { 
+        DECLARE_AND_RETURN_BUFFER("1345656"); 
+    } 
+    const CharT* _15656() { 
+        DECLARE_AND_RETURN_BUFFER("15656"); 
+    } 
+    const CharT* _17856() { 
+        DECLARE_AND_RETURN_BUFFER("17856"); 
+    } 
+    const CharT* _1783456() { 
+        DECLARE_AND_RETURN_BUFFER("1783456"); 
+    } 
+    const CharT* _2() { 
+        DECLARE_AND_RETURN_BUFFER("2"); 
+    } 
+    const CharT* _2123456() { 
+        DECLARE_AND_RETURN_BUFFER("2123456"); 
+    } 
+    const CharT* _23() { 
+        DECLARE_AND_RETURN_BUFFER("23"); 
+    } 
+    const CharT* _2345() { 
+        DECLARE_AND_RETURN_BUFFER("2345"); 
+    } 
+    const CharT* _3() { 
+        DECLARE_AND_RETURN_BUFFER("3"); 
+    } 
+    const CharT* _345() { 
+        DECLARE_AND_RETURN_BUFFER("345"); 
+    } 
+    const CharT* _3456() { 
+        DECLARE_AND_RETURN_BUFFER("3456"); 
+    } 
+    const CharT* _333333() { 
+        DECLARE_AND_RETURN_BUFFER("333333"); 
+    } 
+    const CharT* _389() { 
+        DECLARE_AND_RETURN_BUFFER("389"); 
+    } 
+    const CharT* _4294967295() { 
+        DECLARE_AND_RETURN_BUFFER("4294967295"); 
+    } 
+    const CharT* _4444() { 
+        DECLARE_AND_RETURN_BUFFER("4444"); 
+    } 
+    const CharT* _5() { 
+        DECLARE_AND_RETURN_BUFFER("5"); 
+    } 
+    const CharT* _6() { 
+        DECLARE_AND_RETURN_BUFFER("6"); 
+    } 
+    const CharT* _6543210() { 
+        DECLARE_AND_RETURN_BUFFER("6543210"); 
+    } 
+    const CharT* _7() { 
+        DECLARE_AND_RETURN_BUFFER("7"); 
+    } 
+    const CharT* _78() { 
+        DECLARE_AND_RETURN_BUFFER("78"); 
+    } 
+    const CharT* _2004_01_01() { 
+        DECLARE_AND_RETURN_BUFFER("2004-01-01"); 
+    } 
+    const CharT* _1234562004_01_01() { 
+        DECLARE_AND_RETURN_BUFFER("1234562004-01-01"); 
+    } 
+    const CharT* _0123456_12345() { 
+        DECLARE_AND_RETURN_BUFFER("0123456_12345"); 
+    } 
+ 
+    // letters 
+    const CharT* a() { 
+        DECLARE_AND_RETURN_BUFFER("a"); 
+    } 
+    const CharT* b() { 
+        DECLARE_AND_RETURN_BUFFER("b"); 
+    } 
+    const CharT* c() { 
+        DECLARE_AND_RETURN_BUFFER("c"); 
+    } 
+    const CharT* d() { 
+        DECLARE_AND_RETURN_BUFFER("d"); 
+    } 
+    const CharT* e() { 
+        DECLARE_AND_RETURN_BUFFER("e"); 
+    } 
+    const CharT* f() { 
+        DECLARE_AND_RETURN_BUFFER("f"); 
+    } 
+    const CharT* h() { 
+        DECLARE_AND_RETURN_BUFFER("h"); 
+    } 
+    const CharT* o() { 
+        DECLARE_AND_RETURN_BUFFER("o"); 
+    } 
+    const CharT* p() { 
+        DECLARE_AND_RETURN_BUFFER("p"); 
+    } 
+    const CharT* q() { 
+        DECLARE_AND_RETURN_BUFFER("q"); 
+    } 
+    const CharT* r() { 
+        DECLARE_AND_RETURN_BUFFER("r"); 
+    } 
+    const CharT* s() { 
+        DECLARE_AND_RETURN_BUFFER("s"); 
+    } 
+    const CharT* t() { 
+        DECLARE_AND_RETURN_BUFFER("t"); 
+    } 
+    const CharT* w() { 
+        DECLARE_AND_RETURN_BUFFER("w"); 
+    } 
+    const CharT* x() { 
+        DECLARE_AND_RETURN_BUFFER("x"); 
+    } 
+    const CharT* y() { 
+        DECLARE_AND_RETURN_BUFFER("y"); 
+    } 
+    const CharT* z() { 
+        DECLARE_AND_RETURN_BUFFER("z"); 
+    } 
+    const CharT* H() { 
+        DECLARE_AND_RETURN_BUFFER("H"); 
+    } 
+    const CharT* I() { 
+        DECLARE_AND_RETURN_BUFFER("I"); 
+    } 
+    const CharT* W() { 
+        DECLARE_AND_RETURN_BUFFER("W"); 
+    } 
+ 
+    const CharT* Space() { 
+        DECLARE_AND_RETURN_BUFFER(" "); 
+    } 
+    const CharT* Empty() { 
+        DECLARE_AND_RETURN_BUFFER(""); 
+    } 
+ 
+    size_t HashOf_0123456() { 
+        return 0; 
+    } 
+}; 
+ 
+template <> 
+size_t TTestData<char>::HashOf_0123456() { 
+    return 1229863857ul; 
+} 
+ 
+template <> 
+size_t TTestData<wchar16>::HashOf_0123456() { 
+    return 2775195331ul; 
+} 
+ 
 template <class TStringType, typename TTestData>
 class TStringTestImpl {
 protected:
@@ -518,7 +518,7 @@ protected:
 
 public:
     void TestMaxSize() {
-        const size_t badMaxVal = TStringType{}.max_size() + 1;
+        const size_t badMaxVal = TStringType{}.max_size() + 1; 
 
         TStringType s;
         UNIT_CHECK_GENERATED_EXCEPTION(s.reserve(badMaxVal), std::length_error);
@@ -541,10 +541,10 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(fromChar.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(fromChar[0], char_type('a'));
 
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
         TStringType s3 = TStringType::Uninitialized(10);
         UNIT_ASSERT(s3.size() == 10);
-#endif
+#endif 
 
         TStringType s4(Data._0123456(), 1, 3);
         UNIT_ASSERT(s4 == Data._123());
@@ -556,9 +556,9 @@ public:
         UNIT_ASSERT(s6 == Data._0123456());
         TStringType s7(s6);
         UNIT_ASSERT(s7 == s6);
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
         UNIT_ASSERT(s7.c_str() == s6.c_str());
-#endif
+#endif 
 
         TStringType s8(s7, 1, 3);
         UNIT_ASSERT(s8 == Data._123());
@@ -568,7 +568,7 @@ public:
 
         TStringType s10(Reserve(100));
         UNIT_ASSERT(s10.empty());
-        UNIT_ASSERT(s10.capacity() >= 100);
+        UNIT_ASSERT(s10.capacity() >= 100); 
     }
 
     void TestReplace() {
@@ -579,11 +579,11 @@ public:
         s.append(Data.x());
         UNIT_ASSERT(s == Data._0123456x());
 
-#ifdef TSTRING_IS_STD_STRING
-        s.append(Data.xyz() + 1, 1);
-#else
+#ifdef TSTRING_IS_STD_STRING 
+        s.append(Data.xyz() + 1, 1); 
+#else 
         s.append(Data.xyz(), 1, 1);
-#endif
+#endif 
         UNIT_ASSERT(s == Data._0123456xy());
 
         s.append(TStringType(Data.z()));
@@ -650,7 +650,7 @@ public:
         UNIT_ASSERT(s[s.size()] == 0);
     }
 
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     void TestRefCount() {
         using TStr = TStringType;
 
@@ -672,7 +672,7 @@ public:
         UNIT_ASSERT_EQUAL(s2.RefCount() == 1, true);
         UNIT_ASSERT_EQUAL(s1.c_str() == s2.c_str(), false);
     }
-#endif
+#endif 
 
     //  Find family
 
@@ -797,11 +797,11 @@ public:
         UNIT_ASSERT(s > Data.abc0123456xyz());
         UNIT_ASSERT(s == Data.abcd());
 
-        using TCIStringBuf = TBasicStringBuf<char_type, traits_type>;
-
-        UNIT_ASSERT(s > TCIStringBuf(Data.abc0123456xyz()));
-        UNIT_ASSERT(TCIStringBuf(Data.abc0123456xyz()) < s);
-        UNIT_ASSERT(s == TCIStringBuf(Data.abcd()));
+        using TCIStringBuf = TBasicStringBuf<char_type, traits_type>; 
+ 
+        UNIT_ASSERT(s > TCIStringBuf(Data.abc0123456xyz())); 
+        UNIT_ASSERT(TCIStringBuf(Data.abc0123456xyz()) < s); 
+        UNIT_ASSERT(s == TCIStringBuf(Data.abcd())); 
     }
 
     void TestMulOperators() {
@@ -836,7 +836,7 @@ public:
         UNIT_ASSERT(s2 == s);
 
         // reverse()
-        ReverseInPlace(s2);
+        ReverseInPlace(s2); 
         UNIT_ASSERT(s2 == Data._6543210());
 
         // to_upper()
@@ -894,7 +894,7 @@ public:
         // hash()
         TStringType sS = s2; // type 'TStringType' is used as is
 
-        ComputeHash(sS); /*size_t hash_val = sS.hash();
+        ComputeHash(sS); /*size_t hash_val = sS.hash(); 
 
         try {
             //UNIT_ASSERT(hash_val == Data.HashOf_0123456());
@@ -998,7 +998,7 @@ public:
         UNIT_ASSERT_EQUAL(str.EndsWith(emptyStr), true);
     }
 
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     void TestCharRef() {
         const char_type abc[] = {'a', 'b', 'c', 0};
         const char_type bbc[] = {'b', 'b', 'c', 0};
@@ -1045,7 +1045,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(s1, red_eared);
         }
     }
-#endif
+#endif 
 
     void TestBack() {
         const char_type chars[] = {'f', 'o', 'o', 0};

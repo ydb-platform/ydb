@@ -198,7 +198,7 @@ namespace {
             }
 
             for (size_t i = 0; i < tests.size(); ++i) {
-                if (!AllTests.contains(tests[i])) {
+                if (!AllTests.contains(tests[i])) { 
                     LogError() << "unknown test name: " << tests[i] << Endl;
                     return false;
                 }

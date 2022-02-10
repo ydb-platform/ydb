@@ -3,7 +3,7 @@
 #include <google/protobuf/stubs/strutil.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
-
+ 
 namespace NProtobufJson {
     void TCEscapeTransform::Transform(TString& str) const {
         str = google::protobuf::CEscape(str);
@@ -54,11 +54,11 @@ namespace NProtobufJson {
         return result;
     }
 
-    void TBase64EncodeBytesTransform::TransformBytes(TString &str) const {
-        str = Base64Encode(str);
-    }
-
-    void TBase64DecodeBytesTransform::TransformBytes(TString &str) const {
-        str = Base64Decode(str);
-    }
+    void TBase64EncodeBytesTransform::TransformBytes(TString &str) const { 
+        str = Base64Encode(str); 
+    } 
+ 
+    void TBase64DecodeBytesTransform::TransformBytes(TString &str) const { 
+        str = Base64Decode(str); 
+    } 
 }

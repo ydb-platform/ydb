@@ -215,7 +215,7 @@ public:
         TSettingHandlerImpl& Enum(std::initializer_list<TType> list) {
             THashSet<TType> allowed(list);
             Validators_.push_back([allowed = std::move(allowed)](const TString&, TType value) {
-                if (!allowed.contains(value)) {
+                if (!allowed.contains(value)) { 
                     throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed);
                 }
             });

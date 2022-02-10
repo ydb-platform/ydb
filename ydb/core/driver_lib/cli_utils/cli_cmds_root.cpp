@@ -58,7 +58,7 @@ public:
         case TCommandConfig::EServerType::GRpc:
             CommandConfig.ClientConfig = NGrpc::TGRpcClientConfig(endpoint.Address);
             if (config.EnableSsl) {
-                auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
+                auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef()); 
                 p->EnableSsl = config.EnableSsl;
                 p->SslCaCert = config.CaCerts;
             }

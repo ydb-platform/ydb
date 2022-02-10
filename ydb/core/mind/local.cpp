@@ -1063,7 +1063,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     void RegisterAsDomain(const TRegistrationInfo &info,
                           const TActorContext &ctx)
     {
-        Y_VERIFY(!RunningTenants.contains(info.TenantName));
+        Y_VERIFY(!RunningTenants.contains(info.TenantName)); 
         const auto domainKey = TSubDomainKey(SchemeRoot, 1);
         RunningTenants.emplace(std::make_pair(info.TenantName, TTenantInfo(info, domainKey)));
         for (auto id : HiveIds) {
@@ -1084,7 +1084,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
         const auto domainKey = TSubDomainKey(domainDesc.GetDomainKey());
 
-        Y_VERIFY(!RunningTenants.contains(task.Info.TenantName));
+        Y_VERIFY(!RunningTenants.contains(task.Info.TenantName)); 
         TTenantInfo info(task.Info, domainKey);
         for (auto &attr : rec.GetPathDescription().GetUserAttributes())
             info.Attributes.emplace(std::make_pair(attr.GetKey(), attr.GetValue()));
@@ -1160,7 +1160,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                     LogPrefix << "HandleResolve from schemeshard " << SchemeRoot
                     << ": " << rec.ShortDebugString());
 
-        if (!ResolveTasks.contains(rec.GetPath())) {
+        if (!ResolveTasks.contains(rec.GetPath())) { 
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
                         LogPrefix << "Missing task for " << rec.GetPath());
             return;
@@ -1265,7 +1265,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         auto &info = ev->Get()->TenantInfo;
 
         // Already started?
-        if (RunningTenants.contains(info.TenantName)) {
+        if (RunningTenants.contains(info.TenantName)) { 
             SendStatus(info.TenantName, ev->Sender, ctx);
             return;
         }
@@ -1296,7 +1296,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         // In-fly?
         auto it = ResolveTasks.find(tenant);
         if (it != ResolveTasks.end()) {
-            Y_VERIFY(!RunningTenants.contains(tenant));
+            Y_VERIFY(!RunningTenants.contains(tenant)); 
             SendStatus(tenant, it->second.Senders, ctx);
             ResolveTasks.erase(it);
         } else {
@@ -1427,7 +1427,7 @@ public:
             return false;
         }
 
-        if (!DomainLocals.contains(domainName)) {
+        if (!DomainLocals.contains(domainName)) { 
             auto actor = new TDomainLocal(domainsInfo, *domain, Config);
             DomainLocals[domainName] = ctx.Register(actor);
         }

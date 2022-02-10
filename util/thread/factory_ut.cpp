@@ -1,5 +1,5 @@
-#include "factory.h"
-#include "pool.h"
+#include "factory.h" 
+#include "pool.h" 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -9,7 +9,7 @@ class TThrPoolTest: public TTestBase {
     UNIT_TEST(TestAdaptivePool)
     UNIT_TEST_SUITE_END();
 
-    struct TRunAble: public IThreadFactory::IThreadAble {
+    struct TRunAble: public IThreadFactory::IThreadAble { 
         inline TRunAble()
             : done(false)
         {
@@ -41,7 +41,7 @@ private:
         TRunAble r;
 
         {
-            TAdaptiveThreadPool pool;
+            TAdaptiveThreadPool pool; 
 
             pool.Start(0);
 

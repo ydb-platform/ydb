@@ -22,7 +22,7 @@ public:
     TStatusCallbackPair CallbackTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 
     bool CanExec(const TExprNode& node) const {
-        return Handlers.contains(node.Content());
+        return Handlers.contains(node.Content()); 
     }
 
 protected:

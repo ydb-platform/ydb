@@ -5,7 +5,7 @@ OWNER(g:kikimr)
 PEERDIR(
     library/cpp/actors/core
     library/cpp/digest/crc32c
-    library/cpp/pop_count
+    library/cpp/pop_count 
     ydb/core/base
     ydb/core/base/services
     ydb/core/blobstorage/crypto

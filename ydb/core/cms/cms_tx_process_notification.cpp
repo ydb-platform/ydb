@@ -53,7 +53,7 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification complete with response: %s",
                   Response->Record.ShortDebugString().data());
 
-        Self->Reply(Event, std::move(Response), ctx);
+        Self->Reply(Event, std::move(Response), ctx); 
         Self->ScheduleNotificationsCleanup(ctx);
     }
 

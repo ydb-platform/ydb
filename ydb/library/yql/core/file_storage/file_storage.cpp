@@ -49,7 +49,7 @@ public:
 
         auto numThreads = params.GetThreads();
         if (1 == numThreads) {
-            MtpQueue.Reset(new TFakeThreadPool());
+            MtpQueue.Reset(new TFakeThreadPool()); 
         } else {
             MtpQueue.Reset(new TSimpleThreadPool(TThreadPoolParams{"FileStorage"}));
         }
@@ -295,7 +295,7 @@ private:
     std::vector<IDownloaderPtr> Downloaders;
     TUrlMapper Mapper;
     TAtomic QueueStarted;
-    THolder<IThreadPool> MtpQueue;
+    THolder<IThreadPool> MtpQueue; 
     TMultiResourceLock MultiResourceLock;
 };
 

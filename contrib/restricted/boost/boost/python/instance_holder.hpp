@@ -31,7 +31,7 @@ struct BOOST_PYTHON_DECL instance_holder : private noncopyable
     // that always holds the Python object.
     virtual void* holds(type_info, bool null_ptr_only) = 0;
 
-    void install(PyObject* inst) noexcept;
+    void install(PyObject* inst) noexcept; 
 
     // These functions should probably be located elsewhere.
     
@@ -42,7 +42,7 @@ struct BOOST_PYTHON_DECL instance_holder : private noncopyable
 
     // Deallocate storage from the heap if it was not carved out of
     // the given Python object by allocate(), above.
-    static void deallocate(PyObject*, void* storage) noexcept;
+    static void deallocate(PyObject*, void* storage) noexcept; 
  private:
     instance_holder* m_next;
 };

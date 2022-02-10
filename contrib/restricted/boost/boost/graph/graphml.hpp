@@ -37,8 +37,8 @@ namespace boost
 struct parse_error: public graph_exception
 {
     parse_error(const std::string& err) {error = err; statement = "parse error: " + error;}
-    virtual ~parse_error() {}
-    virtual const char* what() const noexcept {return statement.c_str();}
+    virtual ~parse_error() {} 
+    virtual const char* what() const noexcept {return statement.c_str();} 
     std::string statement;
     std::string error;
 };

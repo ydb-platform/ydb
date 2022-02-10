@@ -125,7 +125,7 @@ bool TBootstrapConfigValidator::CheckResourceBrokerConfig(const NKikimrConfig::T
             AddError(issues, "queue with empty name is not allowed");
             return false;
         }
-        if (queues.contains(queue.GetName())) {
+        if (queues.contains(queue.GetName())) { 
             AddError(issues, Sprintf("multiple queues with '%s' name",
                                      queue.GetName().data()));
             return false;
@@ -149,12 +149,12 @@ bool TBootstrapConfigValidator::CheckResourceBrokerConfig(const NKikimrConfig::T
             AddError(issues, "task with empty name is not allowed");
             return false;
         }
-        if (tasks.contains(task.GetName())) {
+        if (tasks.contains(task.GetName())) { 
             AddError(issues, Sprintf("multiple tasks with '%s' name",
                                      task.GetName().data()));
             return false;
         }
-        if (!queues.contains(task.GetQueueName())) {
+        if (!queues.contains(task.GetQueueName())) { 
             AddError(issues, Sprintf("task '%s' uses unknown queue '%s'",
                                      task.GetName().data(), task.GetQueueName().data()));
             return false;
@@ -168,12 +168,12 @@ bool TBootstrapConfigValidator::CheckResourceBrokerConfig(const NKikimrConfig::T
         unusedQueues.erase(task.GetQueueName());
     }
 
-    if (!queues.contains(NLocalDb::DefaultQueueName)) {
+    if (!queues.contains(NLocalDb::DefaultQueueName)) { 
         AddError(issues, Sprintf("config should have '%s' queue defined",
                                  NLocalDb::DefaultQueueName.data()));
         return false;
     }
-    if (!tasks.contains(NLocalDb::UnknownTaskName)) {
+    if (!tasks.contains(NLocalDb::UnknownTaskName)) { 
         AddError(issues, Sprintf("config should have '%s' task defined",
                                  NLocalDb::UnknownTaskName.data()));
         return false;

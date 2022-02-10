@@ -177,7 +177,7 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
 {
     const auto& record = Ev->Get()->Record;
 
-    Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
+    Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>(); 
     Result->Record.SetTabletID(self->TabletID());
 
     const auto params = TExecuteParams::ForExecute(this, &txc, readVersion, writeVersion);

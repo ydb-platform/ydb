@@ -35,7 +35,7 @@ boost
             virtual error_info_base * clone() const = 0;
 
             virtual
-            ~error_info_base()
+            ~error_info_base() 
                 {
                 }
             };
@@ -73,7 +73,7 @@ boost
             }
 #endif
 #endif
-        ~error_info()
+        ~error_info() 
             {
             }
         value_type const &

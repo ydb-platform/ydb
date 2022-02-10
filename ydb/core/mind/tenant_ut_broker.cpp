@@ -313,31 +313,31 @@ void CheckState(const NKikimrTenantSlotBroker::TTenantState &rec,
     UNIT_ASSERT_VALUES_EQUAL(name, rec.GetTenantName());
     for (auto &slot : rec.GetRequiredSlots()) {
         TSlotDescription key(slot);
-        UNIT_ASSERT(expected.contains(key));
+        UNIT_ASSERT(expected.contains(key)); 
         UNIT_ASSERT_VALUES_EQUAL(slot.GetCount(), expected[key].Required);
         expected[key].Required = 0;
     }
     for (auto &slot : rec.GetPendingSlots()) {
         TSlotDescription key(slot);
-        UNIT_ASSERT(expected.contains(key));
+        UNIT_ASSERT(expected.contains(key)); 
         UNIT_ASSERT_VALUES_EQUAL(slot.GetCount(), expected[key].Pending);
         expected[key].Pending = 0;
     }
     for (auto &slot : rec.GetMissingSlots()) {
         TSlotDescription key(slot);
-        UNIT_ASSERT(expected.contains(key));
+        UNIT_ASSERT(expected.contains(key)); 
         UNIT_ASSERT_VALUES_EQUAL(slot.GetCount(), expected[key].Missing);
         expected[key].Missing = 0;
     }
     for (auto &slot : rec.GetMisplacedSlots()) {
         TSlotDescription key(slot);
-        UNIT_ASSERT(expected.contains(key));
+        UNIT_ASSERT(expected.contains(key)); 
         UNIT_ASSERT_VALUES_EQUAL(slot.GetCount(), expected[key].Misplaced);
         expected[key].Misplaced = 0;
     }
     for (auto &slot : rec.GetSplitSlots()) {
         TSlotDescription key(slot);
-        UNIT_ASSERT(expected.contains(key));
+        UNIT_ASSERT(expected.contains(key)); 
         UNIT_ASSERT_VALUES_EQUAL(slot.GetCount(), expected[key].Split);
         expected[key].Split = 0;
     }
@@ -357,7 +357,7 @@ bool CompareState(NKikimrTenantSlotBroker::TTenantState &rec, const TString &nam
         return false;
     for (auto &slot : rec.GetRequiredSlots()) {
         TSlotDescription key(slot);
-        if (!expected.contains(key))
+        if (!expected.contains(key)) 
             return false;
         if (slot.GetCount() != expected[key].Required)
             return false;
@@ -365,7 +365,7 @@ bool CompareState(NKikimrTenantSlotBroker::TTenantState &rec, const TString &nam
     }
     for (auto &slot : rec.GetPendingSlots()) {
         TSlotDescription key(slot);
-        if (!expected.contains(key))
+        if (!expected.contains(key)) 
             return false;
         if (slot.GetCount() != expected[key].Pending)
             return false;
@@ -373,7 +373,7 @@ bool CompareState(NKikimrTenantSlotBroker::TTenantState &rec, const TString &nam
     }
     for (auto &slot : rec.GetMissingSlots()) {
         TSlotDescription key(slot);
-        if (!expected.contains(key))
+        if (!expected.contains(key)) 
             return false;
         if (slot.GetCount() != expected[key].Missing)
             return false;
@@ -381,7 +381,7 @@ bool CompareState(NKikimrTenantSlotBroker::TTenantState &rec, const TString &nam
     }
     for (auto &slot : rec.GetMisplacedSlots()) {
         TSlotDescription key(slot);
-        if (!expected.contains(key))
+        if (!expected.contains(key)) 
             return false;
         if (slot.GetCount() != expected[key].Misplaced)
             return false;
@@ -389,7 +389,7 @@ bool CompareState(NKikimrTenantSlotBroker::TTenantState &rec, const TString &nam
     }
     for (auto &slot : rec.GetSplitSlots()) {
         TSlotDescription key(slot);
-        if (!expected.contains(key))
+        if (!expected.contains(key)) 
             return false;
         if (slot.GetCount() != expected[key].Split)
             return false;
@@ -397,7 +397,7 @@ bool CompareState(NKikimrTenantSlotBroker::TTenantState &rec, const TString &nam
     }
     for (auto &slot : rec.GetPinnedSlots()) {
         TSlotDescription key(slot);
-        if (!expected.contains(key))
+        if (!expected.contains(key)) 
             return false;
         if (slot.GetCount() != expected[key].Pinned)
             return false;
@@ -520,7 +520,7 @@ void CheckTenantsList(TTenantTestRuntime &runtime,
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvTenantSlotBroker::TEvTenantsList>(handle);
     for (auto &tenant : reply->Record.GetTenants()) {
-        UNIT_ASSERT(expected.contains(tenant.GetTenantName()));
+        UNIT_ASSERT(expected.contains(tenant.GetTenantName())); 
         CheckState(tenant, tenant.GetTenantName(), expected[tenant.GetTenantName()]);
         expected.erase(tenant.GetTenantName());
     }
@@ -1188,7 +1188,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
 
                 if (restartNode && false) {
                     ui32 nodeId = RandomNumber<ui32>(runtime.GetNodeCount());
-                    if (!poolsToRestart.contains(nodeId)) {
+                    if (!poolsToRestart.contains(nodeId)) { 
                         runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeId), 0),
                                                       runtime.Sender,
                                                       new TEvents::TEvPoisonPill));

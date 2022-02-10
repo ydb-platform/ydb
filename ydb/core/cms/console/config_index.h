@@ -497,7 +497,7 @@ private:
                     TIndexMap &map)
     {
         auto &set = map[key][item->Kind];
-        Y_VERIFY(!forced || !set.contains(item));
+        Y_VERIFY(!forced || !set.contains(item)); 
         set.insert(item);
     }
 
@@ -632,7 +632,7 @@ private:
     {
         auto it = index.find(key);
         Y_VERIFY(it != index.end());
-        Y_VERIFY(it->second.contains(subscription));
+        Y_VERIFY(it->second.contains(subscription)); 
         it->second.erase(subscription);
         if (it->second.empty())
             index.erase(it);

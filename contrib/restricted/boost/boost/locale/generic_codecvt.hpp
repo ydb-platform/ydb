@@ -177,15 +177,15 @@ protected:
         next=from;
         return std::codecvt_base::ok;
     }
-    virtual int do_encoding() const noexcept
+    virtual int do_encoding() const noexcept 
     {
         return 0;
     }
-    virtual int do_max_length() const noexcept
+    virtual int do_max_length() const noexcept 
     {
         return implementation().max_encoding_length();
     }
-    virtual bool do_always_noconv() const noexcept
+    virtual bool do_always_noconv() const noexcept 
     {
         return false;
     }
@@ -473,15 +473,15 @@ protected:
         next=from;
         return std::codecvt_base::ok;
     }
-    virtual int do_encoding() const noexcept
+    virtual int do_encoding() const noexcept 
     {
         return 0;
     }
-    virtual int do_max_length() const noexcept
+    virtual int do_max_length() const noexcept 
     {
         return implementation().max_encoding_length();
     }
-    virtual bool do_always_noconv() const noexcept
+    virtual bool do_always_noconv() const noexcept 
     {
         return false;
     }

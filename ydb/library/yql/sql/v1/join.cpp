@@ -146,7 +146,7 @@ public:
         const size_t n = JoinOps.size();
         TString what(Sources[n]->GetLabel());
         static const TSet<TString> noRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
-        for (size_t nn = n; nn > 0 && noRightSourceJoinOps.contains(JoinOps[nn-1]); --nn) {
+        for (size_t nn = n; nn > 0 && noRightSourceJoinOps.contains(JoinOps[nn-1]); --nn) { 
             what = Sources[nn-1]->GetLabel();
         }
         const TString with(Sources[n + 1]->GetLabel());
@@ -426,7 +426,7 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* initSrc) {
 
     const TSet<TString> allowedJoinOps = {"Inner", "Left", "Right", "Full", "LeftOnly", "RightOnly", "Exclusion", "LeftSemi", "RightSemi", "Cross"};
     for (auto& opName: JoinOps) {
-        if (!allowedJoinOps.contains(opName)) {
+        if (!allowedJoinOps.contains(opName)) { 
             ctx.Error(Pos) << "Invalid join op: " << opName;
             return false;
         }
@@ -464,7 +464,7 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* initSrc) {
         }
     }
     for (idx = 0; idx < Sources.size(); ++idx) {
-        if (!joinedSources.contains(idx)) {
+        if (!joinedSources.contains(idx)) { 
             ctx.Error(Sources[idx]->GetPos()) << "Source: " << Sources[idx]->GetLabel() << " was not used in join expressions";
             return false;
         }

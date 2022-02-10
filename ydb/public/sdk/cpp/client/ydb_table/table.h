@@ -263,7 +263,7 @@ public:
     const TDuration& GetRunInterval() const;
 
 private:
-    std::variant<
+    std::variant< 
         TDateTypeColumnModeSettings,
         TValueSinceUnixEpochModeSettings
     > Mode_;

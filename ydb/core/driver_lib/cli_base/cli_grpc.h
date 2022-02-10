@@ -88,7 +88,7 @@ public:
         TClientCommand::Parse(config);
 
         if (CommandConfig.ClientConfig.Defined()) {
-            auto *p = std::get_if<NGRpcProxy::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
+            auto *p = std::get_if<NGRpcProxy::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef()); 
             if (p) {
                 ClientConfig.Locator = p->Locator;
                 ClientConfig.Timeout = p->Timeout;

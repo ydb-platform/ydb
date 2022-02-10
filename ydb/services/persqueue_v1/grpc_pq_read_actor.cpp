@@ -1292,7 +1292,7 @@ void TReadSessionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, cons
 }
 
 bool TReadSessionActor::ActualPartitionActor(const TActorId& part) {
-    return ActualPartitionActors.contains(part);
+    return ActualPartitionActors.contains(part); 
 }
 
 

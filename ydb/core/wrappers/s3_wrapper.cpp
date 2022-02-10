@@ -127,7 +127,7 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
         }
 
         virtual THolder<IEventBase> MakeResponse(const typename TEvResponse::TOutcome& outcome) const {
-            return MakeHolder<TEvResponse>(outcome);
+            return MakeHolder<TEvResponse>(outcome); 
         }
 
     private:
@@ -194,9 +194,9 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
     protected:
         THolder<IEventBase> MakeResponse(const typename TEvResponse::TOutcome& outcome) const override {
             if (outcome.IsSuccess()) {
-                return MakeHolder<TEvResponse>(outcome, std::move(Buffer));
+                return MakeHolder<TEvResponse>(outcome, std::move(Buffer)); 
             } else {
-                return MakeHolder<TEvResponse>(outcome);
+                return MakeHolder<TEvResponse>(outcome); 
             }
         }
 

@@ -102,7 +102,7 @@ bool IsSafePayloadCallable(const TCallable& callable) {
         return false;
     }
 
-    return SafeCallables.contains(callable.CallableName());
+    return SafeCallables.contains(callable.CallableName()); 
 }
 
 bool IsModeratePayloadCallable(TCoNameValueTupleList key, const TCallable& callable) {
@@ -114,7 +114,7 @@ bool IsModeratePayloadCallable(TCoNameValueTupleList key, const TCallable& calla
         return selectRow.Cast().Key().Raw() == key.Raw();
     }
 
-    return ModerateCallables.contains(callable.CallableName());
+    return ModerateCallables.contains(callable.CallableName()); 
 }
 
 struct TAnalyzeTxContext {

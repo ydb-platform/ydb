@@ -650,7 +650,7 @@ private:
         desc->Subscribe(subscriber, path, domainOwnerId, capabilities);
 
         auto it = Subscribers.find(subscriber);
-        Y_VERIFY_DEBUG(it == Subscribers.end() || std::holds_alternative<TPath>(it->second) && std::get<TPath>(it->second) == path);
+        Y_VERIFY_DEBUG(it == Subscribers.end() || std::holds_alternative<TPath>(it->second) && std::get<TPath>(it->second) == path); 
         Subscribers.emplace(subscriber, path);
     }
 
@@ -1052,9 +1052,9 @@ private:
         for (const auto& [subscriber, id] : Subscribers) {
             TDescription* desc = nullptr;
 
-            if (const TString* path = std::get_if<TString>(&id)) {
+            if (const TString* path = std::get_if<TString>(&id)) { 
                 desc = Descriptions.FindPtr(*path);
-            } else if (const TPathId* pathId = std::get_if<TPathId>(&id)) {
+            } else if (const TPathId* pathId = std::get_if<TPathId>(&id)) { 
                 desc = Descriptions.FindPtr(*pathId);
             }
 
@@ -1123,9 +1123,9 @@ private:
 
         TDescription* desc = nullptr;
 
-        if (const TString* path = std::get_if<TString>(&it->second)) {
+        if (const TString* path = std::get_if<TString>(&it->second)) { 
             desc = Descriptions.FindPtr(*path);
-        } else if (const TPathId* pathId = std::get_if<TPathId>(&it->second)) {
+        } else if (const TPathId* pathId = std::get_if<TPathId>(&it->second)) { 
             desc = Descriptions.FindPtr(*pathId);
         }
 
@@ -1174,9 +1174,9 @@ private:
 
         TDescription* desc = nullptr;
 
-        if (const TString* path = std::get_if<TString>(&it->second)) {
+        if (const TString* path = std::get_if<TString>(&it->second)) { 
             desc = Descriptions.FindPtr(*path);
-        } else if (const TPathId* pathId = std::get_if<TPathId>(&it->second)) {
+        } else if (const TPathId* pathId = std::get_if<TPathId>(&it->second)) { 
             desc = Descriptions.FindPtr(*pathId);
         }
 
@@ -1221,9 +1221,9 @@ private:
             auto& info = *record.AddSubscribers();
 
             ActorIdToProto(subscriber, info.MutableActorId());
-            if (const TString* path = std::get_if<TString>(&id)) {
+            if (const TString* path = std::get_if<TString>(&id)) { 
                 info.SetPath(*path);
-            } else if (const TPathId* pathId = std::get_if<TPathId>(&id)) {
+            } else if (const TPathId* pathId = std::get_if<TPathId>(&id)) { 
                 info.MutablePathId()->SetOwnerId(pathId->OwnerId);
                 info.MutablePathId()->SetLocalPathId(pathId->LocalPathId);
             }
@@ -1274,9 +1274,9 @@ private:
             const auto id = it->second;
             ++it;
 
-            if (const TString* path = std::get_if<TString>(&id)) {
+            if (const TString* path = std::get_if<TString>(&id)) { 
                 Unsubscribe(subscriber, *path);
-            } else if (const TPathId* pathId = std::get_if<TPathId>(&id)) {
+            } else if (const TPathId* pathId = std::get_if<TPathId>(&id)) { 
                 Unsubscribe(subscriber, *pathId);
             }
         }
@@ -1329,7 +1329,7 @@ public:
 private:
     THashMap<ui64, TPopulatorInfo> Populators;
     TDoubleIndexedMap<TString, TPathId, TDescription, TMerger, THashMap, TMap> Descriptions;
-    TMap<TActorId, std::variant<TString, TPathId>, TActorId::TOrderedCmp> Subscribers;
+    TMap<TActorId, std::variant<TString, TPathId>, TActorId::TOrderedCmp> Subscribers; 
 
 }; // TReplica
 

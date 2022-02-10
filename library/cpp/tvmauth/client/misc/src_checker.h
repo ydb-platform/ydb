@@ -28,7 +28,7 @@ namespace NTvmAuth {
                 return ticket;
             }
 
-            TServiceTicketImplPtr impl = THolder(NInternal::TCanningKnife::GetS(ticket));
+            TServiceTicketImplPtr impl = THolder(NInternal::TCanningKnife::GetS(ticket)); 
             impl->SetStatus(ETicketStatus::NoRoles);
             return TCheckedServiceTicket(std::move(impl));
         }

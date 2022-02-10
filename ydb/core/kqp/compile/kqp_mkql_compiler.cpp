@@ -303,7 +303,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             THashSet<TStringBuf> keySet(tableMeta.KeyColumnNames.begin(), tableMeta.KeyColumnNames.end());
             THashSet<TStringBuf> upsertSet;
             for (const auto& column : upsertRows.Columns()) {
-                if (keySet.contains(column)) {
+                if (keySet.contains(column)) { 
                     keySet.erase(column);
                 } else {
                     upsertSet.insert(column);

@@ -761,7 +761,7 @@ private:
     void DoSemaphoreSendOp(TSemaphoreState* state, TIntrusivePtr<TSemaphoreOp> op) {
         Y_VERIFY(IsWriteAllowed());
         Y_VERIFY(op->ReqId > 0);
-        Y_VERIFY(!state->WaitingOps.contains(op->ReqId));
+        Y_VERIFY(!state->WaitingOps.contains(op->ReqId)); 
         SemaphoreByReqId[op->ReqId] = state;
         state->WaitingOps[op->ReqId] = op;
         state->LastSentOp = op;

@@ -73,7 +73,7 @@ public:
                     Self->ProtectSchemaSeqNo(meta.Body.GetSeqNo(), txc);
                     for (TActorId subscriber : meta.NotifySubscribers) {
                         TxEvents.emplace_back(subscriber, 0,
-                            MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(Self->TabletID(), txId));
+                            MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(Self->TabletID(), txId)); 
                     }
                     Self->AltersInFlight.erase(txId);
                     break;

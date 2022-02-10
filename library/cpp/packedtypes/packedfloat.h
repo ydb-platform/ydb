@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/generic/cast.h>
+#include <util/generic/cast.h> 
 #include <util/generic/ylimits.h>
-#include <util/system/hi_lo.h>
+#include <util/system/hi_lo.h> 
 
 #include <cmath>
 #include <cfloat>
@@ -34,12 +34,12 @@ namespace NPackedFloat {
 
         self& operator=(float t) {
             assert(SIGNED == 1 || SIGNED == 0 && t >= 0.);
-            val = BitCast<ui32>(t) >> (15 + SIGNED);
+            val = BitCast<ui32>(t) >> (15 + SIGNED); 
             return *this;
         }
 
         operator float() const {
-            return BitCast<float>((ui32)val << (15 + SIGNED));
+            return BitCast<float>((ui32)val << (15 + SIGNED)); 
         }
 
         static self New(float v) {
@@ -81,15 +81,15 @@ namespace NPackedFloat {
 
         self& operator=(float t) {
             assert(SIGNED == 1 || SIGNED == 0 && t >= 0.);
-            ui16 hi16 = Hi16(t);
+            ui16 hi16 = Hi16(t); 
 
-            ui8 sign = SIGNED ? Hi8(hi16) & 0x80 : 0;
+            ui8 sign = SIGNED ? Hi8(hi16) & 0x80 : 0; 
 
-            hi16 <<= 1;
+            hi16 <<= 1; 
 
-            ui8 fexp = Hi8(hi16);
+            ui8 fexp = Hi8(hi16); 
             ui8 exp;
-            ui8 frac = (Lo8(hi16) & 0xf0) >> 4;
+            ui8 frac = (Lo8(hi16) & 0xf0) >> 4; 
 
             if (fexp <= FMinExp) {
                 exp = 0;
@@ -106,25 +106,25 @@ namespace NPackedFloat {
         }
 
         operator float() const {
-            ui32 v = 0;
+            ui32 v = 0; 
 
-            v |= SIGNED ? (val & 0x80) << 24 : 0;
+            v |= SIGNED ? (val & 0x80) << 24 : 0; 
             ui8 frac = val & 0x0f;
             ui8 exp = val & MaxExp;
 
             if (exp) {
-                v |= ((exp >> 4) + FMinExp) << 23 | frac << 19;
+                v |= ((exp >> 4) + FMinExp) << 23 | frac << 19; 
             } else if (DENORM && val & 0x0f) {
                 while (!(frac & 0x10)) {
                     frac <<= 1;
                     ++exp;
                 }
 
-                v |= (FMinExp - exp + 1) << 23 | (frac & 0x0f) << 19;
+                v |= (FMinExp - exp + 1) << 23 | (frac & 0x0f) << 19; 
             } else
-                v |= 0;
+                v |= 0; 
 
-            return BitCast<float>(v);
+            return BitCast<float>(v); 
         }
 
         static self New(float v) {

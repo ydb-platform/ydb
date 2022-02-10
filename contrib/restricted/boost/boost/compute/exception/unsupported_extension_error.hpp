@@ -34,7 +34,7 @@ class unsupported_extension_error : public std::exception
 public:
     /// Creates a new unsupported extension error exception object indicating
     /// that \p extension is not supported by the OpenCL platform or device.
-    explicit unsupported_extension_error(const char *extension) noexcept
+    explicit unsupported_extension_error(const char *extension) noexcept 
         : m_extension(extension)
     {
         std::stringstream msg;
@@ -43,19 +43,19 @@ public:
     }
 
     /// Destroys the unsupported extension error object.
-    ~unsupported_extension_error()
+    ~unsupported_extension_error() 
     {
     }
 
     /// Returns the name of the unsupported extension.
-    std::string extension_name() const noexcept
+    std::string extension_name() const noexcept 
     {
         return m_extension;
     }
 
     /// Returns a string containing a human-readable error message containing
     /// the name of the unsupported exception.
-    const char* what() const noexcept
+    const char* what() const noexcept 
     {
         return m_error_string.c_str();
     }

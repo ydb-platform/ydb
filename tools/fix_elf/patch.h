@@ -28,11 +28,11 @@ public:
         }
     }
 
-    Elf64_Ehdr* GetHeader() const noexcept {
+    Elf64_Ehdr* GetHeader() const noexcept { 
         return reinterpret_cast<Elf64_Ehdr*>(Begin);
     }
 
-    char* GetPtr(size_t offset = 0) const noexcept {
+    char* GetPtr(size_t offset = 0) const noexcept { 
         return Begin + offset;
     }
 
@@ -52,7 +52,7 @@ public:
         return r;
     }
 
-    size_t GetSectionCount() const noexcept {
+    size_t GetSectionCount() const noexcept { 
         size_t count = GetHeader()->e_shnum;
         if (count == 0) {
             count = GetSection(0)->sh_size;
@@ -61,15 +61,15 @@ public:
         return count;
     }
 
-    Elf64_Shdr* GetSectionBegin() const noexcept {
+    Elf64_Shdr* GetSectionBegin() const noexcept { 
         return reinterpret_cast<Elf64_Shdr*>(Begin + GetHeader()->e_shoff);
     }
 
-    Elf64_Shdr* GetSectionEnd() const noexcept {
+    Elf64_Shdr* GetSectionEnd() const noexcept { 
         return reinterpret_cast<Elf64_Shdr*>(Begin + GetHeader()->e_shoff) + GetSectionCount();
     }
 
-    Elf64_Shdr* GetSection(size_t i) const noexcept {
+    Elf64_Shdr* GetSection(size_t i) const noexcept { 
         return GetSectionBegin() + i;
     }
 
@@ -94,36 +94,36 @@ public:
     {
     }
 
-    bool IsNull() const noexcept {
+    bool IsNull() const noexcept { 
         return !This;
     }
 
-    char* GetPtr(size_t offset = 0) const noexcept {
+    char* GetPtr(size_t offset = 0) const noexcept { 
         return Elf->GetPtr(This->sh_offset) + offset;
     }
 
-    TStringBuf GetStr(size_t offset) const noexcept {
+    TStringBuf GetStr(size_t offset) const noexcept { 
         return GetPtr(offset);
     }
 
-    TStringBuf GetName() const noexcept {
+    TStringBuf GetName() const noexcept { 
         return TSection{Elf, Elf->GetSectionsNameSection()}.GetPtr(This->sh_name);
     }
 
-    size_t GetLink() const noexcept {
+    size_t GetLink() const noexcept { 
         return This->sh_link;
     }
 
-    size_t GetSize() const noexcept {
+    size_t GetSize() const noexcept { 
         return This->sh_size;
     }
 
-    size_t GetEntryCount() const noexcept {
+    size_t GetEntryCount() const noexcept { 
         return GetSize() / This->sh_entsize;
     }
 
     template<typename TTo = char>
-    TTo* GetEntry(size_t i) const noexcept {
+    TTo* GetEntry(size_t i) const noexcept { 
         return reinterpret_cast<TTo*>(GetPtr(i * This->sh_entsize));
     }
 
@@ -139,7 +139,7 @@ public:
     {
     }
 
-    Elf64_Verneed* GetFirstVerneed() const noexcept {
+    Elf64_Verneed* GetFirstVerneed() const noexcept { 
         if (!GetSize()) {
             return nullptr;
         }
@@ -147,7 +147,7 @@ public:
         return reinterpret_cast<Elf64_Verneed*>(GetPtr());
     }
 
-    Elf64_Verneed* GetNextVerneed(Elf64_Verneed* v) const noexcept {
+    Elf64_Verneed* GetNextVerneed(Elf64_Verneed* v) const noexcept { 
         if (!v->vn_next) {
             return nullptr;
         }
@@ -155,7 +155,7 @@ public:
         return Offset<Elf64_Verneed*>(v, v->vn_next);
     }
 
-    Elf64_Vernaux* GetFirstVernaux(Elf64_Verneed* v) const noexcept {
+    Elf64_Vernaux* GetFirstVernaux(Elf64_Verneed* v) const noexcept { 
         if (!v->vn_cnt) {
             return nullptr;
         }
@@ -163,7 +163,7 @@ public:
         return Offset<Elf64_Vernaux*>(v, v->vn_aux);
     }
 
-    Elf64_Vernaux* GetNextVernaux(Elf64_Vernaux* v) const noexcept {
+    Elf64_Vernaux* GetNextVernaux(Elf64_Vernaux* v) const noexcept { 
         if (!v->vna_next) {
             return nullptr;
         }

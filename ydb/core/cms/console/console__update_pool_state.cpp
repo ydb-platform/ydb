@@ -34,7 +34,7 @@ public:
             return true;
         }
 
-        if (!Tenant->StoragePools.contains(Pool->Kind)
+        if (!Tenant->StoragePools.contains(Pool->Kind) 
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
             LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
                         "TTxUpdatePoolState pool " << Pool->Config.GetName() << " mismatch");

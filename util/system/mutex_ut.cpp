@@ -3,7 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/thread/pool.h>
+#include <util/thread/pool.h> 
 #include <util/random/random.h>
 
 class TMutexTest: public TTestBase {
@@ -123,7 +123,7 @@ private:
 
 private:
     TSharedData Data_;
-    TThreadPool Q_;
+    TThreadPool Q_; 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TMutexTest)

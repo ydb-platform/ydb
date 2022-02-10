@@ -177,7 +177,7 @@ struct TPDiskFailureInjectionTest {
         auto setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 4; // system, user, io, batch
-        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]); 
         setup->Executors[0] = new TBasicExecutorPool(AppData->SystemPoolId, 8, 10);
         setup->Executors[1] = new TBasicExecutorPool(AppData->UserPoolId, 8, 10);
         setup->Executors[2] = new TIOExecutorPool(AppData->IOPoolId, 10);

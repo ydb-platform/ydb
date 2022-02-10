@@ -98,12 +98,12 @@ inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, doubl
             if (i >= 0 && i < buckets) {
                 out[i][yn + "_cnt"] = out[i].GetOrDefault(yn + "_cnt") + 1;
                 out[i][yn + "_sum"] = out[i].GetOrDefault(yn + "_sum") + y;
-                if (out[i].contains(yn + "_min")) {
+                if (out[i].contains(yn + "_min")) { 
                     out[i][yn + "_min"] = Min(y, out[i].GetOrDefault(yn + "_min"));
                 } else {
                     out[i][yn + "_min"] = y;
                 }
-                if (out[i].contains(yn + "_max")) {
+                if (out[i].contains(yn + "_max")) { 
                     out[i][yn + "_max"] = Max(y, out[i].GetOrDefault(yn + "_max"));
                 } else {
                     out[i][yn + "_max"] = y;

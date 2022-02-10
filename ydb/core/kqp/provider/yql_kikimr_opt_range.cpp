@@ -149,7 +149,7 @@ TMaybeNode<TExprBase> KiTableLookupGetValue(TExprBase node, const TTypeAnnotatio
         }
 
         if (auto maybeArg = node.Maybe<TCoArgument>()) {
-            if (!knownArgs.contains(maybeArg.Cast().Raw())) {
+            if (!knownArgs.contains(maybeArg.Cast().Raw())) { 
                 canPush = false;
                 return false;
             }
@@ -158,7 +158,7 @@ TMaybeNode<TExprBase> KiTableLookupGetValue(TExprBase node, const TTypeAnnotatio
         if (auto maybeCallable = node.Maybe<TCallable>()) {
             auto callable = maybeCallable.Cast();
 
-            if (KikimrKqlFunctions().contains(callable.CallableName())) {
+            if (KikimrKqlFunctions().contains(callable.CallableName())) { 
                 if (callable.Maybe<TKiSelectRow>()) {
                     return true;
                 }

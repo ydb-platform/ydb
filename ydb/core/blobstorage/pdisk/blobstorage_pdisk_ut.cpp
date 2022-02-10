@@ -778,7 +778,7 @@ std::atomic<ui64> TVDiskMock::OwnerRound = 2;
         );
 
         const auto& sender = ev->Sender;
-        THolder<NPDisk::TUndelivered> req{testCtx.GetPDisk()->ReqCreator.CreateFromEv<NPDisk::TUndelivered>(ev, sender)};
+        THolder<NPDisk::TUndelivered> req{testCtx.GetPDisk()->ReqCreator.CreateFromEv<NPDisk::TUndelivered>(ev, sender)}; 
     }
 
     Y_UNIT_TEST(PDiskRestart) {

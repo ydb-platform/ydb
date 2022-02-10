@@ -59,12 +59,12 @@ namespace std
 	 * Sets a function to be called when there is a failure in new.
 	 */
 	__attribute__((weak))
-	new_handler set_new_handler(new_handler handler) noexcept
+	new_handler set_new_handler(new_handler handler) noexcept 
 	{
 		return ATOMIC_SWAP(&new_handl, handler);
 	}
 	__attribute__((weak))
-	new_handler get_new_handler(void) noexcept
+	new_handler get_new_handler(void) noexcept 
 	{
 		return ATOMIC_LOAD(&new_handl);
 	}

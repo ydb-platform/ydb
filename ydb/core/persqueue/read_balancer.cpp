@@ -369,7 +369,7 @@ void TPersQueueReadBalancer::CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &req
     TString user = record.HasUser() ? record.GetUser() : "";
 
     if (record.GetOperation() == NKikimrPQ::EOperation::READ_OP) {
-        if (!Consumers.contains(user)) {
+        if (!Consumers.contains(user)) { 
             RespondWithACL(request, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "no read rule provided for consumer '" << NPersQueue::ConvertOldConsumerName(user) << "' that allows to read topic from cluster '"
                     << NPersQueue::GetDC(Topic) <<"'; may be there is read rule with mode all-original only and you are reading with mirrored topics. Change read-rule to mirror-to-<cluster> or options of reading process.", ctx);
             return;
@@ -613,7 +613,7 @@ void TPersQueueReadBalancer::RestartPipe(const ui64 tabletId, const TActorContex
 void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TActorContext& ctx)
 {
     if ((tabletId == SchemeShardId && !WaitingForACL) ||
-        (tabletId != SchemeShardId && !WaitingForStat.contains(tabletId)))
+        (tabletId != SchemeShardId && !WaitingForStat.contains(tabletId))) 
         return;
 
     auto it = TabletPipes.find(tabletId);

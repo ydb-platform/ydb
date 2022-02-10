@@ -2,7 +2,7 @@
 
 #include "grpc_common.h"
 
-#include <util/thread/factory.h>
+#include <util/thread/factory.h> 
 #include <grpc++/grpc++.h>
 #include <grpc++/support/async_stream.h>
 #include <grpc++/support/async_unary_call.h>
@@ -1371,7 +1371,7 @@ public:
     void AddWorkerThreadForTest();
 
 private:
-    using IThreadRef = std::unique_ptr<IThreadFactory::IThread>;
+    using IThreadRef = std::unique_ptr<IThreadFactory::IThread>; 
     using CompletionQueueRef = std::unique_ptr<grpc::CompletionQueue>;
     void Init(size_t numWorkerThread);
 

@@ -1623,18 +1623,18 @@ public:
     }
 
     template <class TheKey>
-    bool contains(const TheKey& key) const {
-        return rep.find(key) != rep.end();
-    }
-    bool contains(const key_type& key) const {
-        return rep.find(key) != rep.end();
-    }
-
-    template <class TheKey>
-    bool contains(const TheKey& key, insert_ctx& ins) {
-        return rep.find_i(key, ins) != rep.end();
-    }
-
+    bool contains(const TheKey& key) const { 
+        return rep.find(key) != rep.end(); 
+    } 
+    bool contains(const key_type& key) const { 
+        return rep.find(key) != rep.end(); 
+    } 
+ 
+    template <class TheKey> 
+    bool contains(const TheKey& key, insert_ctx& ins) { 
+        return rep.find_i(key, ins) != rep.end(); 
+    } 
+ 
     template <class TKey>
     T& operator[](const TKey& key) {
         insert_ctx ctx = nullptr;
@@ -1935,10 +1935,10 @@ public:
     }
 
     template <class TheKey>
-    bool contains(const TheKey& key) const {
-        return rep.find(key) != rep.end();
-    }
-
+    bool contains(const TheKey& key) const { 
+        return rep.find(key) != rep.end(); 
+    } 
+ 
     template <class TKey>
     size_type count(const TKey& key) const {
         return rep.count(key);
@@ -2021,9 +2021,9 @@ template <class Key, class T, class HF, class EqKey, class Alloc>
 inline bool operator!=(const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm1, const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm2) {
     return !(hm1 == hm2);
 }
-
-// Cannot name it just 'Hash' because it clashes with too many class members in the code.
-template <class T>
-size_t ComputeHash(const T& value) {
-    return THash<T>{}(value);
-}
+ 
+// Cannot name it just 'Hash' because it clashes with too many class members in the code. 
+template <class T> 
+size_t ComputeHash(const T& value) { 
+    return THash<T>{}(value); 
+} 

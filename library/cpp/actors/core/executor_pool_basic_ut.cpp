@@ -82,7 +82,7 @@ THolder<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool)
     auto setup = MakeHolder<NActors::TActorSystemSetup>();
     setup->NodeId = 1;
     setup->ExecutorsCount = 1;
-    setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[1]);
+    setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[1]); 
     setup->Executors[0] = pool;
     setup->Scheduler = new TBasicSchedulerThread(NActors::TSchedulerConfig(512, 0));
     return setup;

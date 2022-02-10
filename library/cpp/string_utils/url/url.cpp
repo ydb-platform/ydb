@@ -36,8 +36,8 @@ namespace {
     template <typename TChar1, typename TChar2>
     int Compare1Case2(const TChar1* s1, const TChar2* s2, size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            if ((TChar1)ToLower(s1[i]) != s2[i])
-                return (TChar1)ToLower(s1[i]) < s2[i] ? -1 : 1;
+            if ((TChar1)ToLower(s1[i]) != s2[i]) 
+                return (TChar1)ToLower(s1[i]) < s2[i] ? -1 : 1; 
         }
         return 0;
     }

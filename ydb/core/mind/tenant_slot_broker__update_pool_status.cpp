@@ -22,7 +22,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxUpdatePoolStatus execute for node " << nodeId);
 
         TString dc = ANY_DATA_CENTER;
-        if (Self->NodeIdToDataCenter.contains(nodeId))
+        if (Self->NodeIdToDataCenter.contains(nodeId)) 
             dc = Self->NodeIdToDataCenter[nodeId];
 
         for (auto &slotProto : rec.GetSlots()) {
@@ -74,7 +74,7 @@ public:
             }
         }
 
-        if (!Self->NodeIdToDataCenter.contains(nodeId))
+        if (!Self->NodeIdToDataCenter.contains(nodeId)) 
             ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
 
         return true;

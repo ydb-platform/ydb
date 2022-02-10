@@ -18,9 +18,9 @@ inline void SetCurrentThreadName(const TString& name,
 
     TStringStream linuxName;
     linuxName << procName << "." << name;
-    TThread::SetCurrentThreadName(linuxName.Str().data());
+    TThread::SetCurrentThreadName(linuxName.Str().data()); 
 #else
     Y_UNUSED(maxCharsFromProcessName);
-    TThread::SetCurrentThreadName(name.data());
+    TThread::SetCurrentThreadName(name.data()); 
 #endif
 }

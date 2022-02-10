@@ -130,7 +130,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
                 TString description = sessionsRowset.GetValue<Schema::Sessions::Description>();
                 TString protectionKey = sessionsRowset.GetValueOrDefault<Schema::Sessions::ProtectionKey>(TString());
                 Y_VERIFY(sessionId > 0);
-                Y_VERIFY(!Self->Sessions.contains(sessionId));
+                Y_VERIFY(!Self->Sessions.contains(sessionId)); 
                 auto* session = &Self->Sessions[sessionId];
                 session->Id = sessionId;
                 session->TimeoutMillis = timeoutMillis;
@@ -154,7 +154,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
                 ui64 limit = semaphoresRowset.GetValue<Schema::Semaphores::Limit>();
                 bool ephemeral = semaphoresRowset.GetValue<Schema::Semaphores::Ephemeral>();
                 Y_VERIFY(semaphoreId > 0);
-                Y_VERIFY(!Self->Semaphores.contains(semaphoreId));
+                Y_VERIFY(!Self->Semaphores.contains(semaphoreId)); 
                 auto* semaphore = &Self->Semaphores[semaphoreId];
                 semaphore->Id = semaphoreId;
                 semaphore->Name = std::move(name);
@@ -183,16 +183,16 @@ struct TKesusTablet::TTxInit : public TTxBase {
                 ui64 count = sessionSemaphoresRowset.GetValue<Schema::SessionSemaphores::Count>();
                 TString data = sessionSemaphoresRowset.GetValue<Schema::SessionSemaphores::Data>();
                 Y_VERIFY(sessionId > 0);
-                Y_VERIFY(Self->Sessions.contains(sessionId), "Missing session: %" PRIu64, sessionId);
+                Y_VERIFY(Self->Sessions.contains(sessionId), "Missing session: %" PRIu64, sessionId); 
                 Y_VERIFY(semaphoreId > 0);
-                Y_VERIFY(Self->Semaphores.contains(semaphoreId), "Missing semaphore: %" PRIu64, semaphoreId);
+                Y_VERIFY(Self->Semaphores.contains(semaphoreId), "Missing semaphore: %" PRIu64, semaphoreId); 
                 Y_VERIFY(orderId > 0);
                 Y_VERIFY(count > 0, "Unexpected count: %" PRIu64, count);
                 auto* session = &Self->Sessions[sessionId];
                 auto* semaphore = &Self->Semaphores[semaphoreId];
-                Y_VERIFY(!session->WaitingSemaphores.contains(semaphoreId),
+                Y_VERIFY(!session->WaitingSemaphores.contains(semaphoreId), 
                     "Session %" PRIu64 " has duplicate semaphore %s", sessionId, semaphore->Name.Quote().data());
-                Y_VERIFY(!semaphore->Waiters.contains(orderId),
+                Y_VERIFY(!semaphore->Waiters.contains(orderId), 
                     "Semaphore %s has duplicate order id: %" PRIu64, semaphore->Name.Quote().data(), orderId);
                 auto* waiter = &session->WaitingSemaphores[semaphoreId];
                 waiter->OrderId = orderId;

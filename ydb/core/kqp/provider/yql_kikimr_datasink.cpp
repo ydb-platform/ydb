@@ -408,8 +408,8 @@ public:
             return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
-        if (KikimrDataSinkFunctions().contains(node.Content()) ||
-            KikimrKqlFunctions().contains(node.Content()))
+        if (KikimrDataSinkFunctions().contains(node.Content()) || 
+            KikimrKqlFunctions().contains(node.Content())) 
         {
             return true;
         }
@@ -770,7 +770,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleEffects(node.Cast(), ctx);
     }
 
-    if (KikimrKqlFunctions().contains(callable.CallableName())) {
+    if (KikimrKqlFunctions().contains(callable.CallableName())) { 
         return HandleKql(callable, ctx);
     }
 

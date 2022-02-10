@@ -260,7 +260,7 @@ public:
 
     /// dispatch of requests is done here
     void Work() {
-        SetCurrentThreadName("FastClient::Work");
+        SetCurrentThreadName("FastClient::Work"); 
 
         while (!TheExit) {
             TBusClientConnection* connection;
@@ -524,7 +524,7 @@ void stopsignal(int /*sig*/) {
 // -c <node:port,node:port> - start client
 
 void TTestStats::PeriodicallyPrint() {
-    SetCurrentThreadName("print-stats");
+    SetCurrentThreadName("print-stats"); 
 
     for (;;) {
         StopEvent.WaitT(TDuration::Seconds(1));

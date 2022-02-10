@@ -1,8 +1,8 @@
 #pragma once
 
 /// This code should not be used directly unless you really understand what you do.
-/// If you need threads, use thread pool functionality in <util/thread/factory.h>
-/// @see SystemThreadFactory()
+/// If you need threads, use thread pool functionality in <util/thread/factory.h> 
+/// @see SystemThreadFactory() 
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -26,7 +26,7 @@ public:
         void* Data;
         size_t StackSize;
         void* StackPointer;
-        // See comments for `SetCurrentThreadName`
+        // See comments for `SetCurrentThreadName` 
         TString Name = GetProgramName();
 
         inline TParams()
@@ -114,12 +114,12 @@ public:
     //
     // NOTE: On Linux thread name is limited to 15 symbols which is probably the smallest one among
     // all platforms. If you provide a name longer than 15 symbols it will be cut. So if you expect
-    // `CurrentThreadName` to return the same name as `name` make sure it's not longer than 15
+    // `CurrentThreadName` to return the same name as `name` make sure it's not longer than 15 
     // symbols.
-    static void SetCurrentThreadName(const char* name);
+    static void SetCurrentThreadName(const char* name); 
 
     // NOTE: Will return empty string where CanGetCurrentThreadName() returns false.
-    static TString CurrentThreadName();
+    static TString CurrentThreadName(); 
 
     // NOTE: Depends on a platform version.
     // Will return true for Darwin, Linux or fresh Windows 10.

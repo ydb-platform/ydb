@@ -131,7 +131,7 @@ static void ContHelperFunc(TCont* cont, void* arg) {
 
 template <typename T, void (T::*M)(TCont*)>
 static void ContHelperMemberFunc(TCont* c, void* arg) {
-    ((reinterpret_cast<T*>(arg))->*M)(c);
+    ((reinterpret_cast<T*>(arg))->*M)(c); 
 }
 
 class IUserEvent

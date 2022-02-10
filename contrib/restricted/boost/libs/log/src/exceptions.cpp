@@ -53,11 +53,11 @@ bad_alloc::bad_alloc(std::string const& descr) :
 {
 }
 
-bad_alloc::~bad_alloc()
+bad_alloc::~bad_alloc() 
 {
 }
 
-const char* bad_alloc::what() const noexcept
+const char* bad_alloc::what() const noexcept 
 {
     return m_message.c_str();
 }
@@ -88,7 +88,7 @@ capacity_limit_reached::capacity_limit_reached(std::string const& descr) :
 {
 }
 
-capacity_limit_reached::~capacity_limit_reached()
+capacity_limit_reached::~capacity_limit_reached() 
 {
 }
 
@@ -113,7 +113,7 @@ runtime_error::runtime_error(std::string const& descr) :
 {
 }
 
-runtime_error::~runtime_error()
+runtime_error::~runtime_error() 
 {
 }
 
@@ -127,7 +127,7 @@ missing_value::missing_value(std::string const& descr) :
 {
 }
 
-missing_value::~missing_value()
+missing_value::~missing_value() 
 {
 }
 
@@ -183,7 +183,7 @@ invalid_type::invalid_type(std::string const& descr) :
 {
 }
 
-invalid_type::~invalid_type()
+invalid_type::~invalid_type() 
 {
 }
 
@@ -277,7 +277,7 @@ invalid_value::invalid_value(std::string const& descr) :
 {
 }
 
-invalid_value::~invalid_value()
+invalid_value::~invalid_value() 
 {
 }
 
@@ -315,7 +315,7 @@ parse_error::parse_error(std::string const& descr) :
 {
 }
 
-parse_error::~parse_error()
+parse_error::~parse_error() 
 {
 }
 
@@ -389,7 +389,7 @@ conversion_error::conversion_error(std::string const& descr) :
 {
 }
 
-conversion_error::~conversion_error()
+conversion_error::~conversion_error() 
 {
 }
 
@@ -422,7 +422,7 @@ system_error::system_error(boost::system::error_code code, std::string const& de
 {
 }
 
-system_error::~system_error()
+system_error::~system_error() 
 {
 }
 
@@ -463,7 +463,7 @@ logic_error::logic_error(std::string const& descr) :
 {
 }
 
-logic_error::~logic_error()
+logic_error::~logic_error() 
 {
 }
 
@@ -493,7 +493,7 @@ odr_violation::odr_violation(std::string const& descr) :
 {
 }
 
-odr_violation::~odr_violation()
+odr_violation::~odr_violation() 
 {
 }
 
@@ -531,7 +531,7 @@ unexpected_call::unexpected_call(std::string const& descr) :
 {
 }
 
-unexpected_call::~unexpected_call()
+unexpected_call::~unexpected_call() 
 {
 }
 
@@ -569,7 +569,7 @@ setup_error::setup_error(std::string const& descr) :
 {
 }
 
-setup_error::~setup_error()
+setup_error::~setup_error() 
 {
 }
 
@@ -607,7 +607,7 @@ limitation_error::limitation_error(std::string const& descr) :
 {
 }
 
-limitation_error::~limitation_error()
+limitation_error::~limitation_error() 
 {
 }
 

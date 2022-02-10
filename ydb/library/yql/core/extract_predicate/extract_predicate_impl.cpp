@@ -1608,7 +1608,7 @@ TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNod
 } // namespace NDetail
 
 IPredicateRangeExtractor::TPtr MakePredicateRangeExtractor(const TPredicateExtractorSettings& settings) {
-    return MakeHolder<NDetail::TPredicateRangeExtractor>(settings);
+    return MakeHolder<NDetail::TPredicateRangeExtractor>(settings); 
 }
 
 } // namespace NYql

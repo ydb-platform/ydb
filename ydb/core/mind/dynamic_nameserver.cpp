@@ -20,7 +20,7 @@ void TDynamicNodeResolverBase::Bootstrap(const TActorContext &ctx)
     auto dinfo = AppData(ctx)->DomainsInfo;
     auto domain = NodeIdToDomain(NodeId, *dinfo);
 
-    if (!dinfo->Domains.contains(domain)) {
+    if (!dinfo->Domains.contains(domain)) { 
         ReplyWithErrorAndDie(ctx);
         return;
     }
@@ -291,7 +291,7 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
     } else {
         for (auto &node : rec.GetNodes()) {
             auto nodeId = node.GetNodeId();
-            if (!config->DynamicNodes.contains(nodeId))
+            if (!config->DynamicNodes.contains(nodeId)) 
                 config->DynamicNodes.emplace(nodeId, node);
         }
         config->Epoch = rec.GetEpoch();
@@ -304,7 +304,7 @@ void TDynamicNameserver::OnPipeDestroyed(ui32 domain,
     NodeBrokerPipes[domain] = TActorId();
     PendingRequestAnswered(domain, ctx);
 
-    if (EpochUpdates.contains(domain)) {
+    if (EpochUpdates.contains(domain)) { 
         ctx.Schedule(TDuration::Seconds(1),
                      new TEvPrivate::TEvUpdateEpoch(domain, EpochUpdates.at(domain)));
         EpochUpdates.erase(domain);
@@ -374,7 +374,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
                                                          it->second.Host, it->second.ResolveHost,
                                                          it->second.Port, it->second.Location);
             ctx.Send(ev->Sender, reply.Release());
-        } else if (DynamicConfigs[domain]->ExpiredNodes.contains(nodeId)
+        } else if (DynamicConfigs[domain]->ExpiredNodes.contains(nodeId) 
                    && ctx.Now() < DynamicConfigs[domain]->Epoch.End) {
             ctx.Send(ev->Sender, reply.Release());
         } else {
@@ -412,7 +412,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvNodesInfo::TPtr &ev, const TAc
     if (rec.GetEpoch().GetVersion() != DynamicConfigs[domain]->Epoch.Version)
         UpdateState(rec, ctx);
 
-    if (EpochUpdates.contains(domain) && EpochUpdates.at(domain) <= rec.GetEpoch().GetId())
+    if (EpochUpdates.contains(domain) && EpochUpdates.at(domain) <= rec.GetEpoch().GetId()) 
         EpochUpdates.erase(domain);
 
     PendingRequestAnswered(rec.GetDomain(), ctx);
@@ -424,7 +424,7 @@ void TDynamicNameserver::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TAct
     ui64 epoch = ev->Get()->Epoch;
 
     if (DynamicConfigs[domain]->Epoch.Id < epoch
-        && (!EpochUpdates.contains(domain)
+        && (!EpochUpdates.contains(domain) 
             || EpochUpdates.at(domain) < epoch))
         RequestEpochUpdate(domain, epoch, ctx);
 }

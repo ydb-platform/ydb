@@ -53,7 +53,7 @@ public:
     {
         auto &rec = ev->Get()->Record;
         auto &id = rec.GetSlotStatus().GetId();
-        UNIT_ASSERT(Answers.contains(id));
+        UNIT_ASSERT(Answers.contains(id)); 
         auto &answer = Answers[id].front();
         UNIT_ASSERT_VALUES_EQUAL((int)rec.GetStatus(), (int)answer.Status);
         UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, answer.Cookie);

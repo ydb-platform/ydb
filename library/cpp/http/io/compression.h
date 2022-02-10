@@ -2,7 +2,7 @@
 
 #include "stream.h"
 
-#include <util/generic/deque.h>
+#include <util/generic/deque.h> 
 #include <util/generic/hash.h>
 
 class TCompressionCodecFactory {
@@ -44,7 +44,7 @@ private:
         TEncoderConstructor Encoder;
     };
 
-    TDeque<TString> Strings_;
+    TDeque<TString> Strings_; 
     THashMap<TStringBuf, TCodec> Codecs_;
     TVector<TStringBuf> BestCodecs_;
 };

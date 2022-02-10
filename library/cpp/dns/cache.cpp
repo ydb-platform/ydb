@@ -38,7 +38,7 @@ namespace {
 
     struct THashResolveInfo {
         inline size_t operator()(const TResolveInfo& ri) const {
-            return ComputeHash(ri.Host) ^ ri.Port;
+            return ComputeHash(ri.Host) ^ ri.Port; 
         }
     };
 

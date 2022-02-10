@@ -172,7 +172,7 @@ struct TCmsLogConfig {
 
     bool IsLogEnabled(ui32 recordType) const
     {
-        if (RecordLevels.contains(recordType))
+        if (RecordLevels.contains(recordType)) 
             return RecordLevels.at(recordType);
         return EnabledByDefault;
     }

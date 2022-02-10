@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         EraseRows(server, sender, "/Root/table-1", testTableId, {1}, SerializeKeys({1, 2}));
 
         auto content = ReadShardedTable(server, "/Root/table-1");
-        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, value = 2020-04-15T00:00:00.000000Z");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, value = 2020-04-15T00:00:00.000000Z"); 
     }
 
     Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldSuccess) {
@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
 
         auto content = ReadShardedTable(server, "/Root/table-1");
-        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), Strip(afterErase));
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), Strip(afterErase)); 
     }
 
     Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldErase) {
@@ -824,7 +824,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         UNIT_ASSERT(response->ErrorCount == 0);
         UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
 
-        return THolder(response);
+        return THolder(response); 
     }
 
     NDataShard::TIndexes GetIndexes(TServer::TPtr server, const TActorId& sender, const TString& path) {
@@ -1006,7 +1006,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
 
         for (const auto& [path, expectedContent] : afterErase) {
             auto content = ReadShardedTable(server, path);
-            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), Strip(expectedContent));
+            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), Strip(expectedContent)); 
         }
     }
 
@@ -1146,15 +1146,15 @@ tkey = 100, key = 4
         }
         {
             auto content = ReadShardedTable(server, "/Root/table-1");
-            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, skey = 90, tkey = 900, value = 2030-04-15T00:00:00.000000Z");
+            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, skey = 90, tkey = 900, value = 2030-04-15T00:00:00.000000Z"); 
         }
         {
             auto content = ReadShardedTable(server, "/Root/table-1/by_skey/indexImplTable");
-            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "skey = 90, key = 3");
+            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "skey = 90, key = 3"); 
         }
         {
             auto content = ReadShardedTable(server, "/Root/table-1/by_tkey/indexImplTable");
-            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "tkey = 900, key = 3");
+            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "tkey = 900, key = 3"); 
         }
 
         // restore previous value in ttl column

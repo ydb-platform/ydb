@@ -3,7 +3,7 @@
 #include "udf_types.h"
 #include "udf_value.h"
 
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/digest/numeric.h>
 
 namespace NYql {
@@ -51,7 +51,7 @@ inline THashType GetFloatHash(const TUnboxedValuePod& value) {
 }
 
 inline THashType GetStringHash(const TUnboxedValuePod& value) {
-    return THash<TStringBuf>{}(value.AsStringRef());
+    return THash<TStringBuf>{}(value.AsStringRef()); 
 }
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
@@ -226,9 +226,9 @@ inline int CompareFloats(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rh
 }
 
 inline int CompareStrings(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
-    const TStringBuf lhsBuf = lhs.AsStringRef();
-    const TStringBuf rhsBuf = rhs.AsStringRef();
-    return lhsBuf.compare(rhsBuf);
+    const TStringBuf lhsBuf = lhs.AsStringRef(); 
+    const TStringBuf rhsBuf = rhs.AsStringRef(); 
+    return lhsBuf.compare(rhsBuf); 
 }
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
@@ -412,7 +412,7 @@ inline bool EquateFloats(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rh
 inline bool EquateStrings(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
     const auto& lhsBuf = lhs.AsStringRef();
     const auto& rhsBuf = rhs.AsStringRef();
-    return lhsBuf == rhsBuf;
+    return lhsBuf == rhsBuf; 
 }
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>

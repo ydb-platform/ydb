@@ -145,7 +145,7 @@ public:
     }
 
     inline void Add(const TString& key, IInputStream* src) {
-        Y_ENSURE(!Dict_.contains(key), "key " << key.data() << " already stored");
+        Y_ENSURE(!Dict_.contains(key), "key " << key.data() << " already stored"); 
 
         TCountingOutput out(Out_);
         if (UseCompression) {
@@ -173,8 +173,8 @@ public:
     }
 
     inline void AddSynonym(const TString& existingKey, const TString& newKey) {
-        Y_ENSURE(Dict_.contains(existingKey), "key " << existingKey.data() << " not stored yet");
-        Y_ENSURE(!Dict_.contains(newKey), "key " << newKey.data() << " already stored");
+        Y_ENSURE(Dict_.contains(existingKey), "key " << existingKey.data() << " not stored yet"); 
+        Y_ENSURE(!Dict_.contains(newKey), "key " << newKey.data() << " already stored"); 
 
         TArchiveRecordDescriptorRef existingDescr = Dict_[existingKey];
         TArchiveRecordDescriptorRef descr(new TArchiveRecordDescriptor(existingDescr->Offset(), existingDescr->Length(), newKey));
@@ -312,7 +312,7 @@ public:
     }
 
     inline bool Has(const TStringBuf key) const {
-        return Dict_.contains(key);
+        return Dict_.contains(key); 
     }
 
     inline TAutoPtr<IInputStream> ObjectByKey(const TStringBuf key) const {

@@ -490,8 +490,8 @@ namespace std {
         static const bool is_integer = Rep::is_integer;
         static const bool is_exact = Rep::is_exact;
         static const int radix = 0;
-        //~ static Res epsilon() { return 0; }
-        //~ static Res round_error() { return 0; }
+        //~ static Res epsilon() { return 0; } 
+        //~ static Res round_error() { return 0; } 
         //~ static const int min_exponent = 0;
         //~ static const int min_exponent10 = 0;
         //~ static const int max_exponent = 0;
@@ -501,10 +501,10 @@ namespace std {
         //~ static const bool has_signaling_NaN = false;
         //~ static const float_denorm_style has_denorm = denorm_absent;
         //~ static const bool has_denorm_loss = false;
-        //~ static Res infinity() { return 0; }
-        //~ static Res quiet_NaN() { return 0; }
-        //~ static Res signaling_NaN() { return 0; }
-        //~ static Res denorm_min() { return 0; }
+        //~ static Res infinity() { return 0; } 
+        //~ static Res quiet_NaN() { return 0; } 
+        //~ static Res signaling_NaN() { return 0; } 
+        //~ static Res denorm_min() { return 0; } 
         //~ static const bool is_iec559 = false;
         //~ static const bool is_bounded = true;
         //~ static const bool is_modulo = false;

@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
     void SendGet(const TTestInfo &test, const TLogoBlobID &blobId, const TString &data,
             NKikimrProto::EReplyStatus status)
     {
-        TArrayHolder<TEvBlobStorage::TEvGet::TQuery> getQueries{new TEvBlobStorage::TEvGet::TQuery[1]};
+        TArrayHolder<TEvBlobStorage::TEvGet::TQuery> getQueries{new TEvBlobStorage::TEvGet::TQuery[1]}; 
         getQueries[0].Id = blobId;
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvGet>(getQueries, 1, TInstant::Max(),
                 NKikimrBlobStorage::AsyncRead);
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
     void SendPatch(const TTestInfo &test, const TLogoBlobID &originalBlobId, const TLogoBlobID &patchedBlobId, ui32 mask,
             const TVector<TEvBlobStorage::TEvPatch::TDiff> &diffs, NKikimrProto::EReplyStatus status)
     {
-        TArrayHolder<TEvBlobStorage::TEvPatch::TDiff> diffArr{new TEvBlobStorage::TEvPatch::TDiff[diffs.size()]};
+        TArrayHolder<TEvBlobStorage::TEvPatch::TDiff> diffArr{new TEvBlobStorage::TEvPatch::TDiff[diffs.size()]}; 
         for (ui32 idx = 0; idx < diffs.size(); ++idx) {
             diffArr[idx] = diffs[idx];
         }

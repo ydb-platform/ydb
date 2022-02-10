@@ -546,7 +546,7 @@ public:
         THashSet<ui64> orders;
         orders.insert(ITEM_DOMAIN_LOG_4.GetId().GetId());
         for (auto &item : validator.ModifiedItems) {
-            UNIT_ASSERT(orders.contains(item->UsageScope.Order));
+            UNIT_ASSERT(orders.contains(item->UsageScope.Order)); 
             orders.erase(item->UsageScope.Order);
         }
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 1);
@@ -574,7 +574,7 @@ public:
         orders.insert(ITEM_DOMAIN_LOG_4.GetId().GetId());
         orders.insert(ITEM_TENANT1_LOG_2.GetId().GetId());
         for (auto &item : validator.ModifiedItems) {
-            UNIT_ASSERT(orders.contains(item->UsageScope.Order));
+            UNIT_ASSERT(orders.contains(item->UsageScope.Order)); 
             orders.erase(item->UsageScope.Order);
         }
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 2);
@@ -610,7 +610,7 @@ public:
         orders.insert(ITEM_TYPE1_LOG_2.GetId().GetId());
         orders.insert(ITEM_TENANT1_TYPE1_LOG_2.GetId().GetId());
         for (auto &item : validator.ModifiedItems) {
-            UNIT_ASSERT(orders.contains(item->UsageScope.Order));
+            UNIT_ASSERT(orders.contains(item->UsageScope.Order)); 
             orders.erase(item->UsageScope.Order);
         }
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 4);
@@ -642,7 +642,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 2);
 
         // Expect all removed items with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 1);
     }
 
@@ -662,8 +662,8 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 4);
 
         // Expect all removed items with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT1_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT1_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 2);
     }
 
@@ -687,10 +687,10 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 8);
 
         // Expect all removed items with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT1_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TYPE1_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT1_TYPE1_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT1_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TYPE1_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT1_TYPE1_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 4);
     }
 
@@ -721,8 +721,8 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 3);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 2);
     }
 
@@ -744,10 +744,10 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 6);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 4);
     }
 
@@ -775,14 +775,14 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 12);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 8);
     }
 
@@ -817,11 +817,11 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 6);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_NODE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_NODE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 5);
     }
 
@@ -847,13 +847,13 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 9);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_NODE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_NODE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 7);
     }
 
@@ -884,16 +884,16 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 14);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_NODE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_HOST2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_NODE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_HOST2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 10);
     }
 
@@ -924,7 +924,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 2);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 1);
     }
 
@@ -946,9 +946,9 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 5);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 3);
     }
 
@@ -975,12 +975,12 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(validator.Index.GetConfigItems().size(), 10);
 
         // Expect all modified items (both original and resulting ones) with required scope.
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId())));
-        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId())));
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(index.GetItem(ITEM_TENANT2_TYPE2_LOG_1.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_DOMAIN_LOG_2.GetId().GetId()))); 
+        UNIT_ASSERT(validator.ModifiedItems.contains(validator.Index.GetItem(ITEM_TYPE2_LOG_1.GetId().GetId()))); 
         UNIT_ASSERT_VALUES_EQUAL(validator.ModifiedItems.size(), 6);
     }
 

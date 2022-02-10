@@ -98,11 +98,11 @@ namespace NSc::NUt {
             return std::move(Memory[pos]);
         }
 
-        [[nodiscard]]
+        [[nodiscard]] 
         bool TryPushBack();
 
         template <class T>
-        [[nodiscard]]
+        [[nodiscard]] 
         bool TryPushBack(T&& t) {
             if (MayAddMoreMemory()) {
                 Memory.emplace_back(std::forward<T>(t));
@@ -112,11 +112,11 @@ namespace NSc::NUt {
             }
         }
 
-        [[nodiscard]]
+        [[nodiscard]] 
         bool TryPushFront();
 
         template <class T>
-        [[nodiscard]]
+        [[nodiscard]] 
         bool TryPushFront(T&& t) {
             if (MayAddMoreMemory()) {
                 Pos += 1;
@@ -127,16 +127,16 @@ namespace NSc::NUt {
             }
         }
 
-        [[nodiscard]]
+        [[nodiscard]] 
         bool TryPopBack();
 
-        [[nodiscard]]
+        [[nodiscard]] 
         bool TryPopFront();
 
         TString ToString() const;
 
     private:
-        [[nodiscard]]
+        [[nodiscard]] 
         bool MayAddMoreMemory() const noexcept {
             return Memory.size() < MaxMemory;
         }
@@ -223,7 +223,7 @@ namespace NSc::NUt {
         TString ToString() const;
     };
 
-    using TArg = std::variant<std::monostate, TIdx, TPos, TRef, TSrc, TDst, TPath>;
+    using TArg = std::variant<std::monostate, TIdx, TPos, TRef, TSrc, TDst, TPath>; 
 
     struct TVMAction {
         using EType = EVMAction;
@@ -269,7 +269,7 @@ namespace NSc::NUt {
         ui32 CurrArg = 0;
     };
 
-    [[nodiscard]]
+    [[nodiscard]] 
     inline ui32 GetCountWidth(ui32 cnt) {
         return MostSignificantBit(cnt - 1) + 1;
     }

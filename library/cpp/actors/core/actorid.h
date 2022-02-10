@@ -66,40 +66,40 @@ namespace NActors {
             return Raw.X.X1 != 0 || Raw.X.X2 != 0;
         }
 
-        ui64 LocalId() const noexcept {
+        ui64 LocalId() const noexcept { 
             return Raw.N.LocalId;
         }
 
-        ui32 Hint() const noexcept {
+        ui32 Hint() const noexcept { 
             return Raw.N.Hint;
         }
 
-        ui32 NodeId() const noexcept {
+        ui32 NodeId() const noexcept { 
             return Raw.N.NodeId & NodeIdMask;
         }
 
-        bool IsService() const noexcept {
+        bool IsService() const noexcept { 
             return (Raw.N.NodeId & ServiceMask);
         }
 
-        TStringBuf ServiceId() const noexcept {
+        TStringBuf ServiceId() const noexcept { 
             Y_VERIFY_DEBUG(IsService());
             return TStringBuf((const char*)Raw.Buf, MaxServiceIDLength);
         }
 
-        static ui32 PoolIndex(ui32 nodeid) noexcept {
+        static ui32 PoolIndex(ui32 nodeid) noexcept { 
             return ((nodeid & PoolIndexMask) >> PoolIndexShift);
         }
 
-        ui32 PoolID() const noexcept {
+        ui32 PoolID() const noexcept { 
             return PoolIndex(Raw.N.NodeId);
         }
 
-        ui64 RawX1() const noexcept {
+        ui64 RawX1() const noexcept { 
             return Raw.X.X1;
         }
 
-        ui64 RawX2() const noexcept {
+        ui64 RawX2() const noexcept { 
             return Raw.X.X2;
         }
 

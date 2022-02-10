@@ -19,12 +19,12 @@ public:
     {
     }
 
-    explicit TReadonlyBitVector(const TBitVector<T>& vector)
-        : Size_(vector.Size_)
-        , Data_(vector.Data_.data())
-    {
-    }
-
+    explicit TReadonlyBitVector(const TBitVector<T>& vector) 
+        : Size_(vector.Size_) 
+        , Data_(vector.Data_.data()) 
+    { 
+    } 
+ 
     bool Test(ui64 pos) const {
         return TTraits::Test(Data_, pos, Size_);
     }

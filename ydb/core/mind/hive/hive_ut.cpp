@@ -270,7 +270,7 @@ namespace {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             auto it = NodeWardenConfigs.find(nodeIndex);
             if (it != NodeWardenConfigs.end()) {
-                runtime.GetAppData(nodeIndex).StaticBlobStorageConfig = MakeHolder<NKikimrBlobStorage::TNodeWardenServiceSet>(it->second->ServiceSet);
+                runtime.GetAppData(nodeIndex).StaticBlobStorageConfig = MakeHolder<NKikimrBlobStorage::TNodeWardenServiceSet>(it->second->ServiceSet); 
             }
         }
 
@@ -802,7 +802,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
         MakeSureTabletIsUp(runtime, hiveTablet, 0);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true); 
         MakeSureTabletIsUp(runtime, tabletId, 0);
     }
 
@@ -814,7 +814,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
         MakeSureTabletIsUp(runtime, hiveTablet, 0);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true); 
         MakeSureTabletIsUp(runtime, tabletId, 0);
         THolder<TEvHive::TEvDeleteOwnerTablets> deleteOwner = MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 1);
         TActorId senderB = runtime.AllocateEdgeActor(0);
@@ -958,7 +958,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createHive->Record.AddAllowedDomains();
         createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false); 
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createTablet->Record.AddAllowedDomains();
         createTablet->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 tabletId = SendCreateTestTablet(runtime, subHiveTablet, testerTablet, std::move(createTablet), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, subHiveTablet, testerTablet, std::move(createTablet), 0, true); 
         MakeSureTabletIsUp(runtime, tabletId, 0); // dummy from sub hive also good
         runtime.SetObserverFunc(prevObserverFunc);
     }
@@ -1020,7 +1020,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createHive->Record.AddAllowedDomains();
         createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false); 
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
@@ -1039,18 +1039,18 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createTablet1->Record.AddAllowedDomains();
         createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet1->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
+        ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true); 
         MakeSureTabletIsUp(runtime, tabletId1, 0);
 
         THolder<TEvHive::TEvCreateTablet> createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::Dummy, BINDED_CHANNELS);
         createTablet2->Record.AddAllowedDomains();
         createTablet2->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet2->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 tabletId2 = SendCreateTestTablet(runtime, subHiveTablet, testerTablet, std::move(createTablet2), 0, true);
+        ui64 tabletId2 = SendCreateTestTablet(runtime, subHiveTablet, testerTablet, std::move(createTablet2), 0, true); 
         MakeSureTabletIsUp(runtime, tabletId2, 0); // dummy from sub hive also good
 
         // retry create request to sub domain hive
-        createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS); 
         createTablet1->Record.SetTabletID(tabletId1);
 
         runtime.SendToPipe(subHiveTablet, sender, createTablet1.Release(), 0, GetPipeConfigWithRetries());
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(deleteTabletReply->Record.GetForwardRequest().GetHiveTabletId(), hiveTablet);
 
         // retry create request to root hive
-        createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::Dummy, BINDED_CHANNELS); 
         createTablet2->Record.SetTabletID(tabletId2);
 
         runtime.SendToPipe(hiveTablet, sender, createTablet2.Release(), 0, GetPipeConfigWithRetries());
@@ -1132,7 +1132,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createHive->Record.AddAllowedDomains();
         createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false); 
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
@@ -1161,7 +1161,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createTablet1->Record.AddAllowedDomains();
         createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet1->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
+        ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true); 
 
         MakeSureTabletIsUp(runtime, tabletId1, 0); // tablet up in root hive
 
@@ -1192,7 +1192,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tabletId1, 0); // tablet up in sub hive
 
         // retry create request to sub domain hive
-        createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS); 
         createTablet1->Record.SetTabletID(tabletId1);
 
         runtime.SendToPipe(hiveTablet, sender, createTablet1.Release(), 0, GetPipeConfigWithRetries());
@@ -1243,7 +1243,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createHive->Record.AddAllowedDomains();
         createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false); 
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
@@ -1277,7 +1277,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             createTablet1->Record.AddAllowedDomains();
             createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
             createTablet1->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-            ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
+            ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true); 
             MakeSureTabletIsUp(runtime, tabletId1, 0); // tablet up in root hive
             tabletIds.push_back(tabletId1);
         }
@@ -1310,7 +1310,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletIds[i], 0); // tablet up in sub hive
 
             // retry create request to sub domain hive
-            THolder<TEvHive::TEvCreateTablet> createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, i + 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+            THolder<TEvHive::TEvCreateTablet> createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, i + 1, TTabletTypes::Dummy, BINDED_CHANNELS); 
             createTablet1->Record.SetTabletID(tabletIds[i]);
 
             runtime.SendToPipe(hiveTablet, sender, createTablet1.Release(), 0, GetPipeConfigWithRetries());
@@ -1361,7 +1361,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createHive->Record.AddAllowedDomains();
         createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+        ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false); 
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
@@ -1454,7 +1454,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             createHive->Record.AddAllowedDomains();
             createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
             createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-            ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+            ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false); 
 
             TTestActorRuntime::TEventObserver prevObserverFunc;
             prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
@@ -1555,7 +1555,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             createHive->Record.AddAllowedDomains();
             createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
             createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-            ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
+            ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false); 
 
             TTestActorRuntime::TEventObserver prevObserverFunc;
             prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
@@ -1586,7 +1586,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             createTablet1->Record.AddAllowedDomains();
             createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
             createTablet1->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
-            ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
+            ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true); 
 
             MakeSureTabletIsUp(runtime, tabletId1, 0); // tablet up in root hive
 
@@ -1625,7 +1625,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId1, 0); // tablet up in sub hive
 
             // retry create request to sub domain hive
-            createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+            createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS); 
             createTablet1->Record.SetTabletID(tabletId1);
 
             runtime.SendToPipe(hiveTablet, sender, createTablet1.Release(), 0, GetPipeConfigWithRetries());
@@ -1703,7 +1703,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateLocal(runtime, 0);
         MakeSureTabletIsUp(runtime, tabletId, 0);
 
-        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
+        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) { 
             WaitEvDeleteTabletResult(runtime);
         }
 
@@ -1739,7 +1739,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         MakeSureTabletIsUp(runtime, tabletId, 0);
 
-        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
+        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) { 
             WaitEvDeleteTabletResult(runtime);
         }
 
@@ -1793,7 +1793,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                     auto* msg = ev->Get<TEvTablet::TEvCommit>();
                     if (msg->TabletID == hiveTablet) {
                         Ctest << "blocked commit for tablet " << msg->TabletID << Endl;
-                        blockedCommits.push_back(std::move(ev));
+                        blockedCommits.push_back(std::move(ev)); 
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                 }
@@ -1890,14 +1890,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, false);
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, false); 
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvLocal::EvBootTablet);
             runtime.DispatchEvents(options);
         }
 
-        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
+        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) { 
             WaitEvDeleteTabletResult(runtime);
         }
 
@@ -1917,14 +1917,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, false);
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, false); 
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvLocal::EvBootTablet);
             runtime.DispatchEvents(options);
         }
 
-        if (!SendDeleteTestOwner(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 123))) {
+        if (!SendDeleteTestOwner(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 123))) { 
             WaitEvDeleteTabletResult(runtime);
         }
 
@@ -1935,7 +1935,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT_VALUES_UNEQUAL(tablet.GetTabletID(), tabletId);
         }
 
-        SendDeleteTestOwner(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 124), 0, NKikimrProto::ALREADY);
+        SendDeleteTestOwner(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 124), 0, NKikimrProto::ALREADY); 
     }
 
     Y_UNIT_TEST(TestDeleteOwnerTabletsMany) {
@@ -1949,11 +1949,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 count = 100;
         TSet<ui64> tabletIds;
         for (ui64 i = 0; i < count; ++i) {
-            const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, i, tabletType, BINDED_CHANNELS), 0, false);
+            const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, i, tabletType, BINDED_CHANNELS), 0, false); 
             tabletIds.insert(tabletId);
         }
 
-        SendDeleteTestOwner(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 123));
+        SendDeleteTestOwner(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 123)); 
 
         runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true));
         TAutoPtr<IEventHandle> handle;
@@ -1962,7 +1962,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT(!tabletIds.contains(tablet.GetTabletID()));
         }
 
-        SendDeleteTestOwner(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 124), 0, NKikimrProto::ALREADY);
+        SendDeleteTestOwner(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 124), 0, NKikimrProto::ALREADY); 
     }
 
     Y_UNIT_TEST(TestDeleteTabletWithFollowers) {
@@ -1976,7 +1976,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto* followerGroup = ev->Record.AddFollowerGroups();
         followerGroup->SetFollowerCount(2);
         followerGroup->SetRequireDifferentNodes(true);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -1987,7 +1987,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tabletId, 1, &pipeConfig);
         MakeSureTabletIsUp(runtime, tabletId, 2, &pipeConfig);
 
-        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500, 0))) {
+        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500, 0))) { 
             WaitEvDeleteTabletResult(runtime);
         }
 
@@ -2007,9 +2007,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 testerTablet = 1;
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true); 
         MakeSureTabletIsUp(runtime, tabletId, 0);
-        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
+        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) { 
             WaitEvDeleteTabletResult(runtime);
         }
         MakeSureTabletIsDown(runtime, tabletId, 0);
@@ -2116,7 +2116,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui32 nodeIndex = 0;
         SendCreateTestTablet(runtime, hiveTablet, testerTablet,
-            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), nodeIndex, true);
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), nodeIndex, true); 
         {
             runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvCreateTablet(testerTablet, 0, TTabletTypes::TxAllocator, BINDED_CHANNELS),
                 nodeIndex, GetPipeConfigWithRetries());
@@ -2196,7 +2196,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui32 nodeIndex = 0;
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
-            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, tabletType, BINDED_CHANNELS), nodeIndex, true);
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, tabletType, BINDED_CHANNELS), nodeIndex, true); 
         MakeSureTabletIsUp(runtime, tabletId, nodeIndex);
         SendKillLocal(runtime, nodeIndex);
         WaitForEvServerDisconnected(runtime);
@@ -2217,7 +2217,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
         ev->Record.SetFollowerCount(1);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -2252,7 +2252,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // Create the tablet
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
-            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, tabletType, BINDED_CHANNELS), 0, true);
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, tabletType, BINDED_CHANNELS), 0, true); 
         // Make sure the tablet is OK
         WaitForTabletIsUp(runtime, tabletId, 0);
         // Re-create the local on node 1
@@ -2278,7 +2278,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui32 nodeIndex = 0;
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
-            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, tabletType, BINDED_CHANNELS), nodeIndex, true);
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, tabletType, BINDED_CHANNELS), nodeIndex, true); 
         MakeSureTabletIsUp(runtime, tabletId, nodeIndex);
 
         TActorId senderA = runtime.AllocateEdgeActor();
@@ -2331,7 +2331,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
         ev->Record.AddAllowedNodeIDs(runtime.GetNodeId(1));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
         // Make sure the tablet is down
         MakeSureTabletIsDown(runtime, tabletId, 0);
         // Re-create the local on node 1
@@ -2349,7 +2349,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
-            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true); 
         MakeSureTabletIsUp(runtime, tabletId, 0);
         SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
         MakeSureTabletIsUp(runtime, tabletId, 0);
@@ -2366,7 +2366,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TChannelsBindings channlesBinds = {GetDefaultChannelBind("NoExistStoragePool"),
                                            GetDefaultChannelBind("NoExistStoragePool")};
         auto ev = new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, channlesBinds);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, THolder(ev), 0, false);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, THolder(ev), 0, false); 
 
         MakeSureTabletIsDown(runtime, tabletId, 0);
 
@@ -2378,7 +2378,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.DispatchEvents(options);
         }*/
 
-        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
+        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) { 
             WaitEvDeleteTabletResult(runtime);
         }
 
@@ -2394,7 +2394,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
-            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true); 
         MakeSureTabletIsUp(runtime, tabletId, 0);
         SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
         SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
@@ -2453,7 +2453,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 tabletId = SendCreateTestTablet(runtime,
                                              hiveTablet,
                                              testerTablet,
-                                             MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS),
+                                             MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 
                                              0,
                                              true);
 
@@ -2477,7 +2477,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         tabletId = SendCreateTestTablet(runtime,
                                         hiveTablet,
                                         testerTablet,
-                                        MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS),
+                                        MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 
                                         0,
                                         true,
                                         NKikimrProto::ALREADY);
@@ -2674,7 +2674,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto* followerGroup = ev->Record.AddFollowerGroups();
         followerGroup->SetFollowerCount(2);
         followerGroup->SetRequireDifferentNodes(true);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -2701,7 +2701,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto* followerGroup = ev->Record.AddFollowerGroups();
         followerGroup->SetFollowerCount(2);
         followerGroup->SetRequireDifferentNodes(true);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -2753,7 +2753,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         followerGroup->SetFollowerCount(2);
         followerGroup->SetAllowLeaderPromotion(true);
 
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -2823,7 +2823,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto* followerGroup = ev->Record.AddFollowerGroups();
         followerGroup->SetFollowerCount(3);
         followerGroup->SetAllowLeaderPromotion(true);
-        SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+        SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, 4);
@@ -2855,7 +2855,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
 
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, false);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, false); 
         SendKillLocal(runtime, 0);
         CreateLocal(runtime, 0);
         {
@@ -2904,7 +2904,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         for (int i = 0; i < NUM_TABLETS; ++i) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
             ev->Record.SetObjectId(i);
-            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
             tablets.emplace_back(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
@@ -2979,7 +2979,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         for (int i = 0; i < NUM_TABLETS; ++i) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 200500 + i, tabletType, BINDED_CHANNELS));
             ev->Record.SetObjectId(NUM_TABLETS + i);
-            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
             tablets.emplace_back(tabletId);
         }
 
@@ -3041,7 +3041,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetFollowerCount(3);
             ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(1));
             ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(2));
-            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
             tablets.emplace_back(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
@@ -3107,7 +3107,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             auto* group = ev->Record.MutableDataCentersPreference()->AddDataCentersGroups();
             group->AddDataCenter(ToString(1));
             group->AddDataCenter(ToString(2));
-            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
             tablets.emplace_back(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
@@ -3169,7 +3169,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TVector<ui64> tablets;
         for (int i = 0; i < NUM_TABLETS; ++i) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
-            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
             tablets.emplace_back(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
@@ -3212,7 +3212,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
             ev->Record.SetObjectId(1);
             ev->Record.SetFollowerCount(3);
-            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
             tablets.emplace_back(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
@@ -3349,7 +3349,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         for (int i = 0; i < NUM_TABLETS; ++i) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
             ev->Record.SetObjectId(i);
-            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
             tablets.emplace_back(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
@@ -3389,7 +3389,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
         ev->Record.SetAllowFollowerPromotion(false);
         ev->Record.SetFollowerCount(2);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
 
         WaitForTabletsBecomeActive(runtime, 3);
 
@@ -3451,7 +3451,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
         ev->Record.SetCrossDataCenterFollowerCount(2);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
 
         WaitForTabletsBecomeActive(runtime, 7);
 
@@ -3506,7 +3506,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         followerGroup->SetFollowerCount(1);
         followerGroup->SetLocalNodeOnly(true);
         followerGroup->SetAllowClientRead(true);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
 
         WaitForTabletsBecomeActive(runtime, 2);
 
@@ -3603,7 +3603,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
         ev->Record.SetCrossDataCenterFollowerCount(FOLLOWERS);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
 
         WaitForTabletsBecomeActive(runtime, NODES + 1);
 
@@ -3656,7 +3656,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
         ev->Record.SetCrossDataCenterFollowerCount(FOLLOWERS);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
 
         //WaitForTabletsBecomeActive(runtime, 3 * 3 + 1);
 
@@ -3759,7 +3759,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
         ev->Record.SetObjectId(1337);
         ev->Record.SetCrossDataCenterFollowerCount(FOLLOWERS);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
 
         WaitForTabletsBecomeActive(runtime, FOLLOWERS * DCS + 1);
 
@@ -3931,7 +3931,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         // Delete tablet while info request is pending
-        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
+        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) { 
             WaitEvDeleteTabletResult(runtime);
         }
 
@@ -4099,7 +4099,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsDown(runtime, tabletId, 0);
 
         // Delete tablet while it is locked
-        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
+        if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) { 
             WaitEvDeleteTabletResult(runtime);
         }
 
@@ -4143,7 +4143,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
 
         // Delete tablet while it is locked
-        SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0));
+        SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0)); 
 
         // Reboot hive while tablet deletion is still delayed.
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
@@ -4368,7 +4368,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         TAutoPtr<TEvHive::TEvCreateTablet> ev = new TEvHive::TEvCreateTablet(testerTablet, 0, TTabletTypes::Dummy, BINDED_CHANNELS);
         ev->Record.SetTabletBootMode(NKikimrHive::ETabletBootMode::TABLET_BOOT_MODE_EXTERNAL);
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
 
         TActorId owner1 = runtime.AllocateEdgeActor(0);
         runtime.SendToPipe(hiveTablet, owner1, new TEvHive::TEvInitiateTabletExternalBoot(tabletId), 0, GetPipeConfigWithRetries());

@@ -240,7 +240,7 @@ namespace NKikimr {
 
             bool IsStreamTag(void *tag) {
                 with_lock (Mutex) {
-                    return StreamTags.contains(tag);
+                    return StreamTags.contains(tag); 
                 }
             }
 

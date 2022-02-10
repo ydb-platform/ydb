@@ -86,7 +86,7 @@ private:
             *request->Record.AddHosts() = host.GetString();
 
         const auto &params = http.GetParams();
-        if (params.contains("dry_run"))
+        if (params.contains("dry_run")) 
             request->Record.SetDryRun(params.find("dry_run")->second == "true");
 
         SendToCms(request.Release(), ctx);

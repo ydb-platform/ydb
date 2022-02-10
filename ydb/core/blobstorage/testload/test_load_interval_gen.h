@@ -47,11 +47,11 @@ namespace NKikimr {
             }
         };
 
-        struct TItem : public std::variant<TUniformItem, TPoissonItem> {
-            using TBase = std::variant<TUniformItem, TPoissonItem>;
+        struct TItem : public std::variant<TUniformItem, TPoissonItem> { 
+            using TBase = std::variant<TUniformItem, TPoissonItem>; 
 
             TItem(const NKikimrBlobStorage::TEvTestLoadRequest::TIntervalInfo& x)
-                : TBase(CreateVariantFromProtobuf(x))
+                : TBase(CreateVariantFromProtobuf(x)) 
             {}
 
             template<typename TProto>
@@ -72,7 +72,7 @@ namespace NKikimr {
 
             TDuration Generate() const {
                 auto f = [](const auto& item) { return item.Generate(); };
-                return std::visit(f, *this);
+                return std::visit(f, *this); 
             }
         };
 

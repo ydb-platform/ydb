@@ -238,7 +238,7 @@ void CheckListTenants(TTenantTestRuntime &runtime, TVector<TString> tenants)
     Ydb::Cms::ListDatabasesResult result;
     reply->Record.GetResponse().operation().result().UnpackTo(&result);
     for (auto &tenant : result.paths()) {
-        UNIT_ASSERT(paths.contains(tenant));
+        UNIT_ASSERT(paths.contains(tenant)); 
         paths.erase(tenant);
     }
     UNIT_ASSERT(paths.empty());
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 
         bool Execute(const THashSet<ui64> &allowed)
         {
-            return allowed.contains(No);
+            return allowed.contains(No); 
         }
 
         void Complete(const TActorContext &ctx) override
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
         void Execute(ITransaction *transaction, const TActorContext &ctx) override
         {
 
-            THolder<TTestTransaction> tx{dynamic_cast<TTestTransaction*>(transaction)};
+            THolder<TTestTransaction> tx{dynamic_cast<TTestTransaction*>(transaction)}; 
             if (tx->Execute(Allowed)) {
                 Result.push_back(tx->No);
                 tx->Complete(ctx);

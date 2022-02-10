@@ -54,10 +54,10 @@ public:
         message += method;
     }
 
-    virtual ~turn_info_exception()
+    virtual ~turn_info_exception() 
     {}
 
-    virtual char const* what() const noexcept
+    virtual char const* what() const noexcept 
     {
         return message.c_str();
     }

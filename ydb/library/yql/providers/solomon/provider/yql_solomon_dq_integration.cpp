@@ -152,7 +152,7 @@ private:
 }
 
 THolder<IDqIntegration> CreateSolomonDqIntegration(const TSolomonState::TPtr& state) {
-    return MakeHolder<TSolomonDqIntegration>(state);
+    return MakeHolder<TSolomonDqIntegration>(state); 
 }
 
 }

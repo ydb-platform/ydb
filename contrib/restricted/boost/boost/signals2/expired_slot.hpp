@@ -20,7 +20,7 @@ namespace boost
     class expired_slot: public bad_weak_ptr
     {
     public:
-      virtual char const * what() const noexcept
+      virtual char const * what() const noexcept 
       {
         return "boost::signals2::expired_slot";
       }

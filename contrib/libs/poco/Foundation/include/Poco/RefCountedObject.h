@@ -40,7 +40,7 @@ public:
 	void duplicate() const;
 		/// Increments the object's reference count.
 		
-	void release() const noexcept;
+	void release() const noexcept; 
 		/// Decrements the object's reference count
 		/// and deletes the object if the count
 		/// reaches zero.
@@ -75,7 +75,7 @@ inline void RefCountedObject::duplicate() const
 }
 
 
-inline void RefCountedObject::release() const noexcept
+inline void RefCountedObject::release() const noexcept 
 {
 	try
 	{

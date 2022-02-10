@@ -341,12 +341,12 @@ void CheckNodesListResponse(const NKikimrNodeBroker::TNodesInfo &rec,
 {
     UNIT_ASSERT_VALUES_EQUAL(rec.NodesSize(), ids.size());
     for (auto &node : rec.GetNodes()) {
-        UNIT_ASSERT(ids.contains(node.GetNodeId()));
+        UNIT_ASSERT(ids.contains(node.GetNodeId())); 
         ids.erase(node.GetNodeId());
     }
     UNIT_ASSERT_VALUES_EQUAL(rec.ExpiredNodesSize(), expiredIds.size());
     for (auto &node : rec.GetExpiredNodes()) {
-        UNIT_ASSERT(expiredIds.contains(node.GetNodeId()));
+        UNIT_ASSERT(expiredIds.contains(node.GetNodeId())); 
         expiredIds.erase(node.GetNodeId());
     }
 }
@@ -836,7 +836,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                     TString host = hosts[no];
                     TStatus::ECode code = TStatus::OK;
                     ui64 nodeId = 0;
-                    if (state.contains(host)) {
+                    if (state.contains(host)) { 
                         nodeId = state[host].NodeId;
                         if (state[host].PingEpoch != epoch.GetId()) {
                             //epoch.SetVersion(epoch.GetVersion() + 1);
@@ -891,7 +891,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                     TStatus::ECode code = TStatus::OK;
                     ui64 nodeId = 0;
 
-                    if (state.contains(host)) {
+                    if (state.contains(host)) { 
                         nodeId = state[host].NodeId;
                         if (state[host].PingEpoch == epoch.GetId()) {
                             // no modifications
@@ -920,7 +920,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                     ui64 nodeId = 0;
                     ui64 expire = 0;
 
-                    if (state.contains(host)) {
+                    if (state.contains(host)) { 
                         nodeId = state[host].NodeId;
                         if (state[host].PingEpoch == epoch.GetId())
                             expire = epoch.GetNextEnd();

@@ -26,7 +26,7 @@ bool TContext::NewParamsBuilder() {
 
 TRuntimeNode TContext::NewParam(TStringBuf name, TType* type) {
     WasParams = true;
-    return PgmBuilder->Parameter(TString(name), type);
+    return PgmBuilder->Parameter(TString(name), type); 
 }
 
 void TContext::AddTableLookup(const IDbSchemeResolver::TTable& request) {

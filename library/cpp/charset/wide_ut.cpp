@@ -261,10 +261,10 @@ void TConversionTest::TestRecodeIntoString() {
     TUtf16String copy = sUnicode; // increase ref-counter
     wres = NDetail::Recode<char>(UTF8Text, sUnicode, CODES_UTF8);
     UNIT_ASSERT(sUnicode == UnicodeText); // same content
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     UNIT_ASSERT(sUnicode.data() != wdata);      // re-allocated (shared buffer supplied)
     UNIT_ASSERT(sUnicode.data() == wres.data());      // same buffer
-#endif
+#endif 
     UNIT_ASSERT(sUnicode.size() == wres.size());      // same content
 }
 
@@ -372,7 +372,7 @@ void TConversionTest::TestRecode() {
             UNIT_ASSERT_VALUES_EQUAL(size_t(1), written);
             UNIT_ASSERT_VALUES_EQUAL(rch2, rch);
 
-            if (hash.contains(rch)) { // there are some stupid encodings with duplicate characters
+            if (hash.contains(rch)) { // there are some stupid encodings with duplicate characters 
                 continue;
             } else {
                 hash.insert(rch);

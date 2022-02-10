@@ -74,7 +74,7 @@ protected:
             return exp->CreateUploader(self, txId, columns, backup);
         };
 
-        THolder<IBuffer> buffer{exp->CreateBuffer(columns, rowsLimit, bytesLimit)};
+        THolder<IBuffer> buffer{exp->CreateBuffer(columns, rowsLimit, bytesLimit)}; 
         THolder<NTable::IScan> scan{CreateExportScan(std::move(buffer), createUploader)};
 
         const auto& taskName = appData->DataShardConfig.GetBackupTaskName();

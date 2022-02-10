@@ -106,7 +106,7 @@ void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void
 namespace {
 
 Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) {
-    char* whitespaces = reinterpret_cast<char*>(alloca(indentation));
+    char* whitespaces = reinterpret_cast<char*>(alloca(indentation)); 
     memset(whitespaces, ' ', indentation);
     out.Write(whitespaces, indentation);
 }

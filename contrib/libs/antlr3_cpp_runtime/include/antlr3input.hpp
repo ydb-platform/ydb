@@ -312,7 +312,7 @@ public:
 
 class ParseNullStringException : public std::exception
 {
-	virtual const char* what() const noexcept
+	virtual const char* what() const noexcept 
 	{
 		return "Null String";
 	}

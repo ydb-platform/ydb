@@ -1,11 +1,11 @@
 #pragma once
 
-#include <util/thread/pool.h>
+#include <util/thread/pool.h> 
 #include <util/system/atomic.h>
 #include <util/generic/ptr.h>
 
 //actual queue limit will be (maxQueueSize - numBusyThreads) or 0
-class TElasticQueue: public IThreadPool {
+class TElasticQueue: public IThreadPool { 
 public:
     explicit TElasticQueue(THolder<IThreadPool> slaveQueue);
 
@@ -21,7 +21,7 @@ private:
 
     bool TryIncCounter();
 private:
-    THolder<IThreadPool> SlaveQueue_;
+    THolder<IThreadPool> SlaveQueue_; 
     size_t MaxQueueSize_ = 0;
     TAtomic ObjectCount_ = 0;
     TAtomic GuardCount_ = 0;

@@ -25,7 +25,7 @@ namespace NYql {
             , Env_(Alloc_)
         {
             MutableFunctionRegistry_->AddModule("", "TopFreq", NUdf::CreateTopFreqModule());
-            PgmBuidler_.Reset(new TProgramBuilder(Env_, *MutableFunctionRegistry_));
+            PgmBuidler_.Reset(new TProgramBuilder(Env_, *MutableFunctionRegistry_)); 
         }
 
         TProgramBuilder& GetProgramBuilder() {

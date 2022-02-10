@@ -188,7 +188,7 @@ public:
         if (!IsGenerationOk(item, action.GetConfigItemId().GetGeneration(), ctx))
             return false;
 
-        if (Self->PendingConfigModifications.ModifiedItems.contains(item->Id)) {
+        if (Self->PendingConfigModifications.ModifiedItems.contains(item->Id)) { 
             Error(Ydb::StatusIds::BAD_REQUEST,
                   TStringBuilder() << "removal action for config item #"
                   << item->Id << " conflicts with its modification",
@@ -262,13 +262,13 @@ public:
         if (!IsConfigKindOk(newItem.GetConfig(), newItem.GetKind(), ctx))
             return false;
 
-        if (Self->PendingConfigModifications.ModifiedItems.contains(item->Id)) {
+        if (Self->PendingConfigModifications.ModifiedItems.contains(item->Id)) { 
             Error(Ydb::StatusIds::BAD_REQUEST,
                   TStringBuilder() << "multiple modification actions for config item #"
                   << item->Id << " are not allowed",
                   ctx);
             return false;
-        } else if (Self->PendingConfigModifications.RemovedItems.contains(item->Id)) {
+        } else if (Self->PendingConfigModifications.RemovedItems.contains(item->Id)) { 
             Error(Ydb::StatusIds::BAD_REQUEST,
                   TStringBuilder() << "modification action conflicts with removal action"
                   " for config item #" << item->Id,
@@ -329,8 +329,8 @@ public:
         TConfigItems conflicts;
         Self->ConfigIndex.CollectItemsByConflictingScope(item->UsageScope, {item->Kind}, false, conflicts);
         for (auto &conflictItem : conflicts) {
-            if (!Self->PendingConfigModifications.ModifiedItems.contains(conflictItem->Id)
-                && !Self->PendingConfigModifications.RemovedItems.contains(conflictItem->Id)) {
+            if (!Self->PendingConfigModifications.ModifiedItems.contains(conflictItem->Id) 
+                && !Self->PendingConfigModifications.RemovedItems.contains(conflictItem->Id)) { 
                 Error(Ydb::StatusIds::BAD_REQUEST,
                       TStringBuilder() << ItemName(item) << " (scope: " << item->UsageScope.ToString()
                       << ") has order conflict with config item #" << conflictItem->Id
@@ -371,8 +371,8 @@ public:
         Self->ConfigIndex.CollectItemsByConflictingScope(item->UsageScope, {item->Kind}, true, conflicts);
         ui32 maxOrder = 0;
         for (auto &conflictItem : conflicts) {
-            if (!Self->PendingConfigModifications.ModifiedItems.contains(conflictItem->Id)
-                && !Self->PendingConfigModifications.RemovedItems.contains(conflictItem->Id))
+            if (!Self->PendingConfigModifications.ModifiedItems.contains(conflictItem->Id) 
+                && !Self->PendingConfigModifications.RemovedItems.contains(conflictItem->Id)) 
                 maxOrder = Max(maxOrder, conflictItem->UsageScope.Order);
         }
 

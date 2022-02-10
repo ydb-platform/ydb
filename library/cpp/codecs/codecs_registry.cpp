@@ -9,7 +9,7 @@
 #include <library/cpp/blockcodecs/codecs.h>
 
 #include <util/string/builder.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 
 namespace NCodecs {
     TCodecPtr ICodec::GetInstance(TStringBuf name) {
@@ -24,7 +24,7 @@ namespace NCodecs {
         void TCodecRegistry::RegisterFactory(TFactoryPtr fac) {
             TVector<TString> names = fac->ListNames();
             for (const auto& name : names) {
-                Y_VERIFY(!Registry.contains(name), "already has %s", name.data());
+                Y_VERIFY(!Registry.contains(name), "already has %s", name.data()); 
                 Registry[name] = fac;
             }
         }
@@ -37,7 +37,7 @@ namespace NCodecs {
             }
 
             if (TStringBuf::npos == name.find(':')) {
-                Y_ENSURE_EX(Registry.contains(name), TNoCodecException(name));
+                Y_ENSURE_EX(Registry.contains(name), TNoCodecException(name)); 
                 return Registry.find(name)->second->MakeCodec(name);
             } else {
                 TPipelineCodec* pipe = new TPipelineCodec;
@@ -190,7 +190,7 @@ namespace NCodecs {
             }
 
             TCodecPtr MakeCodec(TStringBuf name) const override {
-                if (!Registry.contains(name)) {
+                if (!Registry.contains(name)) { 
                     ythrow TNoCodecException(name);
                 }
                 return Registry.find(name)->second;

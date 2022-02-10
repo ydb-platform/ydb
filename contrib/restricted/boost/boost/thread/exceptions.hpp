@@ -56,7 +56,7 @@ namespace boost
         {
         }
 
-        ~thread_exception()
+        ~thread_exception() 
         {}
 
 
@@ -113,7 +113,7 @@ namespace boost
         {
         }
 
-        ~lock_error()
+        ~lock_error() 
         {}
 
     };
@@ -141,7 +141,7 @@ namespace boost
           }
 
 
-        ~thread_resource_error()
+        ~thread_resource_error() 
         {}
 
     };

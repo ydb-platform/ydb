@@ -6,7 +6,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     if (tabletIdParam.StartsWith("0x"))
@@ -874,7 +874,7 @@ private:
                                     << "'>" << shardIdx <<"</a>";
                             }
                             TABLED() {
-                                if (Self->ShardInfos.contains(shardIdx)) {
+                                if (Self->ShardInfos.contains(shardIdx)) { 
                                     TTabletId tabletId = Self->ShardInfos.FindPtr(shardIdx)->TabletID;
                                     str << "<a href='../tablets?"
                                         << TCgi::TabletID.AsCgiParam(tabletId)
@@ -1282,7 +1282,7 @@ private:
     }
     void OutputShardInfoPageByShardIdx(TShardIdx shardIdx, TStringStream& str) const {
         HTML(str) {
-            if (!Self->ShardInfos.contains(shardIdx)) {
+            if (!Self->ShardInfos.contains(shardIdx)) { 
                 H4() {
                     str << "No shard info for shard idx " << shardIdx;
                 }
@@ -1293,7 +1293,7 @@ private:
 
             const TShardInfo& shard = Self->ShardInfos[shardIdx];
 
-            if (!Self->PathsById.contains(shard.PathId)) {
+            if (!Self->PathsById.contains(shard.PathId)) { 
                 H4() {
                     str << "No path item path id " << shard.PathId;
                 }

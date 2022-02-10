@@ -3,7 +3,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
-#include <library/cpp/pop_count/popcount.h>
+#include <library/cpp/pop_count/popcount.h> 
 
 #include <util/generic/bitops.h>
 

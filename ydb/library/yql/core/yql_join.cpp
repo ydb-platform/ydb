@@ -2,7 +2,7 @@
 #include "yql_expr_type_annotation.h"
 #include "yql_opt_utils.h"
 
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 #include <util/string/join.h>
 
 namespace NYql {
@@ -1110,7 +1110,7 @@ TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap(
     }
 
     for (auto& item : structType->GetItems()) {
-        bool needRemove = !usedFields.contains(item->GetName());
+        bool needRemove = !usedFields.contains(item->GetName()); 
         if (auto renamed = reversedRenameMap.FindPtr(item->GetName())) {
             if (needRemove) {
                 if (newRenameMap[*renamed].empty()) {

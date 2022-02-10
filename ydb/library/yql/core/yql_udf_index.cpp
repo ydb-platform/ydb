@@ -79,7 +79,7 @@ TUdfIndex::TUdfIndex(const TMap<TString, TResourceInfo::TPtr>& resources)
 }
 
 bool TUdfIndex::ContainsModule(const TString& moduleName) const {
-    return Resources_.contains(moduleName);
+    return Resources_.contains(moduleName); 
 }
 
 bool TUdfIndex::ContainsAnyModule(const TSet<TString>& modules) const {

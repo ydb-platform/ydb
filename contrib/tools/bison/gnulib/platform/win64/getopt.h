@@ -119,7 +119,7 @@
 #  define __GNUC_PREREQ(maj, min) (0)
 # endif
 # if defined __cplusplus && __GNUC_PREREQ (2,8)
-#  define __THROW       noexcept
+#  define __THROW       noexcept 
 # else
 #  define __THROW
 # endif

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "yql_udf_resolver.h"
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/set.h>
@@ -57,8 +57,8 @@ struct TDownloadLink {
 
     size_t Hash() const {
         return CombineHashes(
-            CombineHashes((size_t)IsUrl, ComputeHash(Path)),
-            ComputeHash(Md5)
+            CombineHashes((size_t)IsUrl, ComputeHash(Path)), 
+            ComputeHash(Md5) 
         );
     }
 };

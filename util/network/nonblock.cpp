@@ -22,7 +22,7 @@ namespace {
         {
 #if defined(_unix_) && defined(SOCK_NONBLOCK)
             {
-                Accept4 = reinterpret_cast<TAccept4>(dlsym(RTLD_DEFAULT, "accept4"));
+                Accept4 = reinterpret_cast<TAccept4>(dlsym(RTLD_DEFAULT, "accept4")); 
 
     #if defined(_musl_)
                 //musl always statically linked

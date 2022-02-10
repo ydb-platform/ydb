@@ -147,7 +147,7 @@ public:
             const TString domainName = domain.HasName() ? domain.GetName() : Sprintf("domain-%" PRIu32, domainId);
             TDomainsInfo::TDomain::TStoragePoolKinds poolTypes;
             for (auto &type : domain.GetStoragePoolTypes()) {
-                Y_VERIFY(!poolTypes.contains(type.GetKind()), "duplicated slot type");
+                Y_VERIFY(!poolTypes.contains(type.GetKind()), "duplicated slot type"); 
                 poolTypes[type.GetKind()] = type.GetPoolConfig();
             }
 

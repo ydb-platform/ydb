@@ -777,7 +777,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
                 pathStr,
                 Self->TabletID(),
                 pathId
-                ));
+                )); 
             Result->Record.SetStatus(status);
             Result->Record.SetReason(explain);
 

@@ -311,7 +311,7 @@ public:
                     const TString &label, const TActorContext &ctx)
     {
         Y_VERIFY(!slot->AssignedTenant);
-        Y_VERIFY(!tenant->AssignedSlots.contains(slot));
+        Y_VERIFY(!tenant->AssignedSlots.contains(slot)); 
         slot->AssignedTenant = tenant;
         slot->Label = label;
         tenant->AssignedSlots.insert(slot);
@@ -324,7 +324,7 @@ public:
     void DetachSlot(TDynamicSlotInfo::TPtr slot, const TActorContext &ctx)
     {
         Y_VERIFY(slot->AssignedTenant);
-        Y_VERIFY(slot->AssignedTenant->AssignedSlots.contains(slot));
+        Y_VERIFY(slot->AssignedTenant->AssignedSlots.contains(slot)); 
 
         LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL,
                      LogPrefix << "detach tenant " << slot->AssignedTenant->Name
@@ -642,7 +642,7 @@ public:
             return;
         }
 
-        if (!DynamicSlots.contains(rec.GetSlotId())) {
+        if (!DynamicSlots.contains(rec.GetSlotId())) { 
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
                         LogPrefix << "got configure for unknown slot " <<  rec.GetSlotId());
             SendConfigureError(ev, rec.GetSlotId(), NKikimrTenantPool::UNKNOWN_SLOT,
@@ -834,7 +834,7 @@ public:
                                                           NMon::IEvHttpInfoRes::EContentType::Html));
         } else if (msg->Request.GetPathInfo().StartsWith(DomainPrefix)) {
             TString domain{msg->Request.GetPathInfo().substr(DomainPrefix.size())};
-            if (!DomainTenantPools.contains(domain)) {
+            if (!DomainTenantPools.contains(domain)) { 
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown domain " + domain, 0,
                                                               NMon::IEvHttpInfoRes::EContentType::Html));
             } else {
@@ -893,7 +893,7 @@ public:
         for (auto &pr : Config->StaticSlots) {
             TString domain = TString(ExtractDomain(pr.second.GetTenantName()));
             Y_VERIFY(domain, "cannot extract domain from tenant name");
-            if (!domainConfigs.contains(domain))
+            if (!domainConfigs.contains(domain)) 
                 domainConfigs[domain] = CreateDomainConfig();
             domainConfigs[domain]->AddStaticSlot(pr.second);
         }
@@ -902,7 +902,7 @@ public:
             TString domain = pr.second.GetDomainName();
             Y_VERIFY(domain, "empty domain for dynamic slot");
             Y_VERIFY(pr.second.GetType(), "empty type for dynamic slot");
-            if (!domainConfigs.contains(domain))
+            if (!domainConfigs.contains(domain)) 
                 domainConfigs[domain] = CreateDomainConfig();
             domainConfigs[domain]->AddDynamicSlot(pr.second);
         }
@@ -974,7 +974,7 @@ void TTenantPoolConfig::AddStaticSlot(const NKikimrTenantPool::TSlotConfig &slot
 {
     TString name = CanonizePath(slot.GetTenantName());
     Y_VERIFY(IsEnabled);
-    Y_VERIFY(!StaticSlots.contains(name),
+    Y_VERIFY(!StaticSlots.contains(name), 
              "two static slots for the same tenant '%s'", name.data());
     StaticSlots[name] = slot;
     StaticSlots[name].SetTenantName(name);
@@ -993,7 +993,7 @@ void TTenantPoolConfig::AddStaticSlot(const TString &tenant,
 void TTenantPoolConfig::AddDynamicSlot(const NKikimrTenantPool::TSlotConfig &slot)
 {
     Y_VERIFY(IsEnabled);
-    Y_VERIFY(!DynamicSlots.contains(slot.GetId()),
+    Y_VERIFY(!DynamicSlots.contains(slot.GetId()), 
              "two dynamic slots with the same id '%s'", slot.GetId().data());
     DynamicSlots[slot.GetId()] = slot;
     DynamicSlots[slot.GetId()].SetTenantName(CanonizePath(slot.GetTenantName()));

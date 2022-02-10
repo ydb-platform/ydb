@@ -276,7 +276,7 @@ bool TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode)
 
 bool TContext::AddExports(const TVector<TString>& symbols) {
     for (const auto& symbol: symbols) {
-        if (Exports.contains(symbol)) {
+        if (Exports.contains(symbol)) { 
             Error() << "Duplicate export symbol: " << symbol;
             return false;
         }

@@ -67,7 +67,7 @@ namespace boost {
    struct lazy_exception : public std::exception {
        const char* s;
        lazy_exception( const char* ss ) : s(ss) {}
-       const char* what() const noexcept { return s; }
+       const char* what() const noexcept { return s; } 
    };
 #endif
 

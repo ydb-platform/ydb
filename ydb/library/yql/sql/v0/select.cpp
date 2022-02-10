@@ -998,7 +998,7 @@ public:
     }
 
     bool IsGroupByColumn(const TString& column) const override {
-        return GroupingCols.contains(column);
+        return GroupingCols.contains(column); 
     }
 
     const TSet<TString>& GetGroupingCols() const {
@@ -1924,7 +1924,7 @@ public:
         }
         for (const auto& column: columns) {
             hint <<= 1;
-            if (!GroupByColumns.contains(column)) {
+            if (!GroupByColumns.contains(column)) { 
                 hint += 1;
             }
         }

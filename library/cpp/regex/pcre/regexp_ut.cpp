@@ -69,7 +69,7 @@ private:
             } else {
                 result = "NM";
             }
-            StripInPlace(result);
+            StripInPlace(result); 
             UNIT_ASSERT_VALUES_EQUAL(result, regTest.Result);
         }
     }

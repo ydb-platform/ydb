@@ -2,7 +2,7 @@
 
 #include "hash.h"
 
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/generic/utility.h>
 #include <util/network/address.h>
 #include <util/network/init.h>
@@ -101,7 +101,7 @@ namespace NBus {
 template <>
 struct THash<NBus::NPrivate::TBusIpAddr> {
     inline size_t operator()(const NBus::NPrivate::TBusIpAddr& a) const {
-        return ComputeHash(TStringBuf((const char*)&a, sizeof(a)));
+        return ComputeHash(TStringBuf((const char*)&a, sizeof(a))); 
     }
 };
 

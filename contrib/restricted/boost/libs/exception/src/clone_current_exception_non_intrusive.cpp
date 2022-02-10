@@ -230,7 +230,7 @@ namespace
             {
             }
 
-        ~cloned_exception()
+        ~cloned_exception() 
             {
             }
 

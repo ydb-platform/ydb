@@ -66,7 +66,7 @@ class BOOST_SYMBOL_VISIBLE cpp_exception
 :   public std::exception
 {
 public:
-    cpp_exception(std::size_t line_, std::size_t column_, char const *filename_) noexcept
+    cpp_exception(std::size_t line_, std::size_t column_, char const *filename_) noexcept 
     :   line(line_), column(column_)
     {
         unsigned int off = 0;
@@ -74,18 +74,18 @@ public:
             filename[off++] = *filename_++;
         filename[off] = 0;
     }
-    ~cpp_exception() {}
+    ~cpp_exception() {} 
 
-    virtual char const *what() const noexcept = 0;           // to be overloaded
-    virtual char const *description() const noexcept = 0;
-    virtual int get_errorcode() const noexcept = 0;
-    virtual int get_severity() const noexcept = 0;
-    virtual char const* get_related_name() const noexcept = 0;
-    virtual bool is_recoverable() const noexcept = 0;
+    virtual char const *what() const noexcept = 0;           // to be overloaded 
+    virtual char const *description() const noexcept = 0; 
+    virtual int get_errorcode() const noexcept = 0; 
+    virtual int get_severity() const noexcept = 0; 
+    virtual char const* get_related_name() const noexcept = 0; 
+    virtual bool is_recoverable() const noexcept = 0; 
 
-    std::size_t line_no() const noexcept { return line; }
-    std::size_t column_no() const noexcept { return column; }
-    char const *file_name() const noexcept { return filename; }
+    std::size_t line_no() const noexcept { return line; } 
+    std::size_t column_no() const noexcept { return column; } 
+    char const *file_name() const noexcept { return filename; } 
 
 protected:
     char filename[512];
@@ -150,7 +150,7 @@ public:
     };
 
     preprocess_exception(char const *what_, error_code code, std::size_t line_,
-        std::size_t column_, char const *filename_) noexcept
+        std::size_t column_, char const *filename_) noexcept 
     :   cpp_exception(line_, column_, filename_),
         code(code)
     {
@@ -159,29 +159,29 @@ public:
             buffer[off++] = *what_++;
         buffer[off] = 0;
     }
-    ~preprocess_exception() {}
+    ~preprocess_exception() {} 
 
-    virtual char const *what() const noexcept
+    virtual char const *what() const noexcept 
     {
         return "boost::wave::preprocess_exception";
     }
-    virtual char const *description() const noexcept
+    virtual char const *description() const noexcept 
     {
         return buffer;
     }
-    virtual int get_severity() const noexcept
+    virtual int get_severity() const noexcept 
     {
         return severity_level(code);
     }
-    virtual int get_errorcode() const noexcept
+    virtual int get_errorcode() const noexcept 
     {
         return code;
     }
-    virtual char const* get_related_name() const noexcept
+    virtual char const* get_related_name() const noexcept 
     {
         return "<unknown>";
     }
-    virtual bool is_recoverable() const noexcept
+    virtual bool is_recoverable() const noexcept 
     {
         switch (get_errorcode()) {
         // these are the exceptions thrown during processing not supposed to
@@ -371,7 +371,7 @@ class BOOST_SYMBOL_VISIBLE macro_handling_exception :
 {
 public:
     macro_handling_exception(char const *what_, error_code code, std::size_t line_,
-        std::size_t column_, char const *filename_, char const *macroname) noexcept
+        std::size_t column_, char const *filename_, char const *macroname) noexcept 
     :   preprocess_exception(what_, code, line_, column_, filename_)
     {
         unsigned int off = 0;
@@ -379,13 +379,13 @@ public:
             name[off++] = *macroname++;
         name[off] = 0;
     }
-    ~macro_handling_exception() {}
+    ~macro_handling_exception() {} 
 
-    virtual char const *what() const noexcept
+    virtual char const *what() const noexcept 
     {
         return "boost::wave::macro_handling_exception";
     }
-    char const* get_related_name() const noexcept
+    char const* get_related_name() const noexcept 
     {
         return name;
     }

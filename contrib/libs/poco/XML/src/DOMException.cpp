@@ -71,13 +71,13 @@ DOMException& DOMException::operator = (const DOMException& exc)
 }
 
 
-const char* DOMException::name() const noexcept
+const char* DOMException::name() const noexcept 
 {
 	return "DOMException";
 }
 
 
-const char* DOMException::className() const noexcept
+const char* DOMException::className() const noexcept 
 {
 	return typeid(*this).name();
 }

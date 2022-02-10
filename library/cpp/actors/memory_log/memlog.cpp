@@ -105,7 +105,7 @@ char* TMemoryLog::LastMarkIsHere = nullptr;
 
 std::atomic<bool> TMemoryLog::PrintLastMark(true);
 
-TMemoryLog::TMemoryLog(size_t totalSize, size_t grainSize)
+TMemoryLog::TMemoryLog(size_t totalSize, size_t grainSize) 
     : GrainSize(grainSize)
     , FreeGrains(DEFAULT_TOTAL_SIZE / DEFAULT_GRAIN_SIZE * 2)
     , Buf(totalSize)

@@ -1,24 +1,24 @@
 #include "deque.h"
-#include "strbuf.h"
-#include "string_ut.h"
+#include "strbuf.h" 
+#include "string_ut.h" 
 #include "vector.h"
 #include "yexception.h"
 
 #include <util/charset/wide.h>
 #include <util/str_stl.h>
-#include <util/stream/output.h>
-#include <util/string/subst.h>
+#include <util/stream/output.h> 
+#include <util/string/subst.h> 
 
 #include <string>
 #include <sstream>
 #include <algorithm>
 #include <stdexcept>
 
-#ifdef TSTRING_IS_STD_STRING
-static_assert(sizeof(TString) == sizeof(std::string), "expect sizeof(TString) == sizeof(std::string)");
-#else
+#ifdef TSTRING_IS_STD_STRING 
+static_assert(sizeof(TString) == sizeof(std::string), "expect sizeof(TString) == sizeof(std::string)"); 
+#else 
 static_assert(sizeof(TString) == sizeof(const char*), "expect sizeof(TString) == sizeof(const char*)");
-#endif
+#endif 
 
 class TStringTestZero: public TTestBase {
     UNIT_TEST_SUITE(TStringTestZero);
@@ -50,7 +50,7 @@ public:
         TString copy = s;
         copy.replace(copy.size() - 1, 1, "z");
         UNIT_ASSERT(s != copy);
-        copy.replace(copy.size() - 1, 1, "\0", 0, 1);
+        copy.replace(copy.size() - 1, 1, "\0", 0, 1); 
         UNIT_ASSERT(s == copy);
 
         TString prefix(data, 5);
@@ -70,9 +70,9 @@ UNIT_TEST_SUITE_REGISTRATION(TStringTestZero);
 
 template <typename TStringType, typename TTestData>
 class TStringStdTestImpl {
-    using TChar = typename TStringType::char_type;
-    using TTraits = typename TStringType::traits_type;
-    using TView = std::basic_string_view<TChar, TTraits>;
+    using TChar = typename TStringType::char_type; 
+    using TTraits = typename TStringType::traits_type; 
+    using TView = std::basic_string_view<TChar, TTraits>; 
 
     TTestData Data_;
 
@@ -121,7 +121,7 @@ protected:
         s.reserve(10);
 
     #ifdef TSTRING_IS_STD_STRING
-        UNIT_ASSERT(s.capacity() >= 64);
+        UNIT_ASSERT(s.capacity() >= 64); 
     #else
         UNIT_ASSERT(s.capacity() >= 256 && s.data() == data);
     #endif
@@ -147,7 +147,7 @@ protected:
         UNIT_ASSERT(s.capacity() >= 64 && s.capacity() < 128 && s.data() != data);
         UNIT_ASSERT(s.IsDetached());
     #endif
-#endif
+#endif 
     }
 
     void short_string() {
@@ -511,7 +511,7 @@ protected:
 
     void copy() {
         TStringType s(Data_.foo());
-        TChar dest[4];
+        TChar dest[4]; 
         dest[0] = dest[1] = dest[2] = dest[3] = 1;
         s.copy(dest, 4);
         int pos = 0;
@@ -712,7 +712,7 @@ protected:
         UNIT_ASSERT(str == Data.This_This_is_test_StringT_for_StringT_calls());
 
     #if !defined(STLPORT) || defined(_STLP_MEMBER_TEMPLATES)
-        deque<TChar> cdeque;
+        deque<TChar> cdeque; 
         cdeque.push_back(*Data.I());
         str.replace(str.begin(), str.begin() + 11, cdeque.begin(), cdeque.end());
         UNIT_ASSERT(str == Data.Is_test_StringT_for_StringT_calls());
@@ -727,9 +727,9 @@ public:
     UNIT_TEST(TestMaxSize);
     UNIT_TEST(TestConstructors);
     UNIT_TEST(TestReplace);
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     UNIT_TEST(TestRefCount);
-#endif
+#endif 
     UNIT_TEST(TestFind);
     UNIT_TEST(TestContains);
     UNIT_TEST(TestOperators);
@@ -741,9 +741,9 @@ public:
     UNIT_TEST(TestCopy);
     UNIT_TEST(TestStrCpy);
     UNIT_TEST(TestPrefixSuffix);
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     UNIT_TEST(TestCharRef);
-#endif
+#endif 
     UNIT_TEST(TestBack)
     UNIT_TEST(TestFront)
     UNIT_TEST(TestIterators);
@@ -788,9 +788,9 @@ public:
     UNIT_TEST_SUITE(TWideStringTest);
     UNIT_TEST(TestConstructors);
     UNIT_TEST(TestReplace);
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     UNIT_TEST(TestRefCount);
-#endif
+#endif 
     UNIT_TEST(TestFind);
     UNIT_TEST(TestContains);
     UNIT_TEST(TestOperators);
@@ -803,9 +803,9 @@ public:
     UNIT_TEST(TestCopy);
     UNIT_TEST(TestStrCpy);
     UNIT_TEST(TestPrefixSuffix);
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     UNIT_TEST(TestCharRef);
-#endif
+#endif 
     UNIT_TEST(TestBack);
     UNIT_TEST(TestFront)
     UNIT_TEST(TestDecodingMethods);
@@ -912,9 +912,9 @@ public:
     UNIT_TEST_SUITE(TUtf32StringTest);
     UNIT_TEST(TestConstructors);
     UNIT_TEST(TestReplace);
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     UNIT_TEST(TestRefCount);
-#endif
+#endif 
     UNIT_TEST(TestFind);
     UNIT_TEST(TestContains);
     UNIT_TEST(TestOperators);
@@ -927,9 +927,9 @@ public:
     UNIT_TEST(TestCopy);
     UNIT_TEST(TestStrCpy);
     UNIT_TEST(TestPrefixSuffix);
-#ifndef TSTRING_IS_STD_STRING
+#ifndef TSTRING_IS_STD_STRING 
     UNIT_TEST(TestCharRef);
-#endif
+#endif 
     UNIT_TEST(TestBack);
     UNIT_TEST(TestFront)
     UNIT_TEST(TestDecodingMethods);

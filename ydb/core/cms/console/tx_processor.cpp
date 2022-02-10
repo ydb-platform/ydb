@@ -79,7 +79,7 @@ void TTxProcessor::RemoveSubProcessor(TTxProcessor::TPtr sub,
 {
     LOG_TRACE_S(ctx, Service, LogPrefix << "removing sub-processor " << sub->Name);
 
-    Y_VERIFY(SubProcessors.contains(sub->Name));
+    Y_VERIFY(SubProcessors.contains(sub->Name)); 
     SubProcessors.erase(sub->Name);
 
     if (CheckTemporary(ctx))

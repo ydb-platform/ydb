@@ -60,8 +60,8 @@ namespace NMonitoring {
 
     class TMtHttpServer: public THttpServer, private THttpServer::ICallBack {
     public:
-        TMtHttpServer(const TOptions& options, THandler handler, IThreadFactory* pool = nullptr);
-        TMtHttpServer(const TOptions& options, THandler handler, TSimpleSharedPtr<IThreadPool> pool);
+        TMtHttpServer(const TOptions& options, THandler handler, IThreadFactory* pool = nullptr); 
+        TMtHttpServer(const TOptions& options, THandler handler, TSimpleSharedPtr<IThreadPool> pool); 
 
         /**
          * This will cause the server start to accept incoming connections.

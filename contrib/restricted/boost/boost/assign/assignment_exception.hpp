@@ -29,7 +29,7 @@ namespace boost
             : what_( _what )
             { }
         
-            virtual const char* what() const noexcept
+            virtual const char* what() const noexcept 
             {
                 return what_;
             }

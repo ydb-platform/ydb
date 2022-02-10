@@ -73,19 +73,19 @@ Exception& Exception::operator = (const Exception& exc)
 }
 
 
-const char* Exception::name() const noexcept
+const char* Exception::name() const noexcept 
 {
 	return "Exception";
 }
 
 
-const char* Exception::className() const noexcept
+const char* Exception::className() const noexcept 
 {
 	return typeid(*this).name();
 }
 
 	
-const char* Exception::what() const noexcept
+const char* Exception::what() const noexcept 
 {
 	return name();
 }

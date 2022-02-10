@@ -485,7 +485,7 @@ namespace {
         const THashSet<ui32>& localReadCallables, IEngineFlatHost* host, const TComputationNodeFactoryContext& ctx)
     {
         TUnboxedValueVector values;
-        if (localReadCallables.contains(callable.GetUniqueId())) {
+        if (localReadCallables.contains(callable.GetUniqueId())) { 
             values.push_back(PerformLocalSelectRow(callable, *host, ctx.HolderFactory, ctx.Env));
         }
 
@@ -575,7 +575,7 @@ namespace {
         const TFlatEngineStrings& strings)
     {
         TUnboxedValueVector values;
-        if (localReadCallables.contains(callable.GetUniqueId())) {
+        if (localReadCallables.contains(callable.GetUniqueId())) { 
             values.push_back(PerformLocalSelectRange(callable, *host, ctx.HolderFactory, ctx.Env));
         }
 

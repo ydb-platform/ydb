@@ -275,7 +275,7 @@ TModificationsValidator::ComputeAffectedConfigs(const TDynBitMap &kinds,
             // the resulting config index then its config is equal to
             // domain one (which is unmodified) and shouldn't be checked.
             for (auto &tenant : affectedTenants) {
-                if (allTenants.contains(tenant))
+                if (allTenants.contains(tenant)) 
                     affected.insert({tenant, TString()});
             }
 
@@ -284,7 +284,7 @@ TModificationsValidator::ComputeAffectedConfigs(const TDynBitMap &kinds,
                 // Filter out those types which have no more config items
                 // in the resulting config index.
                 for (auto &type : affectedNodeTypes) {
-                    if (allNodeTypes.contains(type)) {
+                    if (allNodeTypes.contains(type)) { 
                         affected.insert({TString(), type});
 
                         for (auto &tenant : allTenants)
@@ -294,7 +294,7 @@ TModificationsValidator::ComputeAffectedConfigs(const TDynBitMap &kinds,
                 // Similarly to affected node types affected tenants should be
                 // checked with all node types.
                 for (auto &tenant : affectedTenants) {
-                    if (allTenants.contains(tenant)) {
+                    if (allTenants.contains(tenant)) { 
                         for (auto &type : allNodeTypes)
                             affected.insert({tenant, type});
                     }

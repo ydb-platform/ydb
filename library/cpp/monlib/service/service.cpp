@@ -203,13 +203,13 @@ namespace NMonitoring {
         const TMtHttpServer& Parent;
     };
 
-    TMtHttpServer::TMtHttpServer(const TOptions& options, THandler handler, IThreadFactory* pool)
+    TMtHttpServer::TMtHttpServer(const TOptions& options, THandler handler, IThreadFactory* pool) 
         : THttpServer(this, options, pool)
         , Handler(std::move(handler))
     {
     }
 
-    TMtHttpServer::TMtHttpServer(const TOptions& options, THandler handler, TSimpleSharedPtr<IThreadPool> pool)
+    TMtHttpServer::TMtHttpServer(const TOptions& options, THandler handler, TSimpleSharedPtr<IThreadPool> pool) 
         : THttpServer(this, /* mainWorkers = */pool, /* failWorkers = */pool, options)
         , Handler(std::move(handler))
     {

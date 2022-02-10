@@ -332,8 +332,8 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
     switch (settings.Mode_) {
         case TRestoreSettings::EMode::Yql:
         case TRestoreSettings::EMode::BulkUpsert: {
-            accumulator.Reset(CreateCompatAccumulator(dbPath, desc, settings));
-            writer.Reset(CreateCompatWriter(dbPath, TableClient, accumulator.Get(), settings));
+            accumulator.Reset(CreateCompatAccumulator(dbPath, desc, settings)); 
+            writer.Reset(CreateCompatWriter(dbPath, TableClient, accumulator.Get(), settings)); 
 
             break;
         }
@@ -345,8 +345,8 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
                 return Result<TRestoreResult>(std::move(descResult));
             }
 
-            accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings));
-            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulator.Get(), settings));
+            accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings)); 
+            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulator.Get(), settings)); 
 
             break;
         }

@@ -143,9 +143,9 @@ namespace boost { namespace spirit
             msg = oss.str();
         }
 
-        virtual ~bad_type_exception() {}
+        virtual ~bad_type_exception() {} 
 
-        virtual char const* what() const noexcept
+        virtual char const* what() const noexcept 
         { return msg.c_str(); }
     };
     
@@ -155,9 +155,9 @@ namespace boost { namespace spirit
 
         empty_exception(char const* error) : msg(error) {}
         
-        virtual ~empty_exception() {}
+        virtual ~empty_exception() {} 
 
-        virtual char const* what() const noexcept
+        virtual char const* what() const noexcept 
         { return msg; }
     };
 

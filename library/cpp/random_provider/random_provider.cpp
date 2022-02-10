@@ -1,7 +1,7 @@
 #include "random_provider.h"
 #include <util/random/mersenne.h>
 #include <util/random/random.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 
 namespace {
     void SetV4(TGUID& g) {
@@ -47,7 +47,7 @@ public:
 
     TGUID GenGuid() noexcept override {
         TGUID ret;
-        WriteUnaligned<ui64>(ret.dw, Gen.GenRand());
+        WriteUnaligned<ui64>(ret.dw, Gen.GenRand()); 
         ret.dw[2] = (ui32)Gen.GenRand();
         ret.dw[3] = ++GuidCount;
         return ret;
@@ -55,8 +55,8 @@ public:
 
     TGUID GenUuid4() noexcept override {
         TGUID ret;
-        WriteUnaligned<ui64>(ret.dw, Gen.GenRand());
-        WriteUnaligned<ui64>(ret.dw + 2, Gen.GenRand());
+        WriteUnaligned<ui64>(ret.dw, Gen.GenRand()); 
+        WriteUnaligned<ui64>(ret.dw + 2, Gen.GenRand()); 
         SetV4(ret);
         return ret;
     }

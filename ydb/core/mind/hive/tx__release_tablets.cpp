@@ -6,7 +6,7 @@ namespace NHive {
 
 class TTxReleaseTablets : public TTransactionBase<THive> {
     THolder<TEvHive::TEvReleaseTablets::THandle> Request;
-    THolder<TEvHive::TEvReleaseTabletsReply> Response = MakeHolder<TEvHive::TEvReleaseTabletsReply>();
+    THolder<TEvHive::TEvReleaseTabletsReply> Response = MakeHolder<TEvHive::TEvReleaseTabletsReply>(); 
     TVector<std::pair<TTabletId, TActorId>> UnlockedFromActor;
     bool NeedToProcessPendingOperations = false;
 
@@ -90,7 +90,7 @@ public:
 };
 
 ITransaction* THive::CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event) {
-    return new TTxReleaseTablets(THolder(std::move(event.Release())), this);
+    return new TTxReleaseTablets(THolder(std::move(event.Release())), this); 
 }
 
 } // NHive

@@ -154,7 +154,7 @@ namespace Tests {
 void TYqlServer::Initialize() {
     ResumeYqlExecutionPromise = NThreading::NewPromise<void>();
 
-    Runtime.Reset(new TTestActorRuntime(StaticNodes() + DynamicNodes(), true));
+    Runtime.Reset(new TTestActorRuntime(StaticNodes() + DynamicNodes(), true)); 
 
     Runtime->SetupMonitoring();
     Runtime->SetLogBackend(GetSettings().LogBackend);

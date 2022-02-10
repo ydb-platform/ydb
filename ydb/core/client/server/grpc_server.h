@@ -9,7 +9,7 @@
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
 
-#include <util/thread/factory.h>
+#include <util/thread/factory.h> 
 #include <util/generic/queue.h>
 
 namespace NKikimr {
@@ -74,7 +74,7 @@ private:
     void SetupIncomingRequests();
 
 private:
-    using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
+    using IThreadRef = TAutoPtr<IThreadFactory::IThread>; 
 
 
     NActors::TActorSystem* ActorSystem;

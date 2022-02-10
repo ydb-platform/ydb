@@ -96,13 +96,13 @@ SAXParseException& SAXParseException::operator = (const SAXParseException& exc)
 }
 
 	
-const char* SAXParseException::name() const noexcept
+const char* SAXParseException::name() const noexcept 
 {
 	return "SAXParseException";
 }
 
 
-const char* SAXParseException::className() const noexcept
+const char* SAXParseException::className() const noexcept 
 {
 	return typeid(*this).name();
 }

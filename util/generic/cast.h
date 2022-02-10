@@ -5,7 +5,7 @@
 
 #include <util/system/compat.h>
 #include <util/system/type_name.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 #include <util/system/yassert.h>
 
 #include <cstdlib>
@@ -158,19 +158,19 @@ template <typename T>
 constexpr std::underlying_type_t<T> ToUnderlying(const T enum_) noexcept {
     return static_cast<std::underlying_type_t<T>>(enum_);
 }
-
-// std::bit_cast from c++20
-template <class TTarget, class TSource>
-TTarget BitCast(const TSource& source) {
-    static_assert(sizeof(TSource) == sizeof(TTarget), "Size mismatch");
-    static_assert(std::is_trivially_copyable<TSource>::value, "TSource is not trivially copyable");
-    static_assert(std::is_trivial<TTarget>::value, "TTarget is not trivial");
-
-    // Support volatile qualifiers.
-    // ReadUnaligned does not work with volatile pointers, so cast away
-    // volatileness beforehand.
-    using TNonvolatileSource = std::remove_volatile_t<TSource>;
-    using TNonvolatileTarget = std::remove_volatile_t<TTarget>;
-
-    return ReadUnaligned<TNonvolatileTarget>(&const_cast<const TNonvolatileSource&>(source));
-}
+ 
+// std::bit_cast from c++20 
+template <class TTarget, class TSource> 
+TTarget BitCast(const TSource& source) { 
+    static_assert(sizeof(TSource) == sizeof(TTarget), "Size mismatch"); 
+    static_assert(std::is_trivially_copyable<TSource>::value, "TSource is not trivially copyable"); 
+    static_assert(std::is_trivial<TTarget>::value, "TTarget is not trivial"); 
+ 
+    // Support volatile qualifiers. 
+    // ReadUnaligned does not work with volatile pointers, so cast away 
+    // volatileness beforehand. 
+    using TNonvolatileSource = std::remove_volatile_t<TSource>; 
+    using TNonvolatileTarget = std::remove_volatile_t<TTarget>; 
+ 
+    return ReadUnaligned<TNonvolatileTarget>(&const_cast<const TNonvolatileSource&>(source)); 
+} 

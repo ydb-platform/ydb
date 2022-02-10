@@ -425,7 +425,7 @@ private:
 
     void HandleDirectRequest(const TActorId& sender, ui64 cookie, THolder<IEventBase> event) {
         KPROXY_LOG_TRACE_S("Received " << event->ToStringHeader() << " from " << sender);
-        Y_VERIFY(!DirectRequestBySender.contains(sender), "Only one outgoing request per sender is allowed");
+        Y_VERIFY(!DirectRequestBySender.contains(sender), "Only one outgoing request per sender is allowed"); 
         const ui64 seqNo = ++SeqNo;
         auto& req = DirectRequests[seqNo];
         req.Sender = sender;
@@ -532,7 +532,7 @@ private:
     void Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
         KPROXY_LOG_TRACE_S("Received TEvAttachSession from " << ev->Sender);
         Y_VERIFY(ev->Sender);
-        Y_VERIFY(!SessionByOwner.contains(ev->Sender), "Only one outgoing request per sender is allowed");
+        Y_VERIFY(!SessionByOwner.contains(ev->Sender), "Only one outgoing request per sender is allowed"); 
 
         auto& record = ev->Get()->Record;
         const ui64 sessionId = record.GetSessionId();

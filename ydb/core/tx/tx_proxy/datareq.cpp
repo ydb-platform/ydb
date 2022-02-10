@@ -1402,7 +1402,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
     TMap<TString, size_t> colNames;
     for (size_t i = 0; i < ReadTableRequest->Columns.size(); ++i) {
         auto &col = ReadTableRequest->Columns[i];
-        if (colNames.contains(col.Name)) {
+        if (colNames.contains(col.Name)) { 
             const TString errorExplanation = "duplicated columns are not supported: " + col.Name;
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation));
             UnresolvedKeys.push_back(errorExplanation);
@@ -1445,7 +1445,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
         ++no;
 
         if (projection) {
-            if (colNames.contains(col.Name)) {
+            if (colNames.contains(col.Name)) { 
                 ReadTableRequest->Columns[colNames[col.Name]] = col;
                 colNames.erase(col.Name);
             }
@@ -1510,8 +1510,8 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
         return Die(ctx);
     }
 
-    ReadTableRequest->KeyDesc.Reset(new TKeyDesc(res.TableId, range, TKeyDesc::ERowOperation::Read,
-                                             keyTypes, columns));
+    ReadTableRequest->KeyDesc.Reset(new TKeyDesc(res.TableId, range, TKeyDesc::ERowOperation::Read, 
+                                             keyTypes, columns)); 
     ReadTableRequest->KeySpace.Initialize(ReadTableRequest->Ordered, keyTypes, range);
 
     WallClockResolveStarted = Now();
@@ -2681,7 +2681,7 @@ void TDataReq::FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr
     auto &rec = ev->Get()->Record;
     auto shard = rec.GetOrigin();
 
-    Y_VERIFY_DEBUG(ReadTableRequest->StreamingShards.contains(shard));
+    Y_VERIFY_DEBUG(ReadTableRequest->StreamingShards.contains(shard)); 
     ReadTableRequest->StreamingShards.erase(shard);
 
     if (ReadTableRequest->KeySpace.IsFull()

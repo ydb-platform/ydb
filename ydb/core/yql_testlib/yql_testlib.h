@@ -33,7 +33,7 @@ public:
 protected:
     void Initialize();
 
-    TAutoPtr<IThreadPool> YqlQueue;
+    TAutoPtr<IThreadPool> YqlQueue; 
     NThreading::TPromise<void> ResumeYqlExecutionPromise;
 };
 

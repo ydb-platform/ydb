@@ -41,7 +41,7 @@ RECURSE(
     clustered_hnsw
     clustered_hnsw/ut
     codecs
-    codecs/float_huffman_bench
+    codecs/float_huffman_bench 
     codecs/greedy_dict/ut
     codecs/static/tools
     codecs/static/tools/tests
@@ -86,8 +86,8 @@ RECURSE(
     dot_product
     dot_product/bench
     dot_product/ut
-    dwarf_backtrace
-    dwarf_backtrace/registry
+    dwarf_backtrace 
+    dwarf_backtrace/registry 
     edit_distance
     edit_distance/ut
     enumbitset
@@ -120,8 +120,8 @@ RECURSE(
     file_checker/test
     file_checker/test/tests
     file_checker/ut
-    flatbuffers64_introspection
-    flatbuffers64_introspection/example
+    flatbuffers64_introspection 
+    flatbuffers64_introspection/example 
     float16
     float16/ut
     framing
@@ -274,9 +274,9 @@ RECURSE(
     packers/ut
     par
     perceptron
-    pop_count
-    pop_count/benchmark
-    pop_count/ut
+    pop_count 
+    pop_count/benchmark 
+    pop_count/ut 
     presort
     presort/ut
     prob_counter
@@ -321,9 +321,9 @@ RECURSE(
     scheme/ut_utils
     scores
     scores/ut
-    select_in_word
-    select_in_word/bench
-    select_in_word/ut
+    select_in_word 
+    select_in_word/bench 
+    select_in_word/ut 
     semver
     semver/ut
     shingles

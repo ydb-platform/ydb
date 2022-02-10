@@ -53,7 +53,7 @@ public:
 class TLogWrapReceive: public NActors::TDecorator {
 public:
     TLogWrapReceive(NActors::IActor* actor, const TString& sessionId, int component = NKikimrServices::YQL_PROXY)
-        : NActors::TDecorator(THolder(actor))
+        : NActors::TDecorator(THolder(actor)) 
         , SessionId(sessionId)
         , Component(component)
     { }

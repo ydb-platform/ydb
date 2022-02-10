@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         int goodCount = 0;
         for(int i = 0; i < eventsCount; ++i) {
             events[i].reset(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskId(0),
-                                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
+                                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr)); 
             if (i % 19 != 18) {
                 ++goodCount;
                 TLogoBlobID blob(i, 1, 0, 0, blobSize, 0, 1);

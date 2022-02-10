@@ -46,7 +46,7 @@ namespace NLWTrace {
 
     void TProbeRegistry::AddProbeNoLock(const TBoxPtr& box) {
         TProbe* probe = box->GetProbe();
-        if (Probes.contains(probe)) {
+        if (Probes.contains(probe)) { 
             return; // silently skip probe double registration
         }
         TIds::key_type key(probe->Event.GetProvider(), probe->Event.Name);
@@ -1005,7 +1005,7 @@ namespace NLWTrace {
 
     bool TManager::HasTrace(const TString& id) const {
         TGuard<TMutex> g(Mtx);
-        return Traces.contains(id);
+        return Traces.contains(id); 
     }
 
     const TSession* TManager::GetTrace(const TString& id) const {

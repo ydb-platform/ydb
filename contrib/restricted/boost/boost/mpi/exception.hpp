@@ -45,12 +45,12 @@ class BOOST_MPI_DECL exception : public std::exception
    */
   exception(const char* routine, int result_code);
 
-  virtual ~exception();
+  virtual ~exception(); 
 
   /**
    * A description of the error that occurred. 
    */
-  virtual const char * what () const noexcept
+  virtual const char * what () const noexcept 
   {
     return this->message.c_str();
   }

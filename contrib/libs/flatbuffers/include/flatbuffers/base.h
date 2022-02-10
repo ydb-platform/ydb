@@ -1,73 +1,73 @@
-#ifndef FLATBUFFERS_BASE_H_
-#define FLATBUFFERS_BASE_H_
-
-// clang-format off
+#ifndef FLATBUFFERS_BASE_H_ 
+#define FLATBUFFERS_BASE_H_ 
+ 
+// clang-format off 
 
 // If activate should be declared and included first.
-#if defined(FLATBUFFERS_MEMORY_LEAK_TRACKING) && \
-    defined(_MSC_VER) && defined(_DEBUG)
+#if defined(FLATBUFFERS_MEMORY_LEAK_TRACKING) && \ 
+    defined(_MSC_VER) && defined(_DEBUG) 
   // The _CRTDBG_MAP_ALLOC inside <crtdbg.h> will replace
   // calloc/free (etc) to its debug version using #define directives.
-  #define _CRTDBG_MAP_ALLOC
+  #define _CRTDBG_MAP_ALLOC 
   #include <stdlib.h>
   #include <crtdbg.h>
   // Replace operator new by trace-enabled version.
   #define DEBUG_NEW new(_NORMAL_BLOCK, __FILE__, __LINE__)
   #define new DEBUG_NEW
-#endif
-
+#endif 
+ 
 #if !defined(FLATBUFFERS_ASSERT)
-#include <assert.h>
-#define FLATBUFFERS_ASSERT assert
+#include <assert.h> 
+#define FLATBUFFERS_ASSERT assert 
 #elif defined(FLATBUFFERS_ASSERT_INCLUDE)
 // Include file with forward declaration
 #include FLATBUFFERS_ASSERT_INCLUDE
-#endif
-
-#ifndef ARDUINO
-#include <cstdint>
-#endif
-
-#include <cstddef>
-#include <cstdlib>
-#include <cstring>
-
-#if defined(ARDUINO) && !defined(ARDUINOSTL_M_H)
+#endif 
+ 
+#ifndef ARDUINO 
+#include <cstdint> 
+#endif 
+ 
+#include <cstddef> 
+#include <cstdlib> 
+#include <cstring> 
+ 
+#if defined(ARDUINO) && !defined(ARDUINOSTL_M_H) 
   #error #include <utility.h>
-#else
-  #include <utility>
-#endif
-
-#include <string>
-#include <type_traits>
-#include <vector>
-#include <set>
-#include <algorithm>
-#include <iterator>
-#include <memory>
-
+#else 
+  #include <utility> 
+#endif 
+ 
+#include <string> 
+#include <type_traits> 
+#include <vector> 
+#include <set> 
+#include <algorithm> 
+#include <iterator> 
+#include <memory> 
+ 
 #if defined(__unix__) && !defined(FLATBUFFERS_LOCALE_INDEPENDENT)
   #include <unistd.h>
 #endif
 
-#ifdef _STLPORT_VERSION
-  #define FLATBUFFERS_CPP98_STL
-#endif
+#ifdef _STLPORT_VERSION 
+  #define FLATBUFFERS_CPP98_STL 
+#endif 
 
 #ifdef __ANDROID__
   #include <android/api-level.h>
-#endif
-
+#endif 
+ 
 #if defined(__ICCARM__)
 #include <intrinsics.h>
 #endif
 
-// Note the __clang__ check is needed, because clang presents itself
-// as an older GNUC compiler (4.2).
-// Clang 3.3 and later implement all of the ISO C++ 2011 standard.
-// Clang 3.4 and later implement all of the ISO C++ 2014 standard.
-// http://clang.llvm.org/cxx_status.html
-
+// Note the __clang__ check is needed, because clang presents itself 
+// as an older GNUC compiler (4.2). 
+// Clang 3.3 and later implement all of the ISO C++ 2011 standard. 
+// Clang 3.4 and later implement all of the ISO C++ 2014 standard. 
+// http://clang.llvm.org/cxx_status.html 
+ 
 // Note the MSVC value '__cplusplus' may be incorrect:
 // The '__cplusplus' predefined macro in the MSVC stuck at the value 199711L,
 // indicating (erroneously!) that the compiler conformed to the C++98 Standard.
@@ -89,119 +89,119 @@
   #define FLATBUFFERS_CLANG 0
 #endif
 
-/// @cond FLATBUFFERS_INTERNAL
-#if __cplusplus <= 199711L && \
-    (!defined(_MSC_VER) || _MSC_VER < 1600) && \
-    (!defined(__GNUC__) || \
-      (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__ < 40400))
-  #error A C++11 compatible compiler with support for the auto typing is \
-         required for FlatBuffers.
-  #error __cplusplus _MSC_VER __GNUC__  __GNUC_MINOR__  __GNUC_PATCHLEVEL__
-#endif
-
-#if !defined(__clang__) && \
-    defined(__GNUC__) && \
-    (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__ < 40600)
+/// @cond FLATBUFFERS_INTERNAL 
+#if __cplusplus <= 199711L && \ 
+    (!defined(_MSC_VER) || _MSC_VER < 1600) && \ 
+    (!defined(__GNUC__) || \ 
+      (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__ < 40400)) 
+  #error A C++11 compatible compiler with support for the auto typing is \ 
+         required for FlatBuffers. 
+  #error __cplusplus _MSC_VER __GNUC__  __GNUC_MINOR__  __GNUC_PATCHLEVEL__ 
+#endif 
+ 
+#if !defined(__clang__) && \ 
+    defined(__GNUC__) && \ 
+    (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__ < 40600) 
   // Backwards compatibility for g++ 4.4, and 4.5 which don't have the nullptr
-  // and constexpr keywords. Note the __clang__ check is needed, because clang
-  // presents itself as an older GNUC compiler.
-  #ifndef nullptr_t
-    const class nullptr_t {
-    public:
-      template<class T> inline operator T*() const { return 0; }
-    private:
-      void operator&() const;
-    } nullptr = {};
-  #endif
-  #ifndef constexpr
-    #define constexpr const
-  #endif
-#endif
-
-// The wire format uses a little endian encoding (since that's efficient for
-// the common platforms).
-#if defined(__s390x__)
-  #define FLATBUFFERS_LITTLEENDIAN 0
-#endif // __s390x__
-#if !defined(FLATBUFFERS_LITTLEENDIAN)
+  // and constexpr keywords. Note the __clang__ check is needed, because clang 
+  // presents itself as an older GNUC compiler. 
+  #ifndef nullptr_t 
+    const class nullptr_t { 
+    public: 
+      template<class T> inline operator T*() const { return 0; } 
+    private: 
+      void operator&() const; 
+    } nullptr = {}; 
+  #endif 
+  #ifndef constexpr 
+    #define constexpr const 
+  #endif 
+#endif 
+ 
+// The wire format uses a little endian encoding (since that's efficient for 
+// the common platforms). 
+#if defined(__s390x__) 
+  #define FLATBUFFERS_LITTLEENDIAN 0 
+#endif // __s390x__ 
+#if !defined(FLATBUFFERS_LITTLEENDIAN) 
   #if defined(__GNUC__) || defined(__clang__) || defined(__ICCARM__)
     #if (defined(__BIG_ENDIAN__) || \
          (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__))
-      #define FLATBUFFERS_LITTLEENDIAN 0
-    #else
-      #define FLATBUFFERS_LITTLEENDIAN 1
-    #endif // __BIG_ENDIAN__
-  #elif defined(_MSC_VER)
-    #if defined(_M_PPC)
-      #define FLATBUFFERS_LITTLEENDIAN 0
-    #else
-      #define FLATBUFFERS_LITTLEENDIAN 1
-    #endif
-  #else
-    #error Unable to determine endianness, define FLATBUFFERS_LITTLEENDIAN.
-  #endif
-#endif // !defined(FLATBUFFERS_LITTLEENDIAN)
-
+      #define FLATBUFFERS_LITTLEENDIAN 0 
+    #else 
+      #define FLATBUFFERS_LITTLEENDIAN 1 
+    #endif // __BIG_ENDIAN__ 
+  #elif defined(_MSC_VER) 
+    #if defined(_M_PPC) 
+      #define FLATBUFFERS_LITTLEENDIAN 0 
+    #else 
+      #define FLATBUFFERS_LITTLEENDIAN 1 
+    #endif 
+  #else 
+    #error Unable to determine endianness, define FLATBUFFERS_LITTLEENDIAN. 
+  #endif 
+#endif // !defined(FLATBUFFERS_LITTLEENDIAN) 
+ 
 #define FLATBUFFERS_VERSION_MAJOR 2
 #define FLATBUFFERS_VERSION_MINOR 0
-#define FLATBUFFERS_VERSION_REVISION 0
-#define FLATBUFFERS_STRING_EXPAND(X) #X
-#define FLATBUFFERS_STRING(X) FLATBUFFERS_STRING_EXPAND(X)
+#define FLATBUFFERS_VERSION_REVISION 0 
+#define FLATBUFFERS_STRING_EXPAND(X) #X 
+#define FLATBUFFERS_STRING(X) FLATBUFFERS_STRING_EXPAND(X) 
 namespace flatbuffers {
   // Returns version as string  "MAJOR.MINOR.REVISION".
   const char* FLATBUFFERS_VERSION();
 }
-
-#if (!defined(_MSC_VER) || _MSC_VER > 1600) && \
-    (!defined(__GNUC__) || (__GNUC__ * 100 + __GNUC_MINOR__ >= 407)) || \
-    defined(__clang__)
-  #define FLATBUFFERS_FINAL_CLASS final
-  #define FLATBUFFERS_OVERRIDE override
+ 
+#if (!defined(_MSC_VER) || _MSC_VER > 1600) && \ 
+    (!defined(__GNUC__) || (__GNUC__ * 100 + __GNUC_MINOR__ >= 407)) || \ 
+    defined(__clang__) 
+  #define FLATBUFFERS_FINAL_CLASS final 
+  #define FLATBUFFERS_OVERRIDE override 
   #define FLATBUFFERS_EXPLICIT_CPP11 explicit
   #define FLATBUFFERS_VTABLE_UNDERLYING_TYPE : flatbuffers::voffset_t
-#else
-  #define FLATBUFFERS_FINAL_CLASS
-  #define FLATBUFFERS_OVERRIDE
+#else 
+  #define FLATBUFFERS_FINAL_CLASS 
+  #define FLATBUFFERS_OVERRIDE 
   #define FLATBUFFERS_EXPLICIT_CPP11
   #define FLATBUFFERS_VTABLE_UNDERLYING_TYPE
-#endif
-
-#if (!defined(_MSC_VER) || _MSC_VER >= 1900) && \
-    (!defined(__GNUC__) || (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)) || \
-    (defined(__cpp_constexpr) && __cpp_constexpr >= 200704)
-  #define FLATBUFFERS_CONSTEXPR constexpr
+#endif 
+ 
+#if (!defined(_MSC_VER) || _MSC_VER >= 1900) && \ 
+    (!defined(__GNUC__) || (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)) || \ 
+    (defined(__cpp_constexpr) && __cpp_constexpr >= 200704) 
+  #define FLATBUFFERS_CONSTEXPR constexpr 
   #define FLATBUFFERS_CONSTEXPR_CPP11 constexpr
   #define FLATBUFFERS_CONSTEXPR_DEFINED
-#else
+#else 
   #define FLATBUFFERS_CONSTEXPR const
   #define FLATBUFFERS_CONSTEXPR_CPP11
-#endif
-
-#if (defined(__cplusplus) && __cplusplus >= 201402L) || \
-    (defined(__cpp_constexpr) && __cpp_constexpr >= 201304)
+#endif 
+ 
+#if (defined(__cplusplus) && __cplusplus >= 201402L) || \ 
+    (defined(__cpp_constexpr) && __cpp_constexpr >= 201304) 
   #define FLATBUFFERS_CONSTEXPR_CPP14 FLATBUFFERS_CONSTEXPR_CPP11
-#else
-  #define FLATBUFFERS_CONSTEXPR_CPP14
-#endif
-
-#if (defined(__GXX_EXPERIMENTAL_CXX0X__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)) || \
-    (defined(_MSC_FULL_VER) && (_MSC_FULL_VER >= 190023026)) || \
-    defined(__clang__)
-  #define FLATBUFFERS_NOEXCEPT noexcept
-#else
-  #define FLATBUFFERS_NOEXCEPT
-#endif
-
-// NOTE: the FLATBUFFERS_DELETE_FUNC macro may change the access mode to
-// private, so be sure to put it at the end or reset access mode explicitly.
-#if (!defined(_MSC_VER) || _MSC_FULL_VER >= 180020827) && \
-    (!defined(__GNUC__) || (__GNUC__ * 100 + __GNUC_MINOR__ >= 404)) || \
-    defined(__clang__)
+#else 
+  #define FLATBUFFERS_CONSTEXPR_CPP14 
+#endif 
+ 
+#if (defined(__GXX_EXPERIMENTAL_CXX0X__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)) || \ 
+    (defined(_MSC_FULL_VER) && (_MSC_FULL_VER >= 190023026)) || \ 
+    defined(__clang__) 
+  #define FLATBUFFERS_NOEXCEPT noexcept 
+#else 
+  #define FLATBUFFERS_NOEXCEPT 
+#endif 
+ 
+// NOTE: the FLATBUFFERS_DELETE_FUNC macro may change the access mode to 
+// private, so be sure to put it at the end or reset access mode explicitly. 
+#if (!defined(_MSC_VER) || _MSC_FULL_VER >= 180020827) && \ 
+    (!defined(__GNUC__) || (__GNUC__ * 100 + __GNUC_MINOR__ >= 404)) || \ 
+    defined(__clang__) 
   #define FLATBUFFERS_DELETE_FUNC(func) func = delete
-#else
+#else 
   #define FLATBUFFERS_DELETE_FUNC(func) private: func
-#endif
-
+#endif 
+ 
 #if (!defined(_MSC_VER) || _MSC_VER >= 1900) && \
     (!defined(__GNUC__) || (__GNUC__ * 100 + __GNUC_MINOR__ >= 409)) || \
     defined(__clang__)
@@ -218,24 +218,24 @@ namespace flatbuffers {
   #define FLATBUFFERS_TEMPLATES_ALIASES
 #endif
 
-#ifndef FLATBUFFERS_HAS_STRING_VIEW
-  // Only provide flatbuffers::string_view if __has_include can be used
-  // to detect a header that provides an implementation
-  #if defined(__has_include)
-    // Check for std::string_view (in c++17)
+#ifndef FLATBUFFERS_HAS_STRING_VIEW 
+  // Only provide flatbuffers::string_view if __has_include can be used 
+  // to detect a header that provides an implementation 
+  #if defined(__has_include) 
+    // Check for std::string_view (in c++17) 
     #if __has_include(<string_view>) && (__cplusplus >= 201606 || (defined(_HAS_CXX17) && _HAS_CXX17))
-      #include <string_view>
-      namespace flatbuffers {
-        typedef std::string_view string_view;
-      }
-      #define FLATBUFFERS_HAS_STRING_VIEW 1
-    // Check for std::experimental::string_view (in c++14, compiler-dependent)
-    #elif __has_include(<experimental/string_view>) && (__cplusplus >= 201411)
+      #include <string_view> 
+      namespace flatbuffers { 
+        typedef std::string_view string_view; 
+      } 
+      #define FLATBUFFERS_HAS_STRING_VIEW 1 
+    // Check for std::experimental::string_view (in c++14, compiler-dependent) 
+    #elif __has_include(<experimental/string_view>) && (__cplusplus >= 201411) 
       #error #include <experimental/string_view>
-      namespace flatbuffers {
-        typedef std::experimental::string_view string_view;
-      }
-      #define FLATBUFFERS_HAS_STRING_VIEW 1
+      namespace flatbuffers { 
+        typedef std::experimental::string_view string_view; 
+      } 
+      #define FLATBUFFERS_HAS_STRING_VIEW 1 
     // Check for absl::string_view
     #elif __has_include("absl/strings/string_view.h")
       #error #include "absl/strings/string_view.h"
@@ -243,10 +243,10 @@ namespace flatbuffers {
         typedef absl::string_view string_view;
       }
       #define FLATBUFFERS_HAS_STRING_VIEW 1
-    #endif
-  #endif // __has_include
-#endif // !FLATBUFFERS_HAS_STRING_VIEW
-
+    #endif 
+  #endif // __has_include 
+#endif // !FLATBUFFERS_HAS_STRING_VIEW 
+ 
 #ifndef FLATBUFFERS_HAS_NEW_STRTOD
   // Modern (C++11) strtod and strtof functions are available for use.
   // 1) nan/inf strings as argument of strtod;
@@ -306,104 +306,104 @@ template<typename T> FLATBUFFERS_CONSTEXPR inline bool IsConstTrue(T t) {
   #endif
 #endif
 
-/// @endcond
-
-/// @file
-namespace flatbuffers {
-
-/// @cond FLATBUFFERS_INTERNAL
-// Our default offset / size type, 32bit on purpose on 64bit systems.
-// Also, using a consistent offset type maintains compatibility of serialized
-// offset values between 32bit and 64bit systems.
-typedef uint32_t uoffset_t;
-
-// Signed offsets for references that can go in both directions.
-typedef int32_t soffset_t;
-
-// Offset/index used in v-tables, can be changed to uint8_t in
-// format forks to save a bit of space if desired.
-typedef uint16_t voffset_t;
-
-typedef uintmax_t largest_scalar_t;
-
-// In 32bits, this evaluates to 2GB - 1
+/// @endcond 
+ 
+/// @file 
+namespace flatbuffers { 
+ 
+/// @cond FLATBUFFERS_INTERNAL 
+// Our default offset / size type, 32bit on purpose on 64bit systems. 
+// Also, using a consistent offset type maintains compatibility of serialized 
+// offset values between 32bit and 64bit systems. 
+typedef uint32_t uoffset_t; 
+ 
+// Signed offsets for references that can go in both directions. 
+typedef int32_t soffset_t; 
+ 
+// Offset/index used in v-tables, can be changed to uint8_t in 
+// format forks to save a bit of space if desired. 
+typedef uint16_t voffset_t; 
+ 
+typedef uintmax_t largest_scalar_t; 
+ 
+// In 32bits, this evaluates to 2GB - 1 
 #define FLATBUFFERS_MAX_BUFFER_SIZE ((1ULL << (sizeof(flatbuffers::soffset_t) * 8 - 1)) - 1)
-
-// We support aligning the contents of buffers up to this size.
-#define FLATBUFFERS_MAX_ALIGNMENT 16
-
+ 
+// We support aligning the contents of buffers up to this size. 
+#define FLATBUFFERS_MAX_ALIGNMENT 16 
+ 
 inline bool VerifyAlignmentRequirements(size_t align, size_t min_align = 1) {
   return (min_align <= align) && (align <= (FLATBUFFERS_MAX_ALIGNMENT)) &&
          (align & (align - 1)) == 0;  // must be power of 2
 }
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) 
   #pragma warning(disable: 4351) // C4351: new behavior: elements of array ... will be default initialized
-  #pragma warning(push)
-  #pragma warning(disable: 4127) // C4127: conditional expression is constant
-#endif
-
-template<typename T> T EndianSwap(T t) {
-  #if defined(_MSC_VER)
-    #define FLATBUFFERS_BYTESWAP16 _byteswap_ushort
-    #define FLATBUFFERS_BYTESWAP32 _byteswap_ulong
-    #define FLATBUFFERS_BYTESWAP64 _byteswap_uint64
+  #pragma warning(push) 
+  #pragma warning(disable: 4127) // C4127: conditional expression is constant 
+#endif 
+ 
+template<typename T> T EndianSwap(T t) { 
+  #if defined(_MSC_VER) 
+    #define FLATBUFFERS_BYTESWAP16 _byteswap_ushort 
+    #define FLATBUFFERS_BYTESWAP32 _byteswap_ulong 
+    #define FLATBUFFERS_BYTESWAP64 _byteswap_uint64 
   #elif defined(__ICCARM__)
     #define FLATBUFFERS_BYTESWAP16 __REV16
     #define FLATBUFFERS_BYTESWAP32 __REV
     #define FLATBUFFERS_BYTESWAP64(x) \
        ((__REV(static_cast<uint32_t>(x >> 32U))) | (static_cast<uint64_t>(__REV(static_cast<uint32_t>(x)))) << 32U)
-  #else
-    #if defined(__GNUC__) && __GNUC__ * 100 + __GNUC_MINOR__ < 408 && !defined(__clang__)
-      // __builtin_bswap16 was missing prior to GCC 4.8.
-      #define FLATBUFFERS_BYTESWAP16(x) \
-        static_cast<uint16_t>(__builtin_bswap32(static_cast<uint32_t>(x) << 16))
-    #else
-      #define FLATBUFFERS_BYTESWAP16 __builtin_bswap16
-    #endif
-    #define FLATBUFFERS_BYTESWAP32 __builtin_bswap32
-    #define FLATBUFFERS_BYTESWAP64 __builtin_bswap64
-  #endif
-  if (sizeof(T) == 1) {   // Compile-time if-then's.
-    return t;
-  } else if (sizeof(T) == 2) {
+  #else 
+    #if defined(__GNUC__) && __GNUC__ * 100 + __GNUC_MINOR__ < 408 && !defined(__clang__) 
+      // __builtin_bswap16 was missing prior to GCC 4.8. 
+      #define FLATBUFFERS_BYTESWAP16(x) \ 
+        static_cast<uint16_t>(__builtin_bswap32(static_cast<uint32_t>(x) << 16)) 
+    #else 
+      #define FLATBUFFERS_BYTESWAP16 __builtin_bswap16 
+    #endif 
+    #define FLATBUFFERS_BYTESWAP32 __builtin_bswap32 
+    #define FLATBUFFERS_BYTESWAP64 __builtin_bswap64 
+  #endif 
+  if (sizeof(T) == 1) {   // Compile-time if-then's. 
+    return t; 
+  } else if (sizeof(T) == 2) { 
     union { T t; uint16_t i; } u = { t };
-    u.i = FLATBUFFERS_BYTESWAP16(u.i);
-    return u.t;
-  } else if (sizeof(T) == 4) {
+    u.i = FLATBUFFERS_BYTESWAP16(u.i); 
+    return u.t; 
+  } else if (sizeof(T) == 4) { 
     union { T t; uint32_t i; } u = { t };
-    u.i = FLATBUFFERS_BYTESWAP32(u.i);
-    return u.t;
-  } else if (sizeof(T) == 8) {
+    u.i = FLATBUFFERS_BYTESWAP32(u.i); 
+    return u.t; 
+  } else if (sizeof(T) == 8) { 
     union { T t; uint64_t i; } u = { t };
-    u.i = FLATBUFFERS_BYTESWAP64(u.i);
-    return u.t;
-  } else {
-    FLATBUFFERS_ASSERT(0);
+    u.i = FLATBUFFERS_BYTESWAP64(u.i); 
+    return u.t; 
+  } else { 
+    FLATBUFFERS_ASSERT(0); 
     return t;
-  }
-}
+  } 
+} 
+ 
+#if defined(_MSC_VER) 
+  #pragma warning(pop) 
+#endif 
+ 
 
-#if defined(_MSC_VER)
-  #pragma warning(pop)
-#endif
-
-
-template<typename T> T EndianScalar(T t) {
-  #if FLATBUFFERS_LITTLEENDIAN
-    return t;
-  #else
-    return EndianSwap(t);
-  #endif
-}
-
+template<typename T> T EndianScalar(T t) { 
+  #if FLATBUFFERS_LITTLEENDIAN 
+    return t; 
+  #else 
+    return EndianSwap(t); 
+  #endif 
+} 
+ 
 template<typename T>
 // UBSAN: C++ aliasing type rules, see std::bit_cast<> for details.
 __supress_ubsan__("alignment")
 T ReadScalar(const void *p) {
   return EndianScalar(*reinterpret_cast<const T *>(p));
-}
-
+} 
+ 
 // See https://github.com/google/flatbuffers/issues/5950
 
 #if (FLATBUFFERS_GCC >= 100000) && (FLATBUFFERS_GCC < 110000)
@@ -415,9 +415,9 @@ template<typename T>
 // UBSAN: C++ aliasing type rules, see std::bit_cast<> for details.
 __supress_ubsan__("alignment")
 void WriteScalar(void *p, T t) {
-  *reinterpret_cast<T *>(p) = EndianScalar(t);
-}
-
+  *reinterpret_cast<T *>(p) = EndianScalar(t); 
+} 
+ 
 template<typename T> struct Offset;
 template<typename T> __supress_ubsan__("alignment") void WriteScalar(void *p, Offset<T> t) {
   *reinterpret_cast<uoffset_t *>(p) = EndianScalar(t.o);
@@ -427,13 +427,13 @@ template<typename T> __supress_ubsan__("alignment") void WriteScalar(void *p, Of
   #pragma GCC diagnostic pop
 #endif
 
-// Computes how many bytes you'd have to pad to be able to write an
-// "scalar_size" scalar if the buffer had grown to "buf_size" (downwards in
-// memory).
+// Computes how many bytes you'd have to pad to be able to write an 
+// "scalar_size" scalar if the buffer had grown to "buf_size" (downwards in 
+// memory). 
 __supress_ubsan__("unsigned-integer-overflow")
-inline size_t PaddingBytes(size_t buf_size, size_t scalar_size) {
-  return ((~buf_size) + 1) & (scalar_size - 1);
-}
-
-}  // namespace flatbuffers
-#endif  // FLATBUFFERS_BASE_H_
+inline size_t PaddingBytes(size_t buf_size, size_t scalar_size) { 
+  return ((~buf_size) + 1) & (scalar_size - 1); 
+} 
+ 
+}  // namespace flatbuffers 
+#endif  // FLATBUFFERS_BASE_H_ 

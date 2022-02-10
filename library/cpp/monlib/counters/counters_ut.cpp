@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/set.h>
-#include <util/thread/pool.h>
+#include <util/thread/pool.h> 
 
 using namespace NMonitoring;
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TDeprecatedCountersTest) {
             }
         };
 
-        TThreadPool q;
+        TThreadPool q; 
         q.Start(THREADS_COUNT);
         for (ui32 i = 0; i < THREADS_COUNT; i++) {
             q.SafeAddFunc(adder);

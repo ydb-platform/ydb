@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         {
             Write("Start master actor");
             for (auto &actor : Actors) {
-                THolder<IActor> decaratedActor = MakeHolder<TDyingChecker>(std::move(actor), SelfId());
+                THolder<IActor> decaratedActor = MakeHolder<TDyingChecker>(std::move(actor), SelfId()); 
                 TActorId id = Register(decaratedActor.Release());
                 Write("Register test actor");
                 UNIT_ASSERT(ActorIds.insert(id).second);
@@ -232,11 +232,11 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
 
         void Bootstrap() {
             Write("TFizzBuzzSender::Bootstrap");
-            THolder<IActor> actor = MakeHolder<TFooBarReceiver>(SelfId());
-            THolder<IActor> decoratedActor = MakeHolder<TDyingChecker>(std::move(actor), SelfId());
+            THolder<IActor> actor = MakeHolder<TFooBarReceiver>(SelfId()); 
+            THolder<IActor> decoratedActor = MakeHolder<TDyingChecker>(std::move(actor), SelfId()); 
             SlaveId = Register(decoratedActor.Release());
             for (ui64 idx = 1; idx <= 30; ++idx) {
-                THolder<TEvWords> ev = MakeHolder<TEvWords>();
+                THolder<TEvWords> ev = MakeHolder<TEvWords>(); 
                 if (idx % 3 == 0) {
                     ev->Words.push_back("Fizz");
                 }
@@ -295,11 +295,11 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
     }
 
     THolder<IActor> CreateFizzBuzzSender() {
-        THolder<IActor> actor = MakeHolder<TFizzBuzzSender>();
-        THolder<IActor> foobar = MakeHolder<TFizzBuzzToFooBar>(std::move(actor));
-        THolder<IActor> fizzEraser = MakeHolder<TWordEraser>(std::move(foobar), "Fizz");
-        THolder<IActor> buzzEraser = MakeHolder<TWordEraser>(std::move(fizzEraser), "Buzz");
-        return MakeHolder<TWithoutWordsDroper>(std::move(buzzEraser));
+        THolder<IActor> actor = MakeHolder<TFizzBuzzSender>(); 
+        THolder<IActor> foobar = MakeHolder<TFizzBuzzToFooBar>(std::move(actor)); 
+        THolder<IActor> fizzEraser = MakeHolder<TWordEraser>(std::move(foobar), "Fizz"); 
+        THolder<IActor> buzzEraser = MakeHolder<TWordEraser>(std::move(fizzEraser), "Buzz"); 
+        return MakeHolder<TWithoutWordsDroper>(std::move(buzzEraser)); 
     }
 
     Y_UNIT_TEST(Basic) {
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         TVector<THolder<IActor>> actors(1);
         actors[0] = CreateFizzBuzzSender();
         //actors[1] = CreateFizzBuzzSender();
-        THolder<IActor> testActor = MakeHolder<TTestMasterActor>(std::move(actors), edgeActor);
+        THolder<IActor> testActor = MakeHolder<TTestMasterActor>(std::move(actors), edgeActor); 
         Write("Start test");
         runtime.Register(testActor.Release());
 

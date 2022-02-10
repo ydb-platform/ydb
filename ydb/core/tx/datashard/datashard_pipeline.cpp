@@ -1149,8 +1149,8 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             << " parsed tx body " << txBody;
 
         tx->SetAbortedFlag();
-        tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(
-            rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
+        tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult( 
+            rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)); 
         tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
 
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
@@ -1218,10 +1218,10 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 
         if (!dataTx->Ready() && !dataTx->RequirePrepare()) {
             tx->SetAbortedFlag();
-            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
+            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(), 
                                                                          Self->TabletID(),
                                                                          tx->GetTxId(),
-                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
+                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)); 
             tx->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
 
             LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
@@ -1280,10 +1280,10 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         } else if (tx->IsReadTable() && dataTx->GetReadTableTransaction().HasSnapshotStep() && dataTx->GetReadTableTransaction().HasSnapshotTxId()) {
             tx->SetAbortedFlag();
             TString err = "Ambiguous snapshot info. Cannot use both MVCC and read table snapshots in one transaction";
-            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
+            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(), 
                                                                          Self->TabletID(),
                                                                          tx->GetTxId(),
-                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
+                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)); 
             tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
             LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err);
 
@@ -1291,10 +1291,10 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         } else if (tx->IsKqpScanTransaction() && dataTx->GetKqpTransaction().HasSnapshot()) {
             tx->SetAbortedFlag();
             TString err = "Ambiguous snapshot info. Cannot use both MVCC and kqp scan snapshots in one transaction";
-            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
+            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(), 
                                                                          Self->TabletID(),
                                                                          tx->GetTxId(),
-                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
+                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)); 
             tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT,err);
             LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err);
 
@@ -1304,10 +1304,10 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         if(tx->IsMvccSnapshotRead() && (!tx->IsImmediate() || !tx->IsReadOnly())) {
             tx->SetAbortedFlag();
             TString err = "Snapshot read must be an immediate read only transaction";
-            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
+            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(), 
                                                                          Self->TabletID(),
                                                                          tx->GetTxId(),
-                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
+                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)); 
             tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT,err);
             LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err);
 

@@ -622,7 +622,7 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (!fullColumns.contains(child->Content())) {
+            if (!fullColumns.contains(child->Content())) { 
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
@@ -750,7 +750,7 @@ namespace NTypeAnnImpl {
         for (const auto& child : input->Child(2)->Children()) {
             const auto pos = GetFieldPosition(inputItemType, child->Content());
             auto inputColumnType = GetFieldType(inputItemType, *pos);
-            if (requiredColumns.contains(child->Content())) {
+            if (requiredColumns.contains(child->Content())) { 
                 inputColumnType = inputColumnType->template Cast<TOptionalExprType>()->GetItemType();
             }
 
@@ -763,7 +763,7 @@ namespace NTypeAnnImpl {
         for (const auto& child : input->Child(3)->Children()) {
             const auto pos = GetFieldPosition(inputItemType, child->Content());
             auto inputColumnType = GetFieldType(inputItemType, *pos);
-            if (requiredColumns.contains(child->Content())) {
+            if (requiredColumns.contains(child->Content())) { 
                 inputColumnType = inputColumnType->template Cast<TOptionalExprType>()->GetItemType();
             }
 

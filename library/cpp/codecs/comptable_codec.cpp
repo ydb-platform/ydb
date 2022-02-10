@@ -1,7 +1,7 @@
 #include "comptable_codec.h"
 
 #include <library/cpp/comptable/comptable.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 
 namespace NCodecs {
     class TCompTableCodec::TImpl: public TAtomicRefCount<TImpl> {

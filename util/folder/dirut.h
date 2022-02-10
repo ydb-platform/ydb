@@ -76,7 +76,7 @@ TString GetSystemTempDir();
 int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix);
 
 int ResolvePath(const char* rel, const char* abs, char res[/*FILENAME_MAX*/], bool isdir = false);
-TString ResolvePath(const char* rel, const char* abs, bool isdir = false);
+TString ResolvePath(const char* rel, const char* abs, bool isdir = false); 
 TString ResolvePath(const char* path, bool isDir = false);
 
 TString ResolveDir(const char* path);

@@ -782,7 +782,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, co
     if (rec.ItemIdsSize()) {
         for (ui64 id : rec.GetItemIds()) {
             auto item = ConfigIndex.GetItem(id);
-            if (item && (kinds.empty() || kinds.contains(item->Kind)))
+            if (item && (kinds.empty() || kinds.contains(item->Kind))) 
                 items.insert(item);
         }
         hasFilter = true;
@@ -846,7 +846,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, co
     }
     if (!hasFilter) {
         for (auto &pr : ConfigIndex.GetConfigItems())
-            if (kinds.empty() || kinds.contains(pr.second->Kind))
+            if (kinds.empty() || kinds.contains(pr.second->Kind)) 
                 items.insert(pr.second);
     }
 

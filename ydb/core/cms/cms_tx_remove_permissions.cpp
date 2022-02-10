@@ -23,7 +23,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         for (auto id : Ids) {
-            if (!Self->State->Permissions.contains(id))
+            if (!Self->State->Permissions.contains(id)) 
                 continue;
 
             auto requestId = Self->State->Permissions.find(id)->second.RequestId;
@@ -39,7 +39,7 @@ public:
                     << ", reason# " << "permission " << id << " has expired");
             }
 
-            if (Self->State->WalleRequests.contains(requestId)) {
+            if (Self->State->WalleRequests.contains(requestId)) { 
                 auto taskId = Self->State->WalleRequests.find(requestId)->second;
                 Self->State->WalleTasks.find(taskId)->second.Permissions.erase(id);
             }

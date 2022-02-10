@@ -258,7 +258,7 @@ namespace NKikimr {
 
 template<>
 struct THash<NKikimr::TDiskPart> {
-    inline ui64 operator()(const NKikimr::TDiskPart& x) const noexcept {
+    inline ui64 operator()(const NKikimr::TDiskPart& x) const noexcept { 
         return x.Hash();
     }
 };

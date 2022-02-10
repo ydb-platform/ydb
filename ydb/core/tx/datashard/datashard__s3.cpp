@@ -47,7 +47,7 @@ public:
         const ui64 tableId = Ev->Get()->Record.GetTableId();
         const ui64 maxKeys = Ev->Get()->Record.GetMaxKeys();
 
-        if (!Self->TableInfos.contains(tableId)) {
+        if (!Self->TableInfos.contains(tableId)) { 
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Unknown table id %" PRIu64, tableId));
             return true;
         }

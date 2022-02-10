@@ -20,8 +20,8 @@
 namespace boost {
 
   struct loop_erased_random_walk_stuck : public std::exception {
-    virtual ~loop_erased_random_walk_stuck() {}
-    inline virtual const char* what() const noexcept {
+    virtual ~loop_erased_random_walk_stuck() {} 
+    inline virtual const char* what() const noexcept { 
       return "Loop-erased random walk found a vertex with no out-edges";
     }
   };

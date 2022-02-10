@@ -13,30 +13,30 @@ namespace NKikimr {
     template <class T, class TCounter, class TDeleter>
     class TRefCountWithDeleter {
     public:
-        inline TRefCountWithDeleter(long initval = 0) noexcept
+        inline TRefCountWithDeleter(long initval = 0) noexcept 
             : Counter_(initval)
             , Deleter_()
         {
         }
 
-        inline TRefCountWithDeleter(const TDeleter &deleter) noexcept
+        inline TRefCountWithDeleter(const TDeleter &deleter) noexcept 
             : Counter_(0)
             , Deleter_(deleter)
         {
         }
 
-        inline ~TRefCountWithDeleter() {
+        inline ~TRefCountWithDeleter() { 
         }
 
-        inline void Ref(TAtomicBase d) noexcept {
+        inline void Ref(TAtomicBase d) noexcept { 
             Counter_.Add(d);
         }
 
-        inline void Ref() noexcept {
+        inline void Ref() noexcept { 
             Counter_.Inc();
         }
 
-        inline void UnRef(TAtomicBase d) noexcept {
+        inline void UnRef(TAtomicBase d) noexcept { 
             TAtomicBase resultCount = Counter_.Sub(d);
             Y_ASSERT(resultCount >= 0);
             if (resultCount == 0) {
@@ -44,15 +44,15 @@ namespace NKikimr {
             }
         }
 
-        inline void UnRef() noexcept {
+        inline void UnRef() noexcept { 
             UnRef(1);
         }
 
-        inline long RefCount() const noexcept {
+        inline long RefCount() const noexcept { 
             return Counter_.Val();
         }
 
-        inline void DecRef() noexcept {
+        inline void DecRef() noexcept { 
             Counter_.Dec();
         }
 

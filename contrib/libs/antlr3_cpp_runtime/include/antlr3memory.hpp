@@ -50,9 +50,9 @@ public:
 			typedef AllocatorType<U> other;
 		};
 
-		AllocatorType() noexcept {}
-		AllocatorType( const AllocatorType& ) noexcept {}
-		template<typename U> AllocatorType(const AllocatorType<U>& ) noexcept{}
+		AllocatorType() noexcept {} 
+		AllocatorType( const AllocatorType& ) noexcept {} 
+		template<typename U> AllocatorType(const AllocatorType<U>& ) noexcept{} 
 	};
 
 	template<class TYPE>

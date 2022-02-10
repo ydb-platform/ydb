@@ -98,20 +98,20 @@ public:
   };
 
   /** Default-construct an allocator. */
-  allocator() noexcept { }
+  allocator() noexcept { } 
 
   /** Copy-construct an allocator. */
-  allocator(const allocator&) noexcept { }
+  allocator(const allocator&) noexcept { } 
 
   /** 
    * Copy-construct an allocator from another allocator for a
    * different value type.
    */
   template <typename U> 
-  allocator(const allocator<U>&) noexcept { }
+  allocator(const allocator<U>&) noexcept { } 
 
   /** Destroy an allocator. */
-  ~allocator() { }
+  ~allocator() { } 
 
   /** Returns the address of object @p x. */
   pointer address(reference x) const
@@ -159,7 +159,7 @@ public:
    * Returns the maximum number of elements that can be allocated
    * with @c allocate().
    */
-  size_type max_size() const noexcept
+  size_type max_size() const noexcept 
   {
     return (std::numeric_limits<std::size_t>::max)() / sizeof(T);
   }
@@ -184,7 +184,7 @@ public:
  *  @returns @c true
  */
 template<typename T1, typename T2>
-inline bool operator==(const allocator<T1>&, const allocator<T2>&) noexcept
+inline bool operator==(const allocator<T1>&, const allocator<T2>&) noexcept 
 {
   return true;
 }
@@ -196,7 +196,7 @@ inline bool operator==(const allocator<T1>&, const allocator<T2>&) noexcept
  *  @returns @c false
  */
 template<typename T1, typename T2>
-inline bool operator!=(const allocator<T1>&, const allocator<T2>&) noexcept
+inline bool operator!=(const allocator<T1>&, const allocator<T2>&) noexcept 
 {
   return false;
 }

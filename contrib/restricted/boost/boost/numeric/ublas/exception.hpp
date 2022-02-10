@@ -73,7 +73,7 @@ namespace boost { namespace numeric { namespace ublas {
         : public std::logic_error {
         explicit external_logic (const char *s = "external logic") :
             std::logic_error (s) {}
-        // virtual const char *what () const noexcept {
+        // virtual const char *what () const noexcept { 
         //     return "exception: external logic";
         // }
         void raise () {

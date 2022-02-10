@@ -1140,7 +1140,7 @@ private:
         if (settings.Mode) {
             auto mode = settings.Mode.Cast().Value();
 
-            if (!KikimrCommitModes().contains(mode)) {
+            if (!KikimrCommitModes().contains(mode)) { 
                 ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                     << "Unsupported Kikimr commit mode: " << mode));
                 return TStatus::Error;

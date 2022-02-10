@@ -228,7 +228,7 @@ JOIN_SRCS(
     string/hex.cpp
     string/join.cpp
     string/printf.cpp
-    string/reverse.cpp
+    string/reverse.cpp 
     string/split.cpp
     string/strip.cpp
     string/strspn.cpp
@@ -242,10 +242,10 @@ IF (ARCH_ARM)
     CFLAGS(-D_FORTIFY_SOURCE=0)
 ENDIF()
 
-IF (TSTRING_IS_STD_STRING)
-    CFLAGS(GLOBAL -DTSTRING_IS_STD_STRING)
-ENDIF()
-
+IF (TSTRING_IS_STD_STRING) 
+    CFLAGS(GLOBAL -DTSTRING_IS_STD_STRING) 
+ENDIF() 
+ 
 JOIN_SRCS(
     all_system_1.cpp
     system/atexit.cpp
@@ -270,7 +270,7 @@ JOIN_SRCS(
     system/fs.cpp
     system/fstat.cpp
     system/getpid.cpp
-    system/hi_lo.cpp
+    system/hi_lo.cpp 
     system/hostname.cpp
     system/hp_timer.cpp
     system/info.cpp
@@ -372,11 +372,11 @@ ENDIF()
 # thread
 JOIN_SRCS(
     all_thread.cpp
-    thread/factory.cpp
+    thread/factory.cpp 
     thread/fwd.cpp
     thread/lfqueue.cpp
     thread/lfstack.cpp
-    thread/pool.cpp
+    thread/pool.cpp 
     thread/singleton.cpp
 )
 

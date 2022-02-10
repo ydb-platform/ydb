@@ -10,12 +10,12 @@ namespace NActors {
 
     public:
         TThreadParkPad();
-        ~TThreadParkPad();
+        ~TThreadParkPad(); 
 
-        bool Park() noexcept;
-        void Unpark() noexcept;
-        void Interrupt() noexcept;
-        bool Interrupted() const noexcept;
+        bool Park() noexcept; 
+        void Unpark() noexcept; 
+        void Interrupt() noexcept; 
+        bool Interrupted() const noexcept; 
     };
 
 }

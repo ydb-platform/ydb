@@ -249,7 +249,7 @@ private:
         }
 
         for (const auto& name : requestedColumns) {
-            if (!columnByName.contains(name)) {
+            if (!columnByName.contains(name)) { 
                 ReplyWithError(MSTATUS_ERROR, NTxProxy::TResultStatus::EStatus::WrongRequest,
                                Sprintf("Unknown column '%s'", name.data()), ctx);
                 return false;

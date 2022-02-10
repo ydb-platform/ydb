@@ -59,8 +59,8 @@ namespace std
       BOOST_STATIC_CONSTANT(bool, is_integer = true);
       BOOST_STATIC_CONSTANT(bool, is_exact = true);
       BOOST_STATIC_CONSTANT(int, radix = 2);
-      static BOOST_LLT epsilon() noexcept { return 0; };
-      static BOOST_LLT round_error() noexcept { return 0; };
+      static BOOST_LLT epsilon() noexcept { return 0; }; 
+      static BOOST_LLT round_error() noexcept { return 0; }; 
 
       BOOST_STATIC_CONSTANT(int, min_exponent = 0);
       BOOST_STATIC_CONSTANT(int, min_exponent10 = 0);
@@ -72,10 +72,10 @@ namespace std
       BOOST_STATIC_CONSTANT(bool, has_signaling_NaN = false);
       BOOST_STATIC_CONSTANT(bool, has_denorm = false);
       BOOST_STATIC_CONSTANT(bool, has_denorm_loss = false);
-      static BOOST_LLT infinity() noexcept { return 0; };
-      static BOOST_LLT quiet_NaN() noexcept { return 0; };
-      static BOOST_LLT signaling_NaN() noexcept { return 0; };
-      static BOOST_LLT denorm_min() noexcept { return 0; };
+      static BOOST_LLT infinity() noexcept { return 0; }; 
+      static BOOST_LLT quiet_NaN() noexcept { return 0; }; 
+      static BOOST_LLT signaling_NaN() noexcept { return 0; }; 
+      static BOOST_LLT denorm_min() noexcept { return 0; }; 
 
       BOOST_STATIC_CONSTANT(bool, is_iec559 = false);
       BOOST_STATIC_CONSTANT(bool, is_bounded = true);
@@ -112,8 +112,8 @@ namespace std
       BOOST_STATIC_CONSTANT(bool, is_integer = true);
       BOOST_STATIC_CONSTANT(bool, is_exact = true);
       BOOST_STATIC_CONSTANT(int, radix = 2);
-      static BOOST_ULLT epsilon() noexcept { return 0; };
-      static BOOST_ULLT round_error() noexcept { return 0; };
+      static BOOST_ULLT epsilon() noexcept { return 0; }; 
+      static BOOST_ULLT round_error() noexcept { return 0; }; 
 
       BOOST_STATIC_CONSTANT(int, min_exponent = 0);
       BOOST_STATIC_CONSTANT(int, min_exponent10 = 0);
@@ -125,10 +125,10 @@ namespace std
       BOOST_STATIC_CONSTANT(bool, has_signaling_NaN = false);
       BOOST_STATIC_CONSTANT(bool, has_denorm = false);
       BOOST_STATIC_CONSTANT(bool, has_denorm_loss = false);
-      static BOOST_ULLT infinity() noexcept { return 0; };
-      static BOOST_ULLT quiet_NaN() noexcept { return 0; };
-      static BOOST_ULLT signaling_NaN() noexcept { return 0; };
-      static BOOST_ULLT denorm_min() noexcept { return 0; };
+      static BOOST_ULLT infinity() noexcept { return 0; }; 
+      static BOOST_ULLT quiet_NaN() noexcept { return 0; }; 
+      static BOOST_ULLT signaling_NaN() noexcept { return 0; }; 
+      static BOOST_ULLT denorm_min() noexcept { return 0; }; 
 
       BOOST_STATIC_CONSTANT(bool, is_iec559 = false);
       BOOST_STATIC_CONSTANT(bool, is_bounded = true);

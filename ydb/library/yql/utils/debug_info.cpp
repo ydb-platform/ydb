@@ -33,7 +33,7 @@ void SetCurrentOperationId(const char* operationId) {
     } else {
         threadName = operationId;
     }
-    TThread::SetCurrentThreadName(threadName);
+    TThread::SetCurrentThreadName(threadName); 
 }
 
 long GetRunnigThreadsCount() {

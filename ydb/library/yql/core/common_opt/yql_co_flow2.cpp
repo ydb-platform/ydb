@@ -265,7 +265,7 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
     // check whether some used fields are not aliased
     bool onlyKeys = true;
     for (auto& x : usedFields) {
-        if (!aliases.contains(TString(x))) {
+        if (!aliases.contains(TString(x))) { 
             onlyKeys = false;
             break;
         }
@@ -283,7 +283,7 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
             for (auto field : labels.Inputs[i].EnumerateAllColumns()) {
                 if (auto aliasSet = aliases.FindPtr(field)) {
                     for (auto alias : *aliasSet) {
-                        if (usedFields.contains(alias)) {
+                        if (usedFields.contains(alias)) { 
                             coveredKeys.insert(TString(alias));
                             aliasedKeys[i].insert({ field, TString(alias) });
                         }
@@ -422,7 +422,7 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
         }
 
         for (auto& x : structType->GetItems()) {
-            if (!usedFields.contains(x->GetName())) {
+            if (!usedFields.contains(x->GetName())) { 
                 // new drops
                 auto name = x->GetName();
                 if (auto renamed = reversedRenameMap.FindPtr(name)) {
@@ -630,7 +630,7 @@ TExprNode::TPtr FlatMapSubsetFields(const TCoFlatMapBase& node, TExprContext& ct
 
     TExprNode::TListType fieldNodes;
     for (auto& item : itemStructType->GetItems()) {
-        if (usedFields.contains(item->GetName())) {
+        if (usedFields.contains(item->GetName())) { 
             fieldNodes.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
         }
     }
@@ -825,11 +825,11 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
             return node;
         }
 
-        if (downstreamLabels.contains(label->Content())) {
+        if (downstreamLabels.contains(label->Content())) { 
             // fix conflict for labels
             for (ui32 suffix = 1;; ++suffix) {
                 auto newName = TString::Join(label->Content(), "_", ToString(suffix));
-                if (!downstreamLabels.contains(newName) && !upstreamLabels.contains(newName)) {
+                if (!downstreamLabels.contains(newName) && !upstreamLabels.contains(newName)) { 
                     upstreamTablesRename.insert({ TString(label->Content()) , newName });
                     break;
                 }
@@ -2000,7 +2000,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         TVector<const TItemExprType*> subsetItems;
         for (const auto& item : structType->GetItems()) {
-            if (usedFields.contains(item->GetName())) {
+            if (usedFields.contains(item->GetName())) { 
                 subsetItems.push_back(item);
             }
         }
@@ -2083,7 +2083,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         TVector<const TItemExprType*> subsetItems;
         for (const auto& item : structType->GetItems()) {
-            if (usedFields.contains(item->GetName())) {
+            if (usedFields.contains(item->GetName())) { 
                 subsetItems.push_back(item);
             }
         }
@@ -2154,7 +2154,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         TVector<const TItemExprType*> subsetItems;
         for (const auto& item : structType->GetItems()) {
-            if (lambdaSubset.contains(item->GetName())) {
+            if (lambdaSubset.contains(item->GetName())) { 
                 subsetItems.push_back(item);
             }
         }

@@ -184,7 +184,7 @@ TOptimizeTransformerBase::TFilter TOptimizeTransformerBase::Or(std::initializer_
 }
 
 void TOptimizeTransformerBase::AddHandler(size_t step, TFilter filter, TStringBuf optName, THandler handler) {
-    if (DisabledOpts.contains(optName)) {
+    if (DisabledOpts.contains(optName)) { 
         return;
     }
 

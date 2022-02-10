@@ -772,7 +772,7 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
     const auto label = partView->Label;
 
     // Remove the old part data from our model (since it may have been changed)
-    if (KnownParts.contains(label)) {
+    if (KnownParts.contains(label)) { 
         Y_VERIFY(KnownParts[label] == level, "Borrowed part cannot be moved between levels");
         Y_VERIFY(FinalCompactionId == 0 || FinalCompactionTaken == 0,
             "Borrowed part attaching while final compaction is in progress");

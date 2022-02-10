@@ -102,23 +102,23 @@ namespace NSc::NUt {
 
 
     TRef TVMAction::GetRef(ui32 arg) const noexcept {
-        return std::get<TRef>(Arg[arg]);
+        return std::get<TRef>(Arg[arg]); 
     }
 
     TSrc TVMAction::GetSrc(ui32 arg) const noexcept {
-        return std::get<TSrc>(Arg[arg]);
+        return std::get<TSrc>(Arg[arg]); 
     }
 
     TDst TVMAction::GetDst(ui32 arg) const noexcept {
-        return std::get<TDst>(Arg[arg]);
+        return std::get<TDst>(Arg[arg]); 
     }
 
     ui32 TVMAction::GetPos(ui32 arg) const noexcept {
-        return std::get<TPos>(Arg[arg]).Pos;
+        return std::get<TPos>(Arg[arg]).Pos; 
     }
 
     ui32 TVMAction::GetIdx(ui32 arg) const noexcept {
-        return std::get<TIdx>(Arg[arg]).Idx;
+        return std::get<TIdx>(Arg[arg]).Idx; 
     }
 
     TStringBuf TVMAction::GetKey(ui32 arg) const noexcept {
@@ -134,7 +134,7 @@ namespace NSc::NUt {
     }
 
     TStringBuf TVMAction::GetPath(ui32 arg) const noexcept {
-        return std::get<TPath>(Arg[arg]).Path;
+        return std::get<TPath>(Arg[arg]).Path; 
     }
 
 
@@ -143,7 +143,7 @@ namespace NSc::NUt {
             : Out(out)
         {}
 
-        bool operator()(const std::monostate&) const {
+        bool operator()(const std::monostate&) const { 
             return true;
         }
         //TIdx, TPos, TRef, TSrc, TDst, TPath
@@ -159,7 +159,7 @@ namespace NSc::NUt {
         TStringBuilder out;
         out << Type;
         for (const auto& arg : Arg) {
-            if (std::visit(TActionPrinter(out.Out), arg)) {
+            if (std::visit(TActionPrinter(out.Out), arg)) { 
                 break;
             }
         }

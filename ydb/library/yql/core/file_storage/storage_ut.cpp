@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
 
     Y_UNIT_TEST(ParallelPut) {
         THolder<TStorage> storage = MakeHolder<TStorage>(10, 100);
-        TThreadPool queue;
+        TThreadPool queue; 
         queue.Start(10);
 
         TVector<TFuture<TFileLinkPtr>> res;

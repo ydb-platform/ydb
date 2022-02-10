@@ -423,12 +423,12 @@ namespace NJson {
     }
 
     TJsonValue ReadJsonFastTree(TStringBuf in, bool notClosedBracketIsError) {
-        TJsonValue value;
-        // There is no way to report an error apart from throwing an exception when we return result by value.
+        TJsonValue value; 
+        // There is no way to report an error apart from throwing an exception when we return result by value. 
         ReadJsonFastTree(in, &value, /* throwOnError = */ true, notClosedBracketIsError);
-        return value;
-    }
-
+        return value; 
+    } 
+ 
     namespace {
         struct TJsonCallbacksWrapper {
             TJsonCallbacks& Impl;

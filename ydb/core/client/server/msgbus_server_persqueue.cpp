@@ -1044,7 +1044,7 @@ public:
             for (ui32 i = 0; i < pqDescr.PartitionsSize(); ++i) {
                 ui32 part = pqDescr.GetPartitions(i).GetPartitionId();
                 ui64 tabletId = pqDescr.GetPartitions(i).GetTabletId();
-                if (!it->second.PartitionsToRequest.empty() && !it->second.PartitionsToRequest.contains(part)) {
+                if (!it->second.PartitionsToRequest.empty() && !it->second.PartitionsToRequest.contains(part)) { 
                     continue;
                 }
                 bool res = it->second.PartitionToTablet.insert({part, tabletId}).second;

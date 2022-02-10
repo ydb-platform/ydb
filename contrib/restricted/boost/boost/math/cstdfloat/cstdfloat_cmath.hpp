@@ -191,36 +191,36 @@
   // Begin with some forward function declarations. Also implement patches
   // for compilers that have broken float128 exponential functions.
 
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_LDEXP (boost::math::cstdfloat::detail::float_internal128_t, int)  noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_FREXP (boost::math::cstdfloat::detail::float_internal128_t, int*) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_FABS  (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_FLOOR (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_CEIL  (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_SQRT  (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TRUNC (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_POW   (boost::math::cstdfloat::detail::float_internal128_t, boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_LOG   (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_LOG10 (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_SIN   (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_COS   (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TAN   (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ASIN  (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ACOS  (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ATAN  (boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_FMOD  (boost::math::cstdfloat::detail::float_internal128_t, boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ATAN2 (boost::math::cstdfloat::detail::float_internal128_t, boost::math::cstdfloat::detail::float_internal128_t) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_LGAMMA(boost::math::cstdfloat::detail::float_internal128_t) noexcept;
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_LDEXP (boost::math::cstdfloat::detail::float_internal128_t, int)  noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_FREXP (boost::math::cstdfloat::detail::float_internal128_t, int*) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_FABS  (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_FLOOR (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_CEIL  (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_SQRT  (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TRUNC (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_POW   (boost::math::cstdfloat::detail::float_internal128_t, boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_LOG   (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_LOG10 (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_SIN   (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_COS   (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TAN   (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ASIN  (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ACOS  (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ATAN  (boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_FMOD  (boost::math::cstdfloat::detail::float_internal128_t, boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ATAN2 (boost::math::cstdfloat::detail::float_internal128_t, boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_LGAMMA(boost::math::cstdfloat::detail::float_internal128_t) noexcept; 
 
   #if !defined(BOOST_CSTDFLOAT_BROKEN_FLOAT128_MATH_FUNCTIONS)
 
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_EXP   (boost::math::cstdfloat::detail::float_internal128_t x) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_SINH  (boost::math::cstdfloat::detail::float_internal128_t x) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_COSH  (boost::math::cstdfloat::detail::float_internal128_t x) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TANH  (boost::math::cstdfloat::detail::float_internal128_t x) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ASINH (boost::math::cstdfloat::detail::float_internal128_t x) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ACOSH (boost::math::cstdfloat::detail::float_internal128_t x) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ATANH (boost::math::cstdfloat::detail::float_internal128_t x) noexcept;
-  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TGAMMA(boost::math::cstdfloat::detail::float_internal128_t x) noexcept;
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_EXP   (boost::math::cstdfloat::detail::float_internal128_t x) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_SINH  (boost::math::cstdfloat::detail::float_internal128_t x) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_COSH  (boost::math::cstdfloat::detail::float_internal128_t x) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TANH  (boost::math::cstdfloat::detail::float_internal128_t x) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ASINH (boost::math::cstdfloat::detail::float_internal128_t x) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ACOSH (boost::math::cstdfloat::detail::float_internal128_t x) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ATANH (boost::math::cstdfloat::detail::float_internal128_t x) noexcept; 
+  extern "C" boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TGAMMA(boost::math::cstdfloat::detail::float_internal128_t x) noexcept; 
 
   #else // BOOST_CSTDFLOAT_BROKEN_FLOAT128_MATH_FUNCTIONS
 
@@ -408,13 +408,13 @@
     const float_type ex_minus = (float_type(1) / ex_plus);
     return (ex_plus - ex_minus) / (ex_plus + ex_minus);
   }
-  inline     boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ASINH(boost::math::cstdfloat::detail::float_internal128_t x) noexcept
+  inline     boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ASINH(boost::math::cstdfloat::detail::float_internal128_t x) noexcept 
   {
     // Patch the asinh() function since quadmath does not have it.
     typedef boost::math::cstdfloat::detail::float_internal128_t float_type;
     return ::BOOST_CSTDFLOAT_FLOAT128_LOG(x + ::BOOST_CSTDFLOAT_FLOAT128_SQRT((x * x) + float_type(1)));
   }
-  inline     boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ACOSH(boost::math::cstdfloat::detail::float_internal128_t x) noexcept
+  inline     boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ACOSH(boost::math::cstdfloat::detail::float_internal128_t x) noexcept 
   {
     // Patch the acosh() function since quadmath does not have it.
     typedef boost::math::cstdfloat::detail::float_internal128_t float_type;
@@ -423,14 +423,14 @@
 
     return ::BOOST_CSTDFLOAT_FLOAT128_LOG(x + (zp * ::BOOST_CSTDFLOAT_FLOAT128_SQRT(zm / zp)));
   }
-  inline     boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ATANH(boost::math::cstdfloat::detail::float_internal128_t x) noexcept
+  inline     boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_ATANH(boost::math::cstdfloat::detail::float_internal128_t x) noexcept 
   {
     // Patch the atanh() function since quadmath does not have it.
     typedef boost::math::cstdfloat::detail::float_internal128_t float_type;
     return (  ::BOOST_CSTDFLOAT_FLOAT128_LOG(float_type(1) + x)
             - ::BOOST_CSTDFLOAT_FLOAT128_LOG(float_type(1) - x)) / 2;
   }
-  inline     boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TGAMMA(boost::math::cstdfloat::detail::float_internal128_t x) noexcept
+  inline     boost::math::cstdfloat::detail::float_internal128_t BOOST_CSTDFLOAT_FLOAT128_TGAMMA(boost::math::cstdfloat::detail::float_internal128_t x) noexcept 
   {
     // Patch the tgammaq() function for a subset of broken GCC compilers
     // like GCC 4.7, 4.8 on MinGW.

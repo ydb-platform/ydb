@@ -76,7 +76,7 @@ NKikimrSchemeOp::TStorageConfig *TTableProfiles::GetDefaultStorageConfig(NKikimr
 }
 
 bool TTableProfiles::HasPresetName(const TString &presetName) const {
-    return TableProfiles.contains(presetName);
+    return TableProfiles.contains(presetName); 
 }
 
 bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
@@ -92,7 +92,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
     NKikimrConfig::TCachingPolicy cachingPolicy;
     auto &partitionConfig = *tableDesc.MutablePartitionConfig();
 
-    if (profile.preset_name() && !TableProfiles.contains(profile.preset_name())) {
+    if (profile.preset_name() && !TableProfiles.contains(profile.preset_name())) { 
         code = Ydb::StatusIds::BAD_REQUEST;
         error = Sprintf("unknown table profile preset '%s'", profile.preset_name().data());
         return false;
@@ -100,32 +100,32 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
 
     TString name = profile.preset_name() ? profile.preset_name() : "default";
     NKikimrConfig::TTableProfile tableProfile;
-    if (TableProfiles.contains(name))
+    if (TableProfiles.contains(name)) 
         tableProfile = TableProfiles.at(name);
 
     // Determine used compaction policy.
     if (profile.has_compaction_policy()) {
         auto &policy = profile.compaction_policy();
-        if (!CompactionPolicies.contains(policy.preset_name())) {
+        if (!CompactionPolicies.contains(policy.preset_name())) { 
             code = Ydb::StatusIds::BAD_REQUEST;
             error = Sprintf("unknown compaction policy preset '%s'", policy.preset_name().data());
             return false;
         }
         compactionPolicy = CompactionPolicies.at(policy.preset_name());
-    } else if (CompactionPolicies.contains(tableProfile.GetCompactionPolicy())) {
+    } else if (CompactionPolicies.contains(tableProfile.GetCompactionPolicy())) { 
         compactionPolicy = CompactionPolicies.at(tableProfile.GetCompactionPolicy());
     }
 
     // Determine used execution policy.
     if (profile.has_execution_policy()) {
         auto &policy = profile.execution_policy();
-        if (!ExecutionPolicies.contains(policy.preset_name())) {
+        if (!ExecutionPolicies.contains(policy.preset_name())) { 
             code = Ydb::StatusIds::BAD_REQUEST;
             error = Sprintf("unknown execution policy preset '%s'", policy.preset_name().data());
             return false;
         }
         executionPolicy = ExecutionPolicies.at(policy.preset_name());
-    } else if (ExecutionPolicies.contains(tableProfile.GetExecutionPolicy())) {
+    } else if (ExecutionPolicies.contains(tableProfile.GetExecutionPolicy())) { 
         executionPolicy = ExecutionPolicies.at(tableProfile.GetExecutionPolicy());
     }
 
@@ -133,13 +133,13 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
     if (profile.has_partitioning_policy()) {
         auto &policy = profile.partitioning_policy();
         if (policy.preset_name()) {
-            if (!PartitioningPolicies.contains(policy.preset_name())) {
+            if (!PartitioningPolicies.contains(policy.preset_name())) { 
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("unknown partitioning policy preset '%s'", policy.preset_name().data());
                 return false;
             }
             partitioningPolicy = PartitioningPolicies.at(policy.preset_name());
-        } else if (PartitioningPolicies.contains(tableProfile.GetPartitioningPolicy())) {
+        } else if (PartitioningPolicies.contains(tableProfile.GetPartitioningPolicy())) { 
             partitioningPolicy = PartitioningPolicies.at(tableProfile.GetPartitioningPolicy());
         }
         // Apply auto partitioning overwrites.
@@ -176,7 +176,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         default:
             break;
         }
-    } else if (PartitioningPolicies.contains(tableProfile.GetPartitioningPolicy())) {
+    } else if (PartitioningPolicies.contains(tableProfile.GetPartitioningPolicy())) { 
         partitioningPolicy = PartitioningPolicies.at(tableProfile.GetPartitioningPolicy());
     }
 
@@ -184,13 +184,13 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
     if (profile.has_storage_policy()) {
         auto &policy = profile.storage_policy();
         if (policy.preset_name()) {
-            if (!StoragePolicies.contains(policy.preset_name())) {
+            if (!StoragePolicies.contains(policy.preset_name())) { 
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("unknown storage policy preset '%s'", policy.preset_name().data());
                 return false;
             }
             storagePolicy = StoragePolicies.at(policy.preset_name());
-        } else if (StoragePolicies.contains(tableProfile.GetStoragePolicy())) {
+        } else if (StoragePolicies.contains(tableProfile.GetStoragePolicy())) { 
             storagePolicy = StoragePolicies.at(tableProfile.GetStoragePolicy());
         }
         // Apply overwritten storage settings for syslog.
@@ -305,7 +305,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                 return false;
             }
         }
-    } else if (StoragePolicies.contains(tableProfile.GetStoragePolicy())) {
+    } else if (StoragePolicies.contains(tableProfile.GetStoragePolicy())) { 
         storagePolicy = StoragePolicies.at(tableProfile.GetStoragePolicy());
     }
 
@@ -313,13 +313,13 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
     if (profile.has_replication_policy()) {
         auto &policy = profile.replication_policy();
         if (policy.preset_name()) {
-            if (!ReplicationPolicies.contains(policy.preset_name())) {
+            if (!ReplicationPolicies.contains(policy.preset_name())) { 
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("unknown replciation policy preset '%s'", policy.preset_name().data());
                 return false;
             }
             replicationPolicy = ReplicationPolicies.at(policy.preset_name());
-        } else if (ReplicationPolicies.contains(tableProfile.GetReplicationPolicy())) {
+        } else if (ReplicationPolicies.contains(tableProfile.GetReplicationPolicy())) { 
             replicationPolicy = ReplicationPolicies.at(tableProfile.GetReplicationPolicy());
         }
         if (policy.replicas_count())
@@ -354,20 +354,20 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                             (ui32)policy.allow_promotion());
             return false;
         }
-    } else if (ReplicationPolicies.contains(tableProfile.GetReplicationPolicy())) {
+    } else if (ReplicationPolicies.contains(tableProfile.GetReplicationPolicy())) { 
         replicationPolicy = ReplicationPolicies.at(tableProfile.GetReplicationPolicy());
     }
 
     // Determine used caching policy.
     if (profile.has_caching_policy()) {
         auto &policy = profile.caching_policy();
-        if (!CachingPolicies.contains(policy.preset_name())) {
+        if (!CachingPolicies.contains(policy.preset_name())) { 
             code = Ydb::StatusIds::BAD_REQUEST;
             error = Sprintf("unknown caching policy preset '%s'", policy.preset_name().data());
             return false;
         }
         cachingPolicy = CachingPolicies.at(policy.preset_name());
-    } else if (CachingPolicies.contains(tableProfile.GetCachingPolicy())) {
+    } else if (CachingPolicies.contains(tableProfile.GetCachingPolicy())) { 
         cachingPolicy = CachingPolicies.at(tableProfile.GetCachingPolicy());
     }
 

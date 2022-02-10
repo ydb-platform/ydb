@@ -322,7 +322,7 @@ void TExecutor::RunWorker() {
     Y_VERIFY(!ThreadCurrentExecutor, "state check");
     ThreadCurrentExecutor = this;
 
-    SetCurrentThreadName("wrkr");
+    SetCurrentThreadName("wrkr"); 
 
     for (;;) {
         TAutoPtr<IWorkItem> wi = DequeueWork();

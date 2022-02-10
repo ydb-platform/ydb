@@ -7,7 +7,7 @@
 
 namespace NYql::NDq {
 
-using TTxId = std::variant<ui64, TString>;
+using TTxId = std::variant<ui64, TString>; 
 
 using TLogFunc = std::function<void(const TString& message)>;
 

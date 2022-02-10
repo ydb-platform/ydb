@@ -1,7 +1,7 @@
-ALLOW kernel/geo -> library/cpp/deprecated/small_array
-ALLOW ysite/yandex/clicks -> library/cpp/deprecated/small_array
-ALLOW ysite/yandex/indexuser -> library/cpp/deprecated/small_array
-DENY .* -> library/cpp/deprecated/small_array
+ALLOW kernel/geo -> library/cpp/deprecated/small_array 
+ALLOW ysite/yandex/clicks -> library/cpp/deprecated/small_array 
+ALLOW ysite/yandex/indexuser -> library/cpp/deprecated/small_array 
+DENY .* -> library/cpp/deprecated/small_array 
 
 ALLOW jupytercloud/arcadia_kernel -> library/python/clickhouse_client
 ALLOW market/idx/export/mbi_qdata_reporter/bin -> library/python/clickhouse_client

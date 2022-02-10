@@ -83,7 +83,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
 
         ui64 semaphoreId = Self->NextSemaphoreId++;
         Y_VERIFY(semaphoreId > 0);
-        Y_VERIFY(!Self->Semaphores.contains(semaphoreId));
+        Y_VERIFY(!Self->Semaphores.contains(semaphoreId)); 
         Self->PersistSysParam(db, Schema::SysParam_NextSemaphoreId, ToString(Self->NextSemaphoreId));
         semaphore = &Self->Semaphores[semaphoreId];
         semaphore->Id = semaphoreId;

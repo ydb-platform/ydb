@@ -70,7 +70,7 @@ class bad_weak_ptr: public std::exception
 {
 public:
 
-    virtual char const * what() const noexcept
+    virtual char const * what() const noexcept 
     {
         return "boost::bad_weak_ptr";
     }

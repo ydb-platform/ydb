@@ -150,11 +150,11 @@ class illegal_backtracking : public std::exception
 {
 public:
 
-    illegal_backtracking() noexcept {}
-    ~illegal_backtracking() {}
+    illegal_backtracking() noexcept {} 
+    ~illegal_backtracking() {} 
 
     virtual const char*
-    what() const noexcept
+    what() const noexcept 
     { return "BOOST_SPIRIT_CLASSIC_NS::illegal_backtracking"; }
 };
 

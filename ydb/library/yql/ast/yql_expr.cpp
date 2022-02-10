@@ -2646,7 +2646,7 @@ bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprCo
 
     if (name.size() > 16_KB) {
         ctx.AddError(TIssue(position, TStringBuilder() <<
-            TString(descr).to_title() << " name length must be less than " << 16_KB));
+            TString(descr).to_title() << " name length must be less than " << 16_KB)); 
         return false;
     }
 
@@ -2940,7 +2940,7 @@ size_t TExprContext::GetHash(TPositionHandle p) const {
     YQL_ENSURE(p.Handle < Positions.size());
 
     const TPosition& pos = Positions[p.Handle];
-    size_t h = ComputeHash(pos.File);
+    size_t h = ComputeHash(pos.File); 
     h = CombineHashes(h, NumericHash(pos.Row));
     return CombineHashes(h, NumericHash(pos.Column));
 }

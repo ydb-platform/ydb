@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     vladon
-    # g:zora
+    # g:zora 
 )
 
 SRCS(

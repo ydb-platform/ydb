@@ -1,7 +1,7 @@
 """Implementation of basic magic functions."""
 
 from __future__ import print_function
-from __future__ import absolute_import
+from __future__ import absolute_import 
 
 import argparse
 import io
@@ -15,8 +15,8 @@ from IPython.utils.text import format_screen, dedent, indent
 from IPython.testing.skipdoctest import skip_doctest
 from IPython.utils.ipstruct import Struct
 from IPython.utils.py3compat import unicode_type
-from warnings import warn
-from logging import error
+from warnings import warn 
+from logging import error 
 
 
 class MagicsDisplay(object):
@@ -328,7 +328,7 @@ Currently the magic system has the following functions:""",
         """
         def color_switch_err(name):
             warn('Error changing %s color schemes.\n%s' %
-                 (name, sys.exc_info()[1]), stacklevel=2)
+                 (name, sys.exc_info()[1]), stacklevel=2) 
 
 
         new_scheme = parameter_s.strip()
@@ -338,13 +338,13 @@ Currently the magic system has the following functions:""",
         # local shortcut
         shell = self.shell
 
-        # Set shell colour scheme
+        # Set shell colour scheme 
         try:
-            shell.colors = new_scheme
-            shell.refresh_style()
+            shell.colors = new_scheme 
+            shell.refresh_style() 
         except:
-            color_switch_err('shell')
-
+            color_switch_err('shell') 
+ 
         # Set exception colors
         try:
             shell.InteractiveTB.set_colors(scheme = new_scheme)
@@ -458,12 +458,12 @@ Currently the magic system has the following functions:""",
 
             shell.magic('xmode ' + dstore.xmode)
 
-        # mode here is the state before we switch; switch_doctest_mode takes
-        # the mode we're switching to.
-        shell.switch_doctest_mode(not mode)
-
+        # mode here is the state before we switch; switch_doctest_mode takes 
+        # the mode we're switching to. 
+        shell.switch_doctest_mode(not mode) 
+ 
         # Store new mode and inform
-        dstore.mode = bool(not mode)
+        dstore.mode = bool(not mode) 
         mode_label = ['OFF','ON'][dstore.mode]
         print('Doctest mode is:', mode_label)
 

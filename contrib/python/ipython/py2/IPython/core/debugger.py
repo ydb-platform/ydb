@@ -31,40 +31,40 @@ import bdb
 import functools
 import inspect
 import sys
-import warnings
+import warnings 
 
 from IPython import get_ipython
 from IPython.utils import PyColorize, ulinecache
-from IPython.utils import coloransi, py3compat
+from IPython.utils import coloransi, py3compat 
 from IPython.core.excolors import exception_colors
 from IPython.testing.skipdoctest import skip_doctest
 
-
+ 
 prompt = 'ipdb> '
-
+ 
 #We have to check this directly from sys.argv, config struct not yet available
-from pdb import Pdb as OldPdb
+from pdb import Pdb as OldPdb 
 
 # Allow the set_trace code to operate outside of an ipython instance, even if
 # it does so with some limitations.  The rest of this support is implemented in
 # the Tracer constructor.
-
-def make_arrow(pad):
-    """generate the leading arrow in front of traceback or debugger"""
-    if pad >= 2:
-        return '-'*(pad-2) + '> '
-    elif pad == 1:
-        return '>'
-    return ''
-
-
+ 
+def make_arrow(pad): 
+    """generate the leading arrow in front of traceback or debugger""" 
+    if pad >= 2: 
+        return '-'*(pad-2) + '> ' 
+    elif pad == 1: 
+        return '>' 
+    return '' 
+ 
+ 
 def BdbQuit_excepthook(et, ev, tb, excepthook=None):
     """Exception hook which handles `BdbQuit` exceptions.
 
     All other exceptions are processed using the `excepthook`
     parameter.
     """
-    warnings.warn("`BdbQuit_excepthook` is deprecated since version 5.1",
+    warnings.warn("`BdbQuit_excepthook` is deprecated since version 5.1", 
                   DeprecationWarning, stacklevel=2)
     if et==bdb.BdbQuit:
         print('Exiting Debugger.')
@@ -74,20 +74,20 @@ def BdbQuit_excepthook(et, ev, tb, excepthook=None):
         # Backwards compatibility. Raise deprecation warning?
         BdbQuit_excepthook.excepthook_ori(et,ev,tb)
 
-
+ 
 def BdbQuit_IPython_excepthook(self,et,ev,tb,tb_offset=None):
-    warnings.warn(
-        "`BdbQuit_IPython_excepthook` is deprecated since version 5.1",
+    warnings.warn( 
+        "`BdbQuit_IPython_excepthook` is deprecated since version 5.1", 
         DeprecationWarning, stacklevel=2)
     print('Exiting Debugger.')
 
 
 class Tracer(object):
-    """
-    DEPRECATED
+    """ 
+    DEPRECATED 
 
-    Class for local debugging, similar to pdb.set_trace.
-
+    Class for local debugging, similar to pdb.set_trace. 
+ 
     Instances of this class, when called, behave like pdb.set_trace, but
     providing IPython's enhanced capabilities.
 
@@ -100,11 +100,11 @@ class Tracer(object):
 
     @skip_doctest
     def __init__(self, colors=None):
-        """
-        DEPRECATED
+        """ 
+        DEPRECATED 
 
-        Create a local debugger instance.
-
+        Create a local debugger instance. 
+ 
         Parameters
         ----------
 
@@ -128,8 +128,8 @@ class Tracer(object):
         step through code, set breakpoints, etc.  See the pdb documentation
         from the Python standard library for usage details.
         """
-        warnings.warn("`Tracer` is deprecated since version 5.1, directly use "
-                      "`IPython.core.debugger.Pdb.set_trace()`",
+        warnings.warn("`Tracer` is deprecated since version 5.1, directly use " 
+                      "`IPython.core.debugger.Pdb.set_trace()`", 
                       DeprecationWarning, stacklevel=2)
 
         ip = get_ipython()
@@ -204,25 +204,25 @@ def _file_lines(fname):
 
 
 class Pdb(OldPdb):
-    """Modified Pdb class, does not load readline.
+    """Modified Pdb class, does not load readline. 
 
-    for a standalone version that uses prompt_toolkit, see
-    `IPython.terminal.debugger.TerminalPdb` and
-    `IPython.terminal.debugger.set_trace()`
-    """
-
-    def __init__(self, color_scheme=None, completekey=None,
+    for a standalone version that uses prompt_toolkit, see 
+    `IPython.terminal.debugger.TerminalPdb` and 
+    `IPython.terminal.debugger.set_trace()` 
+    """ 
+ 
+    def __init__(self, color_scheme=None, completekey=None, 
                  stdin=None, stdout=None, context=5):
 
         # Parent constructor:
         try:
-            self.context = int(context)
+            self.context = int(context) 
             if self.context <= 0:
                 raise ValueError("Context must be a positive integer")
         except (TypeError, ValueError):
                 raise ValueError("Context must be a positive integer")
 
-        OldPdb.__init__(self, completekey, stdin, stdout)
+        OldPdb.__init__(self, completekey, stdin, stdout) 
 
         # IPython changes...
         self.shell = get_ipython()
@@ -237,12 +237,12 @@ class Pdb(OldPdb):
             # the debugger was entered. See also #9941.
             sys.modules['__main__'] = save_main 
 
-        if color_scheme is not None:
-            warnings.warn(
-                "The `color_scheme` argument is deprecated since version 5.1",
-                DeprecationWarning)
-        else:
-            color_scheme = self.shell.colors
+        if color_scheme is not None: 
+            warnings.warn( 
+                "The `color_scheme` argument is deprecated since version 5.1", 
+                DeprecationWarning) 
+        else: 
+            color_scheme = self.shell.colors 
 
         self.aliases = {}
 
@@ -266,28 +266,28 @@ class Pdb(OldPdb):
         cst['LightBG'].colors.breakpoint_enabled = C.LightRed
         cst['LightBG'].colors.breakpoint_disabled = C.Red
 
-        cst['Neutral'].colors.prompt = C.Blue
-        cst['Neutral'].colors.breakpoint_enabled = C.LightRed
-        cst['Neutral'].colors.breakpoint_disabled = C.Red
-
+        cst['Neutral'].colors.prompt = C.Blue 
+        cst['Neutral'].colors.breakpoint_enabled = C.LightRed 
+        cst['Neutral'].colors.breakpoint_disabled = C.Red 
+ 
         self.set_colors(color_scheme)
 
         # Add a python parser so we can syntax highlight source while
         # debugging.
         self.parser = PyColorize.Parser()
 
-        # Set the prompt - the default prompt is '(Pdb)'
-        self.prompt = prompt
+        # Set the prompt - the default prompt is '(Pdb)' 
+        self.prompt = prompt 
 
     def set_colors(self, scheme):
         """Shorthand access to the color table scheme selector method."""
         self.color_scheme_table.set_active_scheme(scheme)
 
     def interaction(self, frame, traceback):
-        try:
-            OldPdb.interaction(self, frame, traceback)
-        except KeyboardInterrupt:
-            sys.stdout.write('\n' + self.shell.get_exception_only())
+        try: 
+            OldPdb.interaction(self, frame, traceback) 
+        except KeyboardInterrupt: 
+            sys.stdout.write('\n' + self.shell.get_exception_only()) 
 
     def new_do_up(self, arg):
         OldPdb.do_up(self, arg)
@@ -331,7 +331,7 @@ class Pdb(OldPdb):
         except KeyboardInterrupt:
             pass
 
-    def print_stack_entry(self,frame_lineno, prompt_prefix='\n-> ',
+    def print_stack_entry(self,frame_lineno, prompt_prefix='\n-> ', 
                           context=None):
         if context is None:
             context = self.context
@@ -341,7 +341,7 @@ class Pdb(OldPdb):
                 raise ValueError("Context must be a positive integer")
         except (TypeError, ValueError):
                 raise ValueError("Context must be a positive integer")
-        print(self.format_stack_entry(frame_lineno, '', context))
+        print(self.format_stack_entry(frame_lineno, '', context)) 
 
         # vds: >>
         frame, lineno = frame_lineno
@@ -447,11 +447,11 @@ class Pdb(OldPdb):
         if arrow:
             # This is the line with the error
             pad = numbers_width - len(str(lineno)) - len(bp_mark)
-            num = '%s%s' % (make_arrow(pad), str(lineno))
+            num = '%s%s' % (make_arrow(pad), str(lineno)) 
         else:
             num = '%*s' % (numbers_width - len(bp_mark), str(lineno))
 
-        return tpl_line % (bp_mark_color + bp_mark, num, line)
+        return tpl_line % (bp_mark_color + bp_mark, num, line) 
 
 
     def print_list_lines(self, filename, first, last):
@@ -479,7 +479,7 @@ class Pdb(OldPdb):
                 src.append(line)
                 self.lineno = lineno
 
-            print(''.join(src))
+            print(''.join(src)) 
 
         except KeyboardInterrupt:
             pass

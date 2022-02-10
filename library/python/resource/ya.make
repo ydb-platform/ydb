@@ -6,8 +6,8 @@ PEERDIR(
     contrib/python/six
 )
 
-PY_SRCS(__init__.py)
+PY_SRCS(__init__.py) 
 
 END()
-
-RECURSE_FOR_TESTS(ut)
+ 
+RECURSE_FOR_TESTS(ut) 

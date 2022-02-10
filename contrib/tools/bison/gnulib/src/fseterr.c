@@ -39,8 +39,8 @@ fseterr (FILE *fp)
   fp->_flags |= _IOERR;
 #elif defined _IOERR                /* AIX, HP-UX, IRIX, OSF/1, Solaris, OpenServer, mingw, NonStop Kernel */
   fp_->_flag |= _IOERR;
-#elif WIN_SDK10
-  ((TWinSdk10File*)fp)->_flags |= WIN_SDK10_IOERROR;
+#elif WIN_SDK10 
+  ((TWinSdk10File*)fp)->_flags |= WIN_SDK10_IOERROR; 
 #elif defined __UCLIBC__            /* uClibc */
   fp->__modeflags |= __FLAG_ERROR;
 #elif defined __QNX__               /* QNX */

@@ -1,56 +1,56 @@
-/***************************************************************************
- *                                  _   _ ____  _
- *  Project                     ___| | | |  _ \| |
- *                             / __| | | | |_) | |
- *                            | (__| |_| |  _ <| |___
- *                             \___|\___/|_| \_\_____|
- *
+/*************************************************************************** 
+ *                                  _   _ ____  _ 
+ *  Project                     ___| | | |  _ \| | 
+ *                             / __| | | | |_) | | 
+ *                            | (__| |_| |  _ <| |___ 
+ *                             \___|\___/|_| \_\_____| 
+ * 
  * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- *
- * This software is licensed as described in the file COPYING, which
- * you should have received as part of this distribution. The terms
+ * 
+ * This software is licensed as described in the file COPYING, which 
+ * you should have received as part of this distribution. The terms 
  * are also available at https://curl.se/docs/copyright.html.
- *
- * You may opt to use, copy, modify, merge, publish, distribute and/or sell
- * copies of the Software, and permit persons to whom the Software is
- * furnished to do so, under the terms of the COPYING file.
- *
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
- * KIND, either express or implied.
- *
- ***************************************************************************/
-
-#include "curl_setup.h"
-
+ * 
+ * You may opt to use, copy, modify, merge, publish, distribute and/or sell 
+ * copies of the Software, and permit persons to whom the Software is 
+ * furnished to do so, under the terms of the COPYING file. 
+ * 
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY 
+ * KIND, either express or implied. 
+ * 
+ ***************************************************************************/ 
+ 
+#include "curl_setup.h" 
+ 
 #if !defined(CURL_DISABLE_HTTP) && defined(USE_SPNEGO)
-
-#include "urldata.h"
-#include "sendf.h"
-#include "http_negotiate.h"
+ 
+#include "urldata.h" 
+#include "sendf.h" 
+#include "http_negotiate.h" 
 #include "vauth/vauth.h"
 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
-#include "curl_memory.h"
-#include "memdebug.h"
-
+#include "curl_memory.h" 
+#include "memdebug.h" 
+ 
 CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
                               const char *header)
-{
+{ 
   CURLcode result;
   struct Curl_easy *data = conn->data;
-  size_t len;
-
+  size_t len; 
+ 
   /* Point to the username, password, service and host */
   const char *userp;
   const char *passwdp;
   const char *service;
   const char *host;
-
+ 
   /* Point to the correct struct with this */
   struct negotiatedata *neg_ctx;
   curlnegotiate state;
-
+ 
   if(proxy) {
 #ifndef CURL_DISABLE_PROXY
     userp = conn->http_proxy.user;
@@ -63,8 +63,8 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
 #else
     return CURLE_NOT_BUILT_IN;
 #endif
-  }
-  else {
+  } 
+  else { 
     userp = conn->user;
     passwdp = conn->passwd;
     service = data->set.str[STRING_SERVICE_NAME] ?
@@ -72,21 +72,21 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
     host = conn->host.name;
     neg_ctx = &conn->negotiate;
     state = conn->http_negotiate_state;
-  }
-
+  } 
+ 
   /* Not set means empty */
   if(!userp)
     userp = "";
-
+ 
   if(!passwdp)
     passwdp = "";
-
+ 
   /* Obtain the input token, if any */
   header += strlen("Negotiate");
-  while(*header && ISSPACE(*header))
-    header++;
-
-  len = strlen(header);
+  while(*header && ISSPACE(*header)) 
+    header++; 
+ 
+  len = strlen(header); 
   neg_ctx->havenegdata = len != 0;
   if(!len) {
     if(state == GSS_AUTHSUCC) {
@@ -98,9 +98,9 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
       negotiation mechanisms */
       Curl_http_auth_cleanup_negotiate(conn);
       return CURLE_LOGIN_DENIED;
-    }
-  }
-
+    } 
+  } 
+ 
   /* Supports SSL channel binding for Windows ISS extended protection */
 #if defined(USE_WINDOWS_SSPI) && defined(SECPKG_ATTR_ENDPOINT_BINDINGS)
   neg_ctx->sslContext = conn->sslContext;
@@ -109,15 +109,15 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
   /* Initialize the security context and decode our challenge */
   result = Curl_auth_decode_spnego_message(data, userp, passwdp, service,
                                            host, header, neg_ctx);
-
+ 
   if(result)
     Curl_http_auth_cleanup_negotiate(conn);
-
+ 
   return result;
-}
-
-CURLcode Curl_output_negotiate(struct connectdata *conn, bool proxy)
-{
+} 
+ 
+CURLcode Curl_output_negotiate(struct connectdata *conn, bool proxy) 
+{ 
   struct negotiatedata *neg_ctx = proxy ? &conn->proxyneg :
     &conn->negotiate;
   struct auth *authp = proxy ? &conn->data->state.authproxy :
@@ -126,12 +126,12 @@ CURLcode Curl_output_negotiate(struct connectdata *conn, bool proxy)
     &conn->http_negotiate_state;
   struct Curl_easy *data = conn->data;
   char *base64 = NULL;
-  size_t len = 0;
-  char *userp;
+  size_t len = 0; 
+  char *userp; 
   CURLcode result;
-
+ 
   authp->done = FALSE;
-
+ 
   if(*state == GSS_AUTHRECV) {
     if(neg_ctx->havenegdata) {
       neg_ctx->havemultiplerequests = TRUE;
@@ -142,7 +142,7 @@ CURLcode Curl_output_negotiate(struct connectdata *conn, bool proxy)
       neg_ctx->noauthpersist = !neg_ctx->havemultiplerequests;
     }
   }
-
+ 
   if(neg_ctx->noauthpersist ||
     (*state != GSS_AUTHDONE && *state != GSS_AUTHSUCC)) {
 
@@ -200,26 +200,26 @@ CURLcode Curl_output_negotiate(struct connectdata *conn, bool proxy)
     }
   #endif
   #endif
-  }
+  } 
 
   if(*state == GSS_AUTHDONE || *state == GSS_AUTHSUCC) {
     /* connection is already authenticated,
      * don't send a header in future requests */
     authp->done = TRUE;
-  }
-
+  } 
+ 
   neg_ctx->havenegdata = FALSE;
-
+ 
   return CURLE_OK;
-}
-
+} 
+ 
 void Curl_http_auth_cleanup_negotiate(struct connectdata *conn)
-{
+{ 
   conn->http_negotiate_state = GSS_AUTHNONE;
   conn->proxy_negotiate_state = GSS_AUTHNONE;
 
   Curl_auth_cleanup_spnego(&conn->negotiate);
   Curl_auth_cleanup_spnego(&conn->proxyneg);
-}
-
+} 
+ 
 #endif /* !CURL_DISABLE_HTTP && USE_SPNEGO */

@@ -7,7 +7,7 @@ from .utils import DummyContext, is_windows
 from abc import ABCMeta, abstractmethod
 from six import with_metaclass
 
-import io
+import io 
 import os
 import sys
 
@@ -63,21 +63,21 @@ class StdinInput(Input):
     def __init__(self, stdin=None):
         self.stdin = stdin or sys.stdin
 
-        # The input object should be a TTY.
-        assert self.stdin.isatty()
-
-        # Test whether the given input object has a file descriptor.
-        # (Idle reports stdin to be a TTY, but fileno() is not implemented.)
-        try:
-            # This should not raise, but can return 0.
-            self.stdin.fileno()
-        except io.UnsupportedOperation:
-            if 'idlelib.run' in sys.modules:
-                raise io.UnsupportedOperation(
-                    'Stdin is not a terminal. Running from Idle is not supported.')
-            else:
-                raise io.UnsupportedOperation('Stdin is not a terminal.')
-
+        # The input object should be a TTY. 
+        assert self.stdin.isatty() 
+ 
+        # Test whether the given input object has a file descriptor. 
+        # (Idle reports stdin to be a TTY, but fileno() is not implemented.) 
+        try: 
+            # This should not raise, but can return 0. 
+            self.stdin.fileno() 
+        except io.UnsupportedOperation: 
+            if 'idlelib.run' in sys.modules: 
+                raise io.UnsupportedOperation( 
+                    'Stdin is not a terminal. Running from Idle is not supported.') 
+            else: 
+                raise io.UnsupportedOperation('Stdin is not a terminal.') 
+ 
     def __repr__(self):
         return 'StdinInput(stdin=%r)' % (self.stdin,)
 
@@ -114,22 +114,22 @@ class PipeInput(Input):
     def read(self):
         return os.read(self._r)
 
-    def send_text(self, data):
-        " Send text to the input. "
+    def send_text(self, data): 
+        " Send text to the input. " 
         os.write(self._w, data.encode('utf-8'))
 
-    # Deprecated alias for `send_text`.
-    send = send_text
-
+    # Deprecated alias for `send_text`. 
+    send = send_text 
+ 
     def raw_mode(self):
         return DummyContext()
 
     def cooked_mode(self):
         return DummyContext()
-
-    def close(self):
-        " Close pipe fds. "
-        os.close(self._r)
-        os.close(self._w)
-        self._r = None
-        self._w = None
+ 
+    def close(self): 
+        " Close pipe fds. " 
+        os.close(self._r) 
+        os.close(self._w) 
+        self._r = None 
+        self._w = None 

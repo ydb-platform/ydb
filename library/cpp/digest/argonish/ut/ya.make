@@ -2,12 +2,12 @@ UNITTEST_FOR(library/cpp/digest/argonish)
 
 OWNER(e-sidorov)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/digest/argonish
-)
+) 
 
-SRCS(
-    ut.cpp
-)
+SRCS( 
+    ut.cpp 
+) 
 
 END()

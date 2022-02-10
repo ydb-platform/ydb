@@ -1,8 +1,8 @@
 /* lib/config.h.  Generated from config.hin by configure.  */
 /* lib/config.hin.  Generated from configure.ac by autoheader.  */
 
-#include <contrib/tools/bison/gnulib/win_sdk10.h>
-
+#include <contrib/tools/bison/gnulib/win_sdk10.h> 
+ 
 /* Define if building universal (internal helper macro) */
 /* #undef AC_APPLE_UNIVERSAL_BUILD */
 
@@ -1240,11 +1240,11 @@ char *strsignal (int signum);
 #define PACKAGE_VERSION "3.0.0"
 
 /* the number of pending output bytes on stream 'fp' */
-#if WIN_SDK10
-#define PENDING_OUTPUT_N_BYTES ((TWinSdk10File*)fp)->_ptr - ((TWinSdk10File*)fp)->_base
-#else
+#if WIN_SDK10 
+#define PENDING_OUTPUT_N_BYTES ((TWinSdk10File*)fp)->_ptr - ((TWinSdk10File*)fp)->_base 
+#else 
 #define PENDING_OUTPUT_N_BYTES fp->_ptr - fp->_base
-#endif
+#endif 
 
 /* Define if <inttypes.h> exists and defines unusable PRI* macros. */
 /* #undef PRI_MACROS_BROKEN */

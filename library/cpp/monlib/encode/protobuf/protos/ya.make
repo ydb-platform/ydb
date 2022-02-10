@@ -1,9 +1,9 @@
 PROTO_LIBRARY()
 
-OWNER(
-    jamel
-    g:solomon
-)
+OWNER( 
+    jamel 
+    g:solomon 
+) 
 
 SRCS(
     samples.proto

@@ -5,10 +5,10 @@ IF (WITH_VALGRIND)
     SIZE(MEDIUM)
 ENDIF()
 
-OWNER(
-    alexvru
-    g:kikimr
-)
+OWNER( 
+    alexvru 
+    g:kikimr 
+) 
 
 SRCS(
     rope_ut.cpp

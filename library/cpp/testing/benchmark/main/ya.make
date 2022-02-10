@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    pg
-    yazevnul
-)
+OWNER( 
+    pg 
+    yazevnul 
+) 
 
 SRCS(
     GLOBAL main.cpp

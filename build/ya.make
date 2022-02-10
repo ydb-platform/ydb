@@ -2,9 +2,9 @@ OWNER(
     g:ymake
     somov
 )
-
-NEED_CHECK()
-
+ 
+NEED_CHECK() 
+ 
 PY2_LIBRARY()
 
 PY_SRCS(
@@ -33,6 +33,6 @@ RECURSE(
     prebuilt
     scripts
     tests
-    tests_slow
+    tests_slow 
     yandex_specific/config
 )

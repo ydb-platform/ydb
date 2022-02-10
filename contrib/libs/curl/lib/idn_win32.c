@@ -1,41 +1,41 @@
-/***************************************************************************
- *                                  _   _ ____  _
- *  Project                     ___| | | |  _ \| |
- *                             / __| | | | |_) | |
- *                            | (__| |_| |  _ <| |___
- *                             \___|\___/|_| \_\_____|
- *
+/*************************************************************************** 
+ *                                  _   _ ____  _ 
+ *  Project                     ___| | | |  _ \| | 
+ *                             / __| | | | |_) | | 
+ *                            | (__| |_| |  _ <| |___ 
+ *                             \___|\___/|_| \_\_____| 
+ * 
  * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- *
- * This software is licensed as described in the file COPYING, which
- * you should have received as part of this distribution. The terms
+ * 
+ * This software is licensed as described in the file COPYING, which 
+ * you should have received as part of this distribution. The terms 
  * are also available at https://curl.se/docs/copyright.html.
- *
- * You may opt to use, copy, modify, merge, publish, distribute and/or sell
- * copies of the Software, and permit persons to whom the Software is
- * furnished to do so, under the terms of the COPYING file.
- *
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
- * KIND, either express or implied.
- *
- ***************************************************************************/
-
- /*
-  * IDN conversions using Windows kernel32 and normaliz libraries.
-  */
-
-#include "curl_setup.h"
-
-#ifdef USE_WIN32_IDN
-
-#include "curl_multibyte.h"
+ * 
+ * You may opt to use, copy, modify, merge, publish, distribute and/or sell 
+ * copies of the Software, and permit persons to whom the Software is 
+ * furnished to do so, under the terms of the COPYING file. 
+ * 
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY 
+ * KIND, either express or implied. 
+ * 
+ ***************************************************************************/ 
+ 
+ /* 
+  * IDN conversions using Windows kernel32 and normaliz libraries. 
+  */ 
+ 
+#include "curl_setup.h" 
+ 
+#ifdef USE_WIN32_IDN 
+ 
+#include "curl_multibyte.h" 
 #include "curl_memory.h"
 #include "warnless.h"
-
+ 
   /* The last #include file should be: */
-#include "memdebug.h"
-
-#ifdef WANT_IDN_PROTOTYPES
+#include "memdebug.h" 
+ 
+#ifdef WANT_IDN_PROTOTYPES 
 #  if defined(_SAL_VERSION)
 WINNORMALIZEAPI int WINAPI
 IdnToAscii(_In_                           DWORD    dwFlags,
@@ -61,36 +61,36 @@ WINBASEAPI int WINAPI IdnToUnicode(DWORD dwFlags,
                                    WCHAR *lpUnicodeCharStr,
                                    int cchUnicodeChar);
 #  endif
-#endif
-
-#define IDN_MAX_LENGTH 255
-
+#endif 
+ 
+#define IDN_MAX_LENGTH 255 
+ 
 bool curl_win32_idn_to_ascii(const char *in, char **out);
 bool curl_win32_ascii_to_idn(const char *in, char **out);
-
+ 
 bool curl_win32_idn_to_ascii(const char *in, char **out)
-{
+{ 
   bool success = FALSE;
 
   wchar_t *in_w = curlx_convert_UTF8_to_wchar(in);
-  if(in_w) {
-    wchar_t punycode[IDN_MAX_LENGTH];
+  if(in_w) { 
+    wchar_t punycode[IDN_MAX_LENGTH]; 
     int chars = IdnToAscii(0, in_w, -1, punycode, IDN_MAX_LENGTH);
     free(in_w);
     if(chars) {
       *out = curlx_convert_wchar_to_UTF8(punycode);
       if(*out)
         success = TRUE;
-    }
+    } 
   }
-
+ 
   return success;
-}
-
+} 
+ 
 bool curl_win32_ascii_to_idn(const char *in, char **out)
-{
+{ 
   bool success = FALSE;
-
+ 
   wchar_t *in_w = curlx_convert_UTF8_to_wchar(in);
   if(in_w) {
     size_t in_len = wcslen(in_w) + 1;
@@ -102,10 +102,10 @@ bool curl_win32_ascii_to_idn(const char *in, char **out)
       *out = curlx_convert_wchar_to_UTF8(unicode);
       if(*out)
         success = TRUE;
-    }
-  }
+    } 
+  } 
 
   return success;
-}
-
-#endif /* USE_WIN32_IDN */
+} 
+ 
+#endif /* USE_WIN32_IDN */ 

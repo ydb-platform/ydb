@@ -3,7 +3,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
-#include <util/string/ascii.h>
+#include <util/string/ascii.h> 
 
 //do not own any data
 struct TPathSplitStore: public TVector<TStringBuf> {
@@ -23,7 +23,7 @@ protected:
 
 struct TPathSplitTraitsUnix: public TPathSplitStore {
     static constexpr char MainPathSep = '/';
-
+ 
     inline TString Reconstruct() const {
         return DoReconstruct(TStringBuf("/"));
     }
@@ -42,7 +42,7 @@ struct TPathSplitTraitsUnix: public TPathSplitStore {
 
 struct TPathSplitTraitsWindows: public TPathSplitStore {
     static constexpr char MainPathSep = '\\';
-
+ 
     inline TString Reconstruct() const {
         return DoReconstruct(TStringBuf("\\"));
     }

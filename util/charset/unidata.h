@@ -352,9 +352,9 @@ inline bool IsLower(wchar32 ch) {
 inline bool IsUpper(wchar32 ch) {
     return NUnicode::CharHasType(ch, SHIFT(Lu_UPPER));
 }
-inline bool IsTitle(wchar32 ch) {
-    return NUnicode::CharHasType(ch, SHIFT(Lt_TITLE));
-}
+inline bool IsTitle(wchar32 ch) { 
+    return NUnicode::CharHasType(ch, SHIFT(Lt_TITLE)); 
+} 
 inline bool IsAlpha(wchar32 ch) {
     return NUnicode::CharHasType(ch,
                                  SHIFT(Lu_UPPER) | SHIFT(Ll_LOWER) | SHIFT(Lt_TITLE) | SHIFT(Lm_LETTER) | SHIFT(Lm_EXTENDER) |

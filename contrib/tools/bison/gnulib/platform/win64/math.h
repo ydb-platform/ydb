@@ -24,11 +24,11 @@
 
 
 /* The include_next requires a split double-inclusion guard.  */
-#if _MSC_VER >= 1900
-#include <../ucrt/math.h>
-#else
-#include <../include/math.h>
-#endif
+#if _MSC_VER >= 1900 
+#include <../ucrt/math.h> 
+#else 
+#include <../include/math.h> 
+#endif 
 
 #ifndef _GL_M4_MATH_H
 #define _GL_M4_MATH_H

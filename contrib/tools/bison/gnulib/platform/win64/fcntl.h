@@ -38,11 +38,11 @@
 #if !(defined __GLIBC__ || defined __UCLIBC__) || (defined __cplusplus && defined GNULIB_NAMESPACE && !(__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3)))
 # include <sys/stat.h>
 #endif
-#if _MSC_VER >= 1900
-#include <../ucrt/fcntl.h>
-#else
-#include <../include/fcntl.h>
-#endif
+#if _MSC_VER >= 1900 
+#include <../ucrt/fcntl.h> 
+#else 
+#include <../include/fcntl.h> 
+#endif 
 
 #else
 /* Normal invocation convention.  */
@@ -62,11 +62,11 @@
 # include <sys/stat.h>
 #endif
 /* The include_next requires a split double-inclusion guard.  */
-#if _MSC_VER >= 1900
-#include <../ucrt/fcntl.h>
-#else
-#include <../include/fcntl.h>
-#endif
+#if _MSC_VER >= 1900 
+#include <../ucrt/fcntl.h> 
+#else 
+#include <../include/fcntl.h> 
+#endif 
 
 #ifndef _GL_M4_FCNTL_H
 #define _GL_M4_FCNTL_H

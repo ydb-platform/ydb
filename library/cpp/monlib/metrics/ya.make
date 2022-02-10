@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    g:solomon
-    jamel
-)
+OWNER( 
+    g:solomon 
+    jamel 
+) 
 
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(metric_value_type.h)
 

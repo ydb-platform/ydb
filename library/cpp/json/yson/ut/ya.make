@@ -7,7 +7,7 @@ UNITTEST_FOR(library/cpp/json/yson)
 
 ALLOCATOR(LF)
 
-DATA(sbr://363537653)
+DATA(sbr://363537653) 
 
 PEERDIR(
     library/cpp/blockcodecs

@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    pg
-    velavokr
-)
+OWNER( 
+    pg 
+    velavokr 
+) 
 
 SRCS(
     json_writer.cpp

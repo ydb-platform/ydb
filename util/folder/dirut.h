@@ -67,7 +67,7 @@ inline TString GetFileNameComponent(const TString& f) {
     return GetFileNameComponent(f.data());
 }
 
-/// RealPath doesn't guarantee trailing separator to be stripped or left in place for directories.
+/// RealPath doesn't guarantee trailing separator to be stripped or left in place for directories. 
 TString RealPath(const TString& path);     // throws
 TString RealLocation(const TString& path); /// throws; last file name component doesn't need to exist
 

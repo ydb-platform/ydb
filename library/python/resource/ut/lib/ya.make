@@ -2,7 +2,7 @@ PY23_LIBRARY()
 
 OWNER(pg)
 
-TEST_SRCS(test_simple.py)
+TEST_SRCS(test_simple.py) 
 
 PEERDIR(
     library/python/resource

@@ -1,8 +1,8 @@
 """Magic functions for running cells in various scripts."""
 from __future__ import print_function
 
-# Copyright (c) IPython Development Team.
-# Distributed under the terms of the Modified BSD License.
+# Copyright (c) IPython Development Team. 
+# Distributed under the terms of the Modified BSD License. 
 
 import errno
 import os
@@ -19,7 +19,7 @@ from IPython.core.magic import  (
 from IPython.lib.backgroundjobs import BackgroundJobManager
 from IPython.utils import py3compat
 from IPython.utils.process import arg_split
-from traitlets import List, Dict, default
+from traitlets import List, Dict, default 
 
 #-----------------------------------------------------------------------------
 # Magic implementation classes
@@ -68,7 +68,7 @@ class ScriptMagics(Magics):
     with a program in a subprocess, and registers a few top-level
     magics that call %%script with common interpreters.
     """
-    script_magics = List(
+    script_magics = List( 
         help="""Extra script cell magics to define
         
         This generates simple wrappers of `%%script foo` as `%%foo`.
@@ -76,8 +76,8 @@ class ScriptMagics(Magics):
         If you want to add script magics that aren't on your path,
         specify them in script_paths
         """,
-    ).tag(config=True)
-    @default('script_magics')
+    ).tag(config=True) 
+    @default('script_magics') 
     def _script_magics_default(self):
         """default to a common list of programs"""
         
@@ -98,13 +98,13 @@ class ScriptMagics(Magics):
         
         return defaults
     
-    script_paths = Dict(
+    script_paths = Dict( 
         help="""Dict mapping short 'ruby' names to full paths, such as '/opt/secret/bin/ruby'
         
         Only necessary for items in script_magics where the default path will not
         find the right interpreter.
         """
-    ).tag(config=True)
+    ).tag(config=True) 
     
     def __init__(self, shell=None):
         super(ScriptMagics, self).__init__(shell=shell)

@@ -27,8 +27,8 @@ from IPython.utils.ipstruct import Struct
 from IPython.utils.process import arg_split
 from IPython.utils.py3compat import string_types, iteritems
 from IPython.utils.text import dedent
-from traitlets import Bool, Dict, Instance, observe
-from logging import error
+from traitlets import Bool, Dict, Instance, observe 
+from logging import error 
 
 #-----------------------------------------------------------------------------
 # Globals
@@ -298,12 +298,12 @@ class MagicsManager(Configurable):
 
     shell = Instance('IPython.core.interactiveshell.InteractiveShellABC', allow_none=True)
 
-    auto_magic = Bool(True, help=
-        "Automatically call line magics without requiring explicit % prefix"
-    ).tag(config=True)
-    @observe('auto_magic')
-    def _auto_magic_changed(self, change):
-        self.shell.automagic = change['new']
+    auto_magic = Bool(True, help= 
+        "Automatically call line magics without requiring explicit % prefix" 
+    ).tag(config=True) 
+    @observe('auto_magic') 
+    def _auto_magic_changed(self, change): 
+        self.shell.automagic = change['new'] 
     
     _auto_status = [
         'Automagic is OFF, % prefix IS needed for line magics.',

@@ -1137,14 +1137,14 @@
                 }
             ]
         },
-        "yo": {
-            "tools": {
+        "yo": { 
+            "tools": { 
                 "yo": {
                     "bottle": "yo",
                     "executable": "yo"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -1157,8 +1157,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "mockgen": {
             "tools": {
                 "mockgen": {
@@ -5819,17 +5819,17 @@
                 ]
             }
         },
-        "yo": {
-            "formula": {
+        "yo": { 
+            "formula": { 
                 "sandbox_id": 1183539336,
-                "match": "yo"
-            },
-            "executable": {
+                "match": "yo" 
+            }, 
+            "executable": { 
                 "yo": [
                     "yo"
                 ]
-            }
-        },
+            } 
+        }, 
         "mockgen": {
             "formula": {
                 "sandbox_id": [

@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:antiinfra)
+OWNER(g:antiinfra) 
 
 PEERDIR(
     contrib/libs/hyperscan

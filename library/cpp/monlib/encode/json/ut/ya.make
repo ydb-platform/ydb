@@ -1,9 +1,9 @@
 UNITTEST_FOR(library/cpp/monlib/encode/json)
 
-OWNER(
-    g:solomon
-    jamel
-)
+OWNER( 
+    g:solomon 
+    jamel 
+) 
 
 SRCS(
     json_decoder_ut.cpp

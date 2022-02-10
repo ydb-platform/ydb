@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    g:solomon
-    jamel
-)
+OWNER( 
+    g:solomon 
+    jamel 
+) 
 
 SRCS(
     json_decoder.cpp

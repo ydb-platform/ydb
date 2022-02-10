@@ -1,6 +1,6 @@
 PROGRAM()
 
-OWNER(velavokr)
+OWNER(velavokr) 
 
 SRCS(
     static_codec_generator.cpp

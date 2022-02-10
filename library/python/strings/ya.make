@@ -8,9 +8,9 @@ PY_SRCS(
     strings.py
 )
 
-PEERDIR(
-    library/python/func
+PEERDIR( 
+    library/python/func 
     contrib/python/six
-)
+) 
 
 END()

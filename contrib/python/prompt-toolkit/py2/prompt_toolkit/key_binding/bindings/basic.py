@@ -5,11 +5,11 @@ from prompt_toolkit.enums import DEFAULT_BUFFER
 from prompt_toolkit.filters import HasSelection, Condition, EmacsInsertMode, ViInsertMode
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout.screen import Point
-from prompt_toolkit.mouse_events import MouseEventType, MouseEvent
+from prompt_toolkit.mouse_events import MouseEventType, MouseEvent 
 from prompt_toolkit.renderer import HeightIsUnknownError
 from prompt_toolkit.utils import suspend_to_background_supported, is_windows
 
-from .named_commands import get_by_name
+from .named_commands import get_by_name 
 from ..registry import Registry
 
 
@@ -28,7 +28,7 @@ def if_no_repeat(event):
 
 def load_basic_bindings():
     registry = Registry()
-    insert_mode = ViInsertMode() | EmacsInsertMode()
+    insert_mode = ViInsertMode() | EmacsInsertMode() 
     handle = registry.add_binding
     has_selection = HasSelection()
 
@@ -88,15 +88,15 @@ def load_basic_bindings():
     @handle(Keys.Down)
     @handle(Keys.Right)
     @handle(Keys.Left)
-    @handle(Keys.ShiftUp)
-    @handle(Keys.ShiftDown)
-    @handle(Keys.ShiftRight)
-    @handle(Keys.ShiftLeft)
+    @handle(Keys.ShiftUp) 
+    @handle(Keys.ShiftDown) 
+    @handle(Keys.ShiftRight) 
+    @handle(Keys.ShiftLeft) 
     @handle(Keys.Home)
     @handle(Keys.End)
     @handle(Keys.Delete)
     @handle(Keys.ShiftDelete)
-    @handle(Keys.ControlDelete)
+    @handle(Keys.ControlDelete) 
     @handle(Keys.PageUp)
     @handle(Keys.PageDown)
     @handle(Keys.BackTab)
@@ -106,7 +106,7 @@ def load_basic_bindings():
     @handle(Keys.ControlUp)
     @handle(Keys.ControlDown)
     @handle(Keys.Insert)
-    @handle(Keys.Ignore)
+    @handle(Keys.Ignore) 
     def _(event):
         """
         First, for any of these keys, Don't do anything by default. Also don't
@@ -118,61 +118,61 @@ def load_basic_bindings():
         """
         pass
 
-    # Readline-style bindings.
-    handle(Keys.Home)(get_by_name('beginning-of-line'))
-    handle(Keys.End)(get_by_name('end-of-line'))
-    handle(Keys.Left)(get_by_name('backward-char'))
-    handle(Keys.Right)(get_by_name('forward-char'))
-    handle(Keys.ControlUp)(get_by_name('previous-history'))
-    handle(Keys.ControlDown)(get_by_name('next-history'))
-    handle(Keys.ControlL)(get_by_name('clear-screen'))
+    # Readline-style bindings. 
+    handle(Keys.Home)(get_by_name('beginning-of-line')) 
+    handle(Keys.End)(get_by_name('end-of-line')) 
+    handle(Keys.Left)(get_by_name('backward-char')) 
+    handle(Keys.Right)(get_by_name('forward-char')) 
+    handle(Keys.ControlUp)(get_by_name('previous-history')) 
+    handle(Keys.ControlDown)(get_by_name('next-history')) 
+    handle(Keys.ControlL)(get_by_name('clear-screen')) 
 
-    handle(Keys.ControlK, filter=insert_mode)(get_by_name('kill-line'))
-    handle(Keys.ControlU, filter=insert_mode)(get_by_name('unix-line-discard'))
-    handle(Keys.ControlH, filter=insert_mode, save_before=if_no_repeat)(
-        get_by_name('backward-delete-char'))
-    handle(Keys.Backspace, filter=insert_mode, save_before=if_no_repeat)(
-        get_by_name('backward-delete-char'))
-    handle(Keys.Delete, filter=insert_mode, save_before=if_no_repeat)(
-        get_by_name('delete-char'))
-    handle(Keys.ShiftDelete, filter=insert_mode, save_before=if_no_repeat)(
-        get_by_name('delete-char'))
-    handle(Keys.Any, filter=insert_mode, save_before=if_no_repeat)(
-        get_by_name('self-insert'))
-    handle(Keys.ControlT, filter=insert_mode)(get_by_name('transpose-chars'))
-    handle(Keys.ControlW, filter=insert_mode)(get_by_name('unix-word-rubout'))
+    handle(Keys.ControlK, filter=insert_mode)(get_by_name('kill-line')) 
+    handle(Keys.ControlU, filter=insert_mode)(get_by_name('unix-line-discard')) 
+    handle(Keys.ControlH, filter=insert_mode, save_before=if_no_repeat)( 
+        get_by_name('backward-delete-char')) 
+    handle(Keys.Backspace, filter=insert_mode, save_before=if_no_repeat)( 
+        get_by_name('backward-delete-char')) 
+    handle(Keys.Delete, filter=insert_mode, save_before=if_no_repeat)( 
+        get_by_name('delete-char')) 
+    handle(Keys.ShiftDelete, filter=insert_mode, save_before=if_no_repeat)( 
+        get_by_name('delete-char')) 
+    handle(Keys.Any, filter=insert_mode, save_before=if_no_repeat)( 
+        get_by_name('self-insert')) 
+    handle(Keys.ControlT, filter=insert_mode)(get_by_name('transpose-chars')) 
+    handle(Keys.ControlW, filter=insert_mode)(get_by_name('unix-word-rubout')) 
     handle(Keys.ControlI, filter=insert_mode)(get_by_name('menu-complete'))
     handle(Keys.BackTab, filter=insert_mode)(get_by_name('menu-complete-backward'))
 
-    handle(Keys.PageUp, filter= ~has_selection)(get_by_name('previous-history'))
-    handle(Keys.PageDown, filter= ~has_selection)(get_by_name('next-history'))
-
+    handle(Keys.PageUp, filter= ~has_selection)(get_by_name('previous-history')) 
+    handle(Keys.PageDown, filter= ~has_selection)(get_by_name('next-history')) 
+ 
     # CTRL keys.
 
-    text_before_cursor = Condition(lambda cli: cli.current_buffer.text)
-    handle(Keys.ControlD, filter=text_before_cursor & insert_mode)(get_by_name('delete-char'))
+    text_before_cursor = Condition(lambda cli: cli.current_buffer.text) 
+    handle(Keys.ControlD, filter=text_before_cursor & insert_mode)(get_by_name('delete-char')) 
 
-    is_multiline = Condition(lambda cli: cli.current_buffer.is_multiline())
-    is_returnable = Condition(lambda cli: cli.current_buffer.accept_action.is_returnable)
+    is_multiline = Condition(lambda cli: cli.current_buffer.is_multiline()) 
+    is_returnable = Condition(lambda cli: cli.current_buffer.accept_action.is_returnable) 
 
-    @handle(Keys.ControlJ, filter=is_multiline & insert_mode)
+    @handle(Keys.ControlJ, filter=is_multiline & insert_mode) 
     def _(event):
-        " Newline (in case of multiline input. "
-        event.current_buffer.newline(copy_margin=not event.cli.in_paste_mode)
+        " Newline (in case of multiline input. " 
+        event.current_buffer.newline(copy_margin=not event.cli.in_paste_mode) 
 
-    @handle(Keys.ControlJ, filter=~is_multiline & is_returnable)
+    @handle(Keys.ControlJ, filter=~is_multiline & is_returnable) 
     def _(event):
-        " Enter, accept input. "
-        buff = event.current_buffer
-        buff.accept_action.validate_and_handle(event.cli, buff)
+        " Enter, accept input. " 
+        buff = event.current_buffer 
+        buff.accept_action.validate_and_handle(event.cli, buff) 
 
-    # Delete the word before the cursor.
+    # Delete the word before the cursor. 
 
-    @handle(Keys.Up)
+    @handle(Keys.Up) 
     def _(event):
         event.current_buffer.auto_up(count=event.arg)
 
-    @handle(Keys.Down)
+    @handle(Keys.Down) 
     def _(event):
         event.current_buffer.auto_down(count=event.arg)
 
@@ -211,16 +211,16 @@ def load_basic_bindings():
     @handle(Keys.BracketedPaste)
     def _(event):
         " Pasting from clipboard. "
-        data = event.data
+        data = event.data 
 
-        # Be sure to use \n as line ending.
-        # Some terminals (Like iTerm2) seem to paste \r\n line endings in a
-        # bracketed paste. See: https://github.com/ipython/ipython/issues/9737
-        data = data.replace('\r\n', '\n')
-        data = data.replace('\r', '\n')
-
-        event.current_buffer.insert_text(data)
-
+        # Be sure to use \n as line ending. 
+        # Some terminals (Like iTerm2) seem to paste \r\n line endings in a 
+        # bracketed paste. See: https://github.com/ipython/ipython/issues/9737 
+        data = data.replace('\r\n', '\n') 
+        data = data.replace('\r', '\n') 
+ 
+        event.current_buffer.insert_text(data) 
+ 
     @handle(Keys.Any, filter=Condition(lambda cli: cli.quoted_insert), eager=True)
     def _(event):
         """
@@ -228,15 +228,15 @@ def load_basic_bindings():
         """
         event.current_buffer.insert_text(event.data, overwrite=False)
         event.cli.quoted_insert = False
-
+ 
     return registry
 
 
 def load_mouse_bindings():
-    """
-    Key bindings, required for mouse support.
-    (Mouse events enter through the key binding system.)
-    """
+    """ 
+    Key bindings, required for mouse support. 
+    (Mouse events enter through the key binding system.) 
+    """ 
     registry = Registry()
 
     @registry.add_binding(Keys.Vt100MouseEvent)
@@ -253,16 +253,16 @@ def load_mouse_bindings():
             # Typical.
             mouse_event, x, y = map(ord, event.data[3:])
             mouse_event = {
-                32: MouseEventType.MOUSE_DOWN,
-                35: MouseEventType.MOUSE_UP,
-                96: MouseEventType.SCROLL_UP,
-                97: MouseEventType.SCROLL_DOWN,
+                32: MouseEventType.MOUSE_DOWN, 
+                35: MouseEventType.MOUSE_UP, 
+                96: MouseEventType.SCROLL_UP, 
+                97: MouseEventType.SCROLL_DOWN, 
             }.get(mouse_event)
-
-            # Handle situations where `PosixStdinReader` used surrogateescapes.
-            if x >= 0xdc00: x-= 0xdc00
-            if y >= 0xdc00: y-= 0xdc00
-
+ 
+            # Handle situations where `PosixStdinReader` used surrogateescapes. 
+            if x >= 0xdc00: x-= 0xdc00 
+            if y >= 0xdc00: y-= 0xdc00 
+ 
             x -= 32
             y -= 32
         else:
@@ -283,17 +283,17 @@ def load_mouse_bindings():
             # Parse event type.
             if sgr:
                 mouse_event = {
-                    (0, 'M'): MouseEventType.MOUSE_DOWN,
-                    (0, 'm'): MouseEventType.MOUSE_UP,
-                    (64, 'M'): MouseEventType.SCROLL_UP,
-                    (65, 'M'): MouseEventType.SCROLL_DOWN,
+                    (0, 'M'): MouseEventType.MOUSE_DOWN, 
+                    (0, 'm'): MouseEventType.MOUSE_UP, 
+                    (64, 'M'): MouseEventType.SCROLL_UP, 
+                    (65, 'M'): MouseEventType.SCROLL_DOWN, 
                 }.get((mouse_event, m))
             else:
                 mouse_event = {
-                    32: MouseEventType.MOUSE_DOWN,
-                    35: MouseEventType.MOUSE_UP,
-                    96: MouseEventType.SCROLL_UP,
-                    97: MouseEventType.SCROLL_DOWN,
+                    32: MouseEventType.MOUSE_DOWN, 
+                    35: MouseEventType.MOUSE_UP, 
+                    96: MouseEventType.SCROLL_UP, 
+                    97: MouseEventType.SCROLL_DOWN, 
                     }.get(mouse_event)
 
         x -= 1
@@ -357,7 +357,7 @@ def load_abort_and_exit_bindings():
         return (cli.current_buffer_name == DEFAULT_BUFFER and
                 not cli.current_buffer.text)
 
-    handle(Keys.ControlD, filter=ctrl_d_condition)(get_by_name('end-of-file'))
+    handle(Keys.ControlD, filter=ctrl_d_condition)(get_by_name('end-of-file')) 
 
     return registry
 

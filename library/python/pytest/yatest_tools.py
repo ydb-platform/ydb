@@ -233,10 +233,10 @@ def get_python_cmd(opts=None, use_huge=True, suite=None):
         return ["python"]
     if suite and not suite._use_arcadia_python:
         return ["python"]
-    if use_huge:
-        return ["$(PYTHON)/python"]
-    ymake_path = opts.ymake_bin if opts and getattr(opts, 'ymake_bin', None) else "$(YMAKE)/ymake"
-    return [ymake_path, "--python"]
+    if use_huge: 
+        return ["$(PYTHON)/python"] 
+    ymake_path = opts.ymake_bin if opts and getattr(opts, 'ymake_bin', None) else "$(YMAKE)/ymake" 
+    return [ymake_path, "--python"] 
 
 
 def normalize_name(name):

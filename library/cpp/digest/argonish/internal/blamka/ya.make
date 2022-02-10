@@ -2,8 +2,8 @@ LIBRARY()
 
 OWNER(e-sidorov)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/digest/argonish/internal/rotations
-)
+) 
 
 END()

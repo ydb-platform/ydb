@@ -45,7 +45,7 @@ RECURSE(
     crfsuite
     croaring
     ctemplate
-    curl
+    curl 
     cxxsupp/libcxx
     cxxsupp/libcxxabi-parts
     djvulibre
@@ -287,12 +287,12 @@ RECURSE(
     pycxx
     python
     python/ut
-    qhull
+    qhull 
     quicklz
     r-lang
     re2
-    regional-units/library
-    regional-units/library/ut
+    regional-units/library 
+    regional-units/library/ut 
     rocksdb
     rocksdb/tools/ldb
     rocksdb/tools/sst_dump
@@ -315,7 +315,7 @@ RECURSE(
     stan-math
     stan/stan/command
     stxxl
-    subversion
+    subversion 
     sundials
     svm
     svt-hevc
@@ -391,12 +391,12 @@ ENDIF()
 IF (OS_LINUX)
     RECURSE(
         ibdrv
-        ibdrv/ut
+        ibdrv/ut 
         proc
         luajit
         luajit_21
         libaio
-        libcap
+        libcap 
         libmnl
         libnfnetlink
         libnetfilter_log
@@ -430,7 +430,7 @@ ENDIF()
 
 IF (OS_ANDROID)
     RECURSE(
-        android_cpufeatures
+        android_cpufeatures 
         android_crazy_linker
     )
 ENDIF()

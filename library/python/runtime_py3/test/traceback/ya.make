@@ -1,17 +1,17 @@
 PY3_PROGRAM()
 
-OWNER(
-    abodrov
-    borman
-)
+OWNER( 
+    abodrov 
+    borman 
+) 
 
 PEERDIR(
     contrib/python/ipython
 )
 
 PY_SRCS(
-    MAIN
-    __main__.py=main
+    MAIN 
+    __main__.py=main 
     crash.py
     mod/__init__.py
 )

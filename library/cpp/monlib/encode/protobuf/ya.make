@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    jamel
-    g:solomon
-)
+OWNER( 
+    jamel 
+    g:solomon 
+) 
 
 SRCS(
     protobuf_encoder.cpp

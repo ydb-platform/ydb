@@ -14,8 +14,8 @@ TAG(
     ya:fat
 )
 
-TEST_SRCS(main.py)
+TEST_SRCS(main.py) 
 
-DEPENDS(util/string/benchmark/subst_global)
+DEPENDS(util/string/benchmark/subst_global) 
 
 END()

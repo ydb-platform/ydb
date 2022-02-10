@@ -15,7 +15,7 @@
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 #include <util/system/info.h>
-
+ 
 #include <errno.h>
 
 #if defined(_unix_)
@@ -87,8 +87,8 @@ namespace {
         }
     }
 #elif defined(_win_)
-    constexpr static size_t MAX_COMMAND_LINE = 32 * 1024;
-
+    constexpr static size_t MAX_COMMAND_LINE = 32 * 1024; 
+ 
     std::wstring GetWString(const char* astring) {
         if (!astring)
             return std::wstring();
@@ -400,7 +400,7 @@ public:
                 kill(-Pid, SIGTERM); // between a failed kill(-Pid) and a successful kill(Pid) a grandchild could have been spawned
             }
 #else
-                TerminateProcess(Pid, 1 /* exit code */);
+                TerminateProcess(Pid, 1 /* exit code */); 
 #endif
             if (!ok) {
                 ythrow TSystemError() << "cannot terminate " << Pid;
@@ -562,10 +562,10 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     // winapi can modify command text, copy it
 
     Y_ENSURE_EX(cmd.size() < MAX_COMMAND_LINE, yexception() << "Command is too long (length=" << cmd.size() << ")");
-    TTempArray<wchar_t> cmdcopy(MAX_COMMAND_LINE);
+    TTempArray<wchar_t> cmdcopy(MAX_COMMAND_LINE); 
     Copy(cmd.data(), cmd.data() + cmd.size(), cmdcopy.Data());
     *(cmdcopy.Data() + cmd.size()) = 0;
-
+ 
     const wchar_t* cwd = NULL;
     std::wstring cwdBuff;
     if (WorkDir.size()) {
@@ -591,7 +591,7 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     if (User.Name.empty() || GetUsername() == User.Name) {
         res = CreateProcessW(
             nullptr, // image name
-            cmdcopy.Data(),
+            cmdcopy.Data(), 
             nullptr,       // process security attributes
             nullptr,       // thread security attributes
             TRUE,          // inherit handles - needed for IO, CloseAllFdsOnExec not respected
@@ -607,7 +607,7 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
             GetWString(User.Password.data()).c_str(),
             0,    // logon flags
             NULL, // image name
-            cmdcopy.Data(),
+            cmdcopy.Data(), 
             0,             // obscure creation flags
             lpEnvironment, // environment
             cwd,           // current directory
@@ -619,11 +619,11 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
         AtomicSet(ExecutionStatus, SHELL_ERROR);
         /// @todo: write to error stream if set
         TStringOutput out(CollectedError);
-        out << "Process was not created: " << LastSystemErrorText() << " command text was: '" << GetAString(cmdcopy.Data()) << "'";
+        out << "Process was not created: " << LastSystemErrorText() << " command text was: '" << GetAString(cmdcopy.Data()) << "'"; 
     }
-    Pid = process_info.hProcess;
+    Pid = process_info.hProcess; 
     CloseHandle(process_info.hThread);
-    DBG(Cerr << "created process id " << Pid << " in dir: " << cwd << ", cmd: " << cmdcopy.Data() << Endl);
+    DBG(Cerr << "created process id " << Pid << " in dir: " << cwd << ", cmd: " << cmdcopy.Data() << Endl); 
 }
 #endif
 
@@ -1073,7 +1073,7 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
 #else
         if (waitPidResult == WAIT_OBJECT_0) {
             DWORD exitCode = STILL_ACTIVE;
-            if (!GetExitCodeProcess(pi->Parent->Pid, &exitCode)) {
+            if (!GetExitCodeProcess(pi->Parent->Pid, &exitCode)) { 
                 ythrow yexception() << "GetExitCodeProcess: " << LastSystemErrorText();
             }
             if (exitCode == 0)

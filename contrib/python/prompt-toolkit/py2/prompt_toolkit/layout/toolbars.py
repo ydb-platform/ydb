@@ -4,15 +4,15 @@ from ..enums import IncrementalSearchDirection
 
 from .processors import BeforeInput
 
-from .lexers import SimpleLexer
+from .lexers import SimpleLexer 
 from .dimension import LayoutDimension
-from .controls import BufferControl, TokenListControl, UIControl, UIContent
+from .controls import BufferControl, TokenListControl, UIControl, UIContent 
 from .containers import Window, ConditionalContainer
-from .screen import Char
+from .screen import Char 
 from .utils import token_list_len
-from prompt_toolkit.enums import SEARCH_BUFFER, SYSTEM_BUFFER
+from prompt_toolkit.enums import SEARCH_BUFFER, SYSTEM_BUFFER 
 from prompt_toolkit.filters import HasFocus, HasArg, HasCompletions, HasValidationError, HasSearch, Always, IsDone
-from prompt_toolkit.token import Token
+from prompt_toolkit.token import Token 
 
 __all__ = (
     'TokenListToolbar',
@@ -35,13 +35,13 @@ class TokenListToolbar(ConditionalContainer):
 
 class SystemToolbarControl(BufferControl):
     def __init__(self):
-        token = Token.Toolbar.System
-
+        token = Token.Toolbar.System 
+ 
         super(SystemToolbarControl, self).__init__(
             buffer_name=SYSTEM_BUFFER,
-            default_char=Char(token=token),
-            lexer=SimpleLexer(token=token.Text),
-            input_processors=[BeforeInput.static('Shell command: ', token)],)
+            default_char=Char(token=token), 
+            lexer=SimpleLexer(token=token.Text), 
+            input_processors=[BeforeInput.static('Shell command: ', token)],) 
 
 
 class SystemToolbar(ConditionalContainer):
@@ -56,13 +56,13 @@ class SystemToolbar(ConditionalContainer):
 class ArgToolbarControl(TokenListControl):
     def __init__(self):
         def get_tokens(cli):
-            arg = cli.input_processor.arg
-            if arg == '-':
-                arg = '-1'
-
+            arg = cli.input_processor.arg 
+            if arg == '-': 
+                arg = '-1' 
+ 
             return [
                 (Token.Toolbar.Arg, 'Repeat: '),
-                (Token.Toolbar.Arg.Text, arg),
+                (Token.Toolbar.Arg.Text, arg), 
             ]
 
         super(ArgToolbarControl, self).__init__(get_tokens)
@@ -97,8 +97,8 @@ class SearchToolbarControl(BufferControl):
         super(SearchToolbarControl, self).__init__(
             buffer_name=SEARCH_BUFFER,
             input_processors=[BeforeInput(get_before_input)],
-            default_char=Char(token=token),
-            lexer=SimpleLexer(token=token.Text))
+            default_char=Char(token=token), 
+            lexer=SimpleLexer(token=token.Text)) 
 
 
 class SearchToolbar(ConditionalContainer):
@@ -113,7 +113,7 @@ class SearchToolbar(ConditionalContainer):
 class CompletionsToolbarControl(UIControl):
     token = Token.Toolbar.Completions
 
-    def create_content(self, cli, width, height):
+    def create_content(self, cli, width, height): 
         complete_state = cli.current_buffer.complete_state
         if complete_state:
             completions = complete_state.current_completions
@@ -161,12 +161,12 @@ class CompletionsToolbarControl(UIControl):
         else:
             all_tokens = []
 
-        def get_line(i):
-            return all_tokens
+        def get_line(i): 
+            return all_tokens 
 
-        return UIContent(get_line=get_line, line_count=1)
+        return UIContent(get_line=get_line, line_count=1) 
 
-
+ 
 class CompletionsToolbar(ConditionalContainer):
     def __init__(self, extra_filter=Always()):
         super(CompletionsToolbar, self).__init__(

@@ -25,11 +25,11 @@
 /* Special invocation conventions to handle Solaris header files
    (through Solaris 10) when combined with gettext's libintl.h.  */
 
-#if _MSC_VER >= 1900
-#include <../ucrt/locale.h>
-#else
-#include <../include/locale.h>
-#endif
+#if _MSC_VER >= 1900 
+#include <../ucrt/locale.h> 
+#else 
+#include <../include/locale.h> 
+#endif 
 
 #else
 /* Normal invocation convention.  */
@@ -39,11 +39,11 @@
 #define _GL_ALREADY_INCLUDING_LOCALE_H
 
 /* The include_next requires a split double-inclusion guard.  */
-#if _MSC_VER >= 1900
-#include <../ucrt/locale.h>
-#else
-#include <../include/locale.h>
-#endif
+#if _MSC_VER >= 1900 
+#include <../ucrt/locale.h> 
+#else 
+#include <../include/locale.h> 
+#endif 
 
 #undef _GL_ALREADY_INCLUDING_LOCALE_H
 

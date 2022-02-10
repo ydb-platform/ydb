@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(pg)
 
-ADDINCL(contrib/libs/flatbuffers/include)
+ADDINCL(contrib/libs/flatbuffers/include) 
 
 PEERDIR(
     library/cpp/json

@@ -227,8 +227,8 @@ def try_import(mod, only_modules=False):
     completions.extend(getattr(m, '__all__', []))
     if m_is_init:
         completions.extend(arcadia_module_list(mod))
-    completions = {c for c in completions if isinstance(c, string_types)}
-    completions.discard('__init__')
+    completions = {c for c in completions if isinstance(c, string_types)} 
+    completions.discard('__init__') 
     return sorted(completions)
 
 

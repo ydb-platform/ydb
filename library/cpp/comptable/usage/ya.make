@@ -2,12 +2,12 @@ PROGRAM()
 
 OWNER(ironpeter)
 
-SRCS(
-    usage.cpp
-)
+SRCS( 
+    usage.cpp 
+) 
 
-PEERDIR(
+PEERDIR( 
     library/cpp/comptable
-)
+) 
 
 END()

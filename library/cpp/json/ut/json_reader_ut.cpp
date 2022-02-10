@@ -354,24 +354,24 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
             UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), static_cast<double>(Max<ui64>()));
         } // Max<ui64>()
     }     // TJsonDoubleTest
-
+ 
     Y_UNIT_TEST(TJsonInvalidTest) {
-        {
-            // No exceptions mode.
-            TStringStream in;
-            in << "{ \"test\" : }";
-            TJsonValue value;
-            UNIT_ASSERT(!ReadJsonTree(&in, &value));
-        }
-
-        {
-            // Exception throwing mode.
-            TStringStream in;
-            in << "{ \"test\" : }";
-            TJsonValue value;
-            UNIT_ASSERT_EXCEPTION(ReadJsonTree(&in, &value, true), TJsonException);
-        }
-    }
+        { 
+            // No exceptions mode. 
+            TStringStream in; 
+            in << "{ \"test\" : }"; 
+            TJsonValue value; 
+            UNIT_ASSERT(!ReadJsonTree(&in, &value)); 
+        } 
+ 
+        { 
+            // Exception throwing mode. 
+            TStringStream in; 
+            in << "{ \"test\" : }"; 
+            TJsonValue value; 
+            UNIT_ASSERT_EXCEPTION(ReadJsonTree(&in, &value, true), TJsonException); 
+        } 
+    } 
 
     Y_UNIT_TEST(TJsonMemoryLeakTest) {
         // after https://clubs.at.yandex-team.ru/stackoverflow/3691

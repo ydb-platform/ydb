@@ -1,5 +1,5 @@
 #include "shellcommand.h"
-
+ 
 #include "compat.h"
 #include "defaults.h"
 #include "fs.h"
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
             void DoWrite(const void* buf, size_t len) override {
                 Y_UNUSED(buf);
                 Y_UNUSED(len);
-            }
+            } 
             void DoFinish() override {
                 ++NumCloses;
             }
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
 
         auto options = TShellCommandOptions().SetCloseStreams(true).SetOutputStream(&stream).SetErrorStream(&stream);
         TShellCommand("echo hello", options).Run().Wait();
-        UNIT_ASSERT_VALUES_EQUAL(stream.NumCloses, 2);
+        UNIT_ASSERT_VALUES_EQUAL(stream.NumCloses, 2); 
     }
     Y_UNIT_TEST(TestInterruptSimple) {
         TShellCommandOptions options;

@@ -5,7 +5,7 @@ OWNER(blinkov nslus g:python-contrib)
 VERSION(1.0.18)
 
 LICENSE(BSD-3-Clause)
-
+ 
 PEERDIR(
     contrib/python/six
     contrib/python/wcwidth
@@ -40,7 +40,7 @@ PY_SRCS(
     prompt_toolkit/auto_suggest.py
     prompt_toolkit/buffer.py
     prompt_toolkit/buffer_mapping.py
-    prompt_toolkit/cache.py
+    prompt_toolkit/cache.py 
     prompt_toolkit/clipboard/__init__.py
     prompt_toolkit/clipboard/base.py
     prompt_toolkit/clipboard/in_memory.py
@@ -75,7 +75,7 @@ PY_SRCS(
     prompt_toolkit/eventloop/inputhook.py
     prompt_toolkit/eventloop/posix.py
     prompt_toolkit/eventloop/posix_utils.py
-    prompt_toolkit/eventloop/select.py
+    prompt_toolkit/eventloop/select.py 
     prompt_toolkit/eventloop/utils.py
     prompt_toolkit/eventloop/win32.py
     prompt_toolkit/filters/__init__.py
@@ -89,14 +89,14 @@ PY_SRCS(
     prompt_toolkit/key_binding/__init__.py
     prompt_toolkit/key_binding/bindings/__init__.py
     prompt_toolkit/key_binding/bindings/basic.py
-    prompt_toolkit/key_binding/bindings/completion.py
+    prompt_toolkit/key_binding/bindings/completion.py 
     prompt_toolkit/key_binding/bindings/emacs.py
-    prompt_toolkit/key_binding/bindings/named_commands.py
+    prompt_toolkit/key_binding/bindings/named_commands.py 
     prompt_toolkit/key_binding/bindings/scroll.py
     prompt_toolkit/key_binding/bindings/utils.py
     prompt_toolkit/key_binding/bindings/vi.py
     prompt_toolkit/key_binding/defaults.py
-    prompt_toolkit/key_binding/digraphs.py
+    prompt_toolkit/key_binding/digraphs.py 
     prompt_toolkit/key_binding/input_processor.py
     prompt_toolkit/key_binding/manager.py
     prompt_toolkit/key_binding/registry.py
@@ -122,19 +122,19 @@ PY_SRCS(
     prompt_toolkit/search_state.py
     prompt_toolkit/selection.py
     prompt_toolkit/shortcuts.py
-    prompt_toolkit/styles/__init__.py
-    prompt_toolkit/styles/base.py
-    prompt_toolkit/styles/defaults.py
-    prompt_toolkit/styles/from_dict.py
-    prompt_toolkit/styles/from_pygments.py
-    prompt_toolkit/styles/utils.py
+    prompt_toolkit/styles/__init__.py 
+    prompt_toolkit/styles/base.py 
+    prompt_toolkit/styles/defaults.py 
+    prompt_toolkit/styles/from_dict.py 
+    prompt_toolkit/styles/from_pygments.py 
+    prompt_toolkit/styles/utils.py 
     prompt_toolkit/terminal/__init__.py
     prompt_toolkit/terminal/conemu_output.py
     prompt_toolkit/terminal/vt100_input.py
     prompt_toolkit/terminal/vt100_output.py
     prompt_toolkit/terminal/win32_input.py
     prompt_toolkit/terminal/win32_output.py
-    prompt_toolkit/token.py
+    prompt_toolkit/token.py 
     prompt_toolkit/utils.py
     prompt_toolkit/validation.py
     prompt_toolkit/win32_types.py
@@ -147,7 +147,7 @@ RESOURCE_FILES(
 )
 
 END()
-
+ 
 RECURSE_FOR_TESTS(
     tests
 )

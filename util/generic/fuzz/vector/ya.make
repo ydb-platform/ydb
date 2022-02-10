@@ -1,9 +1,9 @@
 FUZZ()
 
-OWNER(
-    pg
-    g:util
-)
+OWNER( 
+    pg 
+    g:util 
+) 
 SUBSCRIBER(g:util-subscribers)
 
 SRCS(

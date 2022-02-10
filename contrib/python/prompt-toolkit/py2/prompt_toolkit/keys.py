@@ -61,35 +61,35 @@ class Keys(object):
     Down        = Key('<Down>')
     Right       = Key('<Right>')
     Left        = Key('<Left>')
-
-    ShiftLeft   = Key('<ShiftLeft>')
-    ShiftUp     = Key('<ShiftUp>')
-    ShiftDown   = Key('<ShiftDown>')
-    ShiftRight  = Key('<ShiftRight>')
-
+ 
+    ShiftLeft   = Key('<ShiftLeft>') 
+    ShiftUp     = Key('<ShiftUp>') 
+    ShiftDown   = Key('<ShiftDown>') 
+    ShiftRight  = Key('<ShiftRight>') 
+ 
     Home        = Key('<Home>')
     End         = Key('<End>')
     Delete      = Key('<Delete>')
     ShiftDelete = Key('<ShiftDelete>')
-    ControlDelete = Key('<C-Delete>')
+    ControlDelete = Key('<C-Delete>') 
     PageUp      = Key('<PageUp>')
     PageDown    = Key('<PageDown>')
     BackTab     = Key('<BackTab>')  # shift + tab
     Insert      = Key('<Insert>')
-    Backspace   = Key('<Backspace>')
+    Backspace   = Key('<Backspace>') 
 
-    # Aliases.
+    # Aliases. 
     Tab         = ControlI
-    Enter       = ControlJ
-        # XXX: Actually Enter equals ControlM, not ControlJ,
-        #      However, in prompt_toolkit, we made the mistake of translating
-        #      \r into \n during the input, so everyone is now handling the
-        #      enter key by binding ControlJ.
+    Enter       = ControlJ 
+        # XXX: Actually Enter equals ControlM, not ControlJ, 
+        #      However, in prompt_toolkit, we made the mistake of translating 
+        #      \r into \n during the input, so everyone is now handling the 
+        #      enter key by binding ControlJ. 
 
-        #      From now on, it's better to bind `Keys.Enter` everywhere,
-        #      because that's future compatible, and will still work when we
-        #      stop replacing \r by \n.
-
+        #      From now on, it's better to bind `Keys.Enter` everywhere, 
+        #      because that's future compatible, and will still work when we 
+        #      stop replacing \r by \n. 
+ 
     F1 = Key('<F1>')
     F2 = Key('<F2>')
     F3 = Key('<F3>')
@@ -110,10 +110,10 @@ class Keys(object):
     F18 = Key('<F18>')
     F19 = Key('<F19>')
     F20 = Key('<F20>')
-    F21 = Key('<F21>')
-    F22 = Key('<F22>')
-    F23 = Key('<F23>')
-    F24 = Key('<F24>')
+    F21 = Key('<F21>') 
+    F22 = Key('<F22>') 
+    F23 = Key('<F23>') 
+    F24 = Key('<F24>') 
 
     # Matches any key.
     Any = Key('<Any>')
@@ -123,7 +123,7 @@ class Keys(object):
     Vt100MouseEvent = Key('<Vt100-Mouse-Event>')
     WindowsMouseEvent = Key('<Windows-Mouse-Event>')
     BracketedPaste = Key('<Bracketed-Paste>')
-
-    # Key which is ignored. (The key binding for this key should not do
-    # anything.)
-    Ignore = Key('<Ignore>')
+ 
+    # Key which is ignored. (The key binding for this key should not do 
+    # anything.) 
+    Ignore = Key('<Ignore>') 

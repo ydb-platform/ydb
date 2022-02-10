@@ -6,13 +6,13 @@
 
 from __future__ import print_function
 
-from copy import deepcopy
+from copy import deepcopy 
 import json
 import logging
 import os
 import re
 import sys
-from collections import defaultdict, OrderedDict
+from collections import defaultdict, OrderedDict 
 
 from decorator import decorator
 
@@ -22,14 +22,14 @@ from traitlets.config.loader import (
 )
 
 from traitlets.traitlets import (
-    Bool, Unicode, List, Enum, Dict, Instance, TraitError, observe, observe_compat, default,
+    Bool, Unicode, List, Enum, Dict, Instance, TraitError, observe, observe_compat, default, 
 )
 from ipython_genutils.importstring import import_item
 from ipython_genutils.text import indent, wrap_paragraphs, dedent
 from ipython_genutils import py3compat
 
-import six
-
+import six 
+ 
 #-----------------------------------------------------------------------------
 # Descriptions for the various sections
 #-----------------------------------------------------------------------------
@@ -63,24 +63,24 @@ subcommand 'cmd', do: `{app} cmd -h`.
 # Application class
 #-----------------------------------------------------------------------------
 
-
-
-_envvar = os.environ.get('TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR','')
-if _envvar.lower() in {'1','true'}:
-    TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR = True
-elif _envvar.lower() in {'0','false',''} :
-    TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR = False
-else:
-    raise ValueError("Unsupported value for environment variable: 'TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR' is set to '%s' which is none of  {'0', '1', 'false', 'true', ''}."% _envvar )
-
-
+ 
+ 
+_envvar = os.environ.get('TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR','') 
+if _envvar.lower() in {'1','true'}: 
+    TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR = True 
+elif _envvar.lower() in {'0','false',''} : 
+    TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR = False 
+else: 
+    raise ValueError("Unsupported value for environment variable: 'TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR' is set to '%s' which is none of  {'0', '1', 'false', 'true', ''}."% _envvar ) 
+ 
+ 
 @decorator
 def catch_config_error(method, app, *args, **kwargs):
     """Method decorator for catching invalid config (Trait/ArgumentErrors) during init.
 
     On a TraitError (generally caused by bad config), this will print the trait's
     message, and exit the app.
-
+ 
     For use on init methods, to prevent invoking excepthook on invalid input.
     """
     try:
@@ -99,16 +99,16 @@ class ApplicationError(Exception):
 
 class LevelFormatter(logging.Formatter):
     """Formatter with additional `highlevel` record
-
+ 
     This field is empty if log level is less than highlevel_limit,
     otherwise it is formatted with self.highlevel_format.
-
+ 
     Useful for adding 'WARNING' to warning messages,
     without adding 'INFO' to info, etc.
     """
     highlevel_limit = logging.WARN
     highlevel_format = " %(levelname)s |"
-
+ 
     def format(self, record):
         if record.levelno >= self.highlevel_limit:
             record.highlevel = self.highlevel_format % record.__dict__
@@ -116,7 +116,7 @@ class LevelFormatter(logging.Formatter):
             record.highlevel = ""
         return super(LevelFormatter, self).format(record)
 
-
+ 
 class Application(SingletonConfigurable):
     """A singleton application with full configuration support."""
 
@@ -131,7 +131,7 @@ class Application(SingletonConfigurable):
     option_description = Unicode(option_description)
     keyvalue_description = Unicode(keyvalue_description)
     subcommand_description = Unicode(subcommand_description)
-
+ 
     python_config_loader_class = PyFileConfigLoader
     json_config_loader_class = JSONFileConfigLoader
 
@@ -158,13 +158,13 @@ class Application(SingletonConfigurable):
 
     # The version string of this application.
     version = Unicode(u'0.0')
-
+ 
     # the argv used to initialize the application
     argv = List()
 
-    # Whether failing to load config files should prevent startup
-    raise_config_file_errors = Bool(TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR)
-
+    # Whether failing to load config files should prevent startup 
+    raise_config_file_errors = Bool(TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR) 
+ 
     # The log level for the application
     log_level = Enum((0,10,20,30,40,50,'DEBUG','INFO','WARN','ERROR','CRITICAL'),
                     default_value=logging.WARN,
@@ -174,15 +174,15 @@ class Application(SingletonConfigurable):
     @observe_compat
     def _log_level_changed(self, change):
         """Adjust the log level when log_level is set."""
-        new = change.new
-        if isinstance(new, six.string_types):
+        new = change.new 
+        if isinstance(new, six.string_types): 
             new = getattr(logging, new)
             self.log_level = new
         self.log.setLevel(new)
-
+ 
     _log_formatter_cls = LevelFormatter
-
-    log_datefmt = Unicode("%Y-%m-%d %H:%M:%S",
+ 
+    log_datefmt = Unicode("%Y-%m-%d %H:%M:%S", 
         help="The date format used by logging formatters for %(asctime)s"
     ).tag(config=True)
 
@@ -197,7 +197,7 @@ class Application(SingletonConfigurable):
         _log_handler = self.log.handlers[0]
         _log_formatter = self._log_formatter_cls(fmt=self.log_format, datefmt=self.log_datefmt)
         _log_handler.setFormatter(_log_formatter)
-
+ 
     @default('log')
     def _log_default(self):
         """Start logging for this application.
@@ -217,7 +217,7 @@ class Application(SingletonConfigurable):
                 break
             else:
                 _log = _log.parent
-        if sys.executable and sys.executable.endswith('pythonw.exe'):
+        if sys.executable and sys.executable.endswith('pythonw.exe'): 
             # this should really go to a file, but file-logging is only
             # hooked up in parallel applications
             _log_handler = logging.StreamHandler(open(os.devnull, 'w'))
@@ -240,11 +240,11 @@ class Application(SingletonConfigurable):
     @observe_compat
     def _flags_changed(self, change):
         """ensure flags dict is valid"""
-        new = change.new
+        new = change.new 
         for key, value in new.items():
             assert len(value) == 2, "Bad flag: %r:%s" % (key, value)
             assert isinstance(value[0], (dict, Config)), "Bad flag: %r:%s" % (key, value)
-            assert isinstance(value[1], six.string_types), "Bad flag: %r:%s" % (key, value)
+            assert isinstance(value[1], six.string_types), "Bad flag: %r:%s" % (key, value) 
 
 
     # subcommands for launching other applications
@@ -259,34 +259,34 @@ class Application(SingletonConfigurable):
     # extra command-line arguments that don't set config values
     extra_args = List(Unicode())
 
-    cli_config = Instance(Config, (), {},
-        help="""The subset of our configuration that came from the command-line
+    cli_config = Instance(Config, (), {}, 
+        help="""The subset of our configuration that came from the command-line 
 
-        We re-load this configuration after loading config files,
-        to ensure that it maintains highest priority.
-        """
-    )
-
+        We re-load this configuration after loading config files, 
+        to ensure that it maintains highest priority. 
+        """ 
+    ) 
+ 
     _loaded_config_files = List()
-
+ 
     def __init__(self, **kwargs):
         SingletonConfigurable.__init__(self, **kwargs)
         # Ensure my class is in self.classes, so my attributes appear in command line
         # options and config files.
-        cls = self.__class__
-        if cls not in self.classes:
-            if self.classes is cls.classes:
-                # class attr, assign instead of insert
-                cls.classes = [cls] + self.classes
-            else:
-                self.classes.insert(0, self.__class__)
-
+        cls = self.__class__ 
+        if cls not in self.classes: 
+            if self.classes is cls.classes: 
+                # class attr, assign instead of insert 
+                cls.classes = [cls] + self.classes 
+            else: 
+                self.classes.insert(0, self.__class__) 
+ 
     @observe('config')
     @observe_compat
     def _config_changed(self, change):
         super(Application, self)._config_changed(change)
         self.log.debug('Config changed:')
-        self.log.debug(repr(change.new))
+        self.log.debug(repr(change.new)) 
 
     @catch_config_error
     def initialize(self, argv=None):
@@ -317,7 +317,7 @@ class Application(SingletonConfigurable):
             for c in cls.mro()[:-3]:
                 classdict[c.__name__] = c
 
-        for alias, longname in self.aliases.items():
+        for alias, longname in self.aliases.items(): 
             classname, traitname = longname.split('.',1)
             cls = classdict[classname]
 
@@ -337,7 +337,7 @@ class Application(SingletonConfigurable):
             return
 
         lines = []
-        for m, (cfg,help) in self.flags.items():
+        for m, (cfg,help) in self.flags.items(): 
             prefix = '--' if len(m) > 1 else '-'
             lines.append(prefix+m)
             lines.append(indent(dedent(help.strip())))
@@ -370,7 +370,7 @@ class Application(SingletonConfigurable):
                     app=self.name)):
             lines.append(p)
             lines.append('')
-        for subc, (cls, help) in self.subcommands.items():
+        for subc, (cls, help) in self.subcommands.items(): 
             lines.append(subc)
             if help:
                 lines.append(indent(dedent(help.strip())))
@@ -442,26 +442,26 @@ class Application(SingletonConfigurable):
         """Initialize a subcommand with argv."""
         subapp,help = self.subcommands.get(subc)
 
-        if isinstance(subapp, six.string_types):
+        if isinstance(subapp, six.string_types): 
             subapp = import_item(subapp)
 
         # clear existing instances
         self.__class__.clear_instance()
         # instantiate
-        self.subapp = subapp.instance(parent=self)
+        self.subapp = subapp.instance(parent=self) 
         # and initialize subapp
         self.subapp.initialize(argv)
-
+ 
     def flatten_flags(self):
         """flatten flags and aliases, so cl-args override as expected.
-
+ 
         This prevents issues such as an alias pointing to InteractiveShell,
         but a config file setting the same trait in TerminalInteraciveShell
         getting inappropriate priority over the command-line arg.
 
         Only aliases with exactly one descendent in the class list
         will be promoted.
-
+ 
         """
         # build a tree of classes in our list that inherit from a particular
         # it will be a dict by parent classname of classes in our list
@@ -475,20 +475,20 @@ class Application(SingletonConfigurable):
         # flatten aliases, which have the form:
         # { 'alias' : 'Class.trait' }
         aliases = {}
-        for alias, cls_trait in self.aliases.items():
+        for alias, cls_trait in self.aliases.items(): 
             cls,trait = cls_trait.split('.',1)
             children = mro_tree[cls]
             if len(children) == 1:
                 # exactly one descendent, promote alias
                 cls = children[0]
             aliases[alias] = '.'.join([cls,trait])
-
+ 
         # flatten flags, which are of the form:
         # { 'key' : ({'Cls' : {'trait' : value}}, 'help')}
         flags = {}
-        for key, (flagdict, help) in self.flags.items():
+        for key, (flagdict, help) in self.flags.items(): 
             newflag = {}
-            for cls, subdict in flagdict.items():
+            for cls, subdict in flagdict.items(): 
                 children = mro_tree[cls]
                 # exactly one descendent, promote flag section
                 if len(children) == 1:
@@ -502,7 +502,7 @@ class Application(SingletonConfigurable):
         """Parse the command line arguments."""
         argv = sys.argv[1:] if argv is None else argv
         self.argv = [ py3compat.cast_unicode(arg) for arg in argv ]
-
+ 
         if argv and argv[0] == 'help':
             # turn `ipython help notebook` into `ipython notebook -h`
             argv = argv[1:] + ['-h']
@@ -530,33 +530,33 @@ class Application(SingletonConfigurable):
         if '--version' in interpreted_argv or '-V' in interpreted_argv:
             self.print_version()
             self.exit(0)
-
+ 
         # flatten flags&aliases, so cl-args get appropriate priority:
         flags,aliases = self.flatten_flags()
         loader = KVArgParseConfigLoader(argv=argv, aliases=aliases,
                                         flags=flags, log=self.log)
-        self.cli_config = deepcopy(loader.load_config())
-        self.update_config(self.cli_config)
+        self.cli_config = deepcopy(loader.load_config()) 
+        self.update_config(self.cli_config) 
         # store unparsed args in extra_args
         self.extra_args = loader.extra_args
 
     @classmethod
-    def _load_config_files(cls, basefilename, path=None, log=None, raise_config_file_errors=False):
+    def _load_config_files(cls, basefilename, path=None, log=None, raise_config_file_errors=False): 
         """Load config files (py,json) by filename and path.
 
         yield each config object in turn.
         """
-
+ 
         if not isinstance(path, list):
             path = [path]
         for path in path[::-1]:
             # path list is in descending priority order, so load files backwards:
             pyloader = cls.python_config_loader_class(basefilename+'.py', path=path, log=log)
             if log:
-                log.debug("Looking for %s in %s", basefilename, path or os.getcwd())
+                log.debug("Looking for %s in %s", basefilename, path or os.getcwd()) 
             jsonloader = cls.json_config_loader_class(basefilename+'.json', path=path, log=log)
-            loaded = []
-            filenames = []
+            loaded = [] 
+            filenames = [] 
             for loader in [pyloader, jsonloader]:
                 config = None
                 try:
@@ -568,8 +568,8 @@ class Application(SingletonConfigurable):
                     # unlikely event that the error raised before filefind finished
                     filename = loader.full_filename or basefilename
                     # problem while running the file
-                    if raise_config_file_errors:
-                        raise
+                    if raise_config_file_errors: 
+                        raise 
                     if log:
                         log.error("Exception while loading config file %s",
                                 filename, exc_info=True)
@@ -577,16 +577,16 @@ class Application(SingletonConfigurable):
                     if log:
                         log.debug("Loaded config file: %s", loader.full_filename)
                 if config:
-                    for filename, earlier_config in zip(filenames, loaded):
-                        collisions = earlier_config.collisions(config)
-                        if collisions and log:
-                            log.warning("Collisions detected in {0} and {1} config files."
-                                " {1} has higher priority: {2}".format(
-                                filename, loader.full_filename, json.dumps(collisions, indent=2),
-                            ))
+                    for filename, earlier_config in zip(filenames, loaded): 
+                        collisions = earlier_config.collisions(config) 
+                        if collisions and log: 
+                            log.warning("Collisions detected in {0} and {1} config files." 
+                                " {1} has higher priority: {2}".format( 
+                                filename, loader.full_filename, json.dumps(collisions, indent=2), 
+                            )) 
                     yield (config, loader.full_filename)
-                    loaded.append(config)
-                    filenames.append(loader.full_filename)
+                    loaded.append(config) 
+                    filenames.append(loader.full_filename) 
 
     @property
     def loaded_config_files(self):
@@ -597,55 +597,55 @@ class Application(SingletonConfigurable):
     def load_config_file(self, filename, path=None):
         """Load config files by filename and path."""
         filename, ext = os.path.splitext(filename)
-        new_config = Config()
+        new_config = Config() 
         for (config, filename) in self._load_config_files(filename, path=path, log=self.log,
-            raise_config_file_errors=self.raise_config_file_errors,
-        ):
-            new_config.merge(config)
+            raise_config_file_errors=self.raise_config_file_errors, 
+        ): 
+            new_config.merge(config) 
             if filename not in self._loaded_config_files:  # only add to list of loaded files if not previously loaded
                 self._loaded_config_files.append(filename)
-        # add self.cli_config to preserve CLI config priority
-        new_config.merge(self.cli_config)
-        self.update_config(new_config)
+        # add self.cli_config to preserve CLI config priority 
+        new_config.merge(self.cli_config) 
+        self.update_config(new_config) 
 
 
-    def _classes_in_config_sample(self):
-        """
-        Yields only classes with own traits, and their subclasses.
-
-        Thus, produced sample config-file will contain all classes
-        on which a trait-value may be overridden:
-
-        - either on the class owning the trait,
-        - or on its subclasses, even if those subclasses do not define
-          any traits themselves.
-        """
-        cls_to_config = OrderedDict( (cls, bool(cls.class_own_traits(config=True)))
-                              for cls
-                              in self._classes_inc_parents())
-
-        def is_any_parent_included(cls):
-            return any(b in cls_to_config and cls_to_config[b] for b in cls.__bases__)
-
-        ## Mark "empty" classes for inclusion if their parents own-traits,
-        #  and loop until no more classes gets marked.
-        #
-        while True:
-            to_incl_orig = cls_to_config.copy()
-            cls_to_config = OrderedDict( (cls, inc_yes or is_any_parent_included(cls))
-                                  for cls, inc_yes
-                                  in cls_to_config.items())
-            if cls_to_config == to_incl_orig:
-                break
-        for cl, inc_yes in cls_to_config.items():
-            if inc_yes:
-                yield cl
-
+    def _classes_in_config_sample(self): 
+        """ 
+        Yields only classes with own traits, and their subclasses. 
+ 
+        Thus, produced sample config-file will contain all classes 
+        on which a trait-value may be overridden: 
+ 
+        - either on the class owning the trait, 
+        - or on its subclasses, even if those subclasses do not define 
+          any traits themselves. 
+        """ 
+        cls_to_config = OrderedDict( (cls, bool(cls.class_own_traits(config=True))) 
+                              for cls 
+                              in self._classes_inc_parents()) 
+ 
+        def is_any_parent_included(cls): 
+            return any(b in cls_to_config and cls_to_config[b] for b in cls.__bases__) 
+ 
+        ## Mark "empty" classes for inclusion if their parents own-traits, 
+        #  and loop until no more classes gets marked. 
+        # 
+        while True: 
+            to_incl_orig = cls_to_config.copy() 
+            cls_to_config = OrderedDict( (cls, inc_yes or is_any_parent_included(cls)) 
+                                  for cls, inc_yes 
+                                  in cls_to_config.items()) 
+            if cls_to_config == to_incl_orig: 
+                break 
+        for cl, inc_yes in cls_to_config.items(): 
+            if inc_yes: 
+                yield cl 
+ 
     def generate_config_file(self):
         """generate default config file from Configurables"""
         lines = ["# Configuration file for %s." % self.name]
         lines.append('')
-        for cls in self._classes_in_config_sample():
+        for cls in self._classes_in_config_sample(): 
             lines.append(cls.class_config_section())
         return '\n'.join(lines)
 
@@ -656,7 +656,7 @@ class Application(SingletonConfigurable):
     @classmethod
     def launch_instance(cls, argv=None, **kwargs):
         """Launch a global instance of this Application
-
+ 
         If a global instance already exists, this reinitializes and starts it
         """
         app = cls.instance(**kwargs)
@@ -702,7 +702,7 @@ def boolean_flag(name, configurable, set_help='', unset_help=''):
 
 def get_config():
     """Get the config object for the global Application instance, if there is one
-
+ 
     otherwise return an empty config object
     """
     if Application.initialized():

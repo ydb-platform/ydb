@@ -47,8 +47,8 @@ freading (FILE *fp)
 #  else
   return (fp->_flag & _IOREAD) != 0;
 #  endif
-# elif WIN_SDK10
-  return (((TWinSdk10File*)fp)->_flags & WIN_SDK10_IOREAD) != 0;
+# elif WIN_SDK10 
+  return (((TWinSdk10File*)fp)->_flags & WIN_SDK10_IOREAD) != 0; 
 # elif defined __UCLIBC__            /* uClibc */
   return (fp->__modeflags & (__FLAG_READONLY | __FLAG_READING)) != 0;
 # elif defined __QNX__               /* QNX */

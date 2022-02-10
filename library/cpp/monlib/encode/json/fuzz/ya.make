@@ -1,9 +1,9 @@
 FUZZ()
 
-OWNER(
-    g:solomon
-    msherbakov
-)
+OWNER( 
+    g:solomon 
+    msherbakov 
+) 
 
 PEERDIR(
     library/cpp/monlib/encode/json
@@ -12,8 +12,8 @@ PEERDIR(
 
 SIZE(MEDIUM)
 
-SRCS(
-    main.cpp
-)
+SRCS( 
+    main.cpp 
+) 
 
 END()

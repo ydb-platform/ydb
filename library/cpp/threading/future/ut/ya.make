@@ -1,9 +1,9 @@
 UNITTEST_FOR(library/cpp/threading/future)
 
-OWNER(
-    g:rtmr
-    ishfb
-)
+OWNER( 
+    g:rtmr 
+    ishfb 
+) 
 
 SRCS(
     async_ut.cpp

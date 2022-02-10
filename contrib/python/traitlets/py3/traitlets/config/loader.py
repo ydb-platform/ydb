@@ -255,7 +255,7 @@ class Config(dict):
     def merge(self, other):
         """merge another config object into this one"""
         to_update = {}
-        for k, v in other.items():
+        for k, v in other.items(): 
             if k not in self:
                 to_update[k] = v
             else: # I have this key
@@ -542,17 +542,17 @@ class FileConfigLoader(ConfigLoader):
         self.full_filename = filefind(self.filename, self.path)
 
 class JSONFileConfigLoader(FileConfigLoader):
-    """A JSON file loader for config
+    """A JSON file loader for config 
 
-    Can also act as a context manager that rewrite the configuration file to disk on exit.
-
-    Example::
-
-        with JSONFileConfigLoader('myapp.json','/home/jupyter/configurations/') as c:
-            c.MyNewConfigurable.new_value = 'Updated'
-
-    """
-
+    Can also act as a context manager that rewrite the configuration file to disk on exit. 
+ 
+    Example:: 
+ 
+        with JSONFileConfigLoader('myapp.json','/home/jupyter/configurations/') as c: 
+            c.MyNewConfigurable.new_value = 'Updated' 
+ 
+    """ 
+ 
     def load_config(self):
         """Load the config from a file and return it as a Config object."""
         self.clear()
@@ -579,24 +579,24 @@ class JSONFileConfigLoader(FileConfigLoader):
         else:
             raise ValueError('Unknown version of JSON config file: {version}'.format(version=version))
 
-    def __enter__(self):
-        self.load_config()
-        return self.config
+    def __enter__(self): 
+        self.load_config() 
+        return self.config 
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        """
-        Exit the context manager but do not handle any errors.
-
-        In case of any error, we do not want to write the potentially broken
-        configuration to disk.
-        """
-        self.config.version = 1
-        json_config = json.dumps(self.config, indent=2)
-        with open(self.full_filename, 'w') as f:
-            f.write(json_config)
-
-
-
+    def __exit__(self, exc_type, exc_value, traceback): 
+        """ 
+        Exit the context manager but do not handle any errors. 
+ 
+        In case of any error, we do not want to write the potentially broken 
+        configuration to disk. 
+        """ 
+        self.config.version = 1 
+        json_config = json.dumps(self.config, indent=2) 
+        with open(self.full_filename, 'w') as f: 
+            f.write(json_config) 
+ 
+ 
+ 
 class PyFileConfigLoader(FileConfigLoader):
     """A config loader for pure python files.
 
@@ -910,7 +910,7 @@ class ArgParseConfigLoader(CommandLineConfigLoader):
 
     def _convert_to_config(self):
         """self.parsed_data->self.config"""
-        for k, v in vars(self.parsed_data).items():
+        for k, v in vars(self.parsed_data).items(): 
             *path, key = k.split(".")
             section = self.config
             for p in path:

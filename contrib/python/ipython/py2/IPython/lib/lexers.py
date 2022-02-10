@@ -44,7 +44,7 @@ from pygments.lexer import (
     Lexer, DelegatingLexer, RegexLexer, do_insertions, bygroups, using,
 )
 from pygments.token import (
-    Generic, Keyword, Literal, Name, Operator, Other, Text, Error,
+    Generic, Keyword, Literal, Name, Operator, Other, Text, Error, 
 )
 from pygments.util import get_bool_opt
 
@@ -235,13 +235,13 @@ class IPythonConsoleLexer(Lexer):
     # The regexps used to determine what is input and what is output.
     # The default prompts for IPython are:
     #
-    #    in           = 'In [#]: '
-    #    continuation = '   .D.: '
-    #    template     = 'Out[#]: '
+    #    in           = 'In [#]: ' 
+    #    continuation = '   .D.: ' 
+    #    template     = 'Out[#]: ' 
     #
-    # Where '#' is the 'prompt number' or 'execution count' and 'D' 
-    # D is a number of dots  matching the width of the execution count 
-    #
+    # Where '#' is the 'prompt number' or 'execution count' and 'D'  
+    # D is a number of dots  matching the width of the execution count  
+    # 
     in1_regex = r'In \[[0-9]+\]: '
     in2_regex = r'   \.\.+\.: '
     out_regex = r'Out\[[0-9]+\]: '
@@ -475,9 +475,9 @@ class IPythonConsoleLexer(Lexer):
                 self.insertions.append((len(self.buffer), [insertion]))
             self.buffer += code
 
-        for token in self.buffered_tokens():
-            yield token
-
+        for token in self.buffered_tokens(): 
+            yield token 
+ 
 class IPyLexer(Lexer):
     """
     Primary lexer for all IPython-like code.

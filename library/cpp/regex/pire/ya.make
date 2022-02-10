@@ -1,15 +1,15 @@
 LIBRARY()
 
-OWNER(
-    g:util
-    g:antiinfra
-    davenger
-    pg
-)
+OWNER( 
+    g:util 
+    g:antiinfra 
+    davenger 
+    pg 
+) 
 
 CFLAGS(-DPIRE_NO_CONFIG)
 
-SRCDIR(contrib/libs/pire/pire)
+SRCDIR(contrib/libs/pire/pire) 
 
 SRCS(
     pcre2pire.cpp

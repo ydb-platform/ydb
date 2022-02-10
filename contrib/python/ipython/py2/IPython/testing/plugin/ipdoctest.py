@@ -26,8 +26,8 @@ import os
 import re
 import sys
 
-from testpath import modified_env
-
+from testpath import modified_env 
+ 
 from inspect import getmodule
 
 # We are overriding the default doctest runner, so we need to import a few
@@ -41,7 +41,7 @@ from doctest import (REPORTING_FLAGS, REPORT_ONLY_FIRST_FAILURE,
 # Third-party modules
 
 from nose.plugins import doctests, Plugin
-from nose.util import anyp, tolist
+from nose.util import anyp, tolist 
 
 # Our own imports
 from IPython.utils.py3compat import builtin_mod, PY3, getcwd
@@ -140,7 +140,7 @@ class DocTestFinder(doctest.DocTestFinder):
         # doctests in extension modules.
 
         # Local shorthands
-        from inspect import isroutine, isclass
+        from inspect import isroutine, isclass 
 
         # Look for tests in a module's contained objects.
         if inspect.ismodule(obj) and self._recurse:
@@ -586,10 +586,10 @@ class IPDocTestRunner(doctest.DocTestRunner,object):
 
         test.globs.update(_ip.user_ns)
 
-        # Override terminal size to standardise traceback format
-        with modified_env({'COLUMNS': '80', 'LINES': '24'}):
-            return super(IPDocTestRunner,self).run(test,
-                                                   compileflags,out,clear_globs)
+        # Override terminal size to standardise traceback format 
+        with modified_env({'COLUMNS': '80', 'LINES': '24'}): 
+            return super(IPDocTestRunner,self).run(test, 
+                                                   compileflags,out,clear_globs) 
 
 
 class DocFileCase(doctest.DocFileCase):

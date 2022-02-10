@@ -5,7 +5,7 @@ OWNER(
     g:balancer
 )
 
-GENERATE_ENUM_SERIALIZATION(poller.h)
+GENERATE_ENUM_SERIALIZATION(poller.h) 
 GENERATE_ENUM_SERIALIZATION(stack/stack_common.h)
 
 PEERDIR(

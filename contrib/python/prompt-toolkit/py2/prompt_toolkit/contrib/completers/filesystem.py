@@ -80,12 +80,12 @@ class PathCompleter(Completer):
                     # (We don't add them to the `completion`. Users can type it
                     # to trigger the autocompletion themself.)
                     filename += '/'
-                elif self.only_directories:
-                    continue
+                elif self.only_directories: 
+                    continue 
 
-                if not self.file_filter(full_name):
-                    continue
-
+                if not self.file_filter(full_name): 
+                    continue 
+ 
                 yield Completion(completion, 0, display=filename)
         except OSError:
             pass

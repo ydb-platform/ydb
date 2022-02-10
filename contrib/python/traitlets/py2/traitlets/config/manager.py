@@ -7,7 +7,7 @@ import io
 import json
 import os
 
-from six import PY3
+from six import PY3 
 from traitlets.config import LoggingConfigurable
 from traitlets.traitlets import Unicode
 

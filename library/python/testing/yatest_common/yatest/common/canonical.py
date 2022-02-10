@@ -12,22 +12,22 @@ from . import path
 yatest_logger = logging.getLogger("ya.test")
 
 
-def _copy(src, dst, universal_lines=False):
-    if universal_lines:
-        with open(dst, "wb") as f:
+def _copy(src, dst, universal_lines=False): 
+    if universal_lines: 
+        with open(dst, "wb") as f: 
             for line in open(src, "rbU"):
-                f.write(line)
-        return
-    shutil.copy(src, dst)
-
-
+                f.write(line) 
+        return 
+    shutil.copy(src, dst) 
+ 
+ 
 def canonical_file(path, diff_tool=None, local=False, universal_lines=False, diff_file_name=None, diff_tool_timeout=None):
     """
     Create canonical file that can be returned from a test
     :param path: path to the file
     :param diff_tool: custom diff tool to use for comparison with the canonical one, if None - default will be used
     :param local: save file locally, otherwise move to sandbox
-    :param universal_lines: normalize EOL
+    :param universal_lines: normalize EOL 
     :param diff_tool_timeout: timeout for running diff tool
     :return: object that can be canonized
     """
@@ -36,7 +36,7 @@ def canonical_file(path, diff_tool=None, local=False, universal_lines=False, dif
     tempdir = tempfile.mkdtemp(prefix="canon_tmp", dir=runtime.build_path())
     safe_path = os.path.join(tempdir, os.path.basename(abs_path))
     # if the created file is in output_path, we copy it, so that it will be available when the tests finishes
-    _copy(path, safe_path, universal_lines=universal_lines)
+    _copy(path, safe_path, universal_lines=universal_lines) 
     if diff_tool:
         if not isinstance(diff_tool, six.string_types):
             try:  # check if iterable

@@ -2,8 +2,8 @@
 """Miscellaneous context managers.
 """
 
-import warnings
-
+import warnings 
+ 
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
 
@@ -61,14 +61,14 @@ class preserve_keys(object):
 
 
 class NoOpContext(object):
-    """
-    Deprecated
-    
-    Context manager that does nothing."""
-
-    def __init__(self):
-        warnings.warn("""NoOpContext is deprecated since IPython 5.0 """,
-                                            DeprecationWarning, stacklevel=2)
-
+    """ 
+    Deprecated 
+     
+    Context manager that does nothing.""" 
+ 
+    def __init__(self): 
+        warnings.warn("""NoOpContext is deprecated since IPython 5.0 """, 
+                                            DeprecationWarning, stacklevel=2) 
+ 
     def __enter__(self): pass
     def __exit__(self, type, value, traceback): pass

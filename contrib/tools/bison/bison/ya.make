@@ -15,7 +15,7 @@ ENDIF()
 
 NO_COMPILER_WARNINGS()
 
-ADDINCLSELF()
+ADDINCLSELF() 
 
 SRCS(
     src/AnnotationList.c
@@ -54,7 +54,7 @@ SRCS(
     src/symtab.c
     src/tables.c
     src/uniqstr.c
-    arcadia_root.cpp.in
+    arcadia_root.cpp.in 
 )
 
 CFLAGS(

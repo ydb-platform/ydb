@@ -7,10 +7,10 @@ LIBRARY()
 # high level library library/cpp/monlib/encode which is decoupled from the
 # particular format.
 
-OWNER(
-    jamel
-    g:solomon
-)
+OWNER( 
+    jamel 
+    g:solomon 
+) 
 
 SRCS(
     writer.h

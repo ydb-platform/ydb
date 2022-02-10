@@ -4,10 +4,10 @@ from prompt_toolkit.buffer import SelectionType, indent, unindent
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.enums import IncrementalSearchDirection, SEARCH_BUFFER, SYSTEM_BUFFER
 from prompt_toolkit.filters import Condition, EmacsMode, HasSelection, EmacsInsertMode, HasFocus, HasArg
-from prompt_toolkit.completion import CompleteEvent
+from prompt_toolkit.completion import CompleteEvent 
 
 from .scroll import scroll_page_up, scroll_page_down
-from .named_commands import get_by_name
+from .named_commands import get_by_name 
 from ..registry import Registry, ConditionalRegistry
 
 __all__ = (
@@ -27,8 +27,8 @@ def load_emacs_bindings():
     registry = ConditionalRegistry(Registry(), EmacsMode())
     handle = registry.add_binding
 
-    insert_mode = EmacsInsertMode()
-    has_selection = HasSelection()
+    insert_mode = EmacsInsertMode() 
+    has_selection = HasSelection() 
 
     @handle(Keys.Escape)
     def _(event):
@@ -42,42 +42,42 @@ def load_emacs_bindings():
         """
         pass
 
-    handle(Keys.ControlA)(get_by_name('beginning-of-line'))
-    handle(Keys.ControlB)(get_by_name('backward-char'))
-    handle(Keys.ControlDelete, filter=insert_mode)(get_by_name('kill-word'))
-    handle(Keys.ControlE)(get_by_name('end-of-line'))
-    handle(Keys.ControlF)(get_by_name('forward-char'))
-    handle(Keys.ControlLeft)(get_by_name('backward-word'))
-    handle(Keys.ControlRight)(get_by_name('forward-word'))
-    handle(Keys.ControlX, 'r', 'y', filter=insert_mode)(get_by_name('yank'))
-    handle(Keys.ControlY, filter=insert_mode)(get_by_name('yank'))
-    handle(Keys.Escape, 'b')(get_by_name('backward-word'))
-    handle(Keys.Escape, 'c', filter=insert_mode)(get_by_name('capitalize-word'))
-    handle(Keys.Escape, 'd', filter=insert_mode)(get_by_name('kill-word'))
-    handle(Keys.Escape, 'f')(get_by_name('forward-word'))
-    handle(Keys.Escape, 'l', filter=insert_mode)(get_by_name('downcase-word'))
-    handle(Keys.Escape, 'u', filter=insert_mode)(get_by_name('uppercase-word'))
+    handle(Keys.ControlA)(get_by_name('beginning-of-line')) 
+    handle(Keys.ControlB)(get_by_name('backward-char')) 
+    handle(Keys.ControlDelete, filter=insert_mode)(get_by_name('kill-word')) 
+    handle(Keys.ControlE)(get_by_name('end-of-line')) 
+    handle(Keys.ControlF)(get_by_name('forward-char')) 
+    handle(Keys.ControlLeft)(get_by_name('backward-word')) 
+    handle(Keys.ControlRight)(get_by_name('forward-word')) 
+    handle(Keys.ControlX, 'r', 'y', filter=insert_mode)(get_by_name('yank')) 
+    handle(Keys.ControlY, filter=insert_mode)(get_by_name('yank')) 
+    handle(Keys.Escape, 'b')(get_by_name('backward-word')) 
+    handle(Keys.Escape, 'c', filter=insert_mode)(get_by_name('capitalize-word')) 
+    handle(Keys.Escape, 'd', filter=insert_mode)(get_by_name('kill-word')) 
+    handle(Keys.Escape, 'f')(get_by_name('forward-word')) 
+    handle(Keys.Escape, 'l', filter=insert_mode)(get_by_name('downcase-word')) 
+    handle(Keys.Escape, 'u', filter=insert_mode)(get_by_name('uppercase-word')) 
     handle(Keys.Escape, 'y', filter=insert_mode)(get_by_name('yank-pop'))
     handle(Keys.Escape, Keys.ControlH, filter=insert_mode)(get_by_name('backward-kill-word'))
     handle(Keys.Escape, Keys.Backspace, filter=insert_mode)(get_by_name('backward-kill-word'))
-    handle(Keys.Escape, '\\', filter=insert_mode)(get_by_name('delete-horizontal-space'))
+    handle(Keys.Escape, '\\', filter=insert_mode)(get_by_name('delete-horizontal-space')) 
 
-    handle(Keys.ControlUnderscore, save_before=(lambda e: False), filter=insert_mode)(
-        get_by_name('undo'))
+    handle(Keys.ControlUnderscore, save_before=(lambda e: False), filter=insert_mode)( 
+        get_by_name('undo')) 
 
-    handle(Keys.ControlX, Keys.ControlU, save_before=(lambda e: False), filter=insert_mode)(
-        get_by_name('undo'))
+    handle(Keys.ControlX, Keys.ControlU, save_before=(lambda e: False), filter=insert_mode)( 
+        get_by_name('undo')) 
 
 
-    handle(Keys.Escape, '<', filter= ~has_selection)(get_by_name('beginning-of-history'))
-    handle(Keys.Escape, '>', filter= ~has_selection)(get_by_name('end-of-history'))
-
-    handle(Keys.Escape, '.', filter=insert_mode)(get_by_name('yank-last-arg'))
-    handle(Keys.Escape, '_', filter=insert_mode)(get_by_name('yank-last-arg'))
-    handle(Keys.Escape, Keys.ControlY, filter=insert_mode)(get_by_name('yank-nth-arg'))
+    handle(Keys.Escape, '<', filter= ~has_selection)(get_by_name('beginning-of-history')) 
+    handle(Keys.Escape, '>', filter= ~has_selection)(get_by_name('end-of-history')) 
+ 
+    handle(Keys.Escape, '.', filter=insert_mode)(get_by_name('yank-last-arg')) 
+    handle(Keys.Escape, '_', filter=insert_mode)(get_by_name('yank-last-arg')) 
+    handle(Keys.Escape, Keys.ControlY, filter=insert_mode)(get_by_name('yank-nth-arg')) 
     handle(Keys.Escape, '#', filter=insert_mode)(get_by_name('insert-comment'))
     handle(Keys.ControlO)(get_by_name('operate-and-get-next'))
-
+ 
     # ControlQ does a quoted insert. Not that for vt100 terminals, you have to
     # disable flow control by running ``stty -ixon``, otherwise Ctrl-Q and
     # Ctrl-S are captured by the terminal.
@@ -87,22 +87,22 @@ def load_emacs_bindings():
     handle(Keys.ControlX, ')')(get_by_name('end-kbd-macro'))
     handle(Keys.ControlX, 'e')(get_by_name('call-last-kbd-macro'))
 
-    @handle(Keys.ControlN)
+    @handle(Keys.ControlN) 
     def _(event):
-        " Next line. "
+        " Next line. " 
         event.current_buffer.auto_down()
 
-    @handle(Keys.ControlP)
+    @handle(Keys.ControlP) 
     def _(event):
-        " Previous line. "
+        " Previous line. " 
         event.current_buffer.auto_up(count=event.arg)
 
     def handle_digit(c):
         """
-        Handle input of arguments.
-        The first number needs to be preceeded by escape.
+        Handle input of arguments. 
+        The first number needs to be preceeded by escape. 
         """
-        @handle(c, filter=HasArg())
+        @handle(c, filter=HasArg()) 
         @handle(Keys.Escape, c)
         def _(event):
             event.append_to_arg_count(c)
@@ -110,80 +110,80 @@ def load_emacs_bindings():
     for c in '0123456789':
         handle_digit(c)
 
-    @handle(Keys.Escape, '-', filter=~HasArg())
+    @handle(Keys.Escape, '-', filter=~HasArg()) 
     def _(event):
         """
         """
         if event._arg is None:
             event.append_to_arg_count('-')
 
-    @handle('-', filter=Condition(lambda cli: cli.input_processor.arg == '-'))
+    @handle('-', filter=Condition(lambda cli: cli.input_processor.arg == '-')) 
     def _(event):
         """
-        When '-' is typed again, after exactly '-' has been given as an
-        argument, ignore this.
+        When '-' is typed again, after exactly '-' has been given as an 
+        argument, ignore this. 
         """
-        event.cli.input_processor.arg = '-'
+        event.cli.input_processor.arg = '-' 
 
-    is_returnable = Condition(
-        lambda cli: cli.current_buffer.accept_action.is_returnable)
+    is_returnable = Condition( 
+        lambda cli: cli.current_buffer.accept_action.is_returnable) 
 
-    # Meta + Newline: always accept input.
-    handle(Keys.Escape, Keys.ControlJ, filter=insert_mode & is_returnable)(
-        get_by_name('accept-line'))
+    # Meta + Newline: always accept input. 
+    handle(Keys.Escape, Keys.ControlJ, filter=insert_mode & is_returnable)( 
+        get_by_name('accept-line')) 
 
-    def character_search(buff, char, count):
-        if count < 0:
-            match = buff.document.find_backwards(char, in_current_line=True, count=-count)
-        else:
-            match = buff.document.find(char, in_current_line=True, count=count)
+    def character_search(buff, char, count): 
+        if count < 0: 
+            match = buff.document.find_backwards(char, in_current_line=True, count=-count) 
+        else: 
+            match = buff.document.find(char, in_current_line=True, count=count) 
 
-        if match is not None:
-            buff.cursor_position += match
+        if match is not None: 
+            buff.cursor_position += match 
 
-    @handle(Keys.ControlSquareClose, Keys.Any)
+    @handle(Keys.ControlSquareClose, Keys.Any) 
     def _(event):
-        " When Ctl-] + a character is pressed. go to that character. "
+        " When Ctl-] + a character is pressed. go to that character. " 
         # Also named 'character-search'
-        character_search(event.current_buffer, event.data, event.arg)
+        character_search(event.current_buffer, event.data, event.arg) 
 
-    @handle(Keys.Escape, Keys.ControlSquareClose, Keys.Any)
+    @handle(Keys.Escape, Keys.ControlSquareClose, Keys.Any) 
     def _(event):
-        " Like Ctl-], but backwards. "
+        " Like Ctl-], but backwards. " 
         # Also named 'character-search-backward'
-        character_search(event.current_buffer, event.data, -event.arg)
+        character_search(event.current_buffer, event.data, -event.arg) 
 
-    @handle(Keys.Escape, 'a')
+    @handle(Keys.Escape, 'a') 
     def _(event):
-        " Previous sentence. "
+        " Previous sentence. " 
+        # TODO: 
+
+    @handle(Keys.Escape, 'e') 
+    def _(event):
+        " Move to end of sentence. " 
         # TODO:
 
-    @handle(Keys.Escape, 'e')
-    def _(event):
-        " Move to end of sentence. "
-        # TODO:
-
-    @handle(Keys.Escape, 't', filter=insert_mode)
+    @handle(Keys.Escape, 't', filter=insert_mode) 
     def _(event):
         """
         Swap the last two words before the cursor.
         """
         # TODO
 
-    @handle(Keys.Escape, '*', filter=insert_mode)
+    @handle(Keys.Escape, '*', filter=insert_mode) 
     def _(event):
         """
-        `meta-*`: Insert all possible completions of the preceding text.
+        `meta-*`: Insert all possible completions of the preceding text. 
         """
-        buff = event.current_buffer
+        buff = event.current_buffer 
 
-        # List all completions.
-        complete_event = CompleteEvent(text_inserted=False, completion_requested=True)
-        completions = list(buff.completer.get_completions(buff.document, complete_event))
+        # List all completions. 
+        complete_event = CompleteEvent(text_inserted=False, completion_requested=True) 
+        completions = list(buff.completer.get_completions(buff.document, complete_event)) 
 
-        # Insert them.
-        text_to_insert = ' '.join(c.text for c in completions)
-        buff.insert_text(text_to_insert)
+        # Insert them. 
+        text_to_insert = ' '.join(c.text for c in completions) 
+        buff.insert_text(text_to_insert) 
 
     @handle(Keys.ControlX, Keys.ControlX)
     def _(event):
@@ -193,7 +193,7 @@ def load_emacs_bindings():
         """
         buffer = event.current_buffer
 
-        if buffer.document.is_cursor_at_the_end_of_line:
+        if buffer.document.is_cursor_at_the_end_of_line: 
             buffer.cursor_position += buffer.document.get_start_of_line_position(after_whitespace=False)
         else:
             buffer.cursor_position += buffer.document.get_end_of_line_position()
@@ -201,12 +201,12 @@ def load_emacs_bindings():
     @handle(Keys.ControlSpace)
     def _(event):
         """
-        Start of the selection (if the current buffer is not empty).
+        Start of the selection (if the current buffer is not empty). 
         """
         # Take the current cursor position as the start of this selection.
-        buff = event.current_buffer
-        if buff.text:
-            buff.start_selection(selection_type=SelectionType.CHARACTERS)
+        buff = event.current_buffer 
+        if buff.text: 
+            buff.start_selection(selection_type=SelectionType.CHARACTERS) 
 
     @handle(Keys.ControlG, filter= ~has_selection)
     def _(event):
@@ -257,7 +257,7 @@ def load_emacs_bindings():
         buffer.cursor_position += buffer.document.find_next_word_beginning(count=event.arg) or \
             buffer.document.get_end_of_document_position()
 
-    @handle(Keys.Escape, '/', filter=insert_mode)
+    @handle(Keys.Escape, '/', filter=insert_mode) 
     def _(event):
         """
         M-/: Complete.
@@ -316,7 +316,7 @@ def load_emacs_system_bindings():
     registry = ConditionalRegistry(Registry(), EmacsMode())
     handle = registry.add_binding
 
-    has_focus = HasFocus(SYSTEM_BUFFER)
+    has_focus = HasFocus(SYSTEM_BUFFER) 
 
     @handle(Keys.Escape, '!', filter= ~has_focus)
     def _(event):
@@ -354,8 +354,8 @@ def load_emacs_search_bindings(get_search_state=None):
     registry = ConditionalRegistry(Registry(), EmacsMode())
     handle = registry.add_binding
 
-    has_focus = HasFocus(SEARCH_BUFFER)
-
+    has_focus = HasFocus(SEARCH_BUFFER) 
+ 
     assert get_search_state is None or callable(get_search_state)
 
     if not get_search_state:
@@ -408,30 +408,30 @@ def load_emacs_search_bindings(get_search_state=None):
         get_search_state(event.cli).direction = IncrementalSearchDirection.FORWARD
         event.cli.push_focus(SEARCH_BUFFER)
 
-    def incremental_search(cli, direction, count=1):
-        " Apply search, but keep search buffer focussed. "
+    def incremental_search(cli, direction, count=1): 
+        " Apply search, but keep search buffer focussed. " 
         # Update search_state.
-        search_state = get_search_state(cli)
-        direction_changed = search_state.direction != direction
+        search_state = get_search_state(cli) 
+        direction_changed = search_state.direction != direction 
 
-        search_state.text = cli.buffers[SEARCH_BUFFER].text
-        search_state.direction = direction
+        search_state.text = cli.buffers[SEARCH_BUFFER].text 
+        search_state.direction = direction 
 
         # Apply search to current buffer.
         if not direction_changed:
-            input_buffer = cli.buffers.previous(cli)
+            input_buffer = cli.buffers.previous(cli) 
             input_buffer.apply_search(search_state,
-                                      include_current_position=False, count=count)
+                                      include_current_position=False, count=count) 
 
-    @handle(Keys.ControlR, filter=has_focus)
-    @handle(Keys.Up, filter=has_focus)
-    def _(event):
-        incremental_search(event.cli, IncrementalSearchDirection.BACKWARD, count=event.arg)
-
+    @handle(Keys.ControlR, filter=has_focus) 
+    @handle(Keys.Up, filter=has_focus) 
+    def _(event): 
+        incremental_search(event.cli, IncrementalSearchDirection.BACKWARD, count=event.arg) 
+ 
     @handle(Keys.ControlS, filter=has_focus)
     @handle(Keys.Down, filter=has_focus)
     def _(event):
-        incremental_search(event.cli, IncrementalSearchDirection.FORWARD, count=event.arg)
+        incremental_search(event.cli, IncrementalSearchDirection.FORWARD, count=event.arg) 
 
     return registry
 

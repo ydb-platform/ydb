@@ -1,18 +1,18 @@
-from __future__ import unicode_literals
+from __future__ import unicode_literals 
 from ctypes import windll, pointer
 from ctypes.wintypes import DWORD, HANDLE
-from six.moves import range
+from six.moves import range 
 
 from prompt_toolkit.key_binding.input_processor import KeyPress
 from prompt_toolkit.keys import Keys
-from prompt_toolkit.mouse_events import MouseEventType
+from prompt_toolkit.mouse_events import MouseEventType 
 from prompt_toolkit.win32_types import EventTypes, KEY_EVENT_RECORD, MOUSE_EVENT_RECORD, INPUT_RECORD, STD_INPUT_HANDLE
 
-import msvcrt
-import os
-import sys
-import six
-
+import msvcrt 
+import os 
+import sys 
+import six 
+ 
 __all__ = (
     'ConsoleInputReader',
     'raw_mode',
@@ -21,10 +21,10 @@ __all__ = (
 
 
 class ConsoleInputReader(object):
-    """
-    :param recognize_paste: When True, try to discover paste actions and turn
-        the event into a BracketedPaste.
-    """
+    """ 
+    :param recognize_paste: When True, try to discover paste actions and turn 
+        the event into a BracketedPaste. 
+    """ 
     # Keys with character data.
     mappings = {
         b'\x1b': Keys.Escape,
@@ -104,70 +104,70 @@ class ConsoleInputReader(object):
     LEFT_CTRL_PRESSED = 0x0008
     RIGHT_CTRL_PRESSED = 0x0004
 
-    def __init__(self, recognize_paste=True):
-        self._fdcon = None
-        self.recognize_paste = recognize_paste
+    def __init__(self, recognize_paste=True): 
+        self._fdcon = None 
+        self.recognize_paste = recognize_paste 
 
-        # When stdin is a tty, use that handle, otherwise, create a handle from
-        # CONIN$.
-        if sys.stdin.isatty():
+        # When stdin is a tty, use that handle, otherwise, create a handle from 
+        # CONIN$. 
+        if sys.stdin.isatty(): 
             self.handle = HANDLE(windll.kernel32.GetStdHandle(STD_INPUT_HANDLE))
-        else:
-            self._fdcon = os.open('CONIN$', os.O_RDWR | os.O_BINARY)
+        else: 
+            self._fdcon = os.open('CONIN$', os.O_RDWR | os.O_BINARY) 
             self.handle = HANDLE(msvcrt.get_osfhandle(self._fdcon))
-
-    def close(self):
-        " Close fdcon. "
-        if self._fdcon is not None:
-            os.close(self._fdcon)
-
+ 
+    def close(self): 
+        " Close fdcon. " 
+        if self._fdcon is not None: 
+            os.close(self._fdcon) 
+ 
     def read(self):
         """
-        Return a list of `KeyPress` instances. It won't return anything when
-        there was nothing to read.  (This function doesn't block.)
+        Return a list of `KeyPress` instances. It won't return anything when 
+        there was nothing to read.  (This function doesn't block.) 
 
         http://msdn.microsoft.com/en-us/library/windows/desktop/ms684961(v=vs.85).aspx
         """
-        max_count = 2048  # Max events to read at the same time.
+        max_count = 2048  # Max events to read at the same time. 
 
         read = DWORD(0)
         arrtype = INPUT_RECORD * max_count
         input_records = arrtype()
 
         # Get next batch of input event.
-        windll.kernel32.ReadConsoleInputW(
-            self.handle, pointer(input_records), max_count, pointer(read))
+        windll.kernel32.ReadConsoleInputW( 
+            self.handle, pointer(input_records), max_count, pointer(read)) 
 
-        # First, get all the keys from the input buffer, in order to determine
-        # whether we should consider this a paste event or not.
-        all_keys = list(self._get_keys(read, input_records))
-
-        if self.recognize_paste and self._is_paste(all_keys):
-            gen = iter(all_keys)
-            for k in gen:
-                # Pasting: if the current key consists of text or \n, turn it
-                # into a BracketedPaste.
-                data = []
-                while k and (isinstance(k.key, six.text_type) or
-                             k.key == Keys.ControlJ):
-                    data.append(k.data)
-                    try:
-                        k = next(gen)
-                    except StopIteration:
-                        k = None
-
-                if data:
-                    yield KeyPress(Keys.BracketedPaste, ''.join(data))
-                if k is not None:
-                    yield k
-        else:
-            for k in all_keys:
-                yield k
-
-    def _get_keys(self, read, input_records):
-        """
-        Generator that yields `KeyPress` objects from the input records.
-        """
+        # First, get all the keys from the input buffer, in order to determine 
+        # whether we should consider this a paste event or not. 
+        all_keys = list(self._get_keys(read, input_records)) 
+ 
+        if self.recognize_paste and self._is_paste(all_keys): 
+            gen = iter(all_keys) 
+            for k in gen: 
+                # Pasting: if the current key consists of text or \n, turn it 
+                # into a BracketedPaste. 
+                data = [] 
+                while k and (isinstance(k.key, six.text_type) or 
+                             k.key == Keys.ControlJ): 
+                    data.append(k.data) 
+                    try: 
+                        k = next(gen) 
+                    except StopIteration: 
+                        k = None 
+ 
+                if data: 
+                    yield KeyPress(Keys.BracketedPaste, ''.join(data)) 
+                if k is not None: 
+                    yield k 
+        else: 
+            for k in all_keys: 
+                yield k 
+ 
+    def _get_keys(self, read, input_records): 
+        """ 
+        Generator that yields `KeyPress` objects from the input records. 
+        """ 
         for i in range(read.value):
             ir = input_records[i]
 
@@ -181,35 +181,35 @@ class ConsoleInputReader(object):
                 # Process if this is a key event. (We also have mouse, menu and
                 # focus events.)
                 if type(ev) == KEY_EVENT_RECORD and ev.KeyDown:
-                    for key_press in self._event_to_key_presses(ev):
-                        yield key_press
+                    for key_press in self._event_to_key_presses(ev): 
+                        yield key_press 
 
                 elif type(ev) == MOUSE_EVENT_RECORD:
-                    for key_press in self._handle_mouse(ev):
-                        yield key_press
+                    for key_press in self._handle_mouse(ev): 
+                        yield key_press 
 
-    @staticmethod
-    def _is_paste(keys):
-        """
-        Return `True` when we should consider this list of keys as a paste
-        event. Pasted text on windows will be turned into a
-        `Keys.BracketedPaste` event. (It's not 100% correct, but it is probably
-        the best possible way to detect pasting of text and handle that
-        correctly.)
-        """
-        # Consider paste when it contains at least one newline and at least one
-        # other character.
-        text_count = 0
-        newline_count = 0
+    @staticmethod 
+    def _is_paste(keys): 
+        """ 
+        Return `True` when we should consider this list of keys as a paste 
+        event. Pasted text on windows will be turned into a 
+        `Keys.BracketedPaste` event. (It's not 100% correct, but it is probably 
+        the best possible way to detect pasting of text and handle that 
+        correctly.) 
+        """ 
+        # Consider paste when it contains at least one newline and at least one 
+        # other character. 
+        text_count = 0 
+        newline_count = 0 
 
-        for k in keys:
-            if isinstance(k.key, six.text_type):
-                text_count += 1
-            if k.key == Keys.ControlJ:
-                newline_count += 1
-
-        return newline_count >= 1 and text_count > 1
-
+        for k in keys: 
+            if isinstance(k.key, six.text_type): 
+                text_count += 1 
+            if k.key == Keys.ControlJ: 
+                newline_count += 1 
+ 
+        return newline_count >= 1 and text_count > 1 
+ 
     def _event_to_key_presses(self, ev):
         """
         For this `KEY_EVENT_RECORD`, return a list of `KeyPress` instances.
@@ -219,20 +219,20 @@ class ConsoleInputReader(object):
         result = None
 
         u_char = ev.uChar.UnicodeChar
-        ascii_char = u_char.encode('utf-8')
+        ascii_char = u_char.encode('utf-8') 
 
-        # NOTE: We don't use `ev.uChar.AsciiChar`. That appears to be latin-1
-        #       encoded. See also:
-        # https://github.com/ipython/ipython/issues/10004
-        # https://github.com/jonathanslenders/python-prompt-toolkit/issues/389
-
+        # NOTE: We don't use `ev.uChar.AsciiChar`. That appears to be latin-1 
+        #       encoded. See also: 
+        # https://github.com/ipython/ipython/issues/10004 
+        # https://github.com/jonathanslenders/python-prompt-toolkit/issues/389 
+ 
         if u_char == '\x00':
             if ev.VirtualKeyCode in self.keycodes:
                 result = KeyPress(self.keycodes[ev.VirtualKeyCode], '')
         else:
             if ascii_char in self.mappings:
-                if self.mappings[ascii_char] == Keys.ControlJ:
-                    u_char = '\n'  # Windows sends \n, turn into \r for unix compatibility.
+                if self.mappings[ascii_char] == Keys.ControlJ: 
+                    u_char = '\n'  # Windows sends \n, turn into \r for unix compatibility. 
                 result = KeyPress(self.mappings[ascii_char], u_char)
             else:
                 result = KeyPress(u_char, u_char)
@@ -299,7 +299,7 @@ class ConsoleInputReader(object):
         # Check event type.
         if ev.ButtonState == FROM_LEFT_1ST_BUTTON_PRESSED:
             # On a key press, generate both the mouse down and up event.
-            for event_type in [MouseEventType.MOUSE_DOWN, MouseEventType.MOUSE_UP]:
+            for event_type in [MouseEventType.MOUSE_DOWN, MouseEventType.MOUSE_UP]: 
                 data = ';'.join([
                    event_type,
                    str(ev.MousePosition.X),

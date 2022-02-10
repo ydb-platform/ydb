@@ -15,13 +15,13 @@ class SelectionType(object):
     Type of selection.
     """
     #: Characters. (Visual in Vi.)
-    CHARACTERS = 'CHARACTERS'
+    CHARACTERS = 'CHARACTERS' 
 
     #: Whole lines. (Visual-Line in Vi.)
-    LINES = 'LINES'
+    LINES = 'LINES' 
 
     #: A block selection. (Visual-Block in Vi.)
-    BLOCK = 'BLOCK'
+    BLOCK = 'BLOCK' 
 
 
 class PasteMode(object):

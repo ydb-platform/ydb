@@ -26,7 +26,7 @@
 
 void WriteHeader(const TString& headerName, IOutputStream& out, IOutputStream* headerOutPtr = nullptr) {
     out << "// This file was auto-generated. Do not edit!!!\n";
-    out << "#include " << headerName << "\n";
+    out << "#include " << headerName << "\n"; 
     out << "#include <tools/enum_parser/enum_serialization_runtime/enum_runtime.h>\n\n";
     out << "#include <tools/enum_parser/enum_parser/stdlib_deps.h>\n\n";
     out << "#include <util/generic/typetraits.h>\n";
@@ -392,11 +392,11 @@ int main(int argc, char** argv) {
                 "Generate appropriate header to specified file.\n"
                 "Works only if output file specified."
             );
-        opts.AddLongOption("include-path").OptionalArgument("<header-path>").StoreResult(&includePath)
-            .Help(
-                "Include input header using this path in angle brackets.\n"
-                "When not set, header basename is used in double quotes."
-            );
+        opts.AddLongOption("include-path").OptionalArgument("<header-path>").StoreResult(&includePath) 
+            .Help( 
+                "Include input header using this path in angle brackets.\n" 
+                "When not set, header basename is used in double quotes." 
+            ); 
 
         opts.AddLongOption('j', "json-output").OptionalArgument("<json-output>").StoreResult(&outputJsonFileName)
             .Help(
@@ -433,12 +433,12 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (!includePath) {
+        if (!includePath) { 
             includePath = TString() + '"' + TFsPath(inputFileName).Basename() + '"';
-        } else {
+        } else { 
             includePath = TString() + '<' + includePath + '>';
-        }
-
+        } 
+ 
         TEnumParser parser(inputFileName);
         WriteHeader(includePath, *out, headerOut.Get());
 

@@ -17,8 +17,8 @@ spec.
 
 from __future__ import print_function
 
-import sys
-
+import sys 
+ 
 from traitlets.config.configurable import Configurable
 from traitlets import List
 
@@ -105,16 +105,16 @@ class DisplayPublisher(Configurable):
         transient = kwargs.pop('transient', None)
         update = kwargs.pop('update', False)
 
-        # The default is to simply write the plain text data using sys.stdout.
+        # The default is to simply write the plain text data using sys.stdout. 
         if 'text/plain' in data:
-            print(data['text/plain'])
+            print(data['text/plain']) 
 
     def clear_output(self, wait=False):
         """Clear the output of the cell receiving output."""
-        print('\033[2K\r', end='')
-        sys.stdout.flush()
-        print('\033[2K\r', end='')
-        sys.stderr.flush()
+        print('\033[2K\r', end='') 
+        sys.stdout.flush() 
+        print('\033[2K\r', end='') 
+        sys.stderr.flush() 
 
 
 class CapturingDisplayPublisher(DisplayPublisher):

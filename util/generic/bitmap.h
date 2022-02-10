@@ -9,7 +9,7 @@
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
-#include <util/str_stl.h>
+#include <util/str_stl.h> 
 #include <util/ysaveload.h>
 
 namespace NBitMapPrivate {
@@ -985,21 +985,21 @@ public:
         }
         Mask.Sanitize();
     }
-
-    inline size_t Hash() const {
-        THash<TChunk> chunkHasher;
-
-        size_t hash = chunkHasher(0);
-        bool tailSkipped = false;
-        for (size_t i = Mask.GetChunkCapacity(); i > 0; --i) {
-            if (tailSkipped || Mask.Data[i - 1]) {
-                hash = ::CombineHashes(hash, chunkHasher(Mask.Data[i - 1]));
-                tailSkipped = true;
-            }
-        }
-
-        return hash;
-    }
+ 
+    inline size_t Hash() const { 
+        THash<TChunk> chunkHasher; 
+ 
+        size_t hash = chunkHasher(0); 
+        bool tailSkipped = false; 
+        for (size_t i = Mask.GetChunkCapacity(); i > 0; --i) { 
+            if (tailSkipped || Mask.Data[i - 1]) { 
+                hash = ::CombineHashes(hash, chunkHasher(Mask.Data[i - 1])); 
+                tailSkipped = true; 
+            } 
+        } 
+ 
+        return hash; 
+    } 
 
     inline const TChunk* GetChunks() const {
         return Mask.Data;
@@ -1105,10 +1105,10 @@ public:
 using TDynBitMap = TBitMapOps<TDynamicBitMapTraits<ui64>>;
 
 #define Y_FOR_EACH_BIT(var, bitmap) for (size_t var = (bitmap).FirstNonZeroBit(); var != (bitmap).Size(); var = (bitmap).NextNonZeroBit(var))
-
-template <typename TTraits>
+ 
+template <typename TTraits> 
 struct THash<TBitMapOps<TTraits>> {
-    size_t operator()(const TBitMapOps<TTraits>& elem) const {
-        return elem.Hash();
-    }
-};
+    size_t operator()(const TBitMapOps<TTraits>& elem) const { 
+        return elem.Hash(); 
+    } 
+}; 

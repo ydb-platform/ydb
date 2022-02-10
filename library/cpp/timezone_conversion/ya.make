@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    dfyz
-    petrk
-)
+OWNER( 
+    dfyz 
+    petrk 
+) 
 
 PEERDIR(
     contrib/libs/cctz/tzdata

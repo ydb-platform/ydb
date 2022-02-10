@@ -7,10 +7,10 @@ __all__ = (
 
 def create_handle_decorator(registry, filter=Always()):
     """
-    Create a key handle decorator, which is compatible with `Registry.handle`,
-    but will chain the given filter to every key binding.
+    Create a key handle decorator, which is compatible with `Registry.handle`, 
+    but will chain the given filter to every key binding. 
 
-    :param filter: `CLIFilter`
+    :param filter: `CLIFilter` 
     """
     assert isinstance(filter, CLIFilter)
 
@@ -21,5 +21,5 @@ def create_handle_decorator(registry, filter=Always()):
         else:
             kw['filter'] = filter
 
-        return registry.add_binding(*keys, **kw)
+        return registry.add_binding(*keys, **kw) 
     return handle

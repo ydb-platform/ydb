@@ -1,6 +1,6 @@
 PROGRAM(linear_regression_benchmark)
 
-OWNER(alex-sh)
+OWNER(alex-sh) 
 
 SRCS(
     pool.h

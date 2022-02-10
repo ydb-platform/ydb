@@ -4,11 +4,11 @@ OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 
 FORK_TESTS()
-
+ 
 FORK_SUBTESTS()
-
+ 
 SPLIT_FACTOR(40)
-
+ 
 TIMEOUT(300)
 
 SIZE(MEDIUM)

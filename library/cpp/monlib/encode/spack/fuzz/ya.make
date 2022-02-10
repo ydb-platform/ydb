@@ -1,12 +1,12 @@
 FUZZ()
 
-OWNER(
-    g:solomon
-    msherbakov
+OWNER( 
+    g:solomon 
+    msherbakov 
 )
 
-FUZZ_OPTS(-rss_limit_mb=1024)
-
+FUZZ_OPTS(-rss_limit_mb=1024) 
+ 
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -14,8 +14,8 @@ PEERDIR(
     library/cpp/monlib/encode/fake
 )
 
-SRCS(
-    main.cpp
-)
+SRCS( 
+    main.cpp 
+) 
 
 END()

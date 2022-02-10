@@ -6,17 +6,17 @@
 
 from __future__ import print_function
 
-try:
-    from base64 import encodebytes as base64_encode
-except ImportError:
-    from base64 import encodestring as base64_encode
-
+try: 
+    from base64 import encodebytes as base64_encode 
+except ImportError: 
+    from base64 import encodestring as base64_encode 
+ 
 from binascii import b2a_hex, hexlify
 import json
 import mimetypes
 import os
 import struct
-import sys
+import sys 
 import warnings
 
 from IPython.utils.py3compat import (string_types, cast_bytes_py2, cast_unicode,
@@ -964,9 +964,9 @@ class Image(DisplayObject):
 
             Note that QtConsole is not able to display images if `embed` is set to `False`
         width : int
-            Width in pixels to which to constrain the image in html
+            Width in pixels to which to constrain the image in html 
         height : int
-            Height in pixels to which to constrain the image in html
+            Height in pixels to which to constrain the image in html 
         retina : bool
             Automatically set the width and height to half of the measured
             width and height.
@@ -1111,7 +1111,7 @@ class Image(DisplayObject):
 
 class Video(DisplayObject):
 
-    def __init__(self, data=None, url=None, filename=None, embed=False, mimetype=None):
+    def __init__(self, data=None, url=None, filename=None, embed=False, mimetype=None): 
         """Create a video object given raw data or an URL.
 
         When this object is returned by an input cell or passed to the
@@ -1121,54 +1121,54 @@ class Video(DisplayObject):
         Parameters
         ----------
         data : unicode, str or bytes
-            The raw video data or a URL or filename to load the data from.
-            Raw data will require passing `embed=True`.
+            The raw video data or a URL or filename to load the data from. 
+            Raw data will require passing `embed=True`. 
         url : unicode
-            A URL for the video. If you specify `url=`,
-            the image data will not be embedded.
+            A URL for the video. If you specify `url=`, 
+            the image data will not be embedded. 
         filename : unicode
-            Path to a local file containing the video.
-            Will be interpreted as a local URL unless `embed=True`.
+            Path to a local file containing the video. 
+            Will be interpreted as a local URL unless `embed=True`. 
         embed : bool
-            Should the video be embedded using a data URI (True) or be
-            loaded using a <video> tag (False).
+            Should the video be embedded using a data URI (True) or be 
+            loaded using a <video> tag (False). 
 
-            Since videos are large, embedding them should be avoided, if possible.
-            You must confirm embedding as your intention by passing `embed=True`.
+            Since videos are large, embedding them should be avoided, if possible. 
+            You must confirm embedding as your intention by passing `embed=True`. 
 
-            Local files can be displayed with URLs without embedding the content, via::
-
-                Video('./video.mp4')
-
+            Local files can be displayed with URLs without embedding the content, via:: 
+ 
+                Video('./video.mp4') 
+ 
         mimetype: unicode
-            Specify the mimetype for embedded videos.
-            Default will be guessed from file extension, if available.
-
+            Specify the mimetype for embedded videos. 
+            Default will be guessed from file extension, if available. 
+ 
         Examples
         --------
-
+ 
         Video('https://archive.org/download/Sita_Sings_the_Blues/Sita_Sings_the_Blues_small.mp4')
         Video('path/to/video.mp4')
-        Video('path/to/video.mp4', embed=True)
-        Video(b'raw-videodata', embed=True)
+        Video('path/to/video.mp4', embed=True) 
+        Video(b'raw-videodata', embed=True) 
         """
-        if url is None and isinstance(data, string_types) and data.startswith(('http:', 'https:')):
+        if url is None and isinstance(data, string_types) and data.startswith(('http:', 'https:')): 
             url = data
             data = None
         elif os.path.exists(data):
             filename = data
             data = None
-        
-        if data and not embed:
-            msg = ''.join([
-                "To embed videos, you must pass embed=True ",
-                "(this may make your notebook files huge)\n",
-                "Consider passing Video(url='...')",
-            ])
-            raise ValueError(msg)
+         
+        if data and not embed: 
+            msg = ''.join([ 
+                "To embed videos, you must pass embed=True ", 
+                "(this may make your notebook files huge)\n", 
+                "Consider passing Video(url='...')", 
+            ]) 
+            raise ValueError(msg) 
 
         self.mimetype = mimetype
-        self.embed = embed
+        self.embed = embed 
         super(Video, self).__init__(data=data, url=url, filename=filename)
 
     def _repr_html_(self):
@@ -1180,27 +1180,27 @@ class Video(DisplayObject):
       Your browser does not support the <code>video</code> element.
     </video>""".format(url)
             return output
-        
-        # Embedded videos are base64-encoded.
-        mimetype = self.mimetype
+         
+        # Embedded videos are base64-encoded. 
+        mimetype = self.mimetype 
         if self.filename is not None:
-            if not mimetype:
-                mimetype, _ = mimetypes.guess_type(self.filename)
-            
-            with open(self.filename, 'rb') as f:
-                video = f.read()
+            if not mimetype: 
+                mimetype, _ = mimetypes.guess_type(self.filename) 
+             
+            with open(self.filename, 'rb') as f: 
+                video = f.read() 
         else:
-            video = self.data
-        if isinstance(video, unicode_type):
-            # unicode input is already b64-encoded
-            b64_video = video
-        else:
-            b64_video = base64_encode(video).decode('ascii').rstrip()
-        
+            video = self.data 
+        if isinstance(video, unicode_type): 
+            # unicode input is already b64-encoded 
+            b64_video = video 
+        else: 
+            b64_video = base64_encode(video).decode('ascii').rstrip() 
+         
         output = """<video controls>
  <source src="data:{0};base64,{1}" type="{0}">
  Your browser does not support the video tag.
- </video>""".format(mimetype, b64_video)
+ </video>""".format(mimetype, b64_video) 
         return output
 
     def reload(self):
@@ -1225,10 +1225,10 @@ def clear_output(wait=False):
     if InteractiveShell.initialized():
         InteractiveShell.instance().display_pub.clear_output(wait)
     else:
-        print('\033[2K\r', end='')
-        sys.stdout.flush()
-        print('\033[2K\r', end='')
-        sys.stderr.flush()
+        print('\033[2K\r', end='') 
+        sys.stdout.flush() 
+        print('\033[2K\r', end='') 
+        sys.stderr.flush() 
 
 
 @skip_doctest

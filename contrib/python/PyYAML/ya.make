@@ -1,9 +1,9 @@
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 LICENSE(MIT)
 
 OWNER(g:python-contrib)
-
+ 
 IF (PYTHON2)
     PEERDIR(
         contrib/python/PyYAML/py2

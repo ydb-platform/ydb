@@ -8,13 +8,13 @@ import threading
 import library.python.filelock
 
 
-def _acquire_lock(lock_path, out_file_path):
+def _acquire_lock(lock_path, out_file_path): 
     with library.python.filelock.FileLock(lock_path):
-        with open(out_file_path, "a") as out:
-            out.write("{}:{}\n".format(os.getpid(), time.time()))
-        time.sleep(2)
-
-
+        with open(out_file_path, "a") as out: 
+            out.write("{}:{}\n".format(os.getpid(), time.time())) 
+        time.sleep(2) 
+ 
+ 
 def test_filelock():
     temp_dir = tempfile.mkdtemp()
     lock_path = os.path.join(temp_dir, "file.lock")
@@ -46,12 +46,12 @@ def test_filelock():
         time2 = times.pop()
         assert int(time1) - int(time2) >= 2
         time1 = time2
-
-
+ 
+ 
 def test_filelock_init_acquired():
     temp_dir = tempfile.mkdtemp()
     lock_path = os.path.join(temp_dir, "file.lock")
-
+ 
     with library.python.filelock.FileLock(lock_path):
         sublock = library.python.filelock.FileLock(lock_path)
         del sublock

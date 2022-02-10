@@ -14,7 +14,7 @@ from __future__ import print_function
 import logging
 import os
 import sys
-import warnings
+import warnings 
 
 from traitlets.config.loader import Config
 from traitlets.config.application import boolean_flag, catch_config_error, Application
@@ -32,7 +32,7 @@ from IPython.core.shellapp import (
     InteractiveShellApp, shell_flags, shell_aliases
 )
 from IPython.extensions.storemagic import StoreMagics
-from .interactiveshell import TerminalInteractiveShell
+from .interactiveshell import TerminalInteractiveShell 
 from IPython.paths import get_ipython_dir
 from traitlets import (
     Bool, List, Dict, default, observe, Type
@@ -101,11 +101,11 @@ addflag('autoedit-syntax', 'TerminalInteractiveShell.autoedit_syntax',
         'Turn on auto editing of files with syntax errors.',
         'Turn off auto editing of files with syntax errors.'
 )
-addflag('simple-prompt', 'TerminalInteractiveShell.simple_prompt',
-        "Force simple minimal prompt using `raw_input`",
-        "Use a rich interactive prompt with prompt_toolkit",
-)
-
+addflag('simple-prompt', 'TerminalInteractiveShell.simple_prompt', 
+        "Force simple minimal prompt using `raw_input`", 
+        "Use a rich interactive prompt with prompt_toolkit", 
+) 
+ 
 addflag('banner', 'TerminalIPythonApp.display_banner',
         "Display a banner upon starting IPython.",
         "Don't display a banner upon starting IPython."
@@ -123,7 +123,7 @@ addflag('term-title', 'TerminalInteractiveShell.term_title',
 classic_config = Config()
 classic_config.InteractiveShell.cache_size = 0
 classic_config.PlainTextFormatter.pprint = False
-classic_config.TerminalInteractiveShell.prompts_class='IPython.terminal.prompts.ClassicPrompts'
+classic_config.TerminalInteractiveShell.prompts_class='IPython.terminal.prompts.ClassicPrompts' 
 classic_config.InteractiveShell.separate_in = ''
 classic_config.InteractiveShell.separate_out = ''
 classic_config.InteractiveShell.separate_out2 = ''
@@ -192,7 +192,7 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
         help="Class to use to instantiate the TerminalInteractiveShell object. Useful for custom Frontends"
     ).tag(config=True)
 
-    @default('classes')
+    @default('classes') 
     def _classes_default(self):
         """This has to be in a method, for TerminalIPythonApp to be available."""
         return [
@@ -250,33 +250,33 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
     # *do* autocreate requested profile, but don't create the config file.
     auto_create=Bool(True)
     # configurables
-    quick = Bool(False,
+    quick = Bool(False, 
         help="""Start IPython quickly by skipping the loading of config files."""
-    ).tag(config=True)
-    @observe('quick')
-    def _quick_changed(self, change):
-        if change['new']:
+    ).tag(config=True) 
+    @observe('quick') 
+    def _quick_changed(self, change): 
+        if change['new']: 
             self.load_config_file = lambda *a, **kw: None
 
-    display_banner = Bool(True,
+    display_banner = Bool(True, 
         help="Whether to display a banner upon starting IPython."
-    ).tag(config=True)
+    ).tag(config=True) 
 
     # if there is code of files to run from the cmd line, don't interact
     # unless the --i flag (App.force_interact) is true.
-    force_interact = Bool(False,
+    force_interact = Bool(False, 
         help="""If a command or file is given via the command-line,
         e.g. 'ipython foo.py', start an interactive shell after executing the
         file or command."""
-    ).tag(config=True)
-    @observe('force_interact')
-    def _force_interact_changed(self, change):
-        if change['new']:
+    ).tag(config=True) 
+    @observe('force_interact') 
+    def _force_interact_changed(self, change): 
+        if change['new']: 
             self.interact = True
 
-    @observe('file_to_run', 'code_to_run', 'module_to_run')
-    def _file_to_run_changed(self, change):
-        new = change['new']
+    @observe('file_to_run', 'code_to_run', 'module_to_run') 
+    def _file_to_run_changed(self, change): 
+        new = change['new'] 
         if new:
             self.something_to_run = True
         if new and not self.force_interact:
@@ -295,7 +295,7 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
             # warn and transform into current syntax
             argv = argv[:] # copy, don't clobber
             idx = argv.index('-pylab')
-            warnings.warn("`-pylab` flag has been deprecated.\n"
+            warnings.warn("`-pylab` flag has been deprecated.\n" 
             "    Use `--matplotlib <backend>` and import pylab manually.")
             argv[idx] = '--pylab'
 
@@ -328,7 +328,7 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
         # based app, because we call shell.show_banner() by hand below
         # so the banner shows *before* all extension loading stuff.
         self.shell = self.interactive_shell_class.instance(parent=self,
-                        profile_dir=self.profile_dir,
+                        profile_dir=self.profile_dir, 
                         ipython_dir=self.ipython_dir, user_ns=self.user_ns)
         self.shell.configurables.append(self)
 
@@ -342,7 +342,7 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
     def _pylab_changed(self, name, old, new):
         """Replace --pylab='inline' with --pylab='auto'"""
         if new == 'inline':
-            warnings.warn("'inline' not available as pylab backend, "
+            warnings.warn("'inline' not available as pylab backend, " 
                       "using 'auto' instead.")
             self.pylab = 'auto'
 

@@ -3,13 +3,13 @@
 the input using a regular grammar with token annotations.
 """
 from __future__ import unicode_literals
-from prompt_toolkit.document import Document
+from prompt_toolkit.document import Document 
 from prompt_toolkit.layout.lexers import Lexer
-from prompt_toolkit.layout.utils import split_lines
-from prompt_toolkit.token import Token
+from prompt_toolkit.layout.utils import split_lines 
+from prompt_toolkit.token import Token 
 
 from .compiler import _CompiledGrammar
-from six.moves import range
+from six.moves import range 
 
 __all__ = (
     'GrammarLexer',
@@ -40,7 +40,7 @@ class GrammarLexer(Lexer):
         self.default_token = default_token or Token
         self.lexers = lexers or {}
 
-    def _get_tokens(self, cli, text):
+    def _get_tokens(self, cli, text): 
         m = self.compiled_grammar.match_prefix(text)
 
         if m:
@@ -52,15 +52,15 @@ class GrammarLexer(Lexer):
                 lexer = self.lexers.get(v.varname)
 
                 if lexer:
-                    document = Document(text[v.start:v.stop])
-                    lexer_tokens_for_line = lexer.lex_document(cli, document)
-                    lexer_tokens = []
-                    for i in range(len(document.lines)):
-                        lexer_tokens.extend(lexer_tokens_for_line(i))
-                        lexer_tokens.append((Token, '\n'))
-                    if lexer_tokens:
-                        lexer_tokens.pop()
-
+                    document = Document(text[v.start:v.stop]) 
+                    lexer_tokens_for_line = lexer.lex_document(cli, document) 
+                    lexer_tokens = [] 
+                    for i in range(len(document.lines)): 
+                        lexer_tokens.extend(lexer_tokens_for_line(i)) 
+                        lexer_tokens.append((Token, '\n')) 
+                    if lexer_tokens: 
+                        lexer_tokens.pop() 
+ 
                     i = v.start
                     for t, s in lexer_tokens:
                         for c in s:
@@ -77,14 +77,14 @@ class GrammarLexer(Lexer):
             return characters
         else:
             return [(Token, text)]
-
-    def lex_document(self, cli, document):
-        lines = list(split_lines(self._get_tokens(cli, document.text)))
-
-        def get_line(lineno):
-            try:
-                return lines[lineno]
-            except IndexError:
-                return []
-
-        return get_line
+ 
+    def lex_document(self, cli, document): 
+        lines = list(split_lines(self._get_tokens(cli, document.text))) 
+ 
+        def get_line(lineno): 
+            try: 
+                return lines[lineno] 
+            except IndexError: 
+                return [] 
+ 
+        return get_line 

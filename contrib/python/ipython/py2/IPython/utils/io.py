@@ -14,19 +14,19 @@ import atexit
 import os
 import sys
 import tempfile
-import warnings
+import warnings 
 from warnings import warn
-
-from IPython.utils.decorators import undoc
+ 
+from IPython.utils.decorators import undoc 
 from .capture import CapturedIO, capture_output
 from .py3compat import string_types, input, PY3
 
-@undoc
+@undoc 
 class IOStream:
 
-    def __init__(self, stream, fallback=None):
-        warn('IOStream is deprecated since IPython 5.0, use sys.{stdin,stdout,stderr} instead',
-             DeprecationWarning, stacklevel=2)
+    def __init__(self, stream, fallback=None): 
+        warn('IOStream is deprecated since IPython 5.0, use sys.{stdin,stdout,stderr} instead', 
+             DeprecationWarning, stacklevel=2) 
         if not hasattr(stream,'write') or not hasattr(stream,'flush'):
             if fallback is not None:
                 stream = fallback
@@ -52,8 +52,8 @@ class IOStream:
         return tpl.format(mod=cls.__module__, cls=cls.__name__, args=self.stream)
 
     def write(self,data):
-        warn('IOStream is deprecated since IPython 5.0, use sys.{stdin,stdout,stderr} instead',
-             DeprecationWarning, stacklevel=2)
+        warn('IOStream is deprecated since IPython 5.0, use sys.{stdin,stdout,stderr} instead', 
+             DeprecationWarning, stacklevel=2) 
         try:
             self._swrite(data)
         except:
@@ -68,8 +68,8 @@ class IOStream:
                       file=sys.stderr)
 
     def writelines(self, lines):
-        warn('IOStream is deprecated since IPython 5.0, use sys.{stdin,stdout,stderr} instead',
-             DeprecationWarning, stacklevel=2)
+        warn('IOStream is deprecated since IPython 5.0, use sys.{stdin,stdout,stderr} instead', 
+             DeprecationWarning, stacklevel=2) 
         if isinstance(lines, string_types):
             lines = [lines]
         for line in lines:
@@ -87,17 +87,17 @@ class IOStream:
         pass
 
 # setup stdin/stdout/stderr to sys.stdin/sys.stdout/sys.stderr
-devnull = open(os.devnull, 'w')
+devnull = open(os.devnull, 'w') 
 atexit.register(devnull.close)
 
-# io.std* are deprecated, but don't show our own deprecation warnings
-# during initialization of the deprecated API.
-with warnings.catch_warnings():
-    warnings.simplefilter('ignore', DeprecationWarning)
-    stdin = IOStream(sys.stdin, fallback=devnull)
-    stdout = IOStream(sys.stdout, fallback=devnull)
-    stderr = IOStream(sys.stderr, fallback=devnull)
-
+# io.std* are deprecated, but don't show our own deprecation warnings 
+# during initialization of the deprecated API. 
+with warnings.catch_warnings(): 
+    warnings.simplefilter('ignore', DeprecationWarning) 
+    stdin = IOStream(sys.stdin, fallback=devnull) 
+    stdout = IOStream(sys.stdout, fallback=devnull) 
+    stderr = IOStream(sys.stderr, fallback=devnull) 
+ 
 class Tee(object):
     """A class to duplicate an output stream to stdout/err.
 

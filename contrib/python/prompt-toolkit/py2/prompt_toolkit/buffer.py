@@ -13,14 +13,14 @@ from .filters import to_simple_filter
 from .history import History, InMemoryHistory
 from .search_state import SearchState
 from .selection import SelectionType, SelectionState, PasteMode
-from .utils import Event
-from .cache import FastDictCache
+from .utils import Event 
+from .cache import FastDictCache 
 from .validation import ValidationError
 
-from six.moves import range
-
+from six.moves import range 
+ 
 import os
-import re
+import re 
 import shlex
 import six
 import subprocess
@@ -32,10 +32,10 @@ __all__ = (
     'Buffer',
     'indent',
     'unindent',
-    'reshape_text',
+    'reshape_text', 
 )
 
-
+ 
 class EditReadOnlyBuffer(Exception):
     " Attempt editing of read-only :class:`.Buffer`. "
 
@@ -165,24 +165,24 @@ class CompletionState(object):
             return self.current_completions[self.complete_index]
 
 
-_QUOTED_WORDS_RE = re.compile(r"""(\s+|".*?"|'.*?')""")
-
-
-class YankNthArgState(object):
-    """
-    For yank-last-arg/yank-nth-arg: Keep track of where we are in the history.
-    """
-    def __init__(self, history_position=0, n=-1, previous_inserted_word=''):
-        self.history_position = history_position
-        self.previous_inserted_word = previous_inserted_word
-        self.n = n
-
-    def __repr__(self):
-        return '%s(history_position=%r, n=%r, previous_inserted_word=%r)' % (
-            self.__class__.__name__, self.history_position, self.n,
-            self.previous_inserted_word)
-
-
+_QUOTED_WORDS_RE = re.compile(r"""(\s+|".*?"|'.*?')""") 
+ 
+ 
+class YankNthArgState(object): 
+    """ 
+    For yank-last-arg/yank-nth-arg: Keep track of where we are in the history. 
+    """ 
+    def __init__(self, history_position=0, n=-1, previous_inserted_word=''): 
+        self.history_position = history_position 
+        self.previous_inserted_word = previous_inserted_word 
+        self.n = n 
+ 
+    def __repr__(self): 
+        return '%s(history_position=%r, n=%r, previous_inserted_word=%r)' % ( 
+            self.__class__.__name__, self.history_position, self.n, 
+            self.previous_inserted_word) 
+ 
+ 
 class Buffer(object):
     """
     The core data structure that holds the text and cursor position of the
@@ -196,9 +196,9 @@ class Buffer(object):
 
     Events:
 
-    :param on_text_changed: When the buffer text changes. (Callable on None.)
-    :param on_text_insert: When new text is inserted. (Callable on None.)
-    :param on_cursor_position_changed: When the cursor moves. (Callable on None.)
+    :param on_text_changed: When the buffer text changes. (Callable on None.) 
+    :param on_text_insert: When new text is inserted. (Callable on None.) 
+    :param on_cursor_position_changed: When the cursor moves. (Callable on None.) 
 
     Filters:
 
@@ -234,9 +234,9 @@ class Buffer(object):
         assert completer is None or isinstance(completer, Completer)
         assert auto_suggest is None or isinstance(auto_suggest, AutoSuggest)
         assert history is None or isinstance(history, History)
-        assert on_text_changed is None or callable(on_text_changed)
-        assert on_text_insert is None or callable(on_text_insert)
-        assert on_cursor_position_changed is None or callable(on_cursor_position_changed)
+        assert on_text_changed is None or callable(on_text_changed) 
+        assert on_text_insert is None or callable(on_text_insert) 
+        assert on_cursor_position_changed is None or callable(on_cursor_position_changed) 
 
         self.completer = completer
         self.auto_suggest = auto_suggest
@@ -250,9 +250,9 @@ class Buffer(object):
         self.enable_history_search = enable_history_search
         self.read_only = read_only
 
-        # Text width. (For wrapping, used by the Vi 'gq' operator.)
-        self.text_width = 0
-
+        # Text width. (For wrapping, used by the Vi 'gq' operator.) 
+        self.text_width = 0 
+ 
         #: The command buffer history.
         # Note that we shouldn't use a lazy 'or' here. bool(history) could be
         # False when empty.
@@ -261,13 +261,13 @@ class Buffer(object):
         self.__cursor_position = 0
 
         # Events
-        self.on_text_changed = Event(self, on_text_changed)
-        self.on_text_insert = Event(self, on_text_insert)
-        self.on_cursor_position_changed = Event(self, on_cursor_position_changed)
+        self.on_text_changed = Event(self, on_text_changed) 
+        self.on_text_insert = Event(self, on_text_insert) 
+        self.on_cursor_position_changed = Event(self, on_cursor_position_changed) 
 
-        # Document cache. (Avoid creating new Document instances.)
-        self._document_cache = FastDictCache(Document, size=10)
-
+        # Document cache. (Avoid creating new Document instances.) 
+        self._document_cache = FastDictCache(Document, size=10) 
+ 
         self.reset(initial_document=initial_document)
 
     def reset(self, initial_document=None, append_to_history=False):
@@ -290,20 +290,20 @@ class Buffer(object):
         # State of the selection.
         self.selection_state = None
 
-        # Multiple cursor mode. (When we press 'I' or 'A' in visual-block mode,
-        # we can insert text on multiple lines at once. This is implemented by
-        # using multiple cursors.)
-        self.multiple_cursor_positions = []
-
-        # When doing consecutive up/down movements, prefer to stay at this column.
-        self.preferred_column = None
-
+        # Multiple cursor mode. (When we press 'I' or 'A' in visual-block mode, 
+        # we can insert text on multiple lines at once. This is implemented by 
+        # using multiple cursors.) 
+        self.multiple_cursor_positions = [] 
+ 
+        # When doing consecutive up/down movements, prefer to stay at this column. 
+        self.preferred_column = None 
+ 
         # State of complete browser
         self.complete_state = None  # For interactive completion through Ctrl-N/Ctrl-P.
 
-        # State of Emacs yank-nth-arg completion.
-        self.yank_nth_arg_state = None  # for yank-nth-arg.
-
+        # State of Emacs yank-nth-arg completion. 
+        self.yank_nth_arg_state = None  # for yank-nth-arg. 
+ 
         # Remember the document that we had *right before* the last paste
         # operation. This is used for rotating through the kill ring.
         self.document_before_paste = None
@@ -332,24 +332,24 @@ class Buffer(object):
 
     def _set_text(self, value):
         """ set text at current working_index. Return whether it changed. """
-        working_index = self.working_index
-        working_lines = self._working_lines
+        working_index = self.working_index 
+        working_lines = self._working_lines 
 
-        original_value = working_lines[working_index]
-        working_lines[working_index] = value
+        original_value = working_lines[working_index] 
+        working_lines[working_index] = value 
 
-        # Return True when this text has been changed.
-        if len(value) != len(original_value):
-            # For Python 2, it seems that when two strings have a different
-            # length and one is a prefix of the other, Python still scans
-            # character by character to see whether the strings are different.
-            # (Some benchmarking showed significant differences for big
-            # documents. >100,000 of lines.)
-            return True
-        elif value != original_value:
-            return True
-        return False
-
+        # Return True when this text has been changed. 
+        if len(value) != len(original_value): 
+            # For Python 2, it seems that when two strings have a different 
+            # length and one is a prefix of the other, Python still scans 
+            # character by character to see whether the strings are different. 
+            # (Some benchmarking showed significant differences for big 
+            # documents. >100,000 of lines.) 
+            return True 
+        elif value != original_value: 
+            return True 
+        return False 
+ 
     def _set_cursor_position(self, value):
         """ Set cursor position. Return whether it changed. """
         original_position = self.__cursor_position
@@ -415,11 +415,11 @@ class Buffer(object):
         self.validation_error = None
         self.validation_state = ValidationState.UNKNOWN
         self.complete_state = None
-        self.yank_nth_arg_state = None
+        self.yank_nth_arg_state = None 
         self.document_before_paste = None
         self.selection_state = None
         self.suggestion = None
-        self.preferred_column = None
+        self.preferred_column = None 
 
         # fire 'on_text_changed' event.
         self.on_text_changed.fire()
@@ -429,13 +429,13 @@ class Buffer(object):
         self.validation_error = None
         self.validation_state = ValidationState.UNKNOWN
         self.complete_state = None
-        self.yank_nth_arg_state = None
+        self.yank_nth_arg_state = None 
         self.document_before_paste = None
 
-        # Unset preferred_column. (Will be set after the cursor movement, if
-        # required.)
-        self.preferred_column = None
-
+        # Unset preferred_column. (Will be set after the cursor movement, if 
+        # required.) 
+        self.preferred_column = None 
+ 
         # Note that the cursor position can change if we have a selection the
         # new position of the cursor determines the end of the selection.
 
@@ -446,10 +446,10 @@ class Buffer(object):
     def document(self):
         """
         Return :class:`~prompt_toolkit.document.Document` instance from the
-        current text, cursor position and selection state.
+        current text, cursor position and selection state. 
         """
-        return self._document_cache[
-            self.text, self.cursor_position, self.selection_state]
+        return self._document_cache[ 
+            self.text, self.cursor_position, self.selection_state] 
 
     @document.setter
     def document(self, value):
@@ -534,20 +534,20 @@ class Buffer(object):
 
         return '\n'.join(lines)
 
-    def transform_current_line(self, transform_callback):
-        """
-        Apply the given transformation function to the current line.
-
-        :param transform_callback: callable that takes a string and return a new string.
-        """
-        document = self.document
-        a = document.cursor_position + document.get_start_of_line_position()
-        b = document.cursor_position + document.get_end_of_line_position()
-        self.text = (
-            document.text[:a] +
-            transform_callback(document.text[a:b]) +
-            document.text[b:])
-
+    def transform_current_line(self, transform_callback): 
+        """ 
+        Apply the given transformation function to the current line. 
+ 
+        :param transform_callback: callable that takes a string and return a new string. 
+        """ 
+        document = self.document 
+        a = document.cursor_position + document.get_start_of_line_position() 
+        b = document.cursor_position + document.get_end_of_line_position() 
+        self.text = ( 
+            document.text[:a] + 
+            transform_callback(document.text[a:b]) + 
+            document.text[b:]) 
+ 
     def transform_region(self, from_, to, transform_callback):
         """
         Transform a part of the input string.
@@ -573,23 +573,23 @@ class Buffer(object):
 
     def cursor_up(self, count=1):
         """ (for multiline edit). Move cursor to the previous line.  """
-        original_column = self.preferred_column or self.document.cursor_position_col
-        self.cursor_position += self.document.get_cursor_up_position(
-            count=count, preferred_column=original_column)
+        original_column = self.preferred_column or self.document.cursor_position_col 
+        self.cursor_position += self.document.get_cursor_up_position( 
+            count=count, preferred_column=original_column) 
 
-        # Remember the original column for the next up/down movement.
-        self.preferred_column = original_column
-
+        # Remember the original column for the next up/down movement. 
+        self.preferred_column = original_column 
+ 
     def cursor_down(self, count=1):
         """ (for multiline edit). Move cursor to the next line.  """
-        original_column = self.preferred_column or self.document.cursor_position_col
-        self.cursor_position += self.document.get_cursor_down_position(
-            count=count, preferred_column=original_column)
+        original_column = self.preferred_column or self.document.cursor_position_col 
+        self.cursor_position += self.document.get_cursor_down_position( 
+            count=count, preferred_column=original_column) 
 
-        # Remember the original column for the next up/down movement.
-        self.preferred_column = original_column
-
-    def auto_up(self, count=1, go_to_start_of_line_if_history_changes=False):
+        # Remember the original column for the next up/down movement. 
+        self.preferred_column = original_column 
+ 
+    def auto_up(self, count=1, go_to_start_of_line_if_history_changes=False): 
         """
         If we're not on the first line (of a multiline input) go a line up,
         otherwise go back in history. (If nothing is selected.)
@@ -597,15 +597,15 @@ class Buffer(object):
         if self.complete_state:
             self.complete_previous(count=count)
         elif self.document.cursor_position_row > 0:
-            self.cursor_up(count=count)
+            self.cursor_up(count=count) 
         elif not self.selection_state:
             self.history_backward(count=count)
 
-            # Go to the start of the line?
-            if go_to_start_of_line_if_history_changes:
-                self.cursor_position += self.document.get_start_of_line_position()
-
-    def auto_down(self, count=1, go_to_start_of_line_if_history_changes=False):
+            # Go to the start of the line? 
+            if go_to_start_of_line_if_history_changes: 
+                self.cursor_position += self.document.get_start_of_line_position() 
+ 
+    def auto_down(self, count=1, go_to_start_of_line_if_history_changes=False): 
         """
         If we're not on the last line (of a multiline input) go a line down,
         otherwise go forward in history. (If nothing is selected.)
@@ -613,18 +613,18 @@ class Buffer(object):
         if self.complete_state:
             self.complete_next(count=count)
         elif self.document.cursor_position_row < self.document.line_count - 1:
-            self.cursor_down(count=count)
+            self.cursor_down(count=count) 
         elif not self.selection_state:
             self.history_forward(count=count)
 
-            # Go to the start of the line?
-            if go_to_start_of_line_if_history_changes:
-                self.cursor_position += self.document.get_start_of_line_position()
-
+            # Go to the start of the line? 
+            if go_to_start_of_line_if_history_changes: 
+                self.cursor_position += self.document.get_start_of_line_position() 
+ 
     def delete_before_cursor(self, count=1):
         """
-        Delete specified number of characters before cursor and return the
-        deleted text.
+        Delete specified number of characters before cursor and return the 
+        deleted text. 
         """
         assert count >= 0
         deleted = ''
@@ -642,7 +642,7 @@ class Buffer(object):
 
     def delete(self, count=1):
         """
-        Delete specified number of characters and Return the deleted text.
+        Delete specified number of characters and Return the deleted text. 
         """
         if self.cursor_position < len(self.text):
             deleted = self.document.text_after_cursor[:count]
@@ -652,7 +652,7 @@ class Buffer(object):
         else:
             return ''
 
-    def join_next_line(self, separator=' '):
+    def join_next_line(self, separator=' '): 
         """
         Join the next line to the current one by deleting the line ending after
         the current line.
@@ -662,10 +662,10 @@ class Buffer(object):
             self.delete()
 
             # Remove spaces.
-            self.text = (self.document.text_before_cursor + separator +
+            self.text = (self.document.text_before_cursor + separator + 
                          self.document.text_after_cursor.lstrip(' '))
 
-    def join_selected_lines(self, separator=' '):
+    def join_selected_lines(self, separator=' '): 
         """
         Join the selected lines.
         """
@@ -679,7 +679,7 @@ class Buffer(object):
         after = self.text[to:]
 
         # Replace leading spaces with just one space.
-        lines = [l.lstrip(' ') + separator for l in lines]
+        lines = [l.lstrip(' ') + separator for l in lines] 
 
         # Set new document.
         self.document = Document(text=before + ''.join(lines) + after,
@@ -906,63 +906,63 @@ class Buffer(object):
         if found_something:
             self.cursor_position = len(self.text)
 
-    def yank_nth_arg(self, n=None, _yank_last_arg=False):
-        """
-        Pick nth word from previous history entry (depending on current
-        `yank_nth_arg_state`) and insert it at current position. Rotate through
-        history if called repeatedly. If no `n` has been given, take the first
-        argument. (The second word.)
-
-        :param n: (None or int), The index of the word from the previous line
-            to take.
-        """
-        assert n is None or isinstance(n, int)
-
-        if not len(self.history):
-            return
-
-        # Make sure we have a `YankNthArgState`.
-        if self.yank_nth_arg_state is None:
-            state = YankNthArgState(n=-1 if _yank_last_arg else 1)
-        else:
-            state = self.yank_nth_arg_state
-
-        if n is not None:
-            state.n = n
-
-        # Get new history position.
-        new_pos = state.history_position - 1
-        if -new_pos > len(self.history):
-            new_pos = -1
-
-        # Take argument from line.
-        line = self.history[new_pos]
-
-        words = [w.strip() for w in _QUOTED_WORDS_RE.split(line)]
-        words = [w for w in words if w]
-        try:
-            word = words[state.n]
-        except IndexError:
-            word = ''
-
-        # Insert new argument.
-        if state.previous_inserted_word:
-            self.delete_before_cursor(len(state.previous_inserted_word))
-        self.insert_text(word)
-
-        # Save state again for next completion. (Note that the 'insert'
-        # operation from above clears `self.yank_nth_arg_state`.)
-        state.previous_inserted_word = word
-        state.history_position = new_pos
-        self.yank_nth_arg_state = state
-
-    def yank_last_arg(self, n=None):
-        """
-        Like `yank_nth_arg`, but if no argument has been given, yank the last
-        word by default.
-        """
-        self.yank_nth_arg(n=n, _yank_last_arg=True)
-
+    def yank_nth_arg(self, n=None, _yank_last_arg=False): 
+        """ 
+        Pick nth word from previous history entry (depending on current 
+        `yank_nth_arg_state`) and insert it at current position. Rotate through 
+        history if called repeatedly. If no `n` has been given, take the first 
+        argument. (The second word.) 
+ 
+        :param n: (None or int), The index of the word from the previous line 
+            to take. 
+        """ 
+        assert n is None or isinstance(n, int) 
+ 
+        if not len(self.history): 
+            return 
+ 
+        # Make sure we have a `YankNthArgState`. 
+        if self.yank_nth_arg_state is None: 
+            state = YankNthArgState(n=-1 if _yank_last_arg else 1) 
+        else: 
+            state = self.yank_nth_arg_state 
+ 
+        if n is not None: 
+            state.n = n 
+ 
+        # Get new history position. 
+        new_pos = state.history_position - 1 
+        if -new_pos > len(self.history): 
+            new_pos = -1 
+ 
+        # Take argument from line. 
+        line = self.history[new_pos] 
+ 
+        words = [w.strip() for w in _QUOTED_WORDS_RE.split(line)] 
+        words = [w for w in words if w] 
+        try: 
+            word = words[state.n] 
+        except IndexError: 
+            word = '' 
+ 
+        # Insert new argument. 
+        if state.previous_inserted_word: 
+            self.delete_before_cursor(len(state.previous_inserted_word)) 
+        self.insert_text(word) 
+ 
+        # Save state again for next completion. (Note that the 'insert' 
+        # operation from above clears `self.yank_nth_arg_state`.) 
+        state.previous_inserted_word = word 
+        state.history_position = new_pos 
+        self.yank_nth_arg_state = state 
+ 
+    def yank_last_arg(self, n=None): 
+        """ 
+        Like `yank_nth_arg`, but if no argument has been given, yank the last 
+        word by default. 
+        """ 
+        self.yank_nth_arg(n=n, _yank_last_arg=True) 
+ 
     def start_selection(self, selection_type=SelectionType.CHARACTERS):
         """
         Take the current cursor position as the start of this selection.
@@ -1041,21 +1041,21 @@ class Buffer(object):
         :param fire_event: Fire `on_text_insert` event. This is mainly used to
             trigger autocompletion while typing.
         """
-        # Original text & cursor position.
-        otext = self.text
-        ocpos = self.cursor_position
-
+        # Original text & cursor position. 
+        otext = self.text 
+        ocpos = self.cursor_position 
+ 
         # In insert/text mode.
         if overwrite:
-            # Don't overwrite the newline itself. Just before the line ending,
-            # it should act like insert mode.
-            overwritten_text = otext[ocpos:ocpos + len(data)]
+            # Don't overwrite the newline itself. Just before the line ending, 
+            # it should act like insert mode. 
+            overwritten_text = otext[ocpos:ocpos + len(data)] 
             if '\n' in overwritten_text:
                 overwritten_text = overwritten_text[:overwritten_text.find('\n')]
 
-            self.text = otext[:ocpos] + data + otext[ocpos + len(overwritten_text):]
+            self.text = otext[:ocpos] + data + otext[ocpos + len(overwritten_text):] 
         else:
-            self.text = otext[:ocpos] + data + otext[ocpos:]
+            self.text = otext[:ocpos] + data + otext[ocpos:] 
 
         if move_cursor:
             self.cursor_position += len(data)
@@ -1192,7 +1192,7 @@ class Buffer(object):
         for _ in range(count):
             result = search_once(working_index, document)
             if result is None:
-                return  # Nothing found.
+                return  # Nothing found. 
             else:
                 working_index, document = result
 
@@ -1201,10 +1201,10 @@ class Buffer(object):
     def document_for_search(self, search_state):
         """
         Return a :class:`~prompt_toolkit.document.Document` instance that has
-        the text/cursor position for this search, if we would apply it. This
-        will be used in the
-        :class:`~prompt_toolkit.layout.controls.BufferControl` to display
-        feedback while searching.
+        the text/cursor position for this search, if we would apply it. This 
+        will be used in the 
+        :class:`~prompt_toolkit.layout.controls.BufferControl` to display 
+        feedback while searching. 
         """
         search_result = self._search(search_state, include_current_position=True)
 
@@ -1213,37 +1213,37 @@ class Buffer(object):
         else:
             working_index, cursor_position = search_result
 
-            # Keep selection, when `working_index` was not changed.
-            if working_index == self.working_index:
-                selection = self.selection_state
-            else:
-                selection = None
-
-            return Document(self._working_lines[working_index],
-                            cursor_position, selection=selection)
-
-    def get_search_position(self, search_state, include_current_position=True, count=1):
-        """
-        Get the cursor position for this search.
-        (This operation won't change the `working_index`. It's won't go through
-        the history. Vi text objects can't span multiple items.)
-        """
-        search_result = self._search(
-            search_state, include_current_position=include_current_position, count=count)
-
-        if search_result is None:
-            return self.cursor_position
-        else:
-            working_index, cursor_position = search_result
-            return cursor_position
-
+            # Keep selection, when `working_index` was not changed. 
+            if working_index == self.working_index: 
+                selection = self.selection_state 
+            else: 
+                selection = None 
+ 
+            return Document(self._working_lines[working_index], 
+                            cursor_position, selection=selection) 
+ 
+    def get_search_position(self, search_state, include_current_position=True, count=1): 
+        """ 
+        Get the cursor position for this search. 
+        (This operation won't change the `working_index`. It's won't go through 
+        the history. Vi text objects can't span multiple items.) 
+        """ 
+        search_result = self._search( 
+            search_state, include_current_position=include_current_position, count=count) 
+ 
+        if search_result is None: 
+            return self.cursor_position 
+        else: 
+            working_index, cursor_position = search_result 
+            return cursor_position 
+ 
     def apply_search(self, search_state, include_current_position=True, count=1):
         """
         Apply search. If something is found, set `working_index` and
         `cursor_position`.
         """
-        search_result = self._search(
-            search_state, include_current_position=include_current_position, count=count)
+        search_result = self._search( 
+            search_state, include_current_position=include_current_position, count=count) 
 
         if search_result is not None:
             working_index, cursor_position = search_result
@@ -1368,48 +1368,48 @@ def unindent(buffer, from_row, to_row, count=1):
 
     # Go to the start of the line.
     buffer.cursor_position += buffer.document.get_start_of_line_position(after_whitespace=True)
-
-
-def reshape_text(buffer, from_row, to_row):
-    """
-    Reformat text, taking the width into account.
-    `to_row` is included.
-    (Vi 'gq' operator.)
-    """
-    lines = buffer.text.splitlines(True)
-    lines_before = lines[:from_row]
-    lines_after = lines[to_row + 1:]
-    lines_to_reformat = lines[from_row:to_row + 1]
-
-    if lines_to_reformat:
-        # Take indentation from the first line.
-        length = re.search(r'^\s*', lines_to_reformat[0]).end()
-        indent = lines_to_reformat[0][:length].replace('\n', '')
-
-        # Now, take all the 'words' from the lines to be reshaped.
-        words = ''.join(lines_to_reformat).split()
-
-        # And reshape.
-        width = (buffer.text_width or 80) - len(indent)
-        reshaped_text = [indent]
-        current_width = 0
-        for w in words:
-            if current_width:
-                if len(w) + current_width + 1 > width:
-                    reshaped_text.append('\n')
-                    reshaped_text.append(indent)
-                    current_width = 0
-                else:
-                    reshaped_text.append(' ')
-                    current_width += 1
-
-            reshaped_text.append(w)
-            current_width += len(w)
-
-        if reshaped_text[-1] != '\n':
-            reshaped_text.append('\n')
-
-        # Apply result.
-        buffer.document = Document(
-            text=''.join(lines_before + reshaped_text + lines_after),
-            cursor_position=len(''.join(lines_before + reshaped_text)))
+ 
+ 
+def reshape_text(buffer, from_row, to_row): 
+    """ 
+    Reformat text, taking the width into account. 
+    `to_row` is included. 
+    (Vi 'gq' operator.) 
+    """ 
+    lines = buffer.text.splitlines(True) 
+    lines_before = lines[:from_row] 
+    lines_after = lines[to_row + 1:] 
+    lines_to_reformat = lines[from_row:to_row + 1] 
+ 
+    if lines_to_reformat: 
+        # Take indentation from the first line. 
+        length = re.search(r'^\s*', lines_to_reformat[0]).end() 
+        indent = lines_to_reformat[0][:length].replace('\n', '') 
+ 
+        # Now, take all the 'words' from the lines to be reshaped. 
+        words = ''.join(lines_to_reformat).split() 
+ 
+        # And reshape. 
+        width = (buffer.text_width or 80) - len(indent) 
+        reshaped_text = [indent] 
+        current_width = 0 
+        for w in words: 
+            if current_width: 
+                if len(w) + current_width + 1 > width: 
+                    reshaped_text.append('\n') 
+                    reshaped_text.append(indent) 
+                    current_width = 0 
+                else: 
+                    reshaped_text.append(' ') 
+                    current_width += 1 
+ 
+            reshaped_text.append(w) 
+            current_width += len(w) 
+ 
+        if reshaped_text[-1] != '\n': 
+            reshaped_text.append('\n') 
+ 
+        # Apply result. 
+        buffer.document = Document( 
+            text=''.join(lines_before + reshaped_text + lines_after), 
+            cursor_position=len(''.join(lines_before + reshaped_text))) 

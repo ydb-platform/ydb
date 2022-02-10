@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Being removed
+"""Being removed 
 """
 
-from IPython.utils import py3compat
+from IPython.utils import py3compat 
 
 class LazyEvaluate(object):
     """This is used for formatting strings with values that need to be updated

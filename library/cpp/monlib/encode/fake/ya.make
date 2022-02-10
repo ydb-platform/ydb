@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    g:solomon
-    msherbakov
-)
+OWNER( 
+    g:solomon 
+    msherbakov 
+) 
 
 SRCS(
     fake.cpp

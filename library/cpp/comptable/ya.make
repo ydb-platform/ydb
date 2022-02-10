@@ -2,12 +2,12 @@ LIBRARY()
 
 OWNER(ironpeter)
 
-SRCS(
-    comptable.cpp
-)
+SRCS( 
+    comptable.cpp 
+) 
 
-PEERDIR(
+PEERDIR( 
     library/cpp/compproto
-)
+) 
 
 END()

@@ -12,7 +12,7 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     class THandoffMap;
 
-    template <class TKey, class TMemRec>
+    template <class TKey, class TMemRec> 
     class TLevelIndexSnapshot;
 
     ////////////////////////////////////////////////////////////////////////////

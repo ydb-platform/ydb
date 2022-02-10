@@ -563,7 +563,7 @@ int ResolvePath(const char* rel, const char* abs, char res[/*MAXPATHLEN*/], bool
     *res = 0;
     if (!rel || !*rel)
         return EINVAL;
-    if (!IsAbsolutePath(rel) && IsAbsolutePath(abs)) {
+    if (!IsAbsolutePath(rel) && IsAbsolutePath(abs)) { 
         len = strlcpy(t, abs, sizeof(t));
         if (len >= sizeof(t) - 3)
             return EINVAL;
@@ -581,13 +581,13 @@ int ResolvePath(const char* rel, const char* abs, char res[/*MAXPATHLEN*/], bool
     }
     if (!realpath(t, res)) {
         if (!isdir && realpath(GetDirName(t).data(), res)) {
-            len = strlen(res);
-            if (res[len - 1] != LOCSLASH_C) {
-                res[len++] = LOCSLASH_C;
-                res[len] = 0;
+            len = strlen(res); 
+            if (res[len - 1] != LOCSLASH_C) { 
+                res[len++] = LOCSLASH_C; 
+                res[len] = 0; 
             }
             strcpy(res + len, GetBaseName(t).data());
-            return 0;
+            return 0; 
         }
         return errno ? errno : ENOENT;
     }

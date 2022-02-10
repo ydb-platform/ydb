@@ -1,9 +1,9 @@
 from __future__ import unicode_literals
 
-from prompt_toolkit.cache import FastDictCache
-from prompt_toolkit.token import Token
+from prompt_toolkit.cache import FastDictCache 
+from prompt_toolkit.token import Token 
 from prompt_toolkit.utils import get_cwidth
-
+ 
 from collections import defaultdict, namedtuple
 
 __all__ = (
@@ -61,7 +61,7 @@ class Char(object):
         '\x1c': '^\\',
         '\x1d': '^]',
         '\x1f': '^_',
-        '\x7f': '^?',  # Backspace
+        '\x7f': '^?',  # Backspace 
     }
 
     def __init__(self, char=' ', token=Token):
@@ -87,7 +87,7 @@ class Char(object):
         return '%s(%r, %r)' % (self.__class__.__name__, self.char, self.token)
 
 
-_CHAR_CACHE = FastDictCache(Char, size=1000 * 1000)
+_CHAR_CACHE = FastDictCache(Char, size=1000 * 1000) 
 Transparent = Token.Transparent
 
 
@@ -97,13 +97,13 @@ class Screen(object):
     """
     def __init__(self, default_char=None, initial_width=0, initial_height=0):
         if default_char is None:
-            default_char = _CHAR_CACHE[' ', Transparent]
+            default_char = _CHAR_CACHE[' ', Transparent] 
 
         self.data_buffer = defaultdict(lambda: defaultdict(lambda: default_char))
 
-        #: Escape sequences to be injected.
-        self.zero_width_escapes = defaultdict(lambda: defaultdict(lambda: ''))
-
+        #: Escape sequences to be injected. 
+        self.zero_width_escapes = defaultdict(lambda: defaultdict(lambda: '')) 
+ 
         #: Position of the cursor.
         self.cursor_position = Point(y=0, x=0)
 

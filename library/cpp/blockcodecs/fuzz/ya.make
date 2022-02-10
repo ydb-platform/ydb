@@ -1,7 +1,7 @@
-OWNER(
-    pg
-    g:util
-)
+OWNER( 
+    pg 
+    g:util 
+) 
 
 IF (NOT MSVC)
     FUZZ()

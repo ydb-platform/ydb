@@ -54,8 +54,8 @@ except AttributeError:
 from IPython.utils.coloransi import TermColors, InputTermColors ,ColorScheme, ColorSchemeTable
 from IPython.utils.py3compat import PY3
 
-from .colorable import Colorable
-
+from .colorable import Colorable 
+ 
 if PY3:
     from io import StringIO
 else:
@@ -122,40 +122,40 @@ LinuxColors = ColorScheme(
     'normal'         : Colors.Normal  # color off (usu. Colors.Normal)
     } )
 
-NeutralColors = ColorScheme(
-    'Neutral',{
-    'header'         : Colors.Red,
-    token.NUMBER     : Colors.Cyan,
-    token.OP         : Colors.Blue,
-    token.STRING     : Colors.Blue,
-    tokenize.COMMENT : Colors.Red,
-    token.NAME       : Colors.Normal,
-    token.ERRORTOKEN : Colors.Red,
-
-    _KEYWORD         : Colors.Green,
-    _TEXT            : Colors.Blue,
-
-    'in_prompt'      : InputTermColors.Blue,
-    'in_number'      : InputTermColors.LightBlue,
-    'in_prompt2'     : InputTermColors.Blue,
-    'in_normal'      : InputTermColors.Normal,  # color off (usu. Colors.Normal)
-
-    'out_prompt'     : Colors.Red,
-    'out_number'     : Colors.LightRed,
-
-    'normal'         : Colors.Normal  # color off (usu. Colors.Normal)
-    }  )
-
-# Hack: the 'neutral' colours are not very visible on a dark background on
-# Windows. Since Windows command prompts have a dark background by default, and
-# relatively few users are likely to alter that, we will use the 'Linux' colours,
-# designed for a dark background, as the default on Windows. Changing it here
-# avoids affecting the prompt colours rendered by prompt_toolkit, where the
-# neutral defaults do work OK.
-
-if os.name == 'nt':
-    NeutralColors = LinuxColors.copy(name='Neutral')
-
+NeutralColors = ColorScheme( 
+    'Neutral',{ 
+    'header'         : Colors.Red, 
+    token.NUMBER     : Colors.Cyan, 
+    token.OP         : Colors.Blue, 
+    token.STRING     : Colors.Blue, 
+    tokenize.COMMENT : Colors.Red, 
+    token.NAME       : Colors.Normal, 
+    token.ERRORTOKEN : Colors.Red, 
+ 
+    _KEYWORD         : Colors.Green, 
+    _TEXT            : Colors.Blue, 
+ 
+    'in_prompt'      : InputTermColors.Blue, 
+    'in_number'      : InputTermColors.LightBlue, 
+    'in_prompt2'     : InputTermColors.Blue, 
+    'in_normal'      : InputTermColors.Normal,  # color off (usu. Colors.Normal) 
+ 
+    'out_prompt'     : Colors.Red, 
+    'out_number'     : Colors.LightRed, 
+ 
+    'normal'         : Colors.Normal  # color off (usu. Colors.Normal) 
+    }  ) 
+ 
+# Hack: the 'neutral' colours are not very visible on a dark background on 
+# Windows. Since Windows command prompts have a dark background by default, and 
+# relatively few users are likely to alter that, we will use the 'Linux' colours, 
+# designed for a dark background, as the default on Windows. Changing it here 
+# avoids affecting the prompt colours rendered by prompt_toolkit, where the 
+# neutral defaults do work OK. 
+ 
+if os.name == 'nt': 
+    NeutralColors = LinuxColors.copy(name='Neutral') 
+ 
 LightBGColors = ColorScheme(
     'LightBG',{
     'header'         : Colors.Red,
@@ -166,7 +166,7 @@ LightBGColors = ColorScheme(
     token.NAME       : Colors.Normal,
     token.ERRORTOKEN : Colors.Red,
 
-
+ 
     _KEYWORD         : Colors.Green,
     _TEXT            : Colors.Blue,
 
@@ -182,21 +182,21 @@ LightBGColors = ColorScheme(
     }  )
 
 # Build table of color schemes (needed by the parser)
-ANSICodeColors = ColorSchemeTable([NoColor,LinuxColors,LightBGColors, NeutralColors],
+ANSICodeColors = ColorSchemeTable([NoColor,LinuxColors,LightBGColors, NeutralColors], 
                                   _scheme_default)
 
-class Parser(Colorable):
+class Parser(Colorable): 
     """ Format colored Python source.
     """
 
-    def __init__(self, color_table=None, out = sys.stdout, parent=None, style=None):
+    def __init__(self, color_table=None, out = sys.stdout, parent=None, style=None): 
         """ Create a parser with a specified color table and output channel.
 
         Call format() to process code.
         """
-
-        super(Parser, self).__init__(parent=parent)
-
+ 
+        super(Parser, self).__init__(parent=parent) 
+ 
         self.color_table = color_table and color_table or ANSICodeColors
         self.out = out
 

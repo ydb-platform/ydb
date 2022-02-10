@@ -2,10 +2,10 @@
 """A fancy version of Python's builtin :func:`dir` function.
 """
 
-# Copyright (c) IPython Development Team.
-# Distributed under the terms of the Modified BSD License.
+# Copyright (c) IPython Development Team. 
+# Distributed under the terms of the Modified BSD License. 
 
-import inspect
+import inspect 
 from .py3compat import string_types
 
 
@@ -46,36 +46,36 @@ def dir2(obj):
 
     words = [w for w in words if isinstance(w, string_types)]
     return sorted(words)
-
-
-def get_real_method(obj, name):
-    """Like getattr, but with a few extra sanity checks:
-
-    - If obj is a class, ignore its methods
-    - Check if obj is a proxy that claims to have all attributes
-    - Catch attribute access failing with any exception
-    - Check that the attribute is a callable object
-
-    Returns the method or None.
-    """
-    if inspect.isclass(obj):
-        return None
-
-    try:
-        canary = getattr(obj, '_ipython_canary_method_should_not_exist_', None)
-    except Exception:
-        return None
-
-    if canary is not None:
-        # It claimed to have an attribute it should never have
-        return None
-
-    try:
-        m = getattr(obj, name, None)
-    except Exception:
-        return None
-
-    if callable(m):
-        return m
-
-    return None
+ 
+ 
+def get_real_method(obj, name): 
+    """Like getattr, but with a few extra sanity checks: 
+ 
+    - If obj is a class, ignore its methods 
+    - Check if obj is a proxy that claims to have all attributes 
+    - Catch attribute access failing with any exception 
+    - Check that the attribute is a callable object 
+ 
+    Returns the method or None. 
+    """ 
+    if inspect.isclass(obj): 
+        return None 
+ 
+    try: 
+        canary = getattr(obj, '_ipython_canary_method_should_not_exist_', None) 
+    except Exception: 
+        return None 
+ 
+    if canary is not None: 
+        # It claimed to have an attribute it should never have 
+        return None 
+ 
+    try: 
+        m = getattr(obj, name, None) 
+    except Exception: 
+        return None 
+ 
+    if callable(m): 
+        return m 
+ 
+    return None 

@@ -1,9 +1,9 @@
 UNITTEST_FOR(library/cpp/actors/core)
 
-OWNER(
-    alexvru
-    g:kikimr
-)
+OWNER( 
+    alexvru 
+    g:kikimr 
+) 
 
 FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
@@ -21,7 +21,7 @@ ELSE()
         ram:16
     )
 ENDIF()
-
+ 
 
 PEERDIR(
     library/cpp/actors/interconnect

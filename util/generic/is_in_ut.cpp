@@ -75,11 +75,11 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         const char* abc = "abc";
         const char* def = "def";
 
-        UNIT_ASSERT(IsIn({6, 2, 12}, 6));
-        UNIT_ASSERT(IsIn({6, 2, 12}, 2));
-        UNIT_ASSERT(!IsIn({6, 2, 12}, 7));
-        UNIT_ASSERT(IsIn({6}, 6));
-        UNIT_ASSERT(!IsIn({6}, 7));
+        UNIT_ASSERT(IsIn({6, 2, 12}, 6)); 
+        UNIT_ASSERT(IsIn({6, 2, 12}, 2)); 
+        UNIT_ASSERT(!IsIn({6, 2, 12}, 7)); 
+        UNIT_ASSERT(IsIn({6}, 6)); 
+        UNIT_ASSERT(!IsIn({6}, 7)); 
         UNIT_ASSERT(!IsIn(std::initializer_list<int>(), 6));
         UNIT_ASSERT(IsIn({TStringBuf("abc"), TStringBuf("def")}, TStringBuf("abc")));
         UNIT_ASSERT(IsIn({TStringBuf("abc"), TStringBuf("def")}, TStringBuf("def")));
@@ -92,8 +92,8 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         const TStringBuf str = "abc////";
 
         UNIT_ASSERT(IsIn({"abc", "def"}, TStringBuf{str.data(), 3}));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ConfOfTest) {
         UNIT_ASSERT(IsIn({1, 2, 3}, 1));
         UNIT_ASSERT(!IsIn({1, 2, 3}, 4));

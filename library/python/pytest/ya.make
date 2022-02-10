@@ -1,9 +1,9 @@
 PY23_LIBRARY()
 
-OWNER(
-    g:yatool
-    dmitko
-)
+OWNER( 
+    g:yatool 
+    dmitko 
+) 
 
 PY_SRCS(
     __init__.py

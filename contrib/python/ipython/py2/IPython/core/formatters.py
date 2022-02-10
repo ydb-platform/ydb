@@ -21,12 +21,12 @@ from decorator import decorator
 from traitlets.config.configurable import Configurable
 from IPython.core.getipython import get_ipython
 from IPython.utils.sentinel import Sentinel
-from IPython.utils.dir2 import get_real_method
+from IPython.utils.dir2 import get_real_method 
 from IPython.lib import pretty
 from traitlets import (
     Bool, Dict, Integer, Unicode, CUnicode, ObjectName, List,
     ForwardDeclaredInstance,
-    default, observe,
+    default, observe, 
 )
 from IPython.utils.py3compat import (
     with_metaclass, string_types, unicode_type,
@@ -35,28 +35,28 @@ from IPython.utils.py3compat import (
 
 class DisplayFormatter(Configurable):
 
-    active_types = List(Unicode(),
+    active_types = List(Unicode(), 
         help="""List of currently active mime-types to display.
         You can use this to set a white-list for formats to display.
         
         Most users will not need to change this value.
-        """).tag(config=True)
-
-    @default('active_types')
+        """).tag(config=True) 
+ 
+    @default('active_types') 
     def _active_types_default(self):
         return self.format_types
-
-    @observe('active_types')
-    def _active_types_changed(self, change):
+ 
+    @observe('active_types') 
+    def _active_types_changed(self, change): 
         for key, formatter in self.formatters.items():
-            if key in change['new']:
+            if key in change['new']: 
                 formatter.enabled = True
             else:
                 formatter.enabled = False
 
     ipython_display_formatter = ForwardDeclaredInstance('FormatterABC')
-    @default('ipython_display_formatter')
-    def _default_formatter(self):
+    @default('ipython_display_formatter') 
+    def _default_formatter(self): 
         return IPythonDisplayFormatter(parent=self)
 
     mimebundle_formatter = ForwardDeclaredInstance('FormatterABC')
@@ -67,7 +67,7 @@ class DisplayFormatter(Configurable):
     # A dict of formatter whose keys are format types (MIME types) and whose
     # values are subclasses of BaseFormatter.
     formatters = Dict()
-    @default('formatters')
+    @default('formatters') 
     def _formatters_default(self):
         """Activate the default formatters."""
         formatter_classes = [
@@ -305,21 +305,21 @@ class BaseFormatter(Configurable):
     format_type = Unicode('text/plain')
     _return_type = string_types
 
-    enabled = Bool(True).tag(config=True)
+    enabled = Bool(True).tag(config=True) 
 
     print_method = ObjectName('__repr__')
 
     # The singleton printers.
     # Maps the IDs of the builtin singleton objects to the format functions.
-    singleton_printers = Dict().tag(config=True)
+    singleton_printers = Dict().tag(config=True) 
 
     # The type-specific printers.
     # Map type objects to the format functions.
-    type_printers = Dict().tag(config=True)
+    type_printers = Dict().tag(config=True) 
 
     # The deferred-import type-specific printers.
     # Map (modulename, classname) pairs to the format functions.
-    deferred_printers = Dict().tag(config=True)
+    deferred_printers = Dict().tag(config=True) 
     
     @catch_format_error
     def __call__(self, obj):
@@ -333,7 +333,7 @@ class BaseFormatter(Configurable):
             else:
                 return printer(obj)
             # Finally look for special method names
-            method = get_real_method(obj, self.print_method)
+            method = get_real_method(obj, self.print_method) 
             if method is not None:
                 return method()
             return None
@@ -586,37 +586,37 @@ class PlainTextFormatter(BaseFormatter):
 
     # This subclass ignores this attribute as it always need to return
     # something.
-    enabled = Bool(True).tag(config=False)
+    enabled = Bool(True).tag(config=False) 
     
-    max_seq_length = Integer(pretty.MAX_SEQ_LENGTH,
+    max_seq_length = Integer(pretty.MAX_SEQ_LENGTH, 
         help="""Truncate large collections (lists, dicts, tuples, sets) to this size.
         
         Set to 0 to disable truncation.
         """
-    ).tag(config=True)
+    ).tag(config=True) 
     
     # Look for a _repr_pretty_ methods to use for pretty printing.
     print_method = ObjectName('_repr_pretty_')
 
     # Whether to pretty-print or not.
-    pprint = Bool(True).tag(config=True)
+    pprint = Bool(True).tag(config=True) 
 
     # Whether to be verbose or not.
-    verbose = Bool(False).tag(config=True)
+    verbose = Bool(False).tag(config=True) 
 
     # The maximum width.
-    max_width = Integer(79).tag(config=True)
+    max_width = Integer(79).tag(config=True) 
 
     # The newline character.
-    newline = Unicode('\n').tag(config=True)
+    newline = Unicode('\n').tag(config=True) 
 
     # format-string for pprinting floats
     float_format = Unicode('%r')
     # setter for float precision, either int or direct format-string
-    float_precision = CUnicode('').tag(config=True)
+    float_precision = CUnicode('').tag(config=True) 
 
-    @observe('float_precision')
-    def _float_precision_changed(self, change):
+    @observe('float_precision') 
+    def _float_precision_changed(self, change): 
         """float_precision changed, set float_format accordingly.
 
         float_precision can be set by int or str.
@@ -630,7 +630,7 @@ class PlainTextFormatter(BaseFormatter):
         This parameter can be set via the '%precision' magic.
         """
 
-        new = change['new']
+        new = change['new'] 
         if '%' in new:
             # got explicit format string
             fmt = new
@@ -663,17 +663,17 @@ class PlainTextFormatter(BaseFormatter):
         self.float_format = fmt
 
     # Use the default pretty printers from IPython.lib.pretty.
-    @default('singleton_printers')
+    @default('singleton_printers') 
     def _singleton_printers_default(self):
         return pretty._singleton_pprinters.copy()
 
-    @default('type_printers')
+    @default('type_printers') 
     def _type_printers_default(self):
         d = pretty._type_pprinters.copy()
         d[float] = lambda obj,p,cycle: p.text(self.float_format%obj)
         return d
 
-    @default('deferred_printers')
+    @default('deferred_printers') 
     def _deferred_printers_default(self):
         return pretty._deferred_type_pprinters.copy()
 
@@ -910,7 +910,7 @@ class IPythonDisplayFormatter(BaseFormatter):
                 printer(obj)
                 return True
             # Finally look for special method names
-            method = get_real_method(obj, self.print_method)
+            method = get_real_method(obj, self.print_method) 
             if method is not None:
                 method()
                 return True
@@ -1030,7 +1030,7 @@ def format_display_data(obj, include=None, exclude=None):
     """
     from IPython.core.interactiveshell import InteractiveShell
 
-    return InteractiveShell.instance().display_formatter.format(
+    return InteractiveShell.instance().display_formatter.format( 
         obj,
         include,
         exclude

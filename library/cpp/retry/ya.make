@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    osado
-    g:yabs-small
-)
+OWNER( 
+    osado 
+    g:yabs-small 
+) 
 
 SRCS(
     retry.cpp

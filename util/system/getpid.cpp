@@ -14,7 +14,7 @@
     #include <unistd.h>
 #endif
 
-TProcessId GetPID() {
+TProcessId GetPID() { 
 #ifdef _win_
     return GetCurrentProcessId();
 #else

@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    levysotsky
-    g:util
-)
+OWNER( 
+    levysotsky 
+    g:util 
+) 
 
 PEERDIR(
     contrib/libs/brotli/enc

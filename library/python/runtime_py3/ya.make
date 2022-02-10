@@ -1,10 +1,10 @@
 PY3_LIBRARY()
 
-OWNER(
-    borman
-    orivej
-    pg
-)
+OWNER( 
+    borman 
+    orivej 
+    pg 
+) 
 
 NO_WSHADOW()
 
@@ -14,7 +14,7 @@ PEERDIR(
     library/cpp/resource
 )
 
-CFLAGS(-DCYTHON_REGISTER_ABCS=0)
+CFLAGS(-DCYTHON_REGISTER_ABCS=0) 
 
 NO_PYTHON_INCLUDES()
 

@@ -29,11 +29,11 @@
 #if defined __need_system_sys_stat_h
 /* Special invocation convention.  */
 
-#if _MSC_VER >= 1900
-#include <../ucrt/sys/stat.h>
-#else
-#include <../include/sys/stat.h>
-#endif
+#if _MSC_VER >= 1900 
+#include <../ucrt/sys/stat.h> 
+#else 
+#include <../include/sys/stat.h> 
+#endif 
 
 #else
 /* Normal invocation convention.  */
@@ -48,11 +48,11 @@
 #include <time.h>
 
 /* The include_next requires a split double-inclusion guard.  */
-#if _MSC_VER >= 1900
-#include <../ucrt/sys/stat.h>
-#else
-#include <../include/sys/stat.h>
-#endif
+#if _MSC_VER >= 1900 
+#include <../ucrt/sys/stat.h> 
+#else 
+#include <../include/sys/stat.h> 
+#endif 
 
 #ifndef _GL_M4_SYS_STAT_H
 #define _GL_M4_SYS_STAT_H

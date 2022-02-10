@@ -2,7 +2,7 @@ UNITTEST()
 
 OWNER(
     alexvru
-    g:kikimr
+    g:kikimr 
 )
 
 IF (SANITIZER_TYPE == "thread")

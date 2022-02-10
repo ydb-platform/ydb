@@ -85,7 +85,7 @@ class WarningManager:
         else:
             return None
 
-    def __exit__(self, type_, value, traceback):
+    def __exit__(self, type_, value, traceback): 
         if not self._entered:
             raise RuntimeError("Cannot exit %r without entering first" % self)
         self._module.filters = self._filters
@@ -101,8 +101,8 @@ def assert_warns(warning_class, func, *args, **kw):
 
     # XXX: once we may depend on python >= 2.6, this can be replaced by the
     # warnings module context manager.
-    with WarningManager(record=True) as l:
-        warnings.simplefilter('always')
+    with WarningManager(record=True) as l: 
+        warnings.simplefilter('always') 
         func(*args, **kw)
         if not len(l) > 0:
             raise AssertionError("No warning raised when calling %s"

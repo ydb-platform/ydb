@@ -39,7 +39,7 @@ using namespace NSan;
 
 TFiberContext::TFiberContext() noexcept
     : Token_(nullptr)
-    , IsMainFiber_(true)
+    , IsMainFiber_(true) 
 #if defined(_tsan_enabled_)
     , CurrentTSanFiberContext_(__tsan_get_current_fiber())
 #endif
@@ -59,7 +59,7 @@ TFiberContext::TFiberContext(const void* stack, size_t len, const char* contName
     : Token_(nullptr)
     , Stack_(stack)
     , Len_(len)
-    , IsMainFiber_(false)
+    , IsMainFiber_(false) 
 #if defined(_tsan_enabled_)
     , CurrentTSanFiberContext_(__tsan_create_fiber(/*flags =*/0))
 #endif
@@ -71,22 +71,22 @@ TFiberContext::TFiberContext(const void* stack, size_t len, const char* contName
 }
 
 TFiberContext::~TFiberContext() noexcept {
-    if (!IsMainFiber_) {
-#if defined(_asan_enabled_)
-        if (Token_) {
-            // destroy saved FakeStack
-            void* activeFakeStack = nullptr;
-            const void* activeStack = nullptr;
-            size_t activeStackSize = 0;
-            __sanitizer_start_switch_fiber(&activeFakeStack, (char*)Stack_, Len_);
-            __sanitizer_finish_switch_fiber(Token_, &activeStack, &activeStackSize);
-            __sanitizer_start_switch_fiber(nullptr, activeStack, activeStackSize);
-            __sanitizer_finish_switch_fiber(activeFakeStack, nullptr, nullptr);
-        }
-#endif
+    if (!IsMainFiber_) { 
+#if defined(_asan_enabled_) 
+        if (Token_) { 
+            // destroy saved FakeStack 
+            void* activeFakeStack = nullptr; 
+            const void* activeStack = nullptr; 
+            size_t activeStackSize = 0; 
+            __sanitizer_start_switch_fiber(&activeFakeStack, (char*)Stack_, Len_); 
+            __sanitizer_finish_switch_fiber(Token_, &activeStack, &activeStackSize); 
+            __sanitizer_start_switch_fiber(nullptr, activeStack, activeStackSize); 
+            __sanitizer_finish_switch_fiber(activeFakeStack, nullptr, nullptr); 
+        } 
+#endif 
 #if defined(_tsan_enabled_)
         __tsan_destroy_fiber(CurrentTSanFiberContext_);
-#endif
+#endif 
     }
 }
 
@@ -100,11 +100,11 @@ void TFiberContext::BeforeFinish() noexcept {
 #endif
 }
 
-void TFiberContext::BeforeSwitch(TFiberContext* old) noexcept {
+void TFiberContext::BeforeSwitch(TFiberContext* old) noexcept { 
 #if defined(_asan_enabled_)
     __sanitizer_start_switch_fiber(old ? &old->Token_ : nullptr, (char*)Stack_, Len_);
-#else
-    (void)old;
+#else 
+    (void)old; 
 #endif
 
 #if defined(_tsan_enabled_)

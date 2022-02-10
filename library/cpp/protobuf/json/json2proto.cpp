@@ -11,7 +11,7 @@
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
 
-#define JSON_TO_FIELD(EProtoCppType, name, json, JsonCheckType, ProtoSet, JsonGet)        \ 
+#define JSON_TO_FIELD(EProtoCppType, name, json, JsonCheckType, ProtoSet, JsonGet)        \
     case FieldDescriptor::EProtoCppType: {                                          \
         if (config.CastRobust) {                                                    \
             reflection->ProtoSet(&proto, &field, json.JsonGet##Robust());           \
@@ -26,7 +26,7 @@
                 reflection->ProtoSet(&proto, &field, FromString(json.GetString())); \
                 break;                                                              \
             }                                                                       \
-            ythrow yexception() << "Invalid type of JSON field " << name << ": "    \ 
+            ythrow yexception() << "Invalid type of JSON field " << name << ": "    \
                                 << #JsonCheckType << "() failed while "             \
                                 << #EProtoCppType << " is expected.";               \
         }                                                                           \
@@ -194,13 +194,13 @@ Json2SingleField(const NJson::TJsonValue& json,
     const NJson::TJsonValue& fieldJson = name ? json[name] : json;
 
     switch (field.cpp_type()) {
-        JSON_TO_FIELD(CPPTYPE_INT32, field.name(), fieldJson, IsInteger, SetInt32, GetInteger); 
-        JSON_TO_FIELD(CPPTYPE_INT64, field.name(), fieldJson, IsInteger, SetInt64, GetInteger); 
-        JSON_TO_FIELD(CPPTYPE_UINT32, field.name(), fieldJson, IsInteger, SetUInt32, GetInteger); 
-        JSON_TO_FIELD(CPPTYPE_UINT64, field.name(), fieldJson, IsUInteger, SetUInt64, GetUInteger); 
-        JSON_TO_FIELD(CPPTYPE_DOUBLE, field.name(), fieldJson, IsDouble, SetDouble, GetDouble); 
-        JSON_TO_FIELD(CPPTYPE_FLOAT, field.name(), fieldJson, IsDouble, SetFloat, GetDouble); 
-        JSON_TO_FIELD(CPPTYPE_BOOL, field.name(), fieldJson, IsBoolean, SetBool, GetBoolean); 
+        JSON_TO_FIELD(CPPTYPE_INT32, field.name(), fieldJson, IsInteger, SetInt32, GetInteger);
+        JSON_TO_FIELD(CPPTYPE_INT64, field.name(), fieldJson, IsInteger, SetInt64, GetInteger);
+        JSON_TO_FIELD(CPPTYPE_UINT32, field.name(), fieldJson, IsInteger, SetUInt32, GetInteger);
+        JSON_TO_FIELD(CPPTYPE_UINT64, field.name(), fieldJson, IsUInteger, SetUInt64, GetUInteger);
+        JSON_TO_FIELD(CPPTYPE_DOUBLE, field.name(), fieldJson, IsDouble, SetDouble, GetDouble);
+        JSON_TO_FIELD(CPPTYPE_FLOAT, field.name(), fieldJson, IsDouble, SetFloat, GetDouble);
+        JSON_TO_FIELD(CPPTYPE_BOOL, field.name(), fieldJson, IsBoolean, SetBool, GetBoolean);
 
         case FieldDescriptor::CPPTYPE_STRING: {
             JsonString2Field(fieldJson, proto, field, config);
@@ -269,13 +269,13 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
     using namespace google::protobuf;
 
     switch (field.cpp_type()) {
-        JSON_TO_FIELD(CPPTYPE_INT32, field.name(), jsonValue, IsInteger, AddInt32, GetInteger); 
-        JSON_TO_FIELD(CPPTYPE_INT64, field.name(), jsonValue, IsInteger, AddInt64, GetInteger); 
-        JSON_TO_FIELD(CPPTYPE_UINT32, field.name(), jsonValue, IsInteger, AddUInt32, GetInteger); 
-        JSON_TO_FIELD(CPPTYPE_UINT64, field.name(), jsonValue, IsUInteger, AddUInt64, GetUInteger); 
-        JSON_TO_FIELD(CPPTYPE_DOUBLE, field.name(), jsonValue, IsDouble, AddDouble, GetDouble); 
-        JSON_TO_FIELD(CPPTYPE_FLOAT, field.name(), jsonValue, IsDouble, AddFloat, GetDouble); 
-        JSON_TO_FIELD(CPPTYPE_BOOL, field.name(), jsonValue, IsBoolean, AddBool, GetBoolean); 
+        JSON_TO_FIELD(CPPTYPE_INT32, field.name(), jsonValue, IsInteger, AddInt32, GetInteger);
+        JSON_TO_FIELD(CPPTYPE_INT64, field.name(), jsonValue, IsInteger, AddInt64, GetInteger);
+        JSON_TO_FIELD(CPPTYPE_UINT32, field.name(), jsonValue, IsInteger, AddUInt32, GetInteger);
+        JSON_TO_FIELD(CPPTYPE_UINT64, field.name(), jsonValue, IsUInteger, AddUInt64, GetUInteger);
+        JSON_TO_FIELD(CPPTYPE_DOUBLE, field.name(), jsonValue, IsDouble, AddDouble, GetDouble);
+        JSON_TO_FIELD(CPPTYPE_FLOAT, field.name(), jsonValue, IsDouble, AddFloat, GetDouble);
+        JSON_TO_FIELD(CPPTYPE_BOOL, field.name(), jsonValue, IsBoolean, AddBool, GetBoolean);
 
         case FieldDescriptor::CPPTYPE_STRING: {
             JsonString2Field(jsonValue, proto, field, config);

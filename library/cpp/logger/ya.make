@@ -29,7 +29,7 @@ SRCS(
     GLOBAL null_creator.cpp
     priority.h
     record.h
-    rotating_file.cpp 
+    rotating_file.cpp
     GLOBAL rotating_file_creator.cpp
     stream.cpp
     GLOBAL stream_creator.cpp

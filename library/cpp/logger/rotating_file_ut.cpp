@@ -1,13 +1,13 @@
-#include "rotating_file.h" 
-#include "record.h" 
- 
-#include <util/generic/string.h> 
-#include <util/system/fstat.h> 
-#include <util/system/fs.h> 
- 
+#include "rotating_file.h"
+#include "record.h"
+
+#include <util/generic/string.h>
+#include <util/system/fstat.h>
+#include <util/system/fs.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
- 
+
 Y_UNIT_TEST_SUITE(NewRotatingFileSuite) {
     const TString PATH = GetWorkPath() + "/my.log";
 

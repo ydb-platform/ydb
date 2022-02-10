@@ -157,23 +157,23 @@ namespace {
         return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), outSize));
     }
 
-    SIMPLE_UDF_OPTIONS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), builder.OptionalArgs(1)) {
+    SIMPLE_UDF_OPTIONS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), builder.OptionalArgs(1)) { 
         const static ui32 outSize = 32;
         const static NArgonish::TBlake2BFactory bfactory;
         const TStringRef inputRef = args[0].AsStringRef();
 
-        THolder<NArgonish::IBlake2Base> blake2b;
-        if (args[1]) {
-            const TStringRef keyRef = args[1].AsStringRef();
-            if (keyRef.Size() == 0) {
-                blake2b = bfactory.Create(outSize);
-            } else {
-                blake2b = bfactory.Create(outSize, reinterpret_cast<const ui8*>(keyRef.Data()), keyRef.Size());
-            }
-        } else {
-            blake2b = bfactory.Create(outSize);
-        }
-
+        THolder<NArgonish::IBlake2Base> blake2b; 
+        if (args[1]) { 
+            const TStringRef keyRef = args[1].AsStringRef(); 
+            if (keyRef.Size() == 0) { 
+                blake2b = bfactory.Create(outSize); 
+            } else { 
+                blake2b = bfactory.Create(outSize, reinterpret_cast<const ui8*>(keyRef.Data()), keyRef.Size()); 
+            } 
+        } else { 
+            blake2b = bfactory.Create(outSize); 
+        } 
+ 
         ui8 out[outSize];
         blake2b->Update(inputRef.Data(), inputRef.Size());
         blake2b->Final(out, outSize);

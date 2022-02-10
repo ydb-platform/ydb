@@ -7,11 +7,11 @@ namespace NKikimr {
 
 namespace NPQ {
 
-NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr counters,
-                                            const TString& subsystem, const TString& topic)
+NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr counters, 
+                                            const TString& subsystem, const TString& topic) 
 {
     auto pos = topic.find("--");
-    Y_VERIFY(pos != TString::npos);
+    Y_VERIFY(pos != TString::npos); 
 
     TString origDC = topic.substr(4, pos - 4);
     origDC.to_title();
@@ -21,20 +21,20 @@ NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr coun
     TString topicPath = NPersQueue::ConvertOldTopicName(realTopic);
     TString account = topicPath.substr(0, topicPath.find("/"));
     return GetServiceCounters(counters, "pqproxy|" + subsystem)
-        ->GetSubgroup("OriginDC", origDC)
-        ->GetSubgroup("Producer", producer)
-        ->GetSubgroup("TopicPath", topicPath)
-        ->GetSubgroup("Account", account)
-        ->GetSubgroup("Topic", realTopic);
+        ->GetSubgroup("OriginDC", origDC) 
+        ->GetSubgroup("Producer", producer) 
+        ->GetSubgroup("TopicPath", topicPath) 
+        ->GetSubgroup("Account", account) 
+        ->GetSubgroup("Topic", realTopic); 
 }
 
-NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters,
-                                                     const TString& subsystem)
-{
-    return counters->GetSubgroup("counters", "pqproxy")
-        ->GetSubgroup("subsystem", subsystem);
-}
-
+NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters, 
+                                                     const TString& subsystem) 
+{ 
+    return counters->GetSubgroup("counters", "pqproxy") 
+        ->GetSubgroup("subsystem", subsystem); 
+} 
+ 
 TVector<TLabelsInfo> GetLabels(const TString& topic)
 {
     auto pos = topic.find("--");
@@ -66,71 +66,71 @@ TVector<TLabelsInfo> GetLabels(const TString& cluster, const TString& realTopic)
     return res;
 }
 
-TVector<TLabelsInfo> GetLabelsForStream(const TString& topic, const TString& cloudId,
-                                        const TString& dbId, const TString& folderId) {
-    TVector<TLabelsInfo> res = {
-            {{{"database", dbId}}, {dbId}},
-            {{{"cloud", cloudId}}, {cloudId}},
-            {{{"folder", folderId}}, {folderId}},
-            {{{"stream", topic}}, {topic}}};
-    return res;
-}
+TVector<TLabelsInfo> GetLabelsForStream(const TString& topic, const TString& cloudId, 
+                                        const TString& dbId, const TString& folderId) { 
+    TVector<TLabelsInfo> res = { 
+            {{{"database", dbId}}, {dbId}}, 
+            {{{"cloud", cloudId}}, {cloudId}}, 
+            {{{"folder", folderId}}, {folderId}}, 
+            {{{"stream", topic}}, {topic}}}; 
+    return res; 
+} 
 
-TMultiCounter::TMultiCounter(NMonitoring::TDynamicCounterPtr counters,
-                             const TVector<TLabelsInfo>& labels,
-                             const TVector<std::pair<TString, TString>>& subgroups,
-                             const TVector<TString>& counter_names,
-                             bool deriv,
-                             const TString& name,
-                             bool expiring)
-    : Value(0)
-{
-    Y_VERIFY(counters);
-
-    for (const auto& counter : counter_names) {
-        for (ui32 i = 0; i <= labels.size(); ++i) {
-            auto cc = counters;
-            for (ui32 j = 0; j < labels.size(); ++j) {
-                Y_VERIFY(!labels[j].Labels.empty());
-                for (ui32 k = 0; k < labels[j].Labels.size(); ++k) {
-                    Y_VERIFY(labels[j].Labels.size() == labels[j].AggrNames.size());
-                    const TString& res = (j < i) ? labels[j].Labels[k].second : labels[j].AggrNames[k];
-                    cc = cc->GetSubgroup(labels[j].Labels[k].first, res);
-                }
-            }
-            for (const auto& g: subgroups) {
-                cc = cc->GetSubgroup(g.first, g.second);
-            }
-            if (expiring) {
-                Counters.push_back(cc->GetExpiringNamedCounter(name, counter, deriv));
-            } else {
-                Counters.push_back(cc->GetNamedCounter(name, counter, deriv));
-            }
-        }
-    }
-}
-
-void TMultiCounter::Inc(ui64 val)
-{
-    for (auto& c : Counters) (*c) += val;
-    Value += val;
-}
-
-void TMultiCounter::Dec(ui64 val) {
-    for (auto& c : Counters) (*c) -= val;
-    Value -= val;
-}
-
-void TMultiCounter::Set(ui64 value) {
-    auto diff = value - Value;
-    Inc(diff);
-}
-
-TMultiCounter::operator bool() {
-    return !Counters.empty();
-}
-
-
+TMultiCounter::TMultiCounter(NMonitoring::TDynamicCounterPtr counters, 
+                             const TVector<TLabelsInfo>& labels, 
+                             const TVector<std::pair<TString, TString>>& subgroups, 
+                             const TVector<TString>& counter_names, 
+                             bool deriv, 
+                             const TString& name, 
+                             bool expiring) 
+    : Value(0) 
+{ 
+    Y_VERIFY(counters); 
+ 
+    for (const auto& counter : counter_names) { 
+        for (ui32 i = 0; i <= labels.size(); ++i) { 
+            auto cc = counters; 
+            for (ui32 j = 0; j < labels.size(); ++j) { 
+                Y_VERIFY(!labels[j].Labels.empty()); 
+                for (ui32 k = 0; k < labels[j].Labels.size(); ++k) { 
+                    Y_VERIFY(labels[j].Labels.size() == labels[j].AggrNames.size()); 
+                    const TString& res = (j < i) ? labels[j].Labels[k].second : labels[j].AggrNames[k]; 
+                    cc = cc->GetSubgroup(labels[j].Labels[k].first, res); 
+                } 
+            } 
+            for (const auto& g: subgroups) { 
+                cc = cc->GetSubgroup(g.first, g.second); 
+            } 
+            if (expiring) { 
+                Counters.push_back(cc->GetExpiringNamedCounter(name, counter, deriv)); 
+            } else { 
+                Counters.push_back(cc->GetNamedCounter(name, counter, deriv)); 
+            } 
+        } 
+    } 
+} 
+ 
+void TMultiCounter::Inc(ui64 val) 
+{ 
+    for (auto& c : Counters) (*c) += val; 
+    Value += val; 
+} 
+ 
+void TMultiCounter::Dec(ui64 val) { 
+    for (auto& c : Counters) (*c) -= val; 
+    Value -= val; 
+} 
+ 
+void TMultiCounter::Set(ui64 value) { 
+    auto diff = value - Value; 
+    Inc(diff); 
+} 
+ 
+TMultiCounter::operator bool() { 
+    return !Counters.empty(); 
+} 
+ 
+ 
 TPercentileCounter::TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TVector<TLabelsInfo>& labels, const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
                     const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring)
 {
@@ -139,7 +139,7 @@ TPercentileCounter::TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounte
     Ranges.reserve(intervals.size());
     for (auto& interval : intervals) {
         Ranges.push_back(interval.first);
-        Counters.push_back(TMultiCounter(counters, labels, subgroups, {interval.second}, deriv, sensor, expiring));
+        Counters.push_back(TMultiCounter(counters, labels, subgroups, {interval.second}, deriv, sensor, expiring)); 
     }
     Ranges.back() = Max<ui64>();
 }

@@ -26,7 +26,7 @@ struct TReadInfo {
     ui32 Size;
     ui64 Destination;
     TInstant Timestamp;
-    ui64 ReadTimestampMs;
+    ui64 ReadTimestampMs; 
     TDuration WaitQuotaTime;
 
     bool IsSubscription;
@@ -70,7 +70,7 @@ struct TReadInfo {
         const ui64 dst,
         const ui64 sizeLag
     );
-
+ 
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const ui64 endOffset,

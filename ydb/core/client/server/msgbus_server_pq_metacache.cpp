@@ -26,21 +26,21 @@ IActor* CreateSchemeCache(NActors::TActorSystem* ActorSystem, TIntrusivePtr<NMon
 class TPersQueueMetaCacheActor : public TActorBootstrapped<TPersQueueMetaCacheActor> {
     using TBase = TActorBootstrapped<TPersQueueMetaCacheActor>;
 public:
-    TPersQueueMetaCacheActor(TPersQueueMetaCacheActor&&) = default;
-    TPersQueueMetaCacheActor& operator=(TPersQueueMetaCacheActor&&) = default;
-
-    TPersQueueMetaCacheActor(ui64 grpcPort,
-                             const NMonitoring::TDynamicCounterPtr& counters,
-                             const TDuration& versionCheckInterval)
+    TPersQueueMetaCacheActor(TPersQueueMetaCacheActor&&) = default; 
+    TPersQueueMetaCacheActor& operator=(TPersQueueMetaCacheActor&&) = default; 
+ 
+    TPersQueueMetaCacheActor(ui64 grpcPort, 
+                             const NMonitoring::TDynamicCounterPtr& counters, 
+                             const TDuration& versionCheckInterval) 
         : Counters(counters)
-        , ClientWrapper(std::move(std::make_unique<TClientWrapper>(grpcPort)))
+        , ClientWrapper(std::move(std::make_unique<TClientWrapper>(grpcPort))) 
         , VersionCheckInterval(versionCheckInterval)
         , Generation(std::make_shared<TAtomicCounter>())
     {
     }
 
-    TPersQueueMetaCacheActor(const NMonitoring::TDynamicCounterPtr& counters,
-                             const TDuration& versionCheckInterval)
+    TPersQueueMetaCacheActor(const NMonitoring::TDynamicCounterPtr& counters, 
+                             const TDuration& versionCheckInterval) 
         : Counters(counters)
         , VersionCheckInterval(versionCheckInterval)
         , Generation(std::make_shared<TAtomicCounter>())
@@ -58,7 +58,7 @@ public:
                 Die(ctx);
                 return;
             }
-            ClientWrapper.reset(new TClientWrapper(driver));
+            ClientWrapper.reset(new TClientWrapper(driver)); 
         }
         SkipVersionCheck = !AppData(ctx)->PQConfig.GetMetaCacheSkipVersionCheck();
         PathPrefix = TopicPrefix(ctx);
@@ -358,7 +358,7 @@ private:
 
 
     void SendSchemeCacheRequest(const TVector<TString>& topics, bool addDefaultPathPrefix, const TActorContext& ctx) {
-        auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>(++RequestId);
+        auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>(++RequestId); 
         for (const auto& path : topics) {
             auto split = NKikimr::SplitPath(path);
             Y_VERIFY(!split.empty());
@@ -372,7 +372,7 @@ private:
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTopic;
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }
-        ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release()));
+        ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release())); 
     }
 
     void SendListTopicsResponse(const TActorId& recipient, const TActorContext& ctx) {
@@ -444,11 +444,11 @@ private:
 
     class TClientWrapper {
     public:
-        TClientWrapper(const TClientWrapper&) = delete;
-        TClientWrapper& operator=(const TClientWrapper&) = delete;
-        TClientWrapper(TClientWrapper&&) = default;
-        TClientWrapper& operator=(TClientWrapper&&) = default;
-
+        TClientWrapper(const TClientWrapper&) = delete; 
+        TClientWrapper& operator=(const TClientWrapper&) = delete; 
+        TClientWrapper(TClientWrapper&&) = default; 
+        TClientWrapper& operator=(TClientWrapper&&) = default; 
+ 
         TClientWrapper(ui64 driverPort)
             : DriverPort(driverPort)
         {}
@@ -464,18 +464,18 @@ private:
                     auto driverConfig = NYdb::TDriverConfig().SetEndpoint(endpoint);
                     DriverHolder.Reset(new NYdb::TDriver(driverConfig));
                     Driver = DriverHolder.Get();
-                    TableClient.reset(new NYdb::NTable::TTableClient(*Driver));
+                    TableClient.reset(new NYdb::NTable::TTableClient(*Driver)); 
                 }
             } else if (Driver != nullptr) {
-                TableClient.reset(new NYdb::NTable::TTableClient(*Driver));
+                TableClient.reset(new NYdb::NTable::TTableClient(*Driver)); 
             }
         }
-
+ 
         NYdb::NTable::TTableClient* GetClient() {
             Y_VERIFY(TableClient);
-            return TableClient.get();
+            return TableClient.get(); 
         }
-
+ 
         void Stop() {
             if (DriverHolder != nullptr) {
                 TableClient->Stop();
@@ -489,15 +489,15 @@ private:
         THolder<NYdb::TDriver> DriverHolder;
         NYdb::TDriver* Driver = nullptr;
         TMaybe<ui64> DriverPort;
-        std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
-    };
+        std::unique_ptr<NYdb::NTable::TTableClient> TableClient; 
+    }; 
 
     NMonitoring::TDynamicCounterPtr Counters;
     NActors::TActorSystem* ActorSystem;
     TString VersionQuery;
     TString TopicsQuery;
 
-    std::unique_ptr<TClientWrapper> ClientWrapper;
+    std::unique_ptr<TClientWrapper> ClientWrapper; 
     TAsyncCreateSessionResult SessionFuture;
     TMaybe<TSession> YdbSession;
     TAsyncPrepareQueryResult TopicsQueryFuture;

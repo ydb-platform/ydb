@@ -10,7 +10,7 @@ namespace NGRpcService {
 
 template <typename TDerived, typename TRequest>
 class TRpcSchemeRequestActor : public TRpcOperationRequestActor<TDerived, TRequest> {
-protected:
+protected: 
     using TBase = TRpcOperationRequestActor<TDerived, TRequest>;
 
 public:
@@ -128,17 +128,17 @@ protected:
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         NTabletPipe::CloseClient(ctx, SchemePipeActorId_);
-        return this->ReplyNotifyTxCompletionResult(ev, ctx);
+        return this->ReplyNotifyTxCompletionResult(ev, ctx); 
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
     }
 
     virtual void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        return this->Reply(Ydb::StatusIds::SUCCESS, ctx);
-    }
-
+        Y_UNUSED(ev); 
+        return this->Reply(Ydb::StatusIds::SUCCESS, ctx); 
+    } 
+ 
 private:
     TActorId SchemePipeActorId_;
 };

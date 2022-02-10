@@ -107,7 +107,7 @@ namespace NKikimr::NDataStreams::V1 {
                 w->SetDisableDeduplication(true);
                 w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
                 w->SetUncompressedSize(item.Data.size());
-                w->SetExternalOperation(true);
+                w->SetExternalOperation(true); 
                 totalSize += (item.Data.size() + item.Key.size() + item.ExplicitHash.size());
             }
             ui64 putUnitsCount = totalSize / PUT_UNIT_SIZE;
@@ -217,7 +217,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext &ctx);
         void PreparePartitionActors(const NActors::TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
 
     protected:
         void AddRecord(THashMap<ui32, TVector<TPutRecordsItem>>& items, ui32 totalShardsCount, int index);
@@ -244,7 +244,7 @@ namespace NKikimr::NDataStreams::V1 {
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult, Handle);
-                default: TBase::StateWork(ev, ctx);
+                default: TBase::StateWork(ev, ctx); 
             };
         }
     };
@@ -289,10 +289,10 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     template<class TDerived, class TProto>
-    void TPutRecordsActorBase<TDerived, TProto>::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        if (TBase::ReplyIfNotTopic(ev, ctx)) {
-            return;
-        }
+    void TPutRecordsActorBase<TDerived, TProto>::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
+        if (TBase::ReplyIfNotTopic(ev, ctx)) { 
+            return; 
+        } 
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
@@ -301,9 +301,9 @@ namespace NKikimr::NDataStreams::V1 {
                                                         this->Request_->GetInternalToken())) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                             TStringBuilder() << "Access for stream "
-                                            << this->GetProtoRequest()->stream_name()
-                                            << " is denied for subject "
-                                            << this->Request_->GetInternalToken(), ctx);
+                                            << this->GetProtoRequest()->stream_name() 
+                                            << " is denied for subject " 
+                                            << this->Request_->GetInternalToken(), ctx); 
             }
         }
 
@@ -319,8 +319,8 @@ namespace NKikimr::NDataStreams::V1 {
             auto part = partition.GetPartitionId();
             if (items[part].empty()) continue;
             PartitionToActor[part].ActorId = ctx.Register(
-                                                          new TDatastreamsPartitionActor(ctx.SelfID, partition.GetTabletId(), part, this->GetTopicPath(ctx), std::move(items[part]))
-                                                          );
+                                                          new TDatastreamsPartitionActor(ctx.SelfID, partition.GetTabletId(), part, this->GetTopicPath(ctx), std::move(items[part])) 
+                                                          ); 
         }
         this->CheckFinish(ctx);
     }

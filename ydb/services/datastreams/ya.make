@@ -5,9 +5,9 @@ OWNER(g:kikimr)
 SRCS(
     datastreams_proxy.cpp
     grpc_service.cpp
-    next_token.cpp
+    next_token.cpp 
     put_records_actor.cpp
-    shard_iterator.cpp
+    shard_iterator.cpp 
 )
 
 PEERDIR(

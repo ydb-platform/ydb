@@ -141,8 +141,8 @@ private:
     void OnReadRequestFinished(TReadInfo&& info, ui64 answerSize);
 
     // will return rcount and rsize also
-    TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize);
-    TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount, ui32* rsize, ui64* insideHeadOffset);
+    TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize); 
+    TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount, ui32* rsize, ui64* insideHeadOffset); 
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
 
     void HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -210,9 +210,9 @@ private:
     void CreateMirrorerActor();
     bool IsQuotingEnabled() const;
 
-    void SetupTopicCounters(const TActorContext& ctx);
-    void SetupStreamCounters(const TActorContext& ctx);
-
+    void SetupTopicCounters(const TActorContext& ctx); 
+    void SetupStreamCounters(const TActorContext& ctx); 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -564,10 +564,10 @@ private:
     std::deque<std::pair<ui64,ui64>> GapOffsets;
     ui64 GapSize;
 
-    TString CloudId;
-    TString DbId;
-    TString FolderId;
-
+    TString CloudId; 
+    TString DbId; 
+    TString FolderId; 
+ 
     TUsersInfoStorage UsersInfoStorage;
 
     std::deque<TString> UpdateUserInfoTimestamp;
@@ -601,10 +601,10 @@ private:
     TInstant WriteCycleStartTime;
     ui32 WriteCycleSize;
     ui32 WriteNewSize;
-    ui32 WriteNewSizeInternal;
+    ui32 WriteNewSizeInternal; 
     ui64 WriteNewSizeUncompressed;
     ui32 WriteNewMessages;
-    ui32 WriteNewMessagesInternal;
+    ui32 WriteNewMessagesInternal; 
 
     TInstant CurrentTimestamp;
 

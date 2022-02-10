@@ -682,19 +682,19 @@ message TPQClusterDiscoveryConfig {
     optional NKikimrNetClassifier.TNetData CloudNetData = 3;
     optional uint64 RequestInflightLimit = 4;
 }
-
-message TYdsNextToken {
-    required uint64 CreationTimestamp = 1;
-    required uint32 MaxResults = 2;
-    required uint32 AlreadyRead = 3;
-    required string StreamArn = 4;
-}
-
-message TYdsShardIterator {
-    required string StreamName = 1;
-    required string StreamArn = 2;
-    required uint32 ShardId = 3;
-    required uint64 ReadTimestampMs = 4;
-    required uint32 SequenceNumber = 5;
-    required uint64 CreationTimestampMs = 6;
-}
+ 
+message TYdsNextToken { 
+    required uint64 CreationTimestamp = 1; 
+    required uint32 MaxResults = 2; 
+    required uint32 AlreadyRead = 3; 
+    required string StreamArn = 4; 
+} 
+ 
+message TYdsShardIterator { 
+    required string StreamName = 1; 
+    required string StreamArn = 2; 
+    required uint32 ShardId = 3; 
+    required uint64 ReadTimestampMs = 4; 
+    required uint32 SequenceNumber = 5; 
+    required uint64 CreationTimestampMs = 6; 
+} 

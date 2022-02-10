@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-
+ 
 class TWorkingTimeCounter {
 private:
     bool IsInWorkingState;
@@ -36,16 +36,16 @@ public:
         }
     }
 
-    void SetCounter(NMonitoring::TDynamicCounterPtr counter,
-                    const TVector<std::pair<TString, TString>>& subgroups,
-                    const std::tuple<TString, TString, bool>& expiring) {
-        for (const auto& subgroup : subgroups) {
-           counter = counter->GetSubgroup(subgroup.first, subgroup.second);
-        }
-
-        WorkingTimeMicroSec = counter->GetExpiringNamedCounter(std::get<0>(expiring),
-                                                               std::get<1>(expiring),
-                                                               std::get<2>(expiring));
+    void SetCounter(NMonitoring::TDynamicCounterPtr counter, 
+                    const TVector<std::pair<TString, TString>>& subgroups, 
+                    const std::tuple<TString, TString, bool>& expiring) { 
+        for (const auto& subgroup : subgroups) { 
+           counter = counter->GetSubgroup(subgroup.first, subgroup.second); 
+        } 
+ 
+        WorkingTimeMicroSec = counter->GetExpiringNamedCounter(std::get<0>(expiring), 
+                                                               std::get<1>(expiring), 
+                                                               std::get<2>(expiring)); 
     }
 };
 

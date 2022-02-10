@@ -605,11 +605,11 @@ void WriteData(const ui32 partition, const TString& sourceId, const TVector<std:
     tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
 }
 
-void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::pair<ui64, TString>> data,
-              TTestContext& tc, bool error = false, const THashSet<ui32>& alreadyWrittenSeqNo = {},
-              bool isFirst = false, const TString& ownerCookie = "", i32 msn = -1, i64 offset = -1,
-              bool treatWrongCookieAsError = false, bool treatBadOffsetAsError = true,
-              bool disableDeduplication = false) {
+void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::pair<ui64, TString>> data, 
+              TTestContext& tc, bool error = false, const THashSet<ui32>& alreadyWrittenSeqNo = {}, 
+              bool isFirst = false, const TString& ownerCookie = "", i32 msn = -1, i64 offset = -1, 
+              bool treatWrongCookieAsError = false, bool treatBadOffsetAsError = true, 
+              bool disableDeduplication = false) { 
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 
@@ -1046,9 +1046,9 @@ void CmdRead(const ui32 partition, const ui64 offset, const ui32 count, const ui
 
                 auto r = res.GetResult(i);
                 if (offsets.empty()) {
-                    if (readTimestampMs == 0) {
-                        UNIT_ASSERT_EQUAL((ui64)r.GetOffset(), off);
-                    }
+                    if (readTimestampMs == 0) { 
+                        UNIT_ASSERT_EQUAL((ui64)r.GetOffset(), off); 
+                    } 
                     UNIT_ASSERT(r.GetSourceId().size() == 9 && r.GetSourceId().StartsWith("sourceid"));
                     UNIT_ASSERT_EQUAL(ui32(r.GetData()[0]), off);
                     UNIT_ASSERT_EQUAL(ui32((unsigned char)r.GetData().back()), r.GetSeqNo() % 256);

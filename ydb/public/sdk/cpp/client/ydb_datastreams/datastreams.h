@@ -104,26 +104,26 @@ namespace NYdb::NDataStreams::V1 {
         FLUENT_SETTING(TString, ExclusiveStartStreamName);
         FLUENT_SETTING_DEFAULT(bool, Recurse, false);
     };
-    struct TDeleteStreamSettings : public NYdb::TOperationRequestSettings<TDeleteStreamSettings> {
-        FLUENT_SETTING_DEFAULT(bool, EnforceConsumerDeletion, false);
-    };
+    struct TDeleteStreamSettings : public NYdb::TOperationRequestSettings<TDeleteStreamSettings> { 
+        FLUENT_SETTING_DEFAULT(bool, EnforceConsumerDeletion, false); 
+    }; 
     struct TDescribeStreamSettings : public NYdb::TOperationRequestSettings<TDescribeStreamSettings> {
         FLUENT_SETTING(ui32, Limit);
         FLUENT_SETTING(TString, ExclusiveStartShardId);
     };
-    struct TListShardsSettings : public NYdb::TOperationRequestSettings<TListShardsSettings> {
-        FLUENT_SETTING(TString, ExclusiveStartShardId);
-        FLUENT_SETTING(ui32, MaxResults);
-        FLUENT_SETTING(TString, NextToken);
-        FLUENT_SETTING(ui64, StreamCreationTimestamp);
-    };
-    struct TGetRecordsSettings : public NYdb::TOperationRequestSettings<TGetRecordsSettings> {
-        FLUENT_SETTING_DEFAULT(ui32, Limit, 10000);
-    };
-    struct TGetShardIteratorSettings : public NYdb::TOperationRequestSettings<TGetShardIteratorSettings> {
-        FLUENT_SETTING(TString, StartingSequenceNumber);
-        FLUENT_SETTING(ui64, Timestamp);
-    };
+    struct TListShardsSettings : public NYdb::TOperationRequestSettings<TListShardsSettings> { 
+        FLUENT_SETTING(TString, ExclusiveStartShardId); 
+        FLUENT_SETTING(ui32, MaxResults); 
+        FLUENT_SETTING(TString, NextToken); 
+        FLUENT_SETTING(ui64, StreamCreationTimestamp); 
+    }; 
+    struct TGetRecordsSettings : public NYdb::TOperationRequestSettings<TGetRecordsSettings> { 
+        FLUENT_SETTING_DEFAULT(ui32, Limit, 10000); 
+    }; 
+    struct TGetShardIteratorSettings : public NYdb::TOperationRequestSettings<TGetShardIteratorSettings> { 
+        FLUENT_SETTING(TString, StartingSequenceNumber); 
+        FLUENT_SETTING(ui64, Timestamp); 
+    }; 
     struct TSubscribeToShardSettings : public NYdb::TOperationRequestSettings<TSubscribeToShardSettings> {};
     struct TDescribeLimitsSettings : public NYdb::TOperationRequestSettings<TDescribeLimitsSettings> {};
     struct TDescribeStreamSummarySettings : public NYdb::TOperationRequestSettings<TDescribeStreamSummarySettings> {};
@@ -146,10 +146,10 @@ namespace NYdb::NDataStreams::V1 {
     struct TRegisterStreamConsumerSettings : public NYdb::TOperationRequestSettings<TRegisterStreamConsumerSettings> {};
     struct TDeregisterStreamConsumerSettings : public NYdb::TOperationRequestSettings<TDeregisterStreamConsumerSettings> {};
     struct TDescribeStreamConsumerSettings : public NYdb::TOperationRequestSettings<TDescribeStreamConsumerSettings> {};
-    struct TListStreamConsumersSettings : public NYdb::TOperationRequestSettings<TListStreamConsumersSettings> {
-        FLUENT_SETTING(ui32, MaxResults);
-        FLUENT_SETTING(TString, NextToken);
-    };
+    struct TListStreamConsumersSettings : public NYdb::TOperationRequestSettings<TListStreamConsumersSettings> { 
+        FLUENT_SETTING(ui32, MaxResults); 
+        FLUENT_SETTING(TString, NextToken); 
+    }; 
     struct TAddTagsToStreamSettings : public NYdb::TOperationRequestSettings<TAddTagsToStreamSettings> {};
     struct TDisableEnhancedMonitoringSettings : public NYdb::TOperationRequestSettings<TDisableEnhancedMonitoringSettings> {};
     struct TEnableEnhancedMonitoringSettings : public NYdb::TOperationRequestSettings<TEnableEnhancedMonitoringSettings> {};
@@ -172,21 +172,21 @@ namespace NYdb::NDataStreams::V1 {
         TAsyncDescribeStreamResult DescribeStream(const TString& path, TDescribeStreamSettings settings = TDescribeStreamSettings());
         TAsyncPutRecordResult PutRecord(const TString& path, const TDataRecord& record, TPutRecordSettings settings = TPutRecordSettings());
         TAsyncListStreamsResult ListStreams(TListStreamsSettings settings = TListStreamsSettings());
-        TAsyncListShardsResult ListShards(const TString& path, const Ydb::DataStreams::V1::ShardFilter& shardFilter, TListShardsSettings settings = TListShardsSettings());
+        TAsyncListShardsResult ListShards(const TString& path, const Ydb::DataStreams::V1::ShardFilter& shardFilter, TListShardsSettings settings = TListShardsSettings()); 
         TAsyncPutRecordsResult PutRecords(const TString& path, const std::vector<TDataRecord>& records, TPutRecordsSettings settings = TPutRecordsSettings());
-        TAsyncGetRecordsResult GetRecords(const TString& shardIterator, TGetRecordsSettings settings = TGetRecordsSettings());
-        TAsyncGetShardIteratorResult GetShardIterator(const TString& path, const TString& shardId, Ydb::DataStreams::V1::ShardIteratorType shardIteratorTypeStr,
-                                                      TGetShardIteratorSettings settings = TGetShardIteratorSettings());
+        TAsyncGetRecordsResult GetRecords(const TString& shardIterator, TGetRecordsSettings settings = TGetRecordsSettings()); 
+        TAsyncGetShardIteratorResult GetShardIterator(const TString& path, const TString& shardId, Ydb::DataStreams::V1::ShardIteratorType shardIteratorTypeStr, 
+                                                      TGetShardIteratorSettings settings = TGetShardIteratorSettings()); 
         // TAsyncSubscribeToShardResult SubscribeToShard(TSubscribeToShardSettings settings = TSubscribeToShardSettings());
         TAsyncDescribeLimitsResult DescribeLimits(TDescribeLimitsSettings settings = TDescribeLimitsSettings());
-        TAsyncDescribeStreamSummaryResult DescribeStreamSummary(const TString& path, TDescribeStreamSummarySettings settings = TDescribeStreamSummarySettings());
+        TAsyncDescribeStreamSummaryResult DescribeStreamSummary(const TString& path, TDescribeStreamSummarySettings settings = TDescribeStreamSummarySettings()); 
         TAsyncDecreaseStreamRetentionPeriodResult DecreaseStreamRetentionPeriod(const TString& path, TDecreaseStreamRetentionPeriodSettings settings = TDecreaseStreamRetentionPeriodSettings());
         TAsyncIncreaseStreamRetentionPeriodResult IncreaseStreamRetentionPeriod(const TString& path, TIncreaseStreamRetentionPeriodSettings settings = TIncreaseStreamRetentionPeriodSettings());
         TAsyncUpdateShardCountResult UpdateShardCount(const TString& path, TUpdateShardCountSettings settings = TUpdateShardCountSettings());
-        TAsyncRegisterStreamConsumerResult RegisterStreamConsumer(const TString& path, const TString& consumer_name, TRegisterStreamConsumerSettings settings = TRegisterStreamConsumerSettings());
-        TAsyncDeregisterStreamConsumerResult DeregisterStreamConsumer(const TString& path, const TString& consumer_name, TDeregisterStreamConsumerSettings settings = TDeregisterStreamConsumerSettings());
+        TAsyncRegisterStreamConsumerResult RegisterStreamConsumer(const TString& path, const TString& consumer_name, TRegisterStreamConsumerSettings settings = TRegisterStreamConsumerSettings()); 
+        TAsyncDeregisterStreamConsumerResult DeregisterStreamConsumer(const TString& path, const TString& consumer_name, TDeregisterStreamConsumerSettings settings = TDeregisterStreamConsumerSettings()); 
         TAsyncDescribeStreamConsumerResult DescribeStreamConsumer(TDescribeStreamConsumerSettings settings = TDescribeStreamConsumerSettings());
-        TAsyncListStreamConsumersResult ListStreamConsumers(const TString& path, TListStreamConsumersSettings settings = TListStreamConsumersSettings());
+        TAsyncListStreamConsumersResult ListStreamConsumers(const TString& path, TListStreamConsumersSettings settings = TListStreamConsumersSettings()); 
         TAsyncAddTagsToStreamResult AddTagsToStream(TAddTagsToStreamSettings settings = TAddTagsToStreamSettings());
         TAsyncDisableEnhancedMonitoringResult DisableEnhancedMonitoring(TDisableEnhancedMonitoringSettings settings = TDisableEnhancedMonitoringSettings());
         TAsyncEnableEnhancedMonitoringResult EnableEnhancedMonitoring(TEnableEnhancedMonitoringSettings settings = TEnableEnhancedMonitoringSettings());

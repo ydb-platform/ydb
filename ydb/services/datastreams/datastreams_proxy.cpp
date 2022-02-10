@@ -1,21 +1,21 @@
 #include "datastreams_proxy.h"
 #include "put_records_actor.h"
-#include "shard_iterator.h"
-#include "next_token.h"
+#include "shard_iterator.h" 
+#include "next_token.h" 
 
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/write_meta.h>
-
+ 
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <util/folder/path.h>
 
-#include <iterator>
-
+#include <iterator> 
+ 
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -111,7 +111,7 @@ namespace NKikimr::NDataStreams::V1 {
         void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                 const TString& workingDir, const TString& name);
         void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
         void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     };
 
@@ -129,12 +129,12 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TCreateStreamActor::StateWork);
     }
 
-    void TCreateStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-    }
+    void TCreateStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
+        Y_UNUSED(ev); 
+        Y_UNUSED(ctx); 
+    } 
 
-
+ 
     void TCreateStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
             const TActorContext& ctx, const TString& workingDir, const TString& name)
     {
@@ -179,7 +179,7 @@ namespace NKikimr::NDataStreams::V1 {
                                   TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " is already exists",
                                   ctx);
         }
-        return TBase::TBase::Handle(ev, ctx);
+        return TBase::TBase::Handle(ev, ctx); 
     }
 
     void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
@@ -202,29 +202,29 @@ namespace NKikimr::NDataStreams::V1 {
 
         void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                 const TString& workingDir, const TString& name);
-
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                         const TActorContext& ctx);
-
-    private:
-        bool EnforceDeletion;
+ 
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, 
+                                         const TActorContext& ctx); 
+ 
+    private: 
+        bool EnforceDeletion; 
     };
 
     TDeleteStreamActor::TDeleteStreamActor(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest* request)
         : TBase(request, request->GetProtoRequest()->stream_name())
-        , EnforceDeletion{request->GetProtoRequest()->enforce_consumer_deletion()}
+        , EnforceDeletion{request->GetProtoRequest()->enforce_consumer_deletion()} 
     {
     }
 
     void TDeleteStreamActor::Bootstrap(const NActors::TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        SendDescribeProposeRequest(ctx);
+        SendDescribeProposeRequest(ctx); 
         Become(&TDeleteStreamActor::StateWork);
     }
 
-    void TDeleteStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
-                                                const TActorContext& ctx, const TString& workingDir,
-                                                const TString& name)
+    void TDeleteStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, 
+                                                const TActorContext& ctx, const TString& workingDir, 
+                                                const TString& name) 
     {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "WorkingDir = " << workingDir << ", name = " << name);
         NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
@@ -233,24 +233,24 @@ namespace NKikimr::NDataStreams::V1 {
         modifyScheme.MutableDrop()->SetName(name);
     }
 
-    void TDeleteStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                                         const TActorContext& ctx) {
-        if (ReplyIfNotTopic(ev, ctx)) {
-            return;
-        }
-
-        const auto& response = ev->Get()->Request.Get()->ResultSet.front();
-        const auto& pqGroupDescription = response.PQGroupInfo->Description;
-        const auto& readRules = pqGroupDescription.GetPQTabletConfig().GetReadRules();
-
-        if (readRules.size() > 0 && EnforceDeletion == false) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                                  TStringBuilder() << "Stream has registered consumers" <<
-                                  "and EnforceConsumerDeletion flag is false", ctx);
-        }
-
-        SendProposeRequest(ctx);
-    }
+    void TDeleteStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, 
+                                                         const TActorContext& ctx) { 
+        if (ReplyIfNotTopic(ev, ctx)) { 
+            return; 
+        } 
+ 
+        const auto& response = ev->Get()->Request.Get()->ResultSet.front(); 
+        const auto& pqGroupDescription = response.PQGroupInfo->Description; 
+        const auto& readRules = pqGroupDescription.GetPQTabletConfig().GetReadRules(); 
+ 
+        if (readRules.size() > 0 && EnforceDeletion == false) { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                                  TStringBuilder() << "Stream has registered consumers" << 
+                                  "and EnforceConsumerDeletion flag is false", ctx); 
+        } 
+ 
+        SendProposeRequest(ctx); 
+    } 
     //-----------------------------------------------------------------------------------------------------------
 
     class TUpdateShardCountActor : public TUpdateSchemeActor<TUpdateShardCountActor, TEvDataStreamsUpdateShardCountRequest> {
@@ -431,7 +431,7 @@ namespace NKikimr::NDataStreams::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
 
         void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
@@ -454,7 +454,7 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
-        void Die(const TActorContext& ctx) override {
+        void Die(const TActorContext& ctx) override { 
             //close all pipes
             for (auto& pipe : Pipes) {
                 NTabletPipe::CloseClient(ctx, pipe);
@@ -492,43 +492,43 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+    void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
         Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
         const auto& response = result->ResultSet.front();
-        const TString path = JoinSeq("/", response.Path);
+        const TString path = JoinSeq("/", response.Path); 
 
-        if (ReplyIfNotTopic(ev, ctx)) {
-            return;
-        }
+        if (ReplyIfNotTopic(ev, ctx)) { 
+            return; 
+        } 
 
-        Y_VERIFY(response.PQGroupInfo);
+        Y_VERIFY(response.PQGroupInfo); 
 
-        PQGroup = response.PQGroupInfo->Description;
-        SelfInfo = response.Self->Info;
-        std::set<ui64> tabletIds;
-        for (auto& partition : PQGroup.GetPartitions()) {
-            tabletIds.insert(partition.GetTabletId());
-        }
-        if (tabletIds.size() == 0) {
-            ReplyAndDie(ctx);
-        }
+        PQGroup = response.PQGroupInfo->Description; 
+        SelfInfo = response.Self->Info; 
+        std::set<ui64> tabletIds; 
+        for (auto& partition : PQGroup.GetPartitions()) { 
+            tabletIds.insert(partition.GetTabletId()); 
+        } 
+        if (tabletIds.size() == 0) { 
+            ReplyAndDie(ctx); 
+        } 
 
-        RequestsInfly = tabletIds.size();
+        RequestsInfly = tabletIds.size(); 
 
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {
-            .RetryLimitCount = 6,
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::MilliSeconds(100),
-            .BackoffMultiplier = 2,
-            .DoFirstRetryInstantly = true
-        };
-
-        for (auto& tabletId : tabletIds) {
-            Pipes.push_back(ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
-            TAutoPtr<TEvPersQueue::TEvOffsets> req(new TEvPersQueue::TEvOffsets);
-            NTabletPipe::SendData(ctx, Pipes.back(), req.Release());
+        NTabletPipe::TClientConfig clientConfig; 
+        clientConfig.RetryPolicy = { 
+            .RetryLimitCount = 6, 
+            .MinRetryTime = TDuration::MilliSeconds(10), 
+            .MaxRetryTime = TDuration::MilliSeconds(100), 
+            .BackoffMultiplier = 2, 
+            .DoFirstRetryInstantly = true 
+        }; 
+ 
+        for (auto& tabletId : tabletIds) { 
+            Pipes.push_back(ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig))); 
+            TAutoPtr<TEvPersQueue::TEvOffsets> req(new TEvPersQueue::TEvOffsets); 
+            NTabletPipe::SendData(ctx, Pipes.back(), req.Release()); 
         }
     }
 
@@ -744,155 +744,155 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------
 
-    class TListStreamConsumersActor : public TPQGrpcSchemaBase<TListStreamConsumersActor, NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest> {
-        using TBase = TPQGrpcSchemaBase<TListStreamConsumersActor, TEvDataStreamsListStreamConsumersRequest>;
-
-    public:
-        TListStreamConsumersActor(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest* request);
-        ~TListStreamConsumersActor() = default;
-
-        void Bootstrap(const NActors::TActorContext& ctx);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
-
-    protected:
-        void SendResponse(const TActorContext& ctx, const std::vector<std::pair<TString, ui64>>& readRules, ui32 leftToRead);
-
-    private:
-        static constexpr ui32 MAX_MAX_RESULTS     = 10000;
-        static constexpr ui32 MIN_MAX_RESULTS     = 1;
-        static constexpr ui32 DEFAULT_MAX_RESULTS = 100;
-
-        TString StreamArn;
-        ui32 MaxResults = DEFAULT_MAX_RESULTS;
-        TNextToken NextToken;
-    };
-    TListStreamConsumersActor::TListStreamConsumersActor(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest* request)
-        : TBase(request, TNextToken(request->GetProtoRequest()->next_token()).IsValid() ?
-                         TNextToken(request->GetProtoRequest()->next_token()).GetStreamArn() :
-                         request->GetProtoRequest()->stream_arn())
-        , NextToken(request->GetProtoRequest()->next_token())
-    {
-        if (request->GetProtoRequest()->next_token().empty()) {
-            StreamArn = request->GetProtoRequest()->stream_arn();
-            MaxResults = request->GetProtoRequest()->max_results();
-            NextToken = TNextToken(StreamArn, 0, MaxResults, TInstant::Now().MilliSeconds());
-        } else {
-            StreamArn = NextToken.GetStreamArn();
-            MaxResults = NextToken.GetMaxResults();
-        }
-    }
-
-    void TListStreamConsumersActor::Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-
-        auto maxResultsInRange = MIN_MAX_RESULTS <= MaxResults && MaxResults <= MAX_MAX_RESULTS;
-        if (!maxResultsInRange) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                                  TStringBuilder() << "Requested max_result value '" << MaxResults <<
-                                  "' is out of range [" << MIN_MAX_RESULTS << ", " << MAX_MAX_RESULTS <<
-                                  "]", ctx);
-        }
-
-        if (!NextToken.IsValid()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                                  TStringBuilder() << "Provided NextToken has expired or malformed", ctx);
-        }
-        SendDescribeProposeRequest(ctx);
-        Become(&TListStreamConsumersActor::StateWork);
-    }
-
-    void TListStreamConsumersActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-            default: TBase::StateWork(ev, ctx);
-        }
-    }
-
-    void TListStreamConsumersActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+    class TListStreamConsumersActor : public TPQGrpcSchemaBase<TListStreamConsumersActor, NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest> { 
+        using TBase = TPQGrpcSchemaBase<TListStreamConsumersActor, TEvDataStreamsListStreamConsumersRequest>; 
+ 
+    public: 
+        TListStreamConsumersActor(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest* request); 
+        ~TListStreamConsumersActor() = default; 
+ 
+        void Bootstrap(const NActors::TActorContext& ctx); 
+        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
+ 
+    protected: 
+        void SendResponse(const TActorContext& ctx, const std::vector<std::pair<TString, ui64>>& readRules, ui32 leftToRead); 
+ 
+    private: 
+        static constexpr ui32 MAX_MAX_RESULTS     = 10000; 
+        static constexpr ui32 MIN_MAX_RESULTS     = 1; 
+        static constexpr ui32 DEFAULT_MAX_RESULTS = 100; 
+ 
+        TString StreamArn; 
+        ui32 MaxResults = DEFAULT_MAX_RESULTS; 
+        TNextToken NextToken; 
+    }; 
+    TListStreamConsumersActor::TListStreamConsumersActor(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest* request) 
+        : TBase(request, TNextToken(request->GetProtoRequest()->next_token()).IsValid() ? 
+                         TNextToken(request->GetProtoRequest()->next_token()).GetStreamArn() : 
+                         request->GetProtoRequest()->stream_arn()) 
+        , NextToken(request->GetProtoRequest()->next_token()) 
+    { 
+        if (request->GetProtoRequest()->next_token().empty()) { 
+            StreamArn = request->GetProtoRequest()->stream_arn(); 
+            MaxResults = request->GetProtoRequest()->max_results(); 
+            NextToken = TNextToken(StreamArn, 0, MaxResults, TInstant::Now().MilliSeconds()); 
+        } else { 
+            StreamArn = NextToken.GetStreamArn(); 
+            MaxResults = NextToken.GetMaxResults(); 
+        } 
+    } 
+ 
+    void TListStreamConsumersActor::Bootstrap(const NActors::TActorContext& ctx) { 
+        TBase::Bootstrap(ctx); 
+ 
+        auto maxResultsInRange = MIN_MAX_RESULTS <= MaxResults && MaxResults <= MAX_MAX_RESULTS; 
+        if (!maxResultsInRange) { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                                  TStringBuilder() << "Requested max_result value '" << MaxResults << 
+                                  "' is out of range [" << MIN_MAX_RESULTS << ", " << MAX_MAX_RESULTS << 
+                                  "]", ctx); 
+        } 
+ 
+        if (!NextToken.IsValid()) { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                                  TStringBuilder() << "Provided NextToken has expired or malformed", ctx); 
+        } 
+        SendDescribeProposeRequest(ctx); 
+        Become(&TListStreamConsumersActor::StateWork); 
+    } 
+ 
+    void TListStreamConsumersActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        switch (ev->GetTypeRewrite()) { 
+            default: TBase::StateWork(ev, ctx); 
+        } 
+    } 
+ 
+    void TListStreamConsumersActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
         Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
 
-        if (ReplyIfNotTopic(ev, ctx)) {
-            return;
-        }
+        if (ReplyIfNotTopic(ev, ctx)) { 
+            return; 
+        } 
+ 
+        std::vector<std::pair<TString, ui64>> readRules; 
+        ui32 leftToRead{0}; 
+        const auto& response = result->ResultSet.front(); 
+        const auto& pqGroupDescription = response.PQGroupInfo->Description; 
+        const auto& streamReadRulesNames = pqGroupDescription.GetPQTabletConfig().GetReadRules(); 
+        const auto& streamReadRulesReadFromTimestamps = pqGroupDescription.GetPQTabletConfig().GetReadFromTimestampsMs(); 
+        const auto alreadyRead = NextToken.GetAlreadyRead(); 
 
-        std::vector<std::pair<TString, ui64>> readRules;
-        ui32 leftToRead{0};
-        const auto& response = result->ResultSet.front();
-        const auto& pqGroupDescription = response.PQGroupInfo->Description;
-        const auto& streamReadRulesNames = pqGroupDescription.GetPQTabletConfig().GetReadRules();
-        const auto& streamReadRulesReadFromTimestamps = pqGroupDescription.GetPQTabletConfig().GetReadFromTimestampsMs();
-        const auto alreadyRead = NextToken.GetAlreadyRead();
-
-        if (alreadyRead > (ui32)streamReadRulesNames.size()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                                  TStringBuilder() << "Provided next_token is malformed - " <<
-                                  "everything is already read", ctx);
-        }
-
-        const auto rulesToRead = std::min(streamReadRulesNames.size() - alreadyRead, MaxResults);
-        readRules.reserve(rulesToRead);
-        auto itName = streamReadRulesNames.begin() + alreadyRead;
-        auto itTs = streamReadRulesReadFromTimestamps.begin() + alreadyRead;
-        for (auto i = rulesToRead; i > 0; --i, ++itName, ++itTs) {
-            readRules.push_back({*itName, *itTs});
-        }
-        leftToRead = streamReadRulesNames.size() - alreadyRead - rulesToRead;
-
-        SendResponse(ctx, readRules, leftToRead);
-    }
-
-    void TListStreamConsumersActor::SendResponse(const TActorContext& ctx, const std::vector<std::pair<TString, ui64>>& readRules, ui32 leftToRead) {
-        Ydb::DataStreams::V1::ListStreamConsumersResult result;
-
-        for (auto& readRule : readRules) {
-            auto consumer = result.Addconsumers();
-            consumer->set_consumer_name(readRule.first);
-            consumer->set_consumer_creation_timestamp(readRule.second);
-            consumer->set_consumer_status(Ydb::DataStreams::V1::ConsumerDescription_ConsumerStatus_ACTIVE);
-            // TODO: consumer->set_consumer_arn();
-        }
-
-        if (leftToRead > 0) {
-            TNextToken token(StreamArn, NextToken.GetAlreadyRead() + readRules.size(), MaxResults, TInstant::Now().MilliSeconds());
-            result.set_next_token(token.Serialize());
-        }
-
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
-        Die(ctx);
-    }
-
-    //-----------------------------------------------------------------------------------------
-
-    class TRegisterStreamConsumerActor : public TUpdateSchemeActor<TRegisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest> {
-        using TBase = TUpdateSchemeActor<TRegisterStreamConsumerActor, TEvDataStreamsRegisterStreamConsumerRequest>;
-
-    public:
-        TRegisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest* request);
-        ~TRegisterStreamConsumerActor() = default;
-
-        void Bootstrap(const NActors::TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        if (alreadyRead > (ui32)streamReadRulesNames.size()) { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                                  TStringBuilder() << "Provided next_token is malformed - " << 
+                                  "everything is already read", ctx); 
+        } 
+ 
+        const auto rulesToRead = std::min(streamReadRulesNames.size() - alreadyRead, MaxResults); 
+        readRules.reserve(rulesToRead); 
+        auto itName = streamReadRulesNames.begin() + alreadyRead; 
+        auto itTs = streamReadRulesReadFromTimestamps.begin() + alreadyRead; 
+        for (auto i = rulesToRead; i > 0; --i, ++itName, ++itTs) { 
+            readRules.push_back({*itName, *itTs}); 
+        } 
+        leftToRead = streamReadRulesNames.size() - alreadyRead - rulesToRead; 
+ 
+        SendResponse(ctx, readRules, leftToRead); 
+    } 
+ 
+    void TListStreamConsumersActor::SendResponse(const TActorContext& ctx, const std::vector<std::pair<TString, ui64>>& readRules, ui32 leftToRead) { 
+        Ydb::DataStreams::V1::ListStreamConsumersResult result; 
+ 
+        for (auto& readRule : readRules) { 
+            auto consumer = result.Addconsumers(); 
+            consumer->set_consumer_name(readRule.first); 
+            consumer->set_consumer_creation_timestamp(readRule.second); 
+            consumer->set_consumer_status(Ydb::DataStreams::V1::ConsumerDescription_ConsumerStatus_ACTIVE); 
+            // TODO: consumer->set_consumer_arn(); 
+        } 
+ 
+        if (leftToRead > 0) { 
+            TNextToken token(StreamArn, NextToken.GetAlreadyRead() + readRules.size(), MaxResults, TInstant::Now().MilliSeconds()); 
+            result.set_next_token(token.Serialize()); 
+        } 
+ 
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        Die(ctx); 
+    } 
+ 
+    //----------------------------------------------------------------------------------------- 
+ 
+    class TRegisterStreamConsumerActor : public TUpdateSchemeActor<TRegisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest> { 
+        using TBase = TUpdateSchemeActor<TRegisterStreamConsumerActor, TEvDataStreamsRegisterStreamConsumerRequest>; 
+ 
+    public: 
+        TRegisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest* request); 
+        ~TRegisterStreamConsumerActor() = default; 
+ 
+        void Bootstrap(const NActors::TActorContext& ctx); 
+        void ModifyPersqueueConfig(const TActorContext& ctx, 
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
         void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
-
-    private:
-        TString ConsumerName;
-    };
-    TRegisterStreamConsumerActor::TRegisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest* request)
-        : TBase(request, request->GetProtoRequest()->stream_arn())
-        , ConsumerName(request->GetProtoRequest()->consumer_name())
-    {
-    }
-
-    void TRegisterStreamConsumerActor::Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        SendDescribeProposeRequest(ctx);
-        Become(&TRegisterStreamConsumerActor::StateWork);
-    }
-
+ 
+    private: 
+        TString ConsumerName; 
+    }; 
+    TRegisterStreamConsumerActor::TRegisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest* request) 
+        : TBase(request, request->GetProtoRequest()->stream_arn()) 
+        , ConsumerName(request->GetProtoRequest()->consumer_name()) 
+    { 
+    } 
+ 
+    void TRegisterStreamConsumerActor::Bootstrap(const NActors::TActorContext& ctx) { 
+        TBase::Bootstrap(ctx); 
+        SendDescribeProposeRequest(ctx); 
+        Become(&TRegisterStreamConsumerActor::StateWork); 
+    } 
+ 
     void TRegisterStreamConsumerActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
@@ -901,72 +901,72 @@ namespace NKikimr::NDataStreams::V1 {
     ) {
         Y_UNUSED(pqGroupDescription);
 
-        auto* pqConfig = groupConfig.MutablePQTabletConfig();
-        Ydb::PersQueue::V1::TopicSettings::ReadRule readRule;
-        readRule.set_consumer_name(ConsumerName);
-        readRule.set_supported_format(Ydb::PersQueue::V1::TopicSettings_Format_FORMAT_BASE);
-        readRule.set_starting_message_timestamp_ms(TInstant::Now().MilliSeconds());
-        readRule.set_important(false);
+        auto* pqConfig = groupConfig.MutablePQTabletConfig(); 
+        Ydb::PersQueue::V1::TopicSettings::ReadRule readRule; 
+        readRule.set_consumer_name(ConsumerName); 
+        readRule.set_supported_format(Ydb::PersQueue::V1::TopicSettings_Format_FORMAT_BASE); 
+        readRule.set_starting_message_timestamp_ms(TInstant::Now().MilliSeconds()); 
+        readRule.set_important(false); 
         readRule.set_service_type(YDS_SERVICE_TYPE);
-
-        if (readRule.version() == 0) {
+ 
+        if (readRule.version() == 0) { 
             readRule.set_version(selfInfo.GetVersion().GetPQVersion());
-        }
+        } 
         auto serviceTypes = GetSupportedClientServiceTypes(ctx);
         TString error = AddReadRuleToConfig(pqConfig, readRule, serviceTypes, ctx);
         bool hasDuplicates = false;
-        if (error.Empty()) {
+        if (error.Empty()) { 
             hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error);
-        }
-
-        if (!error.Empty()) {
-            return ReplyWithError(hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST,
+        } 
+ 
+        if (!error.Empty()) { 
+            return ReplyWithError(hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST, 
                                   hasDuplicates ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
-        }
-    }
-
+        } 
+    } 
+ 
     void TRegisterStreamConsumerActor::ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Ydb::DataStreams::V1::RegisterStreamConsumerResult result;
-        auto consumer = result.Mutableconsumer();
-        consumer->set_consumer_name(ConsumerName);
-        consumer->set_consumer_creation_timestamp(std::chrono::seconds(std::time(nullptr)).count());
-        // TODO: consumer->set_consumer_arn();
-        consumer->set_consumer_status(Ydb::DataStreams::V1::ConsumerDescription_ConsumerStatus_ACTIVE);
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
-        Die(ctx);
-    }
-
-    //-----------------------------------------------------------------------------------------
-
-    class TDeregisterStreamConsumerActor : public TUpdateSchemeActor<TDeregisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest> {
-        using TBase = TUpdateSchemeActor<TDeregisterStreamConsumerActor, TEvDataStreamsDeregisterStreamConsumerRequest>;
-
-    public:
-        TDeregisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest* request);
-        ~TDeregisterStreamConsumerActor() = default;
-
-        void Bootstrap(const NActors::TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        Y_UNUSED(ev); 
+        Ydb::DataStreams::V1::RegisterStreamConsumerResult result; 
+        auto consumer = result.Mutableconsumer(); 
+        consumer->set_consumer_name(ConsumerName); 
+        consumer->set_consumer_creation_timestamp(std::chrono::seconds(std::time(nullptr)).count()); 
+        // TODO: consumer->set_consumer_arn(); 
+        consumer->set_consumer_status(Ydb::DataStreams::V1::ConsumerDescription_ConsumerStatus_ACTIVE); 
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        Die(ctx); 
+    } 
+ 
+    //----------------------------------------------------------------------------------------- 
+ 
+    class TDeregisterStreamConsumerActor : public TUpdateSchemeActor<TDeregisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest> { 
+        using TBase = TUpdateSchemeActor<TDeregisterStreamConsumerActor, TEvDataStreamsDeregisterStreamConsumerRequest>; 
+ 
+    public: 
+        TDeregisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest* request); 
+        ~TDeregisterStreamConsumerActor() = default; 
+ 
+        void Bootstrap(const NActors::TActorContext& ctx); 
+        void ModifyPersqueueConfig(const TActorContext& ctx, 
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
-
-    private:
-        TString ConsumerName;
-    };
-    TDeregisterStreamConsumerActor::TDeregisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest* request)
-        : TBase(request, request->GetProtoRequest()->stream_arn())
-        , ConsumerName(request->GetProtoRequest()->consumer_name())
-    {
-    }
-
-    void TDeregisterStreamConsumerActor::Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        SendDescribeProposeRequest(ctx);
-        Become(&TDeregisterStreamConsumerActor::StateWork);
-    }
-
+ 
+    private: 
+        TString ConsumerName; 
+    }; 
+    TDeregisterStreamConsumerActor::TDeregisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest* request) 
+        : TBase(request, request->GetProtoRequest()->stream_arn()) 
+        , ConsumerName(request->GetProtoRequest()->consumer_name()) 
+    { 
+    } 
+ 
+    void TDeregisterStreamConsumerActor::Bootstrap(const NActors::TActorContext& ctx) { 
+        TBase::Bootstrap(ctx); 
+        SendDescribeProposeRequest(ctx); 
+        Become(&TDeregisterStreamConsumerActor::StateWork); 
+    } 
+ 
     void TDeregisterStreamConsumerActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
@@ -980,683 +980,683 @@ namespace NKikimr::NDataStreams::V1 {
             GetProtoRequest()->consumer_name(),
             ctx
         );
-        if (!error.Empty()) {
-            return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
-        }
-    }
-
-    //-----------------------------------------------------------------------------------------
-
-    class TGetShardIteratorActor : public TPQGrpcSchemaBase<TGetShardIteratorActor, NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest> {
-        using TBase = TPQGrpcSchemaBase<TGetShardIteratorActor, TEvDataStreamsGetShardIteratorRequest>;
-
-    public:
-        TGetShardIteratorActor(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest* request, NActors::TActorId newSchemeCache);
-        ~TGetShardIteratorActor() = default;
-
-        void Bootstrap(const NActors::TActorContext& ctx);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
-
-
-    private:
-        using TIteratorType = Ydb::DataStreams::V1::ShardIteratorType;
-
-        void SendResponse(const TActorContext& ctx, const TShardIterator& shardIt);
-        std::optional<ui32> SequenceNumberToInt(const TString& sequenceNumberStr);
-
-        TActorId NewSchemeCache;
-        TString StreamName;
-        TString ShardId;
-        TIteratorType IteratorType;
-        ui32 SequenceNumber;
-        ui64 ReadTimestampMs;
-    };
-
-    TGetShardIteratorActor::TGetShardIteratorActor(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest* request, NActors::TActorId newSchemeCache)
-    : TBase(request, request->GetProtoRequest()->stream_name())
-    , NewSchemeCache(std::move(newSchemeCache))
-    , StreamName{request->GetProtoRequest()->stream_name()}
-    , ShardId{request->GetProtoRequest()->shard_id()}
-    , IteratorType{request->GetProtoRequest()->shard_iterator_type()}
-    , SequenceNumber{0}
-    , ReadTimestampMs{0}
-    {
-    }
-
-    void TGetShardIteratorActor::Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-
-        switch (IteratorType) {
-        case TIteratorType::AFTER_SEQUENCE_NUMBER:
-        case TIteratorType::AT_SEQUENCE_NUMBER: {
-            auto sn = SequenceNumberToInt(GetProtoRequest()->starting_sequence_number());
-            if (!sn) {
-                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                      TStringBuilder() << "Malformed sequence number", ctx);
-            }
-            SequenceNumber = sn.value() + (IteratorType == TIteratorType::AFTER_SEQUENCE_NUMBER ? 1u : 0u);
-            }
-            break;
-        case TIteratorType::AT_TIMESTAMP:
-            if (GetProtoRequest()->timestamp() == 0 ||
-                GetProtoRequest()->timestamp() > static_cast<i64>(TInstant::Now().MilliSeconds())) {
-                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                      TStringBuilder() << "Shard iterator type is AT_TIMESTAMP, " <<
-                                      "but timestamp is either missed or too old or in future", ctx);
-            }
-            ReadTimestampMs = GetProtoRequest()->timestamp();
-            break;
-        case TIteratorType::TRIM_HORIZON:
-            ReadTimestampMs = 0;
-            break;
-        case TIteratorType::LATEST:
-            ReadTimestampMs = TInstant::Now().MilliSeconds();
-            break;
-        default:
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                  TStringBuilder() << "Shard iterator type '" <<
-                                  (ui32)IteratorType << "' is not known", ctx);
-
-        }
-
-        SendDescribeProposeRequest(ctx);
-        Become(&TGetShardIteratorActor::StateWork);
-    }
-
-    void TGetShardIteratorActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-        default: TBase::StateWork(ev, ctx);
-        }
-    }
-
-    void TGetShardIteratorActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        if (ReplyIfNotTopic(ev, ctx)) {
-            return;
-        }
-
-        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
-        auto topicInfo = navigate->ResultSet.begin();
-        StreamName = NKikimr::CanonizePath(topicInfo->Path);
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
-                                                        this->Request_->GetInternalToken())) {
-                return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
-                                            Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
-                                            TStringBuilder() << "Access to stream "
-                                            << this->GetProtoRequest()->stream_name()
-                                            << " is denied for subject "
-                                            << this->Request_->GetInternalToken(), ctx);
-            }
-        }
-
-        const auto& partitions = topicInfo->PQGroupInfo->Description.GetPartitions();
-        for (auto& partition : partitions) {
-            auto partitionId = partition.GetPartitionId();
-            TString shardName = GetShardName(partitionId);
-            if (shardName == ShardId) {
-                TShardIterator it(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber);
-                SendResponse(ctx, it);
-                return;
-            }
-        }
-
-        ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                       TStringBuilder() << "No such shard: " << ShardId, ctx);
-    }
-
-    void TGetShardIteratorActor::SendResponse(const TActorContext& ctx, const TShardIterator& shardIt) {
-        Ydb::DataStreams::V1::GetShardIteratorResult result;
-        result.set_shard_iterator(shardIt.Serialize());
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
-        Die(ctx);
-    }
-
-    std::optional<ui32> TGetShardIteratorActor::SequenceNumberToInt(const TString& sequenceNumberStr) {
-        try {
-            return std::stoi(sequenceNumberStr.c_str());
-        } catch(...) {
-            return std::nullopt;
-        }
-    }
-
-    //-----------------------------------------------------------------------------------
-
-    class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest> {
-        using TBase = TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>;
-
-        static constexpr ui32 READ_TIMEOUT_MS = 150;
-        static constexpr i32 MAX_LIMIT = 10000;
-
-    public:
-        TGetRecordsActor(TEvDataStreamsGetRecordsRequest* request, const TActorId& newSchemeCache);
-        ~TGetRecordsActor() = default;
-
-        void Bootstrap(const NActors::TActorContext& ctx);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
-
-    private:
-        void SendReadRequest(const TActorContext& ctx);
-        void SendResponse(const TActorContext& ctx,
-                          const std::vector<Ydb::DataStreams::V1::Record>& records,
-                          ui64 millisBehindLatestMs);
-
-        TShardIterator ShardIterator;
-        TString StreamName;
-        ui64 TabletId;
-        i32 Limit;
-        TActorId NewSchemeCache;
-    };
-
-    TGetRecordsActor::TGetRecordsActor(TEvDataStreamsGetRecordsRequest* request,
-                                       const TActorId& newSchemeCache)
-        : TBase(request, TShardIterator(request->GetProtoRequest()->shard_iterator()).IsValid()
-                ? TShardIterator(request->GetProtoRequest()->shard_iterator()).GetStreamName()
-                : "undefined")
-        , ShardIterator{request->GetProtoRequest()->shard_iterator()}
-        , StreamName{ShardIterator.IsValid() ? ShardIterator.GetStreamName() : "undefined"}
-        , TabletId{0}
-        , Limit{request->GetProtoRequest()->limit()}
-        , NewSchemeCache{newSchemeCache}
-    {
-    }
-
-    void TGetRecordsActor::Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-
-        if (!ShardIterator.IsValid()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                                  TStringBuilder() << "Provided shard iterator is malformed or expired", ctx);
-        }
-
-        Limit = Limit == 0 ? MAX_LIMIT : Limit;
-        if (Limit < 1 || Limit > MAX_LIMIT) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                                  TStringBuilder() << "Limit '" << Limit << "' is out of bounds [1; " << MAX_LIMIT << "]", ctx);
-        }
-
-        SendDescribeProposeRequest(ctx);
-        Become(&TGetRecordsActor::StateWork);
-    }
-
-    void TGetRecordsActor::SendReadRequest(const TActorContext& ctx) {
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {
-            .RetryLimitCount = 6,
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::MilliSeconds(100),
-            .BackoffMultiplier = 2,
-            .DoFirstRetryInstantly = true
-        };
-        auto PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletId, clientConfig));
-
-        NKikimrClient::TPersQueueRequest request;
-        request.MutablePartitionRequest()->SetTopic(this->GetTopicPath(ctx));
-        request.MutablePartitionRequest()->SetPartition(ShardIterator.GetShardId());
-        ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
-
-        auto cmdRead = request.MutablePartitionRequest()->MutableCmdRead();
-        cmdRead->SetClientId(NKikimr::NPQ::CLIENTID_TO_READ_INTERNALLY);
-        cmdRead->SetCount(Limit);
-        cmdRead->SetOffset(ShardIterator.GetSequenceNumber());
-        cmdRead->SetReadTimestampMs(ShardIterator.GetReadTimestamp());
-        cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
-        cmdRead->SetExternalOperation(true);
-
-        TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-        req->Record.Swap(&request);
-        NTabletPipe::SendData(ctx, PipeClient, req.Release());
-    }
-
-    void TGetRecordsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, Handle);
-        default: TBase::StateWork(ev, ctx);
-        }
-    }
-
-    void TGetRecordsActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                  const TActorContext& ctx) {
-        const auto &result = ev->Get()->Request.Get();
-        const auto response = result->ResultSet.front();
-
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
-                                                      this->Request_->GetInternalToken())) {
-                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
-                                      Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
-                                      TStringBuilder() << "Access to stream "
-                                      << ShardIterator.GetStreamName()
-                                      << " is denied for subject "
-                                      << this->Request_->GetInternalToken(), ctx);
-            }
-        }
-
-
+        if (!error.Empty()) { 
+            return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
+        } 
+    } 
+ 
+    //----------------------------------------------------------------------------------------- 
+ 
+    class TGetShardIteratorActor : public TPQGrpcSchemaBase<TGetShardIteratorActor, NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest> { 
+        using TBase = TPQGrpcSchemaBase<TGetShardIteratorActor, TEvDataStreamsGetShardIteratorRequest>; 
+ 
+    public: 
+        TGetShardIteratorActor(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest* request, NActors::TActorId newSchemeCache); 
+        ~TGetShardIteratorActor() = default; 
+ 
+        void Bootstrap(const NActors::TActorContext& ctx); 
+        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
+ 
+ 
+    private: 
+        using TIteratorType = Ydb::DataStreams::V1::ShardIteratorType; 
+ 
+        void SendResponse(const TActorContext& ctx, const TShardIterator& shardIt); 
+        std::optional<ui32> SequenceNumberToInt(const TString& sequenceNumberStr); 
+ 
+        TActorId NewSchemeCache; 
+        TString StreamName; 
+        TString ShardId; 
+        TIteratorType IteratorType; 
+        ui32 SequenceNumber; 
+        ui64 ReadTimestampMs; 
+    }; 
+ 
+    TGetShardIteratorActor::TGetShardIteratorActor(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest* request, NActors::TActorId newSchemeCache) 
+    : TBase(request, request->GetProtoRequest()->stream_name()) 
+    , NewSchemeCache(std::move(newSchemeCache)) 
+    , StreamName{request->GetProtoRequest()->stream_name()} 
+    , ShardId{request->GetProtoRequest()->shard_id()} 
+    , IteratorType{request->GetProtoRequest()->shard_iterator_type()} 
+    , SequenceNumber{0} 
+    , ReadTimestampMs{0} 
+    { 
+    } 
+ 
+    void TGetShardIteratorActor::Bootstrap(const NActors::TActorContext& ctx) { 
+        TBase::Bootstrap(ctx); 
+ 
+        switch (IteratorType) { 
+        case TIteratorType::AFTER_SEQUENCE_NUMBER: 
+        case TIteratorType::AT_SEQUENCE_NUMBER: { 
+            auto sn = SequenceNumberToInt(GetProtoRequest()->starting_sequence_number()); 
+            if (!sn) { 
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, 
+                                      TStringBuilder() << "Malformed sequence number", ctx); 
+            } 
+            SequenceNumber = sn.value() + (IteratorType == TIteratorType::AFTER_SEQUENCE_NUMBER ? 1u : 0u); 
+            } 
+            break; 
+        case TIteratorType::AT_TIMESTAMP: 
+            if (GetProtoRequest()->timestamp() == 0 || 
+                GetProtoRequest()->timestamp() > static_cast<i64>(TInstant::Now().MilliSeconds())) { 
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, 
+                                      TStringBuilder() << "Shard iterator type is AT_TIMESTAMP, " << 
+                                      "but timestamp is either missed or too old or in future", ctx); 
+            } 
+            ReadTimestampMs = GetProtoRequest()->timestamp(); 
+            break; 
+        case TIteratorType::TRIM_HORIZON: 
+            ReadTimestampMs = 0; 
+            break; 
+        case TIteratorType::LATEST: 
+            ReadTimestampMs = TInstant::Now().MilliSeconds(); 
+            break; 
+        default: 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, 
+                                  TStringBuilder() << "Shard iterator type '" << 
+                                  (ui32)IteratorType << "' is not known", ctx); 
+ 
+        } 
+ 
+        SendDescribeProposeRequest(ctx); 
+        Become(&TGetShardIteratorActor::StateWork); 
+    } 
+ 
+    void TGetShardIteratorActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        switch (ev->GetTypeRewrite()) { 
+        default: TBase::StateWork(ev, ctx); 
+        } 
+    } 
+ 
+    void TGetShardIteratorActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
+        if (ReplyIfNotTopic(ev, ctx)) { 
+            return; 
+        } 
+ 
+        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get(); 
+        auto topicInfo = navigate->ResultSet.begin(); 
+        StreamName = NKikimr::CanonizePath(topicInfo->Path); 
+        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) { 
+            if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, 
+                                                        this->Request_->GetInternalToken())) { 
+                return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, 
+                                            Ydb::PersQueue::ErrorCode::ACCESS_DENIED, 
+                                            TStringBuilder() << "Access to stream " 
+                                            << this->GetProtoRequest()->stream_name() 
+                                            << " is denied for subject " 
+                                            << this->Request_->GetInternalToken(), ctx); 
+            } 
+        } 
+ 
+        const auto& partitions = topicInfo->PQGroupInfo->Description.GetPartitions(); 
+        for (auto& partition : partitions) { 
+            auto partitionId = partition.GetPartitionId(); 
+            TString shardName = GetShardName(partitionId); 
+            if (shardName == ShardId) { 
+                TShardIterator it(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber); 
+                SendResponse(ctx, it); 
+                return; 
+            } 
+        } 
+ 
+        ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                       TStringBuilder() << "No such shard: " << ShardId, ctx); 
+    } 
+ 
+    void TGetShardIteratorActor::SendResponse(const TActorContext& ctx, const TShardIterator& shardIt) { 
+        Ydb::DataStreams::V1::GetShardIteratorResult result; 
+        result.set_shard_iterator(shardIt.Serialize()); 
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        Die(ctx); 
+    } 
+ 
+    std::optional<ui32> TGetShardIteratorActor::SequenceNumberToInt(const TString& sequenceNumberStr) { 
+        try { 
+            return std::stoi(sequenceNumberStr.c_str()); 
+        } catch(...) { 
+            return std::nullopt; 
+        } 
+    } 
+ 
+    //----------------------------------------------------------------------------------- 
+ 
+    class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest> { 
+        using TBase = TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>; 
+ 
+        static constexpr ui32 READ_TIMEOUT_MS = 150; 
+        static constexpr i32 MAX_LIMIT = 10000; 
+ 
+    public: 
+        TGetRecordsActor(TEvDataStreamsGetRecordsRequest* request, const TActorId& newSchemeCache); 
+        ~TGetRecordsActor() = default; 
+ 
+        void Bootstrap(const NActors::TActorContext& ctx); 
+        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
+        void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx); 
+ 
+    private: 
+        void SendReadRequest(const TActorContext& ctx); 
+        void SendResponse(const TActorContext& ctx, 
+                          const std::vector<Ydb::DataStreams::V1::Record>& records, 
+                          ui64 millisBehindLatestMs); 
+ 
+        TShardIterator ShardIterator; 
+        TString StreamName; 
+        ui64 TabletId; 
+        i32 Limit; 
+        TActorId NewSchemeCache; 
+    }; 
+ 
+    TGetRecordsActor::TGetRecordsActor(TEvDataStreamsGetRecordsRequest* request, 
+                                       const TActorId& newSchemeCache) 
+        : TBase(request, TShardIterator(request->GetProtoRequest()->shard_iterator()).IsValid() 
+                ? TShardIterator(request->GetProtoRequest()->shard_iterator()).GetStreamName() 
+                : "undefined") 
+        , ShardIterator{request->GetProtoRequest()->shard_iterator()} 
+        , StreamName{ShardIterator.IsValid() ? ShardIterator.GetStreamName() : "undefined"} 
+        , TabletId{0} 
+        , Limit{request->GetProtoRequest()->limit()} 
+        , NewSchemeCache{newSchemeCache} 
+    { 
+    } 
+ 
+    void TGetRecordsActor::Bootstrap(const NActors::TActorContext& ctx) { 
+        TBase::Bootstrap(ctx); 
+ 
+        if (!ShardIterator.IsValid()) { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                                  TStringBuilder() << "Provided shard iterator is malformed or expired", ctx); 
+        } 
+ 
+        Limit = Limit == 0 ? MAX_LIMIT : Limit; 
+        if (Limit < 1 || Limit > MAX_LIMIT) { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                                  TStringBuilder() << "Limit '" << Limit << "' is out of bounds [1; " << MAX_LIMIT << "]", ctx); 
+        } 
+ 
+        SendDescribeProposeRequest(ctx); 
+        Become(&TGetRecordsActor::StateWork); 
+    } 
+ 
+    void TGetRecordsActor::SendReadRequest(const TActorContext& ctx) { 
+        NTabletPipe::TClientConfig clientConfig; 
+        clientConfig.RetryPolicy = { 
+            .RetryLimitCount = 6, 
+            .MinRetryTime = TDuration::MilliSeconds(10), 
+            .MaxRetryTime = TDuration::MilliSeconds(100), 
+            .BackoffMultiplier = 2, 
+            .DoFirstRetryInstantly = true 
+        }; 
+        auto PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletId, clientConfig)); 
+ 
+        NKikimrClient::TPersQueueRequest request; 
+        request.MutablePartitionRequest()->SetTopic(this->GetTopicPath(ctx)); 
+        request.MutablePartitionRequest()->SetPartition(ShardIterator.GetShardId()); 
+        ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient()); 
+ 
+        auto cmdRead = request.MutablePartitionRequest()->MutableCmdRead(); 
+        cmdRead->SetClientId(NKikimr::NPQ::CLIENTID_TO_READ_INTERNALLY); 
+        cmdRead->SetCount(Limit); 
+        cmdRead->SetOffset(ShardIterator.GetSequenceNumber()); 
+        cmdRead->SetReadTimestampMs(ShardIterator.GetReadTimestamp()); 
+        cmdRead->SetTimeoutMs(READ_TIMEOUT_MS); 
+        cmdRead->SetExternalOperation(true); 
+ 
+        TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest); 
+        req->Record.Swap(&request); 
+        NTabletPipe::SendData(ctx, PipeClient, req.Release()); 
+    } 
+ 
+    void TGetRecordsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvPersQueue::TEvResponse, Handle); 
+        default: TBase::StateWork(ev, ctx); 
+        } 
+    } 
+ 
+    void TGetRecordsActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, 
+                                  const TActorContext& ctx) { 
+        const auto &result = ev->Get()->Request.Get(); 
+        const auto response = result->ResultSet.front(); 
+ 
+        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) { 
+            if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, 
+                                                      this->Request_->GetInternalToken())) { 
+                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, 
+                                      Ydb::PersQueue::ErrorCode::ACCESS_DENIED, 
+                                      TStringBuilder() << "Access to stream " 
+                                      << ShardIterator.GetStreamName() 
+                                      << " is denied for subject " 
+                                      << this->Request_->GetInternalToken(), ctx); 
+            } 
+        } 
+ 
+ 
         if (response.Self->Info.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-            const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
-            for (auto& partition : partitions) {
-                auto partitionId = partition.GetPartitionId();
-                if (partitionId == ShardIterator.GetShardId()) {
-                    TabletId = partition.GetTabletId();
-                    return SendReadRequest(ctx);
-                }
-            }
-        }
-
-        ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                       TStringBuilder() << "No such shard: " << ShardIterator.GetShardId(), ctx);
-    }
-
-    void TGetRecordsActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        Y_VERIFY(ev->Get()->Record.HasPartitionResponse());
-
-        ui64 millisBehindLatestMs = 0;
-        std::vector<Ydb::DataStreams::V1::Record> records;
-        const auto& response = record.GetPartitionResponse();
-        if (response.HasCmdReadResult()) {
-            const auto& results = response.GetCmdReadResult().GetResult();
-            records.reserve(results.size());
-            for (auto& r : results) {
-                auto proto(NKikimr::GetDeserializedData(r.GetData()));
-                Ydb::DataStreams::V1::Record record;
-                record.set_data(proto.GetData());
-                record.set_timestamp(r.GetCreateTimestampMS());
-                record.set_encryption(Ydb::DataStreams::V1::EncryptionType::NONE);
-                record.set_partition_key(r.GetPartitionKey());
-                record.set_sequence_number(std::to_string(r.GetOffset()).c_str());
-                records.push_back(record);
-            }
-            millisBehindLatestMs = records.size() > 0 ? TInstant::Now().MilliSeconds() - results.rbegin()->GetWriteTimestampMS() : 0;
-        }
-
-        SendResponse(ctx, records, millisBehindLatestMs);
-    }
-
-    void TGetRecordsActor::SendResponse(const TActorContext& ctx,
-                                        const std::vector<Ydb::DataStreams::V1::Record>& records,
-                                        ui64 millisBehindLatestMs) {
-        Ydb::DataStreams::V1::GetRecordsResult result;
-        for (auto& r : records) {
-            auto record = result.add_records();
-            *record = r;
-        }
-
-        auto timestamp = records.size() > 0 ? records.back().Gettimestamp() + 1
-                                            : ShardIterator.GetReadTimestamp();
-        auto seqNo = records.size() > 0 ? std::stoi(records.back().Getsequence_number()) + 1
-                                        : ShardIterator.GetSequenceNumber();
-        TShardIterator shardIterator(ShardIterator.GetStreamName(),
-                                     ShardIterator.GetStreamArn(),
-                                     ShardIterator.GetShardId(),
-                                     timestamp, seqNo);
-        result.set_next_shard_iterator(shardIterator.Serialize());
-        result.set_millis_behind_latest(millisBehindLatestMs);
-
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
-        Die(ctx);
-    }
-
-    //-----------------------------------------------------------------------------------------
-
-    class TListShardsActor : public TPQGrpcSchemaBase<TListShardsActor, NKikimr::NGRpcService::TEvDataStreamsListShardsRequest> {
-        using TBase = TPQGrpcSchemaBase<TListShardsActor, TEvDataStreamsListShardsRequest>;
-
-    public:
-        TListShardsActor(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest* request, NActors::TActorId newSchemeCache);
-        ~TListShardsActor() = default;
-
-        void Bootstrap(const NActors::TActorContext& ctx);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
-        void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                         const TActorContext& ctx);
-        void Die(const TActorContext& ctx) override;
-
-    private:
-        using TShardFilter = Ydb::DataStreams::V1::ShardFilter;
-
-        void SendResponse(const TActorContext& ctx);
-
-        static constexpr ui32 MAX_MAX_RESULTS     = 10000;
-        static constexpr ui32 MIN_MAX_RESULTS     = 1;
-        static constexpr ui32 DEFAULT_MAX_RESULTS = 100;
-
-        TActorId NewSchemeCache;
-        TString StreamName;
-        TShardFilter ShardFilter;
-        TNextToken NextToken;
-        ui32 MaxResults = DEFAULT_MAX_RESULTS;
-        std::map<ui64, std::pair<ui64, ui64>> StartEndOffsetsPerPartition;
+            const auto& partitions = response.PQGroupInfo->Description.GetPartitions(); 
+            for (auto& partition : partitions) { 
+                auto partitionId = partition.GetPartitionId(); 
+                if (partitionId == ShardIterator.GetShardId()) { 
+                    TabletId = partition.GetTabletId(); 
+                    return SendReadRequest(ctx); 
+                } 
+            } 
+        } 
+ 
+        ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                       TStringBuilder() << "No such shard: " << ShardIterator.GetShardId(), ctx); 
+    } 
+ 
+    void TGetRecordsActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) { 
+        const auto& record = ev->Get()->Record; 
+        Y_VERIFY(ev->Get()->Record.HasPartitionResponse()); 
+ 
+        ui64 millisBehindLatestMs = 0; 
+        std::vector<Ydb::DataStreams::V1::Record> records; 
+        const auto& response = record.GetPartitionResponse(); 
+        if (response.HasCmdReadResult()) { 
+            const auto& results = response.GetCmdReadResult().GetResult(); 
+            records.reserve(results.size()); 
+            for (auto& r : results) { 
+                auto proto(NKikimr::GetDeserializedData(r.GetData())); 
+                Ydb::DataStreams::V1::Record record; 
+                record.set_data(proto.GetData()); 
+                record.set_timestamp(r.GetCreateTimestampMS()); 
+                record.set_encryption(Ydb::DataStreams::V1::EncryptionType::NONE); 
+                record.set_partition_key(r.GetPartitionKey()); 
+                record.set_sequence_number(std::to_string(r.GetOffset()).c_str()); 
+                records.push_back(record); 
+            } 
+            millisBehindLatestMs = records.size() > 0 ? TInstant::Now().MilliSeconds() - results.rbegin()->GetWriteTimestampMS() : 0; 
+        } 
+ 
+        SendResponse(ctx, records, millisBehindLatestMs); 
+    } 
+ 
+    void TGetRecordsActor::SendResponse(const TActorContext& ctx, 
+                                        const std::vector<Ydb::DataStreams::V1::Record>& records, 
+                                        ui64 millisBehindLatestMs) { 
+        Ydb::DataStreams::V1::GetRecordsResult result; 
+        for (auto& r : records) { 
+            auto record = result.add_records(); 
+            *record = r; 
+        } 
+ 
+        auto timestamp = records.size() > 0 ? records.back().Gettimestamp() + 1 
+                                            : ShardIterator.GetReadTimestamp(); 
+        auto seqNo = records.size() > 0 ? std::stoi(records.back().Getsequence_number()) + 1 
+                                        : ShardIterator.GetSequenceNumber(); 
+        TShardIterator shardIterator(ShardIterator.GetStreamName(), 
+                                     ShardIterator.GetStreamArn(), 
+                                     ShardIterator.GetShardId(), 
+                                     timestamp, seqNo); 
+        result.set_next_shard_iterator(shardIterator.Serialize()); 
+        result.set_millis_behind_latest(millisBehindLatestMs); 
+ 
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        Die(ctx); 
+    } 
+ 
+    //----------------------------------------------------------------------------------------- 
+ 
+    class TListShardsActor : public TPQGrpcSchemaBase<TListShardsActor, NKikimr::NGRpcService::TEvDataStreamsListShardsRequest> { 
+        using TBase = TPQGrpcSchemaBase<TListShardsActor, TEvDataStreamsListShardsRequest>; 
+ 
+    public: 
+        TListShardsActor(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest* request, NActors::TActorId newSchemeCache); 
+        ~TListShardsActor() = default; 
+ 
+        void Bootstrap(const NActors::TActorContext& ctx); 
+        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
+        void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx); 
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx); 
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx); 
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, 
+                                         const TActorContext& ctx); 
+        void Die(const TActorContext& ctx) override; 
+ 
+    private: 
+        using TShardFilter = Ydb::DataStreams::V1::ShardFilter; 
+ 
+        void SendResponse(const TActorContext& ctx); 
+ 
+        static constexpr ui32 MAX_MAX_RESULTS     = 10000; 
+        static constexpr ui32 MIN_MAX_RESULTS     = 1; 
+        static constexpr ui32 DEFAULT_MAX_RESULTS = 100; 
+ 
+        TActorId NewSchemeCache; 
+        TString StreamName; 
+        TShardFilter ShardFilter; 
+        TNextToken NextToken; 
+        ui32 MaxResults = DEFAULT_MAX_RESULTS; 
+        std::map<ui64, std::pair<ui64, ui64>> StartEndOffsetsPerPartition; 
         std::vector<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> Shards;
         ui32 LeftToRead = 0;
         ui32 AllShardsCount = 0;
-        std::atomic<ui32> GotOffsetResponds;
-        std::vector<TActorId> Pipes;
-    };
-
-    TListShardsActor::TListShardsActor(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest* request, NActors::TActorId newSchemeCache)
-    : TBase(request, request->GetProtoRequest()->stream_name())
-    , NewSchemeCache(std::move(newSchemeCache))
-    , StreamName{request->GetProtoRequest()->stream_name()}
-    , ShardFilter{request->GetProtoRequest()->shard_filter()}
-    , NextToken{request->GetProtoRequest()->next_token()}
-    , GotOffsetResponds{0}
-    {
-        if (request->GetProtoRequest()->next_token().empty()) {
-            StreamName = request->GetProtoRequest()->stream_name();
-            MaxResults = request->GetProtoRequest()->max_results();
-            NextToken = TNextToken(StreamName, 0, MaxResults, TInstant::Now().MilliSeconds());
-        } else {
-            StreamName = NextToken.GetStreamArn();
-            MaxResults = NextToken.GetMaxResults();
-        }
-    }
-
-    void TListShardsActor::Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-
-        if (!TShardFilter::ShardFilterType_IsValid(ShardFilter.type())) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                  TStringBuilder() << "Shard filter '" <<
-                                  (ui32)ShardFilter.type() << "' is not known", ctx);
-        }
-
-        MaxResults = MaxResults == 0 ? DEFAULT_MAX_RESULTS : MaxResults;
+        std::atomic<ui32> GotOffsetResponds; 
+        std::vector<TActorId> Pipes; 
+    }; 
+ 
+    TListShardsActor::TListShardsActor(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest* request, NActors::TActorId newSchemeCache) 
+    : TBase(request, request->GetProtoRequest()->stream_name()) 
+    , NewSchemeCache(std::move(newSchemeCache)) 
+    , StreamName{request->GetProtoRequest()->stream_name()} 
+    , ShardFilter{request->GetProtoRequest()->shard_filter()} 
+    , NextToken{request->GetProtoRequest()->next_token()} 
+    , GotOffsetResponds{0} 
+    { 
+        if (request->GetProtoRequest()->next_token().empty()) { 
+            StreamName = request->GetProtoRequest()->stream_name(); 
+            MaxResults = request->GetProtoRequest()->max_results(); 
+            NextToken = TNextToken(StreamName, 0, MaxResults, TInstant::Now().MilliSeconds()); 
+        } else { 
+            StreamName = NextToken.GetStreamArn(); 
+            MaxResults = NextToken.GetMaxResults(); 
+        } 
+    } 
+ 
+    void TListShardsActor::Bootstrap(const NActors::TActorContext& ctx) { 
+        TBase::Bootstrap(ctx); 
+ 
+        if (!TShardFilter::ShardFilterType_IsValid(ShardFilter.type())) { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, 
+                                  TStringBuilder() << "Shard filter '" << 
+                                  (ui32)ShardFilter.type() << "' is not known", ctx); 
+        } 
+ 
+        MaxResults = MaxResults == 0 ? DEFAULT_MAX_RESULTS : MaxResults; 
         if (MaxResults > MAX_MAX_RESULTS) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                  TStringBuilder() << "Max results '" << MaxResults <<
-                                  "' is out of bound [" << MIN_MAX_RESULTS << "; " <<
-                                  MAX_MAX_RESULTS << "]", ctx);
-        }
-
-        if (ShardFilter.type() == TShardFilter::AFTER_SHARD_ID && ShardFilter.shard_id() == "") {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                  TStringBuilder() << "Shard filter type is AFTER_SHARD_ID," <<
-                                  " but no ShardId provided", ctx);
-        }
-
-        SendDescribeProposeRequest(ctx);
-        Become(&TListShardsActor::StateWork);
-    }
-
-    void TListShardsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvOffsetsResponse, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-        default: TBase::StateWork(ev, ctx);
-        }
-    }
-
-    void TListShardsActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        if (ReplyIfNotTopic(ev, ctx)) {
-            return;
-        }
-
-        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
-        auto topicInfo = navigate->ResultSet.front();
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
-                                                        this->Request_->GetInternalToken())) {
-                return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
-                                            Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
-                                            TStringBuilder() << "Access to stream "
-                                            << this->GetProtoRequest()->stream_name()
-                                            << " is denied for subject "
-                                            << this->Request_->GetInternalToken(), ctx);
-            }
-        }
-
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, 
+                                  TStringBuilder() << "Max results '" << MaxResults << 
+                                  "' is out of bound [" << MIN_MAX_RESULTS << "; " << 
+                                  MAX_MAX_RESULTS << "]", ctx); 
+        } 
+ 
+        if (ShardFilter.type() == TShardFilter::AFTER_SHARD_ID && ShardFilter.shard_id() == "") { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, 
+                                  TStringBuilder() << "Shard filter type is AFTER_SHARD_ID," << 
+                                  " but no ShardId provided", ctx); 
+        } 
+ 
+        SendDescribeProposeRequest(ctx); 
+        Become(&TListShardsActor::StateWork); 
+    } 
+ 
+    void TListShardsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvPersQueue::TEvOffsetsResponse, Handle); 
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
+        default: TBase::StateWork(ev, ctx); 
+        } 
+    } 
+ 
+    void TListShardsActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
+        if (ReplyIfNotTopic(ev, ctx)) { 
+            return; 
+        } 
+ 
+        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get(); 
+        auto topicInfo = navigate->ResultSet.front(); 
+        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) { 
+            if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, 
+                                                        this->Request_->GetInternalToken())) { 
+                return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, 
+                                            Ydb::PersQueue::ErrorCode::ACCESS_DENIED, 
+                                            TStringBuilder() << "Access to stream " 
+                                            << this->GetProtoRequest()->stream_name() 
+                                            << " is denied for subject " 
+                                            << this->Request_->GetInternalToken(), ctx); 
+            } 
+        } 
+ 
         using TPartition = NKikimrSchemeOp::TPersQueueGroupDescription::TPartition;
-        const auto& partitions = topicInfo.PQGroupInfo->Description.GetPartitions();
-        TString startingShardId = this->GetProtoRequest()->Getexclusive_start_shard_id();
-        ui64 startingTimepoint{0};
-        bool onlyOpenShards{true};
-
-        std::map<TShardFilter::ShardFilterType, std::function<bool(const TPartition&)>> filters = {
-            {TShardFilter::SHARD_TYPE_UNDEFINED, [&](const TPartition& p) {
-                onlyOpenShards = false;
-                return GetShardName(p.GetPartitionId()) >= startingShardId;
-            }},
-            {TShardFilter::AFTER_SHARD_ID, [&](const TPartition& p) {
-                startingShardId = ShardFilter.shard_id();
-                startingTimepoint = 0;
-                onlyOpenShards = false;
-                return GetShardName(p.GetPartitionId()) > startingShardId;
-            }},
-            {TShardFilter::AT_TRIM_HORIZON, [&](const TPartition& p) {
-                startingShardId = "0";
-                startingTimepoint = 0;
-                onlyOpenShards = true;
-                return GetShardName(p.GetPartitionId()) >= startingShardId;
-            }},
-            { TShardFilter::FROM_TRIM_HORIZON, [&](const TPartition& p) {
-                startingShardId = "0";
-                startingTimepoint = 0;
-                onlyOpenShards = false;
-                return GetShardName(p.GetPartitionId()) >= startingShardId;
-            }},
-            {TShardFilter::AT_LATEST, [&](const TPartition& p) {
-                startingTimepoint = TInstant::Now().MilliSeconds();
-                startingShardId = "0";
-                onlyOpenShards = true;
-                return GetShardName(p.GetPartitionId()) >= startingShardId;
-            }},
-            {TShardFilter::AT_TIMESTAMP, [&](const TPartition& p) {
-                startingTimepoint = ShardFilter.timestamp();
-                startingShardId = "0";
-                onlyOpenShards = true;
-                return GetShardName(p.GetPartitionId()) >= startingShardId;
-            }},
-            {TShardFilter::FROM_TIMESTAMP, [&](const TPartition& p) {
-                startingTimepoint = ShardFilter.timestamp();
-                startingShardId = "0";
-                onlyOpenShards = false;
-                return GetShardName(p.GetPartitionId()) >= startingShardId;
-            }}
-        };
-
-        const auto alreadyRead = NextToken.GetAlreadyRead();
-        if (alreadyRead > (ui32)partitions.size()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
-                                  TStringBuilder() << "Provided next_token is malformed - "
-                                  "everything is already read", ctx);
-        }
-
-        const auto shardsToGet = std::min(partitions.size() - alreadyRead, MaxResults);
-        i32 lastCopied{0};
-        Shards.reserve(shardsToGet);
-        AllShardsCount = partitions.size();
-        for (auto partition = partitions.begin() + alreadyRead; partition != partitions.end(); ++partition) {
-            if (Shards.size() == shardsToGet) {
-                break;
-            }
-            if (filters[ShardFilter.type()](*partition)) {
-                Shards.push_back(*partition);
-            }
-            ++lastCopied;
-        }
-        auto actuallyRead = lastCopied - alreadyRead;
-        LeftToRead = partitions.size() - alreadyRead - actuallyRead;
-
-        if (Shards.size() == 0) {
-            return SendResponse(ctx);
-        }
-
-        // Send OffsetRequests
-        std::set<ui64> tabletIds;
-        for (const auto& shard : Shards) {
-            tabletIds.insert(shard.GetTabletId());
-        }
-
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {
-            .RetryLimitCount = 6,
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::MilliSeconds(100),
-            .BackoffMultiplier = 2,
-            .DoFirstRetryInstantly = true
-        };
-
-        for (auto& tabletId : tabletIds) {
-            Pipes.push_back(ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
-            TAutoPtr<TEvPersQueue::TEvOffsets> req(new TEvPersQueue::TEvOffsets);
-            NTabletPipe::SendData(ctx, Pipes.back(), req.Release());
-        }
-    }
-
-    void TListShardsActor::Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
-        for (auto& part : ev->Get()->Record.GetPartResult()) {
-            StartEndOffsetsPerPartition[part.GetPartition()] =
-                std::make_pair<ui64, ui64>(part.GetStartOffset(), part.GetEndOffset());
-            ++GotOffsetResponds;
-        }
-        if (GotOffsetResponds == Shards.size()) {
-            SendResponse(ctx);
-        }
-    }
-
-    void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
-                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
-        }
-    }
-
-    void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-        ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
-                       TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
-    }
-
-    void TListShardsActor::SendResponse(const TActorContext& ctx) {
-        Ydb::DataStreams::V1::ListShardsResult result;
-        for (auto& shard : Shards) {
-            auto awsShard = result.Addshards();
-            // TODO:
-            // awsShard->set_parent_shard_id("");
-            // awsShard->set_adjacent_parent_shard_id(prevShardName);
-            auto range = RangeFromShardNumber(shard.GetPartitionId(), AllShardsCount);
-            awsShard->mutable_hash_key_range()->set_starting_hash_key(
-                Uint128ToDecimalString(range.Start));
-            awsShard->mutable_hash_key_range()->set_ending_hash_key(
-                Uint128ToDecimalString(range.End));
-            awsShard->mutable_sequence_number_range()->set_starting_sequence_number(
-                std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].first));
-            awsShard->mutable_sequence_number_range()->set_ending_sequence_number(
-                std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].second));
-            awsShard->set_shard_id(GetShardName(shard.GetPartitionId()));
-        }
-        if (LeftToRead > 0) {
-            TNextToken token(StreamName, NextToken.GetAlreadyRead() + Shards.size(), MaxResults, TInstant::Now().MilliSeconds());
-            result.set_next_token(token.Serialize());
-        }
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
-        Die(ctx);
-    }
-
-    void TListShardsActor::Die(const TActorContext& ctx) {
-        //close all pipes
-        for (auto& pipe : Pipes) {
-            NTabletPipe::CloseClient(ctx, pipe);
-        }
-        TBase::Die(ctx);
-    }
-
-    //-----------------------------------------------------------------------------------
-
-    class TDescribeStreamSummaryActor : public TPQGrpcSchemaBase<TDescribeStreamSummaryActor, TEvDataStreamsDescribeStreamSummaryRequest> {
-        using TBase = TPQGrpcSchemaBase<TDescribeStreamSummaryActor, TEvDataStreamsDescribeStreamSummaryRequest>;
-
-    public:
-        TDescribeStreamSummaryActor(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest* request);
-        ~TDescribeStreamSummaryActor() = default;
-
-        void Bootstrap(const NActors::TActorContext& ctx);
-
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                         const TActorContext& ctx);
-
-    private:
-        void SendResponse(const TActorContext& ctx);
-
+        const auto& partitions = topicInfo.PQGroupInfo->Description.GetPartitions(); 
+        TString startingShardId = this->GetProtoRequest()->Getexclusive_start_shard_id(); 
+        ui64 startingTimepoint{0}; 
+        bool onlyOpenShards{true}; 
+ 
+        std::map<TShardFilter::ShardFilterType, std::function<bool(const TPartition&)>> filters = { 
+            {TShardFilter::SHARD_TYPE_UNDEFINED, [&](const TPartition& p) { 
+                onlyOpenShards = false; 
+                return GetShardName(p.GetPartitionId()) >= startingShardId; 
+            }}, 
+            {TShardFilter::AFTER_SHARD_ID, [&](const TPartition& p) { 
+                startingShardId = ShardFilter.shard_id(); 
+                startingTimepoint = 0; 
+                onlyOpenShards = false; 
+                return GetShardName(p.GetPartitionId()) > startingShardId; 
+            }}, 
+            {TShardFilter::AT_TRIM_HORIZON, [&](const TPartition& p) { 
+                startingShardId = "0"; 
+                startingTimepoint = 0; 
+                onlyOpenShards = true; 
+                return GetShardName(p.GetPartitionId()) >= startingShardId; 
+            }}, 
+            { TShardFilter::FROM_TRIM_HORIZON, [&](const TPartition& p) { 
+                startingShardId = "0"; 
+                startingTimepoint = 0; 
+                onlyOpenShards = false; 
+                return GetShardName(p.GetPartitionId()) >= startingShardId; 
+            }}, 
+            {TShardFilter::AT_LATEST, [&](const TPartition& p) { 
+                startingTimepoint = TInstant::Now().MilliSeconds(); 
+                startingShardId = "0"; 
+                onlyOpenShards = true; 
+                return GetShardName(p.GetPartitionId()) >= startingShardId; 
+            }}, 
+            {TShardFilter::AT_TIMESTAMP, [&](const TPartition& p) { 
+                startingTimepoint = ShardFilter.timestamp(); 
+                startingShardId = "0"; 
+                onlyOpenShards = true; 
+                return GetShardName(p.GetPartitionId()) >= startingShardId; 
+            }}, 
+            {TShardFilter::FROM_TIMESTAMP, [&](const TPartition& p) { 
+                startingTimepoint = ShardFilter.timestamp(); 
+                startingShardId = "0"; 
+                onlyOpenShards = false; 
+                return GetShardName(p.GetPartitionId()) >= startingShardId; 
+            }} 
+        }; 
+ 
+        const auto alreadyRead = NextToken.GetAlreadyRead(); 
+        if (alreadyRead > (ui32)partitions.size()) { 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR, 
+                                  TStringBuilder() << "Provided next_token is malformed - " 
+                                  "everything is already read", ctx); 
+        } 
+ 
+        const auto shardsToGet = std::min(partitions.size() - alreadyRead, MaxResults); 
+        i32 lastCopied{0}; 
+        Shards.reserve(shardsToGet); 
+        AllShardsCount = partitions.size(); 
+        for (auto partition = partitions.begin() + alreadyRead; partition != partitions.end(); ++partition) { 
+            if (Shards.size() == shardsToGet) { 
+                break; 
+            } 
+            if (filters[ShardFilter.type()](*partition)) { 
+                Shards.push_back(*partition); 
+            } 
+            ++lastCopied; 
+        } 
+        auto actuallyRead = lastCopied - alreadyRead; 
+        LeftToRead = partitions.size() - alreadyRead - actuallyRead; 
+ 
+        if (Shards.size() == 0) { 
+            return SendResponse(ctx); 
+        } 
+ 
+        // Send OffsetRequests 
+        std::set<ui64> tabletIds; 
+        for (const auto& shard : Shards) { 
+            tabletIds.insert(shard.GetTabletId()); 
+        } 
+ 
+        NTabletPipe::TClientConfig clientConfig; 
+        clientConfig.RetryPolicy = { 
+            .RetryLimitCount = 6, 
+            .MinRetryTime = TDuration::MilliSeconds(10), 
+            .MaxRetryTime = TDuration::MilliSeconds(100), 
+            .BackoffMultiplier = 2, 
+            .DoFirstRetryInstantly = true 
+        }; 
+ 
+        for (auto& tabletId : tabletIds) { 
+            Pipes.push_back(ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig))); 
+            TAutoPtr<TEvPersQueue::TEvOffsets> req(new TEvPersQueue::TEvOffsets); 
+            NTabletPipe::SendData(ctx, Pipes.back(), req.Release()); 
+        } 
+    } 
+ 
+    void TListShardsActor::Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) { 
+        for (auto& part : ev->Get()->Record.GetPartResult()) { 
+            StartEndOffsetsPerPartition[part.GetPartition()] = 
+                std::make_pair<ui64, ui64>(part.GetStartOffset(), part.GetEndOffset()); 
+            ++GotOffsetResponds; 
+        } 
+        if (GotOffsetResponds == Shards.size()) { 
+            SendResponse(ctx); 
+        } 
+    } 
+ 
+    void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) { 
+        if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) { 
+            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR, 
+                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx); 
+        } 
+    } 
+ 
+    void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) { 
+        ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR, 
+                       TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx); 
+    } 
+ 
+    void TListShardsActor::SendResponse(const TActorContext& ctx) { 
+        Ydb::DataStreams::V1::ListShardsResult result; 
+        for (auto& shard : Shards) { 
+            auto awsShard = result.Addshards(); 
+            // TODO: 
+            // awsShard->set_parent_shard_id(""); 
+            // awsShard->set_adjacent_parent_shard_id(prevShardName); 
+            auto range = RangeFromShardNumber(shard.GetPartitionId(), AllShardsCount); 
+            awsShard->mutable_hash_key_range()->set_starting_hash_key( 
+                Uint128ToDecimalString(range.Start)); 
+            awsShard->mutable_hash_key_range()->set_ending_hash_key( 
+                Uint128ToDecimalString(range.End)); 
+            awsShard->mutable_sequence_number_range()->set_starting_sequence_number( 
+                std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].first)); 
+            awsShard->mutable_sequence_number_range()->set_ending_sequence_number( 
+                std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].second)); 
+            awsShard->set_shard_id(GetShardName(shard.GetPartitionId())); 
+        } 
+        if (LeftToRead > 0) { 
+            TNextToken token(StreamName, NextToken.GetAlreadyRead() + Shards.size(), MaxResults, TInstant::Now().MilliSeconds()); 
+            result.set_next_token(token.Serialize()); 
+        } 
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        Die(ctx); 
+    } 
+ 
+    void TListShardsActor::Die(const TActorContext& ctx) { 
+        //close all pipes 
+        for (auto& pipe : Pipes) { 
+            NTabletPipe::CloseClient(ctx, pipe); 
+        } 
+        TBase::Die(ctx); 
+    } 
+ 
+    //----------------------------------------------------------------------------------- 
+ 
+    class TDescribeStreamSummaryActor : public TPQGrpcSchemaBase<TDescribeStreamSummaryActor, TEvDataStreamsDescribeStreamSummaryRequest> { 
+        using TBase = TPQGrpcSchemaBase<TDescribeStreamSummaryActor, TEvDataStreamsDescribeStreamSummaryRequest>; 
+ 
+    public: 
+        TDescribeStreamSummaryActor(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest* request); 
+        ~TDescribeStreamSummaryActor() = default; 
+ 
+        void Bootstrap(const NActors::TActorContext& ctx); 
+ 
+        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, 
+                                         const TActorContext& ctx); 
+ 
+    private: 
+        void SendResponse(const TActorContext& ctx); 
+ 
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
-    };
-
-    TDescribeStreamSummaryActor::TDescribeStreamSummaryActor(
-        NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest* request
-    )
-        : TBase(request, request->GetProtoRequest()->stream_name())
-    {
-    }
-
-    void TDescribeStreamSummaryActor::Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        SendDescribeProposeRequest(ctx);
-        Become(&TDescribeStreamSummaryActor::StateWork);
-    }
-
-    void TDescribeStreamSummaryActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-        default: TBase::StateWork(ev, ctx);
-        }
-    }
-
-    void TDescribeStreamSummaryActor::HandleCacheNavigateResponse(
-        TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx
-    ) {
-        if (ReplyIfNotTopic(ev, ctx)) {
-            return;
-        }
-
-        const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
-        const auto& response = result->ResultSet.front();
-        Y_VERIFY(response.PQGroupInfo);
-        const TString path = JoinSeq("/", response.Path);
-
-        PQGroup = response.PQGroupInfo->Description;
-        SelfInfo = response.Self->Info;
-
-        SendResponse(ctx);
-    }
-
-    void TDescribeStreamSummaryActor::SendResponse(const TActorContext& ctx) {
-        Ydb::DataStreams::V1::DescribeStreamSummaryResult result;
-
-        auto& pqConfig = PQGroup.GetPQTabletConfig();
-        auto& descriptionSummary = *result.mutable_stream_description_summary();
-
-        descriptionSummary.set_stream_name(GetProtoRequest()->stream_name());
-        descriptionSummary.set_stream_arn(GetProtoRequest()->stream_name());
-        descriptionSummary.set_key_id("");
-        descriptionSummary.set_retention_period_hours(
-            TInstant::Seconds(pqConfig.GetPartitionConfig().GetLifetimeSeconds()).Hours()
-        );
-        descriptionSummary.set_stream_creation_timestamp(
-            TInstant::MilliSeconds(SelfInfo.GetCreateStep()).Seconds()
-        );
-        descriptionSummary.set_stream_status(
-            SelfInfo.GetCreateFinished() ? Ydb::DataStreams::V1::StreamDescription::ACTIVE
-                                         : Ydb::DataStreams::V1::StreamDescription::CREATING
-        );
-        descriptionSummary.set_open_shard_count(PQGroup.GetPartitions().size());
-        descriptionSummary.set_consumer_count(PQGroup.MutablePQTabletConfig()->GetReadRules().size());
-        descriptionSummary.set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);
-
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
-        Die(ctx);
-    }
-
-    //-----------------------------------------------------------------------------------------
-
+    }; 
+ 
+    TDescribeStreamSummaryActor::TDescribeStreamSummaryActor( 
+        NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest* request 
+    ) 
+        : TBase(request, request->GetProtoRequest()->stream_name()) 
+    { 
+    } 
+ 
+    void TDescribeStreamSummaryActor::Bootstrap(const NActors::TActorContext& ctx) { 
+        TBase::Bootstrap(ctx); 
+        SendDescribeProposeRequest(ctx); 
+        Become(&TDescribeStreamSummaryActor::StateWork); 
+    } 
+ 
+    void TDescribeStreamSummaryActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        switch (ev->GetTypeRewrite()) { 
+        default: TBase::StateWork(ev, ctx); 
+        } 
+    } 
+ 
+    void TDescribeStreamSummaryActor::HandleCacheNavigateResponse( 
+        TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx 
+    ) { 
+        if (ReplyIfNotTopic(ev, ctx)) { 
+            return; 
+        } 
+ 
+        const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get(); 
+        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic 
+        const auto& response = result->ResultSet.front(); 
+        Y_VERIFY(response.PQGroupInfo); 
+        const TString path = JoinSeq("/", response.Path); 
+ 
+        PQGroup = response.PQGroupInfo->Description; 
+        SelfInfo = response.Self->Info; 
+ 
+        SendResponse(ctx); 
+    } 
+ 
+    void TDescribeStreamSummaryActor::SendResponse(const TActorContext& ctx) { 
+        Ydb::DataStreams::V1::DescribeStreamSummaryResult result; 
+ 
+        auto& pqConfig = PQGroup.GetPQTabletConfig(); 
+        auto& descriptionSummary = *result.mutable_stream_description_summary(); 
+ 
+        descriptionSummary.set_stream_name(GetProtoRequest()->stream_name()); 
+        descriptionSummary.set_stream_arn(GetProtoRequest()->stream_name()); 
+        descriptionSummary.set_key_id(""); 
+        descriptionSummary.set_retention_period_hours( 
+            TInstant::Seconds(pqConfig.GetPartitionConfig().GetLifetimeSeconds()).Hours() 
+        ); 
+        descriptionSummary.set_stream_creation_timestamp( 
+            TInstant::MilliSeconds(SelfInfo.GetCreateStep()).Seconds() 
+        ); 
+        descriptionSummary.set_stream_status( 
+            SelfInfo.GetCreateFinished() ? Ydb::DataStreams::V1::StreamDescription::ACTIVE 
+                                         : Ydb::DataStreams::V1::StreamDescription::CREATING 
+        ); 
+        descriptionSummary.set_open_shard_count(PQGroup.GetPartitions().size()); 
+        descriptionSummary.set_consumer_count(PQGroup.MutablePQTabletConfig()->GetReadRules().size()); 
+        descriptionSummary.set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE); 
+ 
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        Die(ctx); 
+    } 
+ 
+    //----------------------------------------------------------------------------------------- 
+ 
     template<class TEvRequest>
     class TNotImplementedRequestActor : public TRpcSchemeRequestActor<TNotImplementedRequestActor<TEvRequest>, TEvRequest> {
         using TBase = TRpcSchemeRequestActor<TNotImplementedRequestActor, TEvRequest>;
@@ -1676,7 +1676,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
     };
 
-    //-----------------------------------------------------------------------------------
+    //----------------------------------------------------------------------------------- 
 
     IActor* CreateDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache) {
         return new TDataStreamsService(counters, newSchemeCache);
@@ -1705,11 +1705,11 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TRegisterStreamConsumerActor(ev->Release().Release()));
+        ctx.Register(new TRegisterStreamConsumerActor(ev->Release().Release())); 
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TDeregisterStreamConsumerActor(ev->Release().Release()));
+        ctx.Register(new TDeregisterStreamConsumerActor(ev->Release().Release())); 
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1725,7 +1725,7 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TListShardsActor(ev->Release().Release(), NewSchemeCache));
+        ctx.Register(new TListShardsActor(ev->Release().Release(), NewSchemeCache)); 
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1733,11 +1733,11 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TGetRecordsActor(ev->Release().Release(), NewSchemeCache));
+        ctx.Register(new TGetRecordsActor(ev->Release().Release(), NewSchemeCache)); 
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TGetShardIteratorActor(ev->Release().Release(), NewSchemeCache));
+        ctx.Register(new TGetShardIteratorActor(ev->Release().Release(), NewSchemeCache)); 
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1749,7 +1749,7 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TDescribeStreamSummaryActor(ev->Release().Release()));
+        ctx.Register(new TDescribeStreamSummaryActor(ev->Release().Release())); 
     }
 
     void TDataStreamsService::Handle(TEvDataStreamsDecreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1769,7 +1769,7 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TListStreamConsumersActor(ev->Release().Release()));
+        ctx.Register(new TListStreamConsumersActor(ev->Release().Release())); 
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest::TPtr& ev, const TActorContext& ctx) {

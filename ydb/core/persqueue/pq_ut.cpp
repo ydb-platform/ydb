@@ -19,7 +19,7 @@
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
 
-
+ 
 namespace NKikimr {
 Y_UNIT_TEST_SUITE(TPQTest) {
 
@@ -1002,8 +1002,8 @@ Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 2, false, tc, {0, 1});
     });
 }
-
-
+ 
+ 
 Y_UNIT_TEST(TestWritePQCompact) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1500,7 +1500,7 @@ Y_UNIT_TEST(TestPQRead) {
     });
 }
 
-
+ 
 Y_UNIT_TEST(TestPQSmallRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1954,7 +1954,7 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
 
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {21}, 0, ts.MilliSeconds() - 3 * 60 * 1000);
         CmdRead(0, 22, 1, Max<i32>(), 1, false, tc, {22}, 0, ts.MilliSeconds() - 3 * 60 * 1000);
-        CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {34}, 0, ts.MilliSeconds() - 1000);
+        CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {34}, 0, ts.MilliSeconds() - 1000); 
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc, 2, 6*1024*1024, true, ts.MilliSeconds() - 1000);
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {34});

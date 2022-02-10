@@ -286,7 +286,7 @@ TThread::TThread(TPrivateCtor, THolder<TCallableBase> callable)
 }
 
 TThread::~TThread() {
-    Join();
+    Join(); 
 }
 
 void TThread::Start() {
@@ -294,17 +294,17 @@ void TThread::Start() {
 }
 
 void* TThread::Join() {
-    if (Running()) {
-        void* ret = Impl_->Join();
-
-        Impl_.Destroy();
-
-        return ret;
-    }
+    if (Running()) { 
+        void* ret = Impl_->Join(); 
+ 
+        Impl_.Destroy(); 
+ 
+        return ret; 
+    } 
 
     return nullptr;
-}
-
+} 
+ 
 void TThread::Detach() {
     if (Running()) {
         Impl_->Detach();

@@ -250,12 +250,12 @@ static void RunSymLinkTest(TString fileLocalName, TString symLinkName) {
         UNIT_ASSERT(fs.IsFile());
         UNIT_ASSERT(!fs.IsDir());
         UNIT_ASSERT(!fs.IsSymlink());
-        UNIT_ASSERT_VALUES_EQUAL(fs.Size, 7u);
+        UNIT_ASSERT_VALUES_EQUAL(fs.Size, 7u); 
     }
 
     {
         TFileStat fs(symLinkName, true);
-        //UNIT_ASSERT(fs.IsFile()); // no evidence that symlink has to be a file as well
+        //UNIT_ASSERT(fs.IsFile()); // no evidence that symlink has to be a file as well 
         UNIT_ASSERT(!fs.IsDir());
         UNIT_ASSERT(fs.IsSymlink());
     }

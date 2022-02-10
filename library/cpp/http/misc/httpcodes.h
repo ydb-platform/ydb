@@ -72,7 +72,7 @@ enum HttpCodes {
     HTTP_NETWORK_AUTHENTICATION_REQUIRED = 511,
     HTTP_UNASSIGNED_512 = 512,
 
-    HTTP_CODE_MAX
+    HTTP_CODE_MAX 
 };
 
 TStringBuf HttpCodeStrEx(int code) noexcept;

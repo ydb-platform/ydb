@@ -987,122 +987,122 @@ Y_UNIT_TEST(TestMapAsObjectConfigNotSet) {
         Json2Proto<TMapType>(modelStr, config), yexception,
         "Map as object representation is not allowed");
 } // TestMapAsObjectNotSet
- 
-Y_UNIT_TEST(TestMergeFlatOptional) { 
-    const NJson::TJsonValue& json = CreateFlatJson(); 
- 
-    NJson::TJsonValue patch; 
-    patch["I32"] = 5; 
-    patch["Bool"] = false; 
-    patch["String"] = "abacaba"; 
-    patch["Double"] = 0.123; 
- 
-    TFlatOptional proto; 
-    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto)); 
-    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto)); 
- 
-    TFlatRequired modelProto; 
-    FillFlatProto(&modelProto); 
-    modelProto.SetI32(5); 
-    modelProto.SetBool(false); 
-    modelProto.SetString("abacaba"); 
-    modelProto.SetDouble(0.123); 
- 
-    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto); 
-} // TestMergeFlatOptional 
- 
-Y_UNIT_TEST(TestMergeFlatRequired) { 
-    const NJson::TJsonValue& json = CreateFlatJson(); 
- 
-    NJson::TJsonValue patch; 
-    patch["I32"] = 5; 
-    patch["Bool"] = false; 
-    patch["String"] = "abacaba"; 
-    patch["Double"] = 0.123; 
- 
-    TFlatRequired proto; 
-    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto)); 
-    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto)); 
- 
-    TFlatRequired modelProto; 
-    FillFlatProto(&modelProto); 
-    modelProto.SetI32(5); 
-    modelProto.SetBool(false); 
-    modelProto.SetString("abacaba"); 
-    modelProto.SetDouble(0.123); 
- 
-    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto); 
-} // TestMergeFlatRequired 
- 
-Y_UNIT_TEST(TestMergeComposite) { 
-    const NJson::TJsonValue& json = CreateCompositeJson(); 
- 
-    NJson::TJsonValue patch; 
-    patch["Part"]["I32"] = 5; 
-    patch["Part"]["Bool"] = false; 
-    patch["Part"]["String"] = "abacaba"; 
-    patch["Part"]["Double"] = 0.123; 
- 
-    TCompositeOptional proto; 
-    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto)); 
-    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto)); 
- 
-    TCompositeOptional modelProto; 
-    FillCompositeProto(&modelProto); 
-    modelProto.MutablePart()->SetI32(5); 
-    modelProto.MutablePart()->SetBool(false); 
-    modelProto.MutablePart()->SetString("abacaba"); 
-    modelProto.MutablePart()->SetDouble(0.123); 
- 
-    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto); 
-} // TestMergeComposite 
- 
-Y_UNIT_TEST(TestMergeRepeatedReplace) { 
-    const NJson::TJsonValue& json = CreateRepeatedFlatJson(); 
- 
-    NJson::TJsonValue patch; 
-    patch["I32"].AppendValue(5); 
-    patch["I32"].AppendValue(6); 
-    patch["String"].AppendValue("abacaba"); 
- 
-    TFlatRepeated proto; 
-    TJson2ProtoConfig config; 
-    config.ReplaceRepeatedFields = true; 
-    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto)); 
-    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto, config)); 
- 
-    TFlatRepeated modelProto; 
-    FillRepeatedProto(&modelProto); 
-    modelProto.ClearI32(); 
-    modelProto.AddI32(5); 
-    modelProto.AddI32(6); 
-    modelProto.ClearString(); 
-    modelProto.AddString("abacaba"); 
- 
-    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto); 
-} // TestMergeRepeatedReplace 
- 
-Y_UNIT_TEST(TestMergeRepeatedAppend) { 
-    const NJson::TJsonValue& json = CreateRepeatedFlatJson(); 
- 
-    NJson::TJsonValue patch; 
-    patch["I32"].AppendValue(5); 
-    patch["I32"].AppendValue(6); 
-    patch["String"].AppendValue("abacaba"); 
- 
-    TFlatRepeated proto; 
-    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto)); 
-    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto)); 
- 
-    TFlatRepeated modelProto; 
-    FillRepeatedProto(&modelProto); 
-    modelProto.AddI32(5); 
-    modelProto.AddI32(6); 
-    modelProto.AddString("abacaba"); 
- 
-    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto); 
-} // TestMergeRepeatedAppend 
- 
+
+Y_UNIT_TEST(TestMergeFlatOptional) {
+    const NJson::TJsonValue& json = CreateFlatJson();
+
+    NJson::TJsonValue patch;
+    patch["I32"] = 5;
+    patch["Bool"] = false;
+    patch["String"] = "abacaba";
+    patch["Double"] = 0.123;
+
+    TFlatOptional proto;
+    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto));
+    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto));
+
+    TFlatRequired modelProto;
+    FillFlatProto(&modelProto);
+    modelProto.SetI32(5);
+    modelProto.SetBool(false);
+    modelProto.SetString("abacaba");
+    modelProto.SetDouble(0.123);
+
+    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
+} // TestMergeFlatOptional
+
+Y_UNIT_TEST(TestMergeFlatRequired) {
+    const NJson::TJsonValue& json = CreateFlatJson();
+
+    NJson::TJsonValue patch;
+    patch["I32"] = 5;
+    patch["Bool"] = false;
+    patch["String"] = "abacaba";
+    patch["Double"] = 0.123;
+
+    TFlatRequired proto;
+    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto));
+    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto));
+
+    TFlatRequired modelProto;
+    FillFlatProto(&modelProto);
+    modelProto.SetI32(5);
+    modelProto.SetBool(false);
+    modelProto.SetString("abacaba");
+    modelProto.SetDouble(0.123);
+
+    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
+} // TestMergeFlatRequired
+
+Y_UNIT_TEST(TestMergeComposite) {
+    const NJson::TJsonValue& json = CreateCompositeJson();
+
+    NJson::TJsonValue patch;
+    patch["Part"]["I32"] = 5;
+    patch["Part"]["Bool"] = false;
+    patch["Part"]["String"] = "abacaba";
+    patch["Part"]["Double"] = 0.123;
+
+    TCompositeOptional proto;
+    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto));
+    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto));
+
+    TCompositeOptional modelProto;
+    FillCompositeProto(&modelProto);
+    modelProto.MutablePart()->SetI32(5);
+    modelProto.MutablePart()->SetBool(false);
+    modelProto.MutablePart()->SetString("abacaba");
+    modelProto.MutablePart()->SetDouble(0.123);
+
+    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
+} // TestMergeComposite
+
+Y_UNIT_TEST(TestMergeRepeatedReplace) {
+    const NJson::TJsonValue& json = CreateRepeatedFlatJson();
+
+    NJson::TJsonValue patch;
+    patch["I32"].AppendValue(5);
+    patch["I32"].AppendValue(6);
+    patch["String"].AppendValue("abacaba");
+
+    TFlatRepeated proto;
+    TJson2ProtoConfig config;
+    config.ReplaceRepeatedFields = true;
+    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto));
+    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto, config));
+
+    TFlatRepeated modelProto;
+    FillRepeatedProto(&modelProto);
+    modelProto.ClearI32();
+    modelProto.AddI32(5);
+    modelProto.AddI32(6);
+    modelProto.ClearString();
+    modelProto.AddString("abacaba");
+
+    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
+} // TestMergeRepeatedReplace
+
+Y_UNIT_TEST(TestMergeRepeatedAppend) {
+    const NJson::TJsonValue& json = CreateRepeatedFlatJson();
+
+    NJson::TJsonValue patch;
+    patch["I32"].AppendValue(5);
+    patch["I32"].AppendValue(6);
+    patch["String"].AppendValue("abacaba");
+
+    TFlatRepeated proto;
+    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto));
+    UNIT_ASSERT_NO_EXCEPTION(MergeJson2Proto(patch, proto));
+
+    TFlatRepeated modelProto;
+    FillRepeatedProto(&modelProto);
+    modelProto.AddI32(5);
+    modelProto.AddI32(6);
+    modelProto.AddString("abacaba");
+
+    UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
+} // TestMergeRepeatedAppend
+
 Y_UNIT_TEST(TestEmptyStringForCastFromString) {
     NJson::TJsonValue json;
     json["I32"] = "";

@@ -175,14 +175,14 @@ Json2SingleField(const NJson::TJsonValue& json,
                  bool isMapValue = false) {
     using namespace google::protobuf;
 
-    const Reflection* reflection = proto.GetReflection(); 
-    Y_ASSERT(!!reflection); 
- 
+    const Reflection* reflection = proto.GetReflection();
+    Y_ASSERT(!!reflection);
+
     TString name;
     if (!isMapValue) {
         name = GetFieldName(field, config);
         if (!json.Has(name) || json[name].GetType() == NJson::JSON_UNDEFINED || json[name].GetType() == NJson::JSON_NULL) {
-            if (field.is_required() && !field.has_default_value() && !reflection->HasField(proto, &field) && config.CheckRequiredFields) { 
+            if (field.is_required() && !field.has_default_value() && !reflection->HasField(proto, &field) && config.CheckRequiredFields) {
                 ythrow yexception() << "JSON has no field for required field "
                                     << name << ".";
             }
@@ -215,7 +215,7 @@ Json2SingleField(const NJson::TJsonValue& json,
         case FieldDescriptor::CPPTYPE_MESSAGE: {
             Message* innerProto = reflection->MutableMessage(&proto, &field);
             Y_ASSERT(!!innerProto);
-            NProtobufJson::MergeJson2Proto(fieldJson, *innerProto, config); 
+            NProtobufJson::MergeJson2Proto(fieldJson, *innerProto, config);
 
             break;
         }
@@ -299,7 +299,7 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
                 Y_ENSURE(valueField, "Map entry value field not found.");
                 Json2SingleField(jsonValue, *innerProto, *valueField, config, /*isMapValue=*/true);
             } else {
-                NProtobufJson::MergeJson2Proto(jsonValue, *innerProto, config); 
+                NProtobufJson::MergeJson2Proto(jsonValue, *innerProto, config);
             }
 
             break;
@@ -353,9 +353,9 @@ Json2RepeatedField(const NJson::TJsonValue& json,
             Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection, key);
         }
     } else {
-        if (config.ReplaceRepeatedFields) { 
-            reflection->ClearField(&proto, &field); 
-        } 
+        if (config.ReplaceRepeatedFields) {
+            reflection->ClearField(&proto, &field);
+        }
         if (fieldJson.GetType() == NJson::JSON_ARRAY) {
             const NJson::TJsonValue::TArray& jsonArray = fieldJson.GetArray();
             for (const NJson::TJsonValue& jsonValue : jsonArray) {
@@ -372,7 +372,7 @@ Json2RepeatedField(const NJson::TJsonValue& json,
 }
 
 namespace NProtobufJson {
-    void MergeJson2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) { 
+    void MergeJson2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
         if (json.IsNull()) {
             return;
         }
@@ -405,7 +405,7 @@ namespace NProtobufJson {
         }
     }
 
-    void MergeJson2Proto(const TStringBuf& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) { 
+    void MergeJson2Proto(const TStringBuf& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
         NJson::TJsonReaderConfig jsonCfg;
         jsonCfg.DontValidateUtf8 = true;
         jsonCfg.AllowComments = config.AllowComments;
@@ -413,16 +413,16 @@ namespace NProtobufJson {
         NJson::TJsonValue jsonValue;
         ReadJsonTree(json, &jsonCfg, &jsonValue, /* throwOnError = */ true);
 
-        MergeJson2Proto(jsonValue, proto, config); 
+        MergeJson2Proto(jsonValue, proto, config);
     }
 
-    void Json2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) { 
-        proto.Clear(); 
-        MergeJson2Proto(json, proto, config); 
-    } 
- 
-    void Json2Proto(const TStringBuf& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) { 
-        proto.Clear(); 
-        MergeJson2Proto(json, proto, config); 
-    } 
+    void Json2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
+        proto.Clear();
+        MergeJson2Proto(json, proto, config);
+    }
+
+    void Json2Proto(const TStringBuf& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
+        proto.Clear();
+        MergeJson2Proto(json, proto, config);
+    }
 }

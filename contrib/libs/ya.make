@@ -163,7 +163,7 @@ RECURSE(
     libm
     libmagic
     libmemcached
-    libmp3lame
+    libmp3lame 
     libmysql_r
     libogg
     libopendkim
@@ -200,7 +200,7 @@ RECURSE(
     libxml
     libxml/dynamic
     libxslt
-    libyang
+    libyang 
     libyuv
     linenoise
     linux-headers
@@ -264,7 +264,7 @@ RECURSE(
     pam
     pango
     pcre
-    pcre2
+    pcre2 
     pdqsort
     pffft
     pfr
@@ -348,7 +348,7 @@ RECURSE(
     util-linux
     valgrind
     vlfeat
-    vmaf
+    vmaf 
     wapiti
     webrtc
     websocketpp

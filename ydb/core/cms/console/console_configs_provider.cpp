@@ -5,7 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/cms/console/validators/registry.h>
 
-#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/core/interconnect.h> 
 
 namespace NKikimr {
 namespace NConsole {

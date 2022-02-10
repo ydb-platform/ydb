@@ -3,7 +3,7 @@ OWNER(e-sidorov)
 Y_BENCHMARK()
 
 PEERDIR(
-    library/cpp/digest/argonish
+    library/cpp/digest/argonish 
 )
 
 SRCS(

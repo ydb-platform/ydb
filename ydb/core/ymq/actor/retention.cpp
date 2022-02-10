@@ -7,7 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/ymq/base/debug_info.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/hfunc.h> 
 #include <util/random/random.h>
 
 namespace NKikimr::NSQS {

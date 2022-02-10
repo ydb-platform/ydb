@@ -1,6 +1,6 @@
 #include "udf_helpers.h"
 
-#include <library/cpp/resource/resource.h>
+#include <library/cpp/resource/resource.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>

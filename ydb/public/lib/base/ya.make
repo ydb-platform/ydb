@@ -13,9 +13,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/deprecated/enum_codegen
-    library/cpp/messagebus
-    library/cpp/messagebus/protobuf
+    library/cpp/deprecated/enum_codegen 
+    library/cpp/messagebus 
+    library/cpp/messagebus/protobuf 
     ydb/core/protos
 )
 

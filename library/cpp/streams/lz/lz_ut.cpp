@@ -1,7 +1,7 @@
 #include "lz.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/resource/resource.h>
+#include <library/cpp/resource/resource.h> 
 
 #include <util/stream/file.h>
 #include <util/generic/vector.h>

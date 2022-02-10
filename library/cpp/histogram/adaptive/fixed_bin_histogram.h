@@ -2,7 +2,7 @@
 
 #include "histogram.h"
 
-#include <library/cpp/histogram/adaptive/protos/histo.pb.h>
+#include <library/cpp/histogram/adaptive/protos/histo.pb.h> 
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>

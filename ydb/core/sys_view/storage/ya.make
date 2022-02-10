@@ -19,7 +19,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    library/cpp/actors/core 
     ydb/core/base
     ydb/core/kqp/runtime
     ydb/core/sys_view/common

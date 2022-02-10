@@ -5,7 +5,7 @@
 #include <google/protobuf/message.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <library/cpp/logger/priority.h>
+#include <library/cpp/logger/priority.h> 
 
 #include "grpc_response.h"
 #include "event_callback.h"

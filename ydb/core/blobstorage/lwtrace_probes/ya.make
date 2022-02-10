@@ -12,7 +12,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/grpc
-    library/cpp/lwtrace/protos
+    library/cpp/lwtrace/protos 
     ydb/core/base
     ydb/core/protos
 )

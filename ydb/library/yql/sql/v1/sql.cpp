@@ -19,7 +19,7 @@
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/core/yql_atom_enums.h>
 
-#include <library/cpp/charset/ci_string.h>
+#include <library/cpp/charset/ci_string.h> 
 
 #include <google/protobuf/repeated_field.h>
 

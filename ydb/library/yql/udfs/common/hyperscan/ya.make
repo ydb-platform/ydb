@@ -15,8 +15,8 @@ IF (OS_LINUX AND CLANG)
     )
 
     PEERDIR(
-        library/cpp/regex/hyperscan
-        library/cpp/regex/pcre
+        library/cpp/regex/hyperscan 
+        library/cpp/regex/pcre 
     )
 
     END()

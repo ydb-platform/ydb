@@ -3,10 +3,10 @@ UNITTEST()
 OWNER(myltsev)
 
 PEERDIR(
-    ADDINCL library/cpp/json/writer
+    ADDINCL library/cpp/json/writer 
 )
 
-SRCDIR(library/cpp/json/writer)
+SRCDIR(library/cpp/json/writer) 
 
 SRCS(
     json_ut.cpp

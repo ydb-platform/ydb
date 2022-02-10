@@ -23,11 +23,11 @@
 // clang-format off
 #include <thrift/thrift-config.h>
 #if USE_BOOST_THREAD
-#error #  include <thrift/concurrency/BoostThreadFactory.h>
+#error #  include <thrift/concurrency/BoostThreadFactory.h> 
 #elif USE_STD_THREAD
 #  include <thrift/concurrency/StdThreadFactory.h>
 #else
-#error #  include <thrift/concurrency/PosixThreadFactory.h>
+#error #  include <thrift/concurrency/PosixThreadFactory.h> 
 #endif
 // clang-format on
 

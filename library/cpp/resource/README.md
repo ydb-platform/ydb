@@ -16,7 +16,7 @@ END()
 
 ### Example - access to a file content by a key:
 ```cpp
-#include <library/cpp/resource/resource.h>
+#include <library/cpp/resource/resource.h> 
 int main() {
         Cout << NResource::Find("/key/in/program/1") << Endl;
         Cout << NResource::Find("/key2") << Endl;

@@ -13,10 +13,10 @@ RECURSE(
     fgood
     fgood/ut
     histogram
-    ipreg1
-    ipreg1/ut
-    ipreg1/ut_full
-    ipreg1/util
+    ipreg1 
+    ipreg1/ut 
+    ipreg1/ut_full 
+    ipreg1/util 
     iter
     kmp
     kmp/ut

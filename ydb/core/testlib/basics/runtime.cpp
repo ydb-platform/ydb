@@ -3,8 +3,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <library/cpp/actors/dnsresolver/dnsresolver.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
+#include <library/cpp/actors/interconnect/interconnect.h> 
+#include <library/cpp/actors/interconnect/interconnect_tcp_server.h> 
 #include <util/generic/xrange.h>
 
 namespace NActors {

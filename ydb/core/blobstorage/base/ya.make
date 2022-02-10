@@ -8,7 +8,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/lwtrace
+    library/cpp/lwtrace 
     ydb/core/protos
     ydb/library/wilson
 )

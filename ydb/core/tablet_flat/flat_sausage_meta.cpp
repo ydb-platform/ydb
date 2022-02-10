@@ -1,6 +1,6 @@
 #include "flat_sausage_align.h"
 #include "flat_sausage_meta.h"
-#include <library/cpp/digest/crc32c/crc32c.h>
+#include <library/cpp/digest/crc32c/crc32c.h> 
 
 namespace NKikimr {
 namespace NPageCollection {

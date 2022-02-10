@@ -6,7 +6,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
-#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/core/interconnect.h> 
 
 #include <library/cpp/pop_count/popcount.h>
 

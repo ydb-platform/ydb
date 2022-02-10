@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/thread.h>
-#include <library/cpp/actors/util/funnel_queue.h>
+#include <library/cpp/actors/util/funnel_queue.h> 
 
 #include "interconnect_stream.h"
 

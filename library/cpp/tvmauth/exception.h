@@ -4,7 +4,7 @@
 
 #include <exception>
 
-namespace NTvmAuth {
+namespace NTvmAuth { 
     class TTvmException: public yexception {
     };
     class TContextException: public TTvmException {
@@ -17,4 +17,4 @@ namespace NTvmAuth {
     };
     class TNotAllowedException: public TTvmException {
     };
-}
+} 

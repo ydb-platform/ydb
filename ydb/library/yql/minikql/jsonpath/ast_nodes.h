@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_value.h> 
 #include <library/cpp/regex/hyperscan/hyperscan.h>
 
 namespace NYql::NJsonPath {

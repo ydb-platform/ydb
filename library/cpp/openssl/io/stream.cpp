@@ -1,18 +1,18 @@
 #include "stream.h"
 
-#include <util/generic/deque.h>
+#include <util/generic/deque.h> 
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
 
-#include <library/cpp/openssl/init/init.h>
-#include <library/cpp/openssl/method/io.h>
-#include <library/cpp/resource/resource.h>
+#include <library/cpp/openssl/init/init.h> 
+#include <library/cpp/openssl/method/io.h> 
+#include <library/cpp/resource/resource.h> 
 
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include <openssl/tls1.h>
-#include <openssl/x509v3.h>
+#include <openssl/tls1.h> 
+#include <openssl/x509v3.h> 
 
 using TOptions = TOpenSslClientIO::TOptions;
 
@@ -55,19 +55,19 @@ namespace {
         static inline void Destroy(bio_st* bio) noexcept {
             BIO_free(bio);
         }
-
-        static inline void Destroy(x509_st* x509) noexcept {
-            X509_free(x509);
-        }
+ 
+        static inline void Destroy(x509_st* x509) noexcept { 
+            X509_free(x509); 
+        } 
     };
 
     template <class T>
-    using TSslHolderPtr = THolder<T, TSslDestroy>;
+    using TSslHolderPtr = THolder<T, TSslDestroy>; 
 
-    using TSslContextPtr = TSslHolderPtr<ssl_ctx_st>;
-    using TSslPtr = TSslHolderPtr<ssl_st>;
-    using TBioPtr = TSslHolderPtr<bio_st>;
-    using TX509Ptr = TSslHolderPtr<x509_st>;
+    using TSslContextPtr = TSslHolderPtr<ssl_ctx_st>; 
+    using TSslPtr = TSslHolderPtr<ssl_st>; 
+    using TBioPtr = TSslHolderPtr<bio_st>; 
+    using TX509Ptr = TSslHolderPtr<x509_st>; 
 
     inline TSslContextPtr CreateSslCtx(const ssl_method_st* method) {
         TSslContextPtr ctx(SSL_CTX_new(method));
@@ -77,7 +77,7 @@ namespace {
         }
 
         SSL_CTX_set_options(ctx.Get(), SSL_OP_NO_SSLv2);
-        SSL_CTX_set_options(ctx.Get(), SSL_OP_NO_SSLv3);
+        SSL_CTX_set_options(ctx.Get(), SSL_OP_NO_SSLv3); 
         SSL_CTX_set_options(ctx.Get(), SSL_OP_MICROSOFT_SESS_ID_BUG);
         SSL_CTX_set_options(ctx.Get(), SSL_OP_NETSCAPE_CHALLENGE_BUG);
 
@@ -171,35 +171,35 @@ namespace {
                 ythrow TSslError() << "SSL_new";
             }
 
-            if (VerifyCert_) {
-                InitVerification(ssl.Get());
-            }
-
+            if (VerifyCert_) { 
+                InitVerification(ssl.Get()); 
+            } 
+ 
             BIO_up_ref(Io); // SSL_set_bio consumes only one reference if rbio and wbio are the same
             SSL_set_bio(ssl.Get(), Io, Io);
 
             return ssl;
         }
 
-        inline void InitVerification(ssl_st* ssl) {
-            X509_VERIFY_PARAM* param = SSL_get0_param(ssl);
-            X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        inline void InitVerification(ssl_st* ssl) { 
+            X509_VERIFY_PARAM* param = SSL_get0_param(ssl); 
+            X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS); 
             Y_ENSURE(X509_VERIFY_PARAM_set1_host(param, VerifyCert_->Hostname_.data(), VerifyCert_->Hostname_.size()));
             SSL_set_tlsext_host_name(ssl, VerifyCert_->Hostname_.data()); // TLS extenstion: SNI
-
-            SSL_CTX_set_cert_store(Ctx.Get(), GetBuiltinOpenSslX509Store().Release());
-
-            Y_ENSURE_EX(1 == SSL_CTX_set_default_verify_paths(Ctx.Get()),
-                        TSslError());
-            // it is OK to ignore result of SSL_CTX_load_verify_locations():
-            // Dir "/etc/ssl/certs/" may be missing
-            SSL_CTX_load_verify_locations(Ctx.Get(),
-                                          "/etc/ssl/certs/ca-certificates.crt",
-                                          "/etc/ssl/certs/");
-
-            SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
-        }
-
+ 
+            SSL_CTX_set_cert_store(Ctx.Get(), GetBuiltinOpenSslX509Store().Release()); 
+ 
+            Y_ENSURE_EX(1 == SSL_CTX_set_default_verify_paths(Ctx.Get()), 
+                        TSslError()); 
+            // it is OK to ignore result of SSL_CTX_load_verify_locations(): 
+            // Dir "/etc/ssl/certs/" may be missing 
+            SSL_CTX_load_verify_locations(Ctx.Get(), 
+                                          "/etc/ssl/certs/ca-certificates.crt", 
+                                          "/etc/ssl/certs/"); 
+ 
+            SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr); 
+        } 
+ 
         inline void Connect() {
             if (SSL_connect(Ssl.Get()) != 1) {
                 ythrow TSslError() << "SSL_connect";
@@ -270,60 +270,60 @@ void TOpenSslClientIO::DoWrite(const void* buf, size_t len) {
 size_t TOpenSslClientIO::DoRead(void* buf, size_t len) {
     return Impl_->Read(buf, len);
 }
-
-namespace NPrivate {
-    void TSslDestroy::Destroy(x509_store_st* x509) noexcept {
-        X509_STORE_free(x509);
-    }
-}
-
-class TBuiltinCerts {
-public:
-    TBuiltinCerts() {
-        TString c = NResource::Find("/builtin/cacert");
-
+ 
+namespace NPrivate { 
+    void TSslDestroy::Destroy(x509_store_st* x509) noexcept { 
+        X509_STORE_free(x509); 
+    } 
+} 
+ 
+class TBuiltinCerts { 
+public: 
+    TBuiltinCerts() { 
+        TString c = NResource::Find("/builtin/cacert"); 
+ 
         TBioPtr cbio(BIO_new_mem_buf(c.data(), c.size()));
-        Y_ENSURE_EX(cbio, TSslError() << "BIO_new_mem_buf");
-
-        while (true) {
+        Y_ENSURE_EX(cbio, TSslError() << "BIO_new_mem_buf"); 
+ 
+        while (true) { 
             TX509Ptr cert(PEM_read_bio_X509(cbio.Get(), nullptr, nullptr, nullptr));
-            if (!cert) {
-                break;
-            }
-            Certs.push_back(std::move(cert));
-        }
-
-        int err = GetLastSslError();
-        if (!Certs.empty() && ERR_GET_LIB(err) == ERR_LIB_PEM && ERR_GET_REASON(err) == PEM_R_NO_START_LINE) {
-            ERR_clear_error();
-        } else {
-            ythrow TSslError() << "can't load provided bundle: " << ERR_reason_error_string(err);
-        }
-
-        Y_ENSURE_EX(!Certs.empty(), TSslError());
-    }
-
-    TOpenSslX509StorePtr GetX509Store() const {
+            if (!cert) { 
+                break; 
+            } 
+            Certs.push_back(std::move(cert)); 
+        } 
+ 
+        int err = GetLastSslError(); 
+        if (!Certs.empty() && ERR_GET_LIB(err) == ERR_LIB_PEM && ERR_GET_REASON(err) == PEM_R_NO_START_LINE) { 
+            ERR_clear_error(); 
+        } else { 
+            ythrow TSslError() << "can't load provided bundle: " << ERR_reason_error_string(err); 
+        } 
+ 
+        Y_ENSURE_EX(!Certs.empty(), TSslError()); 
+    } 
+ 
+    TOpenSslX509StorePtr GetX509Store() const { 
         TOpenSslX509StorePtr store(X509_STORE_new());
-
-        for (const TX509Ptr& c : Certs) {
-            if (0 == X509_STORE_add_cert(store.Get(), c.Get())) {
-                int err = GetLastSslError();
-                if (ERR_GET_LIB(err) == ERR_LIB_X509 && ERR_GET_REASON(err) == X509_R_CERT_ALREADY_IN_HASH_TABLE) {
-                    ERR_clear_error();
-                } else {
-                    ythrow TSslError() << "can't load provided bundle: " << ERR_reason_error_string(err);
-                }
-            }
-        }
-
-        return store;
-    }
-
-private:
-    TDeque<TX509Ptr> Certs;
-};
-
-TOpenSslX509StorePtr GetBuiltinOpenSslX509Store() {
-    return Singleton<TBuiltinCerts>()->GetX509Store();
-}
+ 
+        for (const TX509Ptr& c : Certs) { 
+            if (0 == X509_STORE_add_cert(store.Get(), c.Get())) { 
+                int err = GetLastSslError(); 
+                if (ERR_GET_LIB(err) == ERR_LIB_X509 && ERR_GET_REASON(err) == X509_R_CERT_ALREADY_IN_HASH_TABLE) { 
+                    ERR_clear_error(); 
+                } else { 
+                    ythrow TSslError() << "can't load provided bundle: " << ERR_reason_error_string(err); 
+                } 
+            } 
+        } 
+ 
+        return store; 
+    } 
+ 
+private: 
+    TDeque<TX509Ptr> Certs; 
+}; 
+ 
+TOpenSslX509StorePtr GetBuiltinOpenSslX509Store() { 
+    return Singleton<TBuiltinCerts>()->GetX509Store(); 
+} 

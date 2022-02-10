@@ -1,13 +1,13 @@
 #include "tld.h"
 
-#include <library/cpp/digest/lower_case/hash_ops.h>
+#include <library/cpp/digest/lower_case/hash_ops.h> 
 
 #include <util/generic/hash_set.h>
 #include <util/generic/singleton.h>
 
 namespace NTld {
     namespace {
-#include <library/cpp/tld/tld.inc>
+#include <library/cpp/tld/tld.inc> 
 
         using TCiHash = THashSet<TStringBuf, TCIOps, TCIOps>;
 

@@ -6,12 +6,12 @@ OWNER(
 
 PEERDIR(
     contrib/libs/zlib
-    library/cpp/charset
-    library/cpp/digest/md5
-    library/cpp/http/misc
-    library/cpp/logger
-    library/cpp/mime/types
-    library/cpp/uri
+    library/cpp/charset 
+    library/cpp/digest/md5 
+    library/cpp/http/misc 
+    library/cpp/logger 
+    library/cpp/mime/types 
+    library/cpp/uri 
 )
 
 SRCS(

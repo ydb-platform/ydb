@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/messagebus/ybus.h>
+#include <library/cpp/messagebus/ybus.h> 
 
 struct TSimpleMessage: public NBus::TBusMessage {
     ui32 Payload;

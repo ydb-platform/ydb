@@ -1,13 +1,13 @@
 #include "json.h"
 #include "proto.h"
 
-#include <library/cpp/protobuf/json/ut/test.pb.h>
+#include <library/cpp/protobuf/json/ut/test.pb.h> 
 
-#include <library/cpp/json/json_value.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_value.h> 
+#include <library/cpp/json/json_reader.h> 
+#include <library/cpp/json/json_writer.h> 
 
-#include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/protobuf/json/proto2json.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
                 break;                                                                                \
         }                                                                                             \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl>
+#include <library/cpp/protobuf/json/ut/fields.incl> 
 #undef DEFINE_FIELD
     }
 
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);                      \
         }                                                                  \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl>
+#include <library/cpp/protobuf/json/ut/fields.incl> 
 #undef DEFINE_FIELD
 } // TestFlatOptional
 
@@ -178,7 +178,7 @@ const NJson::TJsonValue& modelJson = CreateFlatJson();
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);                      \
         }                                                                  \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl>
+#include <library/cpp/protobuf/json/ut/fields.incl> 
 #undef DEFINE_FIELD
 } // TestFlatRequired
 
@@ -223,7 +223,7 @@ Y_UNIT_TEST(TestFlatRepeated) {
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);                              \
         }                                                                          \
     }
-#include <library/cpp/protobuf/json/ut/repeated_fields.incl>
+#include <library/cpp/protobuf/json/ut/repeated_fields.incl> 
 #undef DEFINE_REPEATED_FIELD
 } // TestFlatRepeated
 
@@ -264,7 +264,7 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);                           \
         }                                                                       \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl>
+#include <library/cpp/protobuf/json/ut/fields.incl> 
 #undef DEFINE_FIELD
 } // TestCompositeOptional
 
@@ -305,7 +305,7 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);                           \
         }                                                                       \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl>
+#include <library/cpp/protobuf/json/ut/fields.incl> 
 #undef DEFINE_FIELD
 } // TestCompositeRequired
 
@@ -349,7 +349,7 @@ Y_UNIT_TEST(TestCompositeRepeated) {
         proto.AddPart()->CopyFrom(partProto);                 \
         modelArray.AppendValue(CreateFlatJson(skippedField)); \
     }
-#include <library/cpp/protobuf/json/ut/repeated_fields.incl>
+#include <library/cpp/protobuf/json/ut/repeated_fields.incl> 
 #undef DEFINE_REPEATED_FIELD
 
         NJson::TJsonValue modelJson;
@@ -454,7 +454,7 @@ Y_UNIT_TEST(TestMissingSingleKeyConfig) {
         NJson::TJsonValue modelJson;
 #define DEFINE_FIELD(name, value) \
     modelJson.InsertValue(#name, NJson::TJsonValue(NJson::JSON_NULL));
-#include <library/cpp/protobuf/json/ut/fields.incl>
+#include <library/cpp/protobuf/json/ut/fields.incl> 
 #undef DEFINE_FIELD
 
         TFlatOptional proto;
@@ -540,7 +540,7 @@ Y_UNIT_TEST(TestMissingRepeatedKeyConfig) {
         NJson::TJsonValue modelJson;
 #define DEFINE_FIELD(name, value) \
     modelJson.InsertValue(#name, NJson::TJsonValue(NJson::JSON_NULL));
-#include <library/cpp/protobuf/json/ut/fields.incl>
+#include <library/cpp/protobuf/json/ut/fields.incl> 
 #undef DEFINE_FIELD
 
         TFlatRepeated proto;

@@ -4,7 +4,7 @@
 
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/actor_bootstrapped.h> 
 
 namespace NKikimr {
 namespace NConsole {

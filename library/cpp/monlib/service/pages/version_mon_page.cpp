@@ -1,6 +1,6 @@
-#include <library/cpp/svnversion/svnversion.h>
-#include <library/cpp/build_info/build_info.h>
-#include <library/cpp/malloc/api/malloc.h>
+#include <library/cpp/svnversion/svnversion.h> 
+#include <library/cpp/build_info/build_info.h> 
+#include <library/cpp/malloc/api/malloc.h> 
 
 #include "version_mon_page.h"
 

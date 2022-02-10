@@ -12,8 +12,8 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion
-    library/cpp/regex/pcre
+    library/cpp/svnversion 
+    library/cpp/regex/pcre 
 )
 
 SRCS(

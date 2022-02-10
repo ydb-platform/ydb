@@ -4,10 +4,10 @@ OWNER(g:messagebus)
 
 PEERDIR(
     library/cpp/testing/unittest_main
-    library/cpp/messagebus/rain_check/core
-    library/cpp/messagebus/rain_check/http
-    library/cpp/messagebus/rain_check/messagebus
-    library/cpp/messagebus/test/helper
+    library/cpp/messagebus/rain_check/core 
+    library/cpp/messagebus/rain_check/http 
+    library/cpp/messagebus/rain_check/messagebus 
+    library/cpp/messagebus/test/helper 
 )
 
 SRCS(

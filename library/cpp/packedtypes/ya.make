@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/streams/zc_memory_input
+    library/cpp/streams/zc_memory_input 
 )
 
 SRCS(

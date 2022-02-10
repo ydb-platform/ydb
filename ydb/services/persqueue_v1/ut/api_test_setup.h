@@ -6,7 +6,7 @@
 #include <ydb/core/testlib/test_pq_client.h>
 
 #include <google/protobuf/message.h>
-#include <library/cpp/logger/log.h>
+#include <library/cpp/logger/log.h> 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/string/builder.h>

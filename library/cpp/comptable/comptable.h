@@ -4,7 +4,7 @@
 #include <util/memory/blob.h>
 #include <util/ysaveload.h>
 
-#include <library/cpp/compproto/huff.h>
+#include <library/cpp/compproto/huff.h> 
 
 namespace NCompTable {
     struct TCompressorTable {

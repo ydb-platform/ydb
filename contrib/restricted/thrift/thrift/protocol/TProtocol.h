@@ -415,7 +415,7 @@ public:
 
   virtual uint32_t readBool_virt(bool& value) = 0;
 
-  //virtual uint32_t readBool_virt(std::vector<bool>::reference value) = 0;
+  //virtual uint32_t readBool_virt(std::vector<bool>::reference value) = 0; 
 
   virtual uint32_t readByte_virt(int8_t& byte) = 0;
 
@@ -536,12 +536,12 @@ public:
    * rather than bools.   We need to define a different version of readBool()
    * to work with std::vector<bool>.
    */
-  /*
+  /* 
   uint32_t readBool(std::vector<bool>::reference value) {
     T_VIRTUAL_CALL();
     return readBool_virt(value);
   }
-   */
+   */ 
 
   /**
    * Method to arbitrarily skip over data.

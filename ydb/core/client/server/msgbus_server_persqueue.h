@@ -7,7 +7,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/core/interconnect.h> 
 
 #include <util/generic/ptr.h>
 #include <util/system/compiler.h>

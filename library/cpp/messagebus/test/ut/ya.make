@@ -1,6 +1,6 @@
 OWNER(g:messagebus)
 
-UNITTEST_FOR(library/cpp/messagebus)
+UNITTEST_FOR(library/cpp/messagebus) 
 
 TIMEOUT(1200)
 
@@ -15,9 +15,9 @@ FORK_SUBTESTS()
 
 PEERDIR(
     library/cpp/testing/unittest_main
-    library/cpp/messagebus
-    library/cpp/messagebus/test/helper
-    library/cpp/messagebus/www
+    library/cpp/messagebus 
+    library/cpp/messagebus/test/helper 
+    library/cpp/messagebus/www 
 )
 
 SRCS(

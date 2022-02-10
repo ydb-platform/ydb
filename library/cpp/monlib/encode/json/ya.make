@@ -14,8 +14,8 @@ PEERDIR(
     library/cpp/monlib/encode
     library/cpp/monlib/encode/buffered
     library/cpp/monlib/exception
-    library/cpp/json
-    library/cpp/json/writer
+    library/cpp/json 
+    library/cpp/json/writer 
 )
 
 END()

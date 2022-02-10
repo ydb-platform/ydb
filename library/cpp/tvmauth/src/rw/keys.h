@@ -1,29 +1,29 @@
 #pragma once
 
-#include <util/generic/ptr.h>
-#include <util/generic/string.h>
+#include <util/generic/ptr.h> 
+#include <util/generic/string.h> 
 
 #include <unordered_map>
 
-struct TRwInternal;
+struct TRwInternal; 
 
-namespace NTvmAuth {
+namespace NTvmAuth { 
     namespace NRw {
-        namespace NPrivate {
-            class TRwDestroyer {
-            public:
-                static void Destroy(TRwInternal* o);
-            };
-        }
+        namespace NPrivate { 
+            class TRwDestroyer { 
+            public: 
+                static void Destroy(TRwInternal* o); 
+            }; 
+        } 
 
-        using TRw = THolder<TRwInternal, NPrivate::TRwDestroyer>;
-        using TKeyId = ui32;
-
+        using TRw = THolder<TRwInternal, NPrivate::TRwDestroyer>; 
+        using TKeyId = ui32; 
+ 
         struct TKeyPair {
-            TString Private;
-            TString Public;
+            TString Private; 
+            TString Public; 
         };
-        TKeyPair GenKeyPair(size_t size);
+        TKeyPair GenKeyPair(size_t size); 
 
         class TRwPrivateKey {
         public:
@@ -35,9 +35,9 @@ namespace NTvmAuth {
         private:
             static TRw Deserialize(TStringBuf key);
 
-            TKeyId Id_;
-            TRw Rw_;
-            int SignLen_;
+            TKeyId Id_; 
+            TRw Rw_; 
+            int SignLen_; 
         };
 
         class TRwPublicKey {
@@ -49,17 +49,17 @@ namespace NTvmAuth {
         private:
             static TRw Deserialize(TStringBuf key);
 
-            TRw Rw_;
+            TRw Rw_; 
         };
 
         using TPublicKeys = std::unordered_map<TKeyId, TRwPublicKey>;
-
-        class TSecureHeap {
-        public:
-            TSecureHeap(size_t totalSize, int minChunkSize);
-            ~TSecureHeap();
-
-            static void Init(size_t totalSize = 16 * 1024 * 1024, int minChunkSize = 16);
-        };
+ 
+        class TSecureHeap { 
+        public: 
+            TSecureHeap(size_t totalSize, int minChunkSize); 
+            ~TSecureHeap(); 
+ 
+            static void Init(size_t totalSize = 16 * 1024 * 1024, int minChunkSize = 16); 
+        }; 
     }
 }

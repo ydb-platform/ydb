@@ -3,10 +3,10 @@ UNITTEST()
 OWNER(salmin)
 
 PEERDIR(
-    library/cpp/logger/global
+    library/cpp/logger/global 
 )
 
-SRCDIR(library/cpp/logger/global)
+SRCDIR(library/cpp/logger/global) 
 
 SRCS(
     rty_formater_ut.cpp

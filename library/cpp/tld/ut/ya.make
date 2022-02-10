@@ -3,10 +3,10 @@ UNITTEST()
 OWNER(abolkhovityanov)
 
 PEERDIR(
-    ADDINCL library/cpp/tld
+    ADDINCL library/cpp/tld 
 )
 
-SRCDIR(library/cpp/tld)
+SRCDIR(library/cpp/tld) 
 
 SRCS(
     tld_ut.cpp

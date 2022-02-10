@@ -1,15 +1,15 @@
 #include <stdio.h>
 #include <time.h>
 
-#include <library/cpp/charset/doccodes.h>
-#include <library/cpp/charset/codepage.h>
-#include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/charset/doccodes.h> 
+#include <library/cpp/charset/codepage.h> 
+#include <library/cpp/http/misc/httpcodes.h> 
 #include <util/datetime/base.h>
 #include <util/generic/ylimits.h>
 #include <algorithm>    // max
 
-#include <library/cpp/http/fetch/httpheader.h>
-#include <library/cpp/http/fetch/httpfsm.h>
+#include <library/cpp/http/fetch/httpheader.h> 
+#include <library/cpp/http/fetch/httpfsm.h> 
 
 #ifdef _MSC_VER
 #pragma warning(disable: 4702)  // unreachable code
@@ -39,7 +39,7 @@ static inline void setguarded(x &val, long cnt) {
 %%{
 machine http_header_parser;
 
-include HttpDateTimeParser "../../../../util/datetime/parser.rl6";
+include HttpDateTimeParser "../../../../util/datetime/parser.rl6"; 
 
 alphtype unsigned char;
 

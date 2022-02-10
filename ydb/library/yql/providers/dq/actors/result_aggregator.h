@@ -5,7 +5,7 @@
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/actor.h> 
 
 namespace NYql::NDqs::NExecutionHelpers {
     THolder<NActors::IActor> MakeResultAggregator(

@@ -14,7 +14,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/histogram/adaptive/protos
+    library/cpp/histogram/adaptive/protos 
 )
 
 END()

@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/deprecated/enum_codegen
+    library/cpp/deprecated/enum_codegen 
     library/cpp/grpc/client
     ydb/core/blobstorage/pdisk
     ydb/core/client/server

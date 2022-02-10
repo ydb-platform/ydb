@@ -14,9 +14,9 @@ SRCS(
 
 PEERDIR(
     contrib/libs/rapidjson
-    library/cpp/json/common
-    library/cpp/json/fast_sax
-    library/cpp/json/writer
+    library/cpp/json/common 
+    library/cpp/json/fast_sax 
+    library/cpp/json/writer 
     library/cpp/string_utils/relaxed_escaper
 )
 

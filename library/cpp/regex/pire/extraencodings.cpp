@@ -1,9 +1,9 @@
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
-#include <library/cpp/charset/codepage.h>
+#include <library/cpp/charset/codepage.h> 
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
-#include <library/cpp/charset/doccodes.h>
+#include <library/cpp/charset/doccodes.h> 
 
 #include "pire.h"
 

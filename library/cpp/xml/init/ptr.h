@@ -61,8 +61,8 @@ namespace NXml {
     DEF_PTR(xmlNode, xmlFreeNode);
     DEF_PTR(xmlParserCtxt, xmlFreeParserCtxt);
     DEF_PTR(xmlParserInputBuffer, xmlFreeParserInputBuffer);
-    DEF_PTR(xmlDtd, xmlFreeDtd);
-    DEF_PTR(xmlValidCtxt, xmlFreeValidCtxt);
+    DEF_PTR(xmlDtd, xmlFreeDtd); 
+    DEF_PTR(xmlValidCtxt, xmlFreeValidCtxt); 
 
 #undef DEF_HOLDER
 #undef DEF_PTR

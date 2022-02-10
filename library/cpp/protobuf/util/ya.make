@@ -4,8 +4,8 @@ OWNER(mowgli)
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/binsaver
-    library/cpp/protobuf/util/proto
+    library/cpp/binsaver 
+    library/cpp/protobuf/util/proto 
     library/cpp/string_utils/base64
 )
 

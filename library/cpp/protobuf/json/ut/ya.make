@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/protobuf/json)
+UNITTEST_FOR(library/cpp/protobuf/json) 
 
 OWNER(avitella)
 
@@ -17,7 +17,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(test.pb.h)
 
 PEERDIR(
-    library/cpp/protobuf/json
+    library/cpp/protobuf/json 
 )
 
 END()

@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/streams/bzip2
+    library/cpp/streams/bzip2 
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/hulldb/barriers

@@ -19,10 +19,10 @@ SRCS(
 
 PEERDIR(
     library/cpp/cache
-    library/cpp/digest/md5
-    library/cpp/logger/global
+    library/cpp/digest/md5 
+    library/cpp/logger/global 
     library/cpp/threading/future
-    library/cpp/regex/pcre
+    library/cpp/regex/pcre 
     library/cpp/uri
     ydb/library/yql/core/file_storage/proto
     ydb/library/yql/utils

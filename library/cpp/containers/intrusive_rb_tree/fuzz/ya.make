@@ -10,7 +10,7 @@ SIZE(LARGE)
 TAG(ya:fat)
 
 PEERDIR(
-    library/cpp/containers/intrusive_rb_tree
+    library/cpp/containers/intrusive_rb_tree 
 )
 
 SRCS(

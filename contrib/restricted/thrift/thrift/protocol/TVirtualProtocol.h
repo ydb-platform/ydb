@@ -121,13 +121,13 @@ public:
                              "this protocol does not support reading (yet).");
   }
 
-  /*
+  /* 
   uint32_t readBool(std::vector<bool>::reference value) {
     (void)value;
     throw TProtocolException(TProtocolException::NOT_IMPLEMENTED,
                              "this protocol does not support reading (yet).");
   }
-  */
+  */ 
 
   uint32_t readByte(int8_t& byte) {
     (void)byte;
@@ -441,11 +441,11 @@ public:
     return static_cast<Protocol_*>(this)->readBool(value);
   }
 
-  /*
+  /* 
   virtual uint32_t readBool_virt(std::vector<bool>::reference value) {
     return static_cast<Protocol_*>(this)->readBool(value);
   }
-  */
+  */ 
 
   virtual uint32_t readByte_virt(int8_t& byte) {
     return static_cast<Protocol_*>(this)->readByte(byte);
@@ -499,14 +499,14 @@ public:
    * Subclasses can override this if desired, but there normally shouldn't
    * be a need to.
    */
-  /*
+  /* 
   uint32_t readBool(std::vector<bool>::reference value) {
     bool b = false;
     uint32_t ret = static_cast<Protocol_*>(this)->readBool(b);
     value = b;
     return ret;
   }
-  */
+  */ 
   using Super_::readBool; // so we don't hide readBool(bool&)
 
 protected:

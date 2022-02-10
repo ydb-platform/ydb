@@ -5,14 +5,14 @@
 
 #include <ydb/core/protos/config.pb.h>
 
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
 #include <util/stream/file.h>
 #include <util/stream/format.h>
 #include <util/system/hostname.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/string_utils/parse_size/parse_size.h>
-#include <library/cpp/svnversion/svnversion.h>
+#include <library/cpp/svnversion/svnversion.h> 
 
 namespace NKikimr {
 

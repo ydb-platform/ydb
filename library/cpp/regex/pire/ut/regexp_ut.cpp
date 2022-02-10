@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/regex/pire/regexp.h>
-#include <library/cpp/regex/pire/pcre2pire.h>
+#include <library/cpp/regex/pire/regexp.h> 
+#include <library/cpp/regex/pire/pcre2pire.h> 
 
 Y_UNIT_TEST_SUITE(TRegExp) {
     using namespace NRegExp;

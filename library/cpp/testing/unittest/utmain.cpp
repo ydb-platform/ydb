@@ -2,10 +2,10 @@
 #include "registar.h"
 #include "utmain.h"
 
-#include <library/cpp/colorizer/colors.h>
+#include <library/cpp/colorizer/colors.h> 
 
-#include <library/cpp/json/writer/json.h>
-#include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/json/writer/json.h> 
+#include <library/cpp/json/writer/json_value.h> 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/hook/hook.h>
 

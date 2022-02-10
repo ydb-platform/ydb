@@ -8,7 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
 
 #include <stack>
 

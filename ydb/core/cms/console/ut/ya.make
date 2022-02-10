@@ -18,9 +18,9 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/protobuf/util
-    library/cpp/regex/pcre
-    library/cpp/svnversion
+    library/cpp/protobuf/util 
+    library/cpp/regex/pcre 
+    library/cpp/svnversion 
     ydb/core/testlib
 )
 

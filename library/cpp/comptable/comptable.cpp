@@ -4,7 +4,7 @@
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
 #include <util/stream/file.h>
-#include <library/cpp/compproto/huff.h>
+#include <library/cpp/compproto/huff.h> 
 
 #include "comptable.h"
 

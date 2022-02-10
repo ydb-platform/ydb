@@ -88,7 +88,7 @@ RESOURCE(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    library/cpp/actors/core 
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage

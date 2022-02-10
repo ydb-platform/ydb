@@ -19,7 +19,7 @@ RECURSE(
     lzop/ut
     special
     special/ut
-    xz
+    xz 
     zc_memory_input
     zstd
     zstd/ut

@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    library/cpp/actors/core 
     library/cpp/monlib/dynamic_counters
 )
 

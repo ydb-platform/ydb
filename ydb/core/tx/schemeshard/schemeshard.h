@@ -10,7 +10,7 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
 
 #include "schemeshard_identificators.h"
 

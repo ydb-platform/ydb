@@ -1,10 +1,10 @@
 #pragma once
 
-// Deprecated. Use library/cpp/json/writer in new code.
+// Deprecated. Use library/cpp/json/writer in new code. 
 
 #include "json_value.h"
 
-#include <library/cpp/json/writer/json.h>
+#include <library/cpp/json/writer/json.h> 
 
 #include <util/stream/output.h>
 #include <util/generic/hash.h>

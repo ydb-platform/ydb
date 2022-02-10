@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/lwtrace/all.h>
+#include <library/cpp/lwtrace/all.h> 
 
 #define SQS_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                \
     PROBE(CreateLeader, GROUPS("SqsLeadersLifeTime"),                   \

@@ -14,7 +14,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/helpers
-    library/cpp/actors/interconnect
+    library/cpp/actors/interconnect 
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/engine/minikql

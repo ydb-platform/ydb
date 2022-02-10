@@ -15,7 +15,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    library/cpp/actors/core 
     library/cpp/threading/future
     ydb/core/base
     ydb/core/engine

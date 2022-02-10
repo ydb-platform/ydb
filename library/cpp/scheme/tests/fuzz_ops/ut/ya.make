@@ -4,8 +4,8 @@ OWNER(velavokr)
 
 PEERDIR(
     library/cpp/testing/unittest
-    library/cpp/scheme
-    library/cpp/scheme/tests/fuzz_ops/lib
+    library/cpp/scheme 
+    library/cpp/scheme/tests/fuzz_ops/lib 
 )
 
 SRCS(

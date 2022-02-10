@@ -13,7 +13,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/hfunc.h> 
 #include <library/cpp/protobuf/util/pb_io.h>
 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>

@@ -3,7 +3,7 @@
 #include "histogram.h"
 #include "auto_histogram.h"
 
-#include <library/cpp/histogram/adaptive/protos/histo.pb.h>
+#include <library/cpp/histogram/adaptive/protos/histo.pb.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>

@@ -1,5 +1,5 @@
 #include "is_equal.h"
-#include <library/cpp/protobuf/util/ut/sample_for_is_equal.pb.h>
+#include <library/cpp/protobuf/util/ut/sample_for_is_equal.pb.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 

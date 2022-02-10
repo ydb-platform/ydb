@@ -13,7 +13,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 
-#include <library/cpp/charset/ci_string.h>
+#include <library/cpp/charset/ci_string.h> 
 
 #include <google/protobuf/repeated_field.h>
 

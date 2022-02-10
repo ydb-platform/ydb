@@ -9,7 +9,7 @@
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 
-#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_value.h> 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/ptr.h>

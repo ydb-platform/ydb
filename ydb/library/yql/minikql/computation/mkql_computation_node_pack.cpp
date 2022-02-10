@@ -7,8 +7,8 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <library/cpp/packedtypes/zigzag.h>
-#include <library/cpp/resource/resource.h>
+#include <library/cpp/packedtypes/zigzag.h> 
+#include <library/cpp/resource/resource.h> 
 #include <ydb/library/yql/utils/fp_bits.h>
 
 #ifndef MKQL_DISABLE_CODEGEN

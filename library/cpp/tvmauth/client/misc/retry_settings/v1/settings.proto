@@ -1,21 +1,21 @@
-syntax = "proto2";
-
-package retry_settings.v1;
-
-option cc_enable_arenas = true;
-option go_package = "a.yandex-team.ru/library/cpp/tvmauth/client/misc/retry_settings/v1";
-
-message Settings {
-    optional uint32 exponential_backoff_min_sec = 1;
-    optional uint32 exponential_backoff_max_sec = 2;
-    optional double exponential_backoff_factor = 3;
-    optional double exponential_backoff_jitter = 4;
-    optional uint32 max_random_sleep_default = 5;
-    optional uint32 max_random_sleep_when_ok = 12;
-    optional uint32 retries_on_start = 6;
-    optional uint32 worker_awaking_period_sec = 7;
-    optional uint32 dsts_limit = 8;
-    optional uint32 retries_in_background = 9;
-    optional uint32 roles_update_period_sec = 10;
-    optional uint32 roles_warn_period_sec = 11;
-}
+syntax = "proto2"; 
+ 
+package retry_settings.v1; 
+ 
+option cc_enable_arenas = true; 
+option go_package = "a.yandex-team.ru/library/cpp/tvmauth/client/misc/retry_settings/v1"; 
+ 
+message Settings { 
+    optional uint32 exponential_backoff_min_sec = 1; 
+    optional uint32 exponential_backoff_max_sec = 2; 
+    optional double exponential_backoff_factor = 3; 
+    optional double exponential_backoff_jitter = 4; 
+    optional uint32 max_random_sleep_default = 5; 
+    optional uint32 max_random_sleep_when_ok = 12; 
+    optional uint32 retries_on_start = 6; 
+    optional uint32 worker_awaking_period_sec = 7; 
+    optional uint32 dsts_limit = 8; 
+    optional uint32 retries_in_background = 9; 
+    optional uint32 roles_update_period_sec = 10; 
+    optional uint32 roles_warn_period_sec = 11; 
+} 

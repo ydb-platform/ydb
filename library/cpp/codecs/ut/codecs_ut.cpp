@@ -1,9 +1,9 @@
-#include <library/cpp/codecs/delta_codec.h>
-#include <library/cpp/codecs/huffman_codec.h>
-#include <library/cpp/codecs/pfor_codec.h>
-#include <library/cpp/codecs/solar_codec.h>
-#include <library/cpp/codecs/zstd_dict_codec.h>
-#include <library/cpp/codecs/comptable_codec.h>
+#include <library/cpp/codecs/delta_codec.h> 
+#include <library/cpp/codecs/huffman_codec.h> 
+#include <library/cpp/codecs/pfor_codec.h> 
+#include <library/cpp/codecs/solar_codec.h> 
+#include <library/cpp/codecs/zstd_dict_codec.h> 
+#include <library/cpp/codecs/comptable_codec.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 

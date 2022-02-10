@@ -126,11 +126,11 @@ public:
   virtual uint32_t readSetEnd_virt() { return protocol->readSetEnd(); }
 
   virtual uint32_t readBool_virt(bool& value) { return protocol->readBool(value); }
-  /*
+  /* 
   virtual uint32_t readBool_virt(std::vector<bool>::reference value) {
     return protocol->readBool(value);
   }
-  */
+  */ 
 
   virtual uint32_t readByte_virt(int8_t& byte) { return protocol->readByte(byte); }
 

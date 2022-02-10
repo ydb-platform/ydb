@@ -31,11 +31,11 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/colorizer
+    library/cpp/colorizer 
     library/cpp/containers/sorted_vector
     library/cpp/containers/stack_vector
-    library/cpp/deprecated/enum_codegen
-    library/cpp/enumbitset
+    library/cpp/deprecated/enum_codegen 
+    library/cpp/enumbitset 
     library/cpp/string_utils/levenshtein_diff
     library/cpp/yson
     ydb/library/yql/public/udf

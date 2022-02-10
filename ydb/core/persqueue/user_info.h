@@ -11,7 +11,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <library/cpp/sliding_window/sliding_window.h>
+#include <library/cpp/sliding_window/sliding_window.h> 
 
 #include <util/generic/set.h>
 

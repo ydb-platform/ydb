@@ -1,6 +1,6 @@
 #include "load_arcadia_root_certs.h"
 
-#include <library/cpp/resource/resource.h>
+#include <library/cpp/resource/resource.h> 
 
 namespace grpc_core {
     grpc_slice LoadArcadiaRootCerts() {

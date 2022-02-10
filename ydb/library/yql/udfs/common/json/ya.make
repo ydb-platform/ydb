@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json/easy_parse
+    library/cpp/json/easy_parse 
 )
 
 END()

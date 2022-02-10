@@ -2,7 +2,7 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/service/pages/resource_mon_page.h>
-#include <library/cpp/resource/resource.h>
+#include <library/cpp/resource/resource.h> 
 
 namespace {
 

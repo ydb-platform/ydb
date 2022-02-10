@@ -16,7 +16,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/cgiparam
-    library/cpp/digest/lower_case
+    library/cpp/digest/lower_case 
 )
 
 END()

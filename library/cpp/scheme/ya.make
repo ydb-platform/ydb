@@ -16,7 +16,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/json
+    library/cpp/json 
     library/cpp/string_utils/relaxed_escaper
 )
 

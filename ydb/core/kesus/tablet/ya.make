@@ -41,7 +41,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/protobuf/util
+    library/cpp/protobuf/util 
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/engine/minikql

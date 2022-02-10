@@ -1,8 +1,8 @@
 package ticket2;
 
-option go_package = "a.yandex-team.ru/library/cpp/tvmauth/src/protos";
-
-import "library/cpp/tvmauth/src/protos/tvm_keys.proto";
+option go_package = "a.yandex-team.ru/library/cpp/tvmauth/src/protos"; 
+ 
+import "library/cpp/tvmauth/src/protos/tvm_keys.proto"; 
 
 message User {
     required uint64 uid = 1;

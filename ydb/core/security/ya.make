@@ -15,9 +15,9 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/actors/http
+    library/cpp/actors/http 
     library/cpp/monlib/service/pages
-    library/cpp/openssl/io
+    library/cpp/openssl/io 
     ydb/core/base
     ydb/core/protos
     ydb/library/aclib

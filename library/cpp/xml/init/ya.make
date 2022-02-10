@@ -4,7 +4,7 @@ OWNER(pg)
 
 PEERDIR(
     contrib/libs/libxml
-    library/cpp/charset
+    library/cpp/charset 
 )
 
 SRCS(

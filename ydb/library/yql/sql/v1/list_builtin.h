@@ -5,7 +5,7 @@
 
 #include <ydb/library/yql/ast/yql_type_string.h>
 
-#include <library/cpp/charset/ci_string.h>
+#include <library/cpp/charset/ci_string.h> 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/util.h>

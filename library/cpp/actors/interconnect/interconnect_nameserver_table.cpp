@@ -4,8 +4,8 @@
 #include "interconnect_nameserver_base.h"
 #include "events_local.h"
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/memory_log/memlog.h>
+#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/memory_log/memlog.h> 
 
 namespace NActors {
 

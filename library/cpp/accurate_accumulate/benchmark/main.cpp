@@ -1,4 +1,4 @@
-#include <library/cpp/accurate_accumulate/accurate_accumulate.h>
+#include <library/cpp/accurate_accumulate/accurate_accumulate.h> 
 #include <library/cpp/testing/benchmark/bench.h>
 
 #include <util/generic/algorithm.h>

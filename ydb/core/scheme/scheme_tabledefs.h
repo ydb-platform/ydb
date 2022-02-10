@@ -8,7 +8,7 @@
 #include <ydb/core/scheme_types/scheme_types.h>
 #include <ydb/library/aclib/aclib.h>
 
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
 
 #include <util/generic/maybe.h>
 #include <util/generic/map.h>

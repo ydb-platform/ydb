@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/bit_io)
+UNITTEST_FOR(library/cpp/bit_io) 
 
 OWNER(
     velavokr

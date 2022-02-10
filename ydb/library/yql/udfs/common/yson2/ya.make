@@ -14,7 +14,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/containers/stack_vector
-    library/cpp/yson_pull
+    library/cpp/yson_pull 
     ydb/library/yql/minikql/dom
 )
 

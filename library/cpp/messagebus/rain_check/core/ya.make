@@ -3,11 +3,11 @@ LIBRARY()
 OWNER(g:messagebus)
 
 PEERDIR(
-    library/cpp/coroutine/engine
-    library/cpp/deprecated/enum_codegen
-    library/cpp/messagebus
-    library/cpp/messagebus/actor
-    library/cpp/messagebus/scheduler
+    library/cpp/coroutine/engine 
+    library/cpp/deprecated/enum_codegen 
+    library/cpp/messagebus 
+    library/cpp/messagebus/actor 
+    library/cpp/messagebus/scheduler 
 )
 
 SRCS(

@@ -8,7 +8,7 @@ OWNER(
 )
 
 PEERDIR(
-    ADDINCL library/cpp/regex/pire
+    ADDINCL library/cpp/regex/pire 
 )
 
 SRCDIR(

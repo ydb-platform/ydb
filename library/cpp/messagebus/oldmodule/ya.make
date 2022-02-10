@@ -3,8 +3,8 @@ LIBRARY()
 OWNER(g:messagebus)
 
 PEERDIR(
-    library/cpp/messagebus
-    library/cpp/messagebus/actor
+    library/cpp/messagebus 
+    library/cpp/messagebus/actor 
 )
 
 SRCS(

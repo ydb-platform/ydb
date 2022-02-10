@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/json/common/defs.h>
+#include <library/cpp/json/common/defs.h> 
 
 namespace NJson {
     bool ReadJsonFast(TStringBuf in, TJsonCallbacks* callbacks);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/http/io/stream.h>
+#include <library/cpp/http/io/stream.h> 
 #include <util/generic/ptr.h>
 
 class TSocket;

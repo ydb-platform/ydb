@@ -3,10 +3,10 @@ UNITTEST()
 OWNER(pg)
 
 PEERDIR(
-    ADDINCL library/cpp/archive
+    ADDINCL library/cpp/archive 
 )
 
-SRCDIR(library/cpp/archive)
+SRCDIR(library/cpp/archive) 
 
 SRCS(
     yarchive_ut.cpp

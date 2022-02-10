@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/messagebus/oldmodule
+    library/cpp/messagebus/oldmodule 
 )
 
 END()

@@ -20,13 +20,13 @@ SRCS(
 
 PEERDIR(
     contrib/libs/zstd
-    library/cpp/bit_io
-    library/cpp/blockcodecs
-    library/cpp/codecs/greedy_dict
-    library/cpp/comptable
+    library/cpp/bit_io 
+    library/cpp/blockcodecs 
+    library/cpp/codecs/greedy_dict 
+    library/cpp/comptable 
     library/cpp/containers/comptrie
-    library/cpp/deprecated/accessors
-    library/cpp/packers
+    library/cpp/deprecated/accessors 
+    library/cpp/packers 
     library/cpp/string_utils/relaxed_escaper
 )
 

@@ -14,7 +14,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion
+    library/cpp/svnversion 
     ydb/core/base
     ydb/core/mind
     ydb/core/mind/hive

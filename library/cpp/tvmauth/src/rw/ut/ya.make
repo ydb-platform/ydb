@@ -1,10 +1,10 @@
-UNITTEST_FOR(library/cpp/tvmauth/src/rw)
+UNITTEST_FOR(library/cpp/tvmauth/src/rw) 
 
-OWNER(
-    g:passport_infra
-    e-sidorov
-    ezaitov
-)
+OWNER( 
+    g:passport_infra 
+    e-sidorov 
+    ezaitov 
+) 
 
 SRCS(
     rw_ut.cpp

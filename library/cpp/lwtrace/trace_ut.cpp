@@ -1,6 +1,6 @@
 #include "all.h"
 
-#include <library/cpp/lwtrace/protos/lwtrace.pb.h>
+#include <library/cpp/lwtrace/protos/lwtrace.pb.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 

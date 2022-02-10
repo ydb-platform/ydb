@@ -3,8 +3,8 @@ LIBRARY()
 OWNER(g:messagebus)
 
 PEERDIR(
-    library/cpp/messagebus
-    library/cpp/messagebus/rain_check/core
+    library/cpp/messagebus 
+    library/cpp/messagebus/rain_check/core 
 )
 
 SRCS(

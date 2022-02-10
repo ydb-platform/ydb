@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/core/interconnect.h> 
 
 namespace NKikimr {
 

@@ -11,7 +11,7 @@ NO_WSHADOW()
 PEERDIR(
     contrib/tools/python3/src
     contrib/tools/python3/lib/py
-    library/cpp/resource
+    library/cpp/resource 
 )
 
 CFLAGS(-DCYTHON_REGISTER_ABCS=0)

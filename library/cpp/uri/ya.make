@@ -21,7 +21,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/libidn
-    library/cpp/charset
+    library/cpp/charset 
 )
 
 END()

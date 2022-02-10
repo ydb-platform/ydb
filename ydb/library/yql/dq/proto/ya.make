@@ -5,7 +5,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/actors/protos
+    library/cpp/actors/protos 
 )
 
 SRCS(

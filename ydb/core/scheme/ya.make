@@ -14,10 +14,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/charset
-    library/cpp/containers/bitseq
-    library/cpp/deprecated/enum_codegen
+    library/cpp/actors/core 
+    library/cpp/charset 
+    library/cpp/containers/bitseq 
+    library/cpp/deprecated/enum_codegen 
     library/cpp/yson
     ydb/core/base
     ydb/core/scheme_types

@@ -6,8 +6,8 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/archive
-    library/cpp/digest/md5
+    library/cpp/archive 
+    library/cpp/digest/md5 
     library/cpp/getopt/small
 )
 

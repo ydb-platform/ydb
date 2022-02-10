@@ -14,7 +14,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/http/io
     library/cpp/http/server
-    library/cpp/svnversion
+    library/cpp/svnversion 
     library/cpp/testing/unittest
     ydb/core/base
     ydb/core/blockstore/core

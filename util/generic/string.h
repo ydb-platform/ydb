@@ -315,22 +315,22 @@ public:
         return &*MutRef().end();
     }
 
-    reverse_iterator rbegin() {
+    reverse_iterator rbegin() { 
         return reverse_iterator(vend());
-    }
-
-    reverse_iterator rend() {
+    } 
+ 
+    reverse_iterator rend() { 
         return reverse_iterator(begin());
-    }
-
+    } 
+ 
     using TBase::begin;   //!< const_iterator TStringBase::begin() const
     using TBase::cbegin;  //!< const_iterator TStringBase::cbegin() const
     using TBase::cend;    //!< const_iterator TStringBase::cend() const
-    using TBase::crbegin; //!< const_reverse_iterator TStringBase::crbegin() const
-    using TBase::crend;   //!< const_reverse_iterator TStringBase::crend() const
+    using TBase::crbegin; //!< const_reverse_iterator TStringBase::crbegin() const 
+    using TBase::crend;   //!< const_reverse_iterator TStringBase::crend() const 
     using TBase::end;     //!< const_iterator TStringBase::end() const
     using TBase::rbegin;  //!< const_reverse_iterator TStringBase::rbegin() const
-    using TBase::rend;    //!< const_reverse_iterator TStringBase::rend() const
+    using TBase::rend;    //!< const_reverse_iterator TStringBase::rend() const 
 
     inline size_t capacity() const noexcept {
 #ifdef TSTRING_IS_STD_STRING

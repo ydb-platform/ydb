@@ -1,4 +1,4 @@
-#include <library/cpp/containers/stack_array/stack_array.h>
+#include <library/cpp/containers/stack_array/stack_array.h> 
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(TestStackArray) {

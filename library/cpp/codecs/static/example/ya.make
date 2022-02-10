@@ -7,8 +7,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/codecs
-    library/cpp/codecs/static
+    library/cpp/codecs 
+    library/cpp/codecs/static 
 )
 
 ARCHIVE_ASM(

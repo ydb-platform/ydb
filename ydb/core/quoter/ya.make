@@ -16,8 +16,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/containers/ring_buffer
+    library/cpp/actors/core 
+    library/cpp/containers/ring_buffer 
     ydb/core/base
     ydb/core/kesus/tablet
     ydb/core/tx/scheme_cache

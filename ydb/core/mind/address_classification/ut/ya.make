@@ -20,7 +20,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/actors/http
+    library/cpp/actors/http 
     ydb/core/mind/address_classification
     ydb/core/testlib
 )

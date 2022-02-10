@@ -3,8 +3,8 @@ LIBRARY()
 OWNER(antonovvk)
 
 PEERDIR(
-    library/cpp/lcs
-    library/cpp/containers/stack_array
+    library/cpp/lcs 
+    library/cpp/containers/stack_array 
 )
 
 SRCS(

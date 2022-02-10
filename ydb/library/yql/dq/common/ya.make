@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    library/cpp/actors/core 
     ydb/library/mkql_proto/protos
 )
 

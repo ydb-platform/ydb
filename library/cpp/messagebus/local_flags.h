@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
 
 #include <util/generic/string.h>
 #include <util/stream/output.h>

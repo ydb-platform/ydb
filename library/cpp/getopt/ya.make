@@ -4,8 +4,8 @@ OWNER(pg)
 
 PEERDIR(
     library/cpp/getopt/small
-    library/cpp/svnversion
-    library/cpp/build_info
+    library/cpp/svnversion 
+    library/cpp/build_info 
 )
 
 SRCS(

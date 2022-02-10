@@ -2,7 +2,7 @@
 
 #include "events.h"
 #include "event_local.h"
-#include <library/cpp/actors/protos/interconnect.pb.h>
+#include <library/cpp/actors/protos/interconnect.pb.h> 
 #include <util/string/cast.h>
 #include <util/string/builder.h>
 

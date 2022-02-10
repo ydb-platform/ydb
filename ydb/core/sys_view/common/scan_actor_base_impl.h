@@ -11,9 +11,9 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h> 
+#include <library/cpp/actors/core/hfunc.h> 
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>

@@ -14,7 +14,7 @@ ENDIF()
 IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
     CXXFLAGS(-DBALLOC)
     PEERDIR(
-        library/cpp/balloc/optional
+        library/cpp/balloc/optional 
     )
 ENDIF()
 
@@ -103,16 +103,16 @@ GENERATE_ENUM_SERIALIZATION(defs.h)
 GENERATE_ENUM_SERIALIZATION(actor.h)
 
 PEERDIR(
-    library/cpp/actors/memory_log
-    library/cpp/actors/prof
-    library/cpp/actors/protos
-    library/cpp/actors/util
-    library/cpp/execprofile
-    library/cpp/json/writer
-    library/cpp/logger
-    library/cpp/lwtrace
+    library/cpp/actors/memory_log 
+    library/cpp/actors/prof 
+    library/cpp/actors/protos 
+    library/cpp/actors/util 
+    library/cpp/execprofile 
+    library/cpp/json/writer 
+    library/cpp/logger 
+    library/cpp/lwtrace 
     library/cpp/monlib/dynamic_counters
-    library/cpp/svnversion
+    library/cpp/svnversion 
     library/cpp/threading/future
 )
 

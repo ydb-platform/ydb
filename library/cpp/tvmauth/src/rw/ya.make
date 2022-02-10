@@ -1,14 +1,14 @@
 LIBRARY(ticket_parser)
 
 OWNER(
-    g:passport_infra
+    g:passport_infra 
     e-sidorov
-    ezaitov
+    ezaitov 
 )
 
 PEERDIR(
     contrib/libs/openssl
-    library/cpp/openssl/init
+    library/cpp/openssl/init 
 )
 
 SRCS(
@@ -23,8 +23,8 @@ SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-    ut_large
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+    ut_large 
+) 

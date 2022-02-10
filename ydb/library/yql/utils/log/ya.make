@@ -13,8 +13,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/logger
-    library/cpp/logger/global
+    library/cpp/logger 
+    library/cpp/logger/global 
 )
 
 END()

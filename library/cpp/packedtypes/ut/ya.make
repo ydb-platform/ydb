@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/packedtypes)
+UNITTEST_FOR(library/cpp/packedtypes) 
 
 OWNER(
     akhropov
@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/digest/old_crc
+    library/cpp/digest/old_crc 
 )
 
 SRCS(

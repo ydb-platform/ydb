@@ -7,9 +7,9 @@
 #include "queue_config.h"
 #include "session_config.h"
 
-#include <library/cpp/messagebus/actor/executor.h>
+#include <library/cpp/messagebus/actor/executor.h> 
 
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
 
 namespace NBus {
     class TConnectionStatusMonRecord;

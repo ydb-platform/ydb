@@ -8,9 +8,9 @@ OWNER(
 
 PEERDIR(
     contrib/libs/lz4
-    library/cpp/actors/core
-    library/cpp/actors/protos
-    library/cpp/actors/util
+    library/cpp/actors/core 
+    library/cpp/actors/protos 
+    library/cpp/actors/util 
     library/cpp/containers/stack_vector
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters/percentile

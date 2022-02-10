@@ -13,7 +13,7 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
-#include <library/cpp/enumbitset/enumbitset.h>
+#include <library/cpp/enumbitset/enumbitset.h> 
 
 namespace NSQLTranslationV0 {
     constexpr const size_t SQL_MAX_INLINE_SCRIPT_LEN = 24;

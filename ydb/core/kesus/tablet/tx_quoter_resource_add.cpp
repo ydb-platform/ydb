@@ -1,6 +1,6 @@
 #include "tablet_impl.h"
 
-#include <library/cpp/protobuf/util/is_equal.h>
+#include <library/cpp/protobuf/util/is_equal.h> 
 
 namespace NKikimr {
 namespace NKesus {

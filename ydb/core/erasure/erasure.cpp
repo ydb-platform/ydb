@@ -3,7 +3,7 @@
 #include <util/generic/yexception.h>
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/digest/crc32c/crc32c.h>
+#include <library/cpp/digest/crc32c/crc32c.h> 
 
 #define MAX_TOTAL_PARTS 8
 #define MAX_LINES_IN_BLOCK 8

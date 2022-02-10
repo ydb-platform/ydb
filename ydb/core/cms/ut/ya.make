@@ -15,7 +15,7 @@ TIMEOUT(600)
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion
+    library/cpp/svnversion 
     ydb/core/testlib
 )
 

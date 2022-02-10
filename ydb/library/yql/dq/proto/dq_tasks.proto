@@ -4,7 +4,7 @@ option cc_enable_arenas = true;
 package NYql.NDqProto;
 
 import "google/protobuf/any.proto";
-import "library/cpp/actors/protos/actors.proto";
+import "library/cpp/actors/protos/actors.proto"; 
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 
 enum ERuntimeVersion {

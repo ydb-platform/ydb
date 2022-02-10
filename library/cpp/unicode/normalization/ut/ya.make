@@ -3,7 +3,7 @@ UNITTEST()
 OWNER(mvel)
 
 PEERDIR(
-    library/cpp/unicode/normalization
+    library/cpp/unicode/normalization 
 )
 
 SRCS(

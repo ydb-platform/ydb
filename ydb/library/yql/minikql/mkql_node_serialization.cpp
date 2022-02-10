@@ -6,7 +6,7 @@
 #include <ydb/library/yql/minikql/pack_num.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/packedtypes/zigzag.h>
+#include <library/cpp/packedtypes/zigzag.h> 
 
 #include <util/generic/algorithm.h>
 #include <util/system/unaligned_mem.h>

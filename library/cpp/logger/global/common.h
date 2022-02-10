@@ -10,7 +10,7 @@
 #include <util/string/printf.h>
 #include <util/system/src_location.h>
 
-#include <library/cpp/logger/log.h>
+#include <library/cpp/logger/log.h> 
 
 namespace NLoggingImpl {
     const size_t SingletonPriority = 500;

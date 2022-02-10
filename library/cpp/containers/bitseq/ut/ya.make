@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/containers/bitseq)
+UNITTEST_FOR(library/cpp/containers/bitseq) 
 
 OWNER(g:util)
 

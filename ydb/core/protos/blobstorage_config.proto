@@ -3,7 +3,7 @@ syntax = "proto3";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
-import "library/cpp/actors/protos/interconnect.proto";
+import "library/cpp/actors/protos/interconnect.proto"; 
 
 package NKikimrBlobStorage;
 

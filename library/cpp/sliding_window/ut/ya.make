@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/sliding_window)
+UNITTEST_FOR(library/cpp/sliding_window) 
 
 OWNER(g:kikimr)
 

@@ -6,8 +6,8 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
-#include <library/cpp/actors/interconnect/events_local.h>
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
+#include <library/cpp/actors/interconnect/events_local.h> 
+#include <library/cpp/actors/interconnect/interconnect_impl.h> 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/statestorage_impl.h>
@@ -15,8 +15,8 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 
 #include <google/protobuf/text_format.h>
-#include <library/cpp/malloc/api/malloc.h>
-#include <library/cpp/svnversion/svnversion.h>
+#include <library/cpp/malloc/api/malloc.h> 
+#include <library/cpp/svnversion/svnversion.h> 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>

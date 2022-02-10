@@ -18,7 +18,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/http/server
+    library/cpp/http/server 
     library/cpp/threading/future
     ydb/library/yql/core/file_storage/http_download
 )

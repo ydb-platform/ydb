@@ -6,12 +6,12 @@
 #include <util/digest/numeric.h>
 #include <util/digest/fnv.h>
 
-#include <library/cpp/digest/argonish/argon2.h>
-#include <library/cpp/digest/argonish/blake2b.h>
-#include <library/cpp/digest/crc32c/crc32c.h>
-#include <library/cpp/digest/md5/md5.h>
-#include <library/cpp/digest/old_crc/crc.h>
-#include <library/cpp/digest/sfh/sfh.h>
+#include <library/cpp/digest/argonish/argon2.h> 
+#include <library/cpp/digest/argonish/blake2b.h> 
+#include <library/cpp/digest/crc32c/crc32c.h> 
+#include <library/cpp/digest/md5/md5.h> 
+#include <library/cpp/digest/old_crc/crc.h> 
+#include <library/cpp/digest/sfh/sfh.h> 
 
 #include <contrib/libs/highwayhash/highwayhash/c_bindings.h>
 #include <contrib/libs/highwayhash/highwayhash/sip_hash.h>

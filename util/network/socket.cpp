@@ -490,44 +490,44 @@ void SetTcpFastOpen(SOCKET s, int qlen) {
 #endif
 }
 
-static bool IsBlocked(int lasterr) noexcept {
-    return lasterr == EAGAIN || lasterr == EWOULDBLOCK;
-}
-
-struct TUnblockingGuard {
-    SOCKET S_;
-
-    TUnblockingGuard(SOCKET s)
-        : S_(s)
-    {
-        SetNonBlock(S_, true);
-    }
-
-    ~TUnblockingGuard() {
-        SetNonBlock(S_, false);
-    }
-};
-
-static int MsgPeek(SOCKET s) {
-    int flags = MSG_PEEK;
-
+static bool IsBlocked(int lasterr) noexcept { 
+    return lasterr == EAGAIN || lasterr == EWOULDBLOCK; 
+} 
+ 
+struct TUnblockingGuard { 
+    SOCKET S_; 
+ 
+    TUnblockingGuard(SOCKET s) 
+        : S_(s) 
+    { 
+        SetNonBlock(S_, true); 
+    } 
+ 
+    ~TUnblockingGuard() { 
+        SetNonBlock(S_, false); 
+    } 
+}; 
+ 
+static int MsgPeek(SOCKET s) { 
+    int flags = MSG_PEEK; 
+ 
 #if defined(_win_)
-    TUnblockingGuard unblocker(s);
-    Y_UNUSED(unblocker);
-#else
-    flags |= MSG_DONTWAIT;
-#endif
-
-    char c;
-    return recv(s, &c, 1, flags);
-}
-
-bool IsNotSocketClosedByOtherSide(SOCKET s) {
+    TUnblockingGuard unblocker(s); 
+    Y_UNUSED(unblocker); 
+#else 
+    flags |= MSG_DONTWAIT; 
+#endif 
+ 
+    char c; 
+    return recv(s, &c, 1, flags); 
+} 
+ 
+bool IsNotSocketClosedByOtherSide(SOCKET s) { 
     return HasSocketDataToRead(s) != ESocketReadStatus::SocketClosed;
 }
 
 ESocketReadStatus HasSocketDataToRead(SOCKET s) {
-    const int r = MsgPeek(s);
+    const int r = MsgPeek(s); 
     if (r == -1 && IsBlocked(LastSystemError())) {
         return ESocketReadStatus::NoData;
     }
@@ -535,9 +535,9 @@ ESocketReadStatus HasSocketDataToRead(SOCKET s) {
         return ESocketReadStatus::HasData;
     }
     return ESocketReadStatus::SocketClosed;
-}
-
-#if defined(_win_)
+} 
+ 
+#if defined(_win_) 
 static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) {
     return writev(sock, iov, iovcnt);
 }
@@ -1097,15 +1097,15 @@ TNetworkResolutionError::TNetworkResolutionError(int error) {
 #else
     errMsg = gai_strerror(error);
 #endif
-    (*this) << errMsg << "(" << error;
-
-#if defined(_unix_)
-    if (error == EAI_SYSTEM) {
-        (*this) << "; errno=" << LastSystemError();
-    }
-#endif
-
-    (*this) << "): ";
+    (*this) << errMsg << "(" << error; 
+ 
+#if defined(_unix_) 
+    if (error == EAI_SYSTEM) { 
+        (*this) << "; errno=" << LastSystemError(); 
+    } 
+#endif 
+ 
+    (*this) << "): "; 
 }
 
 #if defined(_unix_)

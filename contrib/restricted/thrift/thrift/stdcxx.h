@@ -29,24 +29,24 @@
 //
 ///////////////////////////////////////////////////////////////////
 
-#if defined (BOOST_NO_CXX11_HDR_FUNCTIONAL)
-#undef BOOST_NO_CXX11_HDR_FUNCTIONAL
-#define __SHOULD_RESTORE__BOOST_NO_CXX11_HDR_FUNCTIONAL
-#endif
-
+#if defined (BOOST_NO_CXX11_HDR_FUNCTIONAL) 
+#undef BOOST_NO_CXX11_HDR_FUNCTIONAL 
+#define __SHOULD_RESTORE__BOOST_NO_CXX11_HDR_FUNCTIONAL 
+#endif 
+ 
 #if defined(BOOST_NO_CXX11_HDR_FUNCTIONAL) || (defined(_MSC_VER) && _MSC_VER < 1800) || defined(FORCE_BOOST_FUNCTIONAL)
 #if (BOOST_VERSION <= 106500)
-#include <boost/tr1/functional.hpp> // Y_IGNORE
+#include <boost/tr1/functional.hpp> // Y_IGNORE 
 #else
 #include <tr1/functional>
 #endif
 #define _THRIFT_FUNCTIONAL_TR1_ 1
 #endif
 
-#if defined (__SHOULD_RESTORE__BOOST_NO_CXX11_HDR_FUNCTIONAL)
-#define BOOST_NO_CXX11_HDR_FUNCTIONAL
-#endif
-
+#if defined (__SHOULD_RESTORE__BOOST_NO_CXX11_HDR_FUNCTIONAL) 
+#define BOOST_NO_CXX11_HDR_FUNCTIONAL 
+#endif 
+ 
 #if _THRIFT_FUNCTIONAL_TR1_
 
   namespace apache { namespace thrift { namespace stdcxx {
@@ -101,11 +101,11 @@
 // which do not support the feature, so we must continue to use C++98 and boost on them.
 // We cannot use __cplusplus to detect this either, since Microsoft advertises an older one.
 
-#if defined (BOOST_NO_CXX11_SMART_PTR)
-#undef BOOST_NO_CXX11_SMART_PTR
-#define __SHOULD_RESTORE__BOOST_NO_CXX11_SMART_PTR
-#endif
-
+#if defined (BOOST_NO_CXX11_SMART_PTR) 
+#undef BOOST_NO_CXX11_SMART_PTR 
+#define __SHOULD_RESTORE__BOOST_NO_CXX11_SMART_PTR 
+#endif 
+ 
 #if defined(BOOST_NO_CXX11_SMART_PTR) || (defined(_MSC_VER) && _MSC_VER < 1800) || defined(FORCE_BOOST_SMART_PTR)
 #include <boost/smart_ptr.hpp>
 #else
@@ -138,10 +138,10 @@ namespace apache { namespace thrift { namespace stdcxx {
 
 #endif
 
-#if defined (__SHOULD_RESTORE__BOOST_NO_CXX11_SMART_PTR)
-#define BOOST_NO_CXX11_SMART_PTR
-#endif
-
+#if defined (__SHOULD_RESTORE__BOOST_NO_CXX11_SMART_PTR) 
+#define BOOST_NO_CXX11_SMART_PTR 
+#endif 
+ 
 }}} // apache::thrift::stdcxx
 
 #endif // #ifndef _THRIFT_STDCXX_H_

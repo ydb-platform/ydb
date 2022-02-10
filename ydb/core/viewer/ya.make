@@ -180,9 +180,9 @@ RESOURCE(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/archive
-    library/cpp/mime/types
+    library/cpp/actors/core 
+    library/cpp/archive 
+    library/cpp/mime/types 
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/client/server

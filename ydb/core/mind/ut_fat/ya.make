@@ -14,8 +14,8 @@ TIMEOUT(600)
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre
-    library/cpp/svnversion
+    library/cpp/regex/pcre 
+    library/cpp/svnversion 
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/crypto

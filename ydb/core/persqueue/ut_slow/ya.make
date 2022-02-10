@@ -19,7 +19,7 @@ TIMEOUT(3600)
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
-    library/cpp/svnversion
+    library/cpp/svnversion 
     ydb/core/testlib
 )
 

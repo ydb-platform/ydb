@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/comptable
+    library/cpp/comptable 
 )
 
 END()

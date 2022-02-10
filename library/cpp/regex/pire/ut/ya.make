@@ -12,7 +12,7 @@ SET(PIRETESTSDIR contrib/libs/pire/ut)
 CFLAGS(-DPIRE_NO_CONFIG)
 
 PEERDIR(
-    library/cpp/regex/pire
+    library/cpp/regex/pire 
 )
 
 SRCDIR(

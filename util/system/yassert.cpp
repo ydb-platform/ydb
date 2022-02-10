@@ -5,7 +5,7 @@
 #include "spinlock.h"
 #include "src_root.h"
 
-#include <util/datetime/base.h>
+#include <util/datetime/base.h> 
 #include <util/generic/singleton.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
@@ -63,14 +63,14 @@ void ::NPrivate::Panic(const TStaticBuf& file, int line, const char* function, c
 namespace NPrivate {
     [[noreturn]] Y_NO_INLINE void InternalPanicImpl(int line, const char* function, const char* expr, int, int, int, const TStringBuf file, const char* errorMessage, size_t errorMessageSize) noexcept try {
         TStringBuf errorMsg{errorMessage, errorMessageSize};
-        const TString now = TInstant::Now().ToStringLocal();
-
+        const TString now = TInstant::Now().ToStringLocal(); 
+ 
         TString r;
         TStringOutput o(r);
         if (expr) {
-            o << "VERIFY failed (" << now << "): " << errorMsg << Endl;
+            o << "VERIFY failed (" << now << "): " << errorMsg << Endl; 
         } else {
-            o << "FAIL (" << now << "): " << errorMsg << Endl;
+            o << "FAIL (" << now << "): " << errorMsg << Endl; 
         }
         o << "  " << file << ":" << line << Endl;
         if (expr) {

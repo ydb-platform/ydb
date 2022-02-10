@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/linear_regression
+    library/cpp/linear_regression 
 )
 
 END()

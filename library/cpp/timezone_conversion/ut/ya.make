@@ -4,7 +4,7 @@ OWNER(dfyz)
 
 PEERDIR(
     library/cpp/testing/unittest
-    library/cpp/timezone_conversion
+    library/cpp/timezone_conversion 
 )
 
 SRCS(

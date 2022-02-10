@@ -3,15 +3,15 @@ PROGRAM(messagebus_perftest)
 OWNER(g:messagebus)
 
 PEERDIR(
-    library/cpp/deprecated/threadable
-    library/cpp/execprofile
+    library/cpp/deprecated/threadable 
+    library/cpp/execprofile 
     library/cpp/getopt
-    library/cpp/lwtrace
-    library/cpp/messagebus
-    library/cpp/messagebus/oldmodule
-    library/cpp/messagebus/protobuf
-    library/cpp/messagebus/www
-    library/cpp/sighandler
+    library/cpp/lwtrace 
+    library/cpp/messagebus 
+    library/cpp/messagebus/oldmodule 
+    library/cpp/messagebus/protobuf 
+    library/cpp/messagebus/www 
+    library/cpp/sighandler 
     library/cpp/threading/future
 )
 

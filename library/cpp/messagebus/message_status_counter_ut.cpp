@@ -2,7 +2,7 @@
 
 #include "message_status_counter.h"
 
-#include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
+#include <library/cpp/messagebus/monitoring/mon_proto.pb.h> 
 
 using namespace NBus;
 using namespace NBus::NPrivate;

@@ -95,8 +95,8 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/containers/intrusive_rb_tree
     library/cpp/containers/stack_vector
-    library/cpp/digest/crc32c
-    library/cpp/html/pcdata
+    library/cpp/digest/crc32c 
+    library/cpp/html/pcdata 
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/core/base

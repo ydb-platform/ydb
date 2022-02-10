@@ -1,6 +1,6 @@
 import future.utils as fu
 
-cdef extern from "library/cpp/svnversion/svnversion.h":
+cdef extern from "library/cpp/svnversion/svnversion.h": 
     cdef const char* GetProgramSvnVersion() except +;
     cdef int GetProgramSvnRevision() except +;
     cdef int GetArcadiaLastChangeNum() except +;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/digest/argonish/internal/rotations/rotations_ssse3.h>
+#include <library/cpp/digest/argonish/internal/rotations/rotations_ssse3.h> 
 
 namespace NArgonish {
     static inline void BlamkaG1SSSE3(

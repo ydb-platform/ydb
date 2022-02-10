@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/interconnect/ut/protos/interconnect_test.pb.h>
+#include <library/cpp/actors/interconnect/ut/protos/interconnect_test.pb.h> 
 
 namespace NActors {
     enum {

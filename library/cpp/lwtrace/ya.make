@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(serxa)
 
 PEERDIR(
-    library/cpp/lwtrace/protos
+    library/cpp/lwtrace/protos 
 )
 
 SRCS(

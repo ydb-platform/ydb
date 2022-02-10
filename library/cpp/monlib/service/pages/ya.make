@@ -17,10 +17,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/build_info
-    library/cpp/malloc/api
-    library/cpp/svnversion
-    library/cpp/resource
+    library/cpp/build_info 
+    library/cpp/malloc/api 
+    library/cpp/svnversion 
+    library/cpp/resource 
     library/cpp/monlib/service
     library/cpp/monlib/encode/json
     library/cpp/monlib/encode/text

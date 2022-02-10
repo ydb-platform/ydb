@@ -8,8 +8,8 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/messagebus
-    library/cpp/messagebus/actor
+    library/cpp/messagebus 
+    library/cpp/messagebus/actor 
 )
 
 END()

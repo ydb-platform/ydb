@@ -6,9 +6,9 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 
-#include <library/cpp/http/io/stream.h>
+#include <library/cpp/http/io/stream.h> 
 
-// Simple http client based on library/cpp/http/simple.
+// Simple http client based on library/cpp/http/simple. 
 
 class TNetworkAddress;
 class IOutputStream;

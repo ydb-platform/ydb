@@ -134,7 +134,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 
 PEERDIR(
-    library/cpp/actors/protos
+    library/cpp/actors/protos 
     ydb/core/yq/libs/config/protos
     ydb/library/login/protos
     ydb/library/mkql_proto/protos

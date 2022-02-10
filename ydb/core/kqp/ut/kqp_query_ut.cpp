@@ -9,7 +9,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
-#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_reader.h> 
 
 namespace NKikimr {
 namespace NKqp {

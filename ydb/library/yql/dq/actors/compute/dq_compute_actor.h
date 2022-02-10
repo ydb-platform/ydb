@@ -9,9 +9,9 @@
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/core/actor_bootstrapped.h> 
+#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/log.h> 
 
 namespace NYql {
 namespace NDq {

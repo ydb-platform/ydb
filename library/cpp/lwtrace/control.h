@@ -6,7 +6,7 @@
 #include "log_shuttle.h"
 #include "probe.h"
 
-#include <library/cpp/lwtrace/protos/lwtrace.pb.h>
+#include <library/cpp/lwtrace/protos/lwtrace.pb.h> 
 
 #include <google/protobuf/repeated_field.h>
 

@@ -13,7 +13,7 @@ using namespace NS_LightRWLock;
 #define LIGHT
 
 #ifdef RWSPINLOCK
-#include <library/cpp/lwtrace/rwspinlock.h>
+#include <library/cpp/lwtrace/rwspinlock.h> 
 #endif
 
 #define CHECK_LOGIC 1

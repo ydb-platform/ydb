@@ -17,8 +17,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/http/misc
-    library/cpp/http/io
+    library/cpp/http/misc 
+    library/cpp/http/io 
     library/cpp/threading/equeue
 )
 

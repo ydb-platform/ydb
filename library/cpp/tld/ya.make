@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/digest/lower_case
+    library/cpp/digest/lower_case 
 )
 
 END()

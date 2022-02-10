@@ -34,7 +34,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion
+    library/cpp/svnversion 
     ydb/core/testlib
     ydb/library/aclib
     ydb/library/persqueue/topic_parser

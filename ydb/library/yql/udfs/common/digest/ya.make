@@ -17,11 +17,11 @@ PEERDIR(
     contrib/libs/highwayhash
     contrib/libs/openssl
     contrib/libs/xxhash
-    library/cpp/digest/argonish
-    library/cpp/digest/crc32c
-    library/cpp/digest/md5
-    library/cpp/digest/old_crc
-    library/cpp/digest/sfh
+    library/cpp/digest/argonish 
+    library/cpp/digest/crc32c 
+    library/cpp/digest/md5 
+    library/cpp/digest/old_crc 
+    library/cpp/digest/sfh 
 )
 
 ADDINCL(contrib/libs/highwayhash)

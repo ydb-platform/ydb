@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/unicode/punycode)
+UNITTEST_FOR(library/cpp/unicode/punycode) 
 
 OWNER(
     g:base

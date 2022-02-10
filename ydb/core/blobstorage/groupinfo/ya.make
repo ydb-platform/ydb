@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:kikimr)
 
 PEERDIR(
-    library/cpp/actors/core
+    library/cpp/actors/core 
     library/cpp/digest/crc32c
     library/cpp/pop_count
     ydb/core/base

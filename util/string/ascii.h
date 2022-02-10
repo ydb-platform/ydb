@@ -159,7 +159,7 @@ inline ::NPrivate::TDereferenced<T> AsciiToUpper(T c) noexcept {
 
 /**
  * ASCII case-insensitive string comparison (for proper UTF8 strings
- * case-insensitive comparison consider using @c library/cpp/charset).
+ * case-insensitive comparison consider using @c library/cpp/charset). 
  *
  * BUGS: Currently will NOT work properly with strings that contain
  * 0-terminator character inside. See IGNIETFERRO-1641 for details.
@@ -172,7 +172,7 @@ static inline bool AsciiEqualsIgnoreCase(const char* s1, const char* s2) noexcep
 
 /**
  * ASCII case-insensitive string comparison (for proper UTF8 strings
- * case-insensitive comparison consider using @c library/cpp/charset).
+ * case-insensitive comparison consider using @c library/cpp/charset). 
  *
  * BUGS: Currently will NOT work properly with strings that contain
  * 0-terminator character inside. See IGNIETFERRO-1641 for details.
@@ -185,7 +185,7 @@ static inline bool AsciiEqualsIgnoreCase(const TStringBuf s1, const TStringBuf s
 
 /**
  * ASCII case-insensitive string comparison (for proper UTF8 strings
- * case-insensitive comparison consider using @c library/cpp/charset).
+ * case-insensitive comparison consider using @c library/cpp/charset). 
  *
  * BUGS: Currently will NOT work properly with strings that contain
  * 0-terminator character inside. See IGNIETFERRO-1641 for details.
@@ -200,7 +200,7 @@ static inline int AsciiCompareIgnoreCase(const char* s1, const char* s2) noexcep
 
 /**
  * ASCII case-insensitive string comparison (for proper UTF8 strings
- * case-insensitive comparison consider using @c library/cpp/charset).
+ * case-insensitive comparison consider using @c library/cpp/charset). 
  *
  * BUGS: Currently will NOT work properly with strings that contain
  * 0-terminator character inside. See IGNIETFERRO-1641 for details.
@@ -228,7 +228,7 @@ static inline bool AsciiHasPrefix(const TStringBuf s1, const TStringBuf s2) noex
 
 /**
   * ASCII case-insensitive string comparison (for proper UTF8 strings
-  * case-insensitive comparison consider using @c library/cpp/charset).
+  * case-insensitive comparison consider using @c library/cpp/charset). 
   *
   * @return                              true iff @c s2 are case-insensitively prefix of @c s1.
   */
@@ -238,7 +238,7 @@ static inline bool AsciiHasPrefixIgnoreCase(const TStringBuf s1, const TStringBu
 
 /**
   * ASCII case-insensitive string comparison (for proper UTF8 strings
-  * case-insensitive comparison consider using @c library/cpp/charset).
+  * case-insensitive comparison consider using @c library/cpp/charset). 
   *
   * @return                              true iff @c s2 are case-insensitively suffix of @c s1.
   */

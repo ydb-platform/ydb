@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/pybind
+    library/cpp/pybind 
     library/cpp/yson/node
 )
 SRCS(

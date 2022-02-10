@@ -3,9 +3,9 @@
 #include "httpfsm.h"
 #include "httpheader.h"
 
-#include <library/cpp/mime/types/mime.h>
+#include <library/cpp/mime/types/mime.h> 
 #include <util/system/yassert.h>
-#include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/http/misc/httpcodes.h> 
 
 template <size_t headermax = 100 << 10, size_t bodymax = 1 << 20>
 struct TFakeCheck {

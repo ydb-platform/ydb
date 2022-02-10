@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/colorizer
+    library/cpp/colorizer 
     library/cpp/getopt
     ydb/core/base
     ydb/core/kesus/tablet

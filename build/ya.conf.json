@@ -435,12 +435,12 @@
         },
         "jstyle": {
             "description": "Java styler"
-        },
+        }, 
         "ktlint": {
             "description": "Run kotlin styler"
         },
-        "ya_sed": {
-            "description": "This tool simplifies replacing of some text in Arcadia"
+        "ya_sed": { 
+            "description": "This tool simplifies replacing of some text in Arcadia" 
         },
         "black": {
             "description": "Python styler, Python 3 only"
@@ -1322,14 +1322,14 @@
                 }
             ]
         },
-        "tvmknife": {
-            "tools": {
+        "tvmknife": { 
+            "tools": { 
                 "tvmknife": {
                     "bottle": "tvmknife",
                     "executable": "tvmknife"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -1348,8 +1348,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "sandboxctl": {
             "tools": {
                 "sandboxctl": {
@@ -5341,7 +5341,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "ktlint_bundle": {
             "tools": {
                 "ktlint": {
@@ -5386,33 +5386,33 @@
                 }
             ]
         },
-        "ya_sed": {
-            "tools": {
-                "ya_sed": {
-                    "bottle": "ya_sed",
-                    "executable": "ya_sed"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
+        "ya_sed": { 
+            "tools": { 
+                "ya_sed": { 
+                    "bottle": "ya_sed", 
+                    "executable": "ya_sed" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "black": {
             "tools": {
@@ -5909,17 +5909,17 @@
                 ]
             }
         },
-        "tvmknife": {
-            "formula": {
+        "tvmknife": { 
+            "formula": { 
                 "sandbox_id": 1162775119,
-                "match": "tvmknife"
-            },
-            "executable": {
+                "match": "tvmknife" 
+            }, 
+            "executable": { 
                 "tvmknife": [
                     "tvmknife"
                 ]
-            }
-        },
+            } 
+        }, 
         "sandboxctl": {
             "formula": {
                 "sandbox_id": [
@@ -7772,7 +7772,7 @@
                     "format.bat"
                 ]
             }
-        },
+        }, 
         "ktlint_bundle": {
             "formula": {
                 "sandbox_id": [
@@ -7802,18 +7802,18 @@
                 ]
             }
         },
-        "ya_sed": {
-            "formula": {
-                "sandbox_id": [
-                    1197714990
-                ],
-                "match": "ya_sed"
-            },
-            "executable": {
-                "ya_sed": [
-                    "ya_sed"
-                ]
-            }
+        "ya_sed": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    1197714990 
+                ], 
+                "match": "ya_sed" 
+            }, 
+            "executable": { 
+                "ya_sed": [ 
+                    "ya_sed" 
+                ] 
+            } 
         },
         "black": {
             "formula": {

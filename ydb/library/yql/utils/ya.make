@@ -38,7 +38,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/digest/md5
+    library/cpp/digest/md5 
     library/cpp/threading/future
     library/cpp/messagebus
 )

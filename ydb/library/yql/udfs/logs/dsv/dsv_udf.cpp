@@ -3,7 +3,7 @@
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 
 #include <util/generic/yexception.h>
-#include <library/cpp/deprecated/split/split_iterator.h>
+#include <library/cpp/deprecated/split/split_iterator.h> 
 #include <util/string/vector.h>
 
 using namespace NKikimr;

@@ -1,4 +1,4 @@
-#include <library/cpp/svnversion/svnversion.h>
+#include <library/cpp/svnversion/svnversion.h> 
 #include "version.h"
 
 TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInterconnectProxyCommon::TVersionInfo{

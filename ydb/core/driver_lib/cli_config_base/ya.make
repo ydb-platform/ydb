@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/deprecated/enum_codegen
+    library/cpp/deprecated/enum_codegen 
     ydb/core/util
     ydb/public/lib/deprecated/client
     ydb/library/yql/minikql

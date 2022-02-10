@@ -29,7 +29,7 @@ RECURSE(
     gst-plugins-good
     gstreamer
     http-parser
-    keyutils
+    keyutils 
     libelf
     libffi
     libiscsi
@@ -54,8 +54,8 @@ RECURSE(
     rnnoise
     rubberband
     spdlog
-    thrift
-    thrift/compiler
+    thrift 
+    thrift/compiler 
     turbo_base64
     uriparser
 )

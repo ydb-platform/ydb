@@ -1041,7 +1041,7 @@ RECURSE(
     subprocess32
     subword-nmt
     suds-jurko
-    supervenn
+    supervenn 
     supervisor
     svn
     swagger-spec-validator

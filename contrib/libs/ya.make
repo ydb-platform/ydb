@@ -39,7 +39,7 @@ RECURSE(
     cookiemy
     coreml
     coturn
-    courgette_bsdiff 
+    courgette_bsdiff
     cppkafka
     crcutil
     crfsuite
@@ -353,7 +353,7 @@ RECURSE(
     webrtc
     websocketpp
     woff2
-    xdelta3 
+    xdelta3
     xmlsec
     xpdf-3.04
     xxhash

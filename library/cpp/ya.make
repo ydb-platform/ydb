@@ -440,7 +440,7 @@ ELSE()
         fuse
         sse/ut
         tf
-        xdelta3 
+        xdelta3
         zookeeper
     )
 ENDIF()

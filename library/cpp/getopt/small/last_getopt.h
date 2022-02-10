@@ -61,7 +61,7 @@ namespace NLastGetopt {
     public:
         using TContainer = Container;
         using TValue = typename TContainer::value_type;
-
+ 
         explicit TOptSplitHandler(TContainer* target, const char delim)
             : Target(target)
             , Delim(delim)

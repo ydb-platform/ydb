@@ -483,7 +483,7 @@ static void ListArchiveMd5(const TString& archive, bool cutSlash) {
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) { 
     NLastGetopt::TOpts opts;
     opts.AddHelpOption('?');
     opts.SetTitle(
@@ -621,18 +621,18 @@ int main(int argc, char** argv) {
             off = 2; // skip drive letter ("d:")
 #endif               // _win_
         const size_t pos = path.find(':', off);
-        TRec cur;
+        TRec cur; 
         cur.Path = path.substr(0, pos);
         if (pos != TString::npos)
             cur.Prefix = path.substr(pos + 1);
         if (keys.size())
             cur.Key = keys[i];
-        cur.Recursive = recursive;
-        cur.Fix();
-        recs.push_back(cur);
-    }
+        cur.Recursive = recursive; 
+        cur.Fix(); 
+        recs.push_back(cur); 
+    } 
 
-    try {
+    try { 
         if (listMd5) {
             for (const auto& rec: recs) {
                 ListArchiveMd5(rec.Path, cutSlash);

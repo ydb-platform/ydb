@@ -70,15 +70,15 @@ namespace NProtobufJson {
 
         void Transform(TString& str) const override;
     };
- 
+
     class TDoubleUnescapeTransform: public NProtobufJson::IStringTransform {
     public:
         int GetType() const override {
             return NProtobufJson::IStringTransform::EscapeTransform;
         }
- 
+
         void Transform(TString& str) const override;
- 
+
     private:
         TString Unescape(const TString& str) const;
     };

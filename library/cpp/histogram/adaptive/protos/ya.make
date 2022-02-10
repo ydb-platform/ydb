@@ -1,4 +1,4 @@
-PROTO_LIBRARY() 
+PROTO_LIBRARY()
 
 OWNER(g:crawl)
 

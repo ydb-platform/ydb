@@ -29,7 +29,7 @@ RECURSE(
     cgroups
     charset
     charts_notes
-    charts_notes/example 
+    charts_notes/example
     cityhash
     cityhash/test
     clickhouse_client

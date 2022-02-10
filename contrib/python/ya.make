@@ -735,7 +735,7 @@ RECURSE(
     pem
     pexpect
     pgcli
-    PGPy 
+    PGPy
     pgspecial
     phonenumbers
     pickleshare

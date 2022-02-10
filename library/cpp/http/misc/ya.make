@@ -5,8 +5,8 @@ OWNER(
     mvel
 )
 
-GENERATE_ENUM_SERIALIZATION(httpcodes.h)
-
+GENERATE_ENUM_SERIALIZATION(httpcodes.h) 
+ 
 SRCS(
     httpcodes.cpp
     httpdate.cpp

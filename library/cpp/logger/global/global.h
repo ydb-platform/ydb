@@ -5,7 +5,7 @@
 
 // ATTENTION! MUST CALL DoInitGlobalLog BEFORE USAGE
 
-bool GlobalLogInitialized();
+bool GlobalLogInitialized(); 
 void DoInitGlobalLog(const TString& logType, const int logLevel, const bool rotation, const bool startAsDaemon, THolder<ILoggerFormatter> formatter = {}, bool threaded = false);
 void DoInitGlobalLog(THolder<TLogBackend> backend, THolder<ILoggerFormatter> formatter = {});
 

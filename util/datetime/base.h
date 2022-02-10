@@ -148,9 +148,9 @@ public:
     }
 
     constexpr TValue Days() const noexcept {
-        return Hours() / 24;
-    }
-
+        return Hours() / 24; 
+    } 
+ 
     constexpr TValue NanoSeconds() const noexcept {
         return MicroSeconds() >= (Max<TValue>() / (TValue)1000) ? Max<TValue>() : MicroSeconds() * (TValue)1000;
     }
@@ -270,7 +270,7 @@ public:
         return MicroSeconds((ui64)(typename NDateTimeHelpers::TPrecisionHelper<T>::THighPrecision(ms) * 1000));
     }
 
-    using TBase::Days;
+    using TBase::Days; 
     using TBase::Hours;
     using TBase::MicroSeconds;
     using TBase::MilliSeconds;
@@ -376,7 +376,7 @@ public:
         return TInstant::MicroSeconds(::MicroSeconds());
     }
 
-    using TBase::Days;
+    using TBase::Days; 
     using TBase::Hours;
     using TBase::MicroSeconds;
     using TBase::MilliSeconds;
@@ -416,11 +416,11 @@ public:
         return Minutes(h * 60);
     }
 
-    /// days since epoch
+    /// days since epoch 
     static constexpr TInstant Days(ui64 d) noexcept {
-        return Hours(d * 24);
-    }
-
+        return Hours(d * 24); 
+    } 
+ 
     constexpr time_t TimeT() const noexcept {
         return (time_t)Seconds();
     }

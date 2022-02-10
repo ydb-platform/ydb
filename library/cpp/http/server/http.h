@@ -122,7 +122,7 @@ public:
     NAddr::IRemoteAddrRef GetListenerSockAddrRef() const noexcept;
     TInstant AcceptMoment() const noexcept;
 
-    bool IsLocal() const;
+    bool IsLocal() const; 
     bool CheckLoopback();
     void ProcessFailRequest(int failstate);
 

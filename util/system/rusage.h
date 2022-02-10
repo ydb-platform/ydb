@@ -10,7 +10,7 @@ struct TRusage {
     // some fields may be zero if unsupported
 
     ui64 MaxRss = 0;
-    ui64 MajorPageFaults = 0;
+    ui64 MajorPageFaults = 0; 
     TDuration Utime;
     TDuration Stime;
 

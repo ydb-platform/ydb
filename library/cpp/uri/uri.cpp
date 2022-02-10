@@ -126,7 +126,7 @@ namespace NUri {
     bool TUri::FldTryCpy(EField field, const TStringBuf& value) {
         if (!FldIsDirty(field)) {
             do {
-                if (!FldIsSet(field))
+                if (!FldIsSet(field)) 
                     break;
 
                 TStringBuf& fld = Fields[field];
@@ -160,11 +160,11 @@ namespace NUri {
         }
 
         if (!len)
-            Buffer.Clear();
+            Buffer.Clear(); 
         else {
-            TBuffer newbuf;
-            newbuf.Resize(len);
-            TMemoryWriteBuffer out(newbuf.data(), newbuf.size());
+            TBuffer newbuf; 
+            newbuf.Resize(len); 
+            TMemoryWriteBuffer out(newbuf.data(), newbuf.size()); 
             for (int i = 0; i < FieldAllMAX; ++i) {
                 const EField fld = EField(i);
                 if (!FldIsSet(fld))
@@ -174,9 +174,9 @@ namespace NUri {
                 const TStringBuf& val = Fields[fld];
                 out << val;
                 FldSetNoDirty(fld, TStringBuf(beg, val.length()));
-                out << '\0';
+                out << '\0'; 
             }
-            Buffer = std::move(newbuf);
+            Buffer = std::move(newbuf); 
         }
 
         CheckMissingFields();

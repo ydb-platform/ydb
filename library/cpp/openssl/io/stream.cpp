@@ -131,39 +131,39 @@ namespace {
             Connect();
         }
 
-        inline TSslContextPtr CreateClientContext() {
-            TSslContextPtr ctx = CreateSslCtx(SSLv23_client_method());
-            if (ClientCert_) {
-                if (!ClientCert_->CertificateFile_ || !ClientCert_->PrivateKeyFile_) {
-                    ythrow yexception() << "both client certificate and private key are required";
-                }
-                if (ClientCert_->PrivateKeyPassword_) {
-                    SSL_CTX_set_default_passwd_cb(ctx.Get(), [](char* buf, int size, int rwflag, void* userData) -> int {
-                        Y_UNUSED(rwflag);
-                        auto io = static_cast<TSslIO*>(userData);
-                        if (!io) {
-                            return -1;
-                        }
-                        if (size < static_cast<int>(io->ClientCert_->PrivateKeyPassword_.size())) {
-                            return -1;
-                        }
-                        return io->ClientCert_->PrivateKeyPassword_.copy(buf, size, 0);
-                    });
-                    SSL_CTX_set_default_passwd_cb_userdata(ctx.Get(), this);
-                }
-                if (1 != SSL_CTX_use_certificate_chain_file(ctx.Get(), ClientCert_->CertificateFile_.c_str())) {
-                    ythrow TSslError() << "SSL_CTX_use_certificate_chain_file";
-                }
-                if (1 != SSL_CTX_use_PrivateKey_file(ctx.Get(), ClientCert_->PrivateKeyFile_.c_str(), SSL_FILETYPE_PEM)) {
-                    ythrow TSslError() << "SSL_CTX_use_PrivateKey_file";
-                }
-                if (1 != SSL_CTX_check_private_key(ctx.Get())) {
-                    ythrow TSslError() << "SSL_CTX_check_private_key (client)";
-                }
-            }
-            return ctx;
-        }
-
+        inline TSslContextPtr CreateClientContext() { 
+            TSslContextPtr ctx = CreateSslCtx(SSLv23_client_method()); 
+            if (ClientCert_) { 
+                if (!ClientCert_->CertificateFile_ || !ClientCert_->PrivateKeyFile_) { 
+                    ythrow yexception() << "both client certificate and private key are required"; 
+                } 
+                if (ClientCert_->PrivateKeyPassword_) { 
+                    SSL_CTX_set_default_passwd_cb(ctx.Get(), [](char* buf, int size, int rwflag, void* userData) -> int { 
+                        Y_UNUSED(rwflag); 
+                        auto io = static_cast<TSslIO*>(userData); 
+                        if (!io) { 
+                            return -1; 
+                        } 
+                        if (size < static_cast<int>(io->ClientCert_->PrivateKeyPassword_.size())) { 
+                            return -1; 
+                        } 
+                        return io->ClientCert_->PrivateKeyPassword_.copy(buf, size, 0); 
+                    }); 
+                    SSL_CTX_set_default_passwd_cb_userdata(ctx.Get(), this); 
+                } 
+                if (1 != SSL_CTX_use_certificate_chain_file(ctx.Get(), ClientCert_->CertificateFile_.c_str())) { 
+                    ythrow TSslError() << "SSL_CTX_use_certificate_chain_file"; 
+                } 
+                if (1 != SSL_CTX_use_PrivateKey_file(ctx.Get(), ClientCert_->PrivateKeyFile_.c_str(), SSL_FILETYPE_PEM)) { 
+                    ythrow TSslError() << "SSL_CTX_use_PrivateKey_file"; 
+                } 
+                if (1 != SSL_CTX_check_private_key(ctx.Get())) { 
+                    ythrow TSslError() << "SSL_CTX_check_private_key (client)"; 
+                } 
+            } 
+            return ctx; 
+        } 
+ 
         inline TSslPtr ConstructSsl() {
             TSslPtr ssl(SSL_new(Ctx.Get()));
 

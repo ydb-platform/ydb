@@ -2,10 +2,10 @@
 
 #include "common.h"
 
-namespace NMemInfo {
-    struct TMemInfo;
-}
-
+namespace NMemInfo { 
+    struct TMemInfo; 
+} 
+ 
 class ILoggerFormatter {
 public:
     virtual ~ILoggerFormatter() = default;

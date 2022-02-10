@@ -4,7 +4,7 @@
 #include "encode.h"
 
 #include <library/cpp/charset/doccodes.h>
-#include <util/generic/buffer.h>
+#include <util/generic/buffer.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/singleton.h>
 #include <util/generic/string.h>
@@ -33,7 +33,7 @@ namespace NUri {
         };
 
     private:
-        TBuffer Buffer;
+        TBuffer Buffer; 
         TStringBuf Fields[FieldAllMAX];
         ui32 FieldsSet;
         ui16 Port;
@@ -45,10 +45,10 @@ namespace NUri {
     private:
         void Alloc(size_t len) {
             Dealloc(); // to prevent copy below
-            Buffer.Resize(len);
+            Buffer.Resize(len); 
         }
         void Dealloc() {
-            Buffer.Clear();
+            Buffer.Clear(); 
         }
 
         void ClearImpl() {
@@ -70,7 +70,7 @@ namespace NUri {
             for (int i = 0; i < FieldAllMAX; ++i)
                 Fields[i] = url.Fields[i];
 
-            RewriteImpl();
+            RewriteImpl(); 
         }
 
     private:
@@ -209,7 +209,7 @@ namespace NUri {
 
     private:
         bool IsInBuffer(const char* buf) const {
-            return buf >= Buffer.data() && buf < Buffer.data() + Buffer.size();
+            return buf >= Buffer.data() && buf < Buffer.data() + Buffer.size(); 
         }
 
     public:
@@ -260,7 +260,7 @@ namespace NUri {
         TUri(const TStringBuf& host, ui16 port, const TStringBuf& path, const TStringBuf& query = TStringBuf(), const TStringBuf& scheme = "http", unsigned defaultPort = 0);
 
         TUri(const TUri& url)
-            : FieldsSet(url.FieldsSet)
+            : FieldsSet(url.FieldsSet) 
             , Port(url.Port)
             , DefaultPort(url.DefaultPort)
             , Scheme(url.Scheme)

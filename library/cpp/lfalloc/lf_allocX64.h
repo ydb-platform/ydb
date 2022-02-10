@@ -24,7 +24,7 @@
 #pragma intrinsic(_InterlockedExchangeAdd)
 
 #include <new>
-#include <assert.h>
+#include <assert.h> 
 #include <errno.h>
 
 #define PERTHREAD __declspec(thread)

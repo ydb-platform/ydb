@@ -402,49 +402,49 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
         EmptyAndInsertTest<TMap<char, int, TLess<char>>>(std::pair<char, int>('a', 1));
         EmptyAndInsertTest<TMultiMap<char, int, TLess<char>>>(std::pair<char, int>('a', 1));
     }
-
-    struct TParametrizedKeyCmp {
-        bool Inverse;
-
-        TParametrizedKeyCmp(bool inverse = false)
-            : Inverse(inverse)
-        {
-        }
-
-        bool operator()(TKey lhs, TKey rhs) const {
-            if (Inverse) {
-                return lhs.m_data > rhs.m_data;
-            } else {
-                return lhs.m_data < rhs.m_data;
-            }
-        }
-    };
-
+ 
+    struct TParametrizedKeyCmp { 
+        bool Inverse; 
+ 
+        TParametrizedKeyCmp(bool inverse = false) 
+            : Inverse(inverse) 
+        { 
+        } 
+ 
+        bool operator()(TKey lhs, TKey rhs) const { 
+            if (Inverse) { 
+                return lhs.m_data > rhs.m_data; 
+            } else { 
+                return lhs.m_data < rhs.m_data; 
+            } 
+        } 
+    }; 
+ 
     Y_UNIT_TEST(TestMoveComparator) {
         using Container = TMultiMap<TKey, int, TParametrizedKeyCmp>;
-
-        TParametrizedKeyCmp direct(false);
-        TParametrizedKeyCmp inverse(true);
-
-        {
-            Container c(direct);
-            c = Container(inverse);
-
+ 
+        TParametrizedKeyCmp direct(false); 
+        TParametrizedKeyCmp inverse(true); 
+ 
+        { 
+            Container c(direct); 
+            c = Container(inverse); 
+ 
             c.insert(std::make_pair(TKey(1), 101));
             c.insert(std::make_pair(TKey(2), 102));
             c.insert(std::make_pair(TKey(3), 103));
-
+ 
             TVector<int> values;
             for (auto& i : c) {
                 values.push_back(i.second);
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL(values.size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(values[0], 103);
-            UNIT_ASSERT_VALUES_EQUAL(values[1], 102);
-            UNIT_ASSERT_VALUES_EQUAL(values[2], 101);
-        }
-    }
+            } 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 3); 
+            UNIT_ASSERT_VALUES_EQUAL(values[0], 103); 
+            UNIT_ASSERT_VALUES_EQUAL(values[1], 102); 
+            UNIT_ASSERT_VALUES_EQUAL(values[2], 101); 
+        } 
+    } 
 
     Y_UNIT_TEST(TestMapInitializerList) {
         TMap<TString, int> m = {

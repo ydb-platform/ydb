@@ -326,7 +326,7 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
 
     TString GetIp() const noexcept {
         char ip6[INET6_ADDRSTRLEN];
-        inet_ntop(AF_INET6, (void*)&sin6_addr, ip6, INET6_ADDRSTRLEN);
+        inet_ntop(AF_INET6, (void*)&sin6_addr, ip6, INET6_ADDRSTRLEN); 
         return TString(ip6);
     }
 

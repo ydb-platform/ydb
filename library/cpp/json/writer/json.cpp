@@ -382,7 +382,7 @@ namespace NJsonWriter {
         return *a < *b;
     }
 
-    TValueContext TBuf::WriteJsonValue(const NJson::TJsonValue* v, bool sortKeys, EFloatToStringMode mode, int ndigits) {
+    TValueContext TBuf::WriteJsonValue(const NJson::TJsonValue* v, bool sortKeys, EFloatToStringMode mode, int ndigits) { 
         using namespace NJson;
         switch (v->GetType()) {
             default:
@@ -393,7 +393,7 @@ namespace NJsonWriter {
                 WriteBool(v->GetBoolean());
                 break;
             case JSON_DOUBLE:
-                WriteDouble(v->GetDouble(), mode, ndigits);
+                WriteDouble(v->GetDouble(), mode, ndigits); 
                 break;
             case JSON_INTEGER:
                 WriteLongLong(v->GetInteger());
@@ -408,7 +408,7 @@ namespace NJsonWriter {
                 BeginList();
                 const TJsonValue::TArray& arr = v->GetArray();
                 for (const auto& it : arr)
-                    WriteJsonValue(&it, sortKeys, mode, ndigits);
+                    WriteJsonValue(&it, sortKeys, mode, ndigits); 
                 EndList();
                 break;
             }
@@ -425,13 +425,13 @@ namespace NJsonWriter {
                     for (size_t i = oldsz, sz = Keys.size(); i < sz; ++i) {
                         TJsonValue::TMapType::const_iterator kv = map.find(*Keys[i]);
                         WriteKey(kv->first);
-                        WriteJsonValue(&kv->second, sortKeys, mode, ndigits);
+                        WriteJsonValue(&kv->second, sortKeys, mode, ndigits); 
                     }
                     Keys.resize(oldsz);
                 } else {
                     for (const auto& it : map) {
                         WriteKey(it.first);
-                        WriteJsonValue(&it.second, sortKeys, mode, ndigits);
+                        WriteJsonValue(&it.second, sortKeys, mode, ndigits); 
                     }
                 }
                 EndObject();

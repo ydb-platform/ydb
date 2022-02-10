@@ -1,13 +1,13 @@
-#pragma once
-
-#include "schemeshard.h"
+#pragma once 
+ 
+#include "schemeshard.h" 
 #include "schemeshard_private.h"
-#include "schemeshard_tx_infly.h"
-#include "schemeshard_types.h"
-#include "schemeshard__operation_side_effects.h"
-#include "schemeshard__operation_memory_changes.h"
-#include "schemeshard__operation_db_changes.h"
-
+#include "schemeshard_tx_infly.h" 
+#include "schemeshard_types.h" 
+#include "schemeshard__operation_side_effects.h" 
+#include "schemeshard__operation_memory_changes.h" 
+#include "schemeshard__operation_db_changes.h" 
+ 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -16,183 +16,183 @@
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/tx_processing.h>
-
+ 
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
-
-#include <util/generic/ptr.h>
-#include <util/generic/set.h>
-
-#define SCHEMESHARD_INCOMING_EVENTS(action) \
-    action(TEvHive::TEvCreateTabletReply,        NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
-    action(TEvHive::TEvAdoptTabletReply,         NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
-    action(TEvHive::TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \
-    action(TEvHive::TEvDeleteOwnerTabletsReply,           NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)\
+ 
+#include <util/generic/ptr.h> 
+#include <util/generic/set.h> 
+ 
+#define SCHEMESHARD_INCOMING_EVENTS(action) \ 
+    action(TEvHive::TEvCreateTabletReply,        NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \ 
+    action(TEvHive::TEvAdoptTabletReply,         NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \ 
+    action(TEvHive::TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \ 
+    action(TEvHive::TEvDeleteOwnerTabletsReply,           NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)\ 
+\ 
+    action(TEvDataShard::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT) \ 
+    action(TEvDataShard::TEvSchemaChanged,       NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)          \ 
+    action(TEvDataShard::TEvStateChanged,        NSchemeShard::TXTYPE_DATASHARD_STATE_RESULT)            \ 
+    action(TEvDataShard::TEvInitSplitMergeDestinationAck, NSchemeShard::TXTYPE_INIT_SPLIT_DST_ACK)       \ 
+    action(TEvDataShard::TEvSplitAck,            NSchemeShard::TXTYPE_SPLIT_ACK)                         \ 
+    action(TEvDataShard::TEvSplitPartitioningChangedAck,  NSchemeShard::TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK) \ 
+\ 
+    action(TEvColumnShard::TEvProposeTransactionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_PROPOSE_RESULT)              \ 
+    action(TEvColumnShard::TEvNotifyTxCompletionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT) \ 
 \
-    action(TEvDataShard::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT) \
-    action(TEvDataShard::TEvSchemaChanged,       NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)          \
-    action(TEvDataShard::TEvStateChanged,        NSchemeShard::TXTYPE_DATASHARD_STATE_RESULT)            \
-    action(TEvDataShard::TEvInitSplitMergeDestinationAck, NSchemeShard::TXTYPE_INIT_SPLIT_DST_ACK)       \
-    action(TEvDataShard::TEvSplitAck,            NSchemeShard::TXTYPE_SPLIT_ACK)                         \
-    action(TEvDataShard::TEvSplitPartitioningChangedAck,  NSchemeShard::TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK) \
-\
-    action(TEvColumnShard::TEvProposeTransactionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_PROPOSE_RESULT)              \
-    action(TEvColumnShard::TEvNotifyTxCompletionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT) \
-\
-    action(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult,     NSchemeShard::TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT)     \
-    action(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult,  NSchemeShard::TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT)  \
-    action(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
+    action(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT)   \ 
+    action(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult,     NSchemeShard::TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT)     \ 
+    action(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT)   \ 
+    action(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT)   \ 
+    action(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult,  NSchemeShard::TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT)  \ 
+    action(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \ 
 \
     action(NReplication::TEvController::TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
     action(NReplication::TEvController::TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \
 \
-    action(TEvSubDomain::TEvConfigureStatus,     NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)        \
-\
-    action(TEvSchemeShard::TEvInitTenantSchemeShardResult,   NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)  \
-    action(TEvSchemeShard::TEvMigrateSchemeShardResult,      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult, NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvPrivate::TEvCommitTenantUpdate,                    NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvPrivate::TEvUndoTenantUpdate,                      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvPublishTenantResult,           NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvRewriteOwnerResult,            NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvDataShard::TEvMigrateSchemeShardResponse,          NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-\
-    action(TEvBlockStore::TEvUpdateVolumeConfigResponse,  NSchemeShard::TXTYPE_BLOCKSTORE_CONFIG_RESULT) \
-    action(TEvFileStore::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_FILESTORE_CONFIG_RESULT)  \
-    action(NKesus::TEvKesus::TEvSetConfigResult,          NSchemeShard::TXTYPE_KESUS_CONFIG_RESULT)      \
-    action(TEvPersQueue::TEvDropTabletReply,              NSchemeShard::TXTYPE_DROP_TABLET_RESULT)       \
-    action(TEvPersQueue::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_PERSQUEUE_CONFIG_RESULT)  \
-\
-    action(TEvPrivate::TEvOperationPlan,                   NSchemeShard::TXTYPE_PLAN_STEP)                             \
-    action(TEvPrivate::TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
-    action(TEvPrivate::TEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
-
-
-namespace NKikimr {
-namespace NSchemeShard {
-
-class TSchemeShard;
-
-struct TOperationContext {
-    TSchemeShard* SS;
-    NTabletFlatExecutor::TTransactionContext& Txc;
-    const TActorContext& Ctx;
-    TSideEffects& OnComplete;
-    TMemoryChanges& MemChanges;
-    TStorageChanges& DbChanges;
+    action(TEvSubDomain::TEvConfigureStatus,     NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)        \ 
+\ 
+    action(TEvSchemeShard::TEvInitTenantSchemeShardResult,   NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)  \ 
+    action(TEvSchemeShard::TEvMigrateSchemeShardResult,      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \ 
+    action(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult, NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \ 
+    action(TEvPrivate::TEvCommitTenantUpdate,                    NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \ 
+    action(TEvPrivate::TEvUndoTenantUpdate,                      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \ 
+    action(TEvSchemeShard::TEvPublishTenantResult,           NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \ 
+    action(TEvSchemeShard::TEvRewriteOwnerResult,            NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \ 
+    action(TEvDataShard::TEvMigrateSchemeShardResponse,          NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \ 
+\ 
+    action(TEvBlockStore::TEvUpdateVolumeConfigResponse,  NSchemeShard::TXTYPE_BLOCKSTORE_CONFIG_RESULT) \ 
+    action(TEvFileStore::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_FILESTORE_CONFIG_RESULT)  \ 
+    action(NKesus::TEvKesus::TEvSetConfigResult,          NSchemeShard::TXTYPE_KESUS_CONFIG_RESULT)      \ 
+    action(TEvPersQueue::TEvDropTabletReply,              NSchemeShard::TXTYPE_DROP_TABLET_RESULT)       \ 
+    action(TEvPersQueue::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_PERSQUEUE_CONFIG_RESULT)  \ 
+\ 
+    action(TEvPrivate::TEvOperationPlan,                   NSchemeShard::TXTYPE_PLAN_STEP)                             \ 
+    action(TEvPrivate::TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \ 
+    action(TEvPrivate::TEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \ 
+ 
+ 
+namespace NKikimr { 
+namespace NSchemeShard { 
+ 
+class TSchemeShard; 
+ 
+struct TOperationContext { 
+    TSchemeShard* SS; 
+    NTabletFlatExecutor::TTransactionContext& Txc; 
+    const TActorContext& Ctx; 
+    TSideEffects& OnComplete; 
+    TMemoryChanges& MemChanges; 
+    TStorageChanges& DbChanges; 
     TAutoPtr<NACLib::TUserToken> UserToken = nullptr;
-    bool IsAllowedPrivateTables = false;
-};
-
-using TProposeRequest = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction;
-using TProposeResponse = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult;
-using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
-
-class IOperationBase {
-public:
-    virtual ~IOperationBase() = default;
-
-#define DefaultDebugReply(TEvType, TxType) \
-    static TString DebugReply(const TEvType::TPtr&);
-
-    SCHEMESHARD_INCOMING_EVENTS(DefaultDebugReply)
-#undef DefaultDebugReply
-
-#define DefaultHandleReply(TEvType, ...) \
-    virtual void HandleReply(TEvType::TPtr&, TOperationContext&);
-
-    SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
-#undef DefaultHandleReply
-
-    virtual void ProgressState(TOperationContext& context) = 0;
-};
-
-class ISubOperationBase: public TSimpleRefCount<ISubOperationBase>, public IOperationBase {
-public:
-    using TPtr = TIntrusivePtr<ISubOperationBase>;
-
-    virtual THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) = 0;
-
+    bool IsAllowedPrivateTables = false; 
+}; 
+ 
+using TProposeRequest = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction; 
+using TProposeResponse = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult; 
+using TTxTransaction = NKikimrSchemeOp::TModifyScheme; 
+ 
+class IOperationBase { 
+public: 
+    virtual ~IOperationBase() = default; 
+ 
+#define DefaultDebugReply(TEvType, TxType) \ 
+    static TString DebugReply(const TEvType::TPtr&); 
+ 
+    SCHEMESHARD_INCOMING_EVENTS(DefaultDebugReply) 
+#undef DefaultDebugReply 
+ 
+#define DefaultHandleReply(TEvType, ...) \ 
+    virtual void HandleReply(TEvType::TPtr&, TOperationContext&); 
+ 
+    SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply) 
+#undef DefaultHandleReply 
+ 
+    virtual void ProgressState(TOperationContext& context) = 0; 
+}; 
+ 
+class ISubOperationBase: public TSimpleRefCount<ISubOperationBase>, public IOperationBase { 
+public: 
+    using TPtr = TIntrusivePtr<ISubOperationBase>; 
+ 
+    virtual THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) = 0; 
+ 
     // call it inside multipart operations after failed propose
     virtual void AbortPropose(TOperationContext& context) = 0;
 
-    //call it only before execute ForceDrop operaion for path
-    virtual void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) = 0;
-};
-
-class TSubOperationState {
-private:
-    TString LogHint;
-    TSet<ui32> MsgToIgnore;
-
-    virtual TString DebugHint() const = 0;
-
-public:
-
-    using TPtr = THolder<TSubOperationState>;
-    virtual ~TSubOperationState() = default;
-
-#define DefaultDebugReply(TEvType, TxType) \
-    TString DebugReply(const TEvType::TPtr&);
-
-    SCHEMESHARD_INCOMING_EVENTS(DefaultDebugReply)
-#undef DefaultDebugReply
-
-#define DefaultHandleReply(TEvType, ...)          \
-    virtual bool HandleReply(TEvType::TPtr&, TOperationContext&);
-
-    SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
-#undef DefaultHandleReply
-
-    void IgnoreMessages(TString debugHint, TSet<ui32> mgsIds);
-
-    virtual bool ProgressState(TOperationContext& context) = 0;
-};
-
-class TSubOperation: public ISubOperationBase {
-private:
-    TSubOperationState::TPtr Base = nullptr;
-
-public:
-    virtual void StateDone(TOperationContext& context) = 0;
-
-    void SetState(TSubOperationState::TPtr state) {
-        Base = std::move(state);
-    }
-
-    void ProgressState(TOperationContext& context) override {
-        Y_VERIFY(Base);
-        bool isDone = Base->ProgressState(context);
-        if (isDone) {
-            StateDone(context);
-        }
-    }
-
-    #define DefaultHandleReply(TEvType, ...)          \
-        void HandleReply(TEvType::TPtr& ev, TOperationContext& context) override {      \
-            Y_VERIFY(Base);                             \
-            bool isDone = Base->HandleReply(ev, context);   \
-            if (isDone) {                               \
-                StateDone(context);                     \
-            }                                           \
-        }
-
-        SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
-    #undef DefaultHandleReply
-};
-
+    //call it only before execute ForceDrop operaion for path 
+    virtual void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) = 0; 
+}; 
+ 
+class TSubOperationState { 
+private: 
+    TString LogHint; 
+    TSet<ui32> MsgToIgnore; 
+ 
+    virtual TString DebugHint() const = 0; 
+ 
+public: 
+ 
+    using TPtr = THolder<TSubOperationState>; 
+    virtual ~TSubOperationState() = default; 
+ 
+#define DefaultDebugReply(TEvType, TxType) \ 
+    TString DebugReply(const TEvType::TPtr&); 
+ 
+    SCHEMESHARD_INCOMING_EVENTS(DefaultDebugReply) 
+#undef DefaultDebugReply 
+ 
+#define DefaultHandleReply(TEvType, ...)          \ 
+    virtual bool HandleReply(TEvType::TPtr&, TOperationContext&); 
+ 
+    SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply) 
+#undef DefaultHandleReply 
+ 
+    void IgnoreMessages(TString debugHint, TSet<ui32> mgsIds); 
+ 
+    virtual bool ProgressState(TOperationContext& context) = 0; 
+}; 
+ 
+class TSubOperation: public ISubOperationBase { 
+private: 
+    TSubOperationState::TPtr Base = nullptr; 
+ 
+public: 
+    virtual void StateDone(TOperationContext& context) = 0; 
+ 
+    void SetState(TSubOperationState::TPtr state) { 
+        Base = std::move(state); 
+    } 
+ 
+    void ProgressState(TOperationContext& context) override { 
+        Y_VERIFY(Base); 
+        bool isDone = Base->ProgressState(context); 
+        if (isDone) { 
+            StateDone(context); 
+        } 
+    } 
+ 
+    #define DefaultHandleReply(TEvType, ...)          \ 
+        void HandleReply(TEvType::TPtr& ev, TOperationContext& context) override {      \ 
+            Y_VERIFY(Base);                             \ 
+            bool isDone = Base->HandleReply(ev, context);   \ 
+            if (isDone) {                               \ 
+                StateDone(context);                     \ 
+            }                                           \ 
+        } 
+ 
+        SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply) 
+    #undef DefaultHandleReply 
+}; 
+ 
 ISubOperationBase::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response);
-ISubOperationBase::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message);
-
+ISubOperationBase::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message); 
+ 
 ISubOperationBase::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateMkDir(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateRmDir(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateRmDir(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateModifyACL(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState state);
 
@@ -203,10 +203,10 @@ ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, const TTxTransact
 ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, TTxState::ETxState state);
 
 ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = { });
-ISubOperationBase::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state); 
 
 ISubOperationBase::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state); 
 TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperationBase::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx);
@@ -216,16 +216,16 @@ ISubOperationBase::TPtr CreateSplitMerge(TOperationId id, const TTxTransaction& 
 ISubOperationBase::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state);
 
 ISubOperationBase::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state);
-
-TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-TVector<ISubOperationBase::TPtr> CancelBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-
-TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state);
-
+ISubOperationBase::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state); 
+ 
+TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context); 
+TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context); 
+TVector<ISubOperationBase::TPtr> CancelBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context); 
+ 
+TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context); 
+ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state); 
+ 
 /// CDC
 // Create
 TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
@@ -252,20 +252,20 @@ ISubOperationBase::TPtr CreateBackup(TOperationId id, TTxState::ETxState state);
 ISubOperationBase::TPtr CreateRestore(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateRestore(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev);
+ISubOperationBase::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev); 
 
-TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
-TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
-
+TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context); 
+TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context); 
+ 
 ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
-
-TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
-
+ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState state); 
+ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState state); 
+ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state); 
+ 
+TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context); 
+ 
 ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state);
 ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, const TTxTransaction& tx);
@@ -282,39 +282,39 @@ ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, TTxState::ETxState 
 
 ISubOperationBase::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateAlterBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterBSV(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateAssignBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAssignBSV(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateDropBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropBSV(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateNewPQ(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewPQ(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateAlterPQ(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterPQ(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state);
-
+ 
 ISubOperationBase::TPtr CreateSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateSubDomain(TOperationId id, TTxState::ETxState state);
 
 ISubOperationBase::TPtr CreateAlterSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterSubDomain(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx);
-
-ISubOperationBase::TPtr CreateUpgradeSubDomain(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateUpgradeSubDomain(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateUpgradeSubDomainDecision(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateUpgradeSubDomainDecision(TOperationId id, TTxState::ETxState state);
-
+ISubOperationBase::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx); 
+ 
+ISubOperationBase::TPtr CreateUpgradeSubDomain(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateUpgradeSubDomain(TOperationId id, TTxState::ETxState state); 
+ISubOperationBase::TPtr CreateUpgradeSubDomainDecision(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateUpgradeSubDomainDecision(TOperationId id, TTxState::ETxState state); 
+ 
 ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, TTxState::ETxState state);
 
@@ -327,9 +327,9 @@ ISubOperationBase::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState s
 ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateFroceDropExtSubDomain(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateFroceDropExtSubDomain(TOperationId id, TTxState::ETxState state);
-
+ISubOperationBase::TPtr CreateFroceDropExtSubDomain(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateFroceDropExtSubDomain(TOperationId id, TTxState::ETxState state); 
+ 
 ISubOperationBase::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewKesus(TOperationId id, TTxState::ETxState state);
 
@@ -345,30 +345,30 @@ ISubOperationBase::TPtr CreateNewRTMR(TOperationId id, TTxState::ETxState state)
 ISubOperationBase::TPtr CreateNewSolomon(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewSolomon(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateAlterSolomon(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateAlterSolomon(TOperationId id, TTxState::ETxState state);
-
+ISubOperationBase::TPtr CreateAlterSolomon(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateAlterSolomon(TOperationId id, TTxState::ETxState state); 
+ 
 ISubOperationBase::TPtr CreateDropSolomon(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxState::ETxState state);
-
-ISubOperationBase::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
-
-ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
-
-ISubOperationBase::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, TTxState::ETxState state);
-
-ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, TTxState::ETxState state);
-
-ISubOperationBase::TPtr DropLock(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr DropLock(TOperationId id, TTxState::ETxState state);
-
+ISubOperationBase::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxState::ETxState state); 
+ 
+ISubOperationBase::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state); 
+ 
+ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state); 
+ 
+ISubOperationBase::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, TTxState::ETxState state); 
+ 
+ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, TTxState::ETxState state); 
+ 
+ISubOperationBase::TPtr DropLock(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr DropLock(TOperationId id, TTxState::ETxState state); 
+ 
 ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, TTxState::ETxState state);
 
@@ -381,13 +381,13 @@ ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState 
 ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state);
 
-TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-
-ISubOperationBase::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state);
-
-ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, TTxState::ETxState state);
+TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context); 
+ 
+ISubOperationBase::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state); 
+ 
+ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, TTxState::ETxState state); 
 
 ISubOperationBase::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state);
@@ -399,5 +399,5 @@ ISubOperationBase::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState
 ISubOperationBase::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state);
 
-}
-}
+} 
+} 

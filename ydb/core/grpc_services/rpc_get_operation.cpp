@@ -46,11 +46,11 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
     IEventBase* MakeRequest() override {
         switch (OperationId_.GetKind()) {
         case TOperationId::EXPORT:
-            return new NSchemeShard::TEvExport::TEvGetExportRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvExport::TEvGetExportRequest(DatabaseName, RawOperationId_); 
         case TOperationId::IMPORT:
-            return new NSchemeShard::TEvImport::TEvGetImportRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvImport::TEvGetImportRequest(DatabaseName, RawOperationId_); 
         case TOperationId::BUILD_INDEX:
-            return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(DatabaseName, RawOperationId_);
+            return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(DatabaseName, RawOperationId_); 
         default:
             Y_FAIL("unreachable");
         }
@@ -99,23 +99,23 @@ public:
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleResponse);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle); 
             HFunc(NConsole::TEvConsole::TEvGetOperationResponse, Handle);
-            HFunc(NSchemeShard::TEvExport::TEvGetExportResponse, Handle);
-            HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle);
-            HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
+            HFunc(NSchemeShard::TEvExport::TEvGetExportResponse, Handle); 
+            HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle); 
+            HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle); 
 
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());
         }
     }
 private:
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext& ctx) { 
         ReplyGetOperationResponse(false, ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) { 
         ReplyGetOperationResponse(true, ctx);
     }
 
@@ -179,12 +179,12 @@ private:
         Y_VERIFY(pipeActor);
         PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(); 
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
     }
 
-    void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) { 
         const auto& record = ev->Get()->Record.GetResponse();
 
         LOG_D("Handle TEvExport::TEvGetExportResponse"
@@ -195,7 +195,7 @@ private:
         Reply(resp, ctx);
     }
 
-    void Handle(NSchemeShard::TEvImport::TEvGetImportResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvImport::TEvGetImportResponse::TPtr& ev, const TActorContext& ctx) { 
         const auto& record = ev->Get()->Record.GetResponse();
 
         LOG_D("Handle TEvImport::TEvGetImportResponse"
@@ -206,8 +206,8 @@ private:
         Reply(resp, ctx);
     }
 
-    void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
+    void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) { 
+        const auto& record = ev->Get()->Record; 
 
         LOG_D("Handle TEvIndexBuilder::TEvGetResponse"
             << ": record# " << record.ShortDebugString());

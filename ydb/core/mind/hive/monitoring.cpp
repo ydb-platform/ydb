@@ -1123,7 +1123,7 @@ public:
                 auto it = tabletTypesToChannels.find(pr.second.Type);
                 if (it == tabletTypesToChannels.end()) {
                     ui32 channels = pr.second.GetChannelCount();
-                    tabletTypesToChannels.emplace(pr.second.Type, channels);
+                    tabletTypesToChannels.emplace(pr.second.Type, channels); 
                 }
             }
             ++tablets;
@@ -3052,9 +3052,9 @@ public:
         , Event(new TEvHive::TEvDeleteTablet())
         , Hive(hive)
     {
-        Event->Record.SetShardOwnerId(owner);
-        Event->Record.AddShardLocalIdx(ownerIdx);
-        Event->Record.SetTxId_Deprecated(FAKE_TXID);
+        Event->Record.SetShardOwnerId(owner); 
+        Event->Record.AddShardLocalIdx(ownerIdx); 
+        Event->Record.SetTxId_Deprecated(FAKE_TXID); 
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -3076,9 +3076,9 @@ public:
             }
         }
 
-        Event->Record.SetShardOwnerId(owner);
-        Event->Record.AddShardLocalIdx(ownerIdx);
-        Event->Record.SetTxId_Deprecated(FAKE_TXID);
+        Event->Record.SetShardOwnerId(owner); 
+        Event->Record.AddShardLocalIdx(ownerIdx); 
+        Event->Record.SetTxId_Deprecated(FAKE_TXID); 
     }
 
 private:

@@ -3,7 +3,7 @@
 #include "factories.h"
 #include "service_initializer.h"
 
-#include <library/cpp/actors/util/affinity.h>
+#include <library/cpp/actors/util/affinity.h> 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/tablet/tablet_setup.h>
@@ -13,15 +13,15 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/public/lib/base/msgbus.h>
-
+ 
 #include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
 
-#include <library/cpp/actors/core/defs.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log_settings.h>
-#include <library/cpp/actors/core/scheduler_actor.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/actors/interconnect/poller_tcp.h>
+#include <library/cpp/actors/core/defs.h> 
+#include <library/cpp/actors/core/actorsystem.h> 
+#include <library/cpp/actors/core/log_settings.h> 
+#include <library/cpp/actors/core/scheduler_actor.h> 
+#include <library/cpp/actors/core/scheduler_basic.h> 
+#include <library/cpp/actors/interconnect/poller_tcp.h> 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/vector.h>
@@ -179,7 +179,7 @@ public:
 
 class TBootstrapperInitializer : public IKikimrServicesInitializer {
 public:
-    TBootstrapperInitializer(const TKikimrRunConfig& runConfig);
+    TBootstrapperInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -204,13 +204,13 @@ public:
 
 class TTxProxyInitializer : public IKikimrServicesInitializer {
     TVector<ui64> CollectAllAllocatorsFromAllDomains(const NKikimr::TAppData* appData);
-
-public:
-    TTxProxyInitializer(const TKikimrRunConfig& runConfig);
-
+ 
+public: 
+    TTxProxyInitializer(const TKikimrRunConfig& runConfig); 
+ 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+}; 
+ 
 class TLongTxServiceInitializer : public IKikimrServicesInitializer {
 public:
     TLongTxServiceInitializer(const TKikimrRunConfig& runConfig);
@@ -227,7 +227,7 @@ public:
 
 class TMiniKQLCompileServiceInitializer : public IKikimrServicesInitializer {
 public:
-    TMiniKQLCompileServiceInitializer(const TKikimrRunConfig& runConfig);
+    TMiniKQLCompileServiceInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -238,7 +238,7 @@ class TMessageBusServicesInitializer : public IKikimrServicesInitializer {
 
 public:
     TMessageBusServicesInitializer(const TKikimrRunConfig& runConfig,
-                                   NMsgBusProxy::IMessageBusServer& busServer);
+                                   NMsgBusProxy::IMessageBusServer& busServer); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -310,7 +310,7 @@ class TViewerInitializer : public IKikimrServicesInitializer {
     const TKikimrRunConfig& KikimrRunConfig;
 
 public:
-    TViewerInitializer(const TKikimrRunConfig& runConfig);
+    TViewerInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -458,13 +458,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TMeteringWriterInitializer : public IKikimrServicesInitializer {
-public:
-    TMeteringWriterInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
+class TMeteringWriterInitializer : public IKikimrServicesInitializer { 
+public: 
+    TMeteringWriterInitializer(const TKikimrRunConfig& runConfig); 
+ 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+}; 
+ 
 class TSchemeBoardMonitoringInitializer : public IKikimrServicesInitializer {
 public:
     TSchemeBoardMonitoringInitializer(const TKikimrRunConfig& runConfig);

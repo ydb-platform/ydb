@@ -51,14 +51,14 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
 
     auto &outReadSets = op->OutReadSets();
     ui64 srcTablet = DataShard.TabletID();
-
-    const auto& snapshot = schemeTx.GetSendSnapshot();
-    ui64 targetTablet = snapshot.GetSendTo(0).GetShard();
-    ui64 tableId = snapshot.GetTableId_Deprecated();
-    if (snapshot.HasTableId()) {
-        Y_VERIFY(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
-        tableId = snapshot.GetTableId().GetTableId();
-    }
+ 
+    const auto& snapshot = schemeTx.GetSendSnapshot(); 
+    ui64 targetTablet = snapshot.GetSendTo(0).GetShard(); 
+    ui64 tableId = snapshot.GetTableId_Deprecated(); 
+    if (snapshot.HasTableId()) { 
+        Y_VERIFY(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId()); 
+        tableId = snapshot.GetTableId().GetTableId(); 
+    } 
     Y_VERIFY(DataShard.GetUserTables().contains(tableId));
     ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 

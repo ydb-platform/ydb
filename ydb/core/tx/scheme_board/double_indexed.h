@@ -177,33 +177,33 @@ public:
         auto sIt = EmplaceInIndex(std::forward<TSk>(sKey));
 
         if (pIt.second && sIt.second) {
-            // no pKey, no sKey, insert new element
-
+            // no pKey, no sKey, insert new element 
+ 
             EmplaceInStorage(std::forward<TV>(val));
             auto it = std::prev(Storage.end());
             CrossSetIterators(it, pIt.first);
             CrossSetIterators(it, sIt.first);
         } else if (!pIt.second && sIt.second) {
-            // has pKey, no sKey, merge val into exited pKey
-
+            // has pKey, no sKey, merge val into exited pKey 
+ 
             Y_VERIFY(AnotherIndexIterator(pIt.first) == AnotherIndex(pIt.first).end());
             Merge(pIt.first->second->Value, std::forward<TV>(val));
             CrossSetIterators(pIt.first->second, sIt.first);
         } else if (pIt.second && !sIt.second) {
-            // no pKey, has sKey, merge val into exited sKey
-
+            // no pKey, has sKey, merge val into exited sKey 
+ 
             Y_VERIFY(AnotherIndexIterator(sIt.first) == AnotherIndex(sIt.first).end());
             Merge(sIt.first->second->Value, std::forward<TV>(val));
             CrossSetIterators(sIt.first->second, pIt.first);
         } else if (pIt.first->second != sIt.first->second) {
-            // has pKey, has sKey, pKey is not equal to sKey, merge val into merged pKey and sKey
-
+            // has pKey, has sKey, pKey is not equal to sKey, merge val into merged pKey and sKey 
+ 
             Merge(pIt.first->second->Value, std::forward<TV>(Merge(sIt.first->second->Value, std::forward<TV>(val))));
             Storage.erase(sIt.first->second);
             CrossSetIterators(pIt.first->second, sIt.first);
         } else {
-            // has pKey, has sKey, pKey is equal to sKey, merge val into existed item;
-
+            // has pKey, has sKey, pKey is equal to sKey, merge val into existed item; 
+ 
             Merge(pIt.first->second->Value, std::forward<TV>(val));
         }
 

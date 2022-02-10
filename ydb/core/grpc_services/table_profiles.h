@@ -20,17 +20,17 @@ public:
     bool HasPresetName(const TString& presetName) const;
 
     bool ApplyTableProfile(const Ydb::Table::TableProfile &profile,
-                           NKikimrSchemeOp::TTableDescription &tableDesc,
+                           NKikimrSchemeOp::TTableDescription &tableDesc, 
                            Ydb::StatusIds::StatusCode &code,
                            TString &error) const;
 
-    bool ApplyCompactionPolicy(const TString &name, NKikimrSchemeOp::TPartitionConfig &partitionConfig,
+    bool ApplyCompactionPolicy(const TString &name, NKikimrSchemeOp::TPartitionConfig &partitionConfig, 
         Ydb::StatusIds::StatusCode &code, TString &error, const TAppData* appData = nullptr) const;
 
 private:
-    NKikimrSchemeOp::TFamilyDescription *GetNamedFamilyDescription(NKikimrConfig::TStoragePolicy &policy, const TString& name) const;
-    NKikimrSchemeOp::TFamilyDescription *GetDefaultFamilyDescription(NKikimrConfig::TStoragePolicy &policy) const;
-    NKikimrSchemeOp::TStorageConfig *GetDefaultStorageConfig(NKikimrConfig::TStoragePolicy &policy) const;
+    NKikimrSchemeOp::TFamilyDescription *GetNamedFamilyDescription(NKikimrConfig::TStoragePolicy &policy, const TString& name) const; 
+    NKikimrSchemeOp::TFamilyDescription *GetDefaultFamilyDescription(NKikimrConfig::TStoragePolicy &policy) const; 
+    NKikimrSchemeOp::TStorageConfig *GetDefaultStorageConfig(NKikimrConfig::TStoragePolicy &policy) const; 
 public:
     THashMap<TString, NKikimrConfig::TCompactionPolicy> CompactionPolicies;
     THashMap<TString, NKikimrConfig::TExecutionPolicy> ExecutionPolicies;

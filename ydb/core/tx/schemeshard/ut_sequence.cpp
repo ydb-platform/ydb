@@ -1,8 +1,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-using namespace NKikimr::NSchemeShard;
+using namespace NKikimr::NSchemeShard; 
 using namespace NKikimr;
-using namespace NKikimrSchemeOp;
+using namespace NKikimrSchemeOp; 
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSequence) {
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         TestCreateSequence(runtime, ++txId, "/MyRoot/seq", R"(
             Name: "seq"
-        )", {NKikimrScheme::StatusPathIsNotDirectory});
+        )", {NKikimrScheme::StatusPathIsNotDirectory}); 
     }
 
     Y_UNIT_TEST(CreateSequenceInsideTableThenDropSequence) {
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         TestCreateSequence(runtime, ++txId, "/MyRoot/Table/ValueIndex/indexImplTable", R"(
             Name: "seq"
-        )", {NKikimrScheme::StatusNameConflict});
+        )", {NKikimrScheme::StatusNameConflict}); 
     }
 
     Y_UNIT_TEST(CreateSequencesWithIndexedTable) {
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusInvalidParameter}); 
 
         // Cannot use default from sequence that doesn't match local sequences
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
             SequenceDescription {
                 Name: "someseq"
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusInvalidParameter}); 
 
         // Cannot use default from sequence for a non-key column
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
             SequenceDescription {
                 Name: "myseq"
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusInvalidParameter}); 
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         // Cannot drop sequence used by a column
         TestDropSequence(runtime, ++txId, "/MyRoot/Table", "myseq",
-            {NKikimrScheme::StatusNameConflict});
+            {NKikimrScheme::StatusNameConflict}); 
 
         TestDropTable(runtime, ++txId, "/MyRoot", "Table");
         env.TestWaitNotification(runtime, txId);

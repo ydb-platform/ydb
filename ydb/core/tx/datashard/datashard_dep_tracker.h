@@ -92,9 +92,9 @@ public:
     // Called to update this table schema
     void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) noexcept;
 
-    // Calld to update this table schema upon move
-    void RemoveSchema(const TPathId& tableId) noexcept;
-
+    // Calld to update this table schema upon move 
+    void RemoveSchema(const TPathId& tableId) noexcept; 
+ 
     // Adds operation to the tracker
     void AddOperation(const TOperation::TPtr& op) noexcept {
         GetTrackingLogic().AddOperation(op);

@@ -28,7 +28,7 @@
 #include <google/protobuf/text_format.h>
 
 #include <functional>
-#include <algorithm>
+#include <algorithm> 
 
 namespace NKikimr {
 namespace Tests {
@@ -46,13 +46,13 @@ namespace Tests {
 
     constexpr const char* TestDomainName = "dc-1";
     const ui32 TestDomain = 1;
-    const ui64 DummyTablet1 = 0x840100;
-    const ui64 DummyTablet2 = 0x840101;
-    const ui64 Coordinator = 0x800001;
-    const ui64 Mediator = 0x810001;
-    const ui64 TxAllocator = 0x820001;
-    const ui64 SchemeRoot = 0x850100;
-    const ui64 Hive = 0xA001;
+    const ui64 DummyTablet1 = 0x840100; 
+    const ui64 DummyTablet2 = 0x840101; 
+    const ui64 Coordinator = 0x800001; 
+    const ui64 Mediator = 0x810001; 
+    const ui64 TxAllocator = 0x820001; 
+    const ui64 SchemeRoot = 0x850100; 
+    const ui64 Hive = 0xA001; 
 
     struct TServerSetup {
         TString IpAddress;
@@ -72,20 +72,20 @@ namespace Tests {
     TServerSetup GetServerSetup();
 
     ui64 ChangeDomain(ui64 tabletId, ui32 domainUid);
-    ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid);
+    ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid); 
     NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry);
 
-
+ 
     struct TServerSettings: public TThrRefBase, public TTestFeatureFlagsHolder<TServerSettings> {
         static constexpr ui64 BOX_ID = 999;
         ui64 POOL_ID = 1;
 
-        using TPtr = TIntrusivePtr<TServerSettings>;
-        using TConstPtr = TIntrusiveConstPtr<TServerSettings>;
-
+        using TPtr = TIntrusivePtr<TServerSettings>; 
+        using TConstPtr = TIntrusiveConstPtr<TServerSettings>; 
+ 
         using TControls = NKikimrConfig::TImmediateControlsConfig;
         using TLoggerInitializer = std::function<void (TTestActorRuntime&)>;
-        using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
+        using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds; 
 
         ui16 Port;
         ui16 GrpcPort = 0;
@@ -93,12 +93,12 @@ namespace Tests {
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
         NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
-        ui32 Domain = TestDomain;
+        ui32 Domain = TestDomain; 
         bool SupportsRedirect = true;
         TString TracePath;
         TString DomainName = TestDomainName;
         ui32 NodeCount = 1;
-        ui32 DynamicNodeCount = 0;
+        ui32 DynamicNodeCount = 0; 
         NFake::TStorage CustomDiskParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
@@ -106,7 +106,7 @@ namespace Tests {
         bool EnableMockOnSingleNode = true;
         TAutoPtr<TLogBackend> LogBackend;
         TLoggerInitializer LoggerInitializer;
-        TStoragePoolKinds StoragePoolTypes;
+        TStoragePoolKinds StoragePoolTypes; 
         TVector<NKikimrKqp::TKqpSetting> KqpSettings;
         bool EnableConsole = true;
         bool EnableConfigsDispatcher = true;
@@ -118,7 +118,7 @@ namespace Tests {
         ui64 ChangesQueueBytesLimit = 0;
         NKikimrConfig::TAppConfig AppConfig;
         NKikimrConfig::TCompactionConfig CompactionConfig;
-        TMap<ui32, TString> NodeKeys;
+        TMap<ui32, TString> NodeKeys; 
         ui64 DomainPlanResolution = 0;
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
 
@@ -131,15 +131,15 @@ namespace Tests {
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }
-        TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; }
+        TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; } 
         TServerSettings& SetDomainName(const TString& value);
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
-        TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
+        TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; } 
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
-        TServerSettings& SetLogBackend(TAutoPtr<TLogBackend> value) { LogBackend = value; return *this; }
+        TServerSettings& SetLogBackend(TAutoPtr<TLogBackend> value) { LogBackend = value; return *this; } 
         TServerSettings& SetLoggerInitializer(TLoggerInitializer value) { LoggerInitializer = std::move(value); return *this; }
         TServerSettings& AddStoragePoolType(const TString& poolKind, ui32 encryptionMode = 0);
         TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0);
@@ -148,7 +148,7 @@ namespace Tests {
         TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
         TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig value) { AppConfig = value; return *this; }
-        TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; }
+        TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; } 
         TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
         TServerSettings& SetDomainPlanResolution(ui64 resolution) { DomainPlanResolution = resolution; return *this; }
         TServerSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
@@ -186,36 +186,36 @@ namespace Tests {
         {
             AddStoragePool("test", "/" + DomainName + ":test");
         }
-
-        TServerSettings(const TServerSettings& settings) = default;
+ 
+        TServerSettings(const TServerSettings& settings) = default; 
     };
 
-    class TServer : public TThrRefBase, TMoveOnly {
-    protected:
-        void SetupStorage();
-
-        void SetupMessageBus(ui16 port, const TString &tracePath);
+    class TServer : public TThrRefBase, TMoveOnly { 
+    protected: 
+        void SetupStorage(); 
+ 
+        void SetupMessageBus(ui16 port, const TString &tracePath); 
         void SetupDomains(TAppPrepare&);
         void CreateBootstrapTablets();
-        void SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData);
-        void SetupDomainLocalService(ui32 nodeIdx);
-        void SetupLocalService(ui32 nodeIdx, const TString &domainName);
+        void SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData); 
+        void SetupDomainLocalService(ui32 nodeIdx); 
+        void SetupLocalService(ui32 nodeIdx, const TString &domainName); 
         void SetupConfigurators(ui32 nodeIdx);
         void SetupProxies(ui32 nodeIdx);
-        void SetupLogging();
-
+        void SetupLogging(); 
+ 
         void Initialize();
-
+ 
     public:
-        using TPtr = TIntrusivePtr<TServer>;
-        using TMapStoragePool = TDomainsInfo::TDomain::TStoragePoolKinds;
+        using TPtr = TIntrusivePtr<TServer>; 
+        using TMapStoragePool = TDomainsInfo::TDomain::TStoragePoolKinds; 
 
         TServer(const TServerSettings& settings, bool defaultInit = true);
         TServer(TServerSettings::TConstPtr settings, bool defaultInit = true);
 
-        TServer(TServer&& server) = default;
-        TServer& operator =(TServer&& server) = default;
-        virtual ~TServer();
+        TServer(TServer&& server) = default; 
+        TServer& operator =(TServer&& server) = default; 
+        virtual ~TServer(); 
 
         void EnableGRpc(const NGrpc::TServerOptions& options);
         void EnableGRpc(ui16 port);
@@ -232,30 +232,30 @@ namespace Tests {
                 GRpcServer = nullptr;
             }
         }
-        void StartDummyTablets();
+        void StartDummyTablets(); 
         TTestActorRuntime* GetRuntime() const;
-        const TServerSettings& GetSettings() const;
-        const NScheme::TTypeRegistry* GetTypeRegistry();
-        const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
+        const TServerSettings& GetSettings() const; 
+        const NScheme::TTypeRegistry* GetTypeRegistry(); 
+        const NMiniKQL::IFunctionRegistry* GetFunctionRegistry(); 
 
-        ui32 StaticNodes() const {
-            return Settings->NodeCount;
-        }
-        ui32 DynamicNodes() const {
-            return Settings->DynamicNodeCount;
-        }
-        void SetupDynamicLocalService(ui32 nodeIdx, const TString &tenantName);
-        void DestroyDynamicLocalService(ui32 nodeIdx);
+        ui32 StaticNodes() const { 
+            return Settings->NodeCount; 
+        } 
+        ui32 DynamicNodes() const { 
+            return Settings->DynamicNodeCount; 
+        } 
+        void SetupDynamicLocalService(ui32 nodeIdx, const TString &tenantName); 
+        void DestroyDynamicLocalService(ui32 nodeIdx); 
+ 
+    protected: 
+        const TServerSettings::TConstPtr Settings; 
+        const bool UseStoragePools; 
 
-    protected:
-        const TServerSettings::TConstPtr Settings;
-        const bool UseStoragePools;
-
-        THolder<TTestActorRuntime> Runtime;
+        THolder<TTestActorRuntime> Runtime; 
         THolder<NYdb::TDriver> Driver;
-        TIntrusivePtr<NBus::TBusMessageQueue> Bus;
-        const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
-        TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
+        TIntrusivePtr<NBus::TBusMessageQueue> Bus; 
+        const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config 
+        TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer; 
         std::unique_ptr<NGrpc::TGRpcServer> GRpcServer;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
     };
@@ -268,14 +268,14 @@ namespace Tests {
             bool CollectStats = false;
         };
 
-        struct TPathVersion {
-            ui64 OwnerId = 0;
-            ui64 PathId = 0;
-            ui64 Version = 0;
-        };
-        using TApplyIf = TVector<TPathVersion>;
-
-        TClient(const TServerSettings& settings);
+        struct TPathVersion { 
+            ui64 OwnerId = 0; 
+            ui64 PathId = 0; 
+            ui64 Version = 0; 
+        }; 
+        using TApplyIf = TVector<TPathVersion>; 
+ 
+        TClient(const TServerSettings& settings); 
         virtual ~TClient();
 
         const NMsgBusProxy::TMsgBusClientConfig& GetClientConfig() const;
@@ -333,58 +333,58 @@ namespace Tests {
         }
 
         static ui64 GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect);
-        void WaitRootIsUp(const TString& root);
-        TAutoPtr<NBus::TBusMessage> InitRootSchemeWithReply(const TString& root);
-        void InitRootScheme();
-        void InitRootScheme(const TString& root);
+        void WaitRootIsUp(const TString& root); 
+        TAutoPtr<NBus::TBusMessage> InitRootSchemeWithReply(const TString& root); 
+        void InitRootScheme(); 
+        void InitRootScheme(const TString& root); 
 
         void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString());
         TString StartTrace(const TString &path);
         void StopTrace();
 
         // Flat DB operations
-        NMsgBusProxy::EResponseStatus WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout);
-        NMsgBusProxy::EResponseStatus MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});
-        NMsgBusProxy::EResponseStatus RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});
-        NMsgBusProxy::EResponseStatus CreateSubdomain(const TString &parent, const TString &description);
-        NMsgBusProxy::EResponseStatus CreateSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain);
-        NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString &parent, const TString &description);
-        NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain);
-        NMsgBusProxy::EResponseStatus AlterExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs = {}, const TApplyIf& applyIf = {});
-        NMsgBusProxy::EResponseStatus AlterSubdomain(const TString &parent, const TString &description, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus AlterSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
-        NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
-        NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
+        NMsgBusProxy::EResponseStatus WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout); 
+        NMsgBusProxy::EResponseStatus MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {}); 
+        NMsgBusProxy::EResponseStatus RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {}); 
+        NMsgBusProxy::EResponseStatus CreateSubdomain(const TString &parent, const TString &description); 
+        NMsgBusProxy::EResponseStatus CreateSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain); 
+        NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString &parent, const TString &description); 
+        NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain); 
+        NMsgBusProxy::EResponseStatus AlterExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000)); 
+        NMsgBusProxy::EResponseStatus AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs = {}, const TApplyIf& applyIf = {}); 
+        NMsgBusProxy::EResponseStatus AlterSubdomain(const TString &parent, const TString &description, TDuration timeout = TDuration::Seconds(5000)); 
+        NMsgBusProxy::EResponseStatus AlterSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000)); 
+        NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name); 
+        NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name); 
+        NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name); 
         NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password);
-
-        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
+ 
+        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000)); 
+        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000)); 
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
             const NKikimrSchemeOp::TTableDescription &table, const TString& indexName,
             const TVector<TString> indexColumns, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus CopyTable(const TString& parent, const TString& name, const TString& src);
+        NMsgBusProxy::EResponseStatus SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout = TDuration::Seconds(5000)); 
+        NMsgBusProxy::EResponseStatus CopyTable(const TString& parent, const TString& name, const TString& src); 
         NMsgBusProxy::EResponseStatus CreateKesus(const TString& parent, const TString& name);
         NMsgBusProxy::EResponseStatus DeleteKesus(const TString& parent, const TString& name);
-        NMsgBusProxy::EResponseStatus ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus DeleteTable(const TString& parent, const TString& name);
-        NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update);
-        NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const TString& alter);
-        TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update, const TString& userToken);
+        NMsgBusProxy::EResponseStatus ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout = TDuration::Seconds(5000)); 
+        NMsgBusProxy::EResponseStatus DeleteTable(const TString& parent, const TString& name); 
+        NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update); 
+        NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const TString& alter); 
+        TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update, const TString& userToken); 
         TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const TString& alter, const TString& userToken);
-
+ 
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const TString& scheme);
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const NKikimrSchemeOp::TColumnStoreDescription& store);
         NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const TString& scheme);
         NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const NKikimrSchemeOp::TColumnTableDescription& table);
-        NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
-        NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
+        NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0); 
+        NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task); 
         NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);
         TAutoPtr<NMsgBusProxy::TBusResponse> TryDropPersQueueGroup(const TString& parent, const TString& name);
         TAutoPtr<NMsgBusProxy::TBusResponse> Ls(const TString& path);
-        static TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe);
+        static TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe); 
         static TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
         bool FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result);
         bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
@@ -403,17 +403,17 @@ namespace Tests {
         bool LocalSchemeTx(const ui64 tabletId, const TString& schemeChanges, bool dryRun,
                            NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
         void SetSecurityToken(const TString& token) { SecurityToken = token; }
-        void ModifyOwner(const TString& parent, const TString& name, const TString& owner);
+        void ModifyOwner(const TString& parent, const TString& name, const TString& owner); 
         void ModifyACL(const TString& parent, const TString& name, const TString& acl);
-        TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
-        NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
-        void RemoveStoragePool(const TString& name);
+        TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1); 
+        NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name); 
+        void RemoveStoragePool(const TString& name); 
 
-
+ 
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
-                const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
-
-
+                const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {}); 
+ 
+ 
         // Helper functions
         TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query);
         TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
@@ -421,7 +421,7 @@ namespace Tests {
         bool WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);
         bool WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);
         ui32 GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId);
-        bool TabletExistsInHive(TTestActorRuntime* runtime, ui64 tabletId, bool evenInDeleting = false);
+        bool TabletExistsInHive(TTestActorRuntime* runtime, ui64 tabletId, bool evenInDeleting = false); 
         TVector<ui32> GetFollowerNodes(TTestActorRuntime *runtime, ui64 tabletId);
         void S3Listing(const TString& table, const TString& prefixColumnsPb, const TString &pathPrefix,
                        const TString &pathDelimiter, const TString& startAfterSuffixColumnsPb,
@@ -429,10 +429,10 @@ namespace Tests {
                        NKikimrClient::TS3ListingResponse &res);
 
         void GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res);
-        void GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res);
-
-        static void RefreshPathCache(TTestActorRuntime* runtime, const TString& path, ui32 nodeIdx = 0);
-
+        void GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res); 
+ 
+        static void RefreshPathCache(TTestActorRuntime* runtime, const TString& path, ui32 nodeIdx = 0); 
+ 
         ui64 GetKesusTabletId(const TString& kesusPath);
         Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props);
         Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const TMaybe<double> maxUnitsPerSecond = Nothing());
@@ -481,36 +481,36 @@ namespace Tests {
         }
 
         // Waits for scheme operation to complete
-        NBus::EMessageStatus WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId,
-                                            TAutoPtr<NBus::TBusMessage>& reply,
-                                            TDuration timeout = TDuration::Seconds(1000));
+        NBus::EMessageStatus WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId, 
+                                            TAutoPtr<NBus::TBusMessage>& reply, 
+                                            TDuration timeout = TDuration::Seconds(1000)); 
         NBus::EMessageStatus SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request,
-                                                   TAutoPtr<NBus::TBusMessage>& reply,
-                                                   TDuration timeout = TDuration::Seconds(1000));
+                                                   TAutoPtr<NBus::TBusMessage>& reply, 
+                                                   TDuration timeout = TDuration::Seconds(1000)); 
 
         ui32 NodeIdToIndex(TTestActorRuntime* runtime, ui32 id) {
             ui32 offset = runtime->GetNodeId(0);
-            Y_VERIFY(id >= offset);
+            Y_VERIFY(id >= offset); 
             return id - offset;
         }
 
         TAutoPtr<NMsgBusProxy::TBusResponse> LsImpl(const TString& path);
 
-        static void SetApplyIf(NKikimrSchemeOp::TModifyScheme& transaction, const TApplyIf& applyIf) {
-            for (auto& pathVer: applyIf) {
-                auto item = transaction.AddApplyIf();
-                item->SetPathId(pathVer.PathId);
-                item->SetPathVersion(pathVer.Version);
-            }
-        }
-
+        static void SetApplyIf(NKikimrSchemeOp::TModifyScheme& transaction, const TApplyIf& applyIf) { 
+            for (auto& pathVer: applyIf) { 
+                auto item = transaction.AddApplyIf(); 
+                item->SetPathId(pathVer.PathId); 
+                item->SetPathVersion(pathVer.Version); 
+            } 
+        } 
+ 
     protected:
-        using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
-
+        using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds; 
+ 
         const ui32 Domain;
         const TString DomainName;
         const bool SupportsRedirect;
-        const TStoragePoolKinds StoragePoolTypes;
+        const TStoragePoolKinds StoragePoolTypes; 
         NScheme::TKikimrTypeRegistry TypeRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
         NMsgBusProxy::TMsgBusClientConfig ClientConfig;
@@ -521,44 +521,44 @@ namespace Tests {
         TString SecurityToken;
     };
 
-    struct TTenants {
-    private:
-        Tests::TServer::TPtr Server;
-
+    struct TTenants { 
+    private: 
+        Tests::TServer::TPtr Server; 
+ 
         TVector<ui32> VacantNodes;
         TMap<TString, TVector<ui32>> Tenants;
-
-    public:
-        TTenants(Tests::TServer::TPtr server);
-        ~TTenants();
-
-        void Run(const TString &name, ui32 nodes = 1);
-        void Stop(const TString &name);
-        void Stop();
-
-        void Add(const TString &name, ui32 nodes = 1);
-        void Free(const TString &name, ui32 nodes = 1);
-
-        bool IsActive(const TString &name, ui32 nodeIdx) const;
-        void FreeNode(const TString &name, ui32 nodeIdx);
-
-        bool IsStaticNode(ui32 nodeIdx) const;
+ 
+    public: 
+        TTenants(Tests::TServer::TPtr server); 
+        ~TTenants(); 
+ 
+        void Run(const TString &name, ui32 nodes = 1); 
+        void Stop(const TString &name); 
+        void Stop(); 
+ 
+        void Add(const TString &name, ui32 nodes = 1); 
+        void Free(const TString &name, ui32 nodes = 1); 
+ 
+        bool IsActive(const TString &name, ui32 nodeIdx) const; 
+        void FreeNode(const TString &name, ui32 nodeIdx); 
+ 
+        bool IsStaticNode(ui32 nodeIdx) const; 
         const TVector<ui32>& List(const TString &name) const;
-        ui32 Size(const TString &name) const;
-        ui32 Size() const;
-        ui32 Availabe() const;
-        ui32 Capacity() const;
-
-    private:
+        ui32 Size(const TString &name) const; 
+        ui32 Size() const; 
+        ui32 Availabe() const; 
+        ui32 Capacity() const; 
+ 
+    private: 
         TVector<ui32>& Nodes(const TString &name);
-        void StopNode(const TString /*name*/, ui32 nodeIdx);
-        void RunNode(const TString &name, ui32 nodeIdx);
-        void StopPaticularNode(const TString &name, ui32 nodeIdx);
-        void StopNodes(const TString &name, ui32 count);
-        void RunNodes(const TString &name, ui32 count);
-        ui32 AllocNodeIdx();
-        void FreeNodeIdx(ui32 nodeIdx);
-    };
-
+        void StopNode(const TString /*name*/, ui32 nodeIdx); 
+        void RunNode(const TString &name, ui32 nodeIdx); 
+        void StopPaticularNode(const TString &name, ui32 nodeIdx); 
+        void StopNodes(const TString &name, ui32 count); 
+        void RunNodes(const TString &name, ui32 count); 
+        ui32 AllocNodeIdx(); 
+        void FreeNodeIdx(ui32 nodeIdx); 
+    }; 
+ 
 }
 }

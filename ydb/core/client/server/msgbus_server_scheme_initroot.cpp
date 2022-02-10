@@ -11,7 +11,7 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 
 class TMessageBusSchemeInitRoot : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusSchemeInitRoot>> {
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusSchemeInitRoot>>;
@@ -19,20 +19,20 @@ class TMessageBusSchemeInitRoot : public TMessageBusSecureRequest<TMessageBusSer
     const bool WithRetry = true;
     TActorId PipeClient;
 
-    void ReplyWithResult(EResponseStatus status, TEvSchemeShard::TEvInitRootShardResult::EStatus ssStatus, const TActorContext &ctx) {
+    void ReplyWithResult(EResponseStatus status, TEvSchemeShard::TEvInitRootShardResult::EStatus ssStatus, const TActorContext &ctx) { 
         TAutoPtr<TBusResponseStatus> response(new TBusResponseStatus(status));
         response->Record.SetSchemeStatus(ssStatus);
         SendReplyAutoPtr(response);
         Request.Destroy();
-        Die(ctx);
+        Die(ctx); 
     }
 
-    void Handle(TEvSchemeShard::TEvInitRootShardResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvSchemeShard::TEvInitRootShardResult::TPtr& ev, const TActorContext& ctx) { 
         const NKikimrTxScheme::TEvInitRootShardResult &record = ev->Get()->Record;
-        const auto status = (TEvSchemeShard::TEvInitRootShardResult::EStatus)record.GetStatus();
+        const auto status = (TEvSchemeShard::TEvInitRootShardResult::EStatus)record.GetStatus(); 
         switch (status) {
-        case TEvSchemeShard::TEvInitRootShardResult::StatusSuccess:
-        case TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized:
+        case TEvSchemeShard::TEvInitRootShardResult::StatusSuccess: 
+        case TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized: 
             return ReplyWithResult(MSTATUS_OK, status, ctx);
         default:
             return ReplyWithResult(MSTATUS_ERROR, status, ctx);
@@ -64,7 +64,7 @@ public:
     //STFUNC(StateWork)
     void StateWork(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvSchemeShard::TEvInitRootShardResult, Handle);
+            HFunc(TEvSchemeShard::TEvInitRootShardResult, Handle); 
         }
     }
 
@@ -72,7 +72,7 @@ public:
         TString tagName = Request->Record.GetTagName();
         const TDomainsInfo::TDomain *domain = AppData(ctx)->DomainsInfo->GetDomainByName(tagName);
         if (domain != nullptr) {
-            THolder<TEvSchemeShard::TEvInitRootShard> x = MakeHolder<TEvSchemeShard::TEvInitRootShard>(ctx.SelfID, domain->DomainRootTag(), domain->Name);
+            THolder<TEvSchemeShard::TEvInitRootShard> x = MakeHolder<TEvSchemeShard::TEvInitRootShard>(ctx.SelfID, domain->DomainRootTag(), domain->Name); 
             if (Request->Record.HasGlobalConfig()) {
                 x->Record.MutableConfig()->MergeFrom(Request->Record.GetGlobalConfig());
             }
@@ -85,7 +85,7 @@ public:
             PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, domain->SchemeRoot, clientConfig));
             NTabletPipe::SendData(ctx, PipeClient, x.Release());
         } else {
-            ReplyWithResult(MSTATUS_ERROR, TEvSchemeShard::TEvInitRootShardResult::StatusBadArgument, ctx);
+            ReplyWithResult(MSTATUS_ERROR, TEvSchemeShard::TEvInitRootShardResult::StatusBadArgument, ctx); 
         }
     }
 };

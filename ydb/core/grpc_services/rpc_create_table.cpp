@@ -15,7 +15,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 using namespace NActors;
 using namespace NConsole;
 using namespace Ydb;
@@ -54,7 +54,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
+        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, 
                    "TCreateTableRPC: cannot deliver config request to Configs Dispatcher"
                    " (empty default profile is available only)");
         SendProposeRequest(ctx);
@@ -72,7 +72,7 @@ private:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
             case WakeupTagGetConfig: {
-                LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TCreateTableRPC: cannot get table profiles (timeout)");
+                LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TCreateTableRPC: cannot get table profiles (timeout)"); 
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue("Tables profiles config not available."));
                 return Reply(StatusIds::UNAVAILABLE, issues, ctx);
@@ -124,14 +124,14 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
-        NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
+        NKikimrSchemeOp::TTableDescription* tableDesc = nullptr; 
         if (req->indexesSize()) {
-            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
+            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable); 
             tableDesc = modifyScheme->MutableCreateIndexedTable()->MutableTableDescription();
         } else {
-            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable); 
             tableDesc = modifyScheme->MutableCreateTable();
         }
 

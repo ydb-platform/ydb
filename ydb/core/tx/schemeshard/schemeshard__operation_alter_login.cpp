@@ -5,7 +5,7 @@
 namespace {
 
 using namespace NKikimr;
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 
 class TAlterLogin: public ISubOperationBase {
     const TOperationId OperationId;
@@ -23,7 +23,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override { 
         NIceDb::TNiceDb db(context.Txc.DB);
         TTabletId ssId = context.SS->SelfTabletId();
         auto result = MakeHolder<TProposeResponse>(OperationId.GetTxId(), ssId);
@@ -134,7 +134,7 @@ public:
             }
         }
 
-        if (result->Record.GetStatus() == NKikimrScheme::StatusSuccess) {
+        if (result->Record.GetStatus() == NKikimrScheme::StatusSuccess) { 
             TPathId subDomainPathId = context.SS->GetCurrentSubDomainPathId();
             TSubDomainInfo::TPtr domainPtr = context.SS->ResolveDomainInfo(subDomainPathId);
             domainPtr->UpdateSecurityState(context.SS->LoginProvider.GetSecurityState());
@@ -163,7 +163,7 @@ public:
 }
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx) {
     return new TAlterLogin(id, tx);

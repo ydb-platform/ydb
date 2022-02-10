@@ -32,7 +32,7 @@ using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
-using NSchemeShard::TEvSchemeShard;
+using NSchemeShard::TEvSchemeShard; 
 using NTenantSlotBroker::TEvTenantSlotBroker;
 using NTenantSlotBroker::TSlotDescription;
 using NMonitoring::TDynamicCounterPtr;
@@ -510,13 +510,13 @@ public:
         // Last subdomain version configured in SchemeShard.
         ui64 ConfirmedSubdomain;
         // Attributes to attach to subdomain.
-        NKikimrSchemeOp::TAlterUserAttributes Attributes;
+        NKikimrSchemeOp::TAlterUserAttributes Attributes; 
         // Current generation.
         ui64 Generation;
         // Subdomain ID.
         TDomainId DomainId;
         TDomainId SharedDomainId;
-        bool IsExternalSubdomain;
+        bool IsExternalSubdomain; 
         bool IsExternalHive;
         bool IsExternalSysViewProcessor;
         bool AreResourcesShared;
@@ -867,7 +867,7 @@ public:
                                            TTransactionContext &txc,
                                            const TActorContext &ctx);
     void DbUpdateTenantUserAttributes(TTenant::TPtr tenant,
-                                      const NKikimrSchemeOp::TAlterUserAttributes &attributes,
+                                      const NKikimrSchemeOp::TAlterUserAttributes &attributes, 
                                       TTransactionContext &txc,
                                       const TActorContext &ctx);
     void DbUpdateTenantGeneration(TTenant::TPtr tenant,
@@ -959,7 +959,7 @@ public:
 public:
     TTenantsManager(TConsole &self,
                     TDomainsInfo::TDomain::TPtr domain,
-                    TDynamicCounterPtr counters,
+                    TDynamicCounterPtr counters, 
                     NKikimrConfig::TFeatureFlags featureFlags)
         : Self(self)
         , Domain(domain)

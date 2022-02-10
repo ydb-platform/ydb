@@ -1,8 +1,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-using namespace NKikimr::NSchemeShard;
+using namespace NKikimr::NSchemeShard; 
 using namespace NKikimr;
-using namespace NKikimrSchemeOp;
+using namespace NKikimrSchemeOp; 
 using namespace NSchemeShardUT_Private;
 
 
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: "timestamp"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
 
         // Extra column not in schema preset
         TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: "timestamp"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
 
         // Different column order
         TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: "timestamp"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
 
         // Extra key column
         TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: "data"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
 
         // Unknown key column
         TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: "nottimestamp"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
 
         // Different data column type
         TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: "timestamp"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
 
         // Repeating preset schema should succeed
         TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLs(runtime, "/MyRoot/OlapStore/MyDir/OlapTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
 
-        TestDropOlapStore(runtime, ++txId, "/MyRoot", "OlapStore", {NKikimrScheme::StatusNameConflict});
+        TestDropOlapStore(runtime, ++txId, "/MyRoot", "OlapStore", {NKikimrScheme::StatusNameConflict}); 
         TestRmDir(runtime, ++txId, "/MyRoot/OlapStore", "MyDir");
         env.TestWaitNotification(runtime, txId);
 
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     AddColumns { Name: "comment" Type: "Utf8" }
                 }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusInvalidParameter}); 
     }
 
     Y_UNIT_TEST(AlterTtl) {

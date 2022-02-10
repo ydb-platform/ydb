@@ -7,7 +7,7 @@
 #include <util/stream/format.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TTableInfo::TPartitionStats& tableStats) {
     stats->SetRowCount(tableStats.RowCount);
@@ -42,44 +42,44 @@ static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TTableI
     metrics->SetWriteIops(tableStats.WriteIops);
 }
 
-void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
-    FillChildDescr(descr, pathEl);
-
-    descr->SetACL(pathEl->ACL);
-    descr->SetPathSubType(subType);
-}
-
-void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl) {
+void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) { 
+    FillChildDescr(descr, pathEl); 
+ 
+    descr->SetACL(pathEl->ACL); 
+    descr->SetPathSubType(subType); 
+} 
+ 
+void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl) { 
     bool createFinished = pathEl->IsCreateFinished();
 
     descr->SetName(pathEl->Name);
-
-    descr->SetSchemeshardId(pathEl->PathId.OwnerId);
-    descr->SetPathId(pathEl->PathId.LocalPathId);
-
-    descr->SetParentPathId(pathEl->ParentPathId.LocalPathId); //???? ParnetPathOwnerId
-
+ 
+    descr->SetSchemeshardId(pathEl->PathId.OwnerId); 
+    descr->SetPathId(pathEl->PathId.LocalPathId); 
+ 
+    descr->SetParentPathId(pathEl->ParentPathId.LocalPathId); //???? ParnetPathOwnerId 
+ 
     descr->SetPathType(pathEl->PathType);
-    descr->SetOwner(pathEl->Owner);
+    descr->SetOwner(pathEl->Owner); 
+ 
+    descr->SetPathState(pathEl->PathState); // ???? can't be consistent KIKIMR-8861 
+    descr->SetCreateFinished(createFinished); // use this insted PathState 
+ 
+    descr->SetCreateTxId(ui64(pathEl->CreateTxId)); 
+    if (createFinished) { 
+        descr->SetCreateStep(ui64(pathEl->StepCreated)); 
+    } 
 
-    descr->SetPathState(pathEl->PathState); // ???? can't be consistent KIKIMR-8861
-    descr->SetCreateFinished(createFinished); // use this insted PathState
-
-    descr->SetCreateTxId(ui64(pathEl->CreateTxId));
-    if (createFinished) {
-        descr->SetCreateStep(ui64(pathEl->StepCreated));
-    }
-
-    if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+    if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) { 
         auto it = Self->PersQueueGroups.FindPtr(pathEl->PathId);
         Y_VERIFY(it, "PersQueueGroup is not found");
 
         TPersQueueGroupInfo::TPtr pqGroupInfo = *it;
         if (pqGroupInfo->HasBalancer()) {
-            descr->SetBalancerTabletID(ui64(pqGroupInfo->BalancerTabletID));
+            descr->SetBalancerTabletID(ui64(pqGroupInfo->BalancerTabletID)); 
         }
-    } else {
-        descr->SetACL(pathEl->ACL); // YDBOPS-1328
+    } else { 
+        descr->SetACL(pathEl->ACL); // YDBOPS-1328 
     }
 }
 
@@ -113,80 +113,80 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
     return TPathElement::EPathSubType::EPathSubTypeEmpty;
 }
 
-void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, const TPath& path) {
+void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, const TPath& path) { 
     FillPathDescr(descr, path.Base(), CalcPathSubType(path));
 }
 
-void TPathDescriber::BuildEffectiveACL(NKikimrSchemeOp::TDirEntry* descr, const TPath& path) {
-    descr->SetEffectiveACL(path.GetEffectiveACL());
+void TPathDescriber::BuildEffectiveACL(NKikimrSchemeOp::TDirEntry* descr, const TPath& path) { 
+    descr->SetEffectiveACL(path.GetEffectiveACL()); 
 }
 
 void TPathDescriber::FillLastExistedPrefixDescr(const TPath& path) {
-    if (path.IsEmpty()) {
+    if (path.IsEmpty()) { 
         return;
     }
-    Y_VERIFY(path.IsResolved());
-    Y_VERIFY(!path.IsDeleted());
+    Y_VERIFY(path.IsResolved()); 
+    Y_VERIFY(!path.IsDeleted()); 
 
-    Result->Record.SetLastExistedPrefixPathId(path.Base()->PathId.LocalPathId);
-    Result->Record.SetLastExistedPrefixPath(path.PathString());
+    Result->Record.SetLastExistedPrefixPathId(path.Base()->PathId.LocalPathId); 
+    Result->Record.SetLastExistedPrefixPath(path.PathString()); 
 
-    Y_VERIFY_S(Self->PathsById.contains(path.Base()->PathId), "Unknown pathId " <<  path.Base()->PathId);
+    Y_VERIFY_S(Self->PathsById.contains(path.Base()->PathId), "Unknown pathId " <<  path.Base()->PathId); 
     auto descr = Result->Record.MutableLastExistedPrefixDescription()->MutableSelf();
     FillPathDescr(descr, path);
-    BuildEffectiveACL(descr, path);
+    BuildEffectiveACL(descr, path); 
 }
 
-void TPathDescriber::DescribeChildren(const TPath& path) {
-    auto pathEl = path.Base();
-
-    if (!Params.GetOptions().GetReturnChildren()) {
+void TPathDescriber::DescribeChildren(const TPath& path) { 
+    auto pathEl = path.Base(); 
+ 
+    if (!Params.GetOptions().GetReturnChildren()) { 
         return;
     }
 
-    if (pathEl->IsTable()) {
-        return;
-    }
-
+    if (pathEl->IsTable()) { 
+        return; 
+    } 
+ 
     if (pathEl->PreSerializedChildrenListing.empty()) {
-        NKikimrScheme::TEvDescribeSchemeResult preSerializedResult;
+        NKikimrScheme::TEvDescribeSchemeResult preSerializedResult; 
         auto pathDescription = preSerializedResult.MutablePathDescription();
-        pathDescription->MutableChildren()->Reserve(pathEl->GetAliveChildren());
+        pathDescription->MutableChildren()->Reserve(pathEl->GetAliveChildren()); 
         for (const auto& child : pathEl->GetChildren()) {
             TPathId childId = child.second;
             TPathElement::TPtr childEl = *Self->PathsById.FindPtr(childId);
-            if (childEl->Dropped() || childEl->IsMigrated()) {
+            if (childEl->Dropped() || childEl->IsMigrated()) { 
                 continue;
             }
             auto entry = pathDescription->AddChildren();
-
-            if (pathEl->IsTableIndex()) {
-                // we put version of child here in addition
-                auto childPath = path.Child(child.first);
-                FillPathDescr(entry, childEl, CalcPathSubType(childPath));
-                const auto version = Self->GetPathVersion(childPath);
-                entry->MutableVersion()->CopyFrom(version);
+ 
+            if (pathEl->IsTableIndex()) { 
+                // we put version of child here in addition 
+                auto childPath = path.Child(child.first); 
+                FillPathDescr(entry, childEl, CalcPathSubType(childPath)); 
+                const auto version = Self->GetPathVersion(childPath); 
+                entry->MutableVersion()->CopyFrom(version); 
             } else if (pathEl->IsCdcStream()) {
                 auto childPath = path.Child(child.first);
                 FillPathDescr(entry, childEl, CalcPathSubType(childPath));
-            } else {
-                FillChildDescr(entry, childEl);
-            }
+            } else { 
+                FillChildDescr(entry, childEl); 
+            } 
         }
         Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pathEl->PreSerializedChildrenListing);
     }
     Result->PreSerializedData += pathEl->PreSerializedChildrenListing;
-
+ 
     if (!pathEl->IsCreateFinished()) {
         pathEl->PreSerializedChildrenListing.clear();
     }
 }
 
-
-void TPathDescriber::DescribeDir(const TPath& path) {
-   DescribeChildren(path);
-}
-
+ 
+void TPathDescriber::DescribeDir(const TPath& path) { 
+   DescribeChildren(path); 
+} 
+ 
 void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl) {
     const NScheme::TTypeRegistry* typeRegistry = AppData(ctx)->TypeRegistry;
     const TTableInfo::TPtr tableInfo = *Self->Tables.FindPtr(pathId);
@@ -211,16 +211,16 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     if (returnPartitioning) {
         // partitions
         if (tableInfo->PreSerializedPathDescription.empty()) {
-            NKikimrScheme::TEvDescribeSchemeResult preSerializedResult;
-            NKikimrSchemeOp::TPathDescription& pathDescription = *preSerializedResult.MutablePathDescription();
+            NKikimrScheme::TEvDescribeSchemeResult preSerializedResult; 
+            NKikimrSchemeOp::TPathDescription& pathDescription = *preSerializedResult.MutablePathDescription(); 
             pathDescription.MutableTablePartitions()->Reserve(tableInfo->GetPartitions().size());
             for (auto& p : tableInfo->GetPartitions()) {
                 auto part = pathDescription.AddTablePartitions();
-                auto datashardIdx = p.ShardIdx;
-                auto datashardTabletId = Self->ShardInfos[datashardIdx].TabletID;
+                auto datashardIdx = p.ShardIdx; 
+                auto datashardTabletId = Self->ShardInfos[datashardIdx].TabletID; 
                 // Currently we only support uniform partitioning where each range is [start, end)
                 // +inf as the end of the last range is represented by empty TCell vector
-                part->SetDatashardId(ui64(datashardTabletId));
+                part->SetDatashardId(ui64(datashardTabletId)); 
                 part->SetIsPoint(false);
                 part->SetIsInclusive(false);
                 part->SetEndOfRangeKeyPrefix(p.EndOfRange);
@@ -246,7 +246,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     }
 
     if (returnPartitionStats) {
-        NKikimrSchemeOp::TPathDescription& pathDescription = *Result->Record.MutablePathDescription();
+        NKikimrSchemeOp::TPathDescription& pathDescription = *Result->Record.MutablePathDescription(); 
         pathDescription.MutableTablePartitionStats()->Reserve(tableInfo->GetPartitions().size());
         for (auto& p : tableInfo->GetPartitions()) {
             const auto* stats = tableInfo->GetStats().PartitionStats.FindPtr(p.ShardIdx);
@@ -281,17 +281,17 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             progress->MutableYTSettings()->CopyFrom(
                 tableInfo->BackupSettings.GetYTSettings());
             progress->SetDataTotalSize(txState.DataTotalSize);
-            progress->SetTxId(ui64(txId));
+            progress->SetTxId(ui64(txId)); 
 
-            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
+            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE, 
                       "Add backup process info");
             break;
         }
 
         /* Get information about last completed backup */
         for (const auto& iter: tableInfo->BackupHistory) {
-            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
-                      "Add last backup info item to history");
+            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE, 
+                      "Add last backup info item to history"); 
             auto protoResult = pathDescription->AddLastBackupResult();
             const auto& txId = iter.first;
             const auto& tInfoResult = iter.second;
@@ -302,7 +302,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             protoResult->SetStartTimeStamp(tInfoResult.StartDateTime);
             protoResult->SetDataTotalSize(
                 tInfoResult.DataTotalSize);
-            protoResult->SetTxId(ui64(txId));
+            protoResult->SetTxId(ui64(txId)); 
 
             for (const auto& [shardId, status]: tInfoResult.ShardStatuses) {
                 if (status.Success) {
@@ -324,17 +324,17 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
         auto childPath = Self->PathsById.at(childPathId);
 
         if (childPath->Dropped()) {
-            continue;
-        }
-
+            continue; 
+        } 
+ 
         switch (childPath->PathType) {
-        case NKikimrSchemeOp::EPathTypeTableIndex:
+        case NKikimrSchemeOp::EPathTypeTableIndex: 
             Self->DescribeTableIndex(childPathId, childName, *entry->AddTableIndexes());
             break;
-        case NKikimrSchemeOp::EPathTypeCdcStream:
+        case NKikimrSchemeOp::EPathTypeCdcStream: 
             Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
             break;
-        case NKikimrSchemeOp::EPathTypeSequence:
+        case NKikimrSchemeOp::EPathTypeSequence: 
             Self->DescribeSequence(childPathId, childName, *entry->AddSequences());
             break;
         default:
@@ -402,10 +402,10 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
     TPersQueueGroupInfo::TPtr pqGroupInfo = *it;
 
     if (pqGroupInfo->PreSerializedPathDescription.empty()) {
-        NKikimrScheme::TEvDescribeSchemeResult preSerializedResult;
+        NKikimrScheme::TEvDescribeSchemeResult preSerializedResult; 
         auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
         entry->SetName(pathEl->Name);
-        entry->SetPathId(pathId.LocalPathId);
+        entry->SetPathId(pathId.LocalPathId); 
         entry->SetNextPartitionId(pqGroupInfo->NextPartitionId);
         entry->SetTotalGroupCount(pqGroupInfo->TotalGroupCount);
         entry->SetPartitionPerTablet(pqGroupInfo->MaxPartsPerTablet);
@@ -413,7 +413,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         Y_PROTOBUF_SUPPRESS_NODISCARD entry->MutablePQTabletConfig()->ParseFromString(pqGroupInfo->TabletConfig);
 
         if (pqGroupInfo->HasBalancer()) {
-            entry->SetBalancerTabletID(ui64(pqGroupInfo->BalancerTabletID));
+            entry->SetBalancerTabletID(ui64(pqGroupInfo->BalancerTabletID)); 
         }
 
         Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPathDescription);
@@ -425,7 +425,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
     bool returnPartitioning = Params.GetReturnPartitioningInfo();
     if (returnPartitioning) {
         if (pqGroupInfo->PreSerializedPartitionsDescription.empty()) {
-            NKikimrScheme::TEvDescribeSchemeResult preSerializedResult;
+            NKikimrScheme::TEvDescribeSchemeResult preSerializedResult; 
             auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
 
             struct TPartitionDesc {
@@ -485,14 +485,14 @@ void TPathDescriber::DescribeRtmrVolume(TPathId pathId, TPathElement::TPtr pathE
 
     auto entry = Result->Record.MutablePathDescription()->MutableRtmrVolumeDescription();
     entry->SetName(pathEl->Name);
-    entry->SetPathId(pathId.LocalPathId);
+    entry->SetPathId(pathId.LocalPathId); 
     entry->SetPartitionsCount(rtmrVolumeInfo->Partitions.size());
 
     for (const auto& partition: rtmrVolumeInfo->Partitions) {
         auto part = entry->AddPartitions();
         part->SetPartitionId((const char*)partition.second->Id.dw, sizeof(TGUID));
         part->SetBusKey(partition.second->BusKey);
-        part->SetTabletId(ui64(partition.second->TabletId));
+        part->SetTabletId(ui64(partition.second->TabletId)); 
     }
 
     Sort(entry->MutablePartitions()->begin(),
@@ -502,10 +502,10 @@ void TPathDescriber::DescribeRtmrVolume(TPathId pathId, TPathElement::TPtr pathE
          });
 }
 
-void TPathDescriber::DescribeTableIndex(const TPath& path) {
+void TPathDescriber::DescribeTableIndex(const TPath& path) { 
     Self->DescribeTableIndex(path.Base()->PathId, path.Base()->Name,
         *Result->Record.MutablePathDescription()->MutableTableIndex());
-    DescribeChildren(path);
+    DescribeChildren(path); 
 }
 
 void TPathDescriber::DescribeCdcStream(const TPath& path) {
@@ -521,7 +521,7 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
 
     auto entry = Result->Record.MutablePathDescription()->MutableSolomonDescription();
     entry->SetName(pathEl->Name);
-    entry->SetPathId(pathId.LocalPathId);
+    entry->SetPathId(pathId.LocalPathId); 
     entry->SetPartitionCount(solomonVolumeInfo->Partitions.size());
 
     for (const auto& partition: solomonVolumeInfo->Partitions) {
@@ -531,10 +531,10 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
 
         auto part = entry->AddPartitions();
         part->SetPartitionId(partition.second->PartitionId);
-        part->SetShardIdx(ui64(shardId.GetLocalId()));
+        part->SetShardIdx(ui64(shardId.GetLocalId())); 
         auto tabletId = partition.second->TabletId;
         if (tabletId != InvalidTabletId) {
-            part->SetTabletId(ui64(partition.second->TabletId));
+            part->SetTabletId(ui64(partition.second->TabletId)); 
         }
 
         if (returnChannelsBinding) {
@@ -565,53 +565,53 @@ void TPathDescriber::DescribeUserAttributes(TPathElement::TPtr pathEl) {
     pathEl->SerializeRuntimeAttrs(userAttrs);
 }
 
-void TPathDescriber::DescribePathVersion(const TPath& path) {
+void TPathDescriber::DescribePathVersion(const TPath& path) { 
     const auto& version = Self->GetPathVersion(path);
     Result->Record.MutablePathDescription()->MutableSelf()->SetPathVersion(version.GetGeneralVersion());
     Result->Record.MutablePathDescription()->MutableSelf()->MutableVersion()->CopyFrom(version);
 }
 
-void TPathDescriber::DescribeDomain(TPathElement::TPtr pathEl) {
-    TPathId domainId = Self->ResolveDomainId(pathEl);
+void TPathDescriber::DescribeDomain(TPathElement::TPtr pathEl) { 
+    TPathId domainId = Self->ResolveDomainId(pathEl); 
 
-    TPathElement::TPtr domainEl = Self->PathsById.at(domainId);
-    Y_VERIFY(domainEl);
-
-    DescribeDomainRoot(domainEl);
+    TPathElement::TPtr domainEl = Self->PathsById.at(domainId); 
+    Y_VERIFY(domainEl); 
+ 
+    DescribeDomainRoot(domainEl); 
 }
 
-void TPathDescriber::DescribeRevertedMigrations(TPathElement::TPtr pathEl) {
-    Y_VERIFY(pathEl->IsDomainRoot());
-
-    if (!Self->RevertedMigrations.contains(pathEl->PathId)) {
-        return;
-    }
-
-    auto list = Result->Record.MutablePathDescription()->MutableAbandonedTenantsSchemeShards();
-    for (const TTabletId& abandonedSchemeShardId: Self->RevertedMigrations.at(pathEl->PathId)) {
-        list->Add(ui64(abandonedSchemeShardId));
-    }
-}
-
-void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
-    Y_VERIFY(pathEl->IsDomainRoot());
+void TPathDescriber::DescribeRevertedMigrations(TPathElement::TPtr pathEl) { 
+    Y_VERIFY(pathEl->IsDomainRoot()); 
+ 
+    if (!Self->RevertedMigrations.contains(pathEl->PathId)) { 
+        return; 
+    } 
+ 
+    auto list = Result->Record.MutablePathDescription()->MutableAbandonedTenantsSchemeShards(); 
+    for (const TTabletId& abandonedSchemeShardId: Self->RevertedMigrations.at(pathEl->PathId)) { 
+        list->Add(ui64(abandonedSchemeShardId)); 
+    } 
+} 
+ 
+void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) { 
+    Y_VERIFY(pathEl->IsDomainRoot()); 
     auto it = Self->SubDomains.FindPtr(pathEl->PathId);
     Y_VERIFY(it, "SubDomain not found");
     auto subDomainInfo = *it;
 
     NKikimrSubDomains::TDomainDescription * entry = Result->Record.MutablePathDescription()->MutableDomainDescription();
-
+ 
     NKikimrSubDomains::TDomainKey *key = entry->MutableDomainKey();
-    entry->SetSchemeShardId_Depricated(Self->ParentDomainId.OwnerId);
-    entry->SetPathId_Depricated(Self->ParentDomainId.LocalPathId);
-
-    if (pathEl->IsRoot()) {
-        key->SetSchemeShard(Self->ParentDomainId.OwnerId);
-        key->SetPathId(Self->ParentDomainId.LocalPathId);
-    } else {
-        key->SetSchemeShard(pathEl->PathId.OwnerId);
-        key->SetPathId(pathEl->PathId.LocalPathId);
-    }
+    entry->SetSchemeShardId_Depricated(Self->ParentDomainId.OwnerId); 
+    entry->SetPathId_Depricated(Self->ParentDomainId.LocalPathId); 
+ 
+    if (pathEl->IsRoot()) { 
+        key->SetSchemeShard(Self->ParentDomainId.OwnerId); 
+        key->SetPathId(Self->ParentDomainId.LocalPathId); 
+    } else { 
+        key->SetSchemeShard(pathEl->PathId.OwnerId); 
+        key->SetPathId(pathEl->PathId.LocalPathId); 
+    } 
 
     entry->MutableProcessingParams()->CopyFrom(subDomainInfo->GetProcessingParams());
 
@@ -668,10 +668,10 @@ void TPathDescriber::DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr
 
     auto* entry = Result->Record.MutablePathDescription()->MutableBlockStoreVolumeDescription();
     entry->SetName(pathEl->Name);
-    entry->SetPathId(pathId.LocalPathId);
+    entry->SetPathId(pathId.LocalPathId); 
     entry->MutableVolumeConfig()->CopyFrom(volume->VolumeConfig);
     entry->MutableVolumeConfig()->SetVersion(volume->AlterVersion);
-    entry->SetVolumeTabletId(ui64(volume->VolumeTabletId));
+    entry->SetVolumeTabletId(ui64(volume->VolumeTabletId)); 
     entry->SetAlterVersion(volume->AlterVersion);
     entry->SetMountToken(volume->MountToken);
     entry->SetTokenVersion(volume->TokenVersion);
@@ -680,7 +680,7 @@ void TPathDescriber::DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr
     for (ui32 idx = 0; idx < tablets.size(); ++idx) {
         auto* part = entry->AddPartitions();
         part->SetPartitionId(idx);
-        part->SetTabletId(ui64(tablets[idx]));
+        part->SetTabletId(ui64(tablets[idx])); 
     }
 }
 
@@ -711,10 +711,10 @@ void TPathDescriber::DescribeKesus(TPathId pathId, TPathElement::TPtr pathEl) {
 
     auto* entry = Result->Record.MutablePathDescription()->MutableKesus();
     entry->SetName(pathEl->Name);
-    entry->SetPathId(pathId.LocalPathId);
-    if (kesus->KesusTabletId) {
-        entry->SetKesusTabletId(ui64(kesus->KesusTabletId));
-    }
+    entry->SetPathId(pathId.LocalPathId); 
+    if (kesus->KesusTabletId) { 
+        entry->SetKesusTabletId(ui64(kesus->KesusTabletId)); 
+    } 
     entry->MutableConfig()->CopyFrom(kesus->Config);
     entry->SetVersion(kesus->Version);
 }
@@ -729,8 +729,8 @@ void TPathDescriber::DescribeReplication(TPathId pathId, TPathElement::TPtr path
     Self->DescribeReplication(pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableReplicationDescription());
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
-    TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) { 
+    TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId; 
     TString pathStr = Params.GetPath();
 
     TPath path = Params.HasPathId()
@@ -739,8 +739,8 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
     {
         TPath::TChecker checks = path.Check();
         checks
-            .NotEmpty(NKikimrScheme::StatusPathDoesNotExist)
-            .IsAtLocalSchemeShard()
+            .NotEmpty(NKikimrScheme::StatusPathDoesNotExist) 
+            .IsAtLocalSchemeShard() 
             .IsResolved();
 
         if (checks) {
@@ -752,149 +752,149 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
 
         checks
-            .NotDeleted();
+            .NotDeleted(); 
 
-        if (checks && !path.Base()->IsTable() && !path.Base()->IsTableIndex() && !path.Base()->IsDirectory()) {
-            // KIKIMR-13173
-            // PQ BSV drop their shard before PlatStep
-            // If they are being deleted consider them as deleted
-            checks.NotUnderDeleting(NKikimrScheme::StatusPathDoesNotExist);
-        }
-
-        if (!Params.GetOptions().GetShowPrivateTable()) {
-            checks.IsCommonSensePath();
-        }
-
+        if (checks && !path.Base()->IsTable() && !path.Base()->IsTableIndex() && !path.Base()->IsDirectory()) { 
+            // KIKIMR-13173 
+            // PQ BSV drop their shard before PlatStep 
+            // If they are being deleted consider them as deleted 
+            checks.NotUnderDeleting(NKikimrScheme::StatusPathDoesNotExist); 
+        } 
+ 
+        if (!Params.GetOptions().GetShowPrivateTable()) { 
+            checks.IsCommonSensePath(); 
+        } 
+ 
         if (!checks) {
             TString explain;
             auto status = checks.GetStatus(&explain);
 
-            if (Params.HasPathId()) {
-                pathStr = path.PathString();
-            }
-
-            Result.Reset(new TEvSchemeShard::TEvDescribeSchemeResultBuilder(
-                pathStr,
-                Self->TabletID(),
-                pathId
+            if (Params.HasPathId()) { 
+                pathStr = path.PathString(); 
+            } 
+ 
+            Result.Reset(new TEvSchemeShard::TEvDescribeSchemeResultBuilder( 
+                pathStr, 
+                Self->TabletID(), 
+                pathId 
                 ));
             Result->Record.SetStatus(status);
             Result->Record.SetReason(explain);
 
-            TPath firstExisted = path.FirstExistedParent();
-            FillLastExistedPrefixDescr(firstExisted);
-
-            if (status ==  NKikimrScheme::StatusRedirectDomain) {
-                DescribeDomain(firstExisted.Base());
-            }
-
+            TPath firstExisted = path.FirstExistedParent(); 
+            FillLastExistedPrefixDescr(firstExisted); 
+ 
+            if (status ==  NKikimrScheme::StatusRedirectDomain) { 
+                DescribeDomain(firstExisted.Base()); 
+            } 
+ 
             return std::move(Result);
         }
     }
 
-    Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, Self->TabletID(), pathId);
+    Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, Self->TabletID(), pathId); 
 
     auto descr = Result->Record.MutablePathDescription()->MutableSelf();
     FillPathDescr(descr, path);
-    BuildEffectiveACL(descr, path);
+    BuildEffectiveACL(descr, path); 
     auto base = path.Base();
     DescribeDomain(base);
     DescribeUserAttributes(base);
-    DescribePathVersion(path);
+    DescribePathVersion(path); 
 
-    if (base->IsCreateFinished()) {
-        switch (base->PathType) {
-        case NKikimrSchemeOp::EPathTypeDir:
-            DescribeDir(path);
-            if (base->IsRoot()) {
-                DescribeDomainExtra(base);
-            }
-            break;
-        case NKikimrSchemeOp::EPathTypeSubDomain:
-        case NKikimrSchemeOp::EPathTypeExtSubDomain:
-            DescribeDir(path);
-            DescribeDomainExtra(base);
-            DescribeRevertedMigrations(base);
-            break;
-        case NKikimrSchemeOp::EPathTypeTable:
-            DescribeTable(ctx, base->PathId, base);
-            break;
+    if (base->IsCreateFinished()) { 
+        switch (base->PathType) { 
+        case NKikimrSchemeOp::EPathTypeDir: 
+            DescribeDir(path); 
+            if (base->IsRoot()) { 
+                DescribeDomainExtra(base); 
+            } 
+            break; 
+        case NKikimrSchemeOp::EPathTypeSubDomain: 
+        case NKikimrSchemeOp::EPathTypeExtSubDomain: 
+            DescribeDir(path); 
+            DescribeDomainExtra(base); 
+            DescribeRevertedMigrations(base); 
+            break; 
+        case NKikimrSchemeOp::EPathTypeTable: 
+            DescribeTable(ctx, base->PathId, base); 
+            break; 
         case NKikimrSchemeOp::EPathTypeColumnStore:
             DescribeDir(path);
-            DescribeOlapStore(base->PathId, base);
-            break;
+            DescribeOlapStore(base->PathId, base); 
+            break; 
         case NKikimrSchemeOp::EPathTypeColumnTable:
-            DescribeOlapTable(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypePersQueueGroup:
-            DescribePersQueueGroup(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeRtmrVolume:
-            DescribeRtmrVolume(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
-            DescribeBlockStoreVolume(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeFileStore:
-            DescribeFileStore(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeKesus:
-            DescribeKesus(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeSolomonVolume:
-            DescribeSolomonVolume(base->PathId, base, Params.GetOptions().GetReturnChannelsBinding());
-            break;
-        case NKikimrSchemeOp::EPathTypeTableIndex:
-            DescribeTableIndex(path);
-            break;
-        case NKikimrSchemeOp::EPathTypeCdcStream:
+            DescribeOlapTable(base->PathId, base); 
+            break; 
+        case NKikimrSchemeOp::EPathTypePersQueueGroup: 
+            DescribePersQueueGroup(base->PathId, base); 
+            break; 
+        case NKikimrSchemeOp::EPathTypeRtmrVolume: 
+            DescribeRtmrVolume(base->PathId, base); 
+            break; 
+        case NKikimrSchemeOp::EPathTypeBlockStoreVolume: 
+            DescribeBlockStoreVolume(base->PathId, base); 
+            break; 
+        case NKikimrSchemeOp::EPathTypeFileStore: 
+            DescribeFileStore(base->PathId, base); 
+            break; 
+        case NKikimrSchemeOp::EPathTypeKesus: 
+            DescribeKesus(base->PathId, base); 
+            break; 
+        case NKikimrSchemeOp::EPathTypeSolomonVolume: 
+            DescribeSolomonVolume(base->PathId, base, Params.GetOptions().GetReturnChannelsBinding()); 
+            break; 
+        case NKikimrSchemeOp::EPathTypeTableIndex: 
+            DescribeTableIndex(path); 
+            break; 
+        case NKikimrSchemeOp::EPathTypeCdcStream: 
             DescribeCdcStream(path);
-            break;
-        case NKikimrSchemeOp::EPathTypeSequence:
+            break; 
+        case NKikimrSchemeOp::EPathTypeSequence: 
             DescribeSequence(path.Base()->PathId, path.Base());
             break;
         case NKikimrSchemeOp::EPathTypeReplication:
             DescribeReplication(path.Base()->PathId, path.Base());
             break;
-        case NKikimrSchemeOp::EPathTypeInvalid:
-            Y_UNREACHABLE();
+        case NKikimrSchemeOp::EPathTypeInvalid: 
+            Y_UNREACHABLE(); 
         }
-    } else {
-        // here we do not full any object specific information, like table description
-        // nevertheless, chindren list should be set even when dir or children is being created right now
-        DescribeChildren(path);
+    } else { 
+        // here we do not full any object specific information, like table description 
+        // nevertheless, chindren list should be set even when dir or children is being created right now 
+        DescribeChildren(path); 
     }
 
-    Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+    Result->Record.SetStatus(NKikimrScheme::StatusSuccess); 
     return std::move(Result);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
-    TSchemeShard* self,
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath( 
+    TSchemeShard* self, 
     const TActorContext& ctx,
     TPathId pathId,
-    const NKikimrSchemeOp::TDescribeOptions& opts
+    const NKikimrSchemeOp::TDescribeOptions& opts 
 ) {
-    NKikimrSchemeOp::TDescribePath params;
-    params.SetSchemeshardId(pathId.OwnerId); // ????
-    params.SetPathId(pathId.LocalPathId);
+    NKikimrSchemeOp::TDescribePath params; 
+    params.SetSchemeshardId(pathId.OwnerId); // ???? 
+    params.SetPathId(pathId.LocalPathId); 
     params.MutableOptions()->CopyFrom(opts);
 
     return TPathDescriber(self, std::move(params)).Describe(ctx);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
-    TSchemeShard* self,
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath( 
+    TSchemeShard* self, 
     const TActorContext& ctx,
     TPathId pathId
 ) {
-    NKikimrSchemeOp::TDescribeOptions options;
+    NKikimrSchemeOp::TDescribeOptions options; 
     options.SetShowPrivateTable(true);
     return DescribePath(self, ctx, pathId, options);
 }
 
-void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry,
-                                     bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TTableDescription* entry) const
+void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry, 
+                                     bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TTableDescription* entry) const 
 {
     THashMap<ui32, TString> familyNames;
     bool familyNamesBuilt = false;
@@ -950,7 +950,7 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
 
     if (fillConfig) {
         entry->MutablePartitionConfig()->CopyFrom(tableInfo->PartitionConfig());
-        TPartitionConfigMerger::DeduplicateColumnFamiliesById(*entry->MutablePartitionConfig());
+        TPartitionConfigMerger::DeduplicateColumnFamiliesById(*entry->MutablePartitionConfig()); 
         entry->MutablePartitionConfig()->MutableStorageRooms()->Clear();
     }
 
@@ -965,8 +965,8 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
     entry->SetIsBackup(tableInfo->IsBackup);
 }
 
-void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TIndexDescription& entry)
+void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, 
+        NKikimrSchemeOp::TIndexDescription& entry) 
 {
     auto it = Indexes.FindPtr(pathId);
     Y_VERIFY(it, "TableIndex is not found");
@@ -975,8 +975,8 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     DescribeTableIndex(pathId, name, indexInfo, entry);
 }
 
-void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
-        NKikimrSchemeOp::TIndexDescription& entry)
+void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo, 
+        NKikimrSchemeOp::TIndexDescription& entry) 
 {
     Y_VERIFY(indexInfo, "Empty index info");
 
@@ -1009,8 +1009,8 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     entry.SetDataSize(tableStats.DataSize + tableStats.IndexSize);
 }
 
-void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TCdcStreamDescription& desc)
+void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name, 
+        NKikimrSchemeOp::TCdcStreamDescription& desc) 
 {
     Y_VERIFY_S(CdcStreams.contains(pathId), "Cdc stream not found"
         << ": pathId# " << pathId
@@ -1018,8 +1018,8 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     DescribeCdcStream(pathId, name, CdcStreams.at(pathId), desc);
 }
 
-void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info,
-        NKikimrSchemeOp::TCdcStreamDescription& desc)
+void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info, 
+        NKikimrSchemeOp::TCdcStreamDescription& desc) 
 {
     Y_VERIFY_S(info, "Empty cdc stream info"
         << ": pathId# " << pathId
@@ -1032,8 +1032,8 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     desc.SetSchemaVersion(info->AlterVersion);
 }
 
-void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TSequenceDescription& desc)
+void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, 
+        NKikimrSchemeOp::TSequenceDescription& desc) 
 {
     auto it = Sequences.find(pathId);
     Y_VERIFY_S(it != Sequences.end(), "Sequence not found"
@@ -1042,8 +1042,8 @@ void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
     DescribeSequence(pathId, name, it->second, desc);
 }
 
-void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
-        NKikimrSchemeOp::TSequenceDescription& desc)
+void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info, 
+        NKikimrSchemeOp::TSequenceDescription& desc) 
 {
     Y_VERIFY_S(info, "Empty sequence info"
         << " pathId# " << pathId
@@ -1101,7 +1101,7 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     }
 }
 
-void TSchemeShard::FillTableBoundaries(const TTableInfo::TPtr tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries) {
+void TSchemeShard::FillTableBoundaries(const TTableInfo::TPtr tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries) { 
     TString errStr;
     // Number of split boundaries equals to number of partitions - 1
     boundaries.Reserve(tableInfo->GetPartitions().size() - 1);
@@ -1118,5 +1118,5 @@ void TSchemeShard::FillTableBoundaries(const TTableInfo::TPtr tableInfo, google:
     }
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

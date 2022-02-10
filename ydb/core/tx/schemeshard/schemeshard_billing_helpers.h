@@ -3,7 +3,7 @@
 #include <ydb/core/metering/bill_record.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 struct TRUCalculator {
     // https://a.yandex-team.ru/arc/trunk/arcadia/kikimr/docs/ru/pricing/serverless.md
@@ -12,5 +12,5 @@ struct TRUCalculator {
 
 }; // TRUCalculator
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

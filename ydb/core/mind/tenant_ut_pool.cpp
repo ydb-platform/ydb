@@ -1219,7 +1219,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
             config.Nodes.back().TenantPoolConfig.DynamicSlots.push_back(dynamicSlot);
         }
 
-        TTenantTestRuntime runtime(config, {}, false);
+        TTenantTestRuntime runtime(config, {}, false); 
 
         const TActorId& sender = runtime.Sender;
         const TActorId tenantPoolRoot = MakeTenantPoolRootID();

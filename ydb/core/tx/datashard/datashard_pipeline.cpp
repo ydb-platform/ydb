@@ -68,7 +68,7 @@ void TPipeline::PersistConfig(NIceDb::TNiceDb& db) {
     Self->PersistSys(db, Schema::SysPipeline_LimitDataTxCache, Config.LimitDataTxCache);
 }
 
-void TPipeline::UpdateConfig(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TPipelineConfig& cfg) {
+void TPipeline::UpdateConfig(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TPipelineConfig& cfg) { 
     Config.Update(cfg);
     PersistConfig(db);
 }
@@ -802,16 +802,16 @@ bool TPipeline::PlanTxs(ui64 step,
 
     NIceDb::TNiceDb db(txc.DB);
     SaveLastPlannedTx(db, TStepOrder(step, lastTxId));
-    for (ui64 txId : txIds) {
-        if (SchemaTx && SchemaTx->TxId == txId && SchemaTx->MinStep > step)  {
-            TString explain = TStringBuilder() << "Scheme transaction has come too early"
-                                               << ", only after particular step this shema tx is allowed"
-                                               << ", txId: " << txId
-                                               << ", expected min step: " << SchemaTx->MinStep
-                                               << ", actual step: " << step;
-            Y_VERIFY_DEBUG_S(SchemaTx->MinStep <= step, explain);
-            LOG_ALERT_S(ctx, NKikimrServices::TX_DATASHARD, explain);
-        }
+    for (ui64 txId : txIds) { 
+        if (SchemaTx && SchemaTx->TxId == txId && SchemaTx->MinStep > step)  { 
+            TString explain = TStringBuilder() << "Scheme transaction has come too early" 
+                                               << ", only after particular step this shema tx is allowed" 
+                                               << ", txId: " << txId 
+                                               << ", expected min step: " << SchemaTx->MinStep 
+                                               << ", actual step: " << step; 
+            Y_VERIFY_DEBUG_S(SchemaTx->MinStep <= step, explain); 
+            LOG_ALERT_S(ctx, NKikimrServices::TX_DATASHARD, explain); 
+        } 
 
         auto op = Self->TransQueue.FindTxInFly(txId);
         if (!op) {
@@ -837,7 +837,7 @@ bool TPipeline::PlanTxs(ui64 step,
             auto status = RunExecutionUnit(op, txc, ctx);
             Y_VERIFY(status == EExecutionStatus::Executed);
         }
-    }
+    } 
 
     AddCandidateUnit(EExecutionUnitKind::PlanQueue);
     MaybeActivateWaitingSchemeOps(ctx);

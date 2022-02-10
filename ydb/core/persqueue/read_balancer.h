@@ -284,7 +284,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvents::TEvPoisonPill &ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx); 
 
     void RegisterSession(const TActorId& pipe, const TActorContext& ctx);
     struct TPipeInfo;
@@ -506,7 +506,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvPersQueue::TEvStatusResponse, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
 
             default:
                 HandleDefaultEvents(ev, ctx);

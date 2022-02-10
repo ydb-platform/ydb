@@ -464,12 +464,12 @@ static TIndexes GetIndexes(const NKikimrTxDataShard::TEvConditionalEraseRowsRequ
     return result;
 }
 
-static bool CheckUnit(NScheme::TTypeId type, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& error) {
+static bool CheckUnit(NScheme::TTypeId type, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& error) { 
     switch (type) {
     case NScheme::NTypeIds::Date:
     case NScheme::NTypeIds::Datetime:
     case NScheme::NTypeIds::Timestamp:
-        if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_AUTO) {
+        if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_AUTO) { 
             return true;
         } else {
             error = "Unit cannot be specified for date type column";
@@ -481,12 +481,12 @@ static bool CheckUnit(NScheme::TTypeId type, NKikimrSchemeOp::TTTLSettings::EUni
     case NScheme::NTypeIds::Uint64:
     case NScheme::NTypeIds::DyNumber:
         switch (unit) {
-        case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
+        case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS: 
+        case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS: 
+        case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS: 
+        case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: 
             return true;
-        case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
+        case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: 
             error = "Unit should be specified for integral type column";
             return false;
         default:

@@ -197,8 +197,8 @@ private:
             }
             break;
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete: {
-                if (msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess ||
-                    msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
+                if (msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess || 
+                    msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) 
                 {
                     // We can't close stream if has not empty send buffer
                     if (SendBuffer_) {

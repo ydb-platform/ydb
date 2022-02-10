@@ -968,11 +968,11 @@ public:
         }
 
         if (Params.RenameTo) {
-            auto destination = ctx.GetPrefixedPath(Scoped->CurrService, Scoped->CurrCluster,
-                                                   TDeferredAtom(Params.RenameTo->Pos, Params.RenameTo->Name));
-            actions = L(actions, Q(Y(Q("renameTo"), destination)));
-        }
-
+            auto destination = ctx.GetPrefixedPath(Scoped->CurrService, Scoped->CurrCluster, 
+                                                   TDeferredAtom(Params.RenameTo->Pos, Params.RenameTo->Name)); 
+            actions = L(actions, Q(Y(Q("renameTo"), destination))); 
+        } 
+ 
         for (const auto& cf : Params.AddChangefeeds) {
             const auto& desc = CreateChangefeedDesc(cf, *this);
             actions = L(actions, Q(Y(Q("addChangefeed"), Q(desc))));

@@ -19,12 +19,12 @@ Tests::TServer StartupKikimr(NMsgBusProxy::TMsgBusClientConfig& clientConfig,
 {
     TPortManager pm;
     const ui32 port = pm.GetPort(12001);
-    auto settings = Tests::TServerSettings(port);
-    settings.SetLogBackend(logBackend);
+    auto settings = Tests::TServerSettings(port); 
+    settings.SetLogBackend(logBackend); 
     settings.SetEnableSystemViews(false);
-    Tests::TServer Server(settings);
-    Tests::TClient Client(settings);
-    Client.InitRootScheme();
+    Tests::TServer Server(settings); 
+    Tests::TClient Client(settings); 
+    Client.InitRootScheme(); 
     clientConfig = Client.GetClientConfig();
     return Server;
 }
@@ -37,18 +37,18 @@ Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig,
     const ui32 msgbusPort = pm.GetPort(12001);
     const ui32 grpcPort = pm.GetPort(12002);
 
-    auto settings = Tests::TServerSettings(msgbusPort);
-    settings.SetLogBackend(logBackend);
+    auto settings = Tests::TServerSettings(msgbusPort); 
+    settings.SetLogBackend(logBackend); 
     settings.AppConfig.CopyFrom(config);
     settings.SetEnableSystemViews(false);
     settings.SetEnableMvcc(false);
 
-    Tests::TServer Server(settings);
+    Tests::TServer Server(settings); 
     Server.EnableGRpc(grpcPort);
 
-    Tests::TClient Client(settings);
-    Client.InitRootScheme();
-
+    Tests::TClient Client(settings); 
+    Client.InitRootScheme(); 
+ 
     clientConfig.Locator = "[::1]:" + ToString(grpcPort);
 
     return Server;

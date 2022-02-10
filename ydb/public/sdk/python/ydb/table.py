@@ -833,22 +833,22 @@ class StaleReadOnly(AbstractTransactionModeBuilder):
         return self._name
 
 
-class BackoffSettings(object):
+class BackoffSettings(object): 
     def __init__(self, ceiling=6, slot_duration=0.001, uncertain_ratio=0.5):
-        self.ceiling = ceiling
-        self.slot_duration = slot_duration
-        self.uncertain_ratio = uncertain_ratio
-
-    def calc_timeout(self, retry_number):
-        slots_count = 1 << min(retry_number, self.ceiling)
+        self.ceiling = ceiling 
+        self.slot_duration = slot_duration 
+        self.uncertain_ratio = uncertain_ratio 
+ 
+    def calc_timeout(self, retry_number): 
+        slots_count = 1 << min(retry_number, self.ceiling) 
         max_duration_ms = slots_count * self.slot_duration * 1000.0
-        # duration_ms = random.random() * max_duration_ms * uncertain_ratio) + max_duration_ms * (1 - uncertain_ratio)
+        # duration_ms = random.random() * max_duration_ms * uncertain_ratio) + max_duration_ms * (1 - uncertain_ratio) 
         duration_ms = max_duration_ms * (
             random.random() * self.uncertain_ratio + 1.0 - self.uncertain_ratio
         )
         return duration_ms / 1000.0
-
-
+ 
+ 
 class RetrySettings(object):
     def __init__(
         self,
@@ -887,13 +887,13 @@ class RetrySettings(object):
                 self.max_session_acquire_timeout, self.get_session_client_timeout
             )
 
-    def with_fast_backoff(self, backoff_settings):
-        self.fast_backoff = backoff_settings
-        return self
+    def with_fast_backoff(self, backoff_settings): 
+        self.fast_backoff = backoff_settings 
+        return self 
 
-    def with_slow_backoff(self, backoff_settings):
-        self.slow_backoff = backoff_settings
-        return self
+    def with_slow_backoff(self, backoff_settings): 
+        self.slow_backoff = backoff_settings 
+        return self 
 
 
 class YdbRetryOperationSleepOpt(object):
@@ -951,13 +951,13 @@ def retry_operation_impl(callee, retry_settings=None, *args, **kwargs):
                 retry_settings.slow_backoff.calc_timeout(attempt)
             )
 
-        except issues.Unavailable as e:
-            status = e
-            retry_settings.on_ydb_error_callback(e)
+        except issues.Unavailable as e: 
+            status = e 
+            retry_settings.on_ydb_error_callback(e) 
             yield YdbRetryOperationSleepOpt(
                 retry_settings.fast_backoff.calc_timeout(attempt)
             )
-
+ 
         except issues.Undetermined as e:
             status = e
             retry_settings.on_ydb_error_callback(e)
@@ -1490,25 +1490,25 @@ class TableSchemeEntry(scheme.SchemeEntry):
         self.attributes = attributes
 
 
-class RenameItem:
-    def __init__(self, source_path, destination_path, replace_destination=False):
-        self._source_path = source_path
-        self._destination_path = destination_path
-        self._replace_destination = replace_destination
-
-    @property
-    def source_path(self):
-        return self._source_path
-
-    @property
-    def destination_path(self):
-        return self._destination_path
-
-    @property
-    def replace_destination(self):
-        return self._replace_destination
-
-
+class RenameItem: 
+    def __init__(self, source_path, destination_path, replace_destination=False): 
+        self._source_path = source_path 
+        self._destination_path = destination_path 
+        self._replace_destination = replace_destination 
+ 
+    @property 
+    def source_path(self): 
+        return self._source_path 
+ 
+    @property 
+    def destination_path(self): 
+        return self._destination_path 
+ 
+    @property 
+    def replace_destination(self): 
+        return self._replace_destination 
+ 
+ 
 class BaseSession(ISession):
     def __init__(self, driver, table_client_settings):
         self._driver = driver
@@ -1787,18 +1787,18 @@ class BaseSession(ISession):
             self._state.endpoint,
         )
 
-    def rename_tables(self, rename_items, settings=None):
-        return self._driver(
-            _session_impl.rename_tables_request_factory(self._state, rename_items),
-            _apis.TableService.Stub,
-            _apis.TableService.RenameTables,
-            _session_impl.wrap_operation,
-            settings,
-            (self._state,),
-            self._state.endpoint,
-        )
+    def rename_tables(self, rename_items, settings=None): 
+        return self._driver( 
+            _session_impl.rename_tables_request_factory(self._state, rename_items), 
+            _apis.TableService.Stub, 
+            _apis.TableService.RenameTables, 
+            _session_impl.wrap_operation, 
+            settings, 
+            (self._state,), 
+            self._state.endpoint, 
+        ) 
 
-
+ 
 class Session(BaseSession):
     def async_read_table(
         self,
@@ -2005,18 +2005,18 @@ class Session(BaseSession):
         )
 
     @_utilities.wrap_async_call_exceptions
-    def async_rename_tables(self, rename_tables, settings=None):
-        return self._driver.future(
-            _session_impl.rename_tables_request_factory(self._state, rename_tables),
-            _apis.TableService.Stub,
-            _apis.TableService.RenameTables,
-            _session_impl.wrap_operation,
-            settings,
-            (self._state,),
-            self._state.endpoint,
-        )
-
-    @_utilities.wrap_async_call_exceptions
+    def async_rename_tables(self, rename_tables, settings=None): 
+        return self._driver.future( 
+            _session_impl.rename_tables_request_factory(self._state, rename_tables), 
+            _apis.TableService.Stub, 
+            _apis.TableService.RenameTables, 
+            _session_impl.wrap_operation, 
+            settings, 
+            (self._state,), 
+            self._state.endpoint, 
+        ) 
+ 
+    @_utilities.wrap_async_call_exceptions 
     def async_describe_table(self, path, settings=None):
         return self._driver.future(
             _session_impl.describe_table_request_factory(self._state, path, settings),

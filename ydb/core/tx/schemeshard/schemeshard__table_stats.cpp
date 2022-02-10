@@ -3,7 +3,7 @@
 #include <ydb/core/protos/sys_view.pb.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 template <typename T>
 static ui64 GetThroughput(const T& c) {
@@ -21,11 +21,11 @@ static ui64 GetIops(const T& c) {
     return acc;
 }
 
-void TSchemeShard::Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, const TActorContext& ctx) { 
     ctx.Send(ev->Forward(SysPartitionStatsCollector));
 }
 
-auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TTabletId datashardId,
+auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TTabletId datashardId, 
     TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TTableInfo::TPartitionStats& stats)
 {
     auto ev = MakeHolder<NSysView::TEvSysView::TEvSendPartitionStats>(
@@ -36,7 +36,7 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     sysStats.SetRowCount(stats.RowCount);
     sysStats.SetIndexSize(stats.IndexSize);
     sysStats.SetCPUCores(std::min(stats.GetCurrentRawCpuUsage() / 1000000., 1.0));
-    sysStats.SetTabletId(ui64(datashardId));
+    sysStats.SetTabletId(ui64(datashardId)); 
     sysStats.SetAccessTime(stats.LastAccessTime.MilliSeconds());
     sysStats.SetUpdateTime(stats.LastUpdateTime.MilliSeconds());
     sysStats.SetInFlightTxCount(stats.InFlightTxCount);
@@ -60,15 +60,15 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     return ev;
 }
 
-class TTxStorePartitionStats: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+class TTxStorePartitionStats: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> { 
     TEvDataShard::TEvPeriodicTableStats::TPtr Ev;
 
     THolder<NSysView::TEvSysView::TEvSendPartitionStats> StatsCollectorEv;
     THolder<TEvDataShard::TEvGetTableStats> GetStatsEv;
     THolder<TEvDataShard::TEvCompactBorrowed> CompactEv;
 
-    TSideEffects MergeOpSideEffects;
-
+    TSideEffects MergeOpSideEffects; 
+ 
 public:
     explicit TTxStorePartitionStats(TSelf* self, TEvDataShard::TEvPeriodicTableStats::TPtr& ev)
         : TBase(self)
@@ -87,44 +87,44 @@ public:
 
 }; // TTxStorePartitionStats
 
-THolder<TProposeRequest> MergeRequest(
-    TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge)
-{
-    auto request = MakeHolder<TProposeRequest>(ui64(txId), ui64(ss->SelfTabletId()));
-    auto& record = request->Record;
-
-    TPath tablePath = TPath::Init(pathId, ss);
-
-    auto& propose = *record.AddTransaction();
-    propose.SetFailOnExist(false);
-    propose.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
-    propose.SetInternal(true);
-
-    propose.SetWorkingDir(tablePath.Parent().PathString());
-
-    auto& merge = *propose.MutableSplitMergeTablePartitions();
-    merge.SetTablePath(tablePath.PathString());
-    merge.SetSchemeshardId(ss->TabletID());
-
-    for (auto shardIdx : shardsToMerge) {
-        auto tabletId = ss->ShardInfos.at(shardIdx).TabletID;
-        merge.AddSourceTabletId(ui64(tabletId));
-    }
-
-    return std::move(request);
-}
-
+THolder<TProposeRequest> MergeRequest( 
+    TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge) 
+{ 
+    auto request = MakeHolder<TProposeRequest>(ui64(txId), ui64(ss->SelfTabletId())); 
+    auto& record = request->Record; 
+ 
+    TPath tablePath = TPath::Init(pathId, ss); 
+ 
+    auto& propose = *record.AddTransaction(); 
+    propose.SetFailOnExist(false); 
+    propose.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions); 
+    propose.SetInternal(true); 
+ 
+    propose.SetWorkingDir(tablePath.Parent().PathString()); 
+ 
+    auto& merge = *propose.MutableSplitMergeTablePartitions(); 
+    merge.SetTablePath(tablePath.PathString()); 
+    merge.SetSchemeshardId(ss->TabletID()); 
+ 
+    for (auto shardIdx : shardsToMerge) { 
+        auto tabletId = ss->ShardInfos.at(shardIdx).TabletID; 
+        merge.AddSourceTabletId(ui64(tabletId)); 
+    } 
+ 
+    return std::move(request); 
+} 
+ 
 bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     const auto& rec = Ev->Get()->Record;
-    auto datashardId = TTabletId(rec.GetDatashardId());
-    TPathId tableId = InvalidPathId;
-    if (rec.HasTableOwnerId()) {
-        tableId = TPathId(TOwnerId(rec.GetTableOwnerId()),
-                          TLocalPathId(rec.GetTableLocalId()));
-    } else {
+    auto datashardId = TTabletId(rec.GetDatashardId()); 
+    TPathId tableId = InvalidPathId; 
+    if (rec.HasTableOwnerId()) { 
+        tableId = TPathId(TOwnerId(rec.GetTableOwnerId()), 
+                          TLocalPathId(rec.GetTableLocalId())); 
+    } else { 
         tableId = Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
-    }
-
+    } 
+ 
     const auto& tableStats = rec.GetTableStats();
     const auto& tabletMetrics = rec.GetTabletMetrics();
     ui64 dataSize = tableStats.GetDataSize();
@@ -177,13 +177,13 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     newStats.SearchHeight = tableStats.GetSearchHeight();
     newStats.StartTime = TInstant::MilliSeconds(rec.GetStartTime());
     for (ui64 tabletId : rec.GetUserTablePartOwners()) {
-        newStats.PartOwners.insert(TTabletId(tabletId));
+        newStats.PartOwners.insert(TTabletId(tabletId)); 
         if (tabletId != rec.GetDatashardId()) {
             newStats.HasBorrowed = true;
         }
     }
     for (ui64 tabletId : rec.GetSysTablesPartOwners()) {
-        newStats.PartOwners.insert(TTabletId(tabletId));
+        newStats.PartOwners.insert(TTabletId(tabletId)); 
     }
     newStats.ShardState = rec.GetShardState();
 
@@ -202,7 +202,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
 
     NIceDb::TNiceDb db(txc.DB);
 
-    if (!table->IsBackup && !table->IsShardsStatsDetached()) {
+    if (!table->IsBackup && !table->IsShardsStatsDetached()) { 
         auto newAggrStats = table->GetStats().Aggregated;
         auto subDomainId = Self->ResolveDomainId(tableId);
         auto subDomainInfo = Self->ResolveDomainInfo(tableId);
@@ -255,30 +255,30 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         }
     }
 
-    TVector<TShardIdx> shardsToMerge;
+    TVector<TShardIdx> shardsToMerge; 
     if (table->CheckCanMergePartitions(Self->SplitSettings, shardIdx, shardsToMerge)) {
-        TTxId txId = Self->GetCachedTxId(ctx);
-
-        if (!txId) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Do not request merge op"
-                        << ", reason: no cached tx ids for internal operation"
-                        << ", shardIdx: " << shardIdx
-                        << ", size of merge: " << shardsToMerge.size());
-            return true;
+        TTxId txId = Self->GetCachedTxId(ctx); 
+ 
+        if (!txId) { 
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                       "Do not request merge op" 
+                        << ", reason: no cached tx ids for internal operation" 
+                        << ", shardIdx: " << shardIdx 
+                        << ", size of merge: " << shardsToMerge.size()); 
+            return true; 
         }
 
-        auto request = MergeRequest(Self, txId, Self->ShardInfos[shardIdx].PathId, shardsToMerge);
-
-        TMemoryChanges memChanges;
-        TStorageChanges dbChanges;
-        TOperationContext context{Self, txc, ctx, MergeOpSideEffects, memChanges, dbChanges};
-
-        auto response = Self->IgniteOperation(*request, context);
-
-        dbChanges.Apply(Self, txc, ctx);
-        MergeOpSideEffects.ApplyOnExecute(Self, txc, ctx);
-
+        auto request = MergeRequest(Self, txId, Self->ShardInfos[shardIdx].PathId, shardsToMerge); 
+ 
+        TMemoryChanges memChanges; 
+        TStorageChanges dbChanges; 
+        TOperationContext context{Self, txc, ctx, MergeOpSideEffects, memChanges, dbChanges}; 
+ 
+        auto response = Self->IgniteOperation(*request, context); 
+ 
+        dbChanges.Apply(Self, txc, ctx); 
+        MergeOpSideEffects.ApplyOnExecute(Self, txc, ctx); 
+ 
         return true;
     }
 
@@ -297,40 +297,40 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         collectKeySample = true;
     } else if (dataSize < table->GetShardSizeToSplit()) {
         return true;
-    }
-
+    } 
+ 
     if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         return true;
     }
 
-    {
-        constexpr ui64 deltaShards = 2;
+    { 
+        constexpr ui64 deltaShards = 2; 
         TPathElement::TPtr path = Self->PathsById.at(tableId);
         TSubDomainInfo::TPtr domainInfo = Self->ResolveDomainInfo(tableId);
-
-        if (domainInfo->GetShardsInside() + deltaShards > domainInfo->GetSchemeLimits().MaxShards) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Do not request full stats from datashard"
-                             << ", datashard: " << datashardId
-                             << ", reason: shards count has reached maximum value in the domain"
-                             << ", shards limit for domain: " << domainInfo->GetSchemeLimits().MaxShards
-                             << ", shards count inside domain: " << domainInfo->GetShardsInside()
-                             << ", intention to create new shards: " << deltaShards);
+ 
+        if (domainInfo->GetShardsInside() + deltaShards > domainInfo->GetSchemeLimits().MaxShards) { 
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                         "Do not request full stats from datashard" 
+                             << ", datashard: " << datashardId 
+                             << ", reason: shards count has reached maximum value in the domain" 
+                             << ", shards limit for domain: " << domainInfo->GetSchemeLimits().MaxShards 
+                             << ", shards count inside domain: " << domainInfo->GetShardsInside() 
+                             << ", intention to create new shards: " << deltaShards); 
             return true;
-        }
-
-        if (path->GetShardsInside() + deltaShards > domainInfo->GetSchemeLimits().MaxShardsInPath) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Do not request full stats from datashard"
-                             << ", datashard: " << datashardId
-                             << ", reason: shards count has reached maximum value in the path"
-                             << ", shards limit for path: " << domainInfo->GetSchemeLimits().MaxShardsInPath
-                             << ", shards count inside path: " << path->GetShardsInside()
-                             << ", intention to create new shards: " << deltaShards);
+        } 
+ 
+        if (path->GetShardsInside() + deltaShards > domainInfo->GetSchemeLimits().MaxShardsInPath) { 
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                         "Do not request full stats from datashard" 
+                             << ", datashard: " << datashardId 
+                             << ", reason: shards count has reached maximum value in the path" 
+                             << ", shards limit for path: " << domainInfo->GetSchemeLimits().MaxShardsInPath 
+                             << ", shards count inside path: " << path->GetShardsInside() 
+                             << ", intention to create new shards: " << deltaShards); 
             return true;
-        }
-    }
-
+        } 
+    } 
+ 
     if (newStats.HasBorrowed) {
         // We don't want to split shards that have borrow parts
         // We must ask them to compact first
@@ -345,8 +345,8 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
 }
 
 void TTxStorePartitionStats::Complete(const TActorContext& ctx) {
-    MergeOpSideEffects.ApplyOnComplete(Self, ctx);
-
+    MergeOpSideEffects.ApplyOnComplete(Self, ctx); 
+ 
     if (StatsCollectorEv) {
         ctx.Send(Self->SysPartitionStatsCollector, StatsCollectorEv.Release());
     }
@@ -364,7 +364,7 @@ void TTxStorePartitionStats::Complete(const TActorContext& ctx) {
     }
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) { 
     const auto& rec = ev->Get()->Record;
 
     auto datashardId = TTabletId(rec.GetDatashardId());
@@ -373,14 +373,14 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
     ui64 dataSize = tableStats.GetDataSize();
     ui64 rowCount = tableStats.GetRowCount();
 
-    TPathId pathId = rec.HasTableOwnerId()
-            ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
-            : MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
-
+    TPathId pathId = rec.HasTableOwnerId() 
+            ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId())) 
+            : MakeLocalId(TLocalPathId(rec.GetTableLocalId())); 
+ 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Got periodic table stats at tablet " << TabletID()
-                                                     << " from datashard " << datashardId
-                                                     << " pathId " << pathId
+                                                     << " from datashard " << datashardId 
+                                                     << " pathId " << pathId 
                                                      << " state '" << DatashardStateName(rec.GetShardState()) << "'"
                                                      << " dataSize " << dataSize
                                                      << " rowCount " << rowCount

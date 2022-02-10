@@ -279,7 +279,7 @@ struct TEvLocal {
     };
 
     struct TEvRemoveTenant : public TEventLocal<TEvRemoveTenant, EvRemoveTenant> {
-        TString TenantName;
+        TString TenantName; 
 
         TEvRemoveTenant(const TString &name)
             : TenantName(name)
@@ -320,7 +320,7 @@ struct TEvLocal {
             : TenantName(tenant)
             , Status(status)
         {}
-
+ 
         TEvTenantStatus(const TString &tenant, EStatus status, const TString &error)
             : TenantName(tenant)
             , Status(status)
@@ -348,14 +348,14 @@ struct TEvLocal {
         {}
     };
 };
-
+ 
 struct TLocalConfig : public TThrRefBase {
     using TPtr = TIntrusivePtr<TLocalConfig>;
-
+ 
     struct TTabletClassInfo {
         TTabletSetupInfo::TPtr SetupInfo;
         ui64 MaxCount = 0; // maximum allowed number of running tablets, 0 means unlimited
-
+ 
         TTabletClassInfo()
         {}
 
@@ -388,10 +388,10 @@ inline TActorId MakeLocalRegistrarID(ui32 node, ui64 hiveId) {
     x[5] = (char)((node >> 8) & 0xFF);
     x[6] = (char)((node >> 16) & 0xFF);
     x[7] = (char)((node >> 24) & 0xFF);
-    x[8] = (char)((hiveId & 0xFF) ^ ((hiveId >> 32) & 0xFF));
-    x[9] = (char)(((hiveId >> 8) & 0xFF) ^ ((hiveId >> 40) & 0xFF));
-    x[10] = (char)(((hiveId >> 16) & 0xFF) ^ ((hiveId >> 48) & 0xFF));
-    x[11] = (char)(((hiveId >> 24) & 0xFF) ^ ((hiveId >> 56) & 0xFF));
+    x[8] = (char)((hiveId & 0xFF) ^ ((hiveId >> 32) & 0xFF)); 
+    x[9] = (char)(((hiveId >> 8) & 0xFF) ^ ((hiveId >> 40) & 0xFF)); 
+    x[10] = (char)(((hiveId >> 16) & 0xFF) ^ ((hiveId >> 48) & 0xFF)); 
+    x[11] = (char)(((hiveId >> 24) & 0xFF) ^ ((hiveId >> 56) & 0xFF)); 
     return TActorId(node, TStringBuf(x, 12));
 }
 

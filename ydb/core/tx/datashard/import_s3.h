@@ -4,7 +4,7 @@
 
 #include "defs.h"
 
-namespace NKikimrSchemeOp {
+namespace NKikimrSchemeOp { 
     class TRestoreTask;
 }
 
@@ -13,7 +13,7 @@ namespace NDataShard {
 
 class TTableInfo;
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info);
+IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info); 
 
 } // NDataShard
 } // NKikimr

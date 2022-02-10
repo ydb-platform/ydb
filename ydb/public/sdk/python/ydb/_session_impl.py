@@ -59,16 +59,16 @@ def copy_tables_request_factory(session_state, source_destination_pairs):
     return request
 
 
-def rename_tables_request_factory(session_state, rename_items):
-    request = session_state.attach_request(_apis.ydb_table.RenameTablesRequest())
-    for item in rename_items:
-        table_item = request.tables.add()
-        table_item.source_path = item.source_path
-        table_item.destination_path = item.destination_path
-        table_item.replace_destination = item.replace_destination
-    return request
-
-
+def rename_tables_request_factory(session_state, rename_items): 
+    request = session_state.attach_request(_apis.ydb_table.RenameTablesRequest()) 
+    for item in rename_items: 
+        table_item = request.tables.add() 
+        table_item.source_path = item.source_path 
+        table_item.destination_path = item.destination_path 
+        table_item.replace_destination = item.replace_destination 
+    return request 
+ 
+ 
 def explain_data_query_request_factory(session_state, yql_text):
     request = session_state.start_query().attach_request(
         _apis.ydb_table.ExplainDataQueryRequest()

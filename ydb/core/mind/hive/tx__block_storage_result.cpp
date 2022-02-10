@@ -40,10 +40,10 @@ public:
         BLOG_D("THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
-            if (msg->Status == NKikimrProto::OK
-                    || msg->Status == NKikimrProto::RACE
-                    || msg->Status == NKikimrProto::BLOCKED
-                    || msg->Status == NKikimrProto::NO_GROUP) {
+            if (msg->Status == NKikimrProto::OK 
+                    || msg->Status == NKikimrProto::RACE 
+                    || msg->Status == NKikimrProto::BLOCKED 
+                    || msg->Status == NKikimrProto::NO_GROUP) { 
                 if (tablet->IsDeleting()) {
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                         BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);

@@ -101,10 +101,10 @@ public:
 
     void UpdateChannelsBinding(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db) {
         Y_VERIFY(tablet.BoundChannels.size() <= BoundChannels.size(), "only expansion channels number is allowed in Binded Channels");
-
-        std::bitset<MAX_TABLET_CHANNELS> newChannels;
-
-        // compare channel list with erasure and category information
+ 
+        std::bitset<MAX_TABLET_CHANNELS> newChannels; 
+ 
+        // compare channel list with erasure and category information 
         for (ui32 channelId = 0; channelId < tablet.BoundChannels.size(); ++channelId) {
             auto& channelA = tablet.BoundChannels[channelId];
             auto channelB = BoundChannels[channelId]; // copy, not reference
@@ -113,10 +113,10 @@ public:
                 db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update<Schema::TabletChannel::StoragePool>(BoundChannels[channelId].GetStoragePoolName());
                 db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update<Schema::TabletChannel::Binding>(BoundChannels[channelId]);
                 db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update<Schema::TabletChannel::NeedNewGroup>(true);
-                newChannels.set(channelId);
-            }
-        }
-
+                newChannels.set(channelId); 
+            } 
+        } 
+ 
         // new channels found in the tablet profile
         for (ui32 channelId = tablet.BoundChannels.size(); channelId < BoundChannels.size(); ++channelId) {
             auto channel = BoundChannels[channelId]; // copy, not reference
@@ -124,12 +124,12 @@ public:
             db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update<Schema::TabletChannel::StoragePool>(BoundChannels[channelId].GetStoragePoolName());
             db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update<Schema::TabletChannel::Binding>(BoundChannels[channelId]);
             db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update<Schema::TabletChannel::NeedNewGroup>(true);
-            newChannels.set(channelId);
-        }
-
-        if (newChannels.any()) {
-            tablet.ChannelProfileNewGroup |= newChannels;
-            tablet.State = State = ETabletState::GroupAssignment;
+            newChannels.set(channelId); 
+        } 
+ 
+        if (newChannels.any()) { 
+            tablet.ChannelProfileNewGroup |= newChannels; 
+            tablet.State = State = ETabletState::GroupAssignment; 
             tablet.ChannelProfileReassignReason = NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
             tablet.BoundChannels = BoundChannels;
             for (auto& bind : tablet.BoundChannels) {
@@ -139,10 +139,10 @@ public:
                 .Update<Schema::Tablet::State, Schema::Tablet::ReassignReason, Schema::Tablet::ActorsToNotify>(
                     State, NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO, {Sender}
                     );
-            Status = NKikimrProto::OK; // otherwise it would be ALREADY
-        }
-    }
-
+            Status = NKikimrProto::OK; // otherwise it would be ALREADY 
+        } 
+    } 
+ 
     bool ValidateChannelsBinding(TLeaderTabletInfo& tablet) {
         if (BoundChannels.size() < tablet.BoundChannels.size()) {
             ErrorReason = NKikimrHive::ERROR_REASON_CHANNELS_CANNOT_SHRINK;
@@ -421,7 +421,7 @@ public:
         tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tablet.Id, tablet.Type));
         tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
 
-        UpdateChannelsBinding(tablet, db);
+        UpdateChannelsBinding(tablet, db); 
 
         for (const auto& srcFollowerGroup : FollowerGroups) {
             TFollowerGroup& followerGroup = tablet.AddFollowerGroup();

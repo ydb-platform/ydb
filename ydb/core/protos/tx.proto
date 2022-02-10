@@ -66,17 +66,17 @@ message TCoordinatorTransaction {
     optional uint64 Moderator = 5; // tablet id of moderator (if any)
 }
 
-message TEvSubDomainConfigurationAck {
-    enum EStatus {
-        SUCCESS = 0; // ok
-        ALREADY = 1; // ok, repeated request
-        REJECT = 2; // precisely not ok
-    }
-
-    optional EStatus Status = 1;
-    optional fixed64 OnTabletId = 2;
-}
-
+message TEvSubDomainConfigurationAck { 
+    enum EStatus { 
+        SUCCESS = 0; // ok 
+        ALREADY = 1; // ok, repeated request 
+        REJECT = 2; // precisely not ok 
+    } 
+ 
+    optional EStatus Status = 1; 
+    optional fixed64 OnTabletId = 2; 
+} 
+ 
 message TEvCoordinatorSync {
     optional fixed64 Cookie = 1;
     optional fixed64 MediatorID = 9;
@@ -109,22 +109,22 @@ message TEvCoordinatorStep {
     optional uint64 TotalTxAffectedEntries = 20; // sum(transactions[i].affectedset.size)
 }
 
-message TEvTxAllocate {
-    optional fixed64 RangeSize = 1;
-}
-
-message TEvTxAllocateResult {
-    enum EStatus {
-        SUCCESS = 0; // ok
-        IMPOSIBLE = 1; // precisely not ok
-    }
-
-    optional EStatus Status = 1;
-
-    optional fixed64 RangeBegin = 2;
-    optional fixed64 RangeEnd = 3;
-}
-
+message TEvTxAllocate { 
+    optional fixed64 RangeSize = 1; 
+} 
+ 
+message TEvTxAllocateResult { 
+    enum EStatus { 
+        SUCCESS = 0; // ok 
+        IMPOSIBLE = 1; // precisely not ok 
+    } 
+ 
+    optional EStatus Status = 1; 
+ 
+    optional fixed64 RangeBegin = 2; 
+    optional fixed64 RangeEnd = 3; 
+} 
+ 
 message TEvCoordinatorStepResult {
     enum EStatus {
         UNKNOWN_COORDINATOR = 0; // requested coordinator not known

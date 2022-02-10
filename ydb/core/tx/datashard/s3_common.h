@@ -16,7 +16,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-inline Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
+inline Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings) { 
     Aws::Client::ClientConfiguration config;
 
     config.endpointOverride = settings.GetEndpoint();
@@ -24,10 +24,10 @@ inline Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp
     config.maxConnections = 5;
 
     switch (settings.GetScheme()) {
-    case NKikimrSchemeOp::TS3Settings::HTTP:
+    case NKikimrSchemeOp::TS3Settings::HTTP: 
         config.scheme = Aws::Http::Scheme::HTTP;
         break;
-    case NKikimrSchemeOp::TS3Settings::HTTPS:
+    case NKikimrSchemeOp::TS3Settings::HTTPS: 
         config.scheme = Aws::Http::Scheme::HTTPS;
         break;
     default:
@@ -37,7 +37,7 @@ inline Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp
     return config;
 }
 
-inline Aws::Auth::AWSCredentials CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
+inline Aws::Auth::AWSCredentials CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings) { 
     return Aws::Auth::AWSCredentials(settings.GetAccessKey(), settings.GetSecretKey());
 }
 
@@ -50,7 +50,7 @@ struct TS3Settings {
     Aws::S3::Model::StorageClass StorageClass;
 
 private:
-    explicit TS3Settings(const NKikimrSchemeOp::TS3Settings& settings, ui32 shard)
+    explicit TS3Settings(const NKikimrSchemeOp::TS3Settings& settings, ui32 shard) 
         : Config(ConfigFromSettings(settings))
         , Credentials(CredentialsFromSettings(settings))
         , Bucket(settings.GetBucket())
@@ -90,11 +90,11 @@ private:
     }
 
 public:
-    static TS3Settings FromBackupTask(const NKikimrSchemeOp::TBackupTask& task) {
+    static TS3Settings FromBackupTask(const NKikimrSchemeOp::TBackupTask& task) { 
         return TS3Settings(task.GetS3Settings(), task.GetShardNum());
     }
 
-    static TS3Settings FromRestoreTask(const NKikimrSchemeOp::TRestoreTask& task) {
+    static TS3Settings FromRestoreTask(const NKikimrSchemeOp::TRestoreTask& task) { 
         return TS3Settings(task.GetS3Settings(), task.GetShardNum());
     }
 

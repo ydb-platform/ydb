@@ -8159,7 +8159,7 @@ private:
     bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TAlterTableParameters& params);
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
     void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
-    void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params);
+    void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params); 
     bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params);
     bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);
     void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params);
@@ -8312,7 +8312,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         Error() << humanStatementName << " statement is not supported in subqueries";
         return false;
     }
-
+ 
     switch (altCase) {
         case TRule_sql_stmt_core::kAltSqlStmtCore1: {
             bool success = false;
@@ -8490,12 +8490,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
             }
-
+ 
             TAlterTableParameters params;
             if (!AlterTableAction(rule.GetRule_alter_table_action4(), params)) {
                 return false;
             }
-
+ 
             for (auto& block : rule.GetBlock5()) {
                 if (!AlterTableAction(block.GetRule_alter_table_action2(), params)) {
                     return false;
@@ -8828,12 +8828,12 @@ bool TSqlQuery::ExportStatement(const TRule_export_stmt& stmt) {
 }
 
 bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTableParameters& params) {
-    if (params.RenameTo) {
-        // rename action is followed by some other actions
-        Error() << "RENAME TO can not be used together with another table action";
-        return false;
-    }
-
+    if (params.RenameTo) { 
+        // rename action is followed by some other actions 
+        Error() << "RENAME TO can not be used together with another table action"; 
+        return false; 
+    } 
+ 
     switch (node.Alt_case()) {
     case TRule_alter_table_action::kAltAlterTableAction1: {
         // ADD COLUMN
@@ -8914,18 +8914,18 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         AlterTableDropIndex(dropIndex, params);
         break;
     }
-    case TRule_alter_table_action::kAltAlterTableAction11: {
-        // RENAME TO
-        if (!params.IsEmpty()) {
-            // rename action follows some other actions
-            Error() << "RENAME TO can not be used together with another table action";
-            return false;
-        }
+    case TRule_alter_table_action::kAltAlterTableAction11: { 
+        // RENAME TO 
+        if (!params.IsEmpty()) { 
+            // rename action follows some other actions 
+            Error() << "RENAME TO can not be used together with another table action"; 
+            return false; 
+        } 
 
-        const auto& renameTo = node.GetAlt_alter_table_action11().GetRule_alter_table_rename_to1();
-        AlterTableRenameTo(renameTo, params);
-        break;
-    }
+        const auto& renameTo = node.GetAlt_alter_table_action11().GetRule_alter_table_rename_to1(); 
+        AlterTableRenameTo(renameTo, params); 
+        break; 
+    } 
     case TRule_alter_table_action::kAltAlterTableAction12: {
         // ADD CHANGEFEED
         const auto& rule = node.GetAlt_alter_table_action12().GetRule_alter_table_add_changefeed1();
@@ -8948,7 +8948,7 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         AlterTableDropChangefeed(rule, params);
         break;
     }
-
+ 
     default:
         AltNotImplemented("alter_table_action", node);
         return false;
@@ -9092,10 +9092,10 @@ void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TA
     params.DropIndexes.emplace_back(IdEx(node.GetRule_an_id3(), *this));
 }
 
-void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {
-    params.RenameTo = IdEx(node.GetRule_an_id_table3(), *this);
-}
-
+void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) { 
+    params.RenameTo = IdEx(node.GetRule_an_id_table3(), *this); 
+} 
+ 
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
     return CreateChangefeed(node.GetRule_changefeed2(), *this, params.AddChangefeeds);
 }

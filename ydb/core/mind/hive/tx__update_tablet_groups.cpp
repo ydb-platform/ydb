@@ -17,7 +17,7 @@ class TTxUpdateTabletGroups : public TTransactionBase<THive> {
     bool Changed = false;
     bool Ignored = false;
     TCompleteNotifications Notifications;
-
+ 
 public:
     TTxUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups, THive *hive)
         : TBase(hive)
@@ -35,10 +35,10 @@ public:
             BLOG_W("THive::TTxUpdateTabletGroups:: tablet " << TabletId << " wasn't found");
             Ignored = true;
             return true;
-        }
+        } 
         BLOG_D("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}(" 
                << tablet->Id << "," << tablet->ChannelProfileReassignReason << "," << Groups << ")");
-
+ 
         Y_VERIFY(tablet->TabletStorageInfo);
 
         if (tablet->ChannelProfileNewGroup.count() != Groups.size() && !Groups.empty()) {
@@ -82,8 +82,8 @@ public:
                 NewTabletState = ETabletState::ReadyToWork;
                 return true;
             }
-        }
-
+        } 
+ 
         NIceDb::TNiceDb db(txc.DB);
 
         // updating tablet channels
@@ -94,7 +94,7 @@ public:
                 // we are skipping this channel because we haven't asked for it
                 continue;
             }
-
+ 
             const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* group;
 
             if (Groups.size() > orderNumber) {
@@ -127,7 +127,7 @@ public:
 
             TTabletChannelInfo* channel;
 
-            if (channelId < tabletChannels.size()) {
+            if (channelId < tabletChannels.size()) { 
                 channel = &tabletChannels[channelId];
                 Y_VERIFY(channel->Channel == channelId);
                 if (!tablet->ReleaseAllocationUnit(channelId)) {
@@ -177,7 +177,7 @@ public:
 
             ++orderNumber;
         }
-
+ 
         bool hasEmptyChannel = false;
         for (ui32 channelId = 0; channelId < channels; ++channelId) {
             if (tabletStorageInfo->Channels.size() <= channelId || tabletStorageInfo->Channels[channelId].History.empty()) {
@@ -219,7 +219,7 @@ public:
                 tablet->ActorsToNotify.clear();
                 db.Table<Schema::Tablet>().Key(TabletId).UpdateToNull<Schema::Tablet::ActorsToNotify>();
             }
-        } else {
+        } else { 
             BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                    << tablet->Id
                    << " wasn't changed anything");
@@ -238,8 +238,8 @@ public:
                 }
                 NewTabletState = ETabletState::ReadyToWork;
             }
-        }
-
+        } 
+ 
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(NewTabletState);
 
         if (!tabletBootState.empty()) {
@@ -288,7 +288,7 @@ public:
 
 ITransaction* THive::CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups) {
     return new TTxUpdateTabletGroups(tabletId, std::move(groups), this);
-}
-
+} 
+ 
 } // NHive
 } // NKikimr

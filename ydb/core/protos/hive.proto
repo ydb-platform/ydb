@@ -90,7 +90,7 @@ message TEvCreateTablet {
     optional NKikimrSubDomains.TDomainKey ObjectDomain = 18;
     optional ETabletBootMode TabletBootMode = 19;
     optional uint64 ObjectId = 20;
-    repeated NKikimrStoragePool.TChannelBind BindedChannels = 21;
+    repeated NKikimrStoragePool.TChannelBind BindedChannels = 21; 
     optional fixed64 TabletID = 22;
     repeated NKikimrSubDomains.TDomainKey AllowedDomains = 23;
     optional TDataCentersPreference DataCentersPreference = 24;
@@ -156,26 +156,26 @@ message TEvReconfigureTablet {
     repeated TChannelRequest Channels = 4;
 }
 
-message TEvAdoptTablet {
-    optional fixed64 TabletID = 1;
-
-    optional fixed64 PrevOwner = 2;
-    optional uint64 PrevOwnerIdx = 3;
-    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 4;
-
-    optional fixed64 Owner = 5;
-    optional uint64 OwnerIdx = 6;
-}
-
-message TEvAdoptTabletReply {
-    optional fixed64 TabletID = 1;
-    optional fixed64 Origin = 2;
-    optional fixed64 Owner = 3;
-    optional uint64 OwnerIdx = 4;
-    optional NKikimrProto.EReplyStatus Status = 5;
-    optional string Explain = 6;
-}
-
+message TEvAdoptTablet { 
+    optional fixed64 TabletID = 1; 
+ 
+    optional fixed64 PrevOwner = 2; 
+    optional uint64 PrevOwnerIdx = 3; 
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 4; 
+ 
+    optional fixed64 Owner = 5; 
+    optional uint64 OwnerIdx = 6; 
+} 
+ 
+message TEvAdoptTabletReply { 
+    optional fixed64 TabletID = 1; 
+    optional fixed64 Origin = 2; 
+    optional fixed64 Owner = 3; 
+    optional uint64 OwnerIdx = 4; 
+    optional NKikimrProto.EReplyStatus Status = 5; 
+    optional string Explain = 6; 
+} 
+ 
 message TEvReconfigureTabletReply {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional fixed64 TabletID = 2;
@@ -184,34 +184,34 @@ message TEvReconfigureTabletReply {
 }
 
 message TEvDeleteTablet {
-    optional fixed64 ShardOwnerId = 1;
-    repeated uint64 ShardLocalIdx = 2;
-    optional uint64 TxId_Deprecated = 3;
+    optional fixed64 ShardOwnerId = 1; 
+    repeated uint64 ShardLocalIdx = 2; 
+    optional uint64 TxId_Deprecated = 3; 
     repeated fixed64 TabletID = 4;
 }
 
 message TEvDeleteTabletReply {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional fixed64 Origin = 2;
-    optional uint64 TxId_Deprecated = 3;
-    optional uint64 ShardOwnerId = 4;
-    repeated uint64 ShardLocalIdx = 5;
+    optional uint64 TxId_Deprecated = 3; 
+    optional uint64 ShardOwnerId = 4; 
+    repeated uint64 ShardLocalIdx = 5; 
     optional TForwardRequest ForwardRequest = 6;
 }
 
-message TEvDeleteOwnerTablets {
-    optional fixed64 Owner = 1;
-    optional uint64 TxId = 2;
-}
-
-message TEvDeleteOwnerTabletsReply {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional fixed64 Owner = 2;
-    optional uint64 TxId = 3;
-    optional fixed64 Origin = 4;
-}
-
-
+message TEvDeleteOwnerTablets { 
+    optional fixed64 Owner = 1; 
+    optional uint64 TxId = 2; 
+} 
+ 
+message TEvDeleteOwnerTabletsReply { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional fixed64 Owner = 2; 
+    optional uint64 TxId = 3; 
+    optional fixed64 Origin = 4; 
+} 
+ 
+ 
 message TEvLookupChannelInfo {
     optional fixed64 TabletID = 1;
     repeated uint32 Channels = 2;

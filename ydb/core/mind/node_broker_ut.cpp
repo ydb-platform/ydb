@@ -53,9 +53,9 @@ void SetupServices(TTestActorRuntime &runtime,
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
 
-    // setup domain info
+    // setup domain info 
     TAppPrepare app;
-
+ 
     app.ClearDomainsAndHive();
     app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
 

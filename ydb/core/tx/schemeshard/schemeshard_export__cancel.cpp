@@ -10,11 +10,11 @@
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
+struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase { 
     TEvExport::TEvCancelExportRequest::TPtr Request;
 
     explicit TTxCancel(TSelf *self, TEvExport::TEvCancelExportRequest::TPtr& ev)
@@ -83,7 +83,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         Self->PersistExportState(db, exportInfo);
 
         Send(Request->Sender, std::move(response), 0, Request->Cookie);
-        SendNotificationsIfFinished(exportInfo);
+        SendNotificationsIfFinished(exportInfo); 
         return true;
     }
 
@@ -92,10 +92,10 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 
 }; // TTxCancel
 
-struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    TEvSchemeShard::TEvCancelTxResult::TPtr CancelResult;
+struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase { 
+    TEvSchemeShard::TEvCancelTxResult::TPtr CancelResult; 
 
-    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev) 
         : TXxport::TTxBase(self)
         , CancelResult(ev)
     {
@@ -161,7 +161,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
             Self->PersistExportState(db, exportInfo);
         }
 
-        SendNotificationsIfFinished(exportInfo);
+        SendNotificationsIfFinished(exportInfo); 
         return true;
     }
 
@@ -170,13 +170,13 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
 
 }; // TTxCancelAck
 
-ITransaction* TSchemeShard::CreateTxCancelExport(TEvExport::TEvCancelExportRequest::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxCancelExport(TEvExport::TEvCancelExportRequest::TPtr& ev) { 
     return new TExport::TTxCancel(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxCancelExportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxCancelExportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev) { 
     return new TExport::TTxCancelAck(this, ev);
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

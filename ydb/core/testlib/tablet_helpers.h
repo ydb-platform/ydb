@@ -28,8 +28,8 @@ namespace NKikimr {
     void SetupTabletServices(TTestActorRuntime& runtime, TAppPrepare* app = nullptr, bool mockDisk = false,
                              NFake::TStorage storage = {}, NFake::TCaches caches = {});
 
-    const TString DEFAULT_STORAGE_POOL = "Storage Pool with id: 1";
-
+    const TString DEFAULT_STORAGE_POOL = "Storage Pool with id: 1"; 
+ 
     static TChannelBind GetDefaultChannelBind(const TString& storagePool = DEFAULT_STORAGE_POOL) {
         TChannelBind bind;
         bind.SetStoragePoolName(storagePool);
@@ -42,7 +42,7 @@ namespace NKikimr {
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
 
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
-    bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
+    bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow); 
 
     const TString INITIAL_TEST_DISPATCH_NAME = "Trace";
 
@@ -51,7 +51,7 @@ namespace NKikimr {
         ui32 selectedReboot = Max<ui32>(), ui64 selectedTablet = Max<ui64>(), ui32 bucket = 0, ui32 totalBuckets = 0, bool killOnCommit = false);
 
     // Resets pipe when receiving client events
-    void RunTestWithPipeResets(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
+    void RunTestWithPipeResets(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory, 
         std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
         ui32 selectedReboot = Max<ui32>(), ui32 bucket = 0, ui32 totalBuckets = 0);
 
@@ -124,8 +124,8 @@ namespace NKikimr {
             , TabletId(tabletId)
             , BootstrapperActorId(bootstrapperActorId)
         {}
-
-        TFakeHiveTabletInfo(const TFakeHiveTabletInfo& info) = default;
+ 
+        TFakeHiveTabletInfo(const TFakeHiveTabletInfo& info) = default; 
     };
 
     struct TFakeHiveState : TThrRefBase {

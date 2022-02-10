@@ -1757,7 +1757,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorShardedCompaction) {
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 1024 * 1024;
-        policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
+        policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded; 
         policy->ShardPolicy.SetMinSliceSize(0);
         policy->ShardPolicy.SetMinShardSize(512 * 1024);
         policy->ShardPolicy.SetMaxShardSize(5 * 1024 * 1024 / 2);
@@ -1792,7 +1792,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorShardedCompaction) {
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 1024;
-        policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
+        policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded; 
         policy->ShardPolicy.SetMinSliceSize(0);
         policy->ShardPolicy.SetMinShardSize(512 * 1024);
         policy->ShardPolicy.SetMaxShardSize(5 * 1024 * 1024 / 2);
@@ -1827,7 +1827,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorShardedCompaction) {
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 1024 * 1024;
-        policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
+        policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded; 
         policy->ShardPolicy.SetMinSliceSize(0);
         policy->ShardPolicy.SetMinShardSize(512 * 1024);
         policy->ShardPolicy.SetMaxShardSize(5 * 1024 * 1024 / 2);

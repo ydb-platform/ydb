@@ -187,7 +187,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvProposeTransactionStatus,    HandleResponse);
             hFunc(TMiniKQLCompileServiceEvents::TEvCompileStatus, HandleCompile);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, HandleResult);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, HandleResult); 
             hFunc(TEvTabletPipe::TEvClientDestroyed,              HandlePipeClientDisconnected);
             hFunc(TEvTabletPipe::TEvClientConnected,              HandlePipeClientConnected);
             hFunc(TEvWakeup,                             HandleWakeup);
@@ -203,7 +203,7 @@ private:
 
     void HandleResponse(TResponse::TPtr& ev);
     void HandleWakeup(TEvWakeup::TPtr& ev);
-    void HandleResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
+    void HandleResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev); 
     void HandlePipeClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void HandlePipeClientDisconnected(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
 

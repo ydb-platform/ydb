@@ -1,148 +1,148 @@
-#include "schemeshard__operation_memory_changes.h"
-
-#include "schemeshard_impl.h"
-
+#include "schemeshard__operation_memory_changes.h" 
+ 
+#include "schemeshard_impl.h" 
+ 
 #include <ydb/core/tx/tx_processing.h>
-
-namespace NKikimr {
-namespace NSchemeShard {
-
-void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& op) {
-    Y_VERIFY(!ss->TxInFlight.contains(op));
-
-    TxStates.emplace(op, nullptr);
-}
-
-void TMemoryChanges::GrabNewPath(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->PathsById.contains(pathId));
-
-    Pathes.emplace(pathId, nullptr);
-}
-
-void TMemoryChanges::GrabPath(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(ss->PathsById.contains(pathId));
-
-    TPathElement::TPtr copy = new TPathElement(*ss->PathsById.at(pathId));
-    Pathes.emplace(pathId, copy);
-}
-
-void TMemoryChanges::GrabNewTable(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->Tables.contains(pathId));
-
-    Tables.emplace(pathId, nullptr);
-}
-
-void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(ss->Tables.contains(pathId));
-
-    TTableInfo::TPtr copy = new TTableInfo(*ss->Tables.at(pathId));
-    Tables.emplace(pathId, copy);
-}
-
-void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
-    Shards.emplace(shardId, nullptr);
-}
-
-void TMemoryChanges::GrabShard(TSchemeShard *ss, const TShardIdx &shardId) {
-    Y_VERIFY(ss->ShardInfos.contains(shardId));
-
-    const auto& shard = ss->ShardInfos.at(shardId);
-    Shards.emplace(shardId, MakeHolder<TShardInfo>(shard));
-}
-
-void TMemoryChanges::GrabDomain(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(ss->SubDomains.contains(pathId));
-
-    TSubDomainInfo::TPtr copy = new TSubDomainInfo(*ss->SubDomains.at(pathId));
-    SubDomains.emplace(pathId, copy);
-}
-
-void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->Indexes.contains(pathId));
-
-    Indexes.emplace(pathId, nullptr);
-}
-
-void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
+ 
+namespace NKikimr { 
+namespace NSchemeShard { 
+ 
+void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& op) { 
+    Y_VERIFY(!ss->TxInFlight.contains(op)); 
+ 
+    TxStates.emplace(op, nullptr); 
+} 
+ 
+void TMemoryChanges::GrabNewPath(TSchemeShard* ss, const TPathId& pathId) { 
+    Y_VERIFY(!ss->PathsById.contains(pathId)); 
+ 
+    Pathes.emplace(pathId, nullptr); 
+} 
+ 
+void TMemoryChanges::GrabPath(TSchemeShard* ss, const TPathId& pathId) { 
+    Y_VERIFY(ss->PathsById.contains(pathId)); 
+ 
+    TPathElement::TPtr copy = new TPathElement(*ss->PathsById.at(pathId)); 
+    Pathes.emplace(pathId, copy); 
+} 
+ 
+void TMemoryChanges::GrabNewTable(TSchemeShard* ss, const TPathId& pathId) { 
+    Y_VERIFY(!ss->Tables.contains(pathId)); 
+ 
+    Tables.emplace(pathId, nullptr); 
+} 
+ 
+void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) { 
+    Y_VERIFY(ss->Tables.contains(pathId)); 
+ 
+    TTableInfo::TPtr copy = new TTableInfo(*ss->Tables.at(pathId)); 
+    Tables.emplace(pathId, copy); 
+} 
+ 
+void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) { 
+    Shards.emplace(shardId, nullptr); 
+} 
+ 
+void TMemoryChanges::GrabShard(TSchemeShard *ss, const TShardIdx &shardId) { 
+    Y_VERIFY(ss->ShardInfos.contains(shardId)); 
+ 
+    const auto& shard = ss->ShardInfos.at(shardId); 
+    Shards.emplace(shardId, MakeHolder<TShardInfo>(shard)); 
+} 
+ 
+void TMemoryChanges::GrabDomain(TSchemeShard* ss, const TPathId& pathId) { 
+    Y_VERIFY(ss->SubDomains.contains(pathId)); 
+ 
+    TSubDomainInfo::TPtr copy = new TSubDomainInfo(*ss->SubDomains.at(pathId)); 
+    SubDomains.emplace(pathId, copy); 
+} 
+ 
+void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) { 
+    Y_VERIFY(!ss->Indexes.contains(pathId)); 
+ 
+    Indexes.emplace(pathId, nullptr); 
+} 
+ 
+void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) { 
     Y_VERIFY(!ss->CdcStreams.contains(pathId));
 
-    CdcStreams.emplace(pathId, nullptr);
+    CdcStreams.emplace(pathId, nullptr); 
 }
 
-void TMemoryChanges::UnDo(TSchemeShard* ss) {
-    // be aware of the order of grab & undo ops
-    // stack is the best way to manage it right
-
-    while (Pathes) {
-        const auto& [id, elem] = Pathes.top();
-        if (elem) {
-            ss->PathsById[id] = elem;
-        } else {
-            ss->PathsById.erase(id);
-        }
-        Pathes.pop();
-    }
-
-    while (Indexes) {
-        const auto& [id, elem] = Indexes.top();
-        if (elem) {
-            ss->Indexes[id] = elem;
-        } else {
-            ss->Indexes.erase(id);
-        }
-        Indexes.pop();
-    }
-
-    while (CdcStreams) {
-        const auto& [id, elem] = CdcStreams.top();
+void TMemoryChanges::UnDo(TSchemeShard* ss) { 
+    // be aware of the order of grab & undo ops 
+    // stack is the best way to manage it right 
+ 
+    while (Pathes) { 
+        const auto& [id, elem] = Pathes.top(); 
+        if (elem) { 
+            ss->PathsById[id] = elem; 
+        } else { 
+            ss->PathsById.erase(id); 
+        } 
+        Pathes.pop(); 
+    } 
+ 
+    while (Indexes) { 
+        const auto& [id, elem] = Indexes.top(); 
+        if (elem) { 
+            ss->Indexes[id] = elem; 
+        } else { 
+            ss->Indexes.erase(id); 
+        } 
+        Indexes.pop(); 
+    } 
+ 
+    while (CdcStreams) { 
+        const auto& [id, elem] = CdcStreams.top(); 
         if (elem) {
             ss->CdcStreams[id] = elem;
         } else {
             ss->CdcStreams.erase(id);
         }
-        CdcStreams.pop();
+        CdcStreams.pop(); 
     }
 
-    while (Tables) {
-        const auto& [id, elem] = Tables.top();
-        if (elem) {
-            ss->Tables[id] = elem;
-        } else {
-            ss->Tables.erase(id);
-        }
-        Tables.pop();
-    }
-
-    while (Shards) {
-        const auto& [id, elem] = Shards.top();
-        if (elem) {
-            ss->ShardInfos[id] = *elem;
-        } else {
-            ss->ShardInfos.erase(id);
-        }
-        Shards.pop();
-    }
-
-    while (SubDomains) {
-        const auto& [id, elem] = SubDomains.top();
-        if (elem) {
-            ss->SubDomains[id] = elem;
-        } else {
-            ss->SubDomains.erase(id);
-        }
-        SubDomains.pop();
-    }
-
-    while (TxStates) {
-        const auto& [id, elem] = TxStates.top();
-        if (!elem) {
-            ss->TxInFlight.erase(id);
-        } else {
-            Y_FAIL("No such cases are exist");
-        }
-        TxStates.pop();
-    }
-}
-
-}
-}
+    while (Tables) { 
+        const auto& [id, elem] = Tables.top(); 
+        if (elem) { 
+            ss->Tables[id] = elem; 
+        } else { 
+            ss->Tables.erase(id); 
+        } 
+        Tables.pop(); 
+    } 
+ 
+    while (Shards) { 
+        const auto& [id, elem] = Shards.top(); 
+        if (elem) { 
+            ss->ShardInfos[id] = *elem; 
+        } else { 
+            ss->ShardInfos.erase(id); 
+        } 
+        Shards.pop(); 
+    } 
+ 
+    while (SubDomains) { 
+        const auto& [id, elem] = SubDomains.top(); 
+        if (elem) { 
+            ss->SubDomains[id] = elem; 
+        } else { 
+            ss->SubDomains.erase(id); 
+        } 
+        SubDomains.pop(); 
+    } 
+ 
+    while (TxStates) { 
+        const auto& [id, elem] = TxStates.top(); 
+        if (!elem) { 
+            ss->TxInFlight.erase(id); 
+        } else { 
+            Y_FAIL("No such cases are exist"); 
+        } 
+        TxStates.pop(); 
+    } 
+} 
+ 
+} 
+} 

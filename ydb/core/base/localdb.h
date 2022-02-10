@@ -19,9 +19,9 @@ struct TCompactionPolicy : public TThrRefBase {
 
         TBackgroundPolicy();
         TBackgroundPolicy(ui32 threshold, ui32 priorityBase, double timeFactor, const TString &resourceBrokerTask);
-        TBackgroundPolicy(const NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy &policyPb);
+        TBackgroundPolicy(const NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy &policyPb); 
 
-        void Serialize(NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy& policyPb) const;
+        void Serialize(NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy& policyPb) const; 
 
         bool operator ==(const TBackgroundPolicy& p) const {
             return (Threshold == p.Threshold
@@ -50,9 +50,9 @@ struct TCompactionPolicy : public TThrRefBase {
                           ui64 forceSizeToCompact, const TString &resourceBrokerTask,
                           bool keepInCache,
                           const TBackgroundPolicy &backgroundCompactionPolicy = TBackgroundPolicy());
-        TGenerationPolicy(const NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy &policyPb);
+        TGenerationPolicy(const NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy &policyPb); 
 
-        void Serialize(NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy& policyPb) const;
+        void Serialize(NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy& policyPb) const; 
 
         bool operator ==(const TGenerationPolicy& p) const {
             return SizeToCompact == p.SizeToCompact
@@ -89,16 +89,16 @@ struct TCompactionPolicy : public TThrRefBase {
     ui64 LogOverheadSizeToSnapshot;
     ui32 LogOverheadCountToSnapshot;
     ui32 DroppedRowsPercentToCompact;
-    NKikimrSchemeOp::ECompactionStrategy CompactionStrategy;
-    NKikimrSchemeOp::TCompactionPolicy::TShardPolicy ShardPolicy;
+    NKikimrSchemeOp::ECompactionStrategy CompactionStrategy; 
+    NKikimrSchemeOp::TCompactionPolicy::TShardPolicy ShardPolicy; 
     bool KeepEraseMarkers;
 
     TVector<TGenerationPolicy> Generations;
 
     TCompactionPolicy();
-    explicit TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb);
+    explicit TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb); 
 
-    void Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const;
+    void Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const; 
 
     bool operator ==(const TCompactionPolicy& p) const {
         return InMemSizeToSnapshot == p.InMemSizeToSnapshot

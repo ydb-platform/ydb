@@ -22,7 +22,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
 
             delta.AddFamily(table, it.first, family.Room);
             delta.SetFamily(table, it.first, family.Cache, family.Codec);
-            delta.SetFamilyBlobs(table, it.first, family.Small, family.Large);
+            delta.SetFamilyBlobs(table, it.first, family.Small, family.Large); 
         }
 
         for(const auto& it : itTable.second.Columns) {
@@ -156,7 +156,7 @@ TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec)
     return *this;
 }
 
-TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
+TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large) 
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::SetFamily);

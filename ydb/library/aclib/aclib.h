@@ -26,17 +26,17 @@ enum EAccessRights : ui32 { // bitmask
     CreateDatabase = 0x00000800, // create database
     DropDatabase = 0x00001000, // drop database
     GrantAccessRights = 0x00002000, // grant access rights (only own access rights)
-    WriteUserAttributes = 0x00004000, // modify user attributes / KV
-    ConnectDatabase = 0x00008000, // any type of request to DB
+    WriteUserAttributes = 0x00004000, // modify user attributes / KV 
+    ConnectDatabase = 0x00008000, // any type of request to DB 
     ReadStream = 0x00010000, // reading streams
     WriteStream = 0x00020000, // writing streams
     ReadTopic = 0x00040000, // reading topics
     WritTopic = 0x00080000, // writing topics
 
-    GenericRead = SelectRow | ReadAttributes | DescribeSchema,
-    GenericWrite = UpdateRow | EraseRow | WriteAttributes | CreateDirectory | CreateTable | CreateQueue | RemoveSchema | AlterSchema | WriteUserAttributes,
+    GenericRead = SelectRow | ReadAttributes | DescribeSchema, 
+    GenericWrite = UpdateRow | EraseRow | WriteAttributes | CreateDirectory | CreateTable | CreateQueue | RemoveSchema | AlterSchema | WriteUserAttributes, 
     GenericUse = GenericRead | GenericWrite | GrantAccessRights,
-    GenericManage = CreateDatabase | DropDatabase,
+    GenericManage = CreateDatabase | DropDatabase, 
     GenericFull = GenericUse | GenericManage,
 };
 
@@ -48,7 +48,7 @@ enum class EAccessType : ui32 {
 };
 
 enum EInheritanceType : ui32 { // bitmask
-    InheritNone = 0x00,
+    InheritNone = 0x00, 
     InheritObject = 0x01, // this ACE will inherit on child objects
     InheritContainer = 0x02, // this ACE will inherit on child containers
     InheritOnly = 0x04, // this ACE will not be used for access checking but for inheritance only

@@ -2,11 +2,11 @@
 #include "schemeshard_export.h"
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TExport::TTxGet: public TSchemeShard::TXxport::TTxGet<
+struct TSchemeShard::TExport::TTxGet: public TSchemeShard::TXxport::TTxGet< 
         TExportInfo,
         TEvExport::TEvGetExportRequest,
         TEvExport::TEvGetExportResponse
@@ -23,9 +23,9 @@ struct TSchemeShard::TExport::TTxGet: public TSchemeShard::TXxport::TTxGet<
 
 }; // TTxGet
 
-ITransaction* TSchemeShard::CreateTxGetExport(TEvExport::TEvGetExportRequest::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxGetExport(TEvExport::TEvGetExportRequest::TPtr& ev) { 
     return new TExport::TTxGet(this, ev);
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

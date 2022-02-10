@@ -8,7 +8,7 @@
 namespace {
 
 using namespace NKikimr;
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -100,18 +100,18 @@ public:
         domainInfo->DecPathsInside();
         parentDir->DecAliveChildren();
 
-        // KIKIMR-13173
-        // Repeat it here for a waile, delete it from TDeleteParts after
-        // Initiate asynchonous deletion of all shards
-        for (auto shard : txState->Shards) {
-            context.OnComplete.DeleteShard(shard.Idx);
-        }
-
+        // KIKIMR-13173 
+        // Repeat it here for a waile, delete it from TDeleteParts after 
+        // Initiate asynchonous deletion of all shards 
+        for (auto shard : txState->Shards) { 
+            context.OnComplete.DeleteShard(shard.Idx); 
+        } 
+ 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
             context.SS->PersistRemoveFileStoreInfo(db, pathId);
         }
 
-        context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
+        context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size()); 
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
         ++parentDir->DirAlterVersion;
@@ -259,7 +259,7 @@ THolder<TProposeResponse> TDropFileStore::Propose(
         << ", at schemeshard: " << ssId);
 
     auto result = MakeHolder<TProposeResponse>(
-        NKikimrScheme::StatusAccepted,
+        NKikimrScheme::StatusAccepted, 
         ui64(OperationId.GetTxId()),
         ui64(ssId));
 
@@ -297,7 +297,7 @@ THolder<TProposeResponse> TDropFileStore::Propose(
 
     TString errStr;
     if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-        result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+        result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
         return result;
     }
 
@@ -323,13 +323,13 @@ THolder<TProposeResponse> TDropFileStore::Propose(
 
     // Trying to abort Alter/Create. Wait if can't.
     context.OnComplete.ActivateTx(OperationId);
-    context.SS->PersistTxState(db, OperationId);
+    context.SS->PersistTxState(db, OperationId); 
 
     path.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
     path.Base()->DropTxId = OperationId.GetTxId();
     path.Base()->LastTxId = OperationId.GetTxId();
 
-    context.SS->TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Sub(1);
+    context.SS->TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Sub(1); 
 
     auto parentDir = path.Parent();
     ++parentDir.Base()->DirAlterVersion;
@@ -348,7 +348,7 @@ THolder<TProposeResponse> TDropFileStore::Propose(
 }   // namespace
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -361,5 +361,5 @@ ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState 
     return new TDropFileStore(id, state);
 }
 
-}   // namespace NSchemeShard
+}   // namespace NSchemeShard 
 }   // namespace NKikimr

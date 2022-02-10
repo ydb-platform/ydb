@@ -6,7 +6,7 @@
 #include <util/string/strip.h>
 
 using namespace NKikimr;
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
@@ -16,11 +16,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
             const TString& dstProtoText,
             const TString& posMapExpected)
     {
-        NKikimrSchemeOp::TPartitionConfig config;
+        NKikimrSchemeOp::TPartitionConfig config; 
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(srcProtoText, &config);
         UNIT_ASSERT_C(parseOk, "Failed to parse TPartitionConfig:\n" << srcProtoText);
 
-        auto posById = TPartitionConfigMerger::DeduplicateColumnFamiliesById(config);
+        auto posById = TPartitionConfigMerger::DeduplicateColumnFamiliesById(config); 
 
         TString result;
         ::google::protobuf::TextFormat::PrintToString(config, &result);

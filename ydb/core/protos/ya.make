@@ -15,7 +15,7 @@ ENDIF()
 SRCS(
     alloc.proto
     base.proto
-    bind_channel_storage_pool.proto
+    bind_channel_storage_pool.proto 
     blobstorage.proto
     blobstorage_controller.proto
     blobstorage_disk.proto
@@ -28,7 +28,7 @@ SRCS(
     filestore_config.proto
     bootstrapper.proto
     change_exchange.proto
-    channel_purpose.proto
+    channel_purpose.proto 
     cms.proto
     config.proto
     config_units.proto
@@ -36,7 +36,7 @@ SRCS(
     console_base.proto
     console_config.proto
     console_tenant.proto
-    counters_tx_allocator.proto
+    counters_tx_allocator.proto 
     counters_bs_controller.proto
     counters_coordinator.proto
     counters_columnshard.proto
@@ -52,7 +52,7 @@ SRCS(
     counters_sysview_processor.proto
     counters_testshard.proto
     counters_tx_proxy.proto
-    counters_mediator.proto
+    counters_mediator.proto 
     counters.proto
     database_basic_sausage_metainfo.proto
     drivemodel.proto
@@ -63,7 +63,7 @@ SRCS(
     hive.proto
     http_config.proto
     import.proto
-    index_builder.proto
+    index_builder.proto 
     issue_id.proto
     kesus.proto
     kqp_query_settings.proto
@@ -96,7 +96,7 @@ SRCS(
     ssa.proto
     statestorage.proto
     stream.proto
-    subdomains.proto
+    subdomains.proto 
     table_stats.proto
     tablet.proto
     tablet_counters_aggregator.proto

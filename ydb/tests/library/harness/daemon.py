@@ -45,15 +45,15 @@ class DaemonError(RuntimeError):
         )
 
 
-class SeveralDaemonErrors(RuntimeError):
-    def __init__(self, exceptions):
+class SeveralDaemonErrors(RuntimeError): 
+    def __init__(self, exceptions): 
         super(SeveralDaemonErrors, self).__init__(
             "\n".join(
                 str(x) for x in exceptions
             )
         )
-
-
+ 
+ 
 class Daemon(object):
     def __init__(self, command, cwd, timeout, stdin_file=None, stdout_file=None, stderr_file=None, stderr_on_error_lines=0):
         self.__cwd = cwd
@@ -76,18 +76,18 @@ class Daemon(object):
     def daemon(self):
         return self.__daemon
 
-    @property
+    @property 
     def stdin_file_name(self):
         return os.path.abspath(self.__stdin_file.name)
 
     @property
-    def stdout_file_name(self):
+    def stdout_file_name(self): 
         return os.path.abspath(self.__stdout_file.name)
-
-    @property
-    def stderr_file_name(self):
+ 
+    @property 
+    def stderr_file_name(self): 
         return os.path.abspath(self.__stderr_file.name)
-
+ 
     def is_alive(self):
         return self.__daemon is not None and self.__daemon.running
 
@@ -112,8 +112,8 @@ class Daemon(object):
             self.__check_before_fail()
             raise DaemonError(
                 "Unexpectedly finished on start",
-                exit_code=self.__daemon.exit_code,
-                stdout=self.stdout_file_name,
+                exit_code=self.__daemon.exit_code, 
+                stdout=self.stdout_file_name, 
                 stderr=self.stderr_file_name,
                 max_stderr_lines=self.__stderr_on_error_lines,
             )
@@ -126,14 +126,14 @@ class Daemon(object):
         self.__daemon.verify_no_coredumps()
         self.__daemon.verify_sanitize_errors()
 
-    @property
-    def _acceptable_exit_codes(self):
+    @property 
+    def _acceptable_exit_codes(self): 
         return 0, -signal.SIGTERM
-
+ 
     def __check_can_launch_stop(self, stop_type):
         if self.__daemon is None or self.__killed:
             return False
-
+ 
         if self.__daemon is not None and self.__daemon.exit_code == 0:
             return False
 
@@ -142,8 +142,8 @@ class Daemon(object):
             raise DaemonError(
                 "Unexpectedly finished before %s" % stop_type,
                 exit_code=self.__daemon.exit_code,
-                stdout=self.stdout_file_name,
-                stderr=self.stderr_file_name,
+                stdout=self.stdout_file_name, 
+                stderr=self.stderr_file_name, 
                 max_stderr_lines=self.__stderr_on_error_lines,
             )
 
@@ -153,13 +153,13 @@ class Daemon(object):
         if self.is_alive():
             msg = "Cannot {stop_type} daemon cmd = {cmd}".format(cmd=' '.join(self.__command), stop_type=stop_type)
             self.logger.error(msg)
-            raise DaemonError(
-                msg,
-                exit_code=self.__daemon.exit_code,
-                stdout=self.stdout_file_name,
+            raise DaemonError( 
+                msg, 
+                exit_code=self.__daemon.exit_code, 
+                stdout=self.stdout_file_name, 
                 stderr=self.stderr_file_name,
                 max_stderr_lines=self.__stderr_on_error_lines,
-            )
+            ) 
 
     def stop(self):
         if not self.__check_can_launch_stop("stop"):
@@ -179,11 +179,11 @@ class Daemon(object):
             exit_code = self.__daemon.exit_code
             self.__check_before_fail()
 
-            if exit_code not in self._acceptable_exit_codes:
+            if exit_code not in self._acceptable_exit_codes: 
                 raise DaemonError(
-                    "Bad exit_code.",
-                    exit_code=exit_code,
-                    stdout=self.stdout_file_name,
+                    "Bad exit_code.", 
+                    exit_code=exit_code, 
+                    stdout=self.stdout_file_name, 
                     stderr=self.stderr_file_name,
                     max_stderr_lines=self.__stderr_on_error_lines,
                 )

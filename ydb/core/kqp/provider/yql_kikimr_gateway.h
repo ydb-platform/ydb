@@ -53,7 +53,7 @@ struct TIndexDescription {
 
     };
 
-    // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
+    // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf 
     enum class EIndexState : ui32 {
         Invalid = 0,  // this state should not be used
         Ready = 1,    // index is ready to use
@@ -82,7 +82,7 @@ struct TIndexDescription {
         , PathOwnerId(pathOwnerId)
     {}
 
-    TIndexDescription(const NKikimrSchemeOp::TIndexDescription& index)
+    TIndexDescription(const NKikimrSchemeOp::TIndexDescription& index) 
         : Name(index.GetName())
         , KeyColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end())
         , DataColumns(index.GetDataColumnNames().begin(), index.GetDataColumnNames().end())
@@ -104,7 +104,7 @@ struct TIndexDescription {
         , PathOwnerId(message->GetPathOwnerId())
     {}
 
-    static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::TIndexDescription& index) {
+    static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::TIndexDescription& index) { 
         auto type = NYql::TIndexDescription::EType::GlobalSync;
         if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
             type = NYql::TIndexDescription::EType::GlobalAsync;
@@ -599,8 +599,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
-
+    virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0; 
+ 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;

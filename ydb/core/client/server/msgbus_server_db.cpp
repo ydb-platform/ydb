@@ -1,6 +1,6 @@
-#include "msgbus_server.h"
-#include "msgbus_server_proxy.h"
-
+#include "msgbus_server.h" 
+#include "msgbus_server_proxy.h" 
+ 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
@@ -12,16 +12,16 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
-
+ 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
-
+ 
 namespace NKikimr {
 namespace NMsgBusProxy {
 
@@ -196,7 +196,7 @@ protected:
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
 
     NMon::THistogramCounterHelper* OperationHistogram;
-    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> CacheNavigate;
+    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> CacheNavigate; 
     NJson::TJsonValue JSON;
     THPTimer StartTime;
     TString Table;
@@ -233,9 +233,9 @@ protected:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
+        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request; 
         Y_VERIFY(request.ResultSet.size() == 1);
-        if (request.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        if (request.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) { 
             return ReplyWithError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ResolveError, ToString(request.ResultSet.front().Status), ctx);
         }
         CacheNavigate = ev->Get()->Request;
@@ -279,7 +279,7 @@ protected:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
-        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError: 
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
             return ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx);
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable:
@@ -327,13 +327,13 @@ public:
     }
 
     void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = SplitPath(table);
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate()); 
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry; 
+        entry.Path = SplitPath(table); 
         if (entry.Path.empty()) {
             return ReplyWithError(MSTATUS_ERROR, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, "Invalid table path specified", ctx);
         }
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable; 
         request->ResultSet.emplace_back(entry);
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
         ++Requests;
@@ -341,7 +341,7 @@ public:
             ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(SecurityToken));
             ++Requests;
         }
-        TBase::Become(&TThis::StateWaitResolve, ctx, Timeout, new TEvents::TEvWakeup());
+        TBase::Become(&TThis::StateWaitResolve, ctx, Timeout, new TEvents::TEvWakeup()); 
     }
 
     static NMiniKQL::TRuntimeNode NewDataLiteral(NMiniKQL::TKikimrProgramBuilder& pgmBuilder, const NJson::TJsonValue& jsonValue, NScheme::TTypeId typeId) {
@@ -380,7 +380,7 @@ public:
         }
     }
 
-    void BuildProgram(const NJson::TJsonValue& json, NMiniKQL::TRuntimeNode& pgmReturn, NMiniKQL::TKikimrProgramBuilder& pgmBuilder, const NSchemeCache::TSchemeCacheNavigate::TEntry& tableInfo,
+    void BuildProgram(const NJson::TJsonValue& json, NMiniKQL::TRuntimeNode& pgmReturn, NMiniKQL::TKikimrProgramBuilder& pgmBuilder, const NSchemeCache::TSchemeCacheNavigate::TEntry& tableInfo, 
                       const TVector<const NTxProxy::TTableColumnInfo*>& keys, const THashMap<TString, const NTxProxy::TTableColumnInfo*>& columnByName, TVector<NMiniKQL::TRuntimeNode>& result) {
         TVector<NMiniKQL::TRuntimeNode> keyColumns;
         TVector<ui32> keyTypes;
@@ -496,7 +496,7 @@ public:
             NMiniKQL::TTypeEnvironment env(alloc);
             NMiniKQL::TKikimrProgramBuilder pgmBuilder(env, functionRegistry);
             NMiniKQL::TRuntimeNode pgmReturn = pgmBuilder.NewEmptyListOfVoid();
-            const NSchemeCache::TSchemeCacheNavigate::TEntry& tableInfo = CacheNavigate->ResultSet.front();
+            const NSchemeCache::TSchemeCacheNavigate::TEntry& tableInfo = CacheNavigate->ResultSet.front(); 
             TVector<const NTxProxy::TTableColumnInfo*> keys;
             THashMap<TString, const NTxProxy::TTableColumnInfo*> columnByName;
             TVector<NMiniKQL::TRuntimeNode> result;
@@ -532,7 +532,7 @@ public:
             if (!UserToken.empty()) {
                 record.SetUserToken(UserToken);
             }
-            ctx.Send(TxProxyId, Proposal.Release());
+            ctx.Send(TxProxyId, Proposal.Release()); 
             TBase::Become(&TThis::StateWaitExecute);
         }
         catch (yexception& e) {
@@ -554,7 +554,7 @@ public:
         } else {
             return ReplyWithError(MSTATUS_ERROR, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, "Table should be specified", ctx);
         }
-        ResolveTable(Table, ctx);
+        ResolveTable(Table, ctx); 
     }
 };
 
@@ -562,7 +562,7 @@ template <>
 TServerDbOperation<TMessageBusInterface<TBusDbOperation>>::TServerDbOperation(
         TBusMessageContext& msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters)
     : TMessageBusInterface<TBusDbOperation>(msg)
-    , TxProxyId(txProxyId)
+    , TxProxyId(txProxyId) 
     , SchemeCache(schemeCache)
     , DbOperationsCounters(dbOperationsCounters)
     , OperationHistogram(nullptr)
@@ -578,7 +578,7 @@ TServerDbOperation<TActorInterface>::TServerDbOperation(
         const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters
         )
     : TActorInterface(hostActor)
-    , TxProxyId(txProxyId)
+    , TxProxyId(txProxyId) 
     , SchemeCache(schemeCache)
     , DbOperationsCounters(dbOperationsCounters)
     , OperationHistogram(nullptr)
@@ -635,21 +635,21 @@ protected:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) { 
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) { 
         ProcessRequests(ctx);
     }
 
     void SendNextRequest(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_PROXY,
-                    "SendNextRequest proposal" <<
-                    " to proxy#" << TxProxyId.ToString());
-
+        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_PROXY, 
+                    "SendNextRequest proposal" << 
+                    " to proxy#" << TxProxyId.ToString()); 
+ 
         TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> proposal = Requests.front();
         Requests.pop_front();
-        ctx.Send(TxProxyId, proposal.Release());
+        ctx.Send(TxProxyId, proposal.Release()); 
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
@@ -668,11 +668,11 @@ protected:
                     pipe = itPipe->second;
                 }
             }
-            TAutoPtr<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion());
+            TAutoPtr<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion()); 
             request->Record.SetTxId(msg->Record.GetTxId());
-            LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_PROXY,
-                        "HANDLE TEvProposeTransactionStatus" <<
-                        " send to schemeShard tabletid#" << schemeShardId);
+            LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_PROXY, 
+                        "HANDLE TEvProposeTransactionStatus" << 
+                        " send to schemeShard tabletid#" << schemeShardId); 
             NTabletPipe::SendData(ctx, pipe, request.Release());
             return;
         }
@@ -745,8 +745,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle)
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle); 
         }
     }
 
@@ -784,17 +784,17 @@ public:
                 const NJson::TJsonValue::TArray& array = jsonDropTable.GetArray();
                 for (const NJson::TJsonValue& value : array) {
                     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal(new TEvTxUserProxy::TEvProposeTransaction());
-                    NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme());
+                    NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme()); 
                     modifyScheme.SetWorkingDir(path);
-                    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+                    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable); 
                     modifyScheme.MutableDrop()->SetName(value.GetString());
                     Requests.emplace_back(Proposal.Release());
                 }
             } else {
                 TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal(new TEvTxUserProxy::TEvProposeTransaction());
-                NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme());
+                NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme()); 
                 modifyScheme.SetWorkingDir(path);
-                modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+                modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable); 
                 modifyScheme.MutableDrop()->SetName(jsonDropTable.GetString());
                 Requests.emplace_back(Proposal.Release());
             }
@@ -806,17 +806,17 @@ public:
                 const NJson::TJsonValue::TArray& array = jsonMkDir.GetArray();
                 for (const NJson::TJsonValue& value : array) {
                     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal(new TEvTxUserProxy::TEvProposeTransaction());
-                    NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme());
+                    NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme()); 
                     modifyScheme.SetWorkingDir(path);
-                    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+                    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir); 
                     modifyScheme.MutableMkDir()->SetName(value.GetString());
                     Requests.emplace_back(Proposal.Release());
                 }
             } else {
                 TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal(new TEvTxUserProxy::TEvProposeTransaction());
-                NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme());
+                NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme()); 
                 modifyScheme.SetWorkingDir(path);
-                modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+                modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir); 
                 modifyScheme.MutableMkDir()->SetName(jsonMkDir.GetString());
                 Requests.emplace_back(Proposal.Release());
             }
@@ -827,17 +827,17 @@ public:
             const NJson::TJsonValue::TMapType& jsonTables = jsonCreateTable.GetMap();
             for (auto itTable = jsonTables.begin(); itTable != jsonTables.end(); ++itTable) {
                 TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal(new TEvTxUserProxy::TEvProposeTransaction());
-                NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme());
+                NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme()); 
                 modifyScheme.SetWorkingDir(path);
-                modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
-                NKikimrSchemeOp::TTableDescription& createTable(*modifyScheme.MutableCreateTable());
+                modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable); 
+                NKikimrSchemeOp::TTableDescription& createTable(*modifyScheme.MutableCreateTable()); 
                 createTable.SetName(itTable->first);
                 // parsing CreateTable/<name>/Columns
                 NJson::TJsonValue jsonColumn;
                 if (itTable->second.GetValue("Columns", &jsonColumn)) {
                     const NJson::TJsonValue::TMapType& jsonColumns = jsonColumn.GetMap();
                     for (auto itColumn = jsonColumns.begin(); itColumn != jsonColumns.end(); ++itColumn) {
-                        NKikimrSchemeOp::TColumnDescription& column(*createTable.AddColumns());
+                        NKikimrSchemeOp::TColumnDescription& column(*createTable.AddColumns()); 
                         column.SetName(itColumn->first);
                         column.SetType(itColumn->second.GetString());
                     }
@@ -876,7 +876,7 @@ public:
         if (Requests.empty()) {
             return ReplyWithError(MSTATUS_ERROR, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, "No valid operations were found", ctx);
         }
-        ProcessRequests(ctx);
+        ProcessRequests(ctx); 
     }
 };
 
@@ -884,7 +884,7 @@ template <>
 TServerDbSchema<TMessageBusInterface<TBusDbSchema>>::TServerDbSchema(
         TBusMessageContext &msg, TActorId txProxyId, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters)
     : TMessageBusInterface<TBusDbSchema>(msg)
-    , TxProxyId(txProxyId)
+    , TxProxyId(txProxyId) 
     , DbOperationsCounters(dbOperationsCounters)
 {}
 
@@ -897,7 +897,7 @@ TServerDbSchema<TActorInterface>::TServerDbSchema(
         const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters
         )
     : TActorInterface(hostActor)
-    , TxProxyId(txProxyId)
+    , TxProxyId(txProxyId) 
     , DbOperationsCounters(dbOperationsCounters)
     , JSON(jsonValue)
     , SecurityToken(securityToken)
@@ -1036,7 +1036,7 @@ template <>
 TServerDbBatch<TMessageBusInterface<TBusDbBatch>>::TServerDbBatch(
         TBusMessageContext &msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters)
     : TMessageBusInterface<TBusDbBatch>(msg)
-    , TxProxyId(txProxyId)
+    , TxProxyId(txProxyId) 
     , SchemeCache(schemeCache)
     , DbOperationsCounters(dbOperationsCounters)
     , MaxInFlight(1)
@@ -1045,23 +1045,23 @@ TServerDbBatch<TMessageBusInterface<TBusDbBatch>>::TServerDbBatch(
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbSchema::TPtr& ev, const TActorContext& ctx) {
     TEvBusProxy::TEvDbSchema* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_PROXY,
-                " actor# "<< ctx.SelfID.ToString() <<
-                " HANDLE TEvDbSchema");
-    auto* requestActor = new TServerDbSchema<TMessageBusInterface<TBusDbSchema>>(msg->MsgContext, TxProxy, DbOperationsCounters);
-    ctx.Register(requestActor);
+    LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_PROXY, 
+                " actor# "<< ctx.SelfID.ToString() << 
+                " HANDLE TEvDbSchema"); 
+    auto* requestActor = new TServerDbSchema<TMessageBusInterface<TBusDbSchema>>(msg->MsgContext, TxProxy, DbOperationsCounters); 
+    ctx.Register(requestActor); 
 }
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbOperation::TPtr& ev, const TActorContext& ctx) {
     TEvBusProxy::TEvDbOperation* msg = ev->Get();
-    auto* requestActor = new TServerDbOperation<TMessageBusInterface<TBusDbOperation>>(msg->MsgContext, TxProxy, SchemeCache, DbOperationsCounters);
-    ctx.Register(requestActor);
+    auto* requestActor = new TServerDbOperation<TMessageBusInterface<TBusDbOperation>>(msg->MsgContext, TxProxy, SchemeCache, DbOperationsCounters); 
+    ctx.Register(requestActor); 
 }
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbBatch::TPtr& ev, const TActorContext& ctx) {
     TEvBusProxy::TEvDbBatch* msg = ev->Get();
-    auto* requestActor = new TServerDbBatch<TMessageBusInterface<TBusDbBatch>>(msg->MsgContext, TxProxy, SchemeCache, DbOperationsCounters);
-    ctx.Register(requestActor);
+    auto* requestActor = new TServerDbBatch<TMessageBusInterface<TBusDbBatch>>(msg->MsgContext, TxProxy, SchemeCache, DbOperationsCounters); 
+    ctx.Register(requestActor); 
 }
 
 }

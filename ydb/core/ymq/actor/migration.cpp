@@ -142,7 +142,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> TAddColumnActor::MakeAlterTableEv
     auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable); 
 
     auto* info = trans->MutableAlterTable();
     {

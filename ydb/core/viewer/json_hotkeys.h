@@ -15,14 +15,14 @@ namespace NKikimr {
 namespace NViewer {
 
 using namespace NActors;
-using NSchemeShard::TEvSchemeShard;
+using NSchemeShard::TEvSchemeShard; 
 
 class TJsonHotkeys : public TViewerPipeClient<TJsonHotkeys> {
     static const bool WithRetry = false;
     using TBase = TViewerPipeClient<TJsonHotkeys>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult; 
     ui32 Timeout = 0;
     ui32 Limit = 0;
     float PollingFactor = 0.0;
@@ -46,7 +46,7 @@ public:
         , Event(ev)
     {}
 
-    void FillParams(NKikimrSchemeOp::TDescribePath* record, const TCgiParameters& params) {
+    void FillParams(NKikimrSchemeOp::TDescribePath* record, const TCgiParameters& params) { 
         if (params.Has("path")) {
             record->SetPath(params.Get("path"));
         }
@@ -140,7 +140,7 @@ public:
         TString headers = Viewer->GetHTTPOKJSON();
         if (DescribeResult != nullptr) {
             switch (DescribeResult->GetRecord().GetStatus()) {
-            case NKikimrScheme::StatusAccessDenied:
+            case NKikimrScheme::StatusAccessDenied: 
                 headers = HTTPFORBIDDENJSON;
                 break;
             default:

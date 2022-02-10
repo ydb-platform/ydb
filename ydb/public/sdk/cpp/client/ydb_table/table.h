@@ -730,40 +730,40 @@ inline TTableBuilder& TTablePartitioningSettingsBuilder::EndPartitioningSettings
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TCopyItem {
-public:
-    TCopyItem(const TString& source, const TString& destination);
-
-    const TString& SourcePath() const;
-    const TString& DestinationPath() const;
-
-    TCopyItem& SetOmitIndexes();
-    bool OmitIndexes() const;
-private:
-    TString Source_;
-    TString Destination_;
-    bool OmitIndexes_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TRenameItem {
-public:
-    TRenameItem(const TString& source, const TString& destination);
-
-    const TString& SourcePath() const;
-    const TString& DestinationPath() const;
-
-    TRenameItem& SetReplaceDestination();
-    bool ReplaceDestination() const;
-private:
-    TString Source_;
-    TString Destination_;
-    bool ReplaceDestination_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
+class TCopyItem { 
+public: 
+    TCopyItem(const TString& source, const TString& destination); 
+ 
+    const TString& SourcePath() const; 
+    const TString& DestinationPath() const; 
+ 
+    TCopyItem& SetOmitIndexes(); 
+    bool OmitIndexes() const; 
+private: 
+    TString Source_; 
+    TString Destination_; 
+    bool OmitIndexes_; 
+}; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+class TRenameItem { 
+public: 
+    TRenameItem(const TString& source, const TString& destination); 
+ 
+    const TString& SourcePath() const; 
+    const TString& DestinationPath() const; 
+ 
+    TRenameItem& SetReplaceDestination(); 
+    bool ReplaceDestination() const; 
+private: 
+    TString Source_; 
+    TString Destination_; 
+    bool ReplaceDestination_; 
+}; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 class TCreateSessionResult;
 class TDataQueryResult;
 class TTablePartIterator;
@@ -793,37 +793,37 @@ using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {};
 
-struct TBackoffSettings {
-    using TSelf = TBackoffSettings;
-
-    FLUENT_SETTING_DEFAULT(TDuration, SlotDuration, TDuration::Seconds(1));
-    FLUENT_SETTING_DEFAULT(ui32, Ceiling, 6);
-    FLUENT_SETTING_DEFAULT(double, UncertainRatio, 0.5);
-};
-
+struct TBackoffSettings { 
+    using TSelf = TBackoffSettings; 
+ 
+    FLUENT_SETTING_DEFAULT(TDuration, SlotDuration, TDuration::Seconds(1)); 
+    FLUENT_SETTING_DEFAULT(ui32, Ceiling, 6); 
+    FLUENT_SETTING_DEFAULT(double, UncertainRatio, 0.5); 
+}; 
+ 
 struct TRetryOperationSettings {
     using TSelf = TRetryOperationSettings;
 
     FLUENT_SETTING_DEFAULT(ui32, MaxRetries, 10);
     FLUENT_SETTING_DEFAULT(bool, RetryNotFound, true);
     FLUENT_SETTING_DEFAULT(TDuration, GetSessionClientTimeout, TDuration::Seconds(5));
-    FLUENT_SETTING_DEFAULT(TBackoffSettings, FastBackoffSettings, DefaultFastBackoffSettings());
-    FLUENT_SETTING_DEFAULT(TBackoffSettings, SlowBackoffSettings, DefaultSlowBackoffSettings());
+    FLUENT_SETTING_DEFAULT(TBackoffSettings, FastBackoffSettings, DefaultFastBackoffSettings()); 
+    FLUENT_SETTING_DEFAULT(TBackoffSettings, SlowBackoffSettings, DefaultSlowBackoffSettings()); 
     FLUENT_SETTING_FLAG(Idempotent);
-
-    static TBackoffSettings DefaultFastBackoffSettings() {
-        return TBackoffSettings()
-            .Ceiling(10)
-            .SlotDuration(TDuration::MilliSeconds(5))
-            .UncertainRatio(0.5);
-    }
-
-    static TBackoffSettings DefaultSlowBackoffSettings() {
-        return TBackoffSettings()
-            .Ceiling(6)
-            .SlotDuration(TDuration::Seconds(1))
-            .UncertainRatio(0.5);
-    }
+ 
+    static TBackoffSettings DefaultFastBackoffSettings() { 
+        return TBackoffSettings() 
+            .Ceiling(10) 
+            .SlotDuration(TDuration::MilliSeconds(5)) 
+            .UncertainRatio(0.5); 
+    } 
+ 
+    static TBackoffSettings DefaultSlowBackoffSettings() { 
+        return TBackoffSettings() 
+            .Ceiling(6) 
+            .SlotDuration(TDuration::Seconds(1)) 
+            .UncertainRatio(0.5); 
+    } 
 };
 
 struct TSessionPoolSettings {
@@ -1428,10 +1428,10 @@ inline TAlterTableSettings& TAlterPartitioningSettingsBuilder::EndAlterPartition
 
 struct TCopyTableSettings : public TOperationRequestSettings<TCopyTableSettings> {};
 
-struct TCopyTablesSettings : public TOperationRequestSettings<TCopyTablesSettings> {};
-
-struct TRenameTablesSettings : public TOperationRequestSettings<TRenameTablesSettings> {};
-
+struct TCopyTablesSettings : public TOperationRequestSettings<TCopyTablesSettings> {}; 
+ 
+struct TRenameTablesSettings : public TOperationRequestSettings<TRenameTablesSettings> {}; 
+ 
 struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableSettings> {
     FLUENT_SETTING_DEFAULT(bool, WithKeyShardBoundary, false);
     FLUENT_SETTING_DEFAULT(bool, WithTableStatistics, false);
@@ -1503,12 +1503,12 @@ public:
     TAsyncStatus CopyTable(const TString& src, const TString& dst,
         const TCopyTableSettings& settings = TCopyTableSettings());
 
-    TAsyncStatus CopyTables(const TVector<TCopyItem>& copyItems,
-        const TCopyTablesSettings& settings = TCopyTablesSettings());
-
-    TAsyncStatus RenameTables(const TVector<TRenameItem>& renameItems,
-        const TRenameTablesSettings& settings = TRenameTablesSettings());
-
+    TAsyncStatus CopyTables(const TVector<TCopyItem>& copyItems, 
+        const TCopyTablesSettings& settings = TCopyTablesSettings()); 
+ 
+    TAsyncStatus RenameTables(const TVector<TRenameItem>& renameItems, 
+        const TRenameTablesSettings& settings = TRenameTablesSettings()); 
+ 
     TAsyncDescribeTableResult DescribeTable(const TString& path,
         const TDescribeTableSettings& settings = TDescribeTableSettings());
 

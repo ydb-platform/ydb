@@ -3,11 +3,11 @@
 #include <util/string/join.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
+struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase { 
     TTableInfo::TPtr TableInfo;
     THashMap<TTabletId, NKikimrTxDataShard::TEvConditionalEraseRowsRequest> RunOnTablets;
 
@@ -241,10 +241,10 @@ private:
         Y_VERIFY(indexPath->GetChildren().size() == 1);
 
         for (const auto& [_, indexImplPathId] : indexPath->GetChildren()) {
-            auto childPath = Self->PathsById.at(indexImplPathId);
-
-            Y_VERIFY(!childPath->Dropped());
-
+            auto childPath = Self->PathsById.at(indexImplPathId); 
+ 
+            Y_VERIFY(!childPath->Dropped()); 
+ 
             Y_VERIFY(Self->Tables.contains(indexImplPathId));
             return std::make_pair(indexImplPathId, Self->Tables.at(indexImplPathId));
         }
@@ -299,7 +299,7 @@ private:
 
 }; // TTxRunConditionalErase
 
-struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSchemeShard> {
+struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSchemeShard> { 
     TEvDataShard::TEvConditionalEraseRowsResponse::TPtr Ev;
     THolder<NSysView::TEvSysView::TEvUpdateTtlStats> StatsCollectorEv;
     TTableInfo::TPtr TableInfo;
@@ -459,13 +459,13 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
 
 }; // TTxScheduleConditionalErase
 
-ITransaction* TSchemeShard::CreateTxRunConditionalErase(TEvPrivate::TEvRunConditionalErase::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxRunConditionalErase(TEvPrivate::TEvRunConditionalErase::TPtr& ev) { 
     return new TTxRunConditionalErase(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxScheduleConditionalErase(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxScheduleConditionalErase(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev) { 
     return new TTxScheduleConditionalErase(this, ev);
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

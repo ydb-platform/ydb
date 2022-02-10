@@ -24,7 +24,7 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
     TVector<TTable> Tables;
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
-        const NSchemeCache::TSchemeCacheNavigate &request = *ev->Get()->Request;
+        const NSchemeCache::TSchemeCacheNavigate &request = *ev->Get()->Request; 
         Y_VERIFY(request.ResultSet.size() == Tables.size());
 
         TVector<TTableResult> results;
@@ -108,14 +108,14 @@ public:
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate()); 
 
         request->ResultSet.reserve(Tables.size());
         for (auto &table : Tables) {
             request->ResultSet.push_back({});
             auto &x = request->ResultSet.back();
-            x.Path = SplitPath(table.TableName);
-            x.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+            x.Path = SplitPath(table.TableName); 
+            x.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable; 
             x.ShowPrivatePath = true;
         }
 

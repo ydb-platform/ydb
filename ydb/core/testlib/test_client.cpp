@@ -90,7 +90,7 @@
 #include <ydb/core/client/server/msgbus_server_tracer.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
-
+ 
 #include <library/cpp/grpc/server/actors/logger.h>
 
 #include <util/system/sanitizers.h>
@@ -130,33 +130,33 @@ namespace Tests {
     }
 
     ui64 ChangeDomain(ui64 tabletId, ui32 domainUid) {
-        return MakeTabletID(StateStorageGroupFromTabletID(tabletId), domainUid, UniqPartFromTabletID(tabletId));
+        return MakeTabletID(StateStorageGroupFromTabletID(tabletId), domainUid, UniqPartFromTabletID(tabletId)); 
     }
 
-    ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid) {
-        return MakeTabletID(ssUid, HiveUidFromTabletID(tabletId), UniqPartFromTabletID(tabletId));
-    }
-
+    ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid) { 
+        return MakeTabletID(ssUid, HiveUidFromTabletID(tabletId), UniqPartFromTabletID(tabletId)); 
+    } 
+ 
     TServer::TServer(TServerSettings::TConstPtr settings, bool init)
-        : Settings(settings)
-        , UseStoragePools(!Settings->StoragePoolTypes.empty())
+        : Settings(settings) 
+        , UseStoragePools(!Settings->StoragePoolTypes.empty()) 
     {
-        if (Settings->SupportsRedirect && IsServerRedirected())
-            return;
+        if (Settings->SupportsRedirect && IsServerRedirected()) 
+            return; 
 
         if (init)
             Initialize();
-    }
-
+    } 
+ 
     TServer::TServer(const TServerSettings &settings, bool init)
         : TServer(new TServerSettings(settings), init)
-    {
+    { 
     }
 
-    void TServer::Initialize() {
-        if (Settings->SupportsRedirect && IsServerRedirected())
-            return;
-
+    void TServer::Initialize() { 
+        if (Settings->SupportsRedirect && IsServerRedirected()) 
+            return; 
+ 
         TAppPrepare app; /* will cook TAppData */
         app.SetNetDataSourceUrl(Settings->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl());
         app.SetEnableKqpSpilling(Settings->EnableKqpSpilling);
@@ -173,25 +173,25 @@ namespace Tests {
                     runtime.EnableScheduleForActor(actorId);
                 });
 
-        for (auto& it: Settings->NodeKeys)     {
-            ui32 nodeId = it.first;
-            const TString& keyValue = it.second;
+        for (auto& it: Settings->NodeKeys)     { 
+            ui32 nodeId = it.first; 
+            const TString& keyValue = it.second; 
+ 
+            TString baseDir = Runtime->GetTempDir(); 
+            TString keyfile = TStringBuilder() << baseDir << "/key-" << nodeId << ".txt"; 
+            { 
+                TFileOutput file(keyfile); 
+                file << keyValue; 
+            } 
+            app.SetKeyForNode(keyfile, nodeId); 
+        } 
+ 
+        SetupLogging(); 
 
-            TString baseDir = Runtime->GetTempDir();
-            TString keyfile = TStringBuilder() << baseDir << "/key-" << nodeId << ".txt";
-            {
-                TFileOutput file(keyfile);
-                file << keyValue;
-            }
-            app.SetKeyForNode(keyfile, nodeId);
-        }
-
-        SetupLogging();
-
-        SetupMessageBus(Settings->Port, Settings->TracePath);
+        SetupMessageBus(Settings->Port, Settings->TracePath); 
         SetupDomains(app);
 
-        app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
+        app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain)); 
         app.SetFnRegistry(Settings->FrFactory);
         app.SetFormatsFactory(Settings->Formats);
 
@@ -208,7 +208,7 @@ namespace Tests {
 
         CreateBootstrapTablets();
         SetupStorage();
-
+ 
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
             SetupDomainLocalService(nodeIdx);
             Runtime->GetAppData(nodeIdx).AuthConfig.MergeFrom(Settings->AuthConfig);
@@ -222,7 +222,7 @@ namespace Tests {
         }
     }
 
-    void TServer::SetupMessageBus(ui16 port, const TString &tracePath) {
+    void TServer::SetupMessageBus(ui16 port, const TString &tracePath) { 
         if (port) {
             Bus = NBus::CreateMessageQueue(NBus::TBusQueueConfig());
             if (tracePath) {
@@ -342,29 +342,29 @@ namespace Tests {
     }
 
     void TServer::SetupDomains(TAppPrepare &app) {
-        const ui32 domainId = Settings->Domain;
+        const ui32 domainId = Settings->Domain; 
         ui64 planResolution = Settings->DomainPlanResolution;
         if (!planResolution) {
             planResolution = Settings->UseRealThreads ? 7 : 500;
         }
-        auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(Settings->DomainName, domainId, ChangeStateStorage(SchemeRoot, domainId),
+        auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(Settings->DomainName, domainId, ChangeStateStorage(SchemeRoot, domainId), 
                                                                                   domainId, domainId, TVector<ui32>{domainId},
-                                                                                  domainId, TVector<ui32>{domainId},
+                                                                                  domainId, TVector<ui32>{domainId}, 
                                                                                   planResolution,
-                                                                                  TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
-                                                                                  TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1)},
-                                                                                  TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)},
-                                                                                  Settings->StoragePoolTypes);
+                                                                                  TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)}, 
+                                                                                  TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1)}, 
+                                                                                  TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)}, 
+                                                                                  Settings->StoragePoolTypes); 
         app.AddDomain(domain.Release());
     }
 
     void TServer::CreateBootstrapTablets() {
-        const ui32 domainId = Settings->Domain;
-        Y_VERIFY(TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1) == ChangeStateStorage(TxAllocator, domainId));
+        const ui32 domainId = Settings->Domain; 
+        Y_VERIFY(TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1) == ChangeStateStorage(TxAllocator, domainId)); 
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(TxAllocator, domainId), TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
-        Y_VERIFY(TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1) == ChangeStateStorage(Coordinator, domainId));
+        Y_VERIFY(TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1) == ChangeStateStorage(Coordinator, domainId)); 
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Coordinator, domainId), TTabletTypes::FLAT_TX_COORDINATOR), &CreateFlatTxCoordinator);
-        Y_VERIFY(TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1) == ChangeStateStorage(Mediator, domainId));
+        Y_VERIFY(TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1) == ChangeStateStorage(Mediator, domainId)); 
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Mediator, domainId), TTabletTypes::TX_MEDIATOR), &CreateTxMediator);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(SchemeRoot, domainId), TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Hive, domainId), TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -372,9 +372,9 @@ namespace Tests {
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeTenantSlotBrokerID(domainId), TTabletTypes::TENANT_SLOT_BROKER), &NTenantSlotBroker::CreateTenantSlotBroker);
         if (Settings->EnableConsole)
             CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeConsoleID(domainId), TTabletTypes::CONSOLE), &NConsole::CreateConsole);
-    }
-
-    void TServer::SetupStorage() {
+    } 
+ 
+    void TServer::SetupStorage() { 
         TActorId sender = Runtime->AllocateEdgeActor();
 
         NTabletPipe::TClientConfig pipeConfig;
@@ -421,8 +421,8 @@ namespace Tests {
             Cerr << "\n\n configResponse is #" << configureResponse->Record.DebugString() << "\n\n";
         }
         UNIT_ASSERT(configureResponse->Record.GetResponse().GetSuccess());
-    }
-
+    } 
+ 
     void TServer::SetupDefaultProfiles() {
         NKikimr::Tests::TClient client(*Settings);
         TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest());
@@ -442,7 +442,7 @@ namespace Tests {
         {
             // Compaction policy:
             NLocalDb::TCompactionPolicyPtr defaultPolicy = NLocalDb::CreateDefaultUserTablePolicy();
-            NKikimrSchemeOp::TCompactionPolicy defaultflatSchemePolicy;
+            NKikimrSchemeOp::TCompactionPolicy defaultflatSchemePolicy; 
             defaultPolicy->Serialize(defaultflatSchemePolicy);
             auto &defaultCompactionPolicy = *profiles.AddCompactionPolicies();
             defaultCompactionPolicy.SetName("default");
@@ -450,7 +450,7 @@ namespace Tests {
 
             NLocalDb::TCompactionPolicy policy1;
             policy1.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
-            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy1;
+            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy1; 
             policy1.Serialize(flatSchemePolicy1);
             auto &compactionPolicy1 = *profiles.AddCompactionPolicies();
             compactionPolicy1.SetName("compaction1");
@@ -459,7 +459,7 @@ namespace Tests {
             NLocalDb::TCompactionPolicy policy2;
             policy2.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
             policy2.Generations.push_back({ 40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false });
-            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy2;
+            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy2; 
             policy2.Serialize(flatSchemePolicy2);
             auto &compactionPolicy2 = *profiles.AddCompactionPolicies();
             compactionPolicy2.SetName("compaction2");
@@ -477,62 +477,62 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     }
 
-    void TServer::SetupDomainLocalService(ui32 nodeIdx) {
-        SetupLocalService(nodeIdx, Settings->DomainName);
-    }
-
-    void TServer::SetupDynamicLocalService(ui32 nodeIdx, const TString &tenantName) {
-        Y_VERIFY(nodeIdx >= StaticNodes());
-        SetupLocalService(nodeIdx, tenantName);
-    }
-
-    void TServer::DestroyDynamicLocalService(ui32 nodeIdx) {
-        Y_VERIFY(nodeIdx >= StaticNodes());
+    void TServer::SetupDomainLocalService(ui32 nodeIdx) { 
+        SetupLocalService(nodeIdx, Settings->DomainName); 
+    } 
+ 
+    void TServer::SetupDynamicLocalService(ui32 nodeIdx, const TString &tenantName) { 
+        Y_VERIFY(nodeIdx >= StaticNodes()); 
+        SetupLocalService(nodeIdx, tenantName); 
+    } 
+ 
+    void TServer::DestroyDynamicLocalService(ui32 nodeIdx) { 
+        Y_VERIFY(nodeIdx >= StaticNodes()); 
         TActorId local = MakeLocalID(Runtime->GetNodeId(nodeIdx)); // MakeTenantPoolRootID?
         Runtime->Send(new IEventHandle(local, TActorId(), new TEvents::TEvPoisonPill()));
-    }
+    } 
 
-    void TServer::SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData) {
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Dummy] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+    void TServer::SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData) { 
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Dummy] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
                 &CreateFlatDummyTablet, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.DataShard] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                TMailboxType::Revolving, appData.SystemPoolId)); 
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.DataShard] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
                 &CreateDataShard, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.KeyValue] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
+                TMailboxType::Revolving, appData.SystemPoolId)); 
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.KeyValue] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.ColumnShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateColumnShard, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.PersQueue] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &CreatePersQueue, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.PersQueueReadBalancer] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &CreatePersQueueReadBalancer, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Coordinator] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &CreateFlatTxCoordinator, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Mediator] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &CreateTxMediator, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.PersQueue] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &CreatePersQueue, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.PersQueueReadBalancer] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &CreatePersQueueReadBalancer, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Coordinator] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &CreateFlatTxCoordinator, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Mediator] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &CreateTxMediator, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.Kesus] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NKesus::CreateKesusTablet, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SchemeShard] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &CreateFlatTxSchemeShard, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SchemeShard] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &CreateFlatTxSchemeShard, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.Hive] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateDefaultHive, TMailboxType::Revolving, appData.UserPoolId,
@@ -551,14 +551,14 @@ namespace Tests {
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
 
-    void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
-        TLocalConfig::TPtr localConfig = new TLocalConfig();
-        auto &appData = Runtime->GetAppData(nodeIdx);
-        SetupLocalConfig(*localConfig, appData);
-
+    void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) { 
+        TLocalConfig::TPtr localConfig = new TLocalConfig(); 
+        auto &appData = Runtime->GetAppData(nodeIdx); 
+        SetupLocalConfig(*localConfig, appData); 
+ 
         TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
         tenantPoolConfig->AddStaticSlot(domainName);
-
+ 
         auto poolId = Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeIdx, appData.SystemPoolId,
                                         TMailboxType::Revolving, 0);
         Runtime->RegisterService(MakeTenantPoolRootID(), poolId, nodeIdx);
@@ -575,8 +575,8 @@ namespace Tests {
 
         auto tenantPublisher = CreateTenantNodeEnumerationPublisher();
         Runtime->Register(tenantPublisher, nodeIdx);
-    }
-
+    } 
+ 
     void TServer::SetupConfigurators(ui32 nodeIdx) {
         auto &appData = Runtime->GetAppData(nodeIdx);
         Runtime->Register(NConsole::CreateImmediateControlsConfigurator(appData.Icb, Settings->Controls),
@@ -584,7 +584,7 @@ namespace Tests {
     }
 
     void TServer::SetupProxies(ui32 nodeIdx) {
-        Runtime->SetTxAllocatorTabletIds({ChangeStateStorage(TxAllocator, Settings->Domain)});
+        Runtime->SetTxAllocatorTabletIds({ChangeStateStorage(TxAllocator, Settings->Domain)}); 
         {
             IActor* ticketParser = Settings->CreateTicketParser(Settings->AuthConfig);
             TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx);
@@ -617,7 +617,7 @@ namespace Tests {
             TActorId txProxyId = Runtime->Register(txProxy, nodeIdx);
             Runtime->RegisterService(MakeTxProxyID(), txProxyId, nodeIdx);
         }
-
+ 
         {
             IActor* compileService = CreateMiniKQLCompileService(100000);
             TActorId compileServiceId = Runtime->Register(compileService, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
@@ -820,37 +820,37 @@ namespace Tests {
         }
     }
 
-    void TServer::SetupLogging() {
+    void TServer::SetupLogging() { 
         Runtime->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_WARN);
-        //Runtime->SetLogPriority(NKikimrServices::SCHEMESHARD_DESCRIBE, NLog::PRI_DEBUG);
+        //Runtime->SetLogPriority(NKikimrServices::SCHEMESHARD_DESCRIBE, NLog::PRI_DEBUG); 
         //Runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::LOCAL, NActors::NLog::PRI_DEBUG);
-
+        //Runtime->SetLogPriority(NKikimrServices::LOCAL, NActors::NLog::PRI_DEBUG); 
+ 
         Runtime->SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_WARN);
-        Runtime->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NLog::PRI_WARN);
-
-        //Runtime->SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::TX_MEDIATOR, NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
-
-        //Runtime->SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NLog::PRI_DEBUG);
+        Runtime->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NLog::PRI_WARN); 
+ 
+        //Runtime->SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_DEBUG); 
+        //Runtime->SetLogPriority(NKikimrServices::TX_MEDIATOR, NLog::PRI_DEBUG); 
+        //Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+        //Runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG); 
+ 
+        //Runtime->SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NLog::PRI_DEBUG); 
         //Runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
         //Runtime->SetLogPriority(NKikimrServices::KQP_WORKER, NLog::PRI_DEBUG);
 
-        //Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_TRACE);
-        //Runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_TRACE);
-        //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NActors::NLog::PRI_TRACE);
+        //Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_TRACE); 
+        //Runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_TRACE); 
+        //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG); 
+        //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_DEBUG); 
+        //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NActors::NLog::PRI_TRACE); 
         //Runtime->SetLogPriority(NKikimrServices::YQL_PROXY, NActors::NLog::PRI_DEBUG);
-
-        if (Settings->LoggerInitializer) {
-            Settings->LoggerInitializer(*Runtime);
+ 
+        if (Settings->LoggerInitializer) { 
+            Settings->LoggerInitializer(*Runtime); 
         }
     }
 
-    void TServer::StartDummyTablets() {
+    void TServer::StartDummyTablets() { 
         if (!Runtime)
             ythrow TWithBackTrace<yexception>() << "Server is redirected";
 
@@ -862,19 +862,19 @@ namespace Tests {
         return Runtime.Get();
     }
 
-    const TServerSettings &TServer::GetSettings() const {
-        return *Settings;
-    }
-
-    const NScheme::TTypeRegistry* TServer::GetTypeRegistry() {
+    const TServerSettings &TServer::GetSettings() const { 
+        return *Settings; 
+    } 
+ 
+    const NScheme::TTypeRegistry* TServer::GetTypeRegistry() { 
         return Runtime->GetAppData().TypeRegistry;
     }
 
-    const NMiniKQL::IFunctionRegistry* TServer::GetFunctionRegistry() {
+    const NMiniKQL::IFunctionRegistry* TServer::GetFunctionRegistry() { 
         return Runtime->GetAppData().FunctionRegistry;
     }
 
-    TServer::~TServer() {
+    TServer::~TServer() { 
         if (Runtime->GetAppData().Mon) {
             Runtime->GetAppData().Mon->Stop();
         }
@@ -894,23 +894,23 @@ namespace Tests {
     }
 
 
-    TClient::TClient(const TServerSettings& settings)
-        : Domain(settings.Domain)
-        , DomainName(settings.DomainName)
-        , SupportsRedirect(settings.SupportsRedirect)
-        , StoragePoolTypes(settings.StoragePoolTypes)
+    TClient::TClient(const TServerSettings& settings) 
+        : Domain(settings.Domain) 
+        , DomainName(settings.DomainName) 
+        , SupportsRedirect(settings.SupportsRedirect) 
+        , StoragePoolTypes(settings.StoragePoolTypes) 
         , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
         , LoadedFunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
     {
         TServerSetup serverSetup;
-        if (SupportsRedirect && Tests::IsServerRedirected()) {
-            serverSetup = GetServerSetup();
+        if (SupportsRedirect && Tests::IsServerRedirected()) { 
+            serverSetup = GetServerSetup(); 
         } else {
             serverSetup = TServerSetup("localhost", settings.Port);
         }
 
         ClientConfig.Ip = serverSetup.IpAddress;
-        ClientConfig.Port = serverSetup.Port;
+        ClientConfig.Port = serverSetup.Port; 
         ClientConfig.BusSessionConfig.TotalTimeout = Max<int>() / 2;
         ClientConfig.BusSessionConfig.ConnectTimeout = ConnectTimeoutMilliSeconds;
         ClientConfig.BusSessionConfig.NumRetries = 10;
@@ -973,7 +973,7 @@ namespace Tests {
 
     ui64 TClient::GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect) {
         if (!supportsRedirect || !IsServerRedirected())
-            return ChangeStateStorage(schemeRoot, domain);
+            return ChangeStateStorage(schemeRoot, domain); 
 
         TString domainRedirect = GetEnv(DomainRedirectEnvVar);
         if (!domainRedirect)
@@ -991,54 +991,54 @@ namespace Tests {
         return FromString<ui64>(tabletIdStr);
     }
 
-    void TClient::WaitRootIsUp(const TString& root) {
-        while (true) {
-            TAutoPtr<NMsgBusProxy::TBusResponse> resp = Ls(root);
-            UNIT_ASSERT(resp);
-
-            if (resp->Record.GetStatus() == NMsgBusProxy::MSTATUS_OK && resp->Record.GetSchemeStatus() == NKikimrScheme::StatusSuccess) {
-                break;
-            }
-        }
-    }
-
-    TAutoPtr<NBus::TBusMessage> TClient::InitRootSchemeWithReply(const TString& root) {
-        WaitRootIsUp(root);
-
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request = new NMsgBusProxy::TBusSchemeOperation();
-        auto* transaction = request->Record.MutableTransaction()->MutableModifyScheme();
-        transaction->SetWorkingDir("/");
-        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
-        auto op = transaction->MutableSubDomain();
-        op->SetName(root);
-
-        for (const auto& [kind, pool] : StoragePoolTypes) {
-            auto* p = op->AddStoragePools();
-            p->SetKind(kind);
-            p->SetName(pool.GetName());
+    void TClient::WaitRootIsUp(const TString& root) { 
+        while (true) { 
+            TAutoPtr<NMsgBusProxy::TBusResponse> resp = Ls(root); 
+            UNIT_ASSERT(resp); 
+ 
+            if (resp->Record.GetStatus() == NMsgBusProxy::MSTATUS_OK && resp->Record.GetSchemeStatus() == NKikimrScheme::StatusSuccess) { 
+                break; 
+            } 
+        } 
+    } 
+ 
+    TAutoPtr<NBus::TBusMessage> TClient::InitRootSchemeWithReply(const TString& root) { 
+        WaitRootIsUp(root); 
+ 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request = new NMsgBusProxy::TBusSchemeOperation(); 
+        auto* transaction = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        transaction->SetWorkingDir("/"); 
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain); 
+        auto op = transaction->MutableSubDomain(); 
+        op->SetName(root); 
+ 
+        for (const auto& [kind, pool] : StoragePoolTypes) { 
+            auto* p = op->AddStoragePools(); 
+            p->SetKind(kind); 
+            p->SetName(pool.GetName()); 
         }
 
         TAutoPtr<NBus::TBusMessage> reply;
-        SendAndWaitCompletion(request, reply);
-
-#ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-#endif
+        SendAndWaitCompletion(request, reply); 
+ 
+#ifndef NDEBUG 
+        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl; 
+#endif 
         return reply;
     }
 
-    void TClient::InitRootScheme() {
-        InitRootScheme(DomainName);
-    }
-
-    void TClient::InitRootScheme(const TString& root) {
-        TAutoPtr<NBus::TBusMessage> reply = InitRootSchemeWithReply(root);
-        auto resp = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
-        UNIT_ASSERT(resp);
-        UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-    }
-
-
+    void TClient::InitRootScheme() { 
+        InitRootScheme(DomainName); 
+    } 
+ 
+    void TClient::InitRootScheme(const TString& root) { 
+        TAutoPtr<NBus::TBusMessage> reply = InitRootSchemeWithReply(root); 
+        auto resp = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get()); 
+        UNIT_ASSERT(resp); 
+        UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
+    } 
+ 
+ 
     void TClient::ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path) {
         TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
         request->Record.SetCommand(command);
@@ -1070,20 +1070,20 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
     }
 
-    NBus::EMessageStatus TClient::WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId,
-                                        TAutoPtr<NBus::TBusMessage>& reply,
-                                        TDuration timeout)
-    {
-        auto deadline = TInstant::Now() + timeout;
+    NBus::EMessageStatus TClient::WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId, 
+                                        TAutoPtr<NBus::TBusMessage>& reply, 
+                                        TDuration timeout) 
+    { 
+        auto deadline = TInstant::Now() + timeout; 
 
-        NBus::EMessageStatus status;
-        const NKikimrClient::TResponse* response = nullptr;
-        do {
+        NBus::EMessageStatus status; 
+        const NKikimrClient::TResponse* response = nullptr; 
+        do { 
             TAutoPtr<NMsgBusProxy::TBusSchemeOperationStatus> msg = new NMsgBusProxy::TBusSchemeOperationStatus();
-            msg->Record.MutableFlatTxId()->SetTxId(txId);
-            msg->Record.MutableFlatTxId()->SetSchemeShardTabletId(schemeshard);
-            msg->Record.MutableFlatTxId()->SetPathId(pathId);
-            msg->Record.MutablePollOptions()->SetTimeout(timeout.MilliSeconds());
+            msg->Record.MutableFlatTxId()->SetTxId(txId); 
+            msg->Record.MutableFlatTxId()->SetSchemeShardTabletId(schemeshard); 
+            msg->Record.MutableFlatTxId()->SetPathId(pathId); 
+            msg->Record.MutablePollOptions()->SetTimeout(timeout.MilliSeconds()); 
 #ifndef NDEBUG
             Cerr << "waiting..." << Endl;
 #endif
@@ -1097,45 +1097,45 @@ namespace Tests {
                 break;
             }
             response = &static_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
-        } while (response->GetStatus() == NMsgBusProxy::MSTATUS_INPROGRESS && deadline >= TInstant::Now());
-
-        return status;
-    }
-
-    NBus::EMessageStatus TClient::SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request,
-                                                        TAutoPtr<NBus::TBusMessage>& reply,
-                                                        TDuration timeout) {
-        NBus::EMessageStatus status = SendWhenReady(request, reply, timeout.MilliSeconds());
-
-        if (status != NBus::MESSAGE_OK) {
-            return status;
+        } while (response->GetStatus() == NMsgBusProxy::MSTATUS_INPROGRESS && deadline >= TInstant::Now()); 
+ 
+        return status; 
+    } 
+ 
+    NBus::EMessageStatus TClient::SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request, 
+                                                        TAutoPtr<NBus::TBusMessage>& reply, 
+                                                        TDuration timeout) { 
+        NBus::EMessageStatus status = SendWhenReady(request, reply, timeout.MilliSeconds()); 
+ 
+        if (status != NBus::MESSAGE_OK) { 
+            return status; 
         }
-
-        const NMsgBusProxy::TBusResponse* flatResponse = dynamic_cast<const NMsgBusProxy::TBusResponse*>(reply.Get());
-        if (!flatResponse)
-            return NBus::MESSAGE_UNKNOWN;
-
-        const NKikimrClient::TResponse* response = &flatResponse->Record;
-
+ 
+        const NMsgBusProxy::TBusResponse* flatResponse = dynamic_cast<const NMsgBusProxy::TBusResponse*>(reply.Get()); 
+        if (!flatResponse) 
+            return NBus::MESSAGE_UNKNOWN; 
+ 
+        const NKikimrClient::TResponse* response = &flatResponse->Record; 
+ 
         if (response->HasErrorReason()) {
             Cerr << "reason: " << response->GetErrorReason() << Endl;
         }
-
-        if (response->GetStatus() != NMsgBusProxy::MSTATUS_INPROGRESS) {
-            return status;
-        }
-
-        NKikimrClient::TFlatTxId txId = response->GetFlatTxId();
-        return WaitCompletion(txId.GetTxId(), txId.GetSchemeShardTabletId(), txId.GetPathId(), reply, timeout);
+ 
+        if (response->GetStatus() != NMsgBusProxy::MSTATUS_INPROGRESS) { 
+            return status; 
+        } 
+ 
+        NKikimrClient::TFlatTxId txId = response->GetFlatTxId(); 
+        return WaitCompletion(txId.GetTxId(), txId.GetSchemeShardTabletId(), txId.GetPathId(), reply, timeout); 
     }
 
-    NMsgBusProxy::EResponseStatus TClient::MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
+    NMsgBusProxy::EResponseStatus TClient::MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) { 
         NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation());
         auto* mkDirTx = request->Record.MutableTransaction()->MutableModifyScheme();
         mkDirTx->SetWorkingDir(parent);
-        mkDirTx->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        mkDirTx->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir); 
         mkDirTx->MutableMkDir()->SetName(name);
-        SetApplyIf(*mkDirTx, applyIf);
+        SetApplyIf(*mkDirTx, applyIf); 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
 #ifndef NDEBUG
@@ -1146,163 +1146,163 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
-        NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation());
-        auto* mkDirTx = request->Record.MutableTransaction()->MutableModifyScheme();
-        mkDirTx->SetWorkingDir(parent);
-        mkDirTx->SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
-        mkDirTx->MutableDrop()->SetName(name);
-        SetApplyIf(*mkDirTx, applyIf);
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
-#ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-#endif
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::CreateSubdomain(const TString &parent, const TString &description) {
-        NKikimrSubDomains::TSubDomainSettings subdomain;
-        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
-        return CreateSubdomain(parent, subdomain);
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::CreateSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain);
-        op->SetWorkingDir(parent);
-        op->MutableSubDomain()->CopyFrom(subdomain);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::CreateExtSubdomain(const TString &parent, const TString &description) {
-        NKikimrSubDomains::TSubDomainSettings subdomain;
-        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
-        return CreateExtSubdomain(parent, subdomain);
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::CreateExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain);
-        op->SetWorkingDir(parent);
-        op->MutableSubDomain()->CopyFrom(subdomain);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetWorkingDir(parent);
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
-        auto userAttributes = op->MutableAlterUserAttributes();
-        userAttributes->SetPathName(name);
-        for (const auto& item: addAttrs) {
-            auto attr = userAttributes->AddUserAttributes();
-            attr->SetKey(item.first);
-            attr->SetValue(item.second);
-        }
-        for (const auto& item: dropAttrs) {
-            auto attr = userAttributes->AddUserAttributes();
-            attr->SetKey(item);
-        }
-        SetApplyIf(*op, applyIf);
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::AlterSubdomain(const TString &parent, const TString &description, TDuration timeout) {
-        NKikimrSubDomains::TSubDomainSettings subdomain;
-        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain));
-        return AlterSubdomain(parent, subdomain, timeout);
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::AlterSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
-        op->SetWorkingDir(parent);
-        op->MutableSubDomain()->CopyFrom(subdomain);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::AlterExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain);
-        op->SetWorkingDir(parent);
-        op->MutableSubDomain()->CopyFrom(subdomain);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::DeleteSubdomain(const TString &parent, const TString &name) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain);
-        op->SetWorkingDir(parent);
-        op->MutableDrop()->SetName(name);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::ForceDeleteSubdomain(const TString &parent, const TString &name) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain);
-        op->SetWorkingDir(parent);
-        op->MutableDrop()->SetName(name);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::ForceDeleteUnsafe(const TString &parent, const TString &name) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe);
-        op->SetWorkingDir(parent);
-        op->MutableDrop()->SetName(name);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
+    NMsgBusProxy::EResponseStatus TClient::RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) { 
+        NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto* mkDirTx = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        mkDirTx->SetWorkingDir(parent); 
+        mkDirTx->SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir); 
+        mkDirTx->MutableDrop()->SetName(name); 
+        SetApplyIf(*mkDirTx, applyIf); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply); 
+#ifndef NDEBUG 
+        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl; 
+#endif 
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::CreateSubdomain(const TString &parent, const TString &description) { 
+        NKikimrSubDomains::TSubDomainSettings subdomain; 
+        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain)); 
+        return CreateSubdomain(parent, subdomain); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::CreateSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain); 
+        op->SetWorkingDir(parent); 
+        op->MutableSubDomain()->CopyFrom(subdomain); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::CreateExtSubdomain(const TString &parent, const TString &description) { 
+        NKikimrSubDomains::TSubDomainSettings subdomain; 
+        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain)); 
+        return CreateExtSubdomain(parent, subdomain); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::CreateExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain); 
+        op->SetWorkingDir(parent); 
+        op->MutableSubDomain()->CopyFrom(subdomain); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetWorkingDir(parent); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes); 
+        auto userAttributes = op->MutableAlterUserAttributes(); 
+        userAttributes->SetPathName(name); 
+        for (const auto& item: addAttrs) { 
+            auto attr = userAttributes->AddUserAttributes(); 
+            attr->SetKey(item.first); 
+            attr->SetValue(item.second); 
+        } 
+        for (const auto& item: dropAttrs) { 
+            auto attr = userAttributes->AddUserAttributes(); 
+            attr->SetKey(item); 
+        } 
+        SetApplyIf(*op, applyIf); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::AlterSubdomain(const TString &parent, const TString &description, TDuration timeout) { 
+        NKikimrSubDomains::TSubDomainSettings subdomain; 
+        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(description, &subdomain)); 
+        return AlterSubdomain(parent, subdomain, timeout); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::AlterSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain); 
+        op->SetWorkingDir(parent); 
+        op->MutableSubDomain()->CopyFrom(subdomain); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::AlterExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain); 
+        op->SetWorkingDir(parent); 
+        op->MutableSubDomain()->CopyFrom(subdomain); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::DeleteSubdomain(const TString &parent, const TString &name) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain); 
+        op->SetWorkingDir(parent); 
+        op->MutableDrop()->SetName(name); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::ForceDeleteSubdomain(const TString &parent, const TString &name) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain); 
+        op->SetWorkingDir(parent); 
+        op->MutableDrop()->SetName(name); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::ForceDeleteUnsafe(const TString &parent, const TString &name) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe); 
+        op->SetWorkingDir(parent); 
+        op->MutableDrop()->SetName(name); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
     NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1320,14 +1320,14 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
+    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) { 
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable); 
         op->SetWorkingDir(parent);
         op->MutableCreateTable()->CopyFrom(table);
         TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout); 
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
@@ -1362,60 +1362,60 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions);
-        auto split = op->MutableSplitMergeTablePartitions();
-        split->SetTablePath(table);
-        split->AddSourceTabletId(datashardId);
-        split->AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetUint64(border);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::CopyTable(const TString &parent, const TString &name, const TString &src) {
-        NKikimrSchemeOp::TTableDescription table;
-        table.SetName(name);
-        table.SetCopyFromTable(src);
-        return CreateTable(parent, table, TDuration::Seconds(5000));
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout) {
-        NKikimrSchemeOp::TConsistentTableCopyingConfig coping;
-        for (auto& task: desc) {
-            auto* item = coping.AddCopyTableDescriptions();
-            item->SetSrcPath(std::move(task.first));
-            item->SetDstPath(std::move(task.second));
-        }
-
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
-        *op->MutableCreateConsistentCopyTables() = std::move(coping);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout) {
-        NKikimrSchemeOp::TTableDescription table;
+    NMsgBusProxy::EResponseStatus TClient::SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions); 
+        auto split = op->MutableSplitMergeTablePartitions(); 
+        split->SetTablePath(table); 
+        split->AddSourceTabletId(datashardId); 
+        split->AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetUint64(border); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::CopyTable(const TString &parent, const TString &name, const TString &src) { 
+        NKikimrSchemeOp::TTableDescription table; 
+        table.SetName(name); 
+        table.SetCopyFromTable(src); 
+        return CreateTable(parent, table, TDuration::Seconds(5000)); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout) { 
+        NKikimrSchemeOp::TConsistentTableCopyingConfig coping; 
+        for (auto& task: desc) { 
+            auto* item = coping.AddCopyTableDescriptions(); 
+            item->SetSrcPath(std::move(task.first)); 
+            item->SetDstPath(std::move(task.second)); 
+        } 
+ 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables); 
+        *op->MutableCreateConsistentCopyTables() = std::move(coping); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout) { 
+        NKikimrSchemeOp::TTableDescription table; 
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
         UNIT_ASSERT(parseOk);
-        return CreateTable(parent, table, timeout);
+        return CreateTable(parent, table, timeout); 
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateKesus(const TString& parent, const TString& name) {
         auto* request = new NMsgBusProxy::TBusSchemeOperation();
         auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
-        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus);
+        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus); 
         tx->SetWorkingDir(parent);
         tx->MutableKesus()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1428,7 +1428,7 @@ namespace Tests {
     NMsgBusProxy::EResponseStatus TClient::DeleteKesus(const TString& parent, const TString& name) {
         auto* request = new NMsgBusProxy::TBusSchemeOperation();
         auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
-        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpDropKesus);
+        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpDropKesus); 
         tx->SetWorkingDir(parent);
         tx->MutableDrop()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1480,25 +1480,25 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateSolomon(const TString& parent, const TString& name, ui32 parts, ui32 channelProfile) {
-        auto* request = new NMsgBusProxy::TBusSchemeOperation();
-        auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
-        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSolomonVolume);
-        tx->SetWorkingDir(parent);
-        tx->MutableCreateSolomonVolume()->SetName(name);
-        tx->MutableCreateSolomonVolume()->SetPartitionCount(parts);
-        tx->MutableCreateSolomonVolume()->SetChannelProfileId(channelProfile);
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
-    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter, const TString& userToken) {
+    NMsgBusProxy::EResponseStatus TClient::CreateSolomon(const TString& parent, const TString& name, ui32 parts, ui32 channelProfile) { 
+        auto* request = new NMsgBusProxy::TBusSchemeOperation(); 
+        auto* tx = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSolomonVolume); 
+        tx->SetWorkingDir(parent); 
+        tx->MutableCreateSolomonVolume()->SetName(name); 
+        tx->MutableCreateSolomonVolume()->SetPartitionCount(parts); 
+        tx->MutableCreateSolomonVolume()->SetChannelProfileId(channelProfile); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply); 
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
+    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter, const TString& userToken) { 
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable); 
         op->SetWorkingDir(parent);
         op->MutableAlterTable()->CopyFrom(alter);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1511,29 +1511,29 @@ namespace Tests {
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const TString& alter, const TString& userToken) {
-        NKikimrSchemeOp::TTableDescription table;
+        NKikimrSchemeOp::TTableDescription table; 
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);
         UNIT_ASSERT(parseOk);
         return AlterTable(parent, table, userToken);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter) {
+    NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter) { 
         TAutoPtr<NMsgBusProxy::TBusResponse> reply = AlterTable(parent, alter, TString());
         const NKikimrClient::TResponse &response = reply->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
     NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const TString& alter) {
-        NKikimrSchemeOp::TTableDescription table;
+        NKikimrSchemeOp::TTableDescription table; 
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);
         UNIT_ASSERT(parseOk);
         return AlterTable(parent, table);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task) {
+    NMsgBusProxy::EResponseStatus TClient::StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task) { 
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackup);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackup); 
         op->SetWorkingDir(parent);
         op->MutableBackup()->CopyFrom(task);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1546,7 +1546,7 @@ namespace Tests {
     NMsgBusProxy::EResponseStatus TClient::DeleteTable(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable); 
         op->SetWorkingDir(parent);
         op->MutableDrop()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1559,7 +1559,7 @@ namespace Tests {
     NMsgBusProxy::EResponseStatus TClient::DeleteTopic(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup); 
         op->SetWorkingDir(parent);
         op->MutableDrop()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1572,7 +1572,7 @@ namespace Tests {
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::TryDropPersQueueGroup(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto * op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup); 
         op->SetWorkingDir(parent);
         op->MutableDrop()->SetName(name);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1583,30 +1583,30 @@ namespace Tests {
         return res;
     }
 
-    NMsgBusProxy::EResponseStatus TClient::WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout) {
-        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
-        request->Record.SetPath(path);
-        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
+    NMsgBusProxy::EResponseStatus TClient::WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout) { 
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme()); 
+        request->Record.SetPath(path); 
+        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect); 
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);
-
-        TAutoPtr<IEventHandle> handle;
-        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-        auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
-        //Cerr << record.DebugString() << Endl;
-
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-        auto& descr = record.GetPathDescription().GetSelf();
-        TAutoPtr<NBus::TBusMessage> reply;
-        auto msgStatus = WaitCompletion(descr.GetCreateTxId(), descr.GetSchemeshardId(), descr.GetPathId(), reply, timeout);
+ 
+        TAutoPtr<IEventHandle> handle; 
+        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle); 
+        auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord(); 
+        //Cerr << record.DebugString() << Endl; 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess); 
+        auto& descr = record.GetPathDescription().GetSelf(); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        auto msgStatus = WaitCompletion(descr.GetCreateTxId(), descr.GetSchemeshardId(), descr.GetPathId(), reply, timeout); 
 #ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl; 
 #endif
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::LsImpl(const TString& path) {
         TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         request->Record.SetPath(path);
@@ -1615,7 +1615,7 @@ namespace Tests {
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
 #ifndef NDEBUG
-        Cerr << "TClient::Ls: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cerr << "TClient::Ls: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl; 
 #endif
         return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
     }
@@ -1624,26 +1624,26 @@ namespace Tests {
         return LsImpl(path).Release();
     }
 
-    TClient::TPathVersion TClient::ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe) {
-        UNIT_ASSERT(describe.Get());
-        auto& record = describe->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        UNIT_ASSERT_VALUES_EQUAL(record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
-
-        UNIT_ASSERT(record.HasPathDescription());
-        auto& descr = record.GetPathDescription();
-
-        UNIT_ASSERT(descr.HasSelf());
-        auto& self = descr.GetSelf();
-
-        return TPathVersion{self.GetSchemeshardId(), self.GetPathId(), self.GetPathVersion()};
-    }
-
+    TClient::TPathVersion TClient::ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe) { 
+        UNIT_ASSERT(describe.Get()); 
+        auto& record = describe->Record; 
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
+        UNIT_ASSERT_VALUES_EQUAL(record.GetSchemeStatus(), NKikimrScheme::StatusSuccess); 
+ 
+        UNIT_ASSERT(record.HasPathDescription()); 
+        auto& descr = record.GetPathDescription(); 
+ 
+        UNIT_ASSERT(descr.HasSelf()); 
+        auto& self = descr.GetSelf(); 
+ 
+        return TPathVersion{self.GetSchemeshardId(), self.GetPathId(), self.GetPathVersion()}; 
+    } 
+ 
     TVector<ui64> TClient::ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe) {
         UNIT_ASSERT(describe.Get());
         NKikimrClient::TResponse& record = describe->Record;
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        UNIT_ASSERT_VALUES_EQUAL(record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetSchemeStatus(), NKikimrScheme::StatusSuccess); 
 
         UNIT_ASSERT(record.HasPathDescription());
         auto& descr = record.GetPathDescription();
@@ -1657,38 +1657,38 @@ namespace Tests {
         return shards;
     }
 
-    void TClient::RefreshPathCache(TTestActorRuntime* runtime, const TString& path, ui32 nodeIdx) {
+    void TClient::RefreshPathCache(TTestActorRuntime* runtime, const TString& path, ui32 nodeIdx) { 
         TActorId sender = runtime->AllocateEdgeActor(nodeIdx);
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = SplitPath(path);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        runtime->Send(
-            new IEventHandle(
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(); 
+        auto& entry = request->ResultSet.emplace_back(); 
+        entry.Path = SplitPath(path); 
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath; 
+        runtime->Send( 
+            new IEventHandle( 
                 MakeSchemeCacheID(),
-                sender,
-                new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())),
-            nodeIdx);
-        auto ev = runtime->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
-        Y_VERIFY(ev);
-    }
-
-    void TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
-        op->SetWorkingDir(parent);
-        op->MutableModifyACL()->SetName(name);
-        op->MutableModifyACL()->SetNewOwner(owner);
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-    }
-
+                sender, 
+                new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())), 
+            nodeIdx); 
+        auto ev = runtime->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender); 
+        Y_VERIFY(ev); 
+    } 
+ 
+    void TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL); 
+        op->SetWorkingDir(parent); 
+        op->MutableModifyACL()->SetName(name); 
+        op->MutableModifyACL()->SetNewOwner(owner); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+    } 
+ 
     void TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL); 
         op->SetWorkingDir(parent);
         op->MutableModifyACL()->SetName(name);
         op->MutableModifyACL()->SetDiffACL(acl);
@@ -1698,23 +1698,23 @@ namespace Tests {
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
-                                                               const TVector<ui32>& allowed_node_ids,
-                                                               const TVector<TSubDomainKey>& allowed_domains,
-                                                               const TChannelsBindings& bindings)
-    {
-        TAutoPtr<NMsgBusProxy::TBusHiveCreateTablet> request(new NMsgBusProxy::TBusHiveCreateTablet());
-        NKikimrClient::THiveCreateTablet& record = request->Record;
-        record.SetDomainUid(domainUid);
-        auto *cmdCreate = record.AddCmdCreateTablet();
-        cmdCreate->SetOwnerId(owner);
-        cmdCreate->SetOwnerIdx(owner_index);
-        cmdCreate->SetTabletType(tablet_type);
-        for (ui32 node_id: allowed_node_ids) {
-            cmdCreate->AddAllowedNodeIDs(node_id);
-        }
-        for (auto& domain_id: allowed_domains) {
-            *cmdCreate->AddAllowedDomains() = domain_id;
-        }
+                                                               const TVector<ui32>& allowed_node_ids, 
+                                                               const TVector<TSubDomainKey>& allowed_domains, 
+                                                               const TChannelsBindings& bindings) 
+    { 
+        TAutoPtr<NMsgBusProxy::TBusHiveCreateTablet> request(new NMsgBusProxy::TBusHiveCreateTablet()); 
+        NKikimrClient::THiveCreateTablet& record = request->Record; 
+        record.SetDomainUid(domainUid); 
+        auto *cmdCreate = record.AddCmdCreateTablet(); 
+        cmdCreate->SetOwnerId(owner); 
+        cmdCreate->SetOwnerIdx(owner_index); 
+        cmdCreate->SetTabletType(tablet_type); 
+        for (ui32 node_id: allowed_node_ids) { 
+            cmdCreate->AddAllowedNodeIDs(node_id); 
+        } 
+        for (auto& domain_id: allowed_domains) { 
+            *cmdCreate->AddAllowedDomains() = domain_id; 
+        } 
         if (!bindings.empty()) {
             for (auto& binding: bindings) {
                 *cmdCreate->AddBindedChannels() = binding;
@@ -1725,94 +1725,94 @@ namespace Tests {
             cmdCreate->AddBindedChannels()->SetStoragePoolName(storagePool); // 0
             cmdCreate->AddBindedChannels()->SetStoragePoolName(storagePool); // 1
             cmdCreate->AddBindedChannels()->SetStoragePoolName(storagePool); // 2
-        }
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SyncCall(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        NMsgBusProxy::TBusResponse* res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
-        UNIT_ASSERT(res);
-        return res;
-    }
-
-    TString TClient::CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups) {
+        } 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SyncCall(request, reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        NMsgBusProxy::TBusResponse* res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release()); 
+        UNIT_ASSERT(res); 
+        return res; 
+    } 
+ 
+    TString TClient::CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups) { 
         Y_VERIFY(StoragePoolTypes.contains(poolKind));
-        const TString poolName = Sprintf("name_%s_kind_%s", partOfName.c_str(), poolKind.c_str());
-        const ui64 poolId = THash<TString>()(poolName);
-
-        NKikimrBlobStorage::TDefineStoragePool storagePool = StoragePoolTypes.at(poolKind);
-        Y_VERIFY(storagePool.GetKind() == poolKind);
-        storagePool.SetStoragePoolId(poolId);
-        storagePool.SetName(poolName);
-        storagePool.SetNumGroups(groups);
-
-        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> request(new NMsgBusProxy::TBusBlobStorageConfigRequest());
-        request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
-        request->Record.SetDomain(Domain);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
-
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        Y_VERIFY(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess());
-        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)response.GetStatus());
-
-        return poolName;
-    }
-
-    NKikimrBlobStorage::TDefineStoragePool TClient::DescribeStoragePool(const TString& name) {
-        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> readRequest(new NMsgBusProxy::TBusBlobStorageConfigRequest());
-        readRequest->Record.SetDomain(Domain);
-        auto readParam = readRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
+        const TString poolName = Sprintf("name_%s_kind_%s", partOfName.c_str(), poolKind.c_str()); 
+        const ui64 poolId = THash<TString>()(poolName); 
+ 
+        NKikimrBlobStorage::TDefineStoragePool storagePool = StoragePoolTypes.at(poolKind); 
+        Y_VERIFY(storagePool.GetKind() == poolKind); 
+        storagePool.SetStoragePoolId(poolId); 
+        storagePool.SetName(poolName); 
+        storagePool.SetNumGroups(groups); 
+ 
+        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> request(new NMsgBusProxy::TBusBlobStorageConfigRequest()); 
+        request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool); 
+        request->Record.SetDomain(Domain); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus msgStatus = SendWhenReady(request, reply); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        Y_VERIFY(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess()); 
+        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)response.GetStatus()); 
+ 
+        return poolName; 
+    } 
+ 
+    NKikimrBlobStorage::TDefineStoragePool TClient::DescribeStoragePool(const TString& name) { 
+        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> readRequest(new NMsgBusProxy::TBusBlobStorageConfigRequest()); 
+        readRequest->Record.SetDomain(Domain); 
+        auto readParam = readRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool(); 
         readParam->SetBoxId(TServerSettings::BOX_ID);
-        readParam->AddName(name);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus msgStatus = SendWhenReady(readRequest, reply);
-
+        readParam->AddName(name); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus msgStatus = SendWhenReady(readRequest, reply); 
+ 
 #ifndef NDEBUG
         Cerr << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        UNIT_ASSERT(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess());
-        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)response.GetStatus());
-        UNIT_ASSERT(response.GetBlobStorageConfigResponse().StatusSize() > 0);
-        auto status = response.GetBlobStorageConfigResponse().GetStatus(0);
-        UNIT_ASSERT(status.StoragePoolSize() > 0);
-
-        auto storagePool = status.GetStoragePool(0);
-        UNIT_ASSERT(name == storagePool.GetName());
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        UNIT_ASSERT(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess()); 
+        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)response.GetStatus()); 
+        UNIT_ASSERT(response.GetBlobStorageConfigResponse().StatusSize() > 0); 
+        auto status = response.GetBlobStorageConfigResponse().GetStatus(0); 
+        UNIT_ASSERT(status.StoragePoolSize() > 0); 
+ 
+        auto storagePool = status.GetStoragePool(0); 
+        UNIT_ASSERT(name == storagePool.GetName()); 
         UNIT_ASSERT(TServerSettings::BOX_ID == storagePool.GetBoxId());
-
-        return storagePool;
-    }
-
-    void TClient::RemoveStoragePool(const TString& name) {
-        auto storagePool = DescribeStoragePool(name);
-
-        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> deleteRequest(new NMsgBusProxy::TBusBlobStorageConfigRequest());
-        deleteRequest->Record.SetDomain(Domain);
-        auto deleteParam = deleteRequest->Record.MutableRequest()->AddCommand()->MutableDeleteStoragePool();
+ 
+        return storagePool; 
+    } 
+ 
+    void TClient::RemoveStoragePool(const TString& name) { 
+        auto storagePool = DescribeStoragePool(name); 
+ 
+        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> deleteRequest(new NMsgBusProxy::TBusBlobStorageConfigRequest()); 
+        deleteRequest->Record.SetDomain(Domain); 
+        auto deleteParam = deleteRequest->Record.MutableRequest()->AddCommand()->MutableDeleteStoragePool(); 
         deleteParam->SetBoxId(TServerSettings::BOX_ID);
-        deleteParam->SetStoragePoolId(storagePool.GetStoragePoolId());
-        deleteParam->SetItemConfigGeneration(storagePool.GetItemConfigGeneration());
-
-        TAutoPtr<NBus::TBusMessage> replyDelete;
-        NBus::EMessageStatus msgStatus = SendWhenReady(deleteRequest, replyDelete);
-
+        deleteParam->SetStoragePoolId(storagePool.GetStoragePoolId()); 
+        deleteParam->SetItemConfigGeneration(storagePool.GetItemConfigGeneration()); 
+ 
+        TAutoPtr<NBus::TBusMessage> replyDelete; 
+        NBus::EMessageStatus msgStatus = SendWhenReady(deleteRequest, replyDelete); 
+ 
 #ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(replyDelete.Get()) << Endl;
+        Cout << PrintResult<NMsgBusProxy::TBusResponse>(replyDelete.Get()) << Endl; 
 #endif
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &responseDelete = dynamic_cast<NMsgBusProxy::TBusResponse *>(replyDelete.Get())->Record;
-        UNIT_ASSERT(responseDelete.HasBlobStorageConfigResponse() && responseDelete.GetBlobStorageConfigResponse().GetSuccess());
-        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)responseDelete.GetStatus());
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &responseDelete = dynamic_cast<NMsgBusProxy::TBusResponse *>(replyDelete.Get())->Record; 
+        UNIT_ASSERT(responseDelete.HasBlobStorageConfigResponse() && responseDelete.GetBlobStorageConfigResponse().GetSuccess()); 
+        UNIT_ASSERT((NMsgBusProxy::EResponseStatus)responseDelete.GetStatus()); 
+    } 
+ 
     bool TClient::LocalQuery(const ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result) {
         TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL> request = new NMsgBusProxy::TBusTabletLocalMKQL();
-        request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain));
+        request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain)); 
         request->Record.SetWithRetry(true);
         auto *mkql = request->Record.MutableProgram();
         mkql->MutableProgram()->SetText(pgmText);
@@ -1833,7 +1833,7 @@ namespace Tests {
     bool TClient::LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& changes, bool dryRun,
                                 NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
         TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> request = new NMsgBusProxy::TBusTabletLocalSchemeTx();
-        request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain));
+        request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain)); 
         request->Record.SetDryRun(dryRun);
         auto *schemeChanges = request->Record.MutableSchemeChanges();
         schemeChanges->CopyFrom(changes);
@@ -2020,7 +2020,7 @@ namespace Tests {
 
     TString TClient::MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up) {
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
-        ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
+        ui64 hive = ChangeStateStorage(Tests::Hive, Domain); 
         TInstant deadline = TInstant::Now() + TIMEOUT;
         while (TInstant::Now() <= deadline) {
             TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
@@ -2034,7 +2034,7 @@ namespace Tests {
 
     TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) {
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
-        ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
+        ui64 hive = ChangeStateStorage(Tests::Hive, Domain); 
         return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
     }
 
@@ -2046,29 +2046,29 @@ namespace Tests {
         clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         TActorId pipeClient = runtime->Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
         TAutoPtr<IEventHandle> handle;
-        const TInstant deadline = TInstant::Now() + timeout;
+        const TInstant deadline = TInstant::Now() + timeout; 
         bool res = false;
-
-        try {
-            while (TInstant::Now() <= deadline) {
-                TEvTabletPipe::TEvClientConnected* ev = runtime->GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(handle, deadline - TInstant::Now());
-                if (!ev) {
-                    break;
-                }
-                if (ev->ClientId == pipeClient && ev->TabletId == tabletId) {
-                    res = (ev->Status == NKikimrProto::OK);
-                    break;
-                }
+ 
+        try { 
+            while (TInstant::Now() <= deadline) { 
+                TEvTabletPipe::TEvClientConnected* ev = runtime->GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(handle, deadline - TInstant::Now()); 
+                if (!ev) { 
+                    break; 
+                } 
+                if (ev->ClientId == pipeClient && ev->TabletId == tabletId) { 
+                    res = (ev->Status == NKikimrProto::OK); 
+                    break; 
+                } 
             }
-        } catch (TEmptyEventQueueException &) {}
-
+        } catch (TEmptyEventQueueException &) {} 
+ 
         runtime->Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
         return res;
     }
 
     bool TClient::WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
         TActorId edge = runtime->AllocateEdgeActor();
-        NTabletPipe::TClientConfig clientConfig;
+        NTabletPipe::TClientConfig clientConfig; 
         clientConfig.AllowFollower = !leader;
         clientConfig.ForceFollower = !leader;
         clientConfig.RetryPolicy = {
@@ -2078,45 +2078,45 @@ namespace Tests {
             .BackoffMultiplier = 2,
         };
         TActorId pipeClient = runtime->Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
-        TInstant deadline = TInstant::Now() + timeout;
-
-        bool res = false;
-
-        try {
-            while (TInstant::Now() <= deadline) {
-                TAutoPtr<IEventHandle> handle;
-                auto result = runtime->GrabEdgeEvents<TEvTabletPipe::TEvClientConnected, TEvTabletPipe::TEvClientDestroyed>(handle, deadline - TInstant::Now());
-                if (handle && handle->Recipient == edge && handle->Sender == pipeClient) {
-                    if (std::get<TEvTabletPipe::TEvClientDestroyed*>(result) != nullptr)
-                    {
-                        TEvTabletPipe::TEvClientDestroyed* event = std::get<TEvTabletPipe::TEvClientDestroyed*>(result);
-                        if (event->TabletId == tabletId) {
-                            res = true;
-                            break;
-                        }
-                    }
-                    if (std::get<TEvTabletPipe::TEvClientConnected*>(result) != nullptr)
-                    {
-                        TEvTabletPipe::TEvClientConnected* event = std::get<TEvTabletPipe::TEvClientConnected*>(result);
-                        if (event->TabletId == tabletId && event->Status != NKikimrProto::OK) {
-                            res = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        } catch (TEmptyEventQueueException &) {}
-
-        runtime->Send(new IEventHandle(pipeClient, edge, new TEvents::TEvPoisonPill()));
-        return res;
-    }
-
+        TInstant deadline = TInstant::Now() + timeout; 
+ 
+        bool res = false; 
+ 
+        try { 
+            while (TInstant::Now() <= deadline) { 
+                TAutoPtr<IEventHandle> handle; 
+                auto result = runtime->GrabEdgeEvents<TEvTabletPipe::TEvClientConnected, TEvTabletPipe::TEvClientDestroyed>(handle, deadline - TInstant::Now()); 
+                if (handle && handle->Recipient == edge && handle->Sender == pipeClient) { 
+                    if (std::get<TEvTabletPipe::TEvClientDestroyed*>(result) != nullptr) 
+                    { 
+                        TEvTabletPipe::TEvClientDestroyed* event = std::get<TEvTabletPipe::TEvClientDestroyed*>(result); 
+                        if (event->TabletId == tabletId) { 
+                            res = true; 
+                            break; 
+                        } 
+                    } 
+                    if (std::get<TEvTabletPipe::TEvClientConnected*>(result) != nullptr) 
+                    { 
+                        TEvTabletPipe::TEvClientConnected* event = std::get<TEvTabletPipe::TEvClientConnected*>(result); 
+                        if (event->TabletId == tabletId && event->Status != NKikimrProto::OK) { 
+                            res = true; 
+                            break; 
+                        } 
+                    } 
+                } 
+            } 
+        } catch (TEmptyEventQueueException &) {} 
+ 
+        runtime->Send(new IEventHandle(pipeClient, edge, new TEvents::TEvPoisonPill())); 
+        return res; 
+    } 
+ 
     void TClient::GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res) {
         TAutoPtr<TEvHive::TEvRequestHiveInfo> ev(new TEvHive::TEvRequestHiveInfo);
         ev->Record.SetTabletID(tabletId);
         ev->Record.SetReturnFollowers(returnFollowers);
 
-        ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
+        ui64 hive = ChangeStateStorage(Tests::Hive, Domain); 
         TActorId edge = runtime->AllocateEdgeActor();
         runtime->SendToPipe(hive, edge, ev.Release());
         TAutoPtr<IEventHandle> handle;
@@ -2130,15 +2130,15 @@ namespace Tests {
         // Cerr << res << Endl;
 
         for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) {
-            if (tablet.GetTabletID() == tabletId && tablet.GetNodeID() != 0) {
+            if (tablet.GetTabletID() == tabletId && tablet.GetNodeID() != 0) { 
                 return NodeIdToIndex(runtime, tablet.GetNodeID());
             }
         }
 
-        return Max<ui32>();
+        return Max<ui32>(); 
     }
 
-    bool TClient::TabletExistsInHive(TTestActorRuntime* runtime, ui64 tabletId, bool evenInDeleting) {
+    bool TClient::TabletExistsInHive(TTestActorRuntime* runtime, ui64 tabletId, bool evenInDeleting) { 
         NKikimrHive::TEvResponseHiveInfo res;
         GetTabletInfoFromHive(runtime, tabletId, false, res);
         // Cerr << res << Endl;
@@ -2152,31 +2152,31 @@ namespace Tests {
         return false;
     }
 
-    void TClient::GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res) {
-        TAutoPtr<TEvHive::TEvGetTabletStorageInfo> ev(new TEvHive::TEvGetTabletStorageInfo(tabletId));
-
-        ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
+    void TClient::GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res) { 
+        TAutoPtr<TEvHive::TEvGetTabletStorageInfo> ev(new TEvHive::TEvGetTabletStorageInfo(tabletId)); 
+ 
+        ui64 hive = ChangeStateStorage(Tests::Hive, Domain); 
         TActorId edge = runtime->AllocateEdgeActor();
-        runtime->SendToPipe(hive, edge, ev.Release());
-        TAutoPtr<IEventHandle> handle;
-        TEvHive::TEvGetTabletStorageInfoResult* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
-
-        res.Swap(&response->Record);
+        runtime->SendToPipe(hive, edge, ev.Release()); 
+        TAutoPtr<IEventHandle> handle; 
+        TEvHive::TEvGetTabletStorageInfoResult* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle); 
+ 
+        res.Swap(&response->Record); 
 #ifndef NDEBUG
-        Cerr << response->Record.DebugString() << "\n";
+        Cerr << response->Record.DebugString() << "\n"; 
 #endif
-
-        if (res.GetStatus() == NKikimrProto::OK) {
-            auto& info = res.GetInfo();
-            Y_VERIFY(res.GetTabletID() == info.GetTabletID());
-            Y_VERIFY(info.ChannelsSize() > 0);
-
-            auto& channel = info.GetChannels(0);
-            Y_VERIFY(channel.GetChannel() == 0);
-            Y_VERIFY(channel.HistorySize() > 0);
-        }
-    }
-
+ 
+        if (res.GetStatus() == NKikimrProto::OK) { 
+            auto& info = res.GetInfo(); 
+            Y_VERIFY(res.GetTabletID() == info.GetTabletID()); 
+            Y_VERIFY(info.ChannelsSize() > 0); 
+ 
+            auto& channel = info.GetChannels(0); 
+            Y_VERIFY(channel.GetChannel() == 0); 
+            Y_VERIFY(channel.HistorySize() > 0); 
+        } 
+    } 
+ 
     TVector<ui32> TClient::GetFollowerNodes(TTestActorRuntime* runtime, ui64 tabletId) {
         NKikimrHive::TEvResponseHiveInfo res;
         GetTabletInfoFromHive(runtime, tabletId, true, res);
@@ -2281,165 +2281,165 @@ namespace Tests {
 
         return TServerSetup(TString(address), portValue);
     }
-
-    TTenants::TTenants(TServer::TPtr server)
-        : Server(server)
-    {
-        ui32 dynamicNodeStartsAt = Server->StaticNodes();
-        ui32 dynamicNodeEndsAt = dynamicNodeStartsAt + Server->DynamicNodes();
-        for (ui32 nodeIdx = dynamicNodeStartsAt; nodeIdx < dynamicNodeEndsAt; ++nodeIdx) {
-            VacantNodes.push_back(nodeIdx);
-        }
-        MakeHeap(VacantNodes.begin(), VacantNodes.end());
-    }
-
-    TTenants::~TTenants() {
-        Stop();
-    }
-
-    void TTenants::Run(const TString &name, ui32 nodes) {
+ 
+    TTenants::TTenants(TServer::TPtr server) 
+        : Server(server) 
+    { 
+        ui32 dynamicNodeStartsAt = Server->StaticNodes(); 
+        ui32 dynamicNodeEndsAt = dynamicNodeStartsAt + Server->DynamicNodes(); 
+        for (ui32 nodeIdx = dynamicNodeStartsAt; nodeIdx < dynamicNodeEndsAt; ++nodeIdx) { 
+            VacantNodes.push_back(nodeIdx); 
+        } 
+        MakeHeap(VacantNodes.begin(), VacantNodes.end()); 
+    } 
+ 
+    TTenants::~TTenants() { 
+        Stop(); 
+    } 
+ 
+    void TTenants::Run(const TString &name, ui32 nodes) { 
         Y_VERIFY(!Tenants.contains(name));
-        Y_VERIFY(Availabe() >= nodes);
-
-        Tenants[name] = {};
-        RunNodes(name, nodes);
-    }
-
-    void TTenants::Stop(const TString &name) {
+        Y_VERIFY(Availabe() >= nodes); 
+ 
+        Tenants[name] = {}; 
+        RunNodes(name, nodes); 
+    } 
+ 
+    void TTenants::Stop(const TString &name) { 
         Y_VERIFY(Tenants.contains(name));
-
-        Free(name, Size(name));
-        Tenants.erase(name);
-    }
-
-    void TTenants::Stop() {
-        for (auto &it: Tenants) {
-            const TString &name = it.first;
-            Free(name, Size(name));
-        }
-        Tenants.clear();
-    }
-
-    void TTenants::Add(const TString &name, ui32 nodes) {
+ 
+        Free(name, Size(name)); 
+        Tenants.erase(name); 
+    } 
+ 
+    void TTenants::Stop() { 
+        for (auto &it: Tenants) { 
+            const TString &name = it.first; 
+            Free(name, Size(name)); 
+        } 
+        Tenants.clear(); 
+    } 
+ 
+    void TTenants::Add(const TString &name, ui32 nodes) { 
         Y_VERIFY(Tenants.contains(name));
-        Y_VERIFY(Availabe() >= nodes);
-
-        return RunNodes(name, nodes);
-    }
-
-    void TTenants::Free(const TString &name, ui32 nodes) {
+        Y_VERIFY(Availabe() >= nodes); 
+ 
+        return RunNodes(name, nodes); 
+    } 
+ 
+    void TTenants::Free(const TString &name, ui32 nodes) { 
         Y_VERIFY(Tenants.contains(name));
-        Y_VERIFY(Size(name) >= nodes);
-
-        return StopNodes(name, nodes);
-    }
-
-    void TTenants::FreeNode(const TString &name, ui32 nodeIdx) {
+        Y_VERIFY(Size(name) >= nodes); 
+ 
+        return StopNodes(name, nodes); 
+    } 
+ 
+    void TTenants::FreeNode(const TString &name, ui32 nodeIdx) { 
         Y_VERIFY(Tenants.contains(name));
-        Y_VERIFY(Size(name) >= 1);
-
-        return StopPaticularNode(name, nodeIdx);
-    }
-
-    bool TTenants::IsStaticNode(ui32 nodeIdx) const {
-        return nodeIdx < Server->StaticNodes();
-    }
-
-    bool TTenants::IsActive(const TString &name, ui32 nodeIdx) const {
+        Y_VERIFY(Size(name) >= 1); 
+ 
+        return StopPaticularNode(name, nodeIdx); 
+    } 
+ 
+    bool TTenants::IsStaticNode(ui32 nodeIdx) const { 
+        return nodeIdx < Server->StaticNodes(); 
+    } 
+ 
+    bool TTenants::IsActive(const TString &name, ui32 nodeIdx) const { 
         const TVector<ui32>& nodes = List(name);
 #ifndef NDEBUG
-        Cerr << "IsActive: " << name << " -- " << nodeIdx << Endl;
-        for (auto& x: nodes) {
-            Cerr << " -- " << x;
-        }
-        Cerr << Endl;
+        Cerr << "IsActive: " << name << " -- " << nodeIdx << Endl; 
+        for (auto& x: nodes) { 
+            Cerr << " -- " << x; 
+        } 
+        Cerr << Endl; 
 #endif
-        return std::find(nodes.begin(), nodes.end(), nodeIdx) != nodes.end();
-    }
-
+        return std::find(nodes.begin(), nodes.end(), nodeIdx) != nodes.end(); 
+    } 
+ 
     const TVector<ui32> &TTenants::List(const TString &name) const {
         Y_VERIFY(Tenants.contains(name));
-
-        return Tenants.at(name);
-    }
-
-    ui32 TTenants::Size(const TString &name) const {
+ 
+        return Tenants.at(name); 
+    } 
+ 
+    ui32 TTenants::Size(const TString &name) const { 
         if (!Tenants.contains(name))
-            return 0;
-        return List(name).size();
-    }
-
-    ui32 TTenants::Size() const {
-        return Capacity() - Availabe();
-    }
-
-    ui32 TTenants::Availabe() const {
-        return VacantNodes.size();
-    }
-
-    ui32 TTenants::Capacity() const {
-        return Server->DynamicNodes();
-    }
-
+            return 0; 
+        return List(name).size(); 
+    } 
+ 
+    ui32 TTenants::Size() const { 
+        return Capacity() - Availabe(); 
+    } 
+ 
+    ui32 TTenants::Availabe() const { 
+        return VacantNodes.size(); 
+    } 
+ 
+    ui32 TTenants::Capacity() const { 
+        return Server->DynamicNodes(); 
+    } 
+ 
     TVector<ui32> &TTenants::Nodes(const TString &name) {
-        return Tenants[name];
-    }
-
-    void TTenants::StopNode(const TString, ui32 nodeIdx) {
-        Server->DestroyDynamicLocalService(nodeIdx);
-    }
-
-    void TTenants::RunNode(const TString &name, ui32 nodeIdx) {
-        Server->SetupDynamicLocalService(nodeIdx, name);
-    }
-
-    void TTenants::StopPaticularNode(const TString &name, ui32 nodeIdx) {
+        return Tenants[name]; 
+    } 
+ 
+    void TTenants::StopNode(const TString, ui32 nodeIdx) { 
+        Server->DestroyDynamicLocalService(nodeIdx); 
+    } 
+ 
+    void TTenants::RunNode(const TString &name, ui32 nodeIdx) { 
+        Server->SetupDynamicLocalService(nodeIdx, name); 
+    } 
+ 
+    void TTenants::StopPaticularNode(const TString &name, ui32 nodeIdx) { 
         TVector<ui32>& nodes = Nodes(name);
-
-        auto subj = std::find(nodes.begin(), nodes.end(), nodeIdx);
-        Y_VERIFY(subj != nodes.end());
-
-        StopNode(name, nodeIdx);
-
-        std::swap(*subj, nodes.back());
-        nodes.pop_back();
-        FreeNodeIdx(nodeIdx);
-    }
-
-    void TTenants::StopNodes(const TString &name, ui32 count) {
+ 
+        auto subj = std::find(nodes.begin(), nodes.end(), nodeIdx); 
+        Y_VERIFY(subj != nodes.end()); 
+ 
+        StopNode(name, nodeIdx); 
+ 
+        std::swap(*subj, nodes.back()); 
+        nodes.pop_back(); 
+        FreeNodeIdx(nodeIdx); 
+    } 
+ 
+    void TTenants::StopNodes(const TString &name, ui32 count) { 
         TVector<ui32>& nodes = Nodes(name);
-
-        for (ui32 num = 0; num < count && nodes; ++num) {
-            ui32 nodeIdx = nodes.back();
-            StopNode(name, nodeIdx);
-            nodes.pop_back();
-            FreeNodeIdx(nodeIdx);
-        }
-    }
-
-    void TTenants::RunNodes(const TString &name, ui32 count) {
+ 
+        for (ui32 num = 0; num < count && nodes; ++num) { 
+            ui32 nodeIdx = nodes.back(); 
+            StopNode(name, nodeIdx); 
+            nodes.pop_back(); 
+            FreeNodeIdx(nodeIdx); 
+        } 
+    } 
+ 
+    void TTenants::RunNodes(const TString &name, ui32 count) { 
         TVector<ui32>& nodes = Nodes(name);
-
-        for (ui32 num = 0; num < count; ++num) {
-            ui32 nodeIdx = AllocNodeIdx();
-            RunNode(name, nodeIdx);
-            nodes.push_back(nodeIdx);
-        }
-    }
-
-    ui32 TTenants::AllocNodeIdx() {
-        Y_VERIFY(VacantNodes);
-        PopHeap(VacantNodes.begin(), VacantNodes.end());
-        ui32 node = VacantNodes.back();
-        VacantNodes.pop_back();
-        return node;
-    }
-
-    void TTenants::FreeNodeIdx(ui32 nodeIdx) {
-        VacantNodes.push_back(nodeIdx);
-        PushHeap(VacantNodes.begin(), VacantNodes.end());
-    }
-
+ 
+        for (ui32 num = 0; num < count; ++num) { 
+            ui32 nodeIdx = AllocNodeIdx(); 
+            RunNode(name, nodeIdx); 
+            nodes.push_back(nodeIdx); 
+        } 
+    } 
+ 
+    ui32 TTenants::AllocNodeIdx() { 
+        Y_VERIFY(VacantNodes); 
+        PopHeap(VacantNodes.begin(), VacantNodes.end()); 
+        ui32 node = VacantNodes.back(); 
+        VacantNodes.pop_back(); 
+        return node; 
+    } 
+ 
+    void TTenants::FreeNodeIdx(ui32 nodeIdx) { 
+        VacantNodes.push_back(nodeIdx); 
+        PushHeap(VacantNodes.begin(), VacantNodes.end()); 
+    } 
+ 
     TServerSettings& TServerSettings::AddStoragePool(const TString& poolKind, const TString& poolName, ui32 numGroups, ui32 encryptionMode) {
         NKikimrBlobStorage::TDefineStoragePool& hddPool = StoragePoolTypes[poolKind];
         hddPool.SetBoxId(BOX_ID);
@@ -2461,20 +2461,20 @@ namespace Tests {
     }
 
     TServerSettings& TServerSettings::AddStoragePoolType(const TString& poolKind, ui32 encryptionMode) {
-        NKikimrBlobStorage::TDefineStoragePool hddPool;
+        NKikimrBlobStorage::TDefineStoragePool hddPool; 
         hddPool.SetBoxId(BOX_ID);
         hddPool.SetStoragePoolId(POOL_ID++);
-        hddPool.SetErasureSpecies("none");
-        hddPool.SetVDiskKind("Default");
-        hddPool.AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::ROT);
-        hddPool.SetKind(poolKind);
+        hddPool.SetErasureSpecies("none"); 
+        hddPool.SetVDiskKind("Default"); 
+        hddPool.AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::ROT); 
+        hddPool.SetKind(poolKind); 
         if (encryptionMode) {
             hddPool.SetEncryptionMode(encryptionMode);
         }
-        StoragePoolTypes[poolKind] = hddPool;
-        return *this;
-    }
-
-
+        StoragePoolTypes[poolKind] = hddPool; 
+        return *this; 
+    } 
+ 
+ 
 }
 }

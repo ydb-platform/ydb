@@ -54,7 +54,7 @@ namespace NKikimr {
 
             static ui64 keySalt = 0;
             ui64 salt = ++keySalt;
-            TString baseDir = Runtime.GetTempDir();
+            TString baseDir = Runtime.GetTempDir(); 
 
             if (Conf.UseDisk) {
                 MakeDirIfNotExist(baseDir.c_str());

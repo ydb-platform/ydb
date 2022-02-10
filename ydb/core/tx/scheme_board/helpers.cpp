@@ -16,7 +16,7 @@ TActorId MakeInterconnectProxyId(const ui32 nodeId) {
     return TActivationContext::InterconnectProxy(nodeId);
 }
 
-ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record) { 
     if (!record.HasPathDescription()) {
         return 0;
     }
@@ -34,53 +34,53 @@ ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     return self.GetPathVersion();
 }
 
-TPathId GetPathId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
-    if (record.HasPathId() && record.HasPathOwnerId()) {
-        return TPathId(record.GetPathOwnerId(), record.GetPathId());
-    }
-
-    // for compatibility look deeper if PathOwnerId hasn't been set
-    if (!record.HasPathDescription()) {
-        return TPathId();
-    }
-
-    const auto& pathDescription = record.GetPathDescription();
-    if (!pathDescription.HasSelf()) {
-        return TPathId();
-    }
-
-    const auto& self = pathDescription.GetSelf();
-
-    return TPathId(self.GetSchemeshardId(), self.GetPathId());
-}
-
-TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
-    if (!record.HasPathDescription()) {
-        return TDomainId();
-    }
-
-    const auto& pathDescription = record.GetPathDescription();
-    if (!pathDescription.HasDomainDescription()) {
-        return TDomainId();
-    }
-
+TPathId GetPathId(const NKikimrScheme::TEvDescribeSchemeResult &record) { 
+    if (record.HasPathId() && record.HasPathOwnerId()) { 
+        return TPathId(record.GetPathOwnerId(), record.GetPathId()); 
+    } 
+ 
+    // for compatibility look deeper if PathOwnerId hasn't been set 
+    if (!record.HasPathDescription()) { 
+        return TPathId(); 
+    } 
+ 
+    const auto& pathDescription = record.GetPathDescription(); 
+    if (!pathDescription.HasSelf()) { 
+        return TPathId(); 
+    } 
+ 
+    const auto& self = pathDescription.GetSelf(); 
+ 
+    return TPathId(self.GetSchemeshardId(), self.GetPathId()); 
+} 
+ 
+TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult &record) { 
+    if (!record.HasPathDescription()) { 
+        return TDomainId(); 
+    } 
+ 
+    const auto& pathDescription = record.GetPathDescription(); 
+    if (!pathDescription.HasDomainDescription()) { 
+        return TDomainId(); 
+    } 
+ 
     const auto& domainKey = pathDescription.GetDomainDescription().GetDomainKey();
-
+ 
     return TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId());
-}
-
-TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResult &record) {
-    if (!record.HasPathDescription()) {
-        return {};
-    }
-
-    const auto& pathDescription = record.GetPathDescription();
-    return TSet<ui64>(
-        pathDescription.GetAbandonedTenantsSchemeShards().begin(),
-        pathDescription.GetAbandonedTenantsSchemeShards().end()
+} 
+ 
+TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResult &record) { 
+    if (!record.HasPathDescription()) { 
+        return {}; 
+    } 
+ 
+    const auto& pathDescription = record.GetPathDescription(); 
+    return TSet<ui64>( 
+        pathDescription.GetAbandonedTenantsSchemeShards().begin(), 
+        pathDescription.GetAbandonedTenantsSchemeShards().end() 
     );
-}
-
+} 
+ 
 TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
     TAllocChunkSerializer serializer;
     Y_VERIFY(ev->SerializeToArcadiaStream(&serializer));

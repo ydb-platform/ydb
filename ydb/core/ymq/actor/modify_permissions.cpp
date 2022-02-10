@@ -105,8 +105,8 @@ private:
 
         auto proposeRequest = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL); 
         modifyScheme->SetWorkingDir(TString(workingDir));
         modifyScheme->MutableModifyACL()->SetName(TString(resource));
 

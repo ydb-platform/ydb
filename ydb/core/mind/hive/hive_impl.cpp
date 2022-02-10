@@ -46,10 +46,10 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
 void THive::Handle(TEvHive::TEvAdoptTablet::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvAdoptTablet");
     NKikimrHive::TEvAdoptTablet& rec = ev->Get()->Record;
-    Y_VERIFY(rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType());
+    Y_VERIFY(rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType()); 
     Execute(CreateAdoptTablet(rec, ev->Sender, ev->Cookie));
-}
-
+} 
+ 
 void THive::Handle(TEvents::TEvPoisonPill::TPtr&) {
     BLOG_D("Handle TEvents::TEvPoisonPill");
     Send(Tablet(), new TEvents::TEvPoisonPill);
@@ -157,8 +157,8 @@ void THive::Handle(TEvHive::TEvDeleteTablet::TPtr& ev) {
 
 void THive::Handle(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
     Execute(CreateDeleteOwnerTablets(ev));
-}
-
+} 
+ 
 void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
     Y_ENSURE_LOG(tablet->IsDeleting(), "tablet " << tablet->Id);
     Y_ENSURE_LOG(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty(), "tablet " << tablet->Id);
@@ -667,25 +667,25 @@ void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode>
 void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
     TFullTabletId tabletId(ev->Get()->TabletId);
     TTabletInfo* tablet = FindTablet(tabletId);
-    if (tablet == nullptr) {
+    if (tablet == nullptr) { 
         BLOG_W("THive::Handle::TEvKickTablet" <<
                    " TabletId=" << tabletId <<
                    " tablet not found");
-        return;
-    }
-
-    if (!tablet->IsAlive()) {
+        return; 
+    } 
+ 
+    if (!tablet->IsAlive()) { 
         BLOG_D("THive::Handle::TEvKickTablet" <<
                     " TabletId=" << tabletId <<
-                    " tablet isn't alive");
-        return;
-    }
-
+                    " tablet isn't alive"); 
+        return; 
+    } 
+ 
     BLOG_D("THive::Handle::TEvKickTablet TabletId=" << tabletId);
     TBestNodeResult result = FindBestNode(*tablet);
-    if (result.BestNode == nullptr) {
+    if (result.BestNode == nullptr) { 
         Execute(CreateRestartTablet(tabletId));
-    } else if (result.BestNode != tablet->Node) {
+    } else if (result.BestNode != tablet->Node) { 
         if (IsTabletMoveExpedient(*tablet, *result.BestNode)) {
             Execute(CreateRestartTablet(tabletId));
         }
@@ -828,7 +828,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
     BLOG_D("THive::OnActivateExecutor");
     TDomainsInfo* domainsInfo = AppData()->DomainsInfo.Get();
     HiveUid = domainsInfo->GetDefaultHiveUid(domainsInfo->Domains.begin()->first);
-    HiveDomain = domainsInfo->GetHiveDomainUid(HiveUid);
+    HiveDomain = domainsInfo->GetHiveDomainUid(HiveUid); 
     const TDomainsInfo::TDomain& domain = domainsInfo->GetDomain(HiveDomain);
     RootHiveId = domainsInfo->GetHive(domain.DefaultHiveUid);
     Y_VERIFY(HiveUid != Max<ui32>() && HiveDomain != TDomainsInfo::BadDomainId);
@@ -853,7 +853,7 @@ void THive::DefaultSignalTabletActive(const TActorContext& ctx) {
     Y_UNUSED(ctx);
 }
 
-
+ 
 void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
     ui32 channels = tablet.GetChannelCount();
     THashSet<TString> storagePoolsToRefresh;
@@ -867,8 +867,8 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
             if (!storagePool.IsFresh() || storagePool.ConfigurationGeneration != ConfigurationGeneration) {
                 storagePoolsToRefresh.insert(storagePool.Name);
             }
-        }
-    }
+        } 
+    } 
 
     if (!storagePoolsToRefresh.empty()) {
         // we had to refresh storage pool state from BSC
@@ -962,7 +962,7 @@ void THive::Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr &ev) {
 void THive::Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr &ev) {
     Execute(CreateDeleteTabletResult(ev));
 }
-
+ 
 template <>
 TNodeInfo* THive::SelectNode<NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATEGY_RANDOM>(const std::vector<THive::TSelectedNode>& selectedNodes) {
     if (selectedNodes.empty()) {
@@ -1472,9 +1472,9 @@ void THive::UpdateCounterBootQueueSize(ui64 bootQueueSize) {
 }
 
 bool THive::DomainHasNodes(const TSubDomainKey &domainKey) const {
-    return !DomainsView.IsEmpty(domainKey);
-}
-
+    return !DomainsView.IsEmpty(domainKey); 
+} 
+ 
 TResourceNormalizedValues THive::GetStDevResourceValues() const {
     TVector<TResourceNormalizedValues> values;
     values.reserve(Nodes.size());
@@ -1507,11 +1507,11 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
                    << " is expedient because the node is down");
         return true;
     }
-    if (!tablet.Node->IsAllowedToRunTablet(tablet)) {
+    if (!tablet.Node->IsAllowedToRunTablet(tablet)) { 
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is expedient because the current node is unappropriate target for the tablet");
-        return true;
-    }
+        return true; 
+    } 
     if (tablet.Node->Id == node.Id) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is not expedient because node is the same");
@@ -2039,10 +2039,10 @@ bool THive::IsValidMetricsNetwork(const NKikimrTabletBase::TMetrics& metrics) {
     return metrics.GetNetwork() > 1024/*1KBps*/;
 }
 
-TString THive::DebugDomainsActiveNodes() const {
-    return DomainsView.AsString();
-}
-
+TString THive::DebugDomainsActiveNodes() const { 
+    return DomainsView.AsString(); 
+} 
+ 
 void THive::AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NKikimrTabletBase::TMetrics& value) {
     aggregate.SetCPU(std::max(aggregate.GetCPU(), value.GetCPU()));
     aggregate.SetMemory(std::max(aggregate.GetMemory(), value.GetMemory()));

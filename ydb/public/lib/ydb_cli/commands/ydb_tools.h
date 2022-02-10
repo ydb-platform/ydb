@@ -87,24 +87,24 @@ private:
     TString DatabaseName;
 };
 
-class TCommandRename : public TTableCommand, public TCommandWithExamples {
-public:
-    TCommandRename();
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-
-private:
-    struct TItemFields {
-        TString Source;
-        TString Destination;
-        bool Replace = false;
-    };
-    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination, Replace);
-
-    TVector<TItem> Items;
-    TString DatabaseName;
-};
-
+class TCommandRename : public TTableCommand, public TCommandWithExamples { 
+public: 
+    TCommandRename(); 
+    virtual void Config(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override; 
+    virtual int Run(TConfig& config) override; 
+ 
+private: 
+    struct TItemFields { 
+        TString Source; 
+        TString Destination; 
+        bool Replace = false; 
+    }; 
+    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination, Replace); 
+ 
+    TVector<TItem> Items; 
+    TString DatabaseName; 
+}; 
+ 
 }
 }

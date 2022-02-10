@@ -114,7 +114,7 @@ private:
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = SplitPath(table);
+        entry.Path = SplitPath(table); 
         if (entry.Path.empty()) {
             return ReplyWithError(MSTATUS_ERROR, NTxProxy::TResultStatus::EStatus::ResolveError, "Invalid table path specified", ctx);
         }

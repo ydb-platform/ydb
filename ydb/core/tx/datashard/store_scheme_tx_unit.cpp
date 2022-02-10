@@ -48,10 +48,10 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
     ui64 ssTabletId = tx->GetSchemeShardId();
 
-    if (DataShard.GetCurrentSchemeShardId() == INVALID_TABLET_ID) {
-        DataShard.PersistCurrentSchemeShardId(ssTabletId, txc);
+    if (DataShard.GetCurrentSchemeShardId() == INVALID_TABLET_ID) { 
+        DataShard.PersistCurrentSchemeShardId(ssTabletId, txc); 
     } else {
-        Y_VERIFY(DataShard.GetCurrentSchemeShardId() == ssTabletId,
+        Y_VERIFY(DataShard.GetCurrentSchemeShardId() == ssTabletId, 
                  "Got scheme transaction from unknown SchemeShard %" PRIu64, ssTabletId);
     }
 
@@ -63,18 +63,18 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
         DataShard.StartFindSubDomainPathId();
     }
 
-    if (DataShard.GetPathOwnerId() == INVALID_TABLET_ID) {
-        if (tx->GetSchemeTx().HasCreateTable() && tx->GetSchemeTx().GetCreateTable().HasPathId()) { // message from new SS
-            ui64 ownerPathId = tx->GetSchemeTx().GetCreateTable().GetPathId().GetOwnerId();
-            DataShard.PersistOwnerPathId(ownerPathId, txc);
-        } else { // message from old SS
-            DataShard.PersistOwnerPathId(ssTabletId, txc);
-        }
-    }
-
-    if (!DataShard.GetProcessingParams()) {
+    if (DataShard.GetPathOwnerId() == INVALID_TABLET_ID) { 
+        if (tx->GetSchemeTx().HasCreateTable() && tx->GetSchemeTx().GetCreateTable().HasPathId()) { // message from new SS 
+            ui64 ownerPathId = tx->GetSchemeTx().GetCreateTable().GetPathId().GetOwnerId(); 
+            DataShard.PersistOwnerPathId(ownerPathId, txc); 
+        } else { // message from old SS 
+            DataShard.PersistOwnerPathId(ssTabletId, txc); 
+        } 
+    } 
+ 
+    if (!DataShard.GetProcessingParams()) { 
         DataShard.PersistProcessingParams(tx->GetProcessingParams(), txc);
-    }
+    } 
 
     TSchemaOperation schemeOp(op->GetTxId(), tx->GetSchemeTxType(), op->GetTarget(),
                              tx->GetSchemeShardId(), op->GetMinStep(), op->GetMaxStep(),

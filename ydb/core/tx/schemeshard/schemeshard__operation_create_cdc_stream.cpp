@@ -10,7 +10,7 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 namespace {
 
@@ -126,18 +126,18 @@ public:
         SetState(SelectStateFunc(state));
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override { 
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
         const auto& streamDesc = op.GetStreamDescription();
         const auto& streamName = streamDesc.GetName();
-        const auto acceptExisted = !Transaction.GetFailOnExist();
+        const auto acceptExisted = !Transaction.GetFailOnExist(); 
 
         LOG_N("TNewCdcStream Propose"
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << streamName);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()); 
 
         const auto tablePath = TPath::Resolve(workingDir, context.SS);
         {
@@ -197,21 +197,21 @@ public:
         }
 
         switch (streamDesc.GetMode()) {
-        case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-        case NKikimrSchemeOp::ECdcStreamModeUpdate:
-        case NKikimrSchemeOp::ECdcStreamModeNewImage:
-        case NKikimrSchemeOp::ECdcStreamModeOldImage:
-        case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+        case NKikimrSchemeOp::ECdcStreamModeKeysOnly: 
+        case NKikimrSchemeOp::ECdcStreamModeUpdate: 
+        case NKikimrSchemeOp::ECdcStreamModeNewImage: 
+        case NKikimrSchemeOp::ECdcStreamModeOldImage: 
+        case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: 
             break;
         default:
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() 
                 << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode()));
             return result;
         }
 
         TString errStr;
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr); 
             return result;
         }
 
@@ -237,7 +237,7 @@ public:
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateCdcStream, streamPath.Base()->PathId);
         txState.State = TTxState::Propose;
 
-        streamPath.Base()->PathState = NKikimrSchemeOp::EPathStateCreate;
+        streamPath.Base()->PathState = NKikimrSchemeOp::EPathStateCreate; 
         streamPath.Base()->CreateTxId = OperationId.GetTxId();
         streamPath.Base()->LastTxId = OperationId.GetTxId();
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
@@ -379,7 +379,7 @@ public:
         SetState(SelectStateFunc(state));
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override { 
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
         const auto& tableName = op.GetTableName();
@@ -389,7 +389,7 @@ public:
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << tableName << "/" << streamName);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()); 
 
         const auto workingDirPath = TPath::Resolve(workingDir, context.SS);
         {
@@ -435,7 +435,7 @@ public:
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
             return result;
         }
 
@@ -451,7 +451,7 @@ public:
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateCdcStreamAtTable, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
-        tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
+        tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter; 
         tablePath.Base()->LastTxId = OperationId.GetTxId();
 
         for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
@@ -503,13 +503,13 @@ ISubOperationBase::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETx
 }
 
 TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream); 
 
     LOG_D("CreateNewCdcStream"
         << ": opId# " << opId
         << ", tx# " << tx.ShortDebugString());
 
-    const auto acceptExisted = !tx.GetFailOnExist();
+    const auto acceptExisted = !tx.GetFailOnExist(); 
     const auto& op = tx.GetCreateCdcStream();
     const auto& tableName = op.GetTableName();
     const auto& streamDesc = op.GetStreamDescription();
@@ -548,7 +548,7 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
             checks
                 .IsResolved()
                 .NotUnderDeleting()
-                .FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted);
+                .FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted); 
         } else {
             checks
                 .NotEmpty()
@@ -570,39 +570,39 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
     }
 
     switch (streamDesc.GetMode()) {
-    case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-    case NKikimrSchemeOp::ECdcStreamModeUpdate:
-    case NKikimrSchemeOp::ECdcStreamModeNewImage:
-    case NKikimrSchemeOp::ECdcStreamModeOldImage:
-    case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+    case NKikimrSchemeOp::ECdcStreamModeKeysOnly: 
+    case NKikimrSchemeOp::ECdcStreamModeUpdate: 
+    case NKikimrSchemeOp::ECdcStreamModeNewImage: 
+    case NKikimrSchemeOp::ECdcStreamModeOldImage: 
+    case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: 
         break;
     default:
-        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder() 
             << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode()))};
     }
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)}; 
     }
 
     if (!context.SS->CheckLocks(tablePath.Base()->PathId, tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+        return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)}; 
     }
 
     TVector<ISubOperationBase::TPtr> result;
 
     {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
-        outTx.SetFailOnExist(!acceptExisted);
+        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl); 
+        outTx.SetFailOnExist(!acceptExisted); 
         outTx.MutableCreateCdcStream()->CopyFrom(op);
 
         result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
     }
 
     {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
-        outTx.SetFailOnExist(!acceptExisted);
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable); 
+        outTx.SetFailOnExist(!acceptExisted); 
         outTx.MutableCreateCdcStream()->CopyFrom(op);
 
         result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx));
@@ -674,5 +674,5 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
     return result;
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

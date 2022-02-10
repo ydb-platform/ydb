@@ -29,7 +29,7 @@ class TJsonCluster : public TActorBootstrapped<TJsonCluster> {
     TMap<TNodeId, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvTabletStateResponse>> TabletInfo;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult; 
     TSet<TNodeId> NodesAlive;
     TJsonSettings JsonSettings;
     ui32 Timeout;
@@ -95,7 +95,7 @@ public:
             TIntrusivePtr<TDomainsInfo> domains = AppData(ctx)->DomainsInfo;
             TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
             TString domainPath = "/" + domain->Name;
-            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
+            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath(); 
             record->SetPath(domainPath);
             record->MutableOptions()->SetReturnPartitioningInfo(false);
             record->MutableOptions()->SetReturnPartitionConfig(false);
@@ -203,8 +203,8 @@ public:
         RequestDone(ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext &ctx) {
-        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext &ctx) { 
+        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) { 
             DescribeResult = ev->Release();
         }
         RequestDone(ctx);
@@ -237,7 +237,7 @@ public:
             HFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
             HFunc(TEvWhiteboard::TEvBSGroupStateResponse, Handle);
             HFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
             HFunc(TEvents::TEvUndelivered, Undelivered);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -281,7 +281,7 @@ public:
             }
 
             if (DescribeResult) {
-                const NKikimrSchemeOp::TPathDescription& pathDescription(DescribeResult->GetRecord().GetPathDescription());
+                const NKikimrSchemeOp::TPathDescription& pathDescription(DescribeResult->GetRecord().GetPathDescription()); 
                 if (pathDescription.HasDomainDescription()) {
                     const NKikimrSubDomains::TDomainDescription& domainDescription(pathDescription.GetDomainDescription());
                     for (TTabletId tabletId : domainDescription.GetProcessingParams().GetCoordinators()) {

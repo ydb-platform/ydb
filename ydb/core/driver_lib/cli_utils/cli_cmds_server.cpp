@@ -29,7 +29,7 @@ protected:
     ui32 LogSamplingLevel; // log settings
     ui32 LogSamplingRate; // log settings
     TString LogFormat;// log settings
-    TString SysLogServiceTag; //unique tags for sys logs
+    TString SysLogServiceTag; //unique tags for sys logs 
     TString LogFileName; // log file name to initialize file log backend
     TString ClusterName; // log settings
 
@@ -49,13 +49,13 @@ protected:
     TString UDFsDir;
     TVector<TString> UDFsPaths;
     TString HostLabelOverride;
-    TString TenantName;
+    TString TenantName; 
     TString TenantDomain;
     TString TenantSlotType;
     TString TenantSlotId;
-    ui64 TenantCPU;
-    ui64 TenantMemory;
-    ui64 TenantNetwork;
+    ui64 TenantCPU; 
+    ui64 TenantMemory; 
+    ui64 TenantNetwork; 
     TVector<TString> NodeBrokerAddresses;
     ui32 NodeBrokerPort;
     bool NodeBrokerUseTls;
@@ -104,12 +104,12 @@ protected:
         MonitoringThreads = 10;
         RestartsCountFile = "";
         CompileInflightLimit = 100000;
-        TenantName = "";
+        TenantName = ""; 
         TenantSlotType = "default";
         TenantSlotId = "";
-        TenantCPU = 0;
-        TenantMemory = 0;
-        TenantNetwork = 0;
+        TenantCPU = 0; 
+        TenantMemory = 0; 
+        TenantNetwork = 0; 
         NodeBrokerPort = 0;
         NodeBrokerUseTls = false;
         FixedNodeID = false;
@@ -141,7 +141,7 @@ protected:
         config.Opts->AddLongOption("log-format", "log format to use; short skips the priority and timestamp")
             .DefaultValue("full").OptionalArgument("full|short|json").StoreResult(&LogFormat);
         config.Opts->AddLongOption("syslog", "send to syslog instead of stderr").NoArgument();
-        config.Opts->AddLongOption("syslog-service-tag", "unique tag for syslog").RequiredArgument("NAME").StoreResult(&SysLogServiceTag);
+        config.Opts->AddLongOption("syslog-service-tag", "unique tag for syslog").RequiredArgument("NAME").StoreResult(&SysLogServiceTag); 
         config.Opts->AddLongOption("log-file-name", "file name for log backend").RequiredArgument("NAME").StoreResult(&LogFileName);
         config.Opts->AddLongOption("tcp", "start tcp interconnect").NoArgument();
         config.Opts->AddLongOption('n', "node", "Node ID or 'static' to auto-detect using naming file and ic-port, or 'dynamic' for dynamic nodes, or 'dynamic-fixed' for dynamic nodes with infinite node ID lease (for dynamic storage nodes)")
@@ -167,19 +167,19 @@ protected:
         config.Opts->AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
         config.Opts->AddLongOption("host-label-override", "overrides host label for slot").RequiredArgument("NAME").StoreResult(&HostLabelOverride);
         config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'no', 'dynamic', '/<root>', '/<root>/<path_to_user>'}")
-            .RequiredArgument("NAME").StoreResult(&TenantName);
+            .RequiredArgument("NAME").StoreResult(&TenantName); 
         config.Opts->AddLongOption("tenant-slot-type", "set tenant slot type for dynamic tenant")
             .RequiredArgument("NAME").StoreResult(&TenantSlotType);
         config.Opts->AddLongOption("tenant-slot-id", "set tenant slot id (for static tenants it is used for monitoring)")
             .RequiredArgument("NAME").StoreResult(&TenantSlotId);
         config.Opts->AddLongOption("tenant-domain", "specify domain for dynamic tenant")
             .RequiredArgument("NAME").StoreResult(&TenantDomain);
-        config.Opts->AddLongOption("tenant-cpu", "specify CPU limit tenant binding")
-            .RequiredArgument("NUM").StoreResult(&TenantCPU);
-        config.Opts->AddLongOption("tenant-memory", "specify Memory limit for tenant binding")
-            .RequiredArgument("NUM").StoreResult(&TenantMemory);
-        config.Opts->AddLongOption("tenant-network", "specify Network limit for tenant binding")
-            .RequiredArgument("NUM").StoreResult(&TenantNetwork);
+        config.Opts->AddLongOption("tenant-cpu", "specify CPU limit tenant binding") 
+            .RequiredArgument("NUM").StoreResult(&TenantCPU); 
+        config.Opts->AddLongOption("tenant-memory", "specify Memory limit for tenant binding") 
+            .RequiredArgument("NUM").StoreResult(&TenantMemory); 
+        config.Opts->AddLongOption("tenant-network", "specify Network limit for tenant binding") 
+            .RequiredArgument("NUM").StoreResult(&TenantNetwork); 
         config.Opts->AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         config.Opts->AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
         config.Opts->AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
@@ -224,7 +224,7 @@ protected:
         config.Opts->AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH");
         config.Opts->AddLongOption("rb-file", "File with resource broker customizations").OptionalArgument("PATH");
-        config.Opts->AddLongOption("metering-file", "File with metering config").OptionalArgument("PATH");
+        config.Opts->AddLongOption("metering-file", "File with metering config").OptionalArgument("PATH"); 
         config.Opts->AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
                 .OptionalArgument("PATH").DefaultValue(RestartsCountFile).StoreResult(&RestartsCountFile);
         config.Opts->AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
@@ -431,7 +431,7 @@ protected:
         OPTION("sqs-file", SqsConfig);
         OPTION("feature-flags-file", FeatureFlags);
         OPTION("rb-file", ResourceBrokerConfig);
-        OPTION("metering-file", MeteringConfig);
+        OPTION("metering-file", MeteringConfig); 
         OPTION("kqp-file", KQPConfig);
         OPTION("incrhuge-file", IncrHugeConfig);
         OPTION("alloc-file", AllocatorConfig);
@@ -504,7 +504,7 @@ protected:
                 ythrow yexception() << "--suppress-version-check option is provided without static nameservice config";
             }
         }
-
+ 
         // apply options affecting UDF paths
         if (!AppConfig.HasUDFsDir())
             AppConfig.SetUDFsDir(UDFsDir);
@@ -969,7 +969,7 @@ protected:
         for (auto &node : result->Record().GetNodes()) {
             if (node.GetNodeId() == result->GetNodeId()) {
                 dnConfig.MutableNodeInfo()->CopyFrom(node);
-            } else {
+            } else { 
                 auto &info = *nsConfig.AddNode();
                 info.SetNodeId(node.GetNodeId());
                 info.SetAddress(node.GetAddress());

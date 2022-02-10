@@ -384,7 +384,7 @@ struct TShardedTableOptions {
     };
 
     struct TIndex {
-        using EType = NKikimrSchemeOp::EIndexType;
+        using EType = NKikimrSchemeOp::EIndexType; 
 
         TString Name;
         TVector<TString> IndexColumns;
@@ -393,24 +393,24 @@ struct TShardedTableOptions {
     };
 
     struct TCdcStream {
-        using EMode = NKikimrSchemeOp::ECdcStreamMode;
+        using EMode = NKikimrSchemeOp::ECdcStreamMode; 
 
         TString Name;
         EMode Mode;
     };
 
-#define TABLE_OPTION_IMPL(type, name, defaultValue) \
-    TSelf& name(type value) {\
-        name##_ = std::move(value); \
+#define TABLE_OPTION_IMPL(type, name, defaultValue) \ 
+    TSelf& name(type value) {\ 
+        name##_ = std::move(value); \ 
         return *this; \
     } \
     type name##_ = defaultValue
 
-#define TABLE_OPTION(type, name, defaultValue) TABLE_OPTION_IMPL(type, name, defaultValue)
+#define TABLE_OPTION(type, name, defaultValue) TABLE_OPTION_IMPL(type, name, defaultValue) 
 
     TABLE_OPTION(ui64, Shards, 1);
     TABLE_OPTION(bool, EnableOutOfOrder, true);
-    TABLE_OPTION(const NLocalDb::TCompactionPolicy*, Policy, nullptr);
+    TABLE_OPTION(const NLocalDb::TCompactionPolicy*, Policy, nullptr); 
     TABLE_OPTION(EShadowDataMode, ShadowData, EShadowDataMode::Default);
     TABLE_OPTION(TVector<TColumn>, Columns, (TVector<TColumn>{{"key", "Uint32", true, false}, {"value", "Uint32", false, false}}));
     TABLE_OPTION(TVector<TIndex>, Indexes, {});
@@ -623,6 +623,6 @@ struct IsTxResultComplete {
     }
 };
 
-void WaitTabletBecomesOffline(Tests::TServer::TPtr server, ui64 tabletId);
-
+void WaitTabletBecomesOffline(Tests::TServer::TPtr server, ui64 tabletId); 
+ 
 }

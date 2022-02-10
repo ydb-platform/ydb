@@ -54,7 +54,7 @@ private:
         Timer = { };
         SchemeShardPipe = Register(NTabletPipe::CreateClient(SelfId(), SchemeShardId));
         NTabletPipe::SendData(SelfId(), SchemeShardPipe,
-            new NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathId(TabletId));
+            new NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathId(TabletId)); 
         Become(&TThis::StateWork);
     }
 
@@ -65,7 +65,7 @@ private:
             sFunc(TEvents::TEvPoison, PassAway);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathIdResult, Handle);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathIdResult, Handle); 
         }
     }
 
@@ -91,10 +91,10 @@ private:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathIdResult::TPtr& ev) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathIdResult::TPtr& ev) { 
         const auto* msg = ev->Get();
 
-        if (msg->Record.GetStatus() != NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS) {
+        if (msg->Record.GetStatus() != NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS) { 
             // The request failed for some reason, we just stop trying in that case
             PassAway();
             return;

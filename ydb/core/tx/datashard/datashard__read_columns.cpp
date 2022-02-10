@@ -272,7 +272,7 @@ public:
         TMaybe<TSnapshotKey> snapshotKey;
         if (!ReadVersion.IsMax()) {
             // FIXME: protocol needs a full table id (both owner id and path id)
-            ui64 ownerId = Self->GetPathOwnerId();
+            ui64 ownerId = Self->GetPathOwnerId(); 
             snapshotKey = TSnapshotKey(ownerId, tableId, ReadVersion.Step, ReadVersion.TxId);
 
             // Check if readVersion is a valid snapshot

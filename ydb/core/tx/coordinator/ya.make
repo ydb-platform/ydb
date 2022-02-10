@@ -1,30 +1,30 @@
-LIBRARY()
-
-OWNER(
-    ddoarn
+LIBRARY() 
+ 
+OWNER( 
+    ddoarn 
     g:kikimr
-)
-
-SRCS(
-    coordinator.cpp
-    coordinator_impl.cpp
+) 
+ 
+SRCS( 
+    coordinator.cpp 
+    coordinator_impl.cpp 
     coordinator__acquire_read_step.cpp
-    coordinator__configure.cpp
-    coordinator__check.cpp
-    coordinator__init.cpp
-    coordinator__mediators_confirmations.cpp
-    coordinator__monitoring.cpp
-    coordinator__plan_step.cpp
-    coordinator__restart_mediator.cpp
-    coordinator__restore_transaction.cpp
-    coordinator__schema.cpp
-    coordinator__schema_upgrade.cpp
+    coordinator__configure.cpp 
+    coordinator__check.cpp 
+    coordinator__init.cpp 
+    coordinator__mediators_confirmations.cpp 
+    coordinator__monitoring.cpp 
+    coordinator__plan_step.cpp 
+    coordinator__restart_mediator.cpp 
+    coordinator__restore_transaction.cpp 
+    coordinator__schema.cpp 
+    coordinator__schema_upgrade.cpp 
     coordinator__stop_guard.cpp
-    defs.h
-    mediator_queue.cpp
-)
-
-PEERDIR(
+    defs.h 
+    mediator_queue.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/actors/helpers
     library/cpp/actors/interconnect
@@ -37,6 +37,6 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/util
-)
-
-END()
+) 
+ 
+END() 

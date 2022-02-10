@@ -1,4 +1,4 @@
-#include "mon.h"
+#include "mon.h" 
 
 #include <ydb/core/base/counters.h>
 
@@ -11,13 +11,13 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
     , DataReqGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "datareq"))
     , AllocPoolCounters(counters, "tx_proxy")
 {
-    CacheRequestLatency = TxGroup->GetHistogram("CacheRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
-
+    CacheRequestLatency = TxGroup->GetHistogram("CacheRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1)); 
+ 
     Navigate = TxGroup->GetCounter("Navigate/Request", true);
-    NavigateLatency = TxGroup->GetHistogram("Navigate/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
+    NavigateLatency = TxGroup->GetHistogram("Navigate/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1)); 
 
     SchemeRequest = TxGroup->GetCounter("Propose/SchemeRequest", true);
-    SchemeRequestLatency = TxGroup->GetHistogram("SchemeRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
+    SchemeRequestLatency = TxGroup->GetHistogram("SchemeRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1)); 
     SchemeRequestProxyNotReady = TxGroup->GetCounter("Propose/SchemeRequestProxyNotReady", true);
     MakeRequest = TxGroup->GetCounter("Propose/MakeRequest", true);
     SnapshotRequest = TxGroup->GetCounter("Propose/SnapshotRequest", true);
@@ -96,10 +96,10 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
     ResolveKeySetLegacySuccess = DataReqGroup->GetCounter("ResolveKeySet/LegacySuccess", true);
     ResolveKeySetMiniKQLSuccess = DataReqGroup->GetCounter("ResolveKeySet/MiniKQLSuccess", true);
     ResolveKeySetReadTableSuccess = DataReqGroup->GetCounter("ResolveKeySet/ReadTableSuccess", true);
-    ResolveKeySetRedirectUnavaible = DataReqGroup->GetCounter("ResolveKeySet/RedirectUnavaible", true);
+    ResolveKeySetRedirectUnavaible = DataReqGroup->GetCounter("ResolveKeySet/RedirectUnavaible", true); 
     ResolveKeySetFail = DataReqGroup->GetCounter("ResolveKeySet/Fail", true);
     ResolveKeySetWrongRequest = DataReqGroup->GetCounter("ResolveKeySet/WrongRequest", true);
-    ResolveKeySetDomainLocalityFail = DataReqGroup->GetCounter("ResolveKeySet/DomainLocalityFail", true);
+    ResolveKeySetDomainLocalityFail = DataReqGroup->GetCounter("ResolveKeySet/DomainLocalityFail", true); 
 
     ClientConnectedOk = DataReqGroup->GetCounter("ClientConnected/Ok", true);
     ClientConnectedError = DataReqGroup->GetCounter("ClientConnected/Error", true);

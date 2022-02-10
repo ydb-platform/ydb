@@ -12,8 +12,8 @@ namespace NKikimr {
 
 namespace Tests {
 
-class TYqlServer : public TServer {
-public:
+class TYqlServer : public TServer { 
+public: 
     TYqlServer(const TServerSettings& settings)
         : TServer(settings, false)
     {
@@ -26,11 +26,11 @@ public:
         Initialize();
     }
 
-    TYqlServer& operator=(TYqlServer&& server) = default;
+    TYqlServer& operator=(TYqlServer&& server) = default; 
 
     void ResumeYqlExecutionActor();
 
-protected:
+protected: 
     void Initialize();
 
     TAutoPtr<IThreadPool> YqlQueue;

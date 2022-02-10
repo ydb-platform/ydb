@@ -265,7 +265,7 @@ bool TSchemeModifier::SetExecutorResourceProfile(const TString &name)
     return std::exchange(Scheme.Executor.ResourceProfile, name) != name;
 }
 
-bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TCompactionPolicy &proto)
+bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TCompactionPolicy &proto) 
 {
     auto *table = Table(tid);
     TIntrusiveConstPtr<TCompactionPolicy> policy(new TCompactionPolicy(proto));

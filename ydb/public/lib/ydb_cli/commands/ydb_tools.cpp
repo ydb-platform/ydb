@@ -282,97 +282,97 @@ int TCommandCopy::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-//  Rename
-////////////////////////////////////////////////////////////////////////////////
-
-TCommandRename::TCommandRename()
-    : TTableCommand("rename", {}, "Rename or repalce table(s)")
-{
-    TItem::DefineFields({
-        {"Source", {{"source", "src"}, "Source table path", true}},
-        {"Destination", {{"destination", "dst"}, "Destination table path", true}},
-        {"Replace", {{"replace", "force"}, "Replace destination table with source table, no replacement by default", false}}
-    });
-}
-
-void TCommandRename::Config(TConfig& config) {
-    AddExamplesOption(config);
-    TTableCommand::Config(config);
-
-    config.SetFreeArgsNum(0);
-
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
-        .RequiredArgument("PROPERTY=VALUE,...");
-
-    AddCommandExamples(
-        TExampleSetBuilder()
-            .BeginExample()
-                .Title("Rename one table")
-                .Text("ydb tools rename --item src=table_a,dst=table_b")
-            .EndExample()
-
-            .BeginExample()
-                .Title("Rename using full and relative paths")
-                .Text("ydb tools rename --item src=/root/db/dir/table,dst=dir/other_table")
-            .EndExample()
-
-            .BeginExample()
-                .Title("Rename several tables together")
-                .Text("ydb tools rename --item src=table_a,dst=table_b --item src=table_c,dst=table_d")
-            .EndExample()
-
-            .BeginExample()
-                .Title("Rename tables as a chain in order to replace a table without loosing it")
-                .Text("ydb tools rename --item src=prod_table,dst=backup --item src=test_table,dst=prod_table")
-            .EndExample()
-
-            .BeginExample()
-                .Title("Rename tables as a replacement in order to replace a table with new one and delete older one")
-                .Text("ydb tools rename --item src=test_table,dst=prod_table,replace=true")
-            .EndExample()
-
-            .Build()
-       );
-
-    CheckExamples(config);
-}
-
-void TCommandRename::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-
-    Items = TItem::Parse(config, "item");
-    if (Items.empty()) {
-        throw TMissUseException() << "At least one item should be provided";
-    }
-
-    for (auto& item : Items) {
-        NConsoleClient::AdjustPath(item.Source, config);
-        NConsoleClient::AdjustPath(item.Destination, config);
-    }
-}
-
-int TCommandRename::Run(TConfig& config) {
-    TVector<NYdb::NTable::TRenameItem> renameItems;
-    renameItems.reserve(Items.size());
-    for (auto& item : Items) {
-        renameItems.emplace_back(item.Source, item.Destination);
-        if (item.Replace) {
-            renameItems.back().SetReplaceDestination();
-        }
-    }
-    ThrowOnError(
-        GetSession(config).RenameTables(
-            renameItems,
-            FillSettings(NTable::TRenameTablesSettings())
-        ).GetValueSync()
-    );
-    return EXIT_SUCCESS;
-}
-
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+//  Rename 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+TCommandRename::TCommandRename() 
+    : TTableCommand("rename", {}, "Rename or repalce table(s)") 
+{ 
+    TItem::DefineFields({ 
+        {"Source", {{"source", "src"}, "Source table path", true}}, 
+        {"Destination", {{"destination", "dst"}, "Destination table path", true}}, 
+        {"Replace", {{"replace", "force"}, "Replace destination table with source table, no replacement by default", false}} 
+    }); 
+} 
+ 
+void TCommandRename::Config(TConfig& config) { 
+    AddExamplesOption(config); 
+    TTableCommand::Config(config); 
+ 
+    config.SetFreeArgsNum(0); 
+ 
+    TStringBuilder itemHelp; 
+    itemHelp << "[At least one] Item specification" << Endl 
+        << "  Possible property names:" << Endl 
+        << TItem::FormatHelp(2); 
+    config.Opts->AddLongOption("item", itemHelp) 
+        .RequiredArgument("PROPERTY=VALUE,..."); 
+ 
+    AddCommandExamples( 
+        TExampleSetBuilder() 
+            .BeginExample() 
+                .Title("Rename one table") 
+                .Text("ydb tools rename --item src=table_a,dst=table_b") 
+            .EndExample() 
+ 
+            .BeginExample() 
+                .Title("Rename using full and relative paths") 
+                .Text("ydb tools rename --item src=/root/db/dir/table,dst=dir/other_table") 
+            .EndExample() 
+ 
+            .BeginExample() 
+                .Title("Rename several tables together") 
+                .Text("ydb tools rename --item src=table_a,dst=table_b --item src=table_c,dst=table_d") 
+            .EndExample() 
+ 
+            .BeginExample() 
+                .Title("Rename tables as a chain in order to replace a table without loosing it") 
+                .Text("ydb tools rename --item src=prod_table,dst=backup --item src=test_table,dst=prod_table") 
+            .EndExample() 
+ 
+            .BeginExample() 
+                .Title("Rename tables as a replacement in order to replace a table with new one and delete older one") 
+                .Text("ydb tools rename --item src=test_table,dst=prod_table,replace=true") 
+            .EndExample() 
+ 
+            .Build() 
+       ); 
+ 
+    CheckExamples(config); 
+} 
+ 
+void TCommandRename::Parse(TConfig& config) { 
+    TClientCommand::Parse(config); 
+ 
+    Items = TItem::Parse(config, "item"); 
+    if (Items.empty()) { 
+        throw TMissUseException() << "At least one item should be provided"; 
+    } 
+ 
+    for (auto& item : Items) { 
+        NConsoleClient::AdjustPath(item.Source, config); 
+        NConsoleClient::AdjustPath(item.Destination, config); 
+    } 
+} 
+ 
+int TCommandRename::Run(TConfig& config) { 
+    TVector<NYdb::NTable::TRenameItem> renameItems; 
+    renameItems.reserve(Items.size()); 
+    for (auto& item : Items) { 
+        renameItems.emplace_back(item.Source, item.Destination); 
+        if (item.Replace) { 
+            renameItems.back().SetReplaceDestination(); 
+        } 
+    } 
+    ThrowOnError( 
+        GetSession(config).RenameTables( 
+            renameItems, 
+            FillSettings(NTable::TRenameTablesSettings()) 
+        ).GetValueSync() 
+    ); 
+    return EXIT_SUCCESS; 
+} 
+ 
 } // NYdb::NConsoleClient

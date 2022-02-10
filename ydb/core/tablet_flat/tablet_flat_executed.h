@@ -90,33 +90,33 @@ private:
 };
 
 }}
-
-#define STFUNC_TABLET_INIT(NAME, HANDLERS)                                                           \
-    void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
-            HANDLERS                                                                                \
-            default:                                                                                \
-                TTabletExecutedFlat::StateInitImpl(ev, ctx);                                        \
-        }                                                                                           \
-    }
-
-#define STFUNC_TABLET_DEF(NAME, HANDLERS)                                                            \
-    void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
-            HANDLERS                                                                                \
-            default:                                                                                \
-                if (!TTabletExecutedFlat::HandleDefaultEvents(ev, ctx))                             \
-                    Y_VERIFY_DEBUG(false, "%s: unexpected event type: %" PRIx32 " event: %s",       \
-                                   __func__, ev->GetTypeRewrite(),                                  \
+ 
+#define STFUNC_TABLET_INIT(NAME, HANDLERS)                                                           \ 
+    void NAME(STFUNC_SIG) {                                                                         \ 
+        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \ 
+            HANDLERS                                                                                \ 
+            default:                                                                                \ 
+                TTabletExecutedFlat::StateInitImpl(ev, ctx);                                        \ 
+        }                                                                                           \ 
+    } 
+ 
+#define STFUNC_TABLET_DEF(NAME, HANDLERS)                                                            \ 
+    void NAME(STFUNC_SIG) {                                                                         \ 
+        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \ 
+            HANDLERS                                                                                \ 
+            default:                                                                                \ 
+                if (!TTabletExecutedFlat::HandleDefaultEvents(ev, ctx))                             \ 
+                    Y_VERIFY_DEBUG(false, "%s: unexpected event type: %" PRIx32 " event: %s",       \ 
+                                   __func__, ev->GetTypeRewrite(),                                  \ 
                                    ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");    \
-        }                                                                                           \
-    }
-
-#define STFUNC_TABLET_IGN(NAME, HANDLERS)                                                           \
-    void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
-            HANDLERS                                                                                \
-            default:                                                                                \
-                TTabletExecutedFlat::HandleDefaultEvents(ev, ctx);                                  \
-        }                                                                                           \
-    }
+        }                                                                                           \ 
+    } 
+ 
+#define STFUNC_TABLET_IGN(NAME, HANDLERS)                                                           \ 
+    void NAME(STFUNC_SIG) {                                                                         \ 
+        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \ 
+            HANDLERS                                                                                \ 
+            default:                                                                                \ 
+                TTabletExecutedFlat::HandleDefaultEvents(ev, ctx);                                  \ 
+        }                                                                                           \ 
+    } 

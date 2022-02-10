@@ -85,7 +85,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
 
     class TUploadRowsRequestBuilder {
     public:
-        void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
+        void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) { 
             Request.Reset(new TEvDataShard::TEvUnsafeUploadRowsRequest());
             Request->Record.SetTableId(tableInfo.GetId());
 
@@ -467,7 +467,7 @@ public:
         return "s3";
     }
 
-    explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
+    explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo) 
         : DataShard(dataShard)
         , TxId(txId)
         , Settings(TS3Settings::FromRestoreTask(task))
@@ -515,7 +515,7 @@ private:
     const ui64 TxId;
     const TS3Settings Settings;
     const TTableInfo TableInfo;
-    const NKikimrSchemeOp::TTableDescription Scheme;
+    const NKikimrSchemeOp::TTableDescription Scheme; 
 
     const ui32 Retries;
     ui32 Attempt = 0;
@@ -538,7 +538,7 @@ private:
 
 }; // TS3Downloader
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {
+IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) { 
     return new TS3Downloader(dataShard, txId, task, info);
 }
 

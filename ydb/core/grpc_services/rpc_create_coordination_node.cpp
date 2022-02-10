@@ -40,9 +40,9 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus); 
         auto kesus = modifyScheme->MutableKesus();
         kesus->SetName(name);
         kesus->MutableConfig()->CopyFrom(req->config());

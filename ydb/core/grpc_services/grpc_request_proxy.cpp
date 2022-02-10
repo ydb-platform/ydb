@@ -192,9 +192,9 @@ private:
         TString databaseName;
         const TDatabaseInfo* database = nullptr;
         bool skipResourceCheck = false;
-        // do not check connect rights for the deprecated requests without database
-        // remove this along with AllowYdbRequestsWithoutDatabase flag
-        bool skipCheckConnectRigths = false;
+        // do not check connect rights for the deprecated requests without database 
+        // remove this along with AllowYdbRequestsWithoutDatabase flag 
+        bool skipCheckConnectRigths = false; 
 
         if (state.State == NGrpc::TAuthState::AS_NOT_PERFORMED) {
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
@@ -207,7 +207,7 @@ private:
                 } else {
                     databaseName = RootDatabase;
                     skipResourceCheck = true;
-                    skipCheckConnectRigths = true;
+                    skipCheckConnectRigths = true; 
                 }
             }
             auto it = Databases.find(databaseName);
@@ -253,7 +253,7 @@ private:
 
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
-                database->SecurityObject, event.Release(), Counters, skipCheckConnectRigths));
+                database->SecurityObject, event.Release(), Counters, skipCheckConnectRigths)); 
             return;
         }
 
@@ -578,7 +578,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvDeleteSessionRequest, PreHandle);
         HFunc(TEvCopyTableRequest, PreHandle);
         HFunc(TEvCopyTablesRequest, PreHandle);
-        HFunc(TEvRenameTablesRequest, PreHandle);
+        HFunc(TEvRenameTablesRequest, PreHandle); 
         HFunc(TEvDescribeTableRequest, PreHandle);
         HFunc(TEvReadTableRequest, PreHandle);
         HFunc(TEvExplainDataQueryRequest, PreHandle);

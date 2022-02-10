@@ -1010,7 +1010,7 @@ public:
             Y_VERIFY((needResolving + needAskOffset + needAskStatus + needAskFetch + metadataOnly) == 1);
             ++TopicsAnswered;
             auto it = TopicInfo.find(topic);
-            Y_VERIFY(it != TopicInfo.end(), "topic '%s'", topic.c_str());
+            Y_VERIFY(it != TopicInfo.end(), "topic '%s'", topic.c_str()); 
             it->second.Config = pqDescr.GetPQTabletConfig();
             it->second.Config.SetVersion(pqDescr.GetAlterVersion());
             it->second.NumParts = pqDescr.PartitionsSize();

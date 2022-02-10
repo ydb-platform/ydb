@@ -12,13 +12,13 @@ namespace NKikimr {
 namespace NViewer {
 
 using namespace NActors;
-using NSchemeShard::TEvSchemeShard;
+using NSchemeShard::TEvSchemeShard; 
 
 class TJsonDescribe : public TViewerPipeClient<TJsonDescribe> {
     using TBase = TViewerPipeClient<TJsonDescribe>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult; 
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
 
@@ -32,7 +32,7 @@ public:
         , Event(ev)
     {}
 
-    void FillParams(NKikimrSchemeOp::TDescribePath* record, const TCgiParameters& params) {
+    void FillParams(NKikimrSchemeOp::TDescribePath* record, const TCgiParameters& params) { 
         if (params.Has("path")) {
             record->SetPath(params.Get("path"));
         }
@@ -59,7 +59,7 @@ public:
         InitConfig(params);
 
         if (params.Has("schemeshard_id")) {
-            THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
+            THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(); 
             FillParams(&request->Record, params);
             ui64 schemeShardId = FromStringWithDefault<ui64>(params.Get("schemeshard_id"));
             SendRequestToPipe(ConnectTabletPipe(schemeShardId), request.Release());
@@ -91,7 +91,7 @@ public:
         if (DescribeResult != nullptr) {
             TProtoToJson::ProtoToJson(json, DescribeResult->GetRecord(), JsonSettings);
             switch (DescribeResult->GetRecord().GetStatus()) {
-            case NKikimrScheme::StatusAccessDenied:
+            case NKikimrScheme::StatusAccessDenied: 
                 headers = HTTPFORBIDDENJSON;
                 break;
             default:
@@ -115,7 +115,7 @@ template <>
 struct TJsonRequestSchema<TJsonDescribe> {
     static TString GetSchema() {
         TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::ProtoRecordType>(stream);
+        TProtoToJson::ProtoToJsonSchema<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::ProtoRecordType>(stream); 
         return stream.Str();
     }
 };

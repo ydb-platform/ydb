@@ -9,11 +9,11 @@ namespace NSchemeBoard {
 
 struct TTwoPartDescription {
     TString PreSerialized;
-    NKikimrScheme::TEvDescribeSchemeResult Record;
+    NKikimrScheme::TEvDescribeSchemeResult Record; 
 
     TTwoPartDescription() = default;
 
-    explicit TTwoPartDescription(TString preSerialized, NKikimrScheme::TEvDescribeSchemeResult record)
+    explicit TTwoPartDescription(TString preSerialized, NKikimrScheme::TEvDescribeSchemeResult record) 
         : PreSerialized(std::move(preSerialized))
         , Record(std::move(record))
     {

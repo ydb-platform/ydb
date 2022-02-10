@@ -22,7 +22,7 @@ using NClient::TValue;
 using IEngineFlat = NMiniKQL::IEngineFlat;
 using namespace NKikimr::NDataShard;
 using namespace NKikimr::NDataShard::NKqpHelpers;
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 using namespace Tests;
 
 using TActiveTxPtr = std::shared_ptr<TActiveTransaction>;
@@ -2533,7 +2533,7 @@ namespace {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
-        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable); 
         tx.SetWorkingDir(root);
         auto &desc = *tx.MutableCreateTable();
         desc.SetName(name);

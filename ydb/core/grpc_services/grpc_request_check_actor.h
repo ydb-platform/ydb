@@ -74,13 +74,13 @@ public:
         const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
         TIntrusivePtr<TSecurityObject> securityObject,
         TAutoPtr<TEventHandle<TEvent>> request,
-        TGrpcProxyCounters::TPtr counters,
-        bool skipCheckConnectRigths)
+        TGrpcProxyCounters::TPtr counters, 
+        bool skipCheckConnectRigths) 
         : Owner_(owner)
         , Request_(std::move(request))
         , Counters_(counters)
         , SecurityObject_(std::move(securityObject))
-        , SkipCheckConnectRigths_(skipCheckConnectRigths)
+        , SkipCheckConnectRigths_(skipCheckConnectRigths) 
     {
         GrpcRequestBaseCtx_ = Request_->Get();
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
@@ -96,11 +96,11 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TBase::Become(&TSelf::DbAccessStateFunc);
 
-        {
-            auto [error, issue] = CheckConnectRight();
-            if (error) {
-                ReplyUnauthorizedAndDie(*issue);
-                return;
+        { 
+            auto [error, issue] = CheckConnectRight(); 
+            if (error) { 
+                ReplyUnauthorizedAndDie(*issue); 
+                return; 
             }
         }
 
@@ -328,67 +328,67 @@ private:
         TBase::PassAway();
     }
 
-    std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
-        if (SkipCheckConnectRigths_) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return {false, std::nullopt};
-        }
-
-        if (TBase::IsUserAdmin()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, user is a admin"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return {false, std::nullopt};
-        }
-
-        if (!TBase::GetSecurityToken()) {
-            if (!TBase::IsTokenRequired()) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                            "Skip check permission connect db, token is not required, there is no token provided"
-                            << ", database: " << CheckedDatabaseName_
-                            << ", user: " << TBase::GetUserSID()
-                            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-                return {false, std::nullopt};
-            }
-        }
-
-        if (!SecurityObject_) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, no SecurityObject_"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return {false, std::nullopt};
-        }
-
-        const ui32 access = NACLib::ConnectDatabase;
-        if (SecurityObject_->CheckAccess(access, TBase::GetSerializedToken())) {
-            return {false, std::nullopt};
-        }
-
-        const TString error = TStringBuilder()
-            << "User has no permission to perform query on this database"
-            << ", database: " << CheckedDatabaseName_
-            << ", user: " << TBase::GetUserSID()
-            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName();
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "%s", error.c_str());
-
-        Counters_->IncDatabaseAccessDenyCounter();
-
-        if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
-            return {false, std::nullopt};
-        }
-
-        LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", error.c_str());
-        return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};
-    }
-
+    std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() { 
+        if (SkipCheckConnectRigths_) { 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, 
+                        "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user" 
+                        << ", database: " << CheckedDatabaseName_ 
+                        << ", user: " << TBase::GetUserSID() 
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()); 
+            return {false, std::nullopt}; 
+        } 
+ 
+        if (TBase::IsUserAdmin()) { 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, 
+                        "Skip check permission connect db, user is a admin" 
+                        << ", database: " << CheckedDatabaseName_ 
+                        << ", user: " << TBase::GetUserSID() 
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()); 
+            return {false, std::nullopt}; 
+        } 
+ 
+        if (!TBase::GetSecurityToken()) { 
+            if (!TBase::IsTokenRequired()) { 
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, 
+                            "Skip check permission connect db, token is not required, there is no token provided" 
+                            << ", database: " << CheckedDatabaseName_ 
+                            << ", user: " << TBase::GetUserSID() 
+                            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()); 
+                return {false, std::nullopt}; 
+            } 
+        } 
+ 
+        if (!SecurityObject_) { 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, 
+                        "Skip check permission connect db, no SecurityObject_" 
+                        << ", database: " << CheckedDatabaseName_ 
+                        << ", user: " << TBase::GetUserSID() 
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()); 
+            return {false, std::nullopt}; 
+        } 
+ 
+        const ui32 access = NACLib::ConnectDatabase; 
+        if (SecurityObject_->CheckAccess(access, TBase::GetSerializedToken())) { 
+            return {false, std::nullopt}; 
+        } 
+ 
+        const TString error = TStringBuilder() 
+            << "User has no permission to perform query on this database" 
+            << ", database: " << CheckedDatabaseName_ 
+            << ", user: " << TBase::GetUserSID() 
+            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName(); 
+        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "%s", error.c_str()); 
+ 
+        Counters_->IncDatabaseAccessDenyCounter(); 
+ 
+        if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) { 
+            return {false, std::nullopt}; 
+        } 
+ 
+        LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", error.c_str()); 
+        return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)}; 
+    } 
+ 
     const TActorId Owner_;
     TAutoPtr<TEventHandle<TEvent>> Request_;
     TGrpcProxyCounters::TPtr Counters_;
@@ -396,7 +396,7 @@ private:
     TString CheckedDatabaseName_;
     IRequestProxyCtx* GrpcRequestBaseCtx_;
     NRpcService::TRlConfig* RlConfig = nullptr;
-    bool SkipCheckConnectRigths_ = false;
+    bool SkipCheckConnectRigths_ = false; 
     std::vector<std::pair<TString, TString>> Attributes_;
 };
 
@@ -441,10 +441,10 @@ IActor* CreateGrpcRequestCheckActor(
     const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
     TIntrusivePtr<TSecurityObject> securityObject,
     TAutoPtr<TEventHandle<TEvent>> request,
-    TGrpcProxyCounters::TPtr counters,
-    bool skipCheckConnectRigths) {
+    TGrpcProxyCounters::TPtr counters, 
+    bool skipCheckConnectRigths) { 
 
-    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRigths);
+    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRigths); 
 }
 
 }

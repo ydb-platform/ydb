@@ -104,7 +104,7 @@ class SchemeStatus(enum.IntEnum):
     StatusNameConflict = 6
     StatusInvalidParameter = 7
     StatusMultipleModifications = 8
-    ProxyShardNotAvailable = 13
+    ProxyShardNotAvailable = 13 
 
 
 @enum.unique

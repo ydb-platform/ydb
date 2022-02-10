@@ -16,7 +16,7 @@ from .kikimr_cluster_interface import KiKiMRClusterInterface
 from . import blockstore
 import yaml
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 DEFAULT_INTERCONNECT_PORT = 19001
 DEFAULT_MBUS_PORT = 2134

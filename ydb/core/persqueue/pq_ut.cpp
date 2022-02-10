@@ -331,7 +331,7 @@ Y_UNIT_TEST(TestCheckACL) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
+            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult); 
             tc.Runtime->DispatchEvents(options);
         }
 
@@ -344,7 +344,7 @@ Y_UNIT_TEST(TestCheckACL) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
+            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult); 
             tc.Runtime->DispatchEvents(options);
         }
 
@@ -362,7 +362,7 @@ Y_UNIT_TEST(TestCheckACL) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
+            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult); 
             tc.Runtime->DispatchEvents(options);
         }
 

@@ -17,7 +17,7 @@ public:
 
     bool CheckTable(TOperation::TPtr op, ui64 ownerId, ui64 pathId) {
         // FIXME: tables must use proper owner id when addressed
-        if (ownerId != DataShard.GetPathOwnerId() ||
+        if (ownerId != DataShard.GetPathOwnerId() || 
             !DataShard.GetUserTables().contains(pathId))
         {
             BuildResult(op)->AddError(

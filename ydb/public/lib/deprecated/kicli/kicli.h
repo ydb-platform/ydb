@@ -47,8 +47,8 @@ class TUnbindedQuery;
 class TRetryQueue;
 class TKikimr;
 
-using TTablePartitionConfig = NKikimrSchemeOp::TPartitionConfig;
-using TModifyScheme = NKikimrSchemeOp::TModifyScheme;
+using TTablePartitionConfig = NKikimrSchemeOp::TPartitionConfig; 
+using TModifyScheme = NKikimrSchemeOp::TModifyScheme; 
 
 class TType {
 public:
@@ -563,7 +563,7 @@ class TSchemaObject {
     // KiKiMR DB schema object, used for schema construction and initialization
     friend class TKikimr;
 public:
-    /// @sa NKikimrSchemeOp::EPathType
+    /// @sa NKikimrSchemeOp::EPathType 
     enum class EPathType : ui32 {
         Unknown = 0,
         Directory,
@@ -573,7 +573,7 @@ public:
         RtmrVolume,
         BlockStoreVolume,
         Kesus,
-        SolomonVolume,
+        SolomonVolume, 
         FileStore,
         OlapStore,
         OlapTable,

@@ -61,7 +61,7 @@ private:
 
     void RequestSchemeShard(const TString& path) {
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
-        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
+        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath(); 
         record->SetPath(path);
 
         Send(MakeTxProxyID(), navigateRequest.release());
@@ -75,7 +75,7 @@ private:
     STATEFN(WaitSchemeShardResponse) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse); 
         }
     }
 
@@ -114,13 +114,13 @@ private:
         }
     }
 
-    void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         switch (status) {
-            case NKikimrScheme::StatusSuccess: {
+            case NKikimrScheme::StatusSuccess: { 
                 const auto& pathDescription = record.GetPathDescription();
-                const NKikimrSchemeOp::TDirEntry& entry = pathDescription.GetSelf();
+                const NKikimrSchemeOp::TDirEntry& entry = pathDescription.GetSelf(); 
 
                 TSecurityObject secObjWithACL(entry.GetOwner(), entry.GetACL(), false);
                 TSecurityObject secObjWithEffectiveACL(entry.GetOwner(), entry.GetEffectiveACL(), false);
@@ -139,7 +139,7 @@ private:
 
                 break;
             }
-            case NKikimrScheme::StatusPathDoesNotExist: {
+            case NKikimrScheme::StatusPathDoesNotExist: { 
                 MakeError(MutableErrorDesc(), NErrors::INVALID_PARAMETER_VALUE, Sprintf("Path does not exist: %s.", SanitizeNodePath(Path_).c_str()));
                 break;
             }

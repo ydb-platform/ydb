@@ -15,7 +15,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
         const TString& name,
         const Ydb::PersQueue::V1::TopicSettings& settings,
-        NKikimrSchemeOp::TModifyScheme& modifyScheme,
+        NKikimrSchemeOp::TModifyScheme& modifyScheme, 
         const TActorContext& ctx,
         bool alter,
         TString& error
@@ -257,8 +257,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         {
             Y_UNUSED(name);
             const auto& response = DescribeSchemeResult->Get()->Request.Get()->ResultSet.front();
-            NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+            NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme()); 
+            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup); 
             modifyScheme.SetWorkingDir(workingDir);
 
             auto* config = modifyScheme.MutableAlterPersQueueGroup();

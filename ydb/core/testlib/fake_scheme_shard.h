@@ -72,7 +72,7 @@ public:
     void StateWork(STFUNC_SIG) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeScheme, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeScheme, Handle); 
             HFunc(TEvents::TEvPoisonPill, Handle);
         }
     }
@@ -83,11 +83,11 @@ public:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx) { 
         const auto& record = ev->Get()->Record;
         UNIT_ASSERT(record.GetPathId() == 1);
-        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder> response =
-            new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder();
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder> response = 
+            new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder(); 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD State->ACL.GetACL().SerializeToString(&out);
         response->Record.MutablePathDescription()->MutableSelf()->SetACL(out);

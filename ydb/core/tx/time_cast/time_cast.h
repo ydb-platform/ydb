@@ -1,7 +1,7 @@
 #pragma once
-
+ 
 #include "defs.h"
-
+ 
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/tx_mediator_timecast.pb.h>
 
@@ -43,21 +43,21 @@ struct TEvMediatorTimecast {
 
     struct TEvRegisterTablet : public TEventLocal<TEvRegisterTablet, EvRegisterTablet> {
         const ui64 TabletId;
-        NKikimrSubDomains::TProcessingParams ProcessingParams;
+        NKikimrSubDomains::TProcessingParams ProcessingParams; 
 
-
-        TEvRegisterTablet(ui64 tabletId, const NKikimrSubDomains::TProcessingParams &processing)
+ 
+        TEvRegisterTablet(ui64 tabletId, const NKikimrSubDomains::TProcessingParams &processing) 
             : TabletId(tabletId)
-            , ProcessingParams(processing)
+            , ProcessingParams(processing) 
         {}
 
         TString ToString() const {
             TStringStream str;
             str << "{TEvRegisterTablet";
             str << " TabletId# " << TabletId;
-            if (ProcessingParams.HasVersion()) {
-                str << " ProcessingParams { " <<  ProcessingParams.ShortDebugString() << " }";
-            }
+            if (ProcessingParams.HasVersion()) { 
+                str << " ProcessingParams { " <<  ProcessingParams.ShortDebugString() << " }"; 
+            } 
             str << "}";
             return str.Str();
         }

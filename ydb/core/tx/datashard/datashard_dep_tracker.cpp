@@ -57,10 +57,10 @@ void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& 
     state.ImmediateWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
 }
 
-void TDependencyTracker::RemoveSchema(const TPathId& tableId) noexcept {
-    Tables.erase(tableId.LocalPathId);
-}
-
+void TDependencyTracker::RemoveSchema(const TPathId& tableId) noexcept { 
+    Tables.erase(tableId.LocalPathId); 
+} 
+ 
 void TDependencyTracker::ClearTmpRead() noexcept {
     TmpRead.clear();
 }

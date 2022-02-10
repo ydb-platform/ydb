@@ -46,7 +46,7 @@ class NemesisProcess(threading.Thread):
         self.__initial_sleep = initial_sleep
 
         self.daemon = True
-        self.__logger = logger.getChild(self.__class__.__name__)
+        self.__logger = logger.getChild(self.__class__.__name__) 
 
     @property
     def __nemesis_list(self):

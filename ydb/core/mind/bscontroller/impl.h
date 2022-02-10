@@ -1487,7 +1487,7 @@ private:
             const NKikimrBlobStorage::EEntityStatus entityStatus);
 
     void ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result);
-
+ 
     void DefaultSignalTabletActive(const TActorContext&) override
     {} // do nothing, we will signal tablet active explicitly after initialization
 

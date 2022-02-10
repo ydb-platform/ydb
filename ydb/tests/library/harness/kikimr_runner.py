@@ -21,14 +21,14 @@ from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_
 from library.python import resource
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 
-def get_unique_path_for_current_test(output_path, sub_folder):
-    test_name = yatest_common.context.test_name or ""
+def get_unique_path_for_current_test(output_path, sub_folder): 
+    test_name = yatest_common.context.test_name or "" 
     test_name = test_name.replace(':', '_')
 
-    return os.path.join(output_path, test_name, sub_folder)
+    return os.path.join(output_path, test_name, sub_folder) 
 
 
 def ensure_path_exists(path):
@@ -292,7 +292,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.__wait_for_bs_controller_to_start()
         self.__add_bs_box()
 
-        pools = {}
+        pools = {} 
 
         for p in self.__configurator.dynamic_storage_pools:
             self.add_storage_pool(
@@ -300,10 +300,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 kind=p['kind'],
                 pdisk_user_kind=p['pdisk_user_kind'],
             )
-            pools[p['name']] = p['kind']
+            pools[p['name']] = p['kind'] 
 
         self.client.bind_storage_pools(self.domain_name, pools)
-        default_pool_name = list(pools.keys())[0]
+        default_pool_name = list(pools.keys())[0] 
         self.default_channel_bindings = {idx: default_pool_name for idx in range(3)}
         logger.info("Cluster started and initialized")
 
@@ -380,7 +380,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         return ret
 
     def stop(self):
-        saved_exceptions = []
+        saved_exceptions = [] 
 
         for slot in self.slots.values():
             exception = self.__stop_node(slot)
@@ -394,7 +394,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         self.__port_allocator.release_ports()
 
-        if saved_exceptions:
+        if saved_exceptions: 
             raise daemon.SeveralDaemonErrors(saved_exceptions)
 
     @property

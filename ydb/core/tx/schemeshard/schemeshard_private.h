@@ -4,25 +4,25 @@
 #include "schemeshard_identificators.h"
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 struct TEvPrivate {
     enum EEv {
         EvProgressOperation = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
         EvOperationPlanStep,
-        EvCommitTenantUpdate,
-        EvUndoTenantUpdate,
+        EvCommitTenantUpdate, 
+        EvUndoTenantUpdate, 
         EvRunConditionalErase,
-        EvIndexBuildBilling,
+        EvIndexBuildBilling, 
         EvImportSchemeReady,
-        EvServerlessStorageBilling,
+        EvServerlessStorageBilling, 
         EvCleanDroppedPaths,
         EvCleanDroppedSubDomains,
         EvSubscribeToShardDeletion,
         EvNotifyShardDeleted,
         EvRunBackgroundCompaction,
-        EvCompletePublication,
-        EvCompleteBarrier,
+        EvCompletePublication, 
+        EvCompleteBarrier, 
         EvEnd
     };
 
@@ -32,7 +32,7 @@ struct TEvPrivate {
     // and it should run all the actions associated with this state
     struct TEvProgressOperation: public TEventLocal<TEvProgressOperation, EvProgressOperation> {
         const ui64 TxId;
-        const ui32 TxPartId;
+        const ui32 TxPartId; 
 
         TEvProgressOperation(ui64 txId, ui32 part)
             : TxId(txId)
@@ -50,29 +50,29 @@ struct TEvPrivate {
         {}
     };
 
-    struct TEvCommitTenantUpdate: public TEventLocal<TEvCommitTenantUpdate, EvCommitTenantUpdate> {
-        TEvCommitTenantUpdate()
-        {}
-    };
-
-    struct TEvUndoTenantUpdate: public TEventLocal<TEvUndoTenantUpdate, EvUndoTenantUpdate> {
-        TEvUndoTenantUpdate()
-        {}
-    };
-
+    struct TEvCommitTenantUpdate: public TEventLocal<TEvCommitTenantUpdate, EvCommitTenantUpdate> { 
+        TEvCommitTenantUpdate() 
+        {} 
+    }; 
+ 
+    struct TEvUndoTenantUpdate: public TEventLocal<TEvUndoTenantUpdate, EvUndoTenantUpdate> { 
+        TEvUndoTenantUpdate() 
+        {} 
+    }; 
+ 
     struct TEvRunConditionalErase: public TEventLocal<TEvRunConditionalErase, EvRunConditionalErase> {
     };
 
-    struct TEvIndexBuildingMakeABill: public TEventLocal<TEvIndexBuildingMakeABill, EvIndexBuildBilling> {
-        const ui64 BuildId;
-        const TInstant SendAt;
-
-        TEvIndexBuildingMakeABill(ui64 id, TInstant sendAt)
-            : BuildId(id)
-            , SendAt(std::move(sendAt))
-        {}
-    };
-
+    struct TEvIndexBuildingMakeABill: public TEventLocal<TEvIndexBuildingMakeABill, EvIndexBuildBilling> { 
+        const ui64 BuildId; 
+        const TInstant SendAt; 
+ 
+        TEvIndexBuildingMakeABill(ui64 id, TInstant sendAt) 
+            : BuildId(id) 
+            , SendAt(std::move(sendAt)) 
+        {} 
+    }; 
+ 
     struct TEvImportSchemeReady: public TEventLocal<TEvImportSchemeReady, EvImportSchemeReady> {
         const ui64 ImportId;
         const ui32 ItemIdx;
@@ -87,11 +87,11 @@ struct TEvPrivate {
         {}
     };
 
-    struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> {
-        TEvServerlessStorageBilling()
-        {}
-    };
-
+    struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> { 
+        TEvServerlessStorageBilling() 
+        {} 
+    }; 
+ 
     struct TEvCleanDroppedPaths : public TEventLocal<TEvCleanDroppedPaths, EvCleanDroppedPaths> {
         TEvCleanDroppedPaths() = default;
     };
@@ -116,47 +116,47 @@ struct TEvPrivate {
         { }
     };
 
-    struct TEvCompletePublication: public TEventLocal<TEvCompletePublication, EvCompletePublication> {
-        const TOperationId OpId;
-        const TPathId PathId;
-        const ui64 Version;
-
-        TEvCompletePublication(const TOperationId& opId, const TPathId& pathId, ui64 version)
-            : OpId(opId)
-            , PathId(pathId)
-            , Version(version)
-        {}
-
-        TString ToString() const {
-            return TStringBuilder() << ToStringHeader()
-                                    << " {"
-                                    << " OpId: " << OpId
-                                    << " PathId: " << PathId
-                                    << " Version: " << Version
-                                    << " }";
-        }
-    };
-
-    struct TEvCompleteBarrier: public TEventLocal<TEvCompleteBarrier, EvCompleteBarrier> {
-        const TTxId TxId;
-        const TString Name;
-
-        TEvCompleteBarrier(const TTxId txId, const TString name)
-            : TxId(txId)
-            , Name(name)
-        {}
-
-        TString ToString() const {
-            return TStringBuilder() << ToStringHeader()
-                                    << " {"
-                                    << " TxId: " << TxId
-                                    << " Name: " << Name
-                                    << " }";
-        }
-    };
-
-
+    struct TEvCompletePublication: public TEventLocal<TEvCompletePublication, EvCompletePublication> { 
+        const TOperationId OpId; 
+        const TPathId PathId; 
+        const ui64 Version; 
+ 
+        TEvCompletePublication(const TOperationId& opId, const TPathId& pathId, ui64 version) 
+            : OpId(opId) 
+            , PathId(pathId) 
+            , Version(version) 
+        {} 
+ 
+        TString ToString() const { 
+            return TStringBuilder() << ToStringHeader() 
+                                    << " {" 
+                                    << " OpId: " << OpId 
+                                    << " PathId: " << PathId 
+                                    << " Version: " << Version 
+                                    << " }"; 
+        } 
+    }; 
+ 
+    struct TEvCompleteBarrier: public TEventLocal<TEvCompleteBarrier, EvCompleteBarrier> { 
+        const TTxId TxId; 
+        const TString Name; 
+ 
+        TEvCompleteBarrier(const TTxId txId, const TString name) 
+            : TxId(txId) 
+            , Name(name) 
+        {} 
+ 
+        TString ToString() const { 
+            return TStringBuilder() << ToStringHeader() 
+                                    << " {" 
+                                    << " TxId: " << TxId 
+                                    << " Name: " << Name 
+                                    << " }"; 
+        } 
+    }; 
+ 
+ 
 }; // TEvPrivate
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

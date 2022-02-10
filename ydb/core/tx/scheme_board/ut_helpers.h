@@ -202,24 +202,24 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
 
         TAppPrepare app;
         AddDomain(runtime, app, "Root", 0, 0, TTestTxConfig::Hive, TTestTxConfig::SchemeShard);
-        SetupChannelProfiles(app, 0, 1);
+        SetupChannelProfiles(app, 0, 1); 
         SetupTabletServices(runtime, &app, true);
     }
 
     static void BootSchemeShard(TTestActorRuntime& runtime, ui64 tabletId) {
-        using namespace NSchemeShard;
+        using namespace NSchemeShard; 
 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
-        auto init = new TEvSchemeShard::TEvInitRootShard(edge, 32, "Root");
+        auto init = new TEvSchemeShard::TEvInitRootShard(edge, 32, "Root"); 
         runtime.SendToPipe(tabletId, edge, init, 0, GetPipeConfigWithRetries());
-        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInitRootShardResult>(edge);
+        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInitRootShardResult>(edge); 
 
         UNIT_ASSERT(ev->Get());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetOrigin(), tabletId);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized); 
     }
 
     static void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId) {
@@ -253,30 +253,30 @@ public:
         BootHive(*Context, TTestTxConfig::Hive);
     }
 
-    void TurnOnTabletsScheduling() {
-        if (SchedulingGuard) {
-            return;
-        }
-
+    void TurnOnTabletsScheduling() { 
+        if (SchedulingGuard) { 
+            return; 
+        } 
+ 
         TActorId sender = Context->AllocateEdgeActor();
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         tabletIds.push_back((ui64)TTestTxConfig::SchemeShard);
         for (auto x: xrange(TTestTxConfig::FakeHiveTablets,  TTestTxConfig::FakeHiveTablets + 10)) {
-            tabletIds.push_back(x);
-        }
-
-        SchedulingGuard = CreateTabletScheduledEventsGuard(tabletIds, *Context, sender);
-
-        // make schemeShard visible for ScheduledEventsGuard
-        // trigger actor resolving for existed tablet
+            tabletIds.push_back(x); 
+        } 
+ 
+        SchedulingGuard = CreateTabletScheduledEventsGuard(tabletIds, *Context, sender); 
+ 
+        // make schemeShard visible for ScheduledEventsGuard 
+        // trigger actor resolving for existed tablet 
         RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, sender);
-    }
-
+    } 
+ 
     void TearDown() override {
-        SchedulingGuard.Reset();
+        SchedulingGuard.Reset(); 
         CoordinatorState.Drop();
         HiveState.Drop();
-        Context.Reset();
+        Context.Reset(); 
     }
 
 protected:
@@ -285,53 +285,53 @@ protected:
 private:
     TFakeCoordinator::TState::TPtr CoordinatorState;
     TFakeHiveState::TPtr HiveState;
-    THolder<ITabletScheduledEventsGuard> SchedulingGuard;
+    THolder<ITabletScheduledEventsGuard> SchedulingGuard; 
 
 }; // TTestWithSchemeshard
 
-NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe(
+NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe( 
     const TString& path,
-    TPathId pathId,
-    ui64 version = 1,
-    TDomainId domainId = TDomainId()
+    TPathId pathId, 
+    ui64 version = 1, 
+    TDomainId domainId = TDomainId() 
 );
 
 TSchemeBoardEvents::TEvUpdate* GenerateUpdate(
-    const NKikimrScheme::TEvDescribeSchemeResult& describe,
+    const NKikimrScheme::TEvDescribeSchemeResult& describe, 
     ui64 owner = 1,
     ui64 generation = 1,
     bool isDeletion = false
 );
 
-struct TCombinationsArgs {
-    TString Path;
-    TPathId PathId;
-    ui64 Version;
-    TDomainId DomainId;
-
-    ui64 OwnerId;
-    ui64 Generation;
-    bool IsDeletion;
-
-    TSchemeBoardEvents::TEvUpdate* GenerateUpdate() const {
-        return ::NKikimr::NSchemeBoard::GenerateUpdate(GenerateDescribe(), OwnerId, Generation, IsDeletion);
-    }
-
-    NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe() const {
-        return ::NKikimr::NSchemeBoard::GenerateDescribe(Path, PathId, Version, DomainId);
-    }
-
-    using TSuperId = std::tuple<TDomainId, bool, TPathId, ui64>;
-
-    TSuperId GetSuperId() const {
-        return {DomainId, IsDeletion, PathId, Version};
-    }
-};
-
-TVector<TCombinationsArgs> GenerateCombinationsDomainRoot(TString path = TString("/Root/Tenant"), ui64 gssOwnerID = 800, TVector<ui64> tenantsOwners = TVector<ui64>{900, 910});
-TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(TString path,
-                                                            ui64 gssID, TVector<ui64> tssIDs,
-                                                            ui64 gssLocalPathId, ui64 tssLocalPathId);
-
+struct TCombinationsArgs { 
+    TString Path; 
+    TPathId PathId; 
+    ui64 Version; 
+    TDomainId DomainId; 
+ 
+    ui64 OwnerId; 
+    ui64 Generation; 
+    bool IsDeletion; 
+ 
+    TSchemeBoardEvents::TEvUpdate* GenerateUpdate() const { 
+        return ::NKikimr::NSchemeBoard::GenerateUpdate(GenerateDescribe(), OwnerId, Generation, IsDeletion); 
+    } 
+ 
+    NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe() const { 
+        return ::NKikimr::NSchemeBoard::GenerateDescribe(Path, PathId, Version, DomainId); 
+    } 
+ 
+    using TSuperId = std::tuple<TDomainId, bool, TPathId, ui64>; 
+ 
+    TSuperId GetSuperId() const { 
+        return {DomainId, IsDeletion, PathId, Version}; 
+    } 
+}; 
+ 
+TVector<TCombinationsArgs> GenerateCombinationsDomainRoot(TString path = TString("/Root/Tenant"), ui64 gssOwnerID = 800, TVector<ui64> tenantsOwners = TVector<ui64>{900, 910}); 
+TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(TString path, 
+                                                            ui64 gssID, TVector<ui64> tssIDs, 
+                                                            ui64 gssLocalPathId, ui64 tssLocalPathId); 
+ 
 } // NSchemeBoard
 } // NKikimr

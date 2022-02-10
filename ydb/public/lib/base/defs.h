@@ -45,7 +45,7 @@ namespace NTxProxy {
     XX(NotImplemented, 3) \
     XX(ResolveError, 4) \
     XX(AccessDenied, 5) \
-    XX(DomainLocalityError, 6) \
+    XX(DomainLocalityError, 6) \ 
     \
     XX(ProxyNotReady, 16) \
     XX(ProxyAccepted, 17) \

@@ -1,9 +1,9 @@
 LIBRARY(run)
 
-OWNER(
-    ddoarn
+OWNER( 
+    ddoarn 
     g:kikimr
-)
+) 
 
 IF (PROFILE_MEMORY_ALLOCATIONS)
     CFLAGS(

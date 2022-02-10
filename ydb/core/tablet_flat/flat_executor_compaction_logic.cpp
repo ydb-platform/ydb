@@ -221,10 +221,10 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
         table.Policy = info.CompactionPolicy;
 
         auto newStrategyType = scheme.CompactionStrategyFor(info.Id);
-        Y_VERIFY(newStrategyType != NKikimrSchemeOp::CompactionStrategyUnset);
+        Y_VERIFY(newStrategyType != NKikimrSchemeOp::CompactionStrategyUnset); 
 
         if (table.StrategyType != newStrategyType) {
-            if (table.StrategyType != NKikimrSchemeOp::CompactionStrategyUnset) {
+            if (table.StrategyType != NKikimrSchemeOp::CompactionStrategyUnset) { 
                 result.StrategyChanges.push_back({ info.Id, newStrategyType });
                 StrategyChanging(table);
             }
@@ -268,19 +268,19 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
 
 THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrSchemeOp::ECompactionStrategy strategy) 
 {
     switch (strategy) {
-        case NKikimrSchemeOp::CompactionStrategyGenerational:
+        case NKikimrSchemeOp::CompactionStrategyGenerational: 
             return NTable::CreateGenCompactionStrategy(
                     tableId, Backend, Broker, Time, TaskNameSuffix);
 
-        case NKikimrSchemeOp::CompactionStrategySharded:
+        case NKikimrSchemeOp::CompactionStrategySharded: 
             return NTable::CreateShardedCompactionStrategy(
                     tableId, Backend, Broker, Logger, Time, TaskNameSuffix);
 
         default:
-            Y_FAIL("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());
+            Y_FAIL("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str()); 
     }
 }
 

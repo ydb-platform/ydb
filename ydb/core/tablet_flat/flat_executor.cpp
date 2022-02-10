@@ -4275,7 +4275,7 @@ void TExecutor::Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const
 void TExecutor::CommitCompactionChanges(
         ui32 tableId,
         const NTable::TCompactionChanges& changes,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrSchemeOp::ECompactionStrategy strategy) 
 {
     if (!changes.SliceChanges && !changes.StateChanges) {
         // Don't bother unless there's something to do
@@ -4305,7 +4305,7 @@ void TExecutor::CommitCompactionChanges(
 void TExecutor::ApplyCompactionChanges(
         TCompactionChangesCtx& ctx,
         const NTable::TCompactionChanges& changes,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrSchemeOp::ECompactionStrategy strategy) 
 {
     const ui32 tableId = ctx.Proto.GetTableId();
 

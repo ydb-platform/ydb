@@ -29,14 +29,14 @@ struct Schema : NIceDb::Schema {
         struct SubdomainVersion : Column<10, NScheme::NTypeIds::Uint64> {};
         struct ConfirmedSubdomain : Column<11, NScheme::NTypeIds::Uint64> {};
         struct TimeCastBucketsPerMediator : Column<12, NScheme::NTypeIds::Uint32> {};
-        struct Attributes : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TAlterUserAttributes; };
+        struct Attributes : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TAlterUserAttributes; }; 
         struct Generation : Column<14, NScheme::NTypeIds::Uint64> {};
         // DomainId {
         struct SchemeShardId : Column<15, NScheme::NTypeIds::Uint64> {};
         struct PathId : Column<16, NScheme::NTypeIds::Uint64> {};
         // } // DomainId
         struct ErrorCode : Column<17, NScheme::NTypeIds::Uint32> {};
-        struct IsExternalSubDomain : Column<18, NScheme::NTypeIds::Bool> {};
+        struct IsExternalSubDomain : Column<18, NScheme::NTypeIds::Bool> {}; 
         struct IsExternalHive : Column<19, NScheme::NTypeIds::Bool> {};
         struct AreResourcesShared : Column<20, NScheme::NTypeIds::Bool> {};
         // SharedDomainId {

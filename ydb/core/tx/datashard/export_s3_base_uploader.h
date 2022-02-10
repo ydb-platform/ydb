@@ -376,7 +376,7 @@ public:
 
     explicit TS3UploaderBase(
             const TActorId& dataShard, ui64 txId,
-            const NKikimrSchemeOp::TBackupTask& task,
+            const NKikimrSchemeOp::TBackupTask& task, 
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme)
         : Settings(TS3Settings::FromBackupTask(task))
         , DataShard(dataShard)

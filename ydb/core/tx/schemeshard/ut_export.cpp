@@ -70,14 +70,14 @@ namespace {
                     ExternalSchemeShard: true
                     ExternalHive: false
                     Name: "%s"
-                    StoragePools {
-                      Name: "name_User_kind_hdd-1"
-                      Kind: "common"
-                    }
-                    StoragePools {
-                      Name: "name_User_kind_hdd-2"
-                      Kind: "external"
-                    }
+                    StoragePools { 
+                      Name: "name_User_kind_hdd-1" 
+                      Kind: "common" 
+                    } 
+                    StoragePools { 
+                      Name: "name_User_kind_hdd-2" 
+                      Kind: "external" 
+                    } 
                 )", TStringBuf(dbName).RNextTok('/').data()));
                 env.TestWaitNotification(runtime, txId);
             }
@@ -276,23 +276,23 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
 
     Y_UNIT_TEST(CancelUponCreatingExportDirShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) { 
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir;
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record 
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir; 
         });
     }
 
     Y_UNIT_TEST(CancelUponCopyingTablesShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) { 
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables;
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record 
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables; 
         });
     }
 
@@ -304,12 +304,12 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         UNIT_ASSERT(s3Mock.Start());
 
         Cancel(tables, Sprintf(request.c_str(), port), [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) { 
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record 
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup; 
         });
     }
 
@@ -408,9 +408,9 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         THolder<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvSchemeShard::EvModifySchemeTransaction:
+            case TEvSchemeShard::EvModifySchemeTransaction: 
                 break;
-            case TEvSchemeShard::EvNotifyTxCompletionResult:
+            case TEvSchemeShard::EvNotifyTxCompletionResult: 
                 if (dropNotification) {
                     delayed.Reset(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -420,8 +420,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
 
-            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
-            if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>(); 
+            if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) { 
                 dropNotification = true;
             }
 
@@ -492,9 +492,9 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         THolder<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvSchemeShard::EvModifySchemeTransaction:
+            case TEvSchemeShard::EvModifySchemeTransaction: 
                 break;
-            case TEvSchemeShard::EvNotifyTxCompletionResult:
+            case TEvSchemeShard::EvNotifyTxCompletionResult: 
                 if (dropNotification) {
                     delayed.Reset(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -504,8 +504,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
 
-            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
-            if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>(); 
+            if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) { 
                 dropNotification = true;
             }
 

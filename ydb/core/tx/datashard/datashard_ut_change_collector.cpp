@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"ikey", "Uint32", false, false},
             })
             .Indexes({
-                {"by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                {"by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}, 
             });
     }
 
@@ -416,8 +416,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"ikey2", "Uint32", false, false},
             })
             .Indexes({
-                {"by_ikey1", {"ikey1"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
-                {"by_ikey2", {"ikey2"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                {"by_ikey1", {"ikey1"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}, 
+                {"by_ikey2", {"ikey2"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}, 
             });
     }
 
@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"ikey", "Uint32", false, false},
             })
             .Indexes({
-                {"by_ikey_pkey", {"ikey", "pkey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                {"by_ikey_pkey", {"ikey", "pkey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}, 
             });
     }
 
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"value", "Uint32", false, false},
             })
             .Indexes({
-                {"by_ikey", {"ikey"}, {"value"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                {"by_ikey", {"ikey"}, {"value"}, NKikimrSchemeOp::EIndexTypeGlobalAsync}, 
             });
     }
 
@@ -644,19 +644,19 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     TCdcStream KeysOnly() {
         return TCdcStream{
-            "keys_stream", NKikimrSchemeOp::ECdcStreamModeKeysOnly
+            "keys_stream", NKikimrSchemeOp::ECdcStreamModeKeysOnly 
         };
     }
 
     TCdcStream Updates() {
         return TCdcStream{
-            "updates_stream", NKikimrSchemeOp::ECdcStreamModeUpdate
+            "updates_stream", NKikimrSchemeOp::ECdcStreamModeUpdate 
         };
     }
 
     TCdcStream NewAndOldImages() {
         return TCdcStream{
-            "new_and_old_images", NKikimrSchemeOp::ECdcStreamModeNewAndOldImages
+            "new_and_old_images", NKikimrSchemeOp::ECdcStreamModeNewAndOldImages 
         };
     }
 
@@ -747,7 +747,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 {"ikey", "Uint32", false, false},
             })
             .Indexes({
-                {"by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                {"by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}, 
             });
     }
 

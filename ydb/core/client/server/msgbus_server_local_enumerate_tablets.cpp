@@ -75,10 +75,10 @@ public:
             TActorId invalidId;
             return invalidId;
         }
-        ui32 nodeId = IsNodeIdPresent ? NodeId : ctx.SelfID.NodeId();
-        ui32 hiveUid = domainsInfo.GetDefaultHiveUid(DomainUid);
-        ui64 hiveId = domainsInfo.GetHive(hiveUid);
-        return MakeLocalRegistrarID(nodeId, hiveId);
+        ui32 nodeId = IsNodeIdPresent ? NodeId : ctx.SelfID.NodeId(); 
+        ui32 hiveUid = domainsInfo.GetDefaultHiveUid(DomainUid); 
+        ui64 hiveId = domainsInfo.GetHive(hiveUid); 
+        return MakeLocalRegistrarID(nodeId, hiveId); 
     }
 
     TEvLocal::TEvEnumerateTablets* MakeReq(const TActorContext &ctx) {

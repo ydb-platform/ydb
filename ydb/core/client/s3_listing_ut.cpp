@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
     Y_UNIT_TEST(Listing) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServer cleverServer = TServer(TServerSettings(port)); 
 
         TFlatMsgBusClient annoyingClient(port);
 

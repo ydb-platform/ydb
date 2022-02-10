@@ -40,9 +40,9 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable); 
         auto create = modifyScheme->MutableCreateTable();
         create->SetName(name);
         create->SetCopyFromTable(req->source_path());

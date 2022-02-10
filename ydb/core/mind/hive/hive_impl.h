@@ -183,7 +183,7 @@ protected:
 
     friend class TTxInitScheme;
     friend class TTxDeleteTablet;
-    friend class TTxDeleteOwnerTablets;
+    friend class TTxDeleteOwnerTablets; 
     friend class TTxReassignGroups;
     friend class TTxStartTablet;
     friend class TTxCreateTablet;
@@ -242,7 +242,7 @@ protected:
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
-    ITransaction* CreateDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev);
+    ITransaction* CreateDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev); 
     ITransaction* CreateDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev);
     ITransaction* CreateCutTabletHistory(TEvHive::TEvCutTabletHistory::TPtr& ev);
     ITransaction* CreateBlockStorageResult(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev);
@@ -298,7 +298,7 @@ protected:
     TTabletId RootHiveId;
     TTabletId HiveId;
     ui64 HiveGeneration;
-    TSubDomainKey RootDomainKey;
+    TSubDomainKey RootDomainKey; 
     TSubDomainKey PrimaryDomainKey;
     TString RootDomainName;
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
@@ -561,7 +561,7 @@ public:
     TLeaderTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId); // find tablets, even deleting ones
     TTabletInfo& GetTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(TTabletId tabletId, TFollowerId followerId);
-    TTabletInfo* FindTablet(const TFullTabletId& tabletId) { return FindTablet(tabletId.first, tabletId.second); }
+    TTabletInfo* FindTablet(const TFullTabletId& tabletId) { return FindTablet(tabletId.first, tabletId.second); } 
     TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
@@ -580,7 +580,7 @@ public:
     void UpdateCounterTabletsTotal(i64 tabletsTotalDiff);
     void UpdateCounterTabletsAlive(i64 tabletsAliveDiff);
     void UpdateCounterBootQueueSize(ui64 bootQueueSize);
-    bool DomainHasNodes(const TSubDomainKey &domainKey) const;
+    bool DomainHasNodes(const TSubDomainKey &domainKey) const; 
     void ProcessBootQueue();
     void ProcessWaitQueue();
     void PostponeProcessBootQueue(TDuration after);
@@ -757,7 +757,7 @@ protected:
     void ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet);
     void ScheduleUnlockTabletExecution(TNodeInfo& node);
-    TString DebugDomainsActiveNodes() const;
+    TString DebugDomainsActiveNodes() const; 
     TResourceNormalizedValues GetStDevResourceValues() const;
     bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const;
     TResourceRawValues GetDefaultResourceInitialMaximumValues();

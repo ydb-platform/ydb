@@ -2,7 +2,7 @@
 #include "schemeshard_billing_helpers.h"
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 struct TRestore {
     static constexpr TStringBuf Name() {
@@ -124,5 +124,5 @@ ISubOperationBase::TPtr CreateRestore(TOperationId id, TTxState::ETxState state)
     );
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

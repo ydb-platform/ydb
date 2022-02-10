@@ -91,12 +91,12 @@ message TRWTransaction {
 message TROTransaction {
 }
 
-message TTableId {
-    optional uint64 OwnerId = 1;
-    optional uint64 TableId = 2;
+message TTableId { 
+    optional uint64 OwnerId = 1; 
+    optional uint64 TableId = 2; 
     optional uint64 SchemaVersion = 3;
-}
-
+} 
+ 
 message TReadTableTransaction {
     message TColumn {
         optional uint32 Id = 1;
@@ -295,15 +295,15 @@ message TSnapshotTransferInfo {
 };
 
 message TReceiveSnapshot {
-    optional uint64 TableId_Deprecated = 1;
+    optional uint64 TableId_Deprecated = 1; 
     repeated TSnapshotTransferInfo ReceiveFrom = 2;
-    optional TTableId TableId = 3;
+    optional TTableId TableId = 3; 
 }
 
 message TSendSnapshot {
-    optional uint64 TableId_Deprecated = 1;
+    optional uint64 TableId_Deprecated = 1; 
     repeated TSnapshotTransferInfo SendTo = 2;
-    optional TTableId TableId = 3;
+    optional TTableId TableId = 3; 
 }
 
 message TSchemeOpSeqNo {
@@ -324,44 +324,44 @@ message TDropPersistentSnapshot {
     optional uint64 TxId = 4;
 }
 
-message TInitiateBuildIndex {
+message TInitiateBuildIndex { 
     optional NKikimrProto.TPathID PathId = 1;
-    optional string SnapshotName = 2;
+    optional string SnapshotName = 2; 
     optional uint64 TableSchemaVersion = 3;
-
-    optional NKikimrSchemeOp.TIndexDescription IndexDescription = 4;
-}
-
-message TFinalizeBuildIndex {
+ 
+    optional NKikimrSchemeOp.TIndexDescription IndexDescription = 4; 
+} 
+ 
+message TFinalizeBuildIndex { 
     optional NKikimrProto.TPathID PathId = 1;
-
-    optional uint64 SnapshotStep = 2;
-    optional uint64 SnapshotTxId = 3;
-
-    optional uint64 TableSchemaVersion = 4;
-
-    optional uint64 BuildIndexId = 5;
-}
-
-message TDropIndexNotice {
+ 
+    optional uint64 SnapshotStep = 2; 
+    optional uint64 SnapshotTxId = 3; 
+ 
+    optional uint64 TableSchemaVersion = 4; 
+ 
+    optional uint64 BuildIndexId = 5; 
+} 
+ 
+message TDropIndexNotice { 
     // Path id of the table that the index is being dropped from
     optional NKikimrProto.TPathID PathId = 1;
     optional uint64 TableSchemaVersion = 2;
-
+ 
     // Path id of the index being dropped
     optional NKikimrProto.TPathID IndexPathId = 3;
-}
-
+} 
+ 
 message TCreateCdcStreamNotice {
     optional NKikimrProto.TPathID PathId = 1;
     optional uint64 TableSchemaVersion = 2;
-    optional NKikimrSchemeOp.TCdcStreamDescription StreamDescription = 3;
+    optional NKikimrSchemeOp.TCdcStreamDescription StreamDescription = 3; 
 }
 
 message TAlterCdcStreamNotice {
     optional NKikimrProto.TPathID PathId = 1;
     optional uint64 TableSchemaVersion = 2;
-    optional NKikimrSchemeOp.TCdcStreamDescription StreamDescription = 3;
+    optional NKikimrSchemeOp.TCdcStreamDescription StreamDescription = 3; 
 }
 
 message TDropCdcStreamNotice {
@@ -373,45 +373,45 @@ message TDropCdcStreamNotice {
 message TAsyncIndexInfo {
 }
 
-message TMoveTable {
+message TMoveTable { 
     optional NKikimrProto.TPathID PathId = 1;
-    optional uint64 TableSchemaVersion = 2;
-
+    optional uint64 TableSchemaVersion = 2; 
+ 
     optional NKikimrProto.TPathID DstPathId = 3;
-    optional string DstPath = 4;
-
-    message TRemapIndexPathId {
+    optional string DstPath = 4; 
+ 
+    message TRemapIndexPathId { 
         optional NKikimrProto.TPathID PathId = 1;
         optional NKikimrProto.TPathID DstPathId = 2;
-    }
-
-    repeated TRemapIndexPathId ReMapIndexes = 5;
-}
-
+    } 
+ 
+    repeated TRemapIndexPathId ReMapIndexes = 5; 
+} 
+ 
 message TFlatSchemeTransaction {
-    optional NKikimrSchemeOp.TTableDescription CreateTable = 1;
-    optional NKikimrSchemeOp.TTableDescription DropTable = 2;
-    optional NKikimrSchemeOp.TTableDescription AlterTable = 3;
+    optional NKikimrSchemeOp.TTableDescription CreateTable = 1; 
+    optional NKikimrSchemeOp.TTableDescription DropTable = 2; 
+    optional NKikimrSchemeOp.TTableDescription AlterTable = 3; 
     optional TReceiveSnapshot ReceiveSnapshot = 4;
     optional TSendSnapshot SendSnapshot = 5;
-    optional NKikimrSchemeOp.TBackupTask Backup = 6;
+    optional NKikimrSchemeOp.TBackupTask Backup = 6; 
 
     optional TSchemeOpSeqNo SeqNo = 7;
     optional bool ReadOnly = 8;
-    reserved 9;
+    reserved 9; 
 
     optional TCreatePersistentSnapshot CreatePersistentSnapshot = 10;
     optional TDropPersistentSnapshot DropPersistentSnapshot = 11;
+ 
+    optional TInitiateBuildIndex InitiateBuildIndex = 12; 
+    optional TFinalizeBuildIndex FinalizeBuildIndex = 13; 
+    optional TDropIndexNotice DropIndexNotice = 14; 
 
-    optional TInitiateBuildIndex InitiateBuildIndex = 12;
-    optional TFinalizeBuildIndex FinalizeBuildIndex = 13;
-    optional TDropIndexNotice DropIndexNotice = 14;
-
-    optional NKikimrSchemeOp.TRestoreTask Restore = 15;
+    optional NKikimrSchemeOp.TRestoreTask Restore = 15; 
 
     optional TAsyncIndexInfo AsyncIndexInfo = 16;
-
-    optional TMoveTable MoveTable = 17;
+ 
+    optional TMoveTable MoveTable = 17; 
 
     optional TCreateCdcStreamNotice CreateCdcStreamNotice = 18;
     optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19;
@@ -477,7 +477,7 @@ message TEvProposeTransaction {
     optional uint32 ExecLevel = 5;
     optional uint32 Flags = 6;
     optional uint64 SchemeShardId = 7;
-    optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8;
+    optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8; 
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
     optional TMvccSnapshot MvccSnapshot = 10;
 }
@@ -574,7 +574,7 @@ message TEvProposeTransactionResult {
     optional TTabletInfo TabletInfo = 19;
     // For read table tx result holds offsets in TxResult to cut response
     repeated uint32 RowOffsets = 20;
-    repeated fixed64 DomainCoordinators = 21;
+    repeated fixed64 DomainCoordinators = 21; 
     optional uint32 ApiVersion = 22; // Version of TxResult response data
     optional NKikimrQueryStats.TTxStats TxStats = 23;
     optional uint64 DataSeqNo = 24; // Response data seqno (1, 2, ...)
@@ -629,10 +629,10 @@ message TSplitMergeDescription {
 // Schemeshard -> Dst datashard
 message TEvInitSplitMergeDestination {
     optional uint64 OperationCookie = 1;
-    optional uint64 SchemeshardTabletId = 2; // OwnerSchemeShardTabletId
+    optional uint64 SchemeshardTabletId = 2; // OwnerSchemeShardTabletId 
     optional TSplitMergeDescription SplitDescription = 3;
-    optional NKikimrSubDomains.TProcessingParams ProcessingParams = 4;
-    optional NKikimrSchemeOp.TTableDescription CreateTable = 5;
+    optional NKikimrSubDomains.TProcessingParams ProcessingParams = 4; 
+    optional NKikimrSchemeOp.TTableDescription CreateTable = 5; 
     optional uint64 SubDomainPathId = 6; // LocalPathId (SchemeshardTabletId is the OwnerId)
 }
 
@@ -653,7 +653,7 @@ message TEvSplitAck {
 }
 
 message TTableSnapshot {
-    optional uint64 TableId = 1; // tableid in term of localDB
+    optional uint64 TableId = 1; // tableid in term of localDB 
     optional bytes SnapshotData = 2;
 }
 
@@ -671,7 +671,7 @@ message TPersistentSnapshot {
 message TEvSplitTransferSnapshot {
     optional uint64 OperationCookie = 1;
     optional uint64 SrcTabletId = 2;
-    optional NKikimrSchemeOp.TTableDescription UserTableScheme = 3;
+    optional NKikimrSchemeOp.TTableDescription UserTableScheme = 3; 
     repeated TTableSnapshot TableSnapshot = 4;
     optional uint64 MinWriteVersionStep = 5;
     optional uint64 MinWriteVersionTxId = 6;
@@ -709,7 +709,7 @@ message TEvSplitPartitioningChangedAck {
 
 message TEvCancelBackup {
     optional uint64 BackupTxId = 1;
-    optional uint64 TableId = 2;
+    optional uint64 TableId = 2; 
 }
 
 message TEvCancelRestore {
@@ -726,19 +726,19 @@ message TEvGetTableStats {
 
 message TEvGetTableStatsResult {
     optional uint64 DatashardId = 1;
-    optional uint64 TableLocalId = 2;
+    optional uint64 TableLocalId = 2; 
     optional NKikimrTableStats.TTableStats TableStats = 3;
     optional NKikimrTabletBase.TMetrics TabletMetrics = 4;
     optional uint32 ShardState = 5;
     repeated uint64 UserTablePartOwners = 6;
     repeated uint64 SysTablesPartOwners = 7;
     optional bool FullStatsReady = 8;
-    optional uint64 TableOwnerId = 9;
+    optional uint64 TableOwnerId = 9; 
 }
 
 message TEvPeriodicTableStats {
     optional uint64 DatashardId = 1;
-    optional uint64 TableLocalId = 2;
+    optional uint64 TableLocalId = 2; 
 
     optional uint64 Generation = 3;
     optional uint64 Round = 4;
@@ -752,8 +752,8 @@ message TEvPeriodicTableStats {
 
     optional uint32 NodeId = 10;
     optional uint64 StartTime = 11; // milliseconds since epoch
-
-    optional uint64 TableOwnerId = 12;
+ 
+    optional uint64 TableOwnerId = 12; 
 }
 
 message TEvS3ListingRequest {
@@ -855,7 +855,7 @@ message TEvGetInfoResponse {
         optional string Path = 2;
         optional uint32 LocalId = 3;
         optional uint64 PathId = 4;
-        optional NKikimrSchemeOp.TTableDescription Description = 5;
+        optional NKikimrSchemeOp.TTableDescription Description = 5; 
         optional TStats Stats = 6;
         optional NKikimrTabletBase.TMetrics Metrics = 7;
         optional uint64 SchemaVersion = 8;
@@ -1200,29 +1200,29 @@ message TEvDiscardVolatileSnapshotResponse {
     optional EStatus Status = 6;
     repeated uint64 TransferredToShards = 7;
 }
-
-message TEvMigrateSchemeShardRequest {
-    optional fixed64 CurrentSchemeShardId = 1;
-    optional fixed64 NewSchemeShardId = 2;
-    optional fixed64 TabletId = 3;
-}
-
-message TEvMigrateSchemeShardResponse {
-    enum EStatus {
-        Success = 1;
-        Already = 2;
-        WrongRequest = 3;
-    }
-
-    optional EStatus Status = 1;
-    optional fixed64 TabletId = 2;
-}
-
+ 
+message TEvMigrateSchemeShardRequest { 
+    optional fixed64 CurrentSchemeShardId = 1; 
+    optional fixed64 NewSchemeShardId = 2; 
+    optional fixed64 TabletId = 3; 
+} 
+ 
+message TEvMigrateSchemeShardResponse { 
+    enum EStatus { 
+        Success = 1; 
+        Already = 2; 
+        WrongRequest = 3; 
+    } 
+ 
+    optional EStatus Status = 1; 
+    optional fixed64 TabletId = 2; 
+} 
+ 
 message TExpirationCondition {
     // erase if valueof(ColumnId) < WallClockTimestamp
     optional uint32 ColumnId = 1; // Must contain date type
     optional uint64 WallClockTimestamp = 2;
-    optional NKikimrSchemeOp.TTTLSettings.EUnit ColumnUnit = 3;
+    optional NKikimrSchemeOp.TTTLSettings.EUnit ColumnUnit = 3; 
 }
 
 message TEvEraseRowsRequest {
@@ -1314,65 +1314,65 @@ message TEvConditionalEraseRowsResponse {
     optional string ErrorDescription = 3;
     optional TStats Stats = 4;
 }
-
-message TEvBuildIndexCreateRequest {
-    optional uint64 BuildIndexId = 1;          // unique id of build index proccess
-
-    optional uint64 TabletId = 2;
-    optional uint64 OwnerId = 3;
-    optional uint64 PathId = 4;
-
-    optional string TargetName = 5;
+ 
+message TEvBuildIndexCreateRequest { 
+    optional uint64 BuildIndexId = 1;          // unique id of build index proccess 
+ 
+    optional uint64 TabletId = 2; 
+    optional uint64 OwnerId = 3; 
+    optional uint64 PathId = 4; 
+ 
+    optional string TargetName = 5; 
     repeated string IndexColumns = 6;          // key columns that is needed to transer in terms of target table
-
-    optional NKikimrTx.TKeyRange KeyRange = 7; // key range to transfer in term of source table
-
-    optional uint64 SnapshotTxId = 8;
-    optional uint64 SnapshotStep = 9;
-
-    optional uint32 MaxBatchRows = 10;
-    optional uint64 MaxBatchBytes = 11;
-
-    optional uint64 SeqNoGeneration = 12;       // monotonically increasing sequence, first part
-    optional uint64 SeqNoRound = 13;            // monotonically increasing sequence, second part
-
-    optional uint64 MaxRetries = 14;
+ 
+    optional NKikimrTx.TKeyRange KeyRange = 7; // key range to transfer in term of source table 
+ 
+    optional uint64 SnapshotTxId = 8; 
+    optional uint64 SnapshotStep = 9; 
+ 
+    optional uint32 MaxBatchRows = 10; 
+    optional uint64 MaxBatchBytes = 11; 
+ 
+    optional uint64 SeqNoGeneration = 12;       // monotonically increasing sequence, first part 
+    optional uint64 SeqNoRound = 13;            // monotonically increasing sequence, second part 
+ 
+    optional uint64 MaxRetries = 14; 
 
     repeated string DataColumns = 15;
-}
-
-message TEvBuildIndexProgressResponse {
-    optional uint64 BuildIndexId = 1;
-
-    optional uint64 TabletId = 2;
-    optional uint64 OwnerId = 3;
-    optional uint64 PathId = 4;
-
-    enum EStatus {
-        INVALID = 0;
-        ACCEPTED = 1;
-        INPROGRESS = 2;
-        DONE = 3;
-
-        ABORTED = 4;
-        BUILD_ERROR = 5;
-        BAD_REQUEST = 6;
-    }
-
-    optional EStatus Status = 5;
-
-    optional Ydb.StatusIds.StatusCode UploadStatus = 6;
-    repeated Ydb.Issue.IssueMessage Issues = 7;
-
-    optional NKikimrTx.TKeyRange RequestedKeyRange = 8;
-    optional bytes LastKeyAck = 9;
-
-    optional uint64 RowsDelta = 10;
-    optional uint64 BytesDelta = 11;
-
-    optional uint64 RequestSeqNoGeneration = 12;
-    optional uint64 RequestSeqNoRound = 13;
-}
+} 
+ 
+message TEvBuildIndexProgressResponse { 
+    optional uint64 BuildIndexId = 1; 
+ 
+    optional uint64 TabletId = 2; 
+    optional uint64 OwnerId = 3; 
+    optional uint64 PathId = 4; 
+ 
+    enum EStatus { 
+        INVALID = 0; 
+        ACCEPTED = 1; 
+        INPROGRESS = 2; 
+        DONE = 3; 
+ 
+        ABORTED = 4; 
+        BUILD_ERROR = 5; 
+        BAD_REQUEST = 6; 
+    } 
+ 
+    optional EStatus Status = 5; 
+ 
+    optional Ydb.StatusIds.StatusCode UploadStatus = 6; 
+    repeated Ydb.Issue.IssueMessage Issues = 7; 
+ 
+    optional NKikimrTx.TKeyRange RequestedKeyRange = 8; 
+    optional bytes LastKeyAck = 9; 
+ 
+    optional uint64 RowsDelta = 10; 
+    optional uint64 BytesDelta = 11; 
+ 
+    optional uint64 RequestSeqNoGeneration = 12; 
+    optional uint64 RequestSeqNoRound = 13; 
+} 
 
 message TEvKqpScan {
     optional uint64 TxId = 1;

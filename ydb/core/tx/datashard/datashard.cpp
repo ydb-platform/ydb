@@ -18,7 +18,7 @@ IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info) {
 
 namespace NDataShard {
 
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 using namespace NTabletFlatExecutor;
 
 // NOTE: We really want to batch log records by default in datashards!
@@ -98,8 +98,8 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(PipeClientCacheConfig, GetPipeClientConfig()))
     , ResendReadSetPipeTracker(*PipeClientCache)
     , SchemeShardPipeRetryPolicy({})
-    , PathOwnerId(INVALID_TABLET_ID)
-    , CurrentSchemeShardId(INVALID_TABLET_ID)
+    , PathOwnerId(INVALID_TABLET_ID) 
+    , CurrentSchemeShardId(INVALID_TABLET_ID) 
     , LastKnownMediator(INVALID_TABLET_ID)
     , RegistrationSended(false)
     , LoanReturnTracker(info->TabletID)
@@ -457,10 +457,10 @@ ui64 TDataShard::AllocateChangeRecordGroup(NIceDb::TNiceDb& db) {
 }
 
 void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistChangeRecord"
-        << ": record: " << record
-        << ", at tablet: " << TabletID());
-
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistChangeRecord" 
+        << ": record: " << record 
+        << ", at tablet: " << TabletID()); 
+ 
     db.Table<Schema::ChangeRecords>().Key(record.GetOrder()).Update(
         NIceDb::TUpdate<Schema::ChangeRecords::Group>(record.GetGroup()),
         NIceDb::TUpdate<Schema::ChangeRecords::PlanStep>(record.GetStep()),
@@ -474,21 +474,21 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
 }
 
 void TDataShard::MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "MoveChangeRecord"
-        << ": order: " << order
-        << ": pathId: " << pathId
-        << ", at tablet: " << TabletID());
-
-    db.Table<Schema::ChangeRecords>().Key(order).Update(
-        NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(pathId.OwnerId),
-        NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(pathId.LocalPathId));
-}
-
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "MoveChangeRecord" 
+        << ": order: " << order 
+        << ": pathId: " << pathId 
+        << ", at tablet: " << TabletID()); 
+ 
+    db.Table<Schema::ChangeRecords>().Key(order).Update( 
+        NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(pathId.OwnerId), 
+        NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(pathId.LocalPathId)); 
+} 
+ 
 void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "RemoveChangeRecord"
-        << ": order: " << order
-        << ", at tablet: " << TabletID());
-
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "RemoveChangeRecord" 
+        << ": order: " << order 
+        << ", at tablet: " << TabletID()); 
+ 
     auto it = ChangesQueue.find(order);
     if (it != ChangesQueue.end()) {
         Y_VERIFY(it->second <= ChangesQueueBytes);
@@ -581,35 +581,35 @@ void TDataShard::KillChangeSender(const TActorContext& ctx) {
 
 bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>& changeRecords) {
     using Schema = TDataShard::Schema;
-
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadChangeRecords"
-        << ": QueueSize: " << ChangesQueue.size()
-        << ", at tablet: " << TabletID());
-
-    changeRecords.reserve(ChangesQueue.size());
-
-    auto rowset = db.Table<Schema::ChangeRecords>().Range().Select();
-    if (!rowset.IsReady()) {
-        return false;
-    }
-
-    while (!rowset.EndOfSet()) {
-        const ui64 order = rowset.GetValue<Schema::ChangeRecords::Order>();
-        const ui64 bodySize = rowset.GetValue<Schema::ChangeRecords::BodySize>();
-        const auto pathId = TPathId(
-            rowset.GetValue<Schema::ChangeRecords::PathOwnerId>(),
-            rowset.GetValue<Schema::ChangeRecords::LocalPathId>()
-        );
-
-        changeRecords.emplace_back(order, pathId, bodySize);
-        if (!rowset.Next()) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
+ 
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadChangeRecords" 
+        << ": QueueSize: " << ChangesQueue.size() 
+        << ", at tablet: " << TabletID()); 
+ 
+    changeRecords.reserve(ChangesQueue.size()); 
+ 
+    auto rowset = db.Table<Schema::ChangeRecords>().Range().Select(); 
+    if (!rowset.IsReady()) { 
+        return false; 
+    } 
+ 
+    while (!rowset.EndOfSet()) { 
+        const ui64 order = rowset.GetValue<Schema::ChangeRecords::Order>(); 
+        const ui64 bodySize = rowset.GetValue<Schema::ChangeRecords::BodySize>(); 
+        const auto pathId = TPathId( 
+            rowset.GetValue<Schema::ChangeRecords::PathOwnerId>(), 
+            rowset.GetValue<Schema::ChangeRecords::LocalPathId>() 
+        ); 
+ 
+        changeRecords.emplace_back(order, pathId, bodySize); 
+        if (!rowset.Next()) { 
+            return false; 
+        } 
+    } 
+ 
+    return true; 
+} 
+ 
 void TDataShard::PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation &op) {
     db.Table<Schema::SchemaOperations>().Key(op.TxId).Update(
         NIceDb::TUpdate<Schema::SchemaOperations::Success>(op.Success),
@@ -702,47 +702,47 @@ void TDataShard::PersistUserTableFullCompactionTs(NIceDb::TNiceDb& db, ui64 tabl
 }
 
 void TDataShard::PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId, const TUserTable& tableInfo) {
-    db.Table<Schema::UserTables>().Key(prevTableId).Delete();
-    PersistUserTable(db, tableId, tableInfo);
+    db.Table<Schema::UserTables>().Key(prevTableId).Delete(); 
+    PersistUserTable(db, tableId, tableInfo); 
 
     db.Table<Schema::UserTablesStats>().Key(prevTableId).Delete();
     if (tableInfo.Stats.LastFullCompaction) {
         PersistUserTableFullCompactionTs(db, tableId, tableInfo.Stats.LastFullCompaction.Seconds());
     }
-}
-
+} 
+ 
 TUserTable::TPtr TDataShard::AlterTableSchemaVersion(
     const TActorContext&, TTransactionContext& txc,
     const TPathId& pathId, const ui64 tableSchemaVersion, bool persist)
-{
-
-    Y_VERIFY(GetPathOwnerId() == pathId.OwnerId);
-    ui64 tableId = pathId.LocalPathId;
-
-    Y_VERIFY(TableInfos.contains(tableId));
-    auto oldTableInfo = TableInfos[tableId];
-    Y_VERIFY(oldTableInfo);
-
-    TUserTable::TPtr newTableInfo = new TUserTable(*oldTableInfo);
-    newTableInfo->SetTableSchemaVersion(tableSchemaVersion);
-
-    Y_VERIFY_DEBUG_S(oldTableInfo->GetTableSchemaVersion() < newTableInfo->GetTableSchemaVersion(),
-                     "pathId " << pathId
-                     << "old version " << oldTableInfo->GetTableSchemaVersion()
-                     << "new version " << newTableInfo->GetTableSchemaVersion());
-
+{ 
+ 
+    Y_VERIFY(GetPathOwnerId() == pathId.OwnerId); 
+    ui64 tableId = pathId.LocalPathId; 
+ 
+    Y_VERIFY(TableInfos.contains(tableId)); 
+    auto oldTableInfo = TableInfos[tableId]; 
+    Y_VERIFY(oldTableInfo); 
+ 
+    TUserTable::TPtr newTableInfo = new TUserTable(*oldTableInfo); 
+    newTableInfo->SetTableSchemaVersion(tableSchemaVersion); 
+ 
+    Y_VERIFY_DEBUG_S(oldTableInfo->GetTableSchemaVersion() < newTableInfo->GetTableSchemaVersion(), 
+                     "pathId " << pathId 
+                     << "old version " << oldTableInfo->GetTableSchemaVersion() 
+                     << "new version " << newTableInfo->GetTableSchemaVersion()); 
+ 
     if (persist) {
         NIceDb::TNiceDb db(txc.DB);
         PersistUserTable(db, tableId, *newTableInfo);
     }
-
-    return newTableInfo;
-}
-
+ 
+    return newTableInfo; 
+} 
+ 
 TUserTable::TPtr TDataShard::AlterTableAddIndex(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,
-    const NKikimrSchemeOp::TIndexDescription& indexDesc)
+    const NKikimrSchemeOp::TIndexDescription& indexDesc) 
 {
     auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
     tableInfo->AddIndex(indexDesc);
@@ -770,7 +770,7 @@ TUserTable::TPtr TDataShard::AlterTableDropIndex(
 TUserTable::TPtr TDataShard::AlterTableAddCdcStream(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,
-    const NKikimrSchemeOp::TCdcStreamDescription& streamDesc)
+    const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) 
 {
     auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
     tableInfo->AddCdcStream(streamDesc);
@@ -810,14 +810,14 @@ TUserTable::TPtr TDataShard::AlterTableDropCdcStream(
 }
 
 TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
-    const NKikimrSchemeOp::TTableDescription& tableScheme)
+    const NKikimrSchemeOp::TTableDescription& tableScheme) 
 {
     const TString mainTableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName();
-    ui64 tableId = tableScheme.GetId_Deprecated();
-    if (tableScheme.HasPathId()) {
-        Y_VERIFY(GetPathOwnerId() == tableScheme.GetPathId().GetOwnerId() || GetPathOwnerId() == INVALID_TABLET_ID);
-        tableId = tableScheme.GetPathId().GetLocalId();
-    }
+    ui64 tableId = tableScheme.GetId_Deprecated(); 
+    if (tableScheme.HasPathId()) { 
+        Y_VERIFY(GetPathOwnerId() == tableScheme.GetPathId().GetOwnerId() || GetPathOwnerId() == INVALID_TABLET_ID); 
+        tableId = tableScheme.GetPathId().GetLocalId(); 
+    } 
     ui32 localTid = ++LastLocalTid;
     ui32 shadowTid = tableScheme.GetPartitionConfig().GetShadowData() ? ++LastLocalTid : 0;
     TUserTable::TPtr tableInfo = new TUserTable(localTid, tableScheme, shadowTid);
@@ -853,65 +853,65 @@ TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
 }
 
 THashMap<TPathId, TPathId> TDataShard::GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move) {
-    THashMap<TPathId, TPathId> remap;
-    for (const auto& item: move.GetReMapIndexes()) {
-        auto prevId = TPathId(item.GetPathId().GetOwnerId(), item.GetPathId().GetLocalId());
-        auto newId = TPathId(item.GetDstPathId().GetOwnerId(), item.GetDstPathId().GetLocalId());
-        remap[prevId] = newId;
-    }
-    return remap;
-}
-
+    THashMap<TPathId, TPathId> remap; 
+    for (const auto& item: move.GetReMapIndexes()) { 
+        auto prevId = TPathId(item.GetPathId().GetOwnerId(), item.GetPathId().GetLocalId()); 
+        auto newId = TPathId(item.GetDstPathId().GetOwnerId(), item.GetDstPathId().GetLocalId()); 
+        remap[prevId] = newId; 
+    } 
+    return remap; 
+} 
+ 
 TUserTable::TPtr TDataShard::MoveUserTable(const TActorContext& ctx, TTransactionContext& txc,
-                                                  const NKikimrTxDataShard::TMoveTable& move)
-{
-    auto prevId = TPathId(move.GetPathId().GetOwnerId(), move.GetPathId().GetLocalId());
-    auto newId = TPathId(move.GetDstPathId().GetOwnerId(), move.GetDstPathId().GetLocalId());
-
-    Y_VERIFY(GetPathOwnerId() == prevId.OwnerId);
-    Y_VERIFY(TableInfos.contains(prevId.LocalPathId));
-
-    auto newTableInfo = AlterTableSchemaVersion(ctx, txc, prevId, move.GetTableSchemaVersion(), false);
-    newTableInfo->SetPath(move.GetDstPath());
-
-    Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size());
-    const THashMap<TPathId, TPathId> remap = GetRemapIndexes(move);
-
-    NKikimrSchemeOp::TTableDescription schema;
-    newTableInfo->GetSchema(schema);
-    for (auto& indexDesc: *schema.MutableTableIndexes()) {
-        Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
-        auto prevPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
-        Y_VERIFY_S(remap.contains(prevPathId), "no rule how to move index with pathId " << prevPathId); // we should remap all indexes
-        auto newPathId = remap.at(prevPathId);
-
-        indexDesc.SetPathOwnerId(newPathId.OwnerId);
-        indexDesc.SetLocalPathId(newPathId.LocalPathId);
-
-        newTableInfo->Indexes[newPathId] = newTableInfo->Indexes[prevPathId];
-        newTableInfo->Indexes.erase(prevPathId);
-    }
-    newTableInfo->SetSchema(schema);
-    Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size());
-
-    RemoveUserTable(prevId);
-    AddUserTable(newId, newTableInfo);
-
-    NIceDb::TNiceDb db(txc.DB);
-    PersistMoveUserTable(db, prevId.LocalPathId, newId.LocalPathId, *newTableInfo);
-    PersistOwnerPathId(newId.OwnerId, txc);
-
-    return newTableInfo;
-}
-
+                                                  const NKikimrTxDataShard::TMoveTable& move) 
+{ 
+    auto prevId = TPathId(move.GetPathId().GetOwnerId(), move.GetPathId().GetLocalId()); 
+    auto newId = TPathId(move.GetDstPathId().GetOwnerId(), move.GetDstPathId().GetLocalId()); 
+ 
+    Y_VERIFY(GetPathOwnerId() == prevId.OwnerId); 
+    Y_VERIFY(TableInfos.contains(prevId.LocalPathId)); 
+ 
+    auto newTableInfo = AlterTableSchemaVersion(ctx, txc, prevId, move.GetTableSchemaVersion(), false); 
+    newTableInfo->SetPath(move.GetDstPath()); 
+ 
+    Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size()); 
+    const THashMap<TPathId, TPathId> remap = GetRemapIndexes(move); 
+ 
+    NKikimrSchemeOp::TTableDescription schema; 
+    newTableInfo->GetSchema(schema); 
+    for (auto& indexDesc: *schema.MutableTableIndexes()) { 
+        Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId()); 
+        auto prevPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()); 
+        Y_VERIFY_S(remap.contains(prevPathId), "no rule how to move index with pathId " << prevPathId); // we should remap all indexes 
+        auto newPathId = remap.at(prevPathId); 
+ 
+        indexDesc.SetPathOwnerId(newPathId.OwnerId); 
+        indexDesc.SetLocalPathId(newPathId.LocalPathId); 
+ 
+        newTableInfo->Indexes[newPathId] = newTableInfo->Indexes[prevPathId]; 
+        newTableInfo->Indexes.erase(prevPathId); 
+    } 
+    newTableInfo->SetSchema(schema); 
+    Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size()); 
+ 
+    RemoveUserTable(prevId); 
+    AddUserTable(newId, newTableInfo); 
+ 
+    NIceDb::TNiceDb db(txc.DB); 
+    PersistMoveUserTable(db, prevId.LocalPathId, newId.LocalPathId, *newTableInfo); 
+    PersistOwnerPathId(newId.OwnerId, txc); 
+ 
+    return newTableInfo; 
+} 
+ 
 TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
-                                                   const NKikimrSchemeOp::TTableDescription& alter)
+                                                   const NKikimrSchemeOp::TTableDescription& alter) 
 {
-    ui64 tableId = alter.GetId_Deprecated();
-    if (alter.HasPathId()) {
-        Y_VERIFY(GetPathOwnerId() == alter.GetPathId().GetOwnerId());
-        tableId = alter.GetPathId().GetLocalId();
-    }
+    ui64 tableId = alter.GetId_Deprecated(); 
+    if (alter.HasPathId()) { 
+        Y_VERIFY(GetPathOwnerId() == alter.GetPathId().GetOwnerId()); 
+        tableId = alter.GetPathId().GetLocalId(); 
+    } 
     TUserTable::TCPtr oldTable = TableInfos[tableId];
     Y_VERIFY(oldTable);
 
@@ -928,7 +928,7 @@ TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransacti
 
     if (alter.HasPartitionConfig()) {
         // We are going to update table schema and save it
-        NKikimrSchemeOp::TTableDescription tableDescr;
+        NKikimrSchemeOp::TTableDescription tableDescr; 
         tableInfo->GetSchema(tableDescr);
 
         const auto& configDelta = alter.GetPartitionConfig();
@@ -936,7 +936,7 @@ TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransacti
 
         if (configDelta.HasFreezeState()) {
             auto cmd = configDelta.GetFreezeState();
-            State = cmd == NKikimrSchemeOp::EFreezeState::Freeze ? TShardState::Frozen : TShardState::Ready;
+            State = cmd == NKikimrSchemeOp::EFreezeState::Freeze ? TShardState::Frozen : TShardState::Ready; 
             PersistSys(db, Schema::Sys_State, State);
         }
 
@@ -1059,8 +1059,8 @@ void TDataShard::SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnaps
 }
 
 TUserTable::TSpecialUpdate TDataShard::SpecialUpdates(const NTable::TDatabase& db, const TTableId& tableId) const {
-    Y_VERIFY(tableId.PathId.OwnerId == PathOwnerId, "%" PRIu64 " vs %" PRIu64,
-             tableId.PathId.OwnerId, PathOwnerId);
+    Y_VERIFY(tableId.PathId.OwnerId == PathOwnerId, "%" PRIu64 " vs %" PRIu64, 
+             tableId.PathId.OwnerId, PathOwnerId); 
 
     auto it = TableInfos.find(tableId.PathId.LocalPathId);
     Y_VERIFY(it != TableInfos.end());
@@ -1340,19 +1340,19 @@ void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorCo
 }
 
 void TDataShard::Handle(TEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Handle TEvSchemaChangedResult " << ev->Get()->Record.GetTxId()
-                << "  datashard " << TabletID()
-                << " state " << DatashardStateName(State));
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
+                "Handle TEvSchemaChangedResult " << ev->Get()->Record.GetTxId() 
+                << "  datashard " << TabletID() 
+                << " state " << DatashardStateName(State)); 
     Execute(CreateTxSchemaChanged(ev), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvStateChangedResult::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Handle TEvStateChangedResult "
-                << "  datashard " << TabletID()
-                << " state " << DatashardStateName(State));
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
+                "Handle TEvStateChangedResult " 
+                << "  datashard " << TabletID() 
+                << " state " << DatashardStateName(State)); 
     // TODO: implement
     NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
 }
@@ -1622,15 +1622,15 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
 }
 
 void TDataShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx) {
-    ui64 srcMediatorId = ev->Get()->Record.GetMediatorID();
-    if (!CheckMediatorAuthorisation(srcMediatorId)) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "tablet " << TabletID() <<
-                   " receive PlanStep " << ev->Get()->Record.GetStep() <<
-                   " from unauthorized mediator " << srcMediatorId);
+    ui64 srcMediatorId = ev->Get()->Record.GetMediatorID(); 
+    if (!CheckMediatorAuthorisation(srcMediatorId)) { 
+        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "tablet " << TabletID() << 
+                   " receive PlanStep " << ev->Get()->Record.GetStep() << 
+                   " from unauthorized mediator " << srcMediatorId); 
         BecomeBroken(ctx);
         return;
-    }
-
+    } 
+ 
     Execute(new TTxPlanStep(this, ev), ctx);
 }
 
@@ -1655,8 +1655,8 @@ void TDataShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorCo
         Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
         PlanQueue.Progress(ctx);
     }
-
-    CheckStateChange(ctx);
+ 
+    CheckStateChange(ctx); 
 }
 
 void TDataShard::Handle(TEvPrivate::TEvProgressTransaction::TPtr &ev, const TActorContext &ctx) {
@@ -1881,7 +1881,7 @@ void TDataShard::AckRSToDeletedTablet(ui64 tabletId, const TActorContext& ctx) {
             PlanQueue.Progress(ctx);
         }
     }
-    CheckStateChange(ctx);
+    CheckStateChange(ctx); 
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
@@ -2087,13 +2087,13 @@ void TDataShard::UpdateLastSchemeOpSeqNo(const TSchemeOpSeqNo &newSeqNo,
 }
 
 void TDataShard::ResetLastSchemeOpSeqNo(TTransactionContext &txc)
-{
-    NIceDb::TNiceDb db(txc.DB);
-    LastSchemeOpSeqNo = TSchemeOpSeqNo();
-    PersistSys(db, Schema::Sys_LastSchemeShardGeneration, LastSchemeOpSeqNo.Generation);
-    PersistSys(db, Schema::Sys_LastSchemeShardRound, LastSchemeOpSeqNo.Round);
-}
-
+{ 
+    NIceDb::TNiceDb db(txc.DB); 
+    LastSchemeOpSeqNo = TSchemeOpSeqNo(); 
+    PersistSys(db, Schema::Sys_LastSchemeShardGeneration, LastSchemeOpSeqNo.Generation); 
+    PersistSys(db, Schema::Sys_LastSchemeShardRound, LastSchemeOpSeqNo.Round); 
+} 
+ 
 void TDataShard::PersistProcessingParams(const NKikimrSubDomains::TProcessingParams &params,
                                                 NTabletFlatExecutor::TTransactionContext &txc)
 {
@@ -2108,7 +2108,7 @@ void TDataShard::PersistCurrentSchemeShardId(ui64 id,
                                                    NTabletFlatExecutor::TTransactionContext &txc)
 {
     NIceDb::TNiceDb db(txc.DB);
-    CurrentSchemeShardId = id;
+    CurrentSchemeShardId = id; 
     PersistSys(db, TDataShard::Schema::Sys_CurrentSchemeShardId, id);
 }
 
@@ -2122,13 +2122,13 @@ void TDataShard::PersistSubDomainPathId(ui64 ownerId, ui64 localPathId,
 }
 
 void TDataShard::PersistOwnerPathId(ui64 id,
-                                           NTabletFlatExecutor::TTransactionContext &txc)
-{
-    NIceDb::TNiceDb db(txc.DB);
-    PathOwnerId = id;
+                                           NTabletFlatExecutor::TTransactionContext &txc) 
+{ 
+    NIceDb::TNiceDb db(txc.DB); 
+    PathOwnerId = id; 
     PersistSys(db, TDataShard::Schema::Sys_PathOwnerId, id);
-}
-
+} 
+ 
 void TDataShard::ResolveTablePath(const TActorContext &ctx)
 {
     if (State != TShardState::Ready)
@@ -2142,10 +2142,10 @@ void TDataShard::ResolveTablePath(const TActorContext &ctx)
             if (!TableResolvePipe) {
                 NTabletPipe::TClientConfig clientConfig;
                 clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
-                TableResolvePipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+                TableResolvePipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig)); 
             }
 
-            auto *event = new TEvSchemeShard::TEvDescribeScheme(PathOwnerId,
+            auto *event = new TEvSchemeShard::TEvDescribeScheme(PathOwnerId, 
                                                                     pathId);
             event->Record.MutableOptions()->SetReturnPartitioningInfo(false);
             event->Record.MutableOptions()->SetReturnPartitionConfig(false);
@@ -2199,7 +2199,7 @@ void TDataShard::SerializeKeySample(const TUserTable &tinfo,
 }
 
 
-void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev,
+void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, 
                                const TActorContext &ctx)
 {
     const auto &rec = ev->Get()->GetRecord();
@@ -2458,11 +2458,11 @@ void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
 }
 
 void TDataShard::Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev,
-                               const TActorContext& ctx)
-{
-    Execute(new TTxMigrateSchemeShard(this, ev), ctx);
-}
-
+                               const TActorContext& ctx) 
+{ 
+    Execute(new TTxMigrateSchemeShard(this, ev), ctx); 
+} 
+ 
 void TDataShard::Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx)
 {
     TOperation::TPtr op = Pipeline.FindOp(ev->Get()->Record.GetBackupTxId());

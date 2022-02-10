@@ -41,7 +41,7 @@ private:
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *this->Request_);
         SetDatabase(navigateRequest.get(), *this->Request_);
-        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
+        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath(); 
         record->SetPath(req->path());
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
@@ -49,12 +49,12 @@ private:
 
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
             default: TBase::StateWork(ev, ctx);
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) { 
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
 
@@ -65,7 +65,7 @@ private:
 
         TResult result;
         switch (status) {
-            case NKikimrScheme::StatusSuccess: {
+            case NKikimrScheme::StatusSuccess: { 
                 const auto& pathDescription = record.GetPathDescription();
                 ConvertDirectoryEntry(pathDescription, result.mutable_self(), true);
                 if constexpr (ListChildren) {
@@ -75,14 +75,14 @@ private:
                 }
                 return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
             }
-            case NKikimrScheme::StatusPathDoesNotExist:
-            case NKikimrScheme::StatusSchemeError: {
+            case NKikimrScheme::StatusPathDoesNotExist: 
+            case NKikimrScheme::StatusSchemeError: { 
                 return this->Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
             }
-            case NKikimrScheme::StatusAccessDenied: {
+            case NKikimrScheme::StatusAccessDenied: { 
                 return this->Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
             }
-            case NKikimrScheme::StatusNotAvailable: {
+            case NKikimrScheme::StatusNotAvailable: { 
                 return this->Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
             }
             default: {

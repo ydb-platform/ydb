@@ -219,9 +219,9 @@ namespace NKikimr::NGRpcProxy::V1 {
     }
 
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(const TString& name, const Ydb::PersQueue::V1::TopicSettings& settings,
-                                                      NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx, bool alter, TString& error)
+                                                      NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx, bool alter, TString& error) 
     {
-        modifyScheme.SetOperationType(alter ? NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup : NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+        modifyScheme.SetOperationType(alter ? NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup : NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup); 
 
         auto pqDescr = alter ? modifyScheme.MutableAlterPersQueueGroup() : modifyScheme.MutableCreatePersQueueGroup();
         pqDescr->SetName(name);

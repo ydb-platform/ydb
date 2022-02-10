@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/bucket_quoter
+    library/cpp/bucket_quoter 
     library/cpp/regex/pcre
     library/cpp/string_utils/quote
     util

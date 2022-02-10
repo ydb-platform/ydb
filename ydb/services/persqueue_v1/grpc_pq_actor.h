@@ -1164,9 +1164,9 @@ public:
 
     void Bootstrap(const NActors::TActorContext &ctx);
     void ModifyPersqueueConfig(const TActorContext& ctx,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo);
+                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+                               const NKikimrSchemeOp::TDirEntry& selfInfo); 
 };
 
 class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest> {
@@ -1177,9 +1177,9 @@ public:
 
     void Bootstrap(const NActors::TActorContext &ctx);
     void ModifyPersqueueConfig(const TActorContext& ctx,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo);
+                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+                               const NKikimrSchemeOp::TDirEntry& selfInfo); 
 };
 
 

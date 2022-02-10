@@ -7,7 +7,7 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 namespace {
 
@@ -125,7 +125,7 @@ public:
         SetState(SelectStateFunc(state));
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override { 
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetDrop();
         const auto& streamName = op.GetName();
@@ -134,7 +134,7 @@ public:
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << streamName);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()); 
 
         const auto streamPath = op.HasId()
             ? TPath::Init(context.SS->MakeLocalId(op.GetId()), context.SS)
@@ -192,7 +192,7 @@ public:
         streamPath.Base()->DropTxId = OperationId.GetTxId();
         streamPath.Base()->LastTxId = OperationId.GetTxId();
 
-        context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Sub(1);
+        context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Sub(1); 
         context.SS->ClearDescribePathCaches(streamPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, streamPath.Base()->PathId);
         context.OnComplete.ActivateTx(OperationId);
@@ -318,7 +318,7 @@ public:
         SetState(SelectStateFunc(state));
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override { 
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetDropCdcStream();
         const auto& tableName = op.GetTableName();
@@ -328,7 +328,7 @@ public:
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << tableName << "/" << streamName);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()); 
 
         const auto tablePath = TPath::Resolve(workingDir, context.SS).Dive(tableName);
         {
@@ -375,12 +375,12 @@ public:
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
             return result;
         }
 
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr); 
             return result;
         }
 
@@ -402,7 +402,7 @@ public:
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxDropCdcStreamAtTable, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
-        tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
+        tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter; 
         tablePath.Base()->LastTxId = OperationId.GetTxId();
 
         for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
@@ -454,7 +454,7 @@ ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ET
 }
 
 TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
+    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream); 
 
     LOG_D("CreateDropCdcStream"
         << ": opId# " << opId
@@ -509,24 +509,24 @@ TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TT
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)}; 
     }
 
     if (!context.SS->CheckLocks(tablePath.Base()->PathId, tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+        return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)}; 
     }
 
     TVector<ISubOperationBase::TPtr> result;
 
     {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable);
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable); 
         outTx.MutableDropCdcStream()->CopyFrom(op);
 
         result.push_back(CreateDropCdcStreamAtTable(NextPartId(opId, result), outTx));
     }
 
     {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
+        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl); 
         outTx.MutableDrop()->SetName(streamPath.Base()->Name);
 
         result.push_back(CreateDropCdcStreamImpl(NextPartId(opId, result), outTx));
@@ -552,5 +552,5 @@ TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TT
     return result;
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

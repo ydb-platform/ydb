@@ -517,7 +517,7 @@ NThreading::TFuture<TResult> TKikimr::MakeDirectory(const TSchemaObject& object,
     request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);
     auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
     modifyScheme->SetWorkingDir(object.GetPath());
-    modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+    modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir); 
     auto* makeDirectory = modifyScheme->MutableMkDir();
     makeDirectory->SetName(name);
     return ExecuteRequest(request.Release());
@@ -530,7 +530,7 @@ NThreading::TFuture<TResult> TKikimr::CreateTable(TSchemaObject& object, const T
     request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);
     auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
     modifyScheme->SetWorkingDir(object.GetPath());
-    modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+    modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable); 
     auto* createTable = modifyScheme->MutableCreateTable();
     createTable->SetName(name);
     for (const TColumn& column : columns) {

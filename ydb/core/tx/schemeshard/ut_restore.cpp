@@ -20,14 +20,14 @@
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
-using namespace NKikimr::NSchemeShard;
+using namespace NKikimr::NSchemeShard; 
 using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";
 
-    TString GenerateScheme(const NKikimrSchemeOp::TPathDescription& pathDesc) {
+    TString GenerateScheme(const NKikimrSchemeOp::TPathDescription& pathDesc) { 
         UNIT_ASSERT(pathDesc.HasTable());
         const auto& tableDesc = pathDesc.GetTable();
 
@@ -51,17 +51,17 @@ namespace {
         return result;
     }
 
-    TString GenerateScheme(const NKikimrScheme::TEvDescribeSchemeResult& describeResult) {
+    TString GenerateScheme(const NKikimrScheme::TEvDescribeSchemeResult& describeResult) { 
         UNIT_ASSERT(describeResult.HasPathDescription());
         return GenerateScheme(describeResult.GetPathDescription());
     }
 
-    TString GenerateTableDescription(const NKikimrScheme::TEvDescribeSchemeResult& describeResult) {
+    TString GenerateTableDescription(const NKikimrScheme::TEvDescribeSchemeResult& describeResult) { 
         UNIT_ASSERT(describeResult.HasPathDescription());
         UNIT_ASSERT(describeResult.GetPathDescription().HasTable());
         const auto& tableDesc = describeResult.GetPathDescription().GetTable();
 
-        NKikimrSchemeOp::TTableDescription scheme;
+        NKikimrSchemeOp::TTableDescription scheme; 
         scheme.MutableColumns()->CopyFrom(tableDesc.GetColumns());
         scheme.MutableKeyColumnNames()->CopyFrom(tableDesc.GetKeyColumnNames());
 
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             ui16 port, THolder<TS3Mock>& s3Mock, TVector<TTestData>&& data, ui32 readBatchSize = 128) {
 
         const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess); 
 
         s3Mock.Reset(new TS3Mock(ConvertTestData({GenerateScheme(desc), std::move(data)}), TS3Mock::TSettings(port)));
         UNIT_ASSERT(s3Mock->Start());
@@ -613,7 +613,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
     }
 
     void TestRestoreNegative(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
-            const TVector<TEvSchemeShard::EStatus>& expectedResults) {
+            const TVector<TEvSchemeShard::EStatus>& expectedResults) { 
 
         TestRestore(runtime, ++txId, parentPath, Sprintf(R"(
             TableName: "%s"
@@ -635,25 +635,25 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications});
+        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications}); 
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir");
-        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Dir", {NKikimrScheme::StatusNameConflict});
+        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Dir", {NKikimrScheme::StatusNameConflict}); 
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
-        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Dir", {NKikimrScheme::StatusNameConflict});
-        TestRestoreNegative(runtime, ++txId, "/MyRoot", "NotExist", {NKikimrScheme::StatusPathDoesNotExist});
+        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Dir", {NKikimrScheme::StatusNameConflict}); 
+        TestRestoreNegative(runtime, ++txId, "/MyRoot", "NotExist", {NKikimrScheme::StatusPathDoesNotExist}); 
 
         TestAlterTable(runtime, ++txId, "/MyRoot",R"(
             Name: "Table"
             Columns { Name: "extra"  Type: "Utf8"}
         )");
-        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications});
+        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications}); 
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
         TestDropTable(runtime, ++txId, "/MyRoot", "Table");
-        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications});
+        TestRestoreNegative(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications}); 
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -668,10 +668,10 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
               KeyColumnNames: ["value"]
             }
         )");
-        TestRestoreNegative(runtime, ++txId, "/MyRoot", "IndexedTable", {NKikimrScheme::StatusMultipleModifications});
+        TestRestoreNegative(runtime, ++txId, "/MyRoot", "IndexedTable", {NKikimrScheme::StatusMultipleModifications}); 
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
-        TestRestoreNegative(runtime, ++txId, "/MyRoot", "IndexedTable", {NKikimrScheme::StatusInvalidParameter});
+        TestRestoreNegative(runtime, ++txId, "/MyRoot", "IndexedTable", {NKikimrScheme::StatusInvalidParameter}); 
     }
 
     template <typename TEvToDelay>
@@ -795,7 +795,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
-            UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess); 
 
             s3Mock.Reset(new TS3Mock(ConvertTestData({GenerateScheme(desc), std::move(data)}), TS3Mock::TSettings(port)));
             UNIT_ASSERT(s3Mock->Start());
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
-                UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+                UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess); 
 
                 s3Mock.Reset(new TS3Mock(ConvertTestData({GenerateScheme(desc), {data}}), TS3Mock::TSettings(port)));
                 UNIT_ASSERT(s3Mock->Start());
@@ -1110,8 +1110,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             const ui64 restoreTxId = t.TxId;
 
             t.TestEnv->ReliablePropose(runtime, CancelTxRequest(++t.TxId, restoreTxId), {
-                NKikimrScheme::StatusAccepted,
-                NKikimrScheme::StatusTxIdNotExists
+                NKikimrScheme::StatusAccepted, 
+                NKikimrScheme::StatusTxIdNotExists 
             });
             t.TestEnv->TestWaitNotification(runtime, {restoreTxId, t.TxId});
         });
@@ -1181,14 +1181,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     ExternalSchemeShard: true
                     ExternalHive: false
                     Name: "%s"
-                    StoragePools {
-                      Name: "name_User_kind_hdd-1"
-                      Kind: "common"
-                    }
-                    StoragePools {
-                      Name: "name_User_kind_hdd-2"
-                      Kind: "external"
-                    }
+                    StoragePools { 
+                      Name: "name_User_kind_hdd-1" 
+                      Kind: "common" 
+                    } 
+                    StoragePools { 
+                      Name: "name_User_kind_hdd-2" 
+                      Kind: "external" 
+                    } 
                 )", TStringBuf(dbName).RNextTok('/').data()));
                 env.TestWaitNotification(runtime, id);
             }
@@ -1212,7 +1212,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false) {
 
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions()); 
         Run(runtime, env, std::move(data), request, expectedStatus, dbName, serverless);
     }
 
@@ -1447,7 +1447,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             runtime.DispatchEvents(opts);
         }
 
-        const TString expectedBillRecord = R"({"usage":{"start":0,"quantity":50,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"281474976725758-9437199-2-9437199-4","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+        const TString expectedBillRecord = R"({"usage":{"start":0,"quantity":50,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"281474976725758-9437199-2-9437199-4","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})"; 
 
         UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 1);
         UNIT_ASSERT_NO_DIFF(billRecords[0], expectedBillRecord + "\n");
@@ -1560,12 +1560,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", {
-            NLs::HasTtlEnabled("modified_at", TDuration::Hours(2), NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS),
+            NLs::HasTtlEnabled("modified_at", TDuration::Hours(2), NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS), 
         });
     }
 
     Y_UNIT_TEST(ShouldRestoreStorageSettings) {
-        auto check = [](const NKikimrScheme::TEvDescribeSchemeResult& desc) {
+        auto check = [](const NKikimrScheme::TEvDescribeSchemeResult& desc) { 
             const auto& config = desc.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0).GetStorageConfig();
 
             UNIT_ASSERT_VALUES_EQUAL(config.GetSysLog().GetPreferredPoolKind(), "common");
@@ -1844,7 +1844,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     void CancelShouldSucceed(TDelayFunc delayFunc) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions()); 
         ui64 txId = 100;
 
         const auto data = GenerateTestData(R"(
@@ -1905,34 +1905,34 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(CancelUponCreatingTableShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) { 
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable;
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record 
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable; 
         });
     }
 
     Y_UNIT_TEST(CancelUponTransferringShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) { 
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore;
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record 
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore; 
         });
     }
 
     Y_UNIT_TEST(CancelUponBuildingIndicesShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) { 
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record 
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild; 
         });
     }
 }

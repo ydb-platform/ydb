@@ -16,7 +16,7 @@
 namespace NKikimr::NKqp {
 
 using namespace Tests;
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 
 struct TSimpleResource {
     ui32 Cnt;
@@ -58,9 +58,9 @@ void InitRoot(Tests::TServer::TPtr server,
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
     const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(settings.Domain);
 
-    auto evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
+    auto evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(1, tid); 
     auto transaction = evTx->Record.AddTransaction();
-    transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
+    transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain); 
     transaction->SetWorkingDir("/");
     auto op = transaction->MutableSubDomain();
     op->SetName(domain.Name);
@@ -75,17 +75,17 @@ void InitRoot(Tests::TServer::TPtr server,
 
     {
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); 
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), tid);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted); 
     }
 
-    auto evSubscribe = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(1);
+    auto evSubscribe = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(1); 
     runtime.SendToPipe(tid, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
 
     {
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle); 
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
     }
 }

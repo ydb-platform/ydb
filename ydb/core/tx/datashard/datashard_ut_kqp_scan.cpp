@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
                         request->Record.SetExecTimeoutPeriod(Max<ui64>());
                         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
-                        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+                        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions); 
                         auto &desc = *tx.MutableSplitMergeTablePartitions();
                         desc.SetTablePath("/Root/table-1");
                         desc.AddSourceTabletId(tabletId);

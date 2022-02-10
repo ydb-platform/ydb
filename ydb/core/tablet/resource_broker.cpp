@@ -1335,11 +1335,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->MutableLimit()->SetCpu(KqpRmQueueCPU);
     queue->MutableLimit()->SetMemory(KqpRmQueueMemory);
 
-    queue = config.AddQueues();
-    queue->SetName("queue_build_index");
-    queue->SetWeight(100);
+    queue = config.AddQueues(); 
+    queue->SetName("queue_build_index"); 
+    queue->SetWeight(100); 
     queue->MutableLimit()->SetCpu(10);
-
+ 
     auto task = config.AddTasks();
     task->SetName(NLocalDb::UnknownTaskName);
     task->SetQueueName(NLocalDb::DefaultQueueName);
@@ -1420,11 +1420,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetQueueName(NLocalDb::KqpResourceManagerQueue);
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
-    task = config.AddTasks();
-    task->SetName("build_index");
-    task->SetQueueName("queue_build_index");
-    task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
-
+    task = config.AddTasks(); 
+    task->SetName("build_index"); 
+    task->SetQueueName("queue_build_index"); 
+    task->SetDefaultDuration(TDuration::Minutes(10).GetValue()); 
+ 
     config.MutableResourceLimit()->SetCpu(TotalCPU);
     config.MutableResourceLimit()->SetMemory(TotalMemory);
 

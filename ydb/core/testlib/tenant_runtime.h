@@ -196,7 +196,7 @@ private:
 
 public:
     TTenantTestRuntime(const TTenantTestConfig &config,
-                       const NKikimrConfig::TAppConfig &extension = {},
+                       const NKikimrConfig::TAppConfig &extension = {}, 
                        bool createTenantPools = true);
 
     void CreateTenantPool(ui32 nodeIndex);

@@ -151,7 +151,7 @@ namespace NKikimr {
 
 namespace Tests {
 
-void TYqlServer::Initialize() {
+void TYqlServer::Initialize() { 
     ResumeYqlExecutionPromise = NThreading::NewPromise<void>();
 
     Runtime.Reset(new TTestActorRuntime(StaticNodes() + DynamicNodes(), true));
@@ -164,7 +164,7 @@ void TYqlServer::Initialize() {
     SetupDomains(app);
     SetupChannelProfiles(app);
 
-    app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
+    app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain)); 
     app.SetFnRegistry([this](const NKikimr::NScheme::TTypeRegistry& typeRegistry) -> NKikimr::NMiniKQL::IFunctionRegistry* {
             Y_UNUSED(typeRegistry);
             // register test UDFs
@@ -181,8 +181,8 @@ void TYqlServer::Initialize() {
     CreateBootstrapTablets();
     SetupStorage();
 
-    for (ui32 nodeIdx = 0; nodeIdx < GetSettings().NodeCount; ++nodeIdx) {
-        SetupDomainLocalService(nodeIdx);
+    for (ui32 nodeIdx = 0; nodeIdx < GetSettings().NodeCount; ++nodeIdx) { 
+        SetupDomainLocalService(nodeIdx); 
         SetupProxies(nodeIdx);
     }
     SetupLogging();
@@ -205,7 +205,7 @@ void MakeGatewaysConfig(const THashMap<TString, TString>& clusterMapping, NYql::
     }
 }
 
-void TYqlServer::ResumeYqlExecutionActor() {
+void TYqlServer::ResumeYqlExecutionActor() { 
     ResumeYqlExecutionPromise.SetValue();
 }
 

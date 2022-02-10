@@ -5,7 +5,7 @@ import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 
-package NKikimrScheme;
+package NKikimrScheme; 
 option java_package = "ru.yandex.kikimr.proto";
 
 message TSchemeConfig {
@@ -33,8 +33,8 @@ enum EStatus  {
     StatusTxIsNotCancellable = 11;
     StatusAccessDenied = 12;
     StatusNotAvailable = 13;
-    StatusPreconditionFailed = 14;
-    StatusRedirectDomain = 15;
+    StatusPreconditionFailed = 14; 
+    StatusRedirectDomain = 15; 
     StatusQuotaExceeded = 16;
     StatusResourceExhausted = 17;
     StatusReserved18 = 18;
@@ -45,11 +45,11 @@ enum EStatus  {
 }
 
 message TEvModifySchemeTransaction {
-    repeated NKikimrSchemeOp.TModifyScheme Transaction = 1;
+    repeated NKikimrSchemeOp.TModifyScheme Transaction = 1; 
     optional uint64 TxId = 2;
     optional uint64 TabletId = 3;
     optional string Owner = 5;
-    optional bool FailOnExist = 6; // depricated, TModifyScheme.FailOnExist is recomended
+    optional bool FailOnExist = 6; // depricated, TModifyScheme.FailOnExist is recomended 
     optional string UserToken = 7; // serialized NACLib::TUserToken
 }
 
@@ -67,14 +67,14 @@ message TEvDescribeSchemeResult {
     optional EStatus Status = 1;
     optional string Reason = 2;
     optional string Path = 3;
-    optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
+    optional NKikimrSchemeOp.TPathDescription PathDescription = 4; 
     optional fixed64 PathOwner = 5;
     optional fixed64 PathId = 6;
-
-    optional string LastExistedPrefixPath = 7;
-    optional fixed64 LastExistedPrefixPathId = 8;
-    optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
-    optional fixed64 PathOwnerId = 10;
+ 
+    optional string LastExistedPrefixPath = 7; 
+    optional fixed64 LastExistedPrefixPathId = 8; 
+    optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9; 
+    optional fixed64 PathOwnerId = 10; 
 }
 
 message TEvCancelTx {
@@ -88,7 +88,7 @@ message TEvCancelTxResult {
     optional EStatus Status = 1;
     optional string Result = 2;
     optional uint64 TargetTxId = 3;
-    optional uint64 TxId = 4;
+    optional uint64 TxId = 4; 
 }
 
 message TEvUpdateConfig {
@@ -124,45 +124,45 @@ message TEvNotifyTxCompletionRegistered {
 message TEvNotifyTxCompletionResult {
     optional uint64 TxId = 1;
 }
-
-message TSchemeLimits {
-    optional uint64 MaxDepth = 1;
-    optional uint64 MaxPaths = 2;
-    optional uint64 MaxChildrenInDir = 3;
-    optional uint64 MaxAclBytesSize = 4;
-
-    optional uint64 MaxTableColumns = 5;
-    optional uint64 MaxTableColumnNameLength = 6;
-    optional uint64 MaxTableKeyColumns = 7;
-    optional uint64 MaxTableIndices = 8;
-    optional uint64 MaxShards = 9;
-    optional uint64 MaxShardsInPath = 10;
-    optional uint64 MaxConsistentCopyTargets = 11;
-
-    optional uint64 MaxPathElementLength = 12;
-    optional string ExtraPathSymbolsAllowed = 13;
+ 
+message TSchemeLimits { 
+    optional uint64 MaxDepth = 1; 
+    optional uint64 MaxPaths = 2; 
+    optional uint64 MaxChildrenInDir = 3; 
+    optional uint64 MaxAclBytesSize = 4; 
+ 
+    optional uint64 MaxTableColumns = 5; 
+    optional uint64 MaxTableColumnNameLength = 6; 
+    optional uint64 MaxTableKeyColumns = 7; 
+    optional uint64 MaxTableIndices = 8; 
+    optional uint64 MaxShards = 9; 
+    optional uint64 MaxShardsInPath = 10; 
+    optional uint64 MaxConsistentCopyTargets = 11; 
+ 
+    optional uint64 MaxPathElementLength = 12; 
+    optional string ExtraPathSymbolsAllowed = 13; 
 
     optional uint64 MaxPQPartitions = 14;
-}
-
-message TEvInitTenantSchemeShard {
-    optional fixed64 DomainSchemeShard = 1;
-    optional fixed64 DomainPathId = 2;
-    optional string RootPath = 3;
-    optional string Owner = 4;
-
-    optional bytes EffectiveACL = 5;
-    optional uint64 EffectiveACLVersion = 6;
-
-    optional NKikimrSubDomains.TProcessingParams ProcessingParams = 7;
-    repeated NKikimrStoragePool.TStoragePool StoragePools = 8;
-
-    repeated NKikimrSchemeOp.TUserAttribute UserAttributes = 9;
-    optional uint64 UserAttributesVersion = 10;
-
-    optional TSchemeLimits SchemeLimits = 11;
-
-    optional bool InitiateMigration = 12;
+} 
+ 
+message TEvInitTenantSchemeShard { 
+    optional fixed64 DomainSchemeShard = 1; 
+    optional fixed64 DomainPathId = 2; 
+    optional string RootPath = 3; 
+    optional string Owner = 4; 
+ 
+    optional bytes EffectiveACL = 5; 
+    optional uint64 EffectiveACLVersion = 6; 
+ 
+    optional NKikimrSubDomains.TProcessingParams ProcessingParams = 7; 
+    repeated NKikimrStoragePool.TStoragePool StoragePools = 8; 
+ 
+    repeated NKikimrSchemeOp.TUserAttribute UserAttributes = 9; 
+    optional uint64 UserAttributesVersion = 10; 
+ 
+    optional TSchemeLimits SchemeLimits = 11; 
+ 
+    optional bool InitiateMigration = 12; 
 
     optional fixed64 ResourcesDomainOwnerId = 13;
     optional fixed64 ResourcesDomainPathId = 14;
@@ -170,174 +170,174 @@ message TEvInitTenantSchemeShard {
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 16;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 17;
-}
-
-message TEvInitTenantSchemeShardResult {
-    optional uint64 TenantSchemeShard = 1;
-    optional EStatus Status = 2;
-}
-
-message TShardID {
-    optional fixed64 OwnerId = 1;
-    optional uint64 LocalId = 2;
-}
-
-message TMigrateShard {
-    optional TShardID ShardIdx = 1;
-    optional uint32 Type = 2;
-    optional fixed64 TabletId = 3;
-
-    //repeated uint32 Channel = 4; // it should be equal to array index in StoragePoolName
-    repeated NKikimrStoragePool.TChannelBind BindedStoragePool = 4;
-}
-
-message TMigratePath {
+} 
+ 
+message TEvInitTenantSchemeShardResult { 
+    optional uint64 TenantSchemeShard = 1; 
+    optional EStatus Status = 2; 
+} 
+ 
+message TShardID { 
+    optional fixed64 OwnerId = 1; 
+    optional uint64 LocalId = 2; 
+} 
+ 
+message TMigrateShard { 
+    optional TShardID ShardIdx = 1; 
+    optional uint32 Type = 2; 
+    optional fixed64 TabletId = 3; 
+ 
+    //repeated uint32 Channel = 4; // it should be equal to array index in StoragePoolName 
+    repeated NKikimrStoragePool.TChannelBind BindedStoragePool = 4; 
+} 
+ 
+message TMigratePath { 
     optional NKikimrProto.TPathID PathId = 1;
     optional NKikimrProto.TPathID ParentPathId = 2;
-    optional string Name = 3;
-    optional uint32 PathType = 4;
-    optional uint64 StepCreated= 5;
-    optional fixed64 CreateTxId =6;
-    optional string Owner = 7;
-    optional string ACL = 8;
-    optional uint64 DirAlterVersion = 9;
-    optional uint64 UserAttrsAlterVersion = 10;
-    optional uint64 ACLVersion = 11;
-    repeated NKikimrSchemeOp.TUserAttribute UserAttributes = 12;
-}
-
-message TMigrateColumn {
-    optional uint32 Id = 1;
-    optional string Name = 2;
-    optional uint32 ColType = 3;
-    optional uint32 ColKeyOrder = 4;
-    optional uint64 CreateVersion = 5;
-    optional uint64 DeleteVersion = 6;
-    optional uint32 Family = 7;
+    optional string Name = 3; 
+    optional uint32 PathType = 4; 
+    optional uint64 StepCreated= 5; 
+    optional fixed64 CreateTxId =6; 
+    optional string Owner = 7; 
+    optional string ACL = 8; 
+    optional uint64 DirAlterVersion = 9; 
+    optional uint64 UserAttrsAlterVersion = 10; 
+    optional uint64 ACLVersion = 11; 
+    repeated NKikimrSchemeOp.TUserAttribute UserAttributes = 12; 
+} 
+ 
+message TMigrateColumn { 
+    optional uint32 Id = 1; 
+    optional string Name = 2; 
+    optional uint32 ColType = 3; 
+    optional uint32 ColKeyOrder = 4; 
+    optional uint64 CreateVersion = 5; 
+    optional uint64 DeleteVersion = 6; 
+    optional uint32 Family = 7; 
     optional uint32 DefaultKind = 8;
     optional bytes DefaultValue = 9;
     optional bool NotNull = 10;
-}
-
-message TMigratePartition {
-    optional uint32 Id = 1;
-    optional string RangeEnd = 2;
-    optional TShardID ShardIdx = 3;
-    optional string PartitionConfig = 4;
-}
-
-message TMigrateTable {
+} 
+ 
+message TMigratePartition { 
+    optional uint32 Id = 1; 
+    optional string RangeEnd = 2; 
+    optional TShardID ShardIdx = 3; 
+    optional string PartitionConfig = 4; 
+} 
+ 
+message TMigrateTable { 
     optional NKikimrProto.TPathID PathId = 1;
-    optional uint32 NextColId = 2;
-    optional string PartitionConfig = 3;
-    optional uint32 AlterVersion = 4;
-    optional uint32 PartitioningVersion = 5;
-
-    repeated TMigrateColumn Columns = 6;
-    repeated TMigratePartition Partitions = 7;
-}
-
-message TMigrateTableIndex {
+    optional uint32 NextColId = 2; 
+    optional string PartitionConfig = 3; 
+    optional uint32 AlterVersion = 4; 
+    optional uint32 PartitioningVersion = 5; 
+ 
+    repeated TMigrateColumn Columns = 6; 
+    repeated TMigratePartition Partitions = 7; 
+} 
+ 
+message TMigrateTableIndex { 
     optional NKikimrProto.TPathID PathId = 1;
-    optional uint64 AlterVersion = 2;
-    optional uint32 Type = 3;
-    optional uint32 State = 4;
-    repeated string Keys = 5;
-}
-
-message TMigrateKesus {
+    optional uint64 AlterVersion = 2; 
+    optional uint32 Type = 3; 
+    optional uint32 State = 4; 
+    repeated string Keys = 5; 
+} 
+ 
+message TMigrateKesus { 
     optional NKikimrProto.TPathID PathId = 1;
-    optional uint64 Version = 2;
-    optional string Config = 3;
-}
-
-message TEvMigrate {
-    optional uint64 SchemeShardGeneration = 1;
-    optional TMigratePath Path = 2;
-    optional NKikimrSchemeOp.TPathVersion PathVersion = 3;
-
-    repeated TMigrateShard Shards = 4;
-
-    optional TMigrateTable Table = 5;
-    optional TMigrateTableIndex TableIndex = 6;
-    optional TMigrateKesus Kesus = 7;
-}
-
-message TEvMigrateResult {
-    optional fixed64 TenantSchemeShard = 1;
-    optional uint64 SchemeShardGeneration = 2;
+    optional uint64 Version = 2; 
+    optional string Config = 3; 
+} 
+ 
+message TEvMigrate { 
+    optional uint64 SchemeShardGeneration = 1; 
+    optional TMigratePath Path = 2; 
+    optional NKikimrSchemeOp.TPathVersion PathVersion = 3; 
+ 
+    repeated TMigrateShard Shards = 4; 
+ 
+    optional TMigrateTable Table = 5; 
+    optional TMigrateTableIndex TableIndex = 6; 
+    optional TMigrateKesus Kesus = 7; 
+} 
+ 
+message TEvMigrateResult { 
+    optional fixed64 TenantSchemeShard = 1; 
+    optional uint64 SchemeShardGeneration = 2; 
     optional NKikimrProto.TPathID PathId = 3;
-    repeated TShardID ShardIds = 4;
-}
-
-message TEvPublishTenantAsReadOnly {
-    optional fixed64 DomainSchemeShard = 1;
-}
-
-message TEvPublishTenantAsReadOnlyResult {
-    optional fixed64 TenantSchemeShard = 1;
-    optional EStatus Status = 2;
-}
-
-message TEvRewriteOwner {
-    optional fixed64 PrevOwner = 1;
-    optional fixed64 NewOwner = 2;
-
-    optional uint64 Generation = 3;
-    optional uint64 Round = 4;
-}
-
-message TEvRewriteOwnerResult {
-    optional EStatus Status = 1;
-}
-
-message TEvPublishTenant {
-    optional fixed64 DomainSchemeShard = 1;
-}
-
-message TEvPublishTenantResult {
-    optional fixed64 TenantSchemeShard = 1;
-}
-
-message TEvSyncTenantSchemeShard {
-    optional fixed64 DomainSchemeShard = 1;
-    optional fixed64 DomainPathId = 2;
-    optional fixed64 TabletID = 3;
-    optional uint64 Generation = 4;
-
-    optional uint64 EffectiveACLVersion = 5;
-    optional uint64 SubdomainVersion = 6;
-    optional uint64 UserAttributesVersion = 7;
-
-    optional uint64 TenantHive = 8;
+    repeated TShardID ShardIds = 4; 
+} 
+ 
+message TEvPublishTenantAsReadOnly { 
+    optional fixed64 DomainSchemeShard = 1; 
+} 
+ 
+message TEvPublishTenantAsReadOnlyResult { 
+    optional fixed64 TenantSchemeShard = 1; 
+    optional EStatus Status = 2; 
+} 
+ 
+message TEvRewriteOwner { 
+    optional fixed64 PrevOwner = 1; 
+    optional fixed64 NewOwner = 2; 
+ 
+    optional uint64 Generation = 3; 
+    optional uint64 Round = 4; 
+} 
+ 
+message TEvRewriteOwnerResult { 
+    optional EStatus Status = 1; 
+} 
+ 
+message TEvPublishTenant { 
+    optional fixed64 DomainSchemeShard = 1; 
+} 
+ 
+message TEvPublishTenantResult { 
+    optional fixed64 TenantSchemeShard = 1; 
+} 
+ 
+message TEvSyncTenantSchemeShard { 
+    optional fixed64 DomainSchemeShard = 1; 
+    optional fixed64 DomainPathId = 2; 
+    optional fixed64 TabletID = 3; 
+    optional uint64 Generation = 4; 
+ 
+    optional uint64 EffectiveACLVersion = 5; 
+    optional uint64 SubdomainVersion = 6; 
+    optional uint64 UserAttributesVersion = 7; 
+ 
+    optional uint64 TenantHive = 8; 
     optional uint64 TenantSysViewProcessor = 9;
-
-    optional string TenantRootACL = 10;
-}
-
-message TEvUpdateTenantSchemeShard {
-    optional fixed64 TabletId = 1;
-    optional uint64 Generation = 2;
-
-    optional string Owner = 3;
-    optional bytes EffectiveACL = 4;
-    optional uint64 EffectiveACLVersion = 5;
-
-    repeated NKikimrStoragePool.TStoragePool StoragePools = 6;
-    optional uint64 SubdomainVersion = 7;
-
-    repeated NKikimrSchemeOp.TUserAttribute UserAttributes = 8;
-    optional uint64 UserAttributesVersion = 9;
-
-    optional uint64 TenantHive = 10;
+ 
+    optional string TenantRootACL = 10; 
+} 
+ 
+message TEvUpdateTenantSchemeShard { 
+    optional fixed64 TabletId = 1; 
+    optional uint64 Generation = 2; 
+ 
+    optional string Owner = 3; 
+    optional bytes EffectiveACL = 4; 
+    optional uint64 EffectiveACLVersion = 5; 
+ 
+    repeated NKikimrStoragePool.TStoragePool StoragePools = 6; 
+    optional uint64 SubdomainVersion = 7; 
+ 
+    repeated NKikimrSchemeOp.TUserAttribute UserAttributes = 8; 
+    optional uint64 UserAttributesVersion = 9; 
+ 
+    optional uint64 TenantHive = 10; 
     optional uint64 TenantSysViewProcessor = 11;
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;
-
-    optional string UpdateTenantRootACL = 13;
-}
-
+ 
+    optional string UpdateTenantRootACL = 13; 
+} 
+ 
 message TEvFindTabletSubDomainPathId {
     optional uint64 TabletId = 1; // DataShard tablet id
 }

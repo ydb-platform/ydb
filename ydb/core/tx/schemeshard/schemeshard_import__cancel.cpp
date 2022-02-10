@@ -10,11 +10,11 @@
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
+struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase { 
     TEvImport::TEvCancelImportRequest::TPtr Request;
 
     explicit TTxCancel(TSelf *self, TEvImport::TEvCancelImportRequest::TPtr& ev)
@@ -99,11 +99,11 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 
 }; // TTxCancel
 
-struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    TEvSchemeShard::TEvCancelTxResult::TPtr CancelTxResult = nullptr;
+struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase { 
+    TEvSchemeShard::TEvCancelTxResult::TPtr CancelTxResult = nullptr; 
     TEvIndexBuilder::TEvCancelResponse::TPtr CancelIndexBuildResult = nullptr;
 
-    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev) 
         : TXxport::TTxBase(self)
         , CancelTxResult(ev)
     {
@@ -194,17 +194,17 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
 
 }; // TTxCancelAck
 
-ITransaction* TSchemeShard::CreateTxCancelImport(TEvImport::TEvCancelImportRequest::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxCancelImport(TEvImport::TEvCancelImportRequest::TPtr& ev) { 
     return new TImport::TTxCancel(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxCancelImportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxCancelImportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev) { 
     return new TImport::TTxCancelAck(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxCancelImportAck(TEvIndexBuilder::TEvCancelResponse::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxCancelImportAck(TEvIndexBuilder::TEvCancelResponse::TPtr& ev) { 
     return new TImport::TTxCancelAck(this, ev);
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

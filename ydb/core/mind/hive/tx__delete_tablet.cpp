@@ -6,8 +6,8 @@ namespace NHive {
 
 class TTxDeleteTablet : public TTransactionBase<THive> {
     TEvHive::TEvDeleteTablet::TPtr Event;
-    ui64 OwnerId = 0;
-    TVector<ui64> LocalIdxs;
+    ui64 OwnerId = 0; 
+    TVector<ui64> LocalIdxs; 
     NKikimrProto::EReplyStatus Status = NKikimrProto::ERROR;
     TVector<TTabletId> TabletIds;
     TCompleteNotifications Notifications;
@@ -23,14 +23,14 @@ public:
 
     TTabletId DoDeleteTablet(ui64 owner, ui64 idx, NIceDb::TNiceDb& db) {
         TTabletId deletedTablet = 0;
-
-        TOwnerIdxType::TValueType ownerIdx(owner, idx);
+ 
+        TOwnerIdxType::TValueType ownerIdx(owner, idx); 
         auto it = Self->OwnerToTablet.find(ownerIdx);
         if (it != Self->OwnerToTablet.end()) {
             deletedTablet = it->second;
             BLOG_D("THive::TTxDeleteTablet::Execute Tablet " << it->second);
             TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(it->second);
-            Y_VERIFY(tablet != nullptr, "%s", (TStringBuilder() << "Tablet " << it->second << " OwnerIdx " << ownerIdx).data());
+            Y_VERIFY(tablet != nullptr, "%s", (TStringBuilder() << "Tablet " << it->second << " OwnerIdx " << ownerIdx).data()); 
             if (tablet->SeizedByChild) {
                 BLOG_W("THive::TTxDeleteTablet tablet " << it->second << " seized by child");
                 return 0;
@@ -48,19 +48,19 @@ public:
                 }
             } else {
                 BLOG_D("THive::TTxDeleteTablet::Execute Tablet " << it->second << " already in ETabletState::Deleting");
-            }
-        } else {
+            } 
+        } else { 
             BLOG_W("THive::TTxDeleteTablet tablet " << ownerIdx << " wasn't found");
             Self->PendingCreateTablets.erase({owner, idx});
-        }
-
+        } 
+ 
         return deletedTablet;
-    }
-
+    } 
+ 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvDeleteTablet& rec = Event->Get()->Record;
         NIceDb::TNiceDb db(txc.DB);
-        OwnerId = rec.GetShardOwnerId();
+        OwnerId = rec.GetShardOwnerId(); 
         for (ui64 idx : rec.GetShardLocalIdx()) {
             LocalIdxs.push_back(idx);
         }
@@ -78,8 +78,8 @@ public:
             Status = NKikimrProto::INVALID_OWNER; // actually this status from blob storage, but I think it fits this situation perfectly
             return true; // abort transaction
         }
-        for (ui64 idx : rec.GetShardLocalIdx()) {
-            Status = NKikimrProto::OK;
+        for (ui64 idx : rec.GetShardLocalIdx()) { 
+            Status = NKikimrProto::OK; 
             if (TTabletId deletedTablet = DoDeleteTablet(OwnerId, idx, db)) {
                 TabletIds.push_back(deletedTablet);
             }
@@ -119,16 +119,16 @@ ITransaction* THive::CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev) {
 
 
 // TODO: split
-class TTxDeleteOwnerTablets : public TTransactionBase<THive> {
-    TEvHive::TEvDeleteOwnerTablets::TPtr Event;
-    NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
-    TVector<ui64> ToDelete;
-public:
-    TTxDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev, THive* hive)
-        : TBase(hive)
-        , Event(ev)
-    {}
-
+class TTxDeleteOwnerTablets : public TTransactionBase<THive> { 
+    TEvHive::TEvDeleteOwnerTablets::TPtr Event; 
+    NKikimrProto::EReplyStatus Status = NKikimrProto::OK; 
+    TVector<ui64> ToDelete; 
+public: 
+    TTxDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev, THive* hive) 
+        : TBase(hive) 
+        , Event(ev) 
+    {} 
+ 
     TTabletId DoDeleteTablet(ui64 owner, ui64 idx, NIceDb::TNiceDb& db) {
         TTabletId deletedTablet = 0;
 
@@ -166,45 +166,45 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
+        const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record; 
         BLOG_D("THive::TEvDeleteOwnerTablets::Execute Owner: " << rec.GetOwner());
         for (auto item : Self->OwnerToTablet) {
-            if (item.first.first != rec.GetOwner()) {
-                continue;
-            }
+            if (item.first.first != rec.GetOwner()) { 
+                continue; 
+            } 
             const TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(item.second);
             if (tablet) {
                 if (!tablet->IsDeleting()) {
                     ToDelete.push_back(item.first.second);
                 }
             }
-        }
-
-        if (ToDelete.empty()) {
-            Status = NKikimrProto::ALREADY;
-            return true;
-        }
-
-        NIceDb::TNiceDb db(txc.DB);
+        } 
+ 
+        if (ToDelete.empty()) { 
+            Status = NKikimrProto::ALREADY; 
+            return true; 
+        } 
+ 
+        NIceDb::TNiceDb db(txc.DB); 
         for (auto idx : ToDelete) {
             DoDeleteTablet(rec.GetOwner(), idx, db);
-        }
+        } 
         db.Table<Schema::BlockedOwner>().Key(rec.GetOwner()).Update();
-
-        return true;
-    }
-
+ 
+        return true; 
+    } 
+ 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TEvDeleteOwnerTablets::Complete(" << Event->Get()->Record.GetOwner() << "), " << ToDelete.size() << " tablet has been deleted");
         Self->BlockedOwners.emplace(Event->Get()->Record.GetOwner());
-        ctx.Send(Event->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(Status, Self->TabletID(), Event->Get()->Record.GetOwner(), Event->Get()->Record.GetTxId()));
-    }
-};
-
-ITransaction* THive::CreateDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
-    return new TTxDeleteOwnerTablets(ev, this);
-}
-
-
+        ctx.Send(Event->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(Status, Self->TabletID(), Event->Get()->Record.GetOwner(), Event->Get()->Record.GetTxId())); 
+    } 
+}; 
+ 
+ITransaction* THive::CreateDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) { 
+    return new TTxDeleteOwnerTablets(ev, this); 
+} 
+ 
+ 
 } // NHive
 } // NKikimr

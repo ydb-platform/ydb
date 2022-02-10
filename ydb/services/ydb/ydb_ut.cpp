@@ -1351,36 +1351,36 @@ partitioning_settings {
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
             grpc::ClientContext context;
-            Ydb::Table::CopyTablesRequest request;
-            TString scheme(R"(
-                tables {
-                    source_path: "/Root/TheTable"
-                    destination_path: "/Root/TheTable3"
-                }
-                tables {
-                    source_path: "/Root/TheTable2"
-                    destination_path: "/Root/TheTable4"
-                }
-            )");
-            ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
-            Ydb::Table::CopyTablesResponse response;
-            auto status = Stub_->CopyTables(&context, request, &response);
-            auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());
-            UNIT_ASSERT(deferred.ready() == true);
-            //id = deferred.id();
-        }
-        /*
-        {
-            auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
-        }
-        */
-        id.clear();
-        {
-            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
-            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
+            Ydb::Table::CopyTablesRequest request; 
+            TString scheme(R"( 
+                tables { 
+                    source_path: "/Root/TheTable" 
+                    destination_path: "/Root/TheTable3" 
+                } 
+                tables { 
+                    source_path: "/Root/TheTable2" 
+                    destination_path: "/Root/TheTable4" 
+                } 
+            )"); 
+            ::google::protobuf::TextFormat::ParseFromString(scheme, &request); 
+            Ydb::Table::CopyTablesResponse response; 
+            auto status = Stub_->CopyTables(&context, request, &response); 
+            auto deferred = response.operation(); 
+            UNIT_ASSERT(status.ok()); 
+            UNIT_ASSERT(deferred.ready() == true); 
+            //id = deferred.id(); 
+        } 
+        /* 
+        { 
+            auto status = WaitForStatus(Channel_, id); 
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
+        } 
+        */ 
+        id.clear(); 
+        { 
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_; 
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_); 
+            grpc::ClientContext context; 
             Ydb::Table::DropTableRequest request;
             TString scheme(
                 "path: \"/Root/TheTable\"");
@@ -3181,13 +3181,13 @@ tx_meta {
 
 namespace {
 
-NKikimrSchemeOp::TCompactionPolicy DEFAULT_COMPACTION_POLICY;
-NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY1;
-NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY2;
-NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG1;
-NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG2;
-NKikimrSchemeOp::TStorageConfig STORAGE_CONFIG1;
-NKikimrSchemeOp::TStorageConfig STORAGE_CONFIG2;
+NKikimrSchemeOp::TCompactionPolicy DEFAULT_COMPACTION_POLICY; 
+NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY1; 
+NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY2; 
+NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG1; 
+NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG2; 
+NKikimrSchemeOp::TStorageConfig STORAGE_CONFIG1; 
+NKikimrSchemeOp::TStorageConfig STORAGE_CONFIG2; 
 NKikimrConfig::TExecutionPolicy EXECUTION_POLICY1;
 NKikimrConfig::TExecutionPolicy EXECUTION_POLICY2;
 NKikimrConfig::TPartitioningPolicy PARTITIONING_POLICY1;
@@ -3205,17 +3205,17 @@ TStoragePools CreatePoolsForTenant(TClient& client, const TDomainsInfo::TDomain:
     for (auto& poolType: pool_types) {
         auto& poolKind = poolType.first;
         result.emplace_back(client.CreateStoragePool(poolKind, tenant), poolKind);
-    }
+    } 
     return result;
 }
-
-NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclarationSetting(const TString& name)
-{
-    NKikimrSubDomains::TSubDomainSettings subdomain;
-    subdomain.SetName(name);
-    return subdomain;
-}
-
+ 
+NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclarationSetting(const TString& name) 
+{ 
+    NKikimrSubDomains::TSubDomainSettings subdomain; 
+    subdomain.SetName(name); 
+    return subdomain; 
+} 
+ 
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString& name, const TStoragePools& pools  = {})
 {
     NKikimrSubDomains::TSubDomainSettings subdomain;
@@ -3226,28 +3226,28 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString& 
     subdomain.SetTimeCastBucketsPerMediator(2);
     for (auto& pool: pools) {
         *subdomain.AddStoragePools() = pool;
-    }
+    } 
     return subdomain;
-}
-
+} 
+ 
 void InitConfigs(TKikimrWithGrpcAndRootSchema &server) {
     {
-        TString tenant_name = "ydb_ut_tenant";
-        TString tenant = Sprintf("/Root/%s", tenant_name.c_str());
-
-        TClient client(*server.ServerSettings);
-
-        TStoragePools tenant_pools = CreatePoolsForTenant(client, server.ServerSettings->StoragePoolTypes, tenant_name);
-
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 client.CreateSubdomain("/Root", GetSubDomainDeclarationSetting(tenant_name)));
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 client.AlterSubdomain("/Root", GetSubDomainDefaultSetting(tenant_name, tenant_pools), TDuration::MilliSeconds(500)));
-
-        server.Tenants_->Run(tenant);
-    }
-
-    {
+        TString tenant_name = "ydb_ut_tenant"; 
+        TString tenant = Sprintf("/Root/%s", tenant_name.c_str()); 
+ 
+        TClient client(*server.ServerSettings); 
+ 
+        TStoragePools tenant_pools = CreatePoolsForTenant(client, server.ServerSettings->StoragePoolTypes, tenant_name); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, 
+                                 client.CreateSubdomain("/Root", GetSubDomainDeclarationSetting(tenant_name))); 
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS, 
+                                 client.AlterSubdomain("/Root", GetSubDomainDefaultSetting(tenant_name, tenant_pools), TDuration::MilliSeconds(500))); 
+ 
+        server.Tenants_->Run(tenant); 
+    } 
+ 
+    { 
         NLocalDb::TCompactionPolicyPtr policy = NLocalDb::CreateDefaultUserTablePolicy();
         DEFAULT_COMPACTION_POLICY.Clear();
         policy->Serialize(DEFAULT_COMPACTION_POLICY);
@@ -3363,7 +3363,7 @@ void InitConfigs(TKikimrWithGrpcAndRootSchema &server) {
         STORAGE_POLICY1.Clear();
         auto &family = *STORAGE_POLICY1.AddColumnFamilies();
         family.SetId(0);
-        family.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        family.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4); 
         family.MutableStorageConfig()->CopyFrom(STORAGE_CONFIG1);
     }
 
@@ -3371,7 +3371,7 @@ void InitConfigs(TKikimrWithGrpcAndRootSchema &server) {
         STORAGE_POLICY2.Clear();
         auto &family = *STORAGE_POLICY2.AddColumnFamilies();
         family.SetId(0);
-        family.SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
+        family.SetColumnCache(NKikimrSchemeOp::ColumnCacheEver); 
         family.MutableStorageConfig()->CopyFrom(STORAGE_CONFIG2);
     }
 
@@ -3504,11 +3504,11 @@ void InitConfigs(TKikimrWithGrpcAndRootSchema &server) {
 
 void CheckTableSettings(const TKikimrWithGrpcAndRootSchema &server,
                         const TString &path,
-                        NKikimrSchemeOp::TTableDescription expected)
+                        NKikimrSchemeOp::TTableDescription expected) 
 {
     TClient client(*server.ServerSettings);
     auto desc = client.Ls(path)->Record.GetPathDescription();
-    NKikimrSchemeOp::TTableDescription resp = desc.GetTable();
+    NKikimrSchemeOp::TTableDescription resp = desc.GetTable(); 
     // Table profiles affect only few fields. Clear other fields to simplify comparison.
     THashSet<ui32> affectedFields = {
         7  // PartitionConfig
@@ -3581,14 +3581,14 @@ void CheckTablePartitions(const TKikimrWithGrpcAndRootSchema &server,
     }
 }
 
-void Apply(const NKikimrSchemeOp::TCompactionPolicy &policy,
-           NKikimrSchemeOp::TTableDescription &description)
+void Apply(const NKikimrSchemeOp::TCompactionPolicy &policy, 
+           NKikimrSchemeOp::TTableDescription &description) 
 {
     description.MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(policy);
 }
 
 void Apply(const NKikimrConfig::TExecutionPolicy &policy,
-           NKikimrSchemeOp::TTableDescription &description)
+           NKikimrSchemeOp::TTableDescription &description) 
 {
     auto &partition = *description.MutablePartitionConfig();
 
@@ -3615,7 +3615,7 @@ void Apply(const NKikimrConfig::TExecutionPolicy &policy,
 }
 
 void Apply(const NKikimrConfig::TPartitioningPolicy &policy,
-           NKikimrSchemeOp::TTableDescription &description)
+           NKikimrSchemeOp::TTableDescription &description) 
 {
     auto &partition = *description.MutablePartitionConfig();
 
@@ -3640,7 +3640,7 @@ void Apply(const NKikimrConfig::TPartitioningPolicy &policy,
 }
 
 void Apply(const NKikimrConfig::TStoragePolicy &policy,
-           NKikimrSchemeOp::TTableDescription &description)
+           NKikimrSchemeOp::TTableDescription &description) 
 {
     auto &partition = *description.MutablePartitionConfig();
 
@@ -3650,7 +3650,7 @@ void Apply(const NKikimrConfig::TStoragePolicy &policy,
 }
 
 void Apply(const NKikimrConfig::TReplicationPolicy &policy,
-           NKikimrSchemeOp::TTableDescription &description)
+           NKikimrSchemeOp::TTableDescription &description) 
 {
     auto &partition = *description.MutablePartitionConfig();
 
@@ -3673,7 +3673,7 @@ void Apply(const NKikimrConfig::TReplicationPolicy &policy,
 }
 
 void Apply(const NKikimrConfig::TCachingPolicy &policy,
-           NKikimrSchemeOp::TTableDescription &description)
+           NKikimrSchemeOp::TTableDescription &description) 
 {
     auto &partition = *description.MutablePartitionConfig();
 
@@ -3769,9 +3769,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         //server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CONFIGS_DISPATCHER, NLog::PRI_TRACE);
         InitConfigs(server);
 
-        NKikimrSchemeOp::TTableDescription defaultDescription;
+        NKikimrSchemeOp::TTableDescription defaultDescription; 
         defaultDescription.MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(DEFAULT_COMPACTION_POLICY);
-        //defaultDescription.MutablePartitionConfig()->SetChannelProfileId(0);
+        //defaultDescription.MutablePartitionConfig()->SetChannelProfileId(0); 
 
         {
             CreateTable(server, "/Root/table-1");
@@ -3806,9 +3806,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -3816,15 +3816,15 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile2");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY2, description);
             Apply(EXECUTION_POLICY2, description);
             Apply(PARTITIONING_POLICY2, description);
@@ -3832,7 +3832,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY2, description);
             Apply(CACHING_POLICY2, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description); 
         }
     }
 
@@ -3855,9 +3855,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                 .AddNullableColumn("Key", EPrimitiveType::Uint64);
             tableBuilder.SetPrimaryKeyColumn("Key");
             auto settings = TCreateTableSettings().PresetName("profile1");
-            auto res = session.CreateTable("/Root/ydb_ut_tenant/table-1", tableBuilder.Build(), settings).ExtractValueSync();
+            auto res = session.CreateTable("/Root/ydb_ut_tenant/table-1", tableBuilder.Build(), settings).ExtractValueSync(); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -3865,7 +3865,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description); 
         }
 
         {
@@ -3874,9 +3874,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                 .AddNullableColumn("Key", EPrimitiveType::Uint64);
             tableBuilder.SetPrimaryKeyColumn("Key");
             auto settings = TCreateTableSettings().PresetName("profile2");
-            auto res = session.CreateTable("/Root/ydb_ut_tenant/table-2", tableBuilder.Build(), settings).ExtractValueSync();
+            auto res = session.CreateTable("/Root/ydb_ut_tenant/table-2", tableBuilder.Build(), settings).ExtractValueSync(); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY2, description);
             Apply(EXECUTION_POLICY2, description);
             Apply(PARTITIONING_POLICY2, description);
@@ -3884,14 +3884,14 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY2, description);
             Apply(CACHING_POLICY2, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description); 
         }
 
         {
             auto res = session.ExecuteSchemeQuery("CREATE TABLE [/Root/ydb_ut_tenant/table-3] (Key Uint64, Value Utf8, PRIMARY KEY (Key))").ExtractValueSync();
-            NKikimrSchemeOp::TTableDescription defaultDescription;
+            NKikimrSchemeOp::TTableDescription defaultDescription; 
             defaultDescription.MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(DEFAULT_COMPACTION_POLICY);
-            //defaultDescription.MutablePartitionConfig()->SetChannelProfileId(0);
+            //defaultDescription.MutablePartitionConfig()->SetChannelProfileId(0); 
 
             CheckTableSettings(server, "/Root/ydb_ut_tenant/table-3", defaultDescription);
         }
@@ -3907,9 +3907,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_compaction_policy()->set_preset_name("compaction2");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY2, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -3917,16 +3917,16 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_compaction_policy()->set_preset_name("default");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(DEFAULT_COMPACTION_POLICY, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -3934,7 +3934,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description); 
         }
     }
 
@@ -3947,9 +3947,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_execution_policy()->set_preset_name("execution2");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY2, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -3957,23 +3957,23 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_execution_policy()->set_preset_name("default");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
             Apply(STORAGE_POLICY1, description);
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description); 
         }
     }
 
@@ -3985,9 +3985,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_partitioning_policy()->set_preset_name("partitioning2");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY2, description);
@@ -3995,23 +3995,23 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_partitioning_policy()->set_preset_name("default");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(STORAGE_POLICY1, description);
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description); 
         }
 
         {
@@ -4019,9 +4019,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.set_preset_name("profile1");
             profile.mutable_partitioning_policy()->set_auto_partitioning(Ydb::Table::PartitioningPolicy::DISABLED);
             profile.mutable_partitioning_policy()->set_uniform_partitions(5);
-            CreateTable(server, "/Root/ydb_ut_tenant/table-3", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-3", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(REPLICATION_POLICY1, description);
@@ -4033,7 +4033,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(policy, description);
             Apply(STORAGE_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-3", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-3", description); 
         }
 
         {
@@ -4042,9 +4042,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.mutable_partitioning_policy()->set_preset_name("partitioning2");
             profile.mutable_partitioning_policy()->set_auto_partitioning(Ydb::Table::PartitioningPolicy::DISABLED);
             profile.mutable_partitioning_policy()->set_uniform_partitions(5);
-            CreateTable(server, "/Root/ydb_ut_tenant/table-4", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-4", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(REPLICATION_POLICY1, description);
@@ -4056,7 +4056,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(policy, description);
             Apply(STORAGE_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-4", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-4", description); 
         }
 
         {
@@ -4064,9 +4064,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.set_preset_name("profile1");
             profile.mutable_partitioning_policy()->set_preset_name("default");
             profile.mutable_partitioning_policy()->set_auto_partitioning(Ydb::Table::PartitioningPolicy::AUTO_SPLIT);
-            CreateTable(server, "/Root/ydb_ut_tenant/table-5", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-5", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(REPLICATION_POLICY1, description);
@@ -4077,7 +4077,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(policy, description);
             Apply(STORAGE_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-5", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-5", description); 
         }
 
     }
@@ -4108,7 +4108,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             auto settings = TCreateTableSettings().PresetName("profile1");
             auto res = session.CreateTable("/Root/ydb_ut_tenant/table-1", tableBuilder.Build(), settings).ExtractValueSync();
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -4180,9 +4180,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_storage_policy()->set_preset_name("storage2");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -4190,25 +4190,25 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-1", description); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_storage_policy()->set_preset_name("default");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
             Apply(REPLICATION_POLICY1, description);
             Apply(CACHING_POLICY1, description);
             // TODO: remove this line when storage config is supported in SchemeShard.
-            //description.MutablePartitionConfig()->SetChannelProfileId(0);
+            //description.MutablePartitionConfig()->SetChannelProfileId(0); 
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-2", description); 
         }
 
         {
@@ -4217,9 +4217,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.mutable_storage_policy()->mutable_syslog()->set_media("ssd");
             profile.mutable_storage_policy()->mutable_data()->set_media("ssd");
             profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
-            CreateTable(server, "/Root/ydb_ut_tenant/table-3", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-3", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -4230,10 +4230,10 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             policy.MutableColumnFamilies(0)->MutableStorageConfig()->MutableSysLog()->SetAllowOtherKinds(false);
             policy.MutableColumnFamilies(0)->MutableStorageConfig()->MutableData()->SetPreferredPoolKind("ssd");
             policy.MutableColumnFamilies(0)->MutableStorageConfig()->MutableData()->SetAllowOtherKinds(false);
-            policy.MutableColumnFamilies(0)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
+            policy.MutableColumnFamilies(0)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver); 
             Apply(policy, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-3", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-3", description); 
         }
 
         {
@@ -4243,9 +4243,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.mutable_storage_policy()->mutable_log()->set_media("hdd");
             profile.mutable_storage_policy()->mutable_external()->set_media("hdd");
             profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::DISABLED);
-            CreateTable(server, "/Root/ydb_ut_tenant/table-4", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-4", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -4259,7 +4259,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             policy.MutableColumnFamilies(0)->ClearColumnCache();
             Apply(policy, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-4", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-4", description); 
         }
 
         {
@@ -4269,9 +4269,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.mutable_storage_policy()->mutable_syslog()->set_media("ssd");
             profile.mutable_storage_policy()->mutable_log()->set_media("ssd");
             profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
-            CreateTable(server, "/Root/ydb_ut_tenant/table-5", profile);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-5", profile); 
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -4283,10 +4283,10 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             policy.MutableColumnFamilies(0)->MutableStorageConfig()->MutableSysLog()->SetAllowOtherKinds(false);
             policy.MutableColumnFamilies(0)->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind("ssd");
             policy.MutableColumnFamilies(0)->MutableStorageConfig()->MutableLog()->SetAllowOtherKinds(false);
-            policy.MutableColumnFamilies(0)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
+            policy.MutableColumnFamilies(0)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver); 
             Apply(policy, description);
 
-            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-5", description);
+            CheckTableSettings(server, "/Root/ydb_ut_tenant/table-5", description); 
         }
     }
 
@@ -4300,7 +4300,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.mutable_caching_policy()->set_preset_name("caching2");
             CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile);
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -4317,7 +4317,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.mutable_caching_policy()->set_preset_name("default");
             CreateTable(server, "/Root/ydb_ut_tenant/table-2", profile);
 
-            NKikimrSchemeOp::TTableDescription description;
+            NKikimrSchemeOp::TTableDescription description; 
             Apply(COMPACTION_POLICY1, description);
             Apply(EXECUTION_POLICY1, description);
             Apply(PARTITIONING_POLICY1, description);
@@ -4335,42 +4335,42 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("unknown");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_compaction_policy();
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_compaction_policy()->set_preset_name("unknown");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_execution_policy();
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_execution_policy()->set_preset_name("unknown");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST); 
         }
 
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_partitioning_policy()->set_preset_name("unknown");
-            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST);
+            CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::BAD_REQUEST); 
         }
 
         {
@@ -5279,79 +5279,79 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
 }
 #endif
 
-Y_UNIT_TEST_SUITE(LocalityOperation) {
-Y_UNIT_TEST(LocksFromAnotherTenants) {
-    TKikimrWithGrpcAndRootSchema server;
-    //server.Server_->SetupLogging(
+Y_UNIT_TEST_SUITE(LocalityOperation) { 
+Y_UNIT_TEST(LocksFromAnotherTenants) { 
+    TKikimrWithGrpcAndRootSchema server; 
+    //server.Server_->SetupLogging( 
 
-    auto connection = NYdb::TDriver(
-        TDriverConfig()
-            .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-    TString first_tenant_name = "ydb_tenant_0";
-    TString second_tenant_name = "ydb_tenant_1";
-
-    {
-        TClient admClient(*server.ServerSettings);
-        for (auto& tenant_name: TVector<TString>{first_tenant_name, second_tenant_name}) {
-            TString tenant_path = Sprintf("/Root/%s", tenant_name.c_str());
-
-            TStoragePools tenant_pools = CreatePoolsForTenant(admClient, server.ServerSettings->StoragePoolTypes, tenant_path);
-
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     admClient.CreateSubdomain("/Root", GetSubDomainDeclarationSetting(tenant_name)));
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                     admClient.AlterSubdomain("/Root", GetSubDomainDefaultSetting(tenant_name, tenant_pools), TDuration::MilliSeconds(500)));
-
-            server.Tenants_->Run(tenant_path, 1);
-        }
-    }
-
-    NYdb::NTable::TTableClient client(connection);
-
-    auto sessionResult = client.CreateSession().ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
-    auto session = sessionResult.GetSession();
-
-    for (auto& tenant_name: TVector<TString>{first_tenant_name, second_tenant_name}) {
-        auto tableBuilder = client.GetTableBuilder();
-        tableBuilder
-            .AddNullableColumn("Key", EPrimitiveType::Uint32)
-            .AddNullableColumn("Value", EPrimitiveType::Utf8);
-        tableBuilder.SetPrimaryKeyColumn("Key");
-
-        TString table_path = Sprintf("/Root/%s/table", tenant_name.c_str());
-
-        auto result = session.CreateTable(table_path, tableBuilder.Build()).ExtractValueSync();
-        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    }
-
-    {
-        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) VALUES (1u, \"One\");", first_tenant_name.c_str());
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetStatus() << result.GetIssues().ToString());
-    }
-
-    {
-        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) VALUES (2u, \"Second\");", second_tenant_name.c_str());
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                            "Status: " << result.GetStatus()
-                                << " Issues: " << result.GetIssues().ToString());
-    }
-
-    {
-        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) SELECT Key, Value FROM [Root/%s/table];", second_tenant_name.c_str(), first_tenant_name.c_str());
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
-                            "Status: " << result.GetStatus()
-                                       << " Issues: " << result.GetIssues().ToString());
-    }
-}
-}
-
+    auto connection = NYdb::TDriver( 
+        TDriverConfig() 
+            .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+    TString first_tenant_name = "ydb_tenant_0"; 
+    TString second_tenant_name = "ydb_tenant_1"; 
+ 
+    { 
+        TClient admClient(*server.ServerSettings); 
+        for (auto& tenant_name: TVector<TString>{first_tenant_name, second_tenant_name}) { 
+            TString tenant_path = Sprintf("/Root/%s", tenant_name.c_str()); 
+ 
+            TStoragePools tenant_pools = CreatePoolsForTenant(admClient, server.ServerSettings->StoragePoolTypes, tenant_path); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, 
+                                     admClient.CreateSubdomain("/Root", GetSubDomainDeclarationSetting(tenant_name))); 
+            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS, 
+                                     admClient.AlterSubdomain("/Root", GetSubDomainDefaultSetting(tenant_name, tenant_pools), TDuration::MilliSeconds(500))); 
+ 
+            server.Tenants_->Run(tenant_path, 1); 
+        } 
+    } 
+ 
+    NYdb::NTable::TTableClient client(connection); 
+ 
+    auto sessionResult = client.CreateSession().ExtractValueSync(); 
+    UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
+    auto session = sessionResult.GetSession(); 
+ 
+    for (auto& tenant_name: TVector<TString>{first_tenant_name, second_tenant_name}) { 
+        auto tableBuilder = client.GetTableBuilder(); 
+        tableBuilder 
+            .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+            .AddNullableColumn("Value", EPrimitiveType::Utf8); 
+        tableBuilder.SetPrimaryKeyColumn("Key"); 
+ 
+        TString table_path = Sprintf("/Root/%s/table", tenant_name.c_str()); 
+ 
+        auto result = session.CreateTable(table_path, tableBuilder.Build()).ExtractValueSync(); 
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+    } 
+ 
+    { 
+        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) VALUES (1u, \"One\");", first_tenant_name.c_str()); 
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetStatus() << result.GetIssues().ToString()); 
+    } 
+ 
+    { 
+        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) VALUES (2u, \"Second\");", second_tenant_name.c_str()); 
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                            "Status: " << result.GetStatus() 
+                                << " Issues: " << result.GetIssues().ToString()); 
+    } 
+ 
+    { 
+        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) SELECT Key, Value FROM [Root/%s/table];", second_tenant_name.c_str(), first_tenant_name.c_str()); 
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, 
+                            "Status: " << result.GetStatus() 
+                                       << " Issues: " << result.GetIssues().ToString()); 
+    } 
+} 
+} 
+ 
 } // namespace NKikimr

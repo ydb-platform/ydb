@@ -136,7 +136,7 @@ class Session(BaseSession):
     async def rename_tables(self, rename_items, settings=None):  # pylint: disable=W0236
         return await super().rename_tables(rename_items, settings)
 
-
+ 
 class TableClient(BaseTableClient):
     def session(self):
         return Session(self._driver, self._table_client_settings)

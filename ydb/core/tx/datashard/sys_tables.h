@@ -7,22 +7,22 @@
 namespace NKikimr {
 
 struct TSysTables {
-    struct TTableColumnInfo {
-        TString Name;
-        ui32 Id = 0;
-        ui32 PType = 0;
-        i32 KeyOrder = -1;
+    struct TTableColumnInfo { 
+        TString Name; 
+        ui32 Id = 0; 
+        ui32 PType = 0; 
+        i32 KeyOrder = -1; 
 
-        TTableColumnInfo() = default;
-
-        TTableColumnInfo(TString name, ui32 colId, ui32 type, i32 keyOrder = -1)
-            : Name(name)
-            , Id(colId)
-            , PType(type)
-            , KeyOrder(keyOrder)
-        {}
-    };
-
+        TTableColumnInfo() = default; 
+ 
+        TTableColumnInfo(TString name, ui32 colId, ui32 type, i32 keyOrder = -1) 
+            : Name(name) 
+            , Id(colId) 
+            , PType(type) 
+            , KeyOrder(keyOrder) 
+        {} 
+    }; 
+ 
     // fake TabletIds
     enum ESysIds : ui64 {
         SysSchemeShard = 1,     // fake SchemeShard

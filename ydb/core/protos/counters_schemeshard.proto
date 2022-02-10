@@ -1,6 +1,6 @@
 import "ydb/core/protos/counters.proto";
 
-package NKikimr.NSchemeShard;
+package NKikimr.NSchemeShard; 
 
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -17,9 +17,9 @@ enum ESimpleCounters {
     COUNTER_TABLE_SHARD_INACTIVE_COUNT = 6                [(CounterOpts) = {Name: "TableShardsInactive"}];
     COUNTER_PQ_SHARD_COUNT = 7                            [(CounterOpts) = {Name: "PqGroupShards"}];
     COUNTER_PQ_RB_SHARD_COUNT = 8                         [(CounterOpts) = {Name: "PqReadBalancerShards"}];
-    COUNTER_SUB_DOMAIN_COUNT = 9                          [(CounterOpts) = {Name: "SubDomains"}];
-    COUNTER_SUB_DOMAIN_COORDINATOR_COUNT = 10             [(CounterOpts) = {Name: "SubDomainsCoordinators"}];
-    COUNTER_SUB_DOMAIN_MEDIATOR_COUNT = 11                [(CounterOpts) = {Name: "SubDomainsMediators"}];
+    COUNTER_SUB_DOMAIN_COUNT = 9                          [(CounterOpts) = {Name: "SubDomains"}]; 
+    COUNTER_SUB_DOMAIN_COORDINATOR_COUNT = 10             [(CounterOpts) = {Name: "SubDomainsCoordinators"}]; 
+    COUNTER_SUB_DOMAIN_MEDIATOR_COUNT = 11                [(CounterOpts) = {Name: "SubDomainsMediators"}]; 
     COUNTER_RTMR_VOLUME_COUNT = 12                        [(CounterOpts) = {Name: "RtmrVolumesCount"}];
     COUNTER_RTMR_PARTITIONS_COUNT = 13                    [(CounterOpts) = {Name: "RtmrPartitionsCount"}];
     COUNTER_BLOCKSTORE_VOLUME_COUNT = 14                  [(CounterOpts) = {Name: "BlockStoreVolumes"}];
@@ -52,39 +52,39 @@ enum ESimpleCounters {
     COUNTER_KESUS_SHARD_COUNT = 39                        [(CounterOpts) = {Name: "KesusShards"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateKesus = 40              [(CounterOpts) = {Name: "InFlightOps/CreateKesus"}];
     COUNTER_IN_FLIGHT_OPS_TxDropKesus = 41                [(CounterOpts) = {Name: "InFlightOps/DropKesus"}];
-    COUNTER_IN_FLIGHT_OPS_TxForceDropSubDomain = 42       [(CounterOpts) = {Name: "InFlightOps/ForceDropSubDomain"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateSolomonVolume = 43      [(CounterOpts) = {Name: "InFlightOps/CreateSolomonVolume"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropSolomonVolume = 44        [(CounterOpts) = {Name: "InFlightOps/DropSolomonVolume"}];
-    COUNTER_SOLOMON_VOLUME_COUNT = 45                     [(CounterOpts) = {Name: "SolomonVolumesCount"}];
-    COUNTER_SOLOMON_PARTITIONS_COUNT = 46                 [(CounterOpts) = {Name: "SolomonPartitionsCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxForceDropSubDomain = 42       [(CounterOpts) = {Name: "InFlightOps/ForceDropSubDomain"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateSolomonVolume = 43      [(CounterOpts) = {Name: "InFlightOps/CreateSolomonVolume"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxDropSolomonVolume = 44        [(CounterOpts) = {Name: "InFlightOps/DropSolomonVolume"}]; 
+    COUNTER_SOLOMON_VOLUME_COUNT = 45                     [(CounterOpts) = {Name: "SolomonVolumesCount"}]; 
+    COUNTER_SOLOMON_PARTITIONS_COUNT = 46                 [(CounterOpts) = {Name: "SolomonPartitionsCount"}]; 
     COUNTER_IN_FLIGHT_OPS_TxAlterKesus = 47               [(CounterOpts) = {Name: "InFlightOps/AlterKesus"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterSubDomain = 48           [(CounterOpts) = {Name: "InFlightOps/AlterSubDomain"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterUserAttributes = 49      [(CounterOpts) = {Name: "InFlightOps/AlterUserAttributes"}];
-    COUNTER_USER_ATTRIBUTES_COUNT = 50                    [(CounterOpts) = {Name: "UserAttributes"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateTableIndex = 51         [(CounterOpts) = {Name: "InFlightOps/CreateTableIndex"}];
-    COUNTER_TABLE_INDEXES_COUNT = 52                      [(CounterOpts) = {Name: "TableIndexes"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterSubDomain = 48           [(CounterOpts) = {Name: "InFlightOps/AlterSubDomain"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterUserAttributes = 49      [(CounterOpts) = {Name: "InFlightOps/AlterUserAttributes"}]; 
+    COUNTER_USER_ATTRIBUTES_COUNT = 50                    [(CounterOpts) = {Name: "UserAttributes"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateTableIndex = 51         [(CounterOpts) = {Name: "InFlightOps/CreateTableIndex"}]; 
+    COUNTER_TABLE_INDEXES_COUNT = 52                      [(CounterOpts) = {Name: "TableIndexes"}]; 
     COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT = 53        [(CounterOpts) = {Name: "BlockStorePartition2Shards"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropTableIndex = 54           [(CounterOpts) = {Name: "InFlightOps/DropTableIndex"}];
-
-    COUNTER_EXTSUB_DOMAIN_COUNT = 55                      [(CounterOpts) = {Name: "ExernalSubDomains"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateExtSubDomain = 56       [(CounterOpts) = {Name: "InFlightOps/CreateExtSubDomain"}];
-    COUNTER_SUB_DOMAIN_SCHEME_SHARD_COUNT = 57            [(CounterOpts) = {Name: "SubDomainsSchemeShards"}];
-    COUNTER_IN_FLIGHT_OPS_TxMergeTablePartition = 58      [(CounterOpts) = {Name: "InFlightOps/MergeTablePartition"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterExtSubDomain = 59        [(CounterOpts) = {Name: "InFlightOps/AlterExtSubDomain"}];
-    COUNTER_IN_FLIGHT_OPS_TxForceDropExtSubDomain = 60    [(CounterOpts) = {Name: "InFlightOps/ForceDropExtSubDomain"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTableIndex = 54           [(CounterOpts) = {Name: "InFlightOps/DropTableIndex"}]; 
+ 
+    COUNTER_EXTSUB_DOMAIN_COUNT = 55                      [(CounterOpts) = {Name: "ExernalSubDomains"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateExtSubDomain = 56       [(CounterOpts) = {Name: "InFlightOps/CreateExtSubDomain"}]; 
+    COUNTER_SUB_DOMAIN_SCHEME_SHARD_COUNT = 57            [(CounterOpts) = {Name: "SubDomainsSchemeShards"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxMergeTablePartition = 58      [(CounterOpts) = {Name: "InFlightOps/MergeTablePartition"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterExtSubDomain = 59        [(CounterOpts) = {Name: "InFlightOps/AlterExtSubDomain"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxForceDropExtSubDomain = 60    [(CounterOpts) = {Name: "InFlightOps/ForceDropExtSubDomain"}]; 
     COUNTER_IN_FLIGHT_OPS_TxFillIndex = 61                [(CounterOpts) = {Name: "InFlightOps/FillIndex"}];
-    COUNTER_IN_FLIGHT_OPS_TxUpgradeSubDomain = 62         [(CounterOpts) = {Name: "InFlightOps/UpgradeSubDomain"}];
-    COUNTER_IN_FLIGHT_OPS_TxUpgradeSubDomainDecision = 63 [(CounterOpts) = {Name: "InFlightOps/UpgradeSubDomainDecision"}];
+    COUNTER_IN_FLIGHT_OPS_TxUpgradeSubDomain = 62         [(CounterOpts) = {Name: "InFlightOps/UpgradeSubDomain"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxUpgradeSubDomainDecision = 63 [(CounterOpts) = {Name: "InFlightOps/UpgradeSubDomainDecision"}]; 
     COUNTER_SUB_DOMAIN_HIVE_COUNT = 64                    [(CounterOpts) = {Name: "SubDomainsHives"}];
-    COUNTER_IN_FLIGHT_OPS_TxInitializeBuildIndex = 65     [(CounterOpts) = {Name: "InFlightOps/InitializeBuildIndex"}];
-    COUNTER_SNAPSHOTS_COUNT = 66                          [(CounterOpts) = {Name: "Snapshots"}];
-    COUNTER_LOCKS_COUNT = 67                              [(CounterOpts) = {Name: "Locks"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateLockForIndexBuild = 68  [(CounterOpts) = {Name: "InFlightOps/CreateLockForIndexBuild"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterTableIndex = 69          [(CounterOpts) = {Name: "InFlightOps/AlterTableIndex"}];
-    COUNTER_IN_FLIGHT_OPS_TxFinalizeBuildIndex = 70       [(CounterOpts) = {Name: "InFlightOps/FinalizeBuildIndex"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterSolomonVolume = 71       [(CounterOpts) = {Name: "InFlightOps/AlterSolomonVolume"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropLock = 72                 [(CounterOpts) = {Name: "InFlightOps/DropLock"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropTableIndexAtMainTable = 73 [(CounterOpts) = {Name: "InFlightOps/DropTableIndexAtMainTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxInitializeBuildIndex = 65     [(CounterOpts) = {Name: "InFlightOps/InitializeBuildIndex"}]; 
+    COUNTER_SNAPSHOTS_COUNT = 66                          [(CounterOpts) = {Name: "Snapshots"}]; 
+    COUNTER_LOCKS_COUNT = 67                              [(CounterOpts) = {Name: "Locks"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateLockForIndexBuild = 68  [(CounterOpts) = {Name: "InFlightOps/CreateLockForIndexBuild"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterTableIndex = 69          [(CounterOpts) = {Name: "InFlightOps/AlterTableIndex"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxFinalizeBuildIndex = 70       [(CounterOpts) = {Name: "InFlightOps/FinalizeBuildIndex"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterSolomonVolume = 71       [(CounterOpts) = {Name: "InFlightOps/AlterSolomonVolume"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxDropLock = 72                 [(CounterOpts) = {Name: "InFlightOps/DropLock"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxDropTableIndexAtMainTable = 73 [(CounterOpts) = {Name: "InFlightOps/DropTableIndexAtMainTable"}]; 
     COUNTER_SYS_VIEW_PROCESSOR_COUNT = 74                 [(CounterOpts) = {Name: "SysViewProcessors"}];
 
     COUNTER_FILESTORE_COUNT = 75                          [(CounterOpts) = {Name: "FileStores"}];
@@ -116,7 +116,7 @@ enum ESimpleCounters {
 
     COUNTER_DISK_SPACE_HARD_QUOTA_BYTES = 96              [(CounterOpts) = {Name: "DiskSpaceHardQuotaBytes"}];
     COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES = 97              [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytes"}];
-
+ 
     COUNTER_IN_FLIGHT_OPS_TxCreateCdcStream = 98          [(CounterOpts) = {Name: "InFlightOps/CreateCdcStream"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateCdcStreamAtTable = 99   [(CounterOpts) = {Name: "InFlightOps/CreateCdcStreamAtTable"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterCdcStream = 100          [(CounterOpts) = {Name: "InFlightOps/AlterCdcStream"}];
@@ -177,28 +177,28 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxCreateKesus = 22               [(CounterOpts) = {Name: "FinishedOps/CreateKesus"}];
     COUNTER_FINISHED_OPS_TxDropKesus = 23                 [(CounterOpts) = {Name: "FinishedOps/DropKesus"}];
-    COUNTER_FINISHED_OPS_TxForceDropSubDomain = 24        [(CounterOpts) = {Name: "FinishedOps/ForceDropSubDomain"}];
-    COUNTER_FINISHED_OPS_TxCreateSolomonVolume = 25       [(CounterOpts) = {Name: "FinishedOps/CreateSolomonVolume"}];
-    COUNTER_FINISHED_OPS_TxDropSolomonVolume = 26         [(CounterOpts) = {Name: "FinishedOps/DropSolomonVolume"}];
+    COUNTER_FINISHED_OPS_TxForceDropSubDomain = 24        [(CounterOpts) = {Name: "FinishedOps/ForceDropSubDomain"}]; 
+    COUNTER_FINISHED_OPS_TxCreateSolomonVolume = 25       [(CounterOpts) = {Name: "FinishedOps/CreateSolomonVolume"}]; 
+    COUNTER_FINISHED_OPS_TxDropSolomonVolume = 26         [(CounterOpts) = {Name: "FinishedOps/DropSolomonVolume"}]; 
     COUNTER_FINISHED_OPS_TxAlterKesus = 27                [(CounterOpts) = {Name: "FinishedOps/AlterKesus"}];
-    COUNTER_FINISHED_OPS_TxAlterSubDomain = 28            [(CounterOpts) = {Name: "FinishedOps/AlterSubDomain"}];
-    COUNTER_FINISHED_OPS_TxAlterUserAttributes = 29       [(CounterOpts) = {Name: "FinishedOps/AlterUserAttributes"}];
-    COUNTER_FINISHED_OPS_TxCreateTableIndex = 30          [(CounterOpts) = {Name: "FinishedOps/CreateTableIndex"}];
-    COUNTER_FINISHED_OPS_TxDropTableIndex = 31            [(CounterOpts) = {Name: "FinishedOps/DropTableIndex"}];
-    COUNTER_FINISHED_OPS_TxCreateExtSubDomain = 32        [(CounterOpts) = {Name: "FinishedOps/DropExtSubDomain"}];
-    COUNTER_FINISHED_OPS_TxMergeTablePartition = 33       [(CounterOpts) = {Name: "FinishedOps/MergeTablePartition"}];
-    COUNTER_FINISHED_OPS_TxAlterExtSubDomain = 34         [(CounterOpts) = {Name: "FinishedOps/AlterExtSubDomain"}];
-    COUNTER_FINISHED_OPS_TxForceDropExtSubDomain = 35     [(CounterOpts) = {Name: "FinishedOps/ForceDropExtSubDomain"}];
+    COUNTER_FINISHED_OPS_TxAlterSubDomain = 28            [(CounterOpts) = {Name: "FinishedOps/AlterSubDomain"}]; 
+    COUNTER_FINISHED_OPS_TxAlterUserAttributes = 29       [(CounterOpts) = {Name: "FinishedOps/AlterUserAttributes"}]; 
+    COUNTER_FINISHED_OPS_TxCreateTableIndex = 30          [(CounterOpts) = {Name: "FinishedOps/CreateTableIndex"}]; 
+    COUNTER_FINISHED_OPS_TxDropTableIndex = 31            [(CounterOpts) = {Name: "FinishedOps/DropTableIndex"}]; 
+    COUNTER_FINISHED_OPS_TxCreateExtSubDomain = 32        [(CounterOpts) = {Name: "FinishedOps/DropExtSubDomain"}]; 
+    COUNTER_FINISHED_OPS_TxMergeTablePartition = 33       [(CounterOpts) = {Name: "FinishedOps/MergeTablePartition"}]; 
+    COUNTER_FINISHED_OPS_TxAlterExtSubDomain = 34         [(CounterOpts) = {Name: "FinishedOps/AlterExtSubDomain"}]; 
+    COUNTER_FINISHED_OPS_TxForceDropExtSubDomain = 35     [(CounterOpts) = {Name: "FinishedOps/ForceDropExtSubDomain"}]; 
     COUNTER_FINISHED_OPS_TxFillIndex = 36                 [(CounterOpts) = {Name: "FinishedOps/FillIndex"}];
-    COUNTER_FINISHED_OPS_TxUpgradeSubDomain = 37          [(CounterOpts) = {Name: "FinishedOps/UpgradeSubDomain"}];
-    COUNTER_FINISHED_OPS_TxUpgradeSubDomainDecision = 38  [(CounterOpts) = {Name: "FinishedOps/UpgradeSubDomainDecision"}];
-    COUNTER_FINISHED_OPS_TxInitializeBuildIndex = 39      [(CounterOpts) = {Name: "FinishedOps/InitializeBuildIndex"}];
-    COUNTER_FINISHED_OPS_TxCreateLockForIndexBuild = 40   [(CounterOpts) = {Name: "FinishedOps/CreateLockForIndexBuild"}];
-    COUNTER_FINISHED_OPS_TxAlterTableIndex = 41           [(CounterOpts) = {Name: "FinishedOps/AlterTableIndex"}];
-    COUNTER_FINISHED_OPS_TxFinalizeBuildIndex = 42        [(CounterOpts) = {Name: "FinishedOps/FinalizeBuildIndex"}];
-    COUNTER_FINISHED_OPS_TxAlterSolomonVolume = 43        [(CounterOpts) = {Name: "FinishedOps/AlterSolomonVolume"}];
-    COUNTER_FINISHED_OPS_TxDropLock = 44                  [(CounterOpts) = {Name: "FinishedOps/DropLock"}];
-    COUNTER_FINISHED_OPS_TxDropTableIndexAtMainTable = 45 [(CounterOpts) = {Name: "FinishedOps/DropTableIndexAtMainTable"}];
+    COUNTER_FINISHED_OPS_TxUpgradeSubDomain = 37          [(CounterOpts) = {Name: "FinishedOps/UpgradeSubDomain"}]; 
+    COUNTER_FINISHED_OPS_TxUpgradeSubDomainDecision = 38  [(CounterOpts) = {Name: "FinishedOps/UpgradeSubDomainDecision"}]; 
+    COUNTER_FINISHED_OPS_TxInitializeBuildIndex = 39      [(CounterOpts) = {Name: "FinishedOps/InitializeBuildIndex"}]; 
+    COUNTER_FINISHED_OPS_TxCreateLockForIndexBuild = 40   [(CounterOpts) = {Name: "FinishedOps/CreateLockForIndexBuild"}]; 
+    COUNTER_FINISHED_OPS_TxAlterTableIndex = 41           [(CounterOpts) = {Name: "FinishedOps/AlterTableIndex"}]; 
+    COUNTER_FINISHED_OPS_TxFinalizeBuildIndex = 42        [(CounterOpts) = {Name: "FinishedOps/FinalizeBuildIndex"}]; 
+    COUNTER_FINISHED_OPS_TxAlterSolomonVolume = 43        [(CounterOpts) = {Name: "FinishedOps/AlterSolomonVolume"}]; 
+    COUNTER_FINISHED_OPS_TxDropLock = 44                  [(CounterOpts) = {Name: "FinishedOps/DropLock"}]; 
+    COUNTER_FINISHED_OPS_TxDropTableIndexAtMainTable = 45 [(CounterOpts) = {Name: "FinishedOps/DropTableIndexAtMainTable"}]; 
 
     COUNTER_FINISHED_OPS_TxCreateFileStore = 46           [(CounterOpts) = {Name: "FinishedOps/CreateFileStore"}];
     COUNTER_FINISHED_OPS_TxAlterFileStore = 47            [(CounterOpts) = {Name: "FinishedOps/AlterFileStore"}];
@@ -213,16 +213,16 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterOlapTable = 54            [(CounterOpts) = {Name: "FinishedOps/AlterOlapTable"}];
     COUNTER_FINISHED_OPS_TxDropOlapTable = 55             [(CounterOpts) = {Name: "FinishedOps/DropOlapTable"}];
 
-
+ 
     COUNTER_FINISHED_OPS_TxCreateCdcStream = 56           [(CounterOpts) = {Name: "FinishedOps/CreateCdcStream"}];
     COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTable = 57    [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTable"}];
     COUNTER_FINISHED_OPS_TxAlterCdcStream = 58            [(CounterOpts) = {Name: "FinishedOps/AlterCdcStream"}];
     COUNTER_FINISHED_OPS_TxAlterCdcStreamAtTable = 59     [(CounterOpts) = {Name: "FinishedOps/AlterCdcStreamAtTable"}];
     COUNTER_FINISHED_OPS_TxDropCdcStream = 60             [(CounterOpts) = {Name: "FinishedOps/DropCdcStream"}];
     COUNTER_FINISHED_OPS_TxDropCdcStreamAtTable = 61      [(CounterOpts) = {Name: "FinishedOps/DropCdcStreamAtTable"}];
-
-    COUNTER_FINISHED_OPS_TxMoveTable = 62                 [(CounterOpts) = {Name: "FinishedOps/MoveTable"}];
-    COUNTER_FINISHED_OPS_TxMoveTableIndex = 63            [(CounterOpts) = {Name: "FinishedOps/MoveTableIndex"}];
+ 
+    COUNTER_FINISHED_OPS_TxMoveTable = 62                 [(CounterOpts) = {Name: "FinishedOps/MoveTable"}]; 
+    COUNTER_FINISHED_OPS_TxMoveTableIndex = 63            [(CounterOpts) = {Name: "FinishedOps/MoveTableIndex"}]; 
 
     COUNTER_FINISHED_OPS_TxCreateSequence = 64            [(CounterOpts) = {Name: "FinishedOps/CreateSequence"}];
     COUNTER_FINISHED_OPS_TxAlterSequence = 65             [(CounterOpts) = {Name: "FinishedOps/AlterSequence"}];
@@ -280,26 +280,26 @@ enum ETxTypes {
     TXTYPE_INIT = 0                                       [(TxTypeOpts) = {Name: "TxInit"}];
     TXTYPE_INIT_ROOT = 1                                  [(TxTypeOpts) = {Name: "TxInitRoot"}];
     TXTYPE_PLAN_STEP = 2                                  [(TxTypeOpts) = {Name: "TxPlanStep"}];
-    TXTYPE_DESCRIBE_SCHEME = 3                            [(TxTypeOpts) = {Name: "TxDescribeScheme"}];
-    TXTYPE_DATASHARD_PROPOSE_RESULT = 4                   [(TxTypeOpts) = {Name: "TxDataShardProposeResult"}];
-    TXTYPE_CREATE_TABLET_REPLY = 5                        [(TxTypeOpts) = {Name: "TxCreateTabletReply"}];
-    TXTYPE_PROGRESS_OP = 6                                [(TxTypeOpts) = {Name: "TxProgressOp"}];
-    TXTYPE_PERSQUEUE_CONFIG_RESULT = 7                    [(TxTypeOpts) = {Name: "TxPersQueueConfigResult"}];
-    TXTYPE_DROP_TABLET_RESULT = 8                         [(TxTypeOpts) = {Name: "TxDropTabletResult"}];
-    TXTYPE_FREE_TABLET_RESULT = 9                         [(TxTypeOpts) = {Name: "TxFreeTabletResult"}];
-    TXTYPE_DATASHARD_STATE_RESULT = 10                    [(TxTypeOpts) = {Name: "TxDataShardStateResult"}];
-    TXTYPE_INIT_SPLIT_DST_ACK = 11                        [(TxTypeOpts) = {Name: "TxInitSplitDstAck"}];
-    TXTYPE_SPLIT_ACK = 12                                 [(TxTypeOpts) = {Name: "TxSplitAck"}];
-    TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK = 13        [(TxTypeOpts) = {Name: "TxSplitPartitioningChangedAck"}];
+    TXTYPE_DESCRIBE_SCHEME = 3                            [(TxTypeOpts) = {Name: "TxDescribeScheme"}]; 
+    TXTYPE_DATASHARD_PROPOSE_RESULT = 4                   [(TxTypeOpts) = {Name: "TxDataShardProposeResult"}]; 
+    TXTYPE_CREATE_TABLET_REPLY = 5                        [(TxTypeOpts) = {Name: "TxCreateTabletReply"}]; 
+    TXTYPE_PROGRESS_OP = 6                                [(TxTypeOpts) = {Name: "TxProgressOp"}]; 
+    TXTYPE_PERSQUEUE_CONFIG_RESULT = 7                    [(TxTypeOpts) = {Name: "TxPersQueueConfigResult"}]; 
+    TXTYPE_DROP_TABLET_RESULT = 8                         [(TxTypeOpts) = {Name: "TxDropTabletResult"}]; 
+    TXTYPE_FREE_TABLET_RESULT = 9                         [(TxTypeOpts) = {Name: "TxFreeTabletResult"}]; 
+    TXTYPE_DATASHARD_STATE_RESULT = 10                    [(TxTypeOpts) = {Name: "TxDataShardStateResult"}]; 
+    TXTYPE_INIT_SPLIT_DST_ACK = 11                        [(TxTypeOpts) = {Name: "TxInitSplitDstAck"}]; 
+    TXTYPE_SPLIT_ACK = 12                                 [(TxTypeOpts) = {Name: "TxSplitAck"}]; 
+    TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK = 13        [(TxTypeOpts) = {Name: "TxSplitPartitioningChangedAck"}]; 
     TXTYPE_CANCEL_BACKUP_IMPL = 14                        [(TxTypeOpts) = {Name: "TxCancelBackupImpl"}];
-    TXTYPE_MONITORING = 15                                [(TxTypeOpts) = {Name: "TxMonitoring"}];
-    TXTYPE_SUBDOMAIN_CONFIGURE_RESULT = 16                [(TxTypeOpts) = {Name: "TTxSubDomainConfigureStatus"}];
-    TXTYPE_BLOCKSTORE_CONFIG_RESULT = 17                  [(TxTypeOpts) = {Name: "TTxBlockStoreConfigResult"}];
-    TXTYPE_KESUS_CONFIG_RESULT = 18                       [(TxTypeOpts) = {Name: "TTxKesusConfigResult"}];
-    TXTYPE_PROPOSE = 19                                   [(TxTypeOpts) = {Name: "TTxOperationPropose"}];
-    TXTYPE_DATASHARD_SCHEMA_CHANGED = 20                  [(TxTypeOpts) = {Name: "TxDataShardSchemaChanged"}];
+    TXTYPE_MONITORING = 15                                [(TxTypeOpts) = {Name: "TxMonitoring"}]; 
+    TXTYPE_SUBDOMAIN_CONFIGURE_RESULT = 16                [(TxTypeOpts) = {Name: "TTxSubDomainConfigureStatus"}]; 
+    TXTYPE_BLOCKSTORE_CONFIG_RESULT = 17                  [(TxTypeOpts) = {Name: "TTxBlockStoreConfigResult"}]; 
+    TXTYPE_KESUS_CONFIG_RESULT = 18                       [(TxTypeOpts) = {Name: "TTxKesusConfigResult"}]; 
+    TXTYPE_PROPOSE = 19                                   [(TxTypeOpts) = {Name: "TTxOperationPropose"}]; 
+    TXTYPE_DATASHARD_SCHEMA_CHANGED = 20                  [(TxTypeOpts) = {Name: "TxDataShardSchemaChanged"}]; 
     TXTYPE_DEFERRED_UPDATE_ON_SCHEME_BOARD = 21           [(TxTypeOpts) = {Name: "TxDeferredUpdateOnSchemeBoard"}];
-    TXTYPE_CLEAN_TABLES = 22                              [(TxTypeOpts) = {Name: "TxCleanTables"}];
+    TXTYPE_CLEAN_TABLES = 22                              [(TxTypeOpts) = {Name: "TxCleanTables"}]; 
 
     TXTYPE_CREATE_EXPORT = 23                             [(TxTypeOpts) = {Name: "TxCreateExport"}];
     TXTYPE_GET_EXPORT = 24                                [(TxTypeOpts) = {Name: "TxGetExport"}];
@@ -308,21 +308,21 @@ enum ETxTypes {
     TXTYPE_FORGET_EXPORT = 27                             [(TxTypeOpts) = {Name: "TxForgetExport"}];
     TXTYPE_LIST_EXPORTS = 28                              [(TxTypeOpts) = {Name: "TxListExports"}];
     TXTYPE_EXPORT_PROGRESS = 29                           [(TxTypeOpts) = {Name: "TxExportProgress"}];
-
-    TXTYPE_SYNC_TENANT = 30                               [(TxTypeOpts) = {Name: "TxSyncTenant"}];
-    TXTYPE_UPDATE_TENANT = 31                             [(TxTypeOpts) = {Name: "TxUpdateTenant"}];
-    TXTYPE_FREE_OWNER_TABLETS_RESULT = 32                 [(TxTypeOpts) = {Name: "TxFreeOwnerTabletsResult"}];
-    TXTYPE_SUBDOMAIN_MIGRATE_RESULT = 33                  [(TxTypeOpts) = {Name: "TTxSubDomainMigrateResult"}];
-    TXTYPE_SUBDOMAIN_MIGRATE = 34                         [(TxTypeOpts) = {Name: "TTxSubDomainMigrate"}];
-    TXTYPE_UPGRADE_SCHEME = 35                            [(TxTypeOpts) = {Name: "TTxUpgradeScheme"}];
-    TXTYPE_INIT_POPULATOR = 36                            [(TxTypeOpts) = {Name: "TTxInitPopulator"}];
-
-    TXTYPE_CREATE_INDEX_BUILD = 37                        [(TxTypeOpts) = {Name: "TxCreateIndexBuild"}];
-    TXTYPE_GET_INDEX_BUILD = 38                           [(TxTypeOpts) = {Name: "TxGetIndexBuild"}];
-    TXTYPE_CANCEL_INDEX_BUILD = 39                        [(TxTypeOpts) = {Name: "TxCancelIndexBuild"}];
-    TXTYPE_FORGET_INDEX_BUILD = 40                        [(TxTypeOpts) = {Name: "TxForgetIndexBuild"}];
-    TXTYPE_LIST_INDEX_BUILD = 41                          [(TxTypeOpts) = {Name: "TxListIndexBuild"}];
-    TXTYPE_PROGRESS_INDEX_BUILD = 42                      [(TxTypeOpts) = {Name: "TxProgressIndexBuild"}];
+ 
+    TXTYPE_SYNC_TENANT = 30                               [(TxTypeOpts) = {Name: "TxSyncTenant"}]; 
+    TXTYPE_UPDATE_TENANT = 31                             [(TxTypeOpts) = {Name: "TxUpdateTenant"}]; 
+    TXTYPE_FREE_OWNER_TABLETS_RESULT = 32                 [(TxTypeOpts) = {Name: "TxFreeOwnerTabletsResult"}]; 
+    TXTYPE_SUBDOMAIN_MIGRATE_RESULT = 33                  [(TxTypeOpts) = {Name: "TTxSubDomainMigrateResult"}]; 
+    TXTYPE_SUBDOMAIN_MIGRATE = 34                         [(TxTypeOpts) = {Name: "TTxSubDomainMigrate"}]; 
+    TXTYPE_UPGRADE_SCHEME = 35                            [(TxTypeOpts) = {Name: "TTxUpgradeScheme"}]; 
+    TXTYPE_INIT_POPULATOR = 36                            [(TxTypeOpts) = {Name: "TTxInitPopulator"}]; 
+ 
+    TXTYPE_CREATE_INDEX_BUILD = 37                        [(TxTypeOpts) = {Name: "TxCreateIndexBuild"}]; 
+    TXTYPE_GET_INDEX_BUILD = 38                           [(TxTypeOpts) = {Name: "TxGetIndexBuild"}]; 
+    TXTYPE_CANCEL_INDEX_BUILD = 39                        [(TxTypeOpts) = {Name: "TxCancelIndexBuild"}]; 
+    TXTYPE_FORGET_INDEX_BUILD = 40                        [(TxTypeOpts) = {Name: "TxForgetIndexBuild"}]; 
+    TXTYPE_LIST_INDEX_BUILD = 41                          [(TxTypeOpts) = {Name: "TxListIndexBuild"}]; 
+    TXTYPE_PROGRESS_INDEX_BUILD = 42                      [(TxTypeOpts) = {Name: "TxProgressIndexBuild"}]; 
 
     TXTYPE_SCHEDULE_CONDITIONAL_ERASE = 43                [(TxTypeOpts) = {Name: "TxScheduleConditionalErase"}];
     TXTYPE_RUN_CONDITIONAL_ERASE = 44                     [(TxTypeOpts) = {Name: "TxRunConditionalErase"}];
@@ -330,8 +330,8 @@ enum ETxTypes {
     TXTYPE_STORE_PARTITION_STATS = 45                     [(TxTypeOpts) = {Name: "TxStorePartitionStats"}];
 
     TXTYPE_FILESTORE_CONFIG_RESULT = 46                   [(TxTypeOpts) = {Name: "TxFileStoreConfigResult"}];
-
-    TXTYPE_MAKEBILL_INDEX_BUILD = 47                      [(TxTypeOpts) = {Name: "TxBillingIndexBuild"}];
+ 
+    TXTYPE_MAKEBILL_INDEX_BUILD = 47                      [(TxTypeOpts) = {Name: "TxBillingIndexBuild"}]; 
 
     TXTYPE_CREATE_IMPORT = 48                             [(TxTypeOpts) = {Name: "TxCreateImport"}];
     TXTYPE_GET_IMPORT = 49                                [(TxTypeOpts) = {Name: "TxGetImport"}];
@@ -340,7 +340,7 @@ enum ETxTypes {
     TXTYPE_FORGET_IMPORT = 52                             [(TxTypeOpts) = {Name: "TxForgetImport"}];
     TXTYPE_LIST_IMPORTS = 53                              [(TxTypeOpts) = {Name: "TxListImports"}];
     TXTYPE_IMPORT_PROGRESS = 54                           [(TxTypeOpts) = {Name: "TxImportProgress"}];
-    TXTYPE_SERVERLESS_STORAGE_BILLING = 55                [(TxTypeOpts) = {Name: "TxServerlessStorageBilling"}];
+    TXTYPE_SERVERLESS_STORAGE_BILLING = 55                [(TxTypeOpts) = {Name: "TxServerlessStorageBilling"}]; 
     TXTYPE_OLAPSHARD_PROPOSE_RESULT = 56                  [(TxTypeOpts) = {Name: "TxOlapShardProposeResult"}];
     TXTYPE_COLUMNSHARD_PROPOSE_RESULT = 57                [(TxTypeOpts) = {Name: "TxColumnShardProposeResult"}];
     TXTYPE_OLAPSHARD_NOTIFY_TX_COMPLETION_RESULT = 58     [(TxTypeOpts) = {Name: "TxOlapShardNotifyTxCompletionResult"}];
@@ -360,11 +360,11 @@ enum ETxTypes {
     TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT = 68      [(TxTypeOpts) = {Name: "TxSequenceShardFreezeSequenceResult"}];
     TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT = 69     [(TxTypeOpts) = {Name: "TxSequenceShardRestoreSequenceResult"}];
     TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT = 70    [(TxTypeOpts) = {Name: "TxSequenceShardRedirectSequenceResult"}];
-
-    TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION = 71     [(TxTypeOpts) = {Name: "TxNotifyOperationCompletePublication"}];
-    TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER = 72         [(TxTypeOpts) = {Name: "TxNotifyOperationCompleteBarrier"}];
-
-    TXTYPE_PARTITION_HISTOGRAM = 73                       [(TxTypeOpts) = {Name: "TxPartitionHistogram"}];
+ 
+    TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION = 71     [(TxTypeOpts) = {Name: "TxNotifyOperationCompletePublication"}]; 
+    TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER = 72         [(TxTypeOpts) = {Name: "TxNotifyOperationCompleteBarrier"}]; 
+ 
+    TXTYPE_PARTITION_HISTOGRAM = 73                       [(TxTypeOpts) = {Name: "TxPartitionHistogram"}]; 
 
     TXTYPE_CREATE_REPLICATION_RESULT = 74                 [(TxTypeOpts) = {Name: "TxCreateReplicationResult"}];
     TXTYPE_ALTER_REPLICATION_RESULT = 75                  [(TxTypeOpts) = {Name: "TxAlterReplicationResult"}];

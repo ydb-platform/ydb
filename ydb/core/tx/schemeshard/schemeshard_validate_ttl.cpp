@@ -2,7 +2,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 // Helper accessors for OLTP and OLAP tables that use different TColumn's
 namespace {

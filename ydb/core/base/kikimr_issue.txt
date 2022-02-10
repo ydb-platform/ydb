@@ -19,7 +19,7 @@ ids { code: DOMAIN_LOCALITY_ERROR severity: S_ERROR }
 ids { code: SHARD_NOT_AVAILABLE severity: S_ERROR }
 ids { code: TX_STATE_UNKNOWN severity: S_ERROR }
 ids { code: TX_DECLINED_BY_COORDINATOR severity: S_ERROR }
-ids { code: TX_DECLINED_IMPLICIT_COORDINATOR severity: S_ERROR }
+ids { code: TX_DECLINED_IMPLICIT_COORDINATOR severity: S_ERROR } 
 ids { code: SHARD_PROGRAM_SIZE_EXCEEDED severity: S_ERROR }
 
 ids { code: SCOPE_REQPROXY severity: S_INFO}

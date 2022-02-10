@@ -42,7 +42,7 @@ SRCS(
     logoblob.cpp
     logoblob.h
     nameservice.h
-    path.cpp
+    path.cpp 
     pathid.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
@@ -65,11 +65,11 @@ SRCS(
     statestorage_replica.cpp
     statestorage_replica_probe.cpp
     statestorage_warden.cpp
-    storage_pools.cpp
-    storage_pools.h
-    subdomain.h
-    subdomain.cpp
-    table_index.cpp
+    storage_pools.cpp 
+    storage_pools.h 
+    subdomain.h 
+    subdomain.cpp 
+    table_index.cpp 
     tablet.cpp
     tablet.h
     tablet_killer.cpp
@@ -82,8 +82,8 @@ SRCS(
     traceid.cpp
     traceid.h
     tracing.h
-    tx_processing.h
-    tx_processing.cpp
+    tx_processing.h 
+    tx_processing.cpp 
     user_registry.h
     blobstorage_grouptype.cpp
 )

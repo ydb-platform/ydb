@@ -33,7 +33,7 @@ namespace NDataShard {
 
 TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     const TMap<ui32, TUserTable::TUserColumn>& columns,
-    const NKikimrSchemeOp::TPathDescription& pathDesc);
+    const NKikimrSchemeOp::TPathDescription& pathDesc); 
 
 TString DecimalToString(const std::pair<ui64, i64>& loHi);
 TString DyNumberToString(TStringBuf data);

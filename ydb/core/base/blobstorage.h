@@ -94,11 +94,11 @@ enum EGroupConfigurationType {
 };
 
 struct TGroupID {
-    TGroupID() { Set((EGroupConfigurationType)0x1, 0x3f, InvalidLocalId); }
-    TGroupID(EGroupConfigurationType configurationType, ui32 dataCenterId, ui32 groupLocalId) {
+    TGroupID() { Set((EGroupConfigurationType)0x1, 0x3f, InvalidLocalId); } 
+    TGroupID(EGroupConfigurationType configurationType, ui32 dataCenterId, ui32 groupLocalId) { 
         Set(configurationType, dataCenterId, groupLocalId);
     }
-    TGroupID(const TGroupID& group) { Raw.X = group.GetRaw(); }
+    TGroupID(const TGroupID& group) { Raw.X = group.GetRaw(); } 
     explicit TGroupID(ui32 raw) { Raw.X = raw; }
     EGroupConfigurationType ConfigurationType() const { return (EGroupConfigurationType)Raw.N.ConfigurationType; }
     ui32 AvailabilityDomainID() const { return Raw.N.AvailabilityDomainID; }
@@ -107,16 +107,16 @@ struct TGroupID {
     bool operator==(const TGroupID &x) const { return GetRaw() == x.GetRaw(); }
     bool operator!=(const TGroupID &x) const { return GetRaw() != x.GetRaw(); }
 
-    TGroupID operator++() {
-        Set(ConfigurationType(), AvailabilityDomainID(), NextValidLocalId());
-        return *this;
-    }
-    TGroupID operator++(int) {
-        TGroupID old(*this);
-        ++(*this);
-        return old;
-    }
-
+    TGroupID operator++() { 
+        Set(ConfigurationType(), AvailabilityDomainID(), NextValidLocalId()); 
+        return *this; 
+    } 
+    TGroupID operator++(int) { 
+        TGroupID old(*this); 
+        ++(*this); 
+        return old; 
+    } 
+ 
     TString ToString() const;
 private:
     union {
@@ -137,19 +137,19 @@ private:
         Raw.N.AvailabilityDomainID = availabilityDomainID;
         Raw.N.GroupLocalID = groupLocalId;
     }
-
-    ui32 NextValidLocalId() {
-        const ui32 localId = GroupLocalID();
-        if (localId == InvalidLocalId) {
-            return localId;
-        }
-        if (localId == InvalidLocalId - 1) {
-            return 0;
-        }
-        return localId + 1;
-    }
-
-    static constexpr ui32 InvalidLocalId = 0x1ffffff;
+ 
+    ui32 NextValidLocalId() { 
+        const ui32 localId = GroupLocalID(); 
+        if (localId == InvalidLocalId) { 
+            return localId; 
+        } 
+        if (localId == InvalidLocalId - 1) { 
+            return 0; 
+        } 
+        return localId + 1; 
+    } 
+ 
+    static constexpr ui32 InvalidLocalId = 0x1ffffff; 
     static_assert(sizeof(decltype(Raw)) == sizeof(ui32), "TGroupID Raw value must be binary compatible with ui32");
 };
 
@@ -229,8 +229,8 @@ struct TTabletChannelInfo {
 
     ui32 Channel;
     TBlobStorageGroupType Type;
-    TString StoragePool;
-    TVector<THistoryEntry> History;
+    TString StoragePool; 
+    TVector<THistoryEntry> History; 
 
     TTabletChannelInfo()
         : Channel()
@@ -247,11 +247,11 @@ struct TTabletChannelInfo {
         , Type(erasureSpecies)
     {}
 
-    TTabletChannelInfo(ui32 channel, TString storagePool)
-        : Channel(channel)
-        , Type(TBlobStorageGroupType::ErasureNone)
-        , StoragePool(storagePool)
-    {}
+    TTabletChannelInfo(ui32 channel, TString storagePool) 
+        : Channel(channel) 
+        , Type(TBlobStorageGroupType::ErasureNone) 
+        , StoragePool(storagePool) 
+    {} 
 
     ui32 GroupForGeneration(ui32 gen) const {
         const size_t historySize = History.size();
@@ -296,7 +296,7 @@ struct TTabletChannelInfo {
         TStringStream str;
         str << "{Channel# " << Channel;
         str << " Type# " << Type.ToString();
-        str << " StoragePool# " << StoragePool;
+        str << " StoragePool# " << StoragePool; 
         str << " History# {";
         const size_t historySize = History.size();
         for (size_t historyIdx = 0; historyIdx < historySize; ++historyIdx) {
@@ -722,8 +722,8 @@ struct TEvBlobStorage {
         EvUnusedLocal2,                    // Not used.
         EvUnusedLocal3,                    // Not used.
         EvNotReadyRetryTimeout,
-        EvConfigureQueryTimeout,
-        EvEstablishingSessionTimeout,
+        EvConfigureQueryTimeout, 
+        EvEstablishingSessionTimeout, 
         EvDeathNote,                       /// 268 637 191
         EvVDiskStateChanged,
         EvAccelerate,

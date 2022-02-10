@@ -330,7 +330,7 @@ public:
     TTabletId RootSchemeShardId;
     TTabletId RootHiveId;
     THashMap<TString, TTenantInfo> TenantByPath;
-    THashMap<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeByPath;
+    THashMap<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeByPath; 
     THashMap<TString, Ydb::Cms::GetDatabaseStatusResult> DatabaseStatusByPath;
     THashMap<TString, THolder<NTenantSlotBroker::TEvTenantSlotBroker::TEvTenantState>> TenantStateByPath;
     THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
@@ -532,7 +532,7 @@ public:
             hFunc(TEvHive::TEvResponseHiveDomainStats, Handle);
             hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(TEvHive::TEvResponseHiveInfo, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle)
             hFunc(TEvBlobStorage::TEvControllerSelectGroupsResult, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
@@ -574,8 +574,8 @@ public:
     }
 
     void RequestDescribe(TTabletId schemeShardId, const TString& path) {
-        THolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
-        NKikimrSchemeOp::TDescribePath& record = request->Record;
+        THolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(); 
+        NKikimrSchemeOp::TDescribePath& record = request->Record; 
         record.SetPath(path);
         record.MutableOptions()->SetReturnPartitioningInfo(false);
         record.MutableOptions()->SetReturnPartitionConfig(false);
@@ -847,9 +847,9 @@ public:
         RequestDone("TEvControllerSelectGroupsResult");
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
         TabletRequests.CompleteRequest(ev->Cookie);
-        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
+        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) { 
             TString path = ev->Get()->GetRecord().GetPath();
             TDatabaseState& state(DatabaseState[path]);
             for (const auto& storagePool : ev->Get()->GetRecord().GetPathDescription().GetDomainDescription().GetStoragePools()) {

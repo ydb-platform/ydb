@@ -2,13 +2,13 @@
 #include "schemeshard_path_describer.h"
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
+struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase { 
     THashMap<TTxId, TDeque<TPathId>> Paths;
-    THashMap<TTxId, TVector<THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>>> Descriptions;
+    THashMap<TTxId, TVector<THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>>> Descriptions; 
 
     TTxPublishToSchemeBoard(TSelf *self, THashMap<TTxId, TDeque<TPathId>>&& paths)
         : TRwTxBase(self)
@@ -74,7 +74,7 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
 
 }; // TTxPublishToSchemeBoard
 
-struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TSchemeShard> {
+struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TSchemeShard> { 
     TSchemeBoardEvents::TEvUpdateAck::TPtr Ev;
     TSideEffects SideEffects;
 
@@ -93,8 +93,8 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                        << ", msg: " << record.ShortDebugString()
                        << ", cookie: " << Ev->Cookie);
 
-        const auto txId = TTxId(Ev->Cookie);
-        const auto pathId = TPathId(record.GetPathOwnerId(), record.GetLocalPathId());
+        const auto txId = TTxId(Ev->Cookie); 
+        const auto pathId = TPathId(record.GetPathOwnerId(), record.GetLocalPathId()); 
         const ui64 version = record.GetVersion();
 
         NIceDb::TNiceDb db(txc.DB);
@@ -116,31 +116,31 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
 
                 operation->DoNotify(Self, SideEffects, ctx);
             }
-
-            auto toActivateWaitPublication = operation->ActivatePartsWaitPublication(pathId, version);
-            for (auto opId: toActivateWaitPublication) {
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "TTxAckPublishToSchemeBoard"
-                               << ", operation is ready to ack that some awaited pathed is published"
-                               << ", opId: " << opId
-                               << ", left await publications: " << operation->CountWaitPublication(opId)
-                               << ", at schemeshard: " << Self->TabletID()
-                               << ", txId: " << txId);
-
-                THolder<TEvPrivate::TEvCompletePublication> msg = MakeHolder<TEvPrivate::TEvCompletePublication>(opId, pathId, version);
-                TEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompletePublication>*) new IEventHandle(
+ 
+            auto toActivateWaitPublication = operation->ActivatePartsWaitPublication(pathId, version); 
+            for (auto opId: toActivateWaitPublication) { 
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                           "TTxAckPublishToSchemeBoard" 
+                               << ", operation is ready to ack that some awaited pathed is published" 
+                               << ", opId: " << opId 
+                               << ", left await publications: " << operation->CountWaitPublication(opId) 
+                               << ", at schemeshard: " << Self->TabletID() 
+                               << ", txId: " << txId); 
+ 
+                THolder<TEvPrivate::TEvCompletePublication> msg = MakeHolder<TEvPrivate::TEvCompletePublication>(opId, pathId, version); 
+                TEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompletePublication>*) new IEventHandle( 
                     Self->SelfId(), Self->SelfId(), msg.Release());
-
-                TMemoryChanges memChanges;
-                TStorageChanges dbChanges;
-                TOperationContext context{Self, txc, ctx, SideEffects, memChanges, dbChanges};
-
-                operation->Parts[opId.GetSubTxId()]->HandleReply(personalEv, context);
-            }
+ 
+                TMemoryChanges memChanges; 
+                TStorageChanges dbChanges; 
+                TOperationContext context{Self, txc, ctx, SideEffects, memChanges, dbChanges}; 
+ 
+                operation->Parts[opId.GetSubTxId()]->HandleReply(personalEv, context); 
+            } 
         } else if (Self->Publications.contains(txId)) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "Publication in-flight"
-                           << ", count: " << Self->Publications.at(txId).Paths.size()
+                           << ", count: " << Self->Publications.at(txId).Paths.size() 
                            << ", at schemeshard: " << Self->TabletID()
                            << ", txId: " << txId);
 
@@ -209,27 +209,27 @@ private:
                            << ", at schemeshard: " << Self->TabletID()
                            << ", to actorId: " << subscriber);
 
-            SideEffects.Send(subscriber, new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId)), ui64(txId));
+            SideEffects.Send(subscriber, new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId)), ui64(txId)); 
         }
     }
 
 }; // TTxAckPublishToSchemeBoard
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxPublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxPublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths) { 
     return new TTxPublishToSchemeBoard(this, std::move(paths));
 }
 
-void TSchemeShard::PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx) {
+void TSchemeShard::PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx) { 
     Execute(CreateTxPublishToSchemeBoard(std::move(paths)), ctx);
 }
 
-void TSchemeShard::PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx) {
+void TSchemeShard::PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx) { 
     PublishToSchemeBoard({{txId, std::move(paths)}}, ctx);
 }
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxAckPublishToSchemeBoard(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxAckPublishToSchemeBoard(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev) { 
     return new TTxAckPublishToSchemeBoard(this, ev);
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

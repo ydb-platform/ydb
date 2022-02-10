@@ -38,7 +38,7 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
             return ReplyAndDie(NKikimrProto::OK);
         case NKikimrProto::BLOCKED:
         case NKikimrProto::RACE:
-        case NKikimrProto::NO_GROUP:
+        case NKikimrProto::NO_GROUP: 
             // The request will never succeed
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:

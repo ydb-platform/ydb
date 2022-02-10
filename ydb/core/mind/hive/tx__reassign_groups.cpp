@@ -40,7 +40,7 @@ public:
                             NIceDb::TUpdate<Schema::Tablet::ReassignReason>(tablet->ChannelProfileReassignReason));
 
                 const ui32 channels = tablet->GetChannelCount();
-                for (ui32 channelId = 0; channelId < channels; ++channelId) {
+                for (ui32 channelId = 0; channelId < channels; ++channelId) { 
                     if (ChannelProfileNewGroup.none() || ChannelProfileNewGroup.test(channelId)) {
                         db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update(NIceDb::TUpdate<Schema::TabletChannel::NeedNewGroup>(true));
                     }

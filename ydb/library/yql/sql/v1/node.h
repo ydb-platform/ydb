@@ -1147,19 +1147,19 @@ namespace NSQLTranslationV1 {
         TTableSettings TableSettings;
         TVector<TIndexDescription> AddIndexes;
         TVector<TIdentifier> DropIndexes;
-        TMaybe<TIdentifier> RenameTo;
+        TMaybe<TIdentifier> RenameTo; 
         TVector<TChangefeedDescription> AddChangefeeds;
         TVector<TChangefeedDescription> AlterChangefeeds;
         TVector<TIdentifier> DropChangefeeds;
-
-        bool IsEmpty() const {
-            return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
+ 
+        bool IsEmpty() const { 
+            return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty() 
                 && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
                 && !TableSettings.IsSet()
                 && AddIndexes.empty() && DropIndexes.empty()
                 && !RenameTo.Defined()
                 && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
-        }
+        } 
     };
 
     struct TRoleParameters {

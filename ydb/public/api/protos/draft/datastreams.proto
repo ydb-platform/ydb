@@ -172,7 +172,7 @@ message ShardFilter {
         FROM_TRIM_HORIZON = 3;
         // Include only the currently open shards
         AT_LATEST = 4;
-        // Include all the shards whose start timestamp is <= to the given
+        // Include all the shards whose start timestamp is <= to the given 
         AT_TIMESTAMP = 5;
         // Include all closed shards whose end timestamp >= to the given
         FROM_TIMESTAMP = 6;

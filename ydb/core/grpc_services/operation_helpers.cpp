@@ -159,9 +159,9 @@ public:
         (this->*StateFunc)(ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {}
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {} 
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) { 
         //TODO: Change SS API to get operation status just from TEvNotifyTxCompletionResult
         switch (OpType) {
             case TOpType::Common:
@@ -189,13 +189,13 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle); 
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(NSchemeShard::TEvExport::TEvGetExportResponse, Handle);
-            HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle);
-            HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
+            HFunc(NSchemeShard::TEvExport::TEvGetExportResponse, Handle); 
+            HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle); 
+            HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle); 
         default:
             {
                  Req->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
@@ -214,27 +214,27 @@ private:
     }
 
     void DoSubscribe(const TActorContext& ctx) {
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(); 
         request->Record.SetTxId(TxId);
         NTabletPipe::SendData(ctx, SSPipeClient, request.Release());
     }
 
     void GetBuildIndexStatus(const TActorContext& ctx) {
-        auto request = new NSchemeShard::TEvIndexBuilder::TEvGetRequest(DatabaseName, TxId);
+        auto request = new NSchemeShard::TEvIndexBuilder::TEvGetRequest(DatabaseName, TxId); 
         NTabletPipe::SendData(ctx, SSPipeClient, request);
     }
 
     void GetExportStatus(const TActorContext& ctx) {
-        auto request = new NSchemeShard::TEvExport::TEvGetExportRequest(DatabaseName, TxId);
+        auto request = new NSchemeShard::TEvExport::TEvGetExportRequest(DatabaseName, TxId); 
         NTabletPipe::SendData(ctx, SSPipeClient, request);
     }
 
     void GetImportStatus(const TActorContext& ctx) {
-        auto request = new NSchemeShard::TEvImport::TEvGetImportRequest(DatabaseName, TxId);
+        auto request = new NSchemeShard::TEvImport::TEvGetImportRequest(DatabaseName, TxId); 
         NTabletPipe::SendData(ctx, SSPipeClient, request);
     }
 
-    void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) { 
         const auto& record = ev->Get()->Record.GetResponse();
 
         LOG_D("Handle TEvExport::TEvGetExportResponse"
@@ -245,7 +245,7 @@ private:
         Die(ctx);
     }
 
-    void Handle(NSchemeShard::TEvImport::TEvGetImportResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvImport::TEvGetImportResponse::TPtr& ev, const TActorContext& ctx) { 
         const auto& record = ev->Get()->Record.GetResponse();
 
         LOG_D("Handle TEvImport::TEvGetImportResponse"
@@ -256,7 +256,7 @@ private:
         Die(ctx);
     }
 
-    void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) { 
         const auto& record = ev->Get()->Record;
 
         LOG_D("Handle TEvIndexBuilder::TEvGetResponse"

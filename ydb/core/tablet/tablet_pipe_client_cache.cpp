@@ -36,8 +36,8 @@ namespace NTabletPipe {
     class TClientCache : public IClientCache {
     public:
         TClientCache(const TClientConfig& config, TAutoPtr<IClientCacheContainer> container, TAutoPtr<IClientCacheContainer> poolContainer, IClientFactory::TPtr pipeFactory)
-            : PipeClientConfig(config)
-            , Container(container)
+            : PipeClientConfig(config) 
+            , Container(container) 
             , PoolContainer(poolContainer)
             , ActorSystem(nullptr)
             , PipeFactory(std::move(pipeFactory))
@@ -99,13 +99,13 @@ namespace NTabletPipe {
         }
 
         TActorId Send(const TActorContext& ctx, ui64 tabletId, IEventBase* payload, ui64 cookie) override {
-            auto clientId = Prepare(ctx, tabletId);
+            auto clientId = Prepare(ctx, tabletId); 
             SendData(ctx, clientId, payload, cookie);
             return clientId;
         }
 
         TActorId Send(const TActorContext& ctx, ui64 tabletId, ui32 eventType, const TIntrusivePtr<TEventSerializedData>& eventBuffer, ui64 cookie) override {
-            auto clientId = Prepare(ctx, tabletId);
+            auto clientId = Prepare(ctx, tabletId); 
             SendData(ctx, clientId, eventType, eventBuffer, cookie);
             return clientId;
         }
@@ -206,7 +206,7 @@ namespace NTabletPipe {
         }
 
     private:
-        TClientConfig PipeClientConfig;
+        TClientConfig PipeClientConfig; 
         TAutoPtr<IClientCacheContainer> Container;
         TAutoPtr<IClientCacheContainer> PoolContainer;
 
@@ -225,7 +225,7 @@ namespace NTabletPipe {
         TIntrusivePtr<NCache::T2QCacheConfig> poolContainerConfig(new NCache::T2QCacheConfig);
         TAutoPtr<IClientCacheContainer> poolContainer(new NCache::T2QCache<ui64, TClientCacheEntry>(poolContainerConfig));
         poolContainer->SetOverflowCallback([=](const IClientCacheContainer& cache) {
-            return cache.GetUsedSize() >= cacheConfig->ClientPoolLimit;
+            return cache.GetUsedSize() >= cacheConfig->ClientPoolLimit; 
         });
 
         return new TClientCache(pipeConfig, container, poolContainer, std::move(pipeFactory));

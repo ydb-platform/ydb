@@ -98,7 +98,7 @@ public:
         }
 
         auto &info = *response->Record.MutableTabletInfo();
-        info.SetSchemeShard(Self->PathOwnerId);
+        info.SetSchemeShard(Self->PathOwnerId); 
         info.SetMediator(Self->LastKnownMediator);
         info.SetGeneration(Self->Generation());
         info.SetIsFollower(Self->IsFollower());

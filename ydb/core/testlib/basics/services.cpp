@@ -243,11 +243,11 @@ namespace NPDisk {
 
         TTestStorageFactory disk(runtime, storage, mock);
 
-        {
-            NKikimrBlobStorage::TNodeWardenServiceSet bsConfig;
+        { 
+            NKikimrBlobStorage::TNodeWardenServiceSet bsConfig; 
             Y_VERIFY(google::protobuf::TextFormat::ParseFromString(disk.MakeTextConf(*app.Domains), &bsConfig));
             app.SetBSConf(std::move(bsConfig));
-        }
+        } 
 
         if (app.Domains->Domains.empty()) {
             app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());

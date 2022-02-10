@@ -93,7 +93,7 @@ void TSubscriberTest::NotifyUpdate() {
     auto replicas = ResolveReplicas();
 
     Context->HandshakeReplica(replicas[0], edge);
-    Context->Send(replicas[0], edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1))));
+    Context->Send(replicas[0], edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)))); 
     auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
 
     UNIT_ASSERT(ev->Get());
@@ -108,7 +108,7 @@ void TSubscriberTest::NotifyDelete() {
 
     for (const auto& replica : replicas) {
         Context->HandshakeReplica(replica, edge);
-        Context->Send(replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1))));
+        Context->Send(replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)))); 
     }
 
     Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "path");
@@ -152,7 +152,7 @@ void TSubscriberTest::InvalidNotification() {
 
     // send notification directly to subscriber
     auto* notify = new TSchemeBoardEvents::TEvNotifyBuilder(TPathId(1, 1));
-    notify->Record.MutableDescribeSchemeResult()->CopyFrom(GenerateDescribe("another/path", TPathId(1, 1)));
+    notify->Record.MutableDescribeSchemeResult()->CopyFrom(GenerateDescribe("another/path", TPathId(1, 1))); 
     Context->Send(subscriber, edge, notify);
 
     size_t counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvNotifyUpdate>();
@@ -170,7 +170,7 @@ void TSubscriberTest::ReconnectOnFailure() {
     auto replicas = ResolveReplicas();
 
     Context->HandshakeReplica(replicas[0], edge);
-    Context->Send(replicas[0], edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1))));
+    Context->Send(replicas[0], edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)))); 
     auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
 
     UNIT_ASSERT(ev->Get());
@@ -183,7 +183,7 @@ void TSubscriberTest::Sync() {
     auto replicas = ResolveReplicas();
     for (const auto& replica : replicas) {
         Context->HandshakeReplica(replica, edge);
-        Context->Send(replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1))));
+        Context->Send(replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)))); 
     }
 
     const TActorId subscriber = Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "path");
@@ -249,264 +249,264 @@ void TSubscriberTest::SyncWithOutdatedReplica() {
     }
 }
 
-class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
+class TSubscriberCombinationsTest: public NUnitTest::TTestBase { 
     TVector<TActorId> ResolveReplicas(TTestContext& context) {
         const TActorId proxy = MakeStateStorageProxyID(0);
         const TActorId edge = context.AllocateEdgeActor();
-
-        context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
-        auto ev = context.GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
-
-        Y_VERIFY(ev->Get()->Info);
-        auto allReplicas = ev->Get()->Info->SelectAllReplicas();
+ 
+        context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard()); 
+        auto ev = context.GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge); 
+ 
+        Y_VERIFY(ev->Get()->Info); 
+        auto allReplicas = ev->Get()->Info->SelectAllReplicas(); 
         return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
-    }
-
-    THolder<TTestContext> CreateContext() {
-        auto context = MakeHolder<TTestContext>(2);
-
-        for (ui32 i : xrange(context->GetNodeCount())) {
-            SetupStateStorage(*context, i, 0);
-        }
-
-        context->Initialize(TAppPrepare().Unwrap());
-        context->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
-        context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
-
-        return context;
-    }
-
-    UNIT_TEST_SUITE(TSubscriberCombinationsTest);
-    UNIT_TEST(CombinationsRootDomain);
-    UNIT_TEST(MigratedPathRecreation);
-    UNIT_TEST(CombinationsMigratedPath);
-    UNIT_TEST_SUITE_END();
-
-    void CombinationsRootDomain();
-    void MigratedPathRecreation();
-    void CombinationsMigratedPath();
-}; // TSubscriberCombinationsTest
-
-UNIT_TEST_SUITE_REGISTRATION(TSubscriberCombinationsTest);
-
-
-void TSubscriberCombinationsTest::CombinationsRootDomain() {
-    TString path = "/root/tenant";
-    ui64 gssOwnerID = 800;
-    TVector<TCombinationsArgs> combinations = GenerateCombinationsDomainRoot(path, gssOwnerID);
-
-    //make all the variants
-    for (const auto& argsLeft: combinations) {
-        for (const auto& argsRight: combinations) {
-            Cerr << "=========== " << argsLeft.GenerateDescribe().ShortDebugString()
-                 << "\n=========== " << argsRight.GenerateDescribe().ShortDebugString() << Endl;
-
-            auto context = CreateContext();
-
+    } 
+ 
+    THolder<TTestContext> CreateContext() { 
+        auto context = MakeHolder<TTestContext>(2); 
+ 
+        for (ui32 i : xrange(context->GetNodeCount())) { 
+            SetupStateStorage(*context, i, 0); 
+        } 
+ 
+        context->Initialize(TAppPrepare().Unwrap()); 
+        context->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG); 
+        context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG); 
+ 
+        return context; 
+    } 
+ 
+    UNIT_TEST_SUITE(TSubscriberCombinationsTest); 
+    UNIT_TEST(CombinationsRootDomain); 
+    UNIT_TEST(MigratedPathRecreation); 
+    UNIT_TEST(CombinationsMigratedPath); 
+    UNIT_TEST_SUITE_END(); 
+ 
+    void CombinationsRootDomain(); 
+    void MigratedPathRecreation(); 
+    void CombinationsMigratedPath(); 
+}; // TSubscriberCombinationsTest 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TSubscriberCombinationsTest); 
+ 
+ 
+void TSubscriberCombinationsTest::CombinationsRootDomain() { 
+    TString path = "/root/tenant"; 
+    ui64 gssOwnerID = 800; 
+    TVector<TCombinationsArgs> combinations = GenerateCombinationsDomainRoot(path, gssOwnerID); 
+ 
+    //make all the variants 
+    for (const auto& argsLeft: combinations) { 
+        for (const auto& argsRight: combinations) { 
+            Cerr << "=========== " << argsLeft.GenerateDescribe().ShortDebugString() 
+                 << "\n=========== " << argsRight.GenerateDescribe().ShortDebugString() << Endl; 
+ 
+            auto context = CreateContext(); 
+ 
             TVector<TActorId> replicas = ResolveReplicas(*context);
-            Y_ASSERT(replicas.size() >= 2);
-
+            Y_ASSERT(replicas.size() >= 2); 
+ 
             const TActorId populatorLeft = context->AllocateEdgeActor();
-            context->HandshakeReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
-            context->CommitReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
-
+            context->HandshakeReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation); 
+            context->CommitReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation); 
+ 
             const TActorId populatorRight = context->AllocateEdgeActor();
-            context->HandshakeReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation);
-            context->CommitReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation);
-
+            context->HandshakeReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation); 
+            context->CommitReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation); 
+ 
             const TActorId edge = context->AllocateEdgeActor();
-            context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path);
-
-            context->Send(replicas[0], populatorLeft, argsLeft.GenerateUpdate());
-
-            if (!argsLeft.IsDeletion) {
-                Cerr << "=========== !argsLeft.IsDeletion" << Endl;
-                auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
-                Y_ASSERT(ev);
-                UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
-                UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
-                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
-                const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
-            }
-
-            context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
-
-            if (argsLeft.GetSuperId() >= argsRight.GetSuperId()) {
-                Cerr << "=========== argsLeft.GetSuperId() >= argsRight.GetSuperId()" << Endl;
-
-                // there is no update comming
-                continue;
-            }
-
-            Cerr << "=========== argsLeft.GetSuperId() < argsRight.GetSuperId()" << Endl;
-
-            if (!argsRight.IsDeletion) {
-                Cerr << "=========== !argsRight.IsDeletion" << Endl;
-
-                auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
-
-                Y_ASSERT(ev);
-                UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
-                UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
-                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
-                const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
-
-                continue;
-            }
-        }
-    }
-}
-
-void TSubscriberCombinationsTest::MigratedPathRecreation() {
-    ui64 gssOwnerID = 800;
-    ui64 tssOwnerID = 900;
-
-    TString path = "/root/db/dir_inside";
-
-    auto domainId = TPathId(gssOwnerID, 1);
-    auto migratedPathId = TPathId(gssOwnerID, 1111);
-
-    auto recreatedPathId = TPathId(tssOwnerID, 11);
-
-    auto argsLeft = TCombinationsArgs{
-        path, migratedPathId, 1, domainId,
-        gssOwnerID, 1, false};
-    auto argsRight = TCombinationsArgs{
-        path, recreatedPathId, 1, domainId,
-        tssOwnerID, 1, false};
-
-
-    auto context = CreateContext();
-
-    TVector<TActorId> replicas = ResolveReplicas(*context);
-    Y_ASSERT(replicas.size() >= 2);
-
-    const TActorId populatorLeft = context->AllocateEdgeActor();
-    context->HandshakeReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
-    context->CommitReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
-
-    const TActorId populatorRight = context->AllocateEdgeActor();
-    context->HandshakeReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation);
-    context->CommitReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation);
-
-    const TActorId edge = context->AllocateEdgeActor();
-    context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path);
-
-    context->Send(replicas[0], populatorLeft, argsLeft.GenerateUpdate());
-
-    if (!argsLeft.IsDeletion) {
-        Cerr << "=========== !argsLeft.IsDeletion" << Endl;
-        auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
-        Y_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
-        UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
-        const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
-        const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-        UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
-    }
-
-    context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
-
-    if (argsLeft.GetSuperId() >= argsRight.GetSuperId()) {
-        Cerr << "=========== argsLeft.GetSuperId() >= argsRight.GetSuperId()" << Endl;
-
-        // there is no update comming
-        return;
-    }
-
-    Cerr << "=========== argsLeft.GetSuperId() < argsRight.GetSuperId()" << Endl;
-
-    if (!argsRight.IsDeletion) {
-        Cerr << "=========== !argsRight.IsDeletion" << Endl;
-
-        auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
-
-        Y_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
-        UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
-        const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
-        const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-        UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
-
-        return;
-    }
-}
-
-void TSubscriberCombinationsTest::CombinationsMigratedPath() {
-    TString path = "/Root/Tenant/table_inside";
-    ui64 gssID = 800;
-    ui64 tssID = 900;
-    ui64 tssIDrecreated = 910;
-    ui64 gssLocalId = 5;
-    ui64 tssLocalId = 9;
-    TVector<TCombinationsArgs> combinations = GenerateCombinationsMigratedPath(path, gssID, {tssID, tssIDrecreated}, gssLocalId, tssLocalId);
-
-    //make all the variants
-    for (const auto& argsLeft: combinations) {
-        for (const auto& argsRight: combinations) {
-            Cerr << "=========== " << argsLeft.GenerateDescribe().ShortDebugString()
-                 << "\n=========== " << argsRight.GenerateDescribe().ShortDebugString() << Endl;
-
-            auto context = CreateContext();
-
-            TVector<TActorId> replicas = ResolveReplicas(*context);
-            Y_ASSERT(replicas.size() >= 2);
-
-            const TActorId populatorLeft = context->AllocateEdgeActor();
-            context->HandshakeReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
-            context->CommitReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
-
-            const TActorId populatorRight = context->AllocateEdgeActor();
-            context->HandshakeReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation);
-            context->CommitReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation);
-
-            const TActorId edge = context->AllocateEdgeActor();
-            context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path);
-
-            context->Send(replicas[0], populatorLeft, argsLeft.GenerateUpdate());
-
-            if (!argsLeft.IsDeletion) {
-                Cerr << "=========== !argsLeft.IsDeletion" << Endl;
-                auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
-                Y_ASSERT(ev);
-                UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
-                UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
-                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
-                const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
-            }
-
-            context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
-
-            if (argsLeft.GetSuperId() >= argsRight.GetSuperId()) {
-                Cerr << "=========== argsLeft.GetSuperId() >= argsRight.GetSuperId()" << Endl;
-
-                // there is no update comming
-                continue;
-            }
-
-            Cerr << "=========== argsLeft.GetSuperId() < argsRight.GetSuperId()" << Endl;
-
-            if (!argsRight.IsDeletion) {
-                Cerr << "=========== !argsRight.IsDeletion" << Endl;
-
-                auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
-
-                Y_ASSERT(ev);
-                UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
-                UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
-                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
-                const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
-
-                continue;
-            }
-        }
-    }
-}
-
-
+            context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path); 
+ 
+            context->Send(replicas[0], populatorLeft, argsLeft.GenerateUpdate()); 
+ 
+            if (!argsLeft.IsDeletion) { 
+                Cerr << "=========== !argsLeft.IsDeletion" << Endl; 
+                auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge); 
+                Y_ASSERT(ev); 
+                UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path); 
+                UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId); 
+                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult; 
+                const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey(); 
+                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId())); 
+            } 
+ 
+            context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate()); 
+ 
+            if (argsLeft.GetSuperId() >= argsRight.GetSuperId()) { 
+                Cerr << "=========== argsLeft.GetSuperId() >= argsRight.GetSuperId()" << Endl; 
+ 
+                // there is no update comming 
+                continue; 
+            } 
+ 
+            Cerr << "=========== argsLeft.GetSuperId() < argsRight.GetSuperId()" << Endl; 
+ 
+            if (!argsRight.IsDeletion) { 
+                Cerr << "=========== !argsRight.IsDeletion" << Endl; 
+ 
+                auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge); 
+ 
+                Y_ASSERT(ev); 
+                UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path); 
+                UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId); 
+                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult; 
+                const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey(); 
+                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId())); 
+ 
+                continue; 
+            } 
+        } 
+    } 
+} 
+ 
+void TSubscriberCombinationsTest::MigratedPathRecreation() { 
+    ui64 gssOwnerID = 800; 
+    ui64 tssOwnerID = 900; 
+ 
+    TString path = "/root/db/dir_inside"; 
+ 
+    auto domainId = TPathId(gssOwnerID, 1); 
+    auto migratedPathId = TPathId(gssOwnerID, 1111); 
+ 
+    auto recreatedPathId = TPathId(tssOwnerID, 11); 
+ 
+    auto argsLeft = TCombinationsArgs{ 
+        path, migratedPathId, 1, domainId, 
+        gssOwnerID, 1, false}; 
+    auto argsRight = TCombinationsArgs{ 
+        path, recreatedPathId, 1, domainId, 
+        tssOwnerID, 1, false}; 
+ 
+ 
+    auto context = CreateContext(); 
+ 
+    TVector<TActorId> replicas = ResolveReplicas(*context); 
+    Y_ASSERT(replicas.size() >= 2); 
+ 
+    const TActorId populatorLeft = context->AllocateEdgeActor(); 
+    context->HandshakeReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation); 
+    context->CommitReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation); 
+ 
+    const TActorId populatorRight = context->AllocateEdgeActor(); 
+    context->HandshakeReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation); 
+    context->CommitReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation); 
+ 
+    const TActorId edge = context->AllocateEdgeActor(); 
+    context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path); 
+ 
+    context->Send(replicas[0], populatorLeft, argsLeft.GenerateUpdate()); 
+ 
+    if (!argsLeft.IsDeletion) { 
+        Cerr << "=========== !argsLeft.IsDeletion" << Endl; 
+        auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge); 
+        Y_ASSERT(ev); 
+        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path); 
+        UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId); 
+        const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult; 
+        const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey(); 
+        UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId())); 
+    } 
+ 
+    context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate()); 
+ 
+    if (argsLeft.GetSuperId() >= argsRight.GetSuperId()) { 
+        Cerr << "=========== argsLeft.GetSuperId() >= argsRight.GetSuperId()" << Endl; 
+ 
+        // there is no update comming 
+        return; 
+    } 
+ 
+    Cerr << "=========== argsLeft.GetSuperId() < argsRight.GetSuperId()" << Endl; 
+ 
+    if (!argsRight.IsDeletion) { 
+        Cerr << "=========== !argsRight.IsDeletion" << Endl; 
+ 
+        auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge); 
+ 
+        Y_ASSERT(ev); 
+        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path); 
+        UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId); 
+        const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult; 
+        const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey(); 
+        UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId())); 
+ 
+        return; 
+    } 
+} 
+ 
+void TSubscriberCombinationsTest::CombinationsMigratedPath() { 
+    TString path = "/Root/Tenant/table_inside"; 
+    ui64 gssID = 800; 
+    ui64 tssID = 900; 
+    ui64 tssIDrecreated = 910; 
+    ui64 gssLocalId = 5; 
+    ui64 tssLocalId = 9; 
+    TVector<TCombinationsArgs> combinations = GenerateCombinationsMigratedPath(path, gssID, {tssID, tssIDrecreated}, gssLocalId, tssLocalId); 
+ 
+    //make all the variants 
+    for (const auto& argsLeft: combinations) { 
+        for (const auto& argsRight: combinations) { 
+            Cerr << "=========== " << argsLeft.GenerateDescribe().ShortDebugString() 
+                 << "\n=========== " << argsRight.GenerateDescribe().ShortDebugString() << Endl; 
+ 
+            auto context = CreateContext(); 
+ 
+            TVector<TActorId> replicas = ResolveReplicas(*context); 
+            Y_ASSERT(replicas.size() >= 2); 
+ 
+            const TActorId populatorLeft = context->AllocateEdgeActor(); 
+            context->HandshakeReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation); 
+            context->CommitReplica(replicas[0], populatorLeft, argsLeft.OwnerId, argsLeft.Generation); 
+ 
+            const TActorId populatorRight = context->AllocateEdgeActor(); 
+            context->HandshakeReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation); 
+            context->CommitReplica(replicas[1], populatorRight, argsRight.OwnerId, argsRight.Generation); 
+ 
+            const TActorId edge = context->AllocateEdgeActor(); 
+            context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path); 
+ 
+            context->Send(replicas[0], populatorLeft, argsLeft.GenerateUpdate()); 
+ 
+            if (!argsLeft.IsDeletion) { 
+                Cerr << "=========== !argsLeft.IsDeletion" << Endl; 
+                auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge); 
+                Y_ASSERT(ev); 
+                UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path); 
+                UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId); 
+                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult; 
+                const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey(); 
+                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId())); 
+            } 
+ 
+            context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate()); 
+ 
+            if (argsLeft.GetSuperId() >= argsRight.GetSuperId()) { 
+                Cerr << "=========== argsLeft.GetSuperId() >= argsRight.GetSuperId()" << Endl; 
+ 
+                // there is no update comming 
+                continue; 
+            } 
+ 
+            Cerr << "=========== argsLeft.GetSuperId() < argsRight.GetSuperId()" << Endl; 
+ 
+            if (!argsRight.IsDeletion) { 
+                Cerr << "=========== !argsRight.IsDeletion" << Endl; 
+ 
+                auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge); 
+ 
+                Y_ASSERT(ev); 
+                UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path); 
+                UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId); 
+                const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult; 
+                const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey(); 
+                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId())); 
+ 
+                continue; 
+            } 
+        } 
+    } 
+} 
+ 
+ 
 } // NSchemeBoard
 } // NKikimr

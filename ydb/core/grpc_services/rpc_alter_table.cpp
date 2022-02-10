@@ -195,7 +195,7 @@ private:
         switch (ev->GetTypeRewrite()) {
            HFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-           HFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle);
+           HFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle); 
            default: TBase::StateWork(ev, ctx);
         }
     }
@@ -330,17 +330,17 @@ private:
     void SendAddIndexOpToSS(const TActorContext& ctx) {
         const auto& req = *GetProtoRequest();
 
-        NKikimrIndexBuilder::TIndexBuildSettings settings;
-        settings.set_source_path(req.path());
-        auto tableIndex = settings.mutable_index();
+        NKikimrIndexBuilder::TIndexBuildSettings settings; 
+        settings.set_source_path(req.path()); 
+        auto tableIndex = settings.mutable_index(); 
         tableIndex->CopyFrom(req.add_indexes(0));
-        auto ev = new NSchemeShard::TEvIndexBuilder::TEvCreateRequest(TxId, DatabaseName, std::move(settings));
+        auto ev = new NSchemeShard::TEvIndexBuilder::TEvCreateRequest(TxId, DatabaseName, std::move(settings)); 
 
         NTabletPipe::SendData(ctx, SSPipeClient, ev);
     }
 
-    void Handle(NSchemeShard::TEvIndexBuilder::TEvCreateResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& response = ev->Get()->Record;
+    void Handle(NSchemeShard::TEvIndexBuilder::TEvCreateResponse::TPtr& ev, const TActorContext& ctx) { 
+        const auto& response = ev->Get()->Record; 
         const auto status = response.GetStatus();
         auto issuesProto = response.GetIssues();
 
@@ -384,9 +384,9 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex); 
 
         for (const auto& drop : req->drop_indexes()) {
             auto desc = modifyScheme->MutableDropIndex();
@@ -411,9 +411,9 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable); 
 
         auto desc = modifyScheme->MutableAlterTable();
         desc->SetName(name);
@@ -505,7 +505,7 @@ private:
         auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
 
         modifyScheme.SetWorkingDir(workingDir);
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes); 
 
         auto& alter = *modifyScheme.MutableAlterUserAttributes();
         alter.SetPathName(name);

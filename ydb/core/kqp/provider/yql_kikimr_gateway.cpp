@@ -5,7 +5,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/core/base/table_index.h>
-
+ 
 #include <util/string/split.h>
 
 namespace NYql {
@@ -171,7 +171,7 @@ TString IKikimrGateway::CreateIndexTablePath(const TString& tableName, const TSt
 void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult) {
     auto tableMetadata = loadTableMetadataResult.Metadata;
     YQL_ENSURE(tableMetadata);
-
+ 
     if (tableMetadata->Indexes.empty()) {
         return;
     }
@@ -182,27 +182,27 @@ void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataR
 
     NKikimr::NTableIndex::TTableColumns tableColumns;
     tableColumns.Columns.reserve(tableMetadata->Columns.size());
-    for (auto& column: tableMetadata->Columns) {
+    for (auto& column: tableMetadata->Columns) { 
         tableColumns.Columns.insert_noresize(column.first);
-    }
+    } 
     tableColumns.Keys = tableMetadata->KeyColumnNames;
 
-    tableMetadata->SecondaryGlobalIndexMetadata.resize(indexesCount);
+    tableMetadata->SecondaryGlobalIndexMetadata.resize(indexesCount); 
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
-        auto indexTablePath = CreateIndexTablePath(tableName, index.Name);
+        auto indexTablePath = CreateIndexTablePath(tableName, index.Name); 
         NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(
                     tableColumns,
                     NKikimr::NTableIndex::TIndexColumns{index.KeyColumns, {}});
 
-        TKikimrTableMetadataPtr indexTableMetadata = new TKikimrTableMetadata(cluster, indexTablePath);
-        indexTableMetadata->DoesExist = true;
+        TKikimrTableMetadataPtr indexTableMetadata = new TKikimrTableMetadata(cluster, indexTablePath); 
+        indexTableMetadata->DoesExist = true; 
         indexTableMetadata->KeyColumnNames = indexTableColumns.Keys;
         for (auto& column: indexTableColumns.Columns) {
-            indexTableMetadata->Columns[column] = tableMetadata->Columns.at(column);
-        }
-
-        tableMetadata->SecondaryGlobalIndexMetadata[i] = indexTableMetadata;
+            indexTableMetadata->Columns[column] = tableMetadata->Columns.at(column); 
+        } 
+ 
+        tableMetadata->SecondaryGlobalIndexMetadata[i] = indexTableMetadata; 
     }
 }
 

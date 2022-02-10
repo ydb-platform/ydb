@@ -44,7 +44,7 @@ struct TRateLimiterSettings {
     }
 
     ui32 GetRps() const {
-        return Max<ui32>(1, Rate_ * TDuration::Seconds(1).MilliSeconds() / Interval_.MilliSeconds());
+        return Max<ui32>(1, Rate_ * TDuration::Seconds(1).MilliSeconds() / Interval_.MilliSeconds()); 
     }
 
 }; // TRateLimiterSettings

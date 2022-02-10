@@ -61,16 +61,16 @@ enum EServiceKikimr {
     BS_VDISK_CHUNKS = 299;
 
     // SCHEMESHARD section
-    SCHEMESHARD_DESCRIBE = 295;
+    SCHEMESHARD_DESCRIBE = 295; 
     FLAT_TX_SCHEMESHARD = 296;
-    SHEME_SHARD = 700; // stillborn tag
+    SHEME_SHARD = 700; // stillborn tag 
 
     // OLAP section
     TX_OLAPSHARD = 331;
     TX_COLUMNSHARD = 332;
     BLOB_CACHE = 333;
     TX_COLUMNSHARD_SCAN = 334;
-
+ 
     // BLOBSTORAGE again
     BS_HANDOFF = 298;
 
@@ -141,17 +141,17 @@ enum EServiceKikimr {
     // PROXY section
     TX_PROXY = 400;
     TX_PROXY_SCHEME_CACHE = 401;
-    MSGBUS_PROXY = 403;
-    TX_ALLOCATOR = 402;
+    MSGBUS_PROXY = 403; 
+    TX_ALLOCATOR = 402; 
     TX_ALLOCATOR_CLIENT = 404;
     LONG_TX_SERVICE = 405;
-
+ 
     LOGGER = 410;
     MSGBUS_TRACER = 411;
     MSGBUS_REQUEST = 412; // deprecated, use RPC_REQUEST
     GRPC_SERVER = 413;
-    GRPC_PROXY = 415;
-    GRPC_PROXY_NO_CONNECT_ACCESS = 417;
+    GRPC_PROXY = 415; 
+    GRPC_PROXY_NO_CONNECT_ACCESS = 417; 
     READ_TABLE_API = 414; // deprecated, use RPC_REQUEST
     RPC_REQUEST = 416;
     // KEY VALUE section
@@ -274,10 +274,10 @@ enum EServiceKikimr {
 
     // System views
     SYSTEM_VIEWS = 900;
-
-    BUILD_INDEX = 1000;
-
-    METERING_WRITER = 1010;
+ 
+    BUILD_INDEX = 1000; 
+ 
+    METERING_WRITER = 1010; 
 
     // Streaming
     STREAMS = 1011;
@@ -772,7 +772,7 @@ message TActivity {
         BS_PROXY_PATCH_ACTOR = 457;
         SCHEME_BOARD_WATCH_CACHE_ACTOR = 458;
         SEQUENCESHARD_ACTOR = 459;
-        BUILD_INDEX_SCAN_ACTOR = 460;
+        BUILD_INDEX_SCAN_ACTOR = 460; 
         FLAT_EXECUTOR_REASSIGN = 461;
         DISTRIBUTED_ERASE_ROWS_ACTOR = 462;
         YT_WRAPPER_ACTOR = 463;
@@ -796,7 +796,7 @@ message TActivity {
         TX_COLUMNSHARD_COMPACTION_ACTOR = 499;
         SCHEME_BOARD_MONITORING_ACTOR = 478;
         SCHEME_BOARD_INFO_REQUESTER_ACTOR = 479;
-        METERING_WRITER_ACTOR = 480;
+        METERING_WRITER_ACTOR = 480; 
         SEQUENCE_PROXY_SERVICE = 481;
         KQP_TABLE_SCAN_PROXY = 482;
         KQP_TABLE_RESOLVER = 483;

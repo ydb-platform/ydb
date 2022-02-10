@@ -1573,22 +1573,22 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(SmartParenInGroupByClause) {
         UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input GROUP BY (k, v)").IsOk());
     }
-
-    Y_UNIT_TEST(AlterTableRenameToIsCorrect) {
-        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table RENAME TO moved").IsOk());
-    }
-
-    Y_UNIT_TEST(AlterTableAddDropColumnIsCorrect) {
-        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ADD COLUMN addc uint64, DROP COLUMN dropc, ADD addagain uint64").IsOk());
-    }
-
-    Y_UNIT_TEST(AlterTableSetTTLIsCorrect) {
-        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (TTL = Interval(\"PT3H\") ON column)").IsOk());
-    }
-
-    Y_UNIT_TEST(AlterTableSetPartitioningIsCorrect) {
-        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
-    }
+ 
+    Y_UNIT_TEST(AlterTableRenameToIsCorrect) { 
+        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table RENAME TO moved").IsOk()); 
+    } 
+ 
+    Y_UNIT_TEST(AlterTableAddDropColumnIsCorrect) { 
+        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ADD COLUMN addc uint64, DROP COLUMN dropc, ADD addagain uint64").IsOk()); 
+    } 
+ 
+    Y_UNIT_TEST(AlterTableSetTTLIsCorrect) { 
+        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (TTL = Interval(\"PT3H\") ON column)").IsOk()); 
+    } 
+ 
+    Y_UNIT_TEST(AlterTableSetPartitioningIsCorrect) { 
+        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk()); 
+    } 
 
     Y_UNIT_TEST(OptionalAliases) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT foo FROM (SELECT key foo FROM Input);").IsOk());
@@ -3136,16 +3136,16 @@ select FormatType($f());
             "<main>:1:37: Error: Unable to GROUP BY constant expression\n");
     }
 
-    Y_UNIT_TEST(ErrRenameWithAddColumn) {
-        ExpectFailWithError("USE plato; ALTER TABLE table RENAME TO moved, ADD COLUMN addc uint64",
-                            "<main>:1:40: Error: RENAME TO can not be used together with another table action\n");
-    }
-
-    Y_UNIT_TEST(ErrAddColumnAndRename) {
+    Y_UNIT_TEST(ErrRenameWithAddColumn) { 
+        ExpectFailWithError("USE plato; ALTER TABLE table RENAME TO moved, ADD COLUMN addc uint64", 
+                            "<main>:1:40: Error: RENAME TO can not be used together with another table action\n"); 
+    } 
+ 
+    Y_UNIT_TEST(ErrAddColumnAndRename) { 
         // FIXME: fix positions in ALTER TABLE
-        ExpectFailWithError("USE plato; ALTER TABLE table ADD COLUMN addc uint64, RENAME TO moved",
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD COLUMN addc uint64, RENAME TO moved", 
                             "<main>:1:46: Error: RENAME TO can not be used together with another table action\n");
-    }
+    } 
 
     Y_UNIT_TEST(InvalidUuidValue) {
         ExpectFailWithError("SELECT Uuid('123e4567ae89ba12d3aa456a426614174ab0')",

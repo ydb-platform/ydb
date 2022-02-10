@@ -80,7 +80,7 @@ public:
 
         ui64 tableId = Ev->Get()->Record.GetTableId();
 
-        Result = new TEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId);
+        Result = new TEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId); 
 
         if (!Self->TableInfos.contains(tableId))
             return true;

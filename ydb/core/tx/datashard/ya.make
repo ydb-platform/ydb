@@ -37,7 +37,7 @@ SRCS(
     create_persistent_snapshot_unit.cpp
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
-    datashard__build_index.cpp
+    datashard__build_index.cpp 
     datashard__cancel_tx_proposal.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
@@ -49,7 +49,7 @@ SRCS(
     datashard__engine_host.h
     datashard__get_state_tx.cpp
     datashard__schema_changed.cpp
-    datashard__migrate_schemeshard.cpp
+    datashard__migrate_schemeshard.cpp 
     datashard__init.cpp
     datashard__monitoring.cpp
     datashard__mon_reset_schema_version.cpp
@@ -125,7 +125,7 @@ SRCS(
     defs.h
     direct_tx_unit.cpp
     drop_cdc_stream_unit.cpp
-    drop_index_notice_unit.cpp
+    drop_index_notice_unit.cpp 
     drop_persistent_snapshot_unit.cpp
     drop_table_unit.cpp
     drop_volatile_snapshot_unit.cpp
@@ -152,7 +152,7 @@ SRCS(
     load_tx_details_unit.cpp
     make_scan_snapshot_unit.cpp
     make_snapshot_unit.cpp
-    move_table_unit.cpp
+    move_table_unit.cpp 
     operation.cpp
     operation.h
     plan_queue_unit.cpp
@@ -167,7 +167,7 @@ SRCS(
     read_table_scan_unit.cpp
     receive_snapshot_unit.cpp
     range_avl_tree.cpp
-    range_ops.cpp
+    range_ops.cpp 
     range_treap.cpp
     read_iterator.h
     restore_unit.cpp
@@ -180,7 +180,7 @@ SRCS(
     store_snapshot_tx_unit.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
-    upload_stats.cpp
+    upload_stats.cpp 
 )
 
 GENERATE_ENUM_SERIALIZATION(change_exchange.h)

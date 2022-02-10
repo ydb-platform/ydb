@@ -20,31 +20,31 @@ struct TEvTxAllocatorClient {
     );
 
     struct TEvAllocate: public TEventLocal<TEvAllocate, EvAllocate> {
-        const ui32 Count = 1;
-
-        TEvAllocate() = default;
-
-        explicit TEvAllocate(ui32 count)
-            : Count(count)
-        {
-            Y_VERIFY(count > 0);
-        }
+        const ui32 Count = 1; 
+ 
+        TEvAllocate() = default; 
+ 
+        explicit TEvAllocate(ui32 count) 
+            : Count(count) 
+        { 
+            Y_VERIFY(count > 0); 
+        } 
     };
 
     struct TEvAllocateResult: public TEventLocal<TEvAllocateResult, EvAllocateResult> {
-        const TVector<ui64> TxIds;
+        const TVector<ui64> TxIds; 
 
         TEvAllocateResult() = default;
 
         explicit TEvAllocateResult(ui64 txId)
-            : TxIds(1, txId)
+            : TxIds(1, txId) 
         {
         }
-
-        explicit TEvAllocateResult(TVector<ui64>&& txIds)
-            : TxIds(std::move(txIds))
-        {
-        }
+ 
+        explicit TEvAllocateResult(TVector<ui64>&& txIds) 
+            : TxIds(std::move(txIds)) 
+        { 
+        } 
     };
 
 }; // TTxAllocatorClientEvents

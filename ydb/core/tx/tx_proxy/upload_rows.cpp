@@ -13,14 +13,14 @@ public:
         const TString& table,
         std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
-        EUploadRowsMode mode,
-        bool writeToPrivateTable)
+        EUploadRowsMode mode, 
+        bool writeToPrivateTable) 
         : Sender(sender)
         , Table(table)
         , ColumnTypes(types)
         , Rows(rows)
     {
-        AllowWriteToPrivateTable = writeToPrivateTable;
+        AllowWriteToPrivateTable = writeToPrivateTable; 
 
         switch (mode) {
             case EUploadRowsMode::Normal:

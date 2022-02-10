@@ -1019,7 +1019,7 @@ public:
             for (; i < 500; ++i) {
                 TAutoPtr<NMsgBusProxy::TBusResponse> r = TryDropPersQueueGroup("/Root/PQ", name);
                 UNIT_ASSERT(r);
-                if (r->Record.GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+                if (r->Record.GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist) { 
                     break;
                 }
                 Sleep(TDuration::MilliSeconds(50));

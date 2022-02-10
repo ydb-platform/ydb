@@ -31,7 +31,7 @@ class TBrowse : public TActorBootstrapped<TBrowse> {
     NKikimrViewer::TMetaInfo MetaInfo;
     TString CurrentPath; // TStringBuf?
     NKikimrViewer::EObjectType CurrentType;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult; 
     THashSet<TActorId> Handlers;
     TActorId TxProxy = MakeTxProxyID();
 
@@ -62,38 +62,38 @@ public:
         return clientConfig;
     }
 
-    static NKikimrViewer::EObjectType GetPathTypeFromSchemeShardType(NKikimrSchemeOp::EPathType type) {
+    static NKikimrViewer::EObjectType GetPathTypeFromSchemeShardType(NKikimrSchemeOp::EPathType type) { 
         switch (type) {
-        case NKikimrSchemeOp::EPathType::EPathTypeDir:
+        case NKikimrSchemeOp::EPathType::EPathTypeDir: 
         case NKikimrSchemeOp::EPathType::EPathTypeColumnStore: // TODO
             return NKikimrViewer::EObjectType::Directory;
-        case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
+        case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume: 
             return NKikimrViewer::EObjectType::RtmrVolume;
-        case NKikimrSchemeOp::EPathType::EPathTypeTable:
+        case NKikimrSchemeOp::EPathType::EPathTypeTable: 
         case NKikimrSchemeOp::EPathType::EPathTypeColumnTable: // TODO
             return NKikimrViewer::EObjectType::Table;
-        case NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup:
+        case NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup: 
             return NKikimrViewer::EObjectType::Topic;
-        case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
+        case NKikimrSchemeOp::EPathType::EPathTypeSubDomain: 
             return NKikimrViewer::EObjectType::SubDomain;
-        case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
+        case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume: 
             return NKikimrViewer::EObjectType::BlockStoreVolume;
-        case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
+        case NKikimrSchemeOp::EPathType::EPathTypeFileStore: 
             return NKikimrViewer::EObjectType::FileStore;
-        case NKikimrSchemeOp::EPathType::EPathTypeKesus:
+        case NKikimrSchemeOp::EPathType::EPathTypeKesus: 
             return NKikimrViewer::EObjectType::Kesus;
-        case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
-            return NKikimrViewer::EObjectType::SolomonVolume;
-        case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
+        case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume: 
+            return NKikimrViewer::EObjectType::SolomonVolume; 
+        case NKikimrSchemeOp::EPathType::EPathTypeCdcStream: 
             return NKikimrViewer::EObjectType::CdcStream;
-        case NKikimrSchemeOp::EPathType::EPathTypeSequence:
+        case NKikimrSchemeOp::EPathType::EPathTypeSequence: 
             return NKikimrViewer::EObjectType::Sequence;
         case NKikimrSchemeOp::EPathType::EPathTypeReplication:
             return NKikimrViewer::EObjectType::Replication;
-        case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
-        case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
-        case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
-            Y_UNREACHABLE();
+        case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain: 
+        case NKikimrSchemeOp::EPathType::EPathTypeTableIndex: 
+        case NKikimrSchemeOp::EPathType::EPathTypeInvalid: 
+            Y_UNREACHABLE(); 
         }
         return NKikimrViewer::EObjectType::Unknown;
     }
@@ -222,7 +222,7 @@ public:
                 if (!BrowseContext.UserToken.empty()) {
                     request->Record.SetUserToken(BrowseContext.UserToken);
                 }
-                NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
+                NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath(); 
                 record->SetPath(CurrentPath);
                 ctx.Send(TxProxy, request.Release(), IEventHandle::FlagTrackDelivery);
                 ++Requests;
@@ -272,12 +272,12 @@ public:
         return HandleBadRequest(ctx, "The path is not found");
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) { 
         DescribeResult.Reset(ev->Release());
         ++Responses;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
         const auto& pbRecord(DescribeResult->GetRecord());
-        if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+        if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) { 
             if (pbRecord.HasPathDescription()) {
                 const auto& pbPathDescription(pbRecord.GetPathDescription());
                 if (pbPathDescription.HasSelf()) {
@@ -335,7 +335,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
             HFunc(NViewerEvents::TEvBrowseResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             HFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -379,7 +379,7 @@ protected:
     TVector<ui64> Tablets;
     ui32 Requests = 0;
     ui32 Responses = 0;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult; 
     TString Path;
     IViewer::TBrowseContext BrowseContext;
     TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> TabletCountersResults;
@@ -396,7 +396,7 @@ public:
     }
 
     TBrowseTabletsCommon(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
-        : Owner(owner)
+        : Owner(owner) 
         , Path(browseContext.Path)
         , BrowseContext(browseContext)
     {}

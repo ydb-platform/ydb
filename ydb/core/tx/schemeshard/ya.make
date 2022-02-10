@@ -15,8 +15,8 @@ RECURSE_FOR_TESTS(
     ut_index_build
     ut_index_build_reboots
     ut_login
-    ut_move
-    ut_move_reboots
+    ut_move 
+    ut_move_reboots 
     ut_olap
     ut_olap_reboots
     ut_pq
@@ -44,10 +44,10 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
-OWNER(
-    ddoarn
+OWNER( 
+    ddoarn 
     g:kikimr
-)
+) 
 
 IF (KIKIMR_ALLOW_SHARDED_COMPACTION)
     CFLAGS(
@@ -58,130 +58,130 @@ ENDIF()
 SRCS(
     defs.h
     schemeshard.h
-    schemeshard.cpp
+    schemeshard.cpp 
     schemeshard__compaction.cpp
-    schemeshard__clean_pathes.cpp
+    schemeshard__clean_pathes.cpp 
     schemeshard__conditional_erase.cpp
-    schemeshard__describe_scheme.cpp
-    schemeshard__delete_tablet_reply.cpp
+    schemeshard__describe_scheme.cpp 
+    schemeshard__delete_tablet_reply.cpp 
     schemeshard__find_subdomain_path_id.cpp
     schemeshard__fix_bad_paths.cpp
     schemeshard__init.cpp
     schemeshard__init_populator.cpp
-    schemeshard__init_root.cpp
-    schemeshard__init_schema.cpp
-    schemeshard__serverless_storage_billing.cpp
-    schemeshard__sync_update_tenants.cpp
+    schemeshard__init_root.cpp 
+    schemeshard__init_schema.cpp 
+    schemeshard__serverless_storage_billing.cpp 
+    schemeshard__sync_update_tenants.cpp 
     schemeshard__login.cpp
     schemeshard__monitoring.cpp
-    schemeshard__notify.cpp
-    schemeshard__operation.cpp
-    schemeshard__operation.h
-    schemeshard__operation_side_effects.cpp
-    schemeshard__operation_side_effects.h
-    schemeshard__operation_memory_changes.cpp
-    schemeshard__operation_db_changes.cpp
-    schemeshard__operation_alter_bsv.cpp
-    schemeshard__operation_alter_extsubdomain.cpp
+    schemeshard__notify.cpp 
+    schemeshard__operation.cpp 
+    schemeshard__operation.h 
+    schemeshard__operation_side_effects.cpp 
+    schemeshard__operation_side_effects.h 
+    schemeshard__operation_memory_changes.cpp 
+    schemeshard__operation_db_changes.cpp 
+    schemeshard__operation_alter_bsv.cpp 
+    schemeshard__operation_alter_extsubdomain.cpp 
     schemeshard__operation_alter_fs.cpp
     schemeshard__operation_alter_index.cpp
-    schemeshard__operation_alter_kesus.cpp
+    schemeshard__operation_alter_kesus.cpp 
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_olap_store.cpp
     schemeshard__operation_alter_olap_table.cpp
-    schemeshard__operation_alter_pq.cpp
+    schemeshard__operation_alter_pq.cpp 
     schemeshard__operation_alter_solomon.cpp
-    schemeshard__operation_alter_subdomain.cpp
-    schemeshard__operation_alter_table.cpp
-    schemeshard__operation_alter_user_attrs.cpp
-    schemeshard__operation_assign_bsv.cpp
+    schemeshard__operation_alter_subdomain.cpp 
+    schemeshard__operation_alter_table.cpp 
+    schemeshard__operation_alter_user_attrs.cpp 
+    schemeshard__operation_assign_bsv.cpp 
     schemeshard__operation_cancel_tx.cpp
-    schemeshard__operation_common.cpp
-    schemeshard__operation_common.h
-    schemeshard__operation_consistent_copy_tables.cpp
-    schemeshard__operation_copy_table.cpp
-    schemeshard__operation_create_backup.cpp
-    schemeshard__operation_create_bsv.cpp
-    schemeshard__operation_create_extsubdomain.cpp
+    schemeshard__operation_common.cpp 
+    schemeshard__operation_common.h 
+    schemeshard__operation_consistent_copy_tables.cpp 
+    schemeshard__operation_copy_table.cpp 
+    schemeshard__operation_create_backup.cpp 
+    schemeshard__operation_create_bsv.cpp 
+    schemeshard__operation_create_extsubdomain.cpp 
     schemeshard__operation_create_fs.cpp
     schemeshard__operation_create_index.cpp
     schemeshard__operation_create_indexed_table.cpp
-    schemeshard__operation_create_kesus.cpp
-    schemeshard__operation_create_lock.cpp
+    schemeshard__operation_create_kesus.cpp 
+    schemeshard__operation_create_lock.cpp 
     schemeshard__operation_create_olap_store.cpp
     schemeshard__operation_create_olap_table.cpp
-    schemeshard__operation_create_pq.cpp
+    schemeshard__operation_create_pq.cpp 
     schemeshard__operation_create_replication.cpp
     schemeshard__operation_create_restore.cpp
-    schemeshard__operation_create_rtmr.cpp
+    schemeshard__operation_create_rtmr.cpp 
     schemeshard__operation_create_sequence.cpp
-    schemeshard__operation_create_solomon.cpp
-    schemeshard__operation_create_subdomain.cpp
-    schemeshard__operation_create_table.cpp
-    schemeshard__operation_drop_bsv.cpp
-    schemeshard__operation_drop_extsubdomain.cpp
+    schemeshard__operation_create_solomon.cpp 
+    schemeshard__operation_create_subdomain.cpp 
+    schemeshard__operation_create_table.cpp 
+    schemeshard__operation_drop_bsv.cpp 
+    schemeshard__operation_drop_extsubdomain.cpp 
     schemeshard__operation_drop_fs.cpp
-    schemeshard__operation_drop_indexed_table.cpp
-    schemeshard__operation_drop_kesus.cpp
+    schemeshard__operation_drop_indexed_table.cpp 
+    schemeshard__operation_drop_kesus.cpp 
     schemeshard__operation_drop_lock.cpp
     schemeshard__operation_drop_olap_store.cpp
     schemeshard__operation_drop_olap_table.cpp
     schemeshard__operation_drop_pq.cpp
     schemeshard__operation_drop_replication.cpp
     schemeshard__operation_drop_sequence.cpp
-    schemeshard__operation_drop_solomon.cpp
-    schemeshard__operation_drop_subdomain.cpp
-    schemeshard__operation_drop_table.cpp
-    schemeshard__operation_drop_unsafe.cpp
-    schemeshard__operation_mkdir.cpp
-    schemeshard__operation_modify_acl.cpp
-    schemeshard__operation_move_table.cpp
-    schemeshard__operation_move_tables.cpp
-    schemeshard__operation_move_table_index.cpp
-    schemeshard__operation_part.cpp
-    schemeshard__operation_part.h
-    schemeshard__operation_rmdir.cpp
-    schemeshard__operation_split_merge.cpp
-    schemeshard__operation_just_reject.cpp
-    schemeshard__operation_upgrade_subdomain.cpp
-    schemeshard__operation_initiate_build_index.cpp
-    schemeshard__operation_finalize_build_index.cpp
-    schemeshard__operation_create_build_index.cpp
-    schemeshard__operation_apply_build_index.cpp
-    schemeshard__operation_cansel_build_index.cpp
-    schemeshard__operation_drop_index.cpp
+    schemeshard__operation_drop_solomon.cpp 
+    schemeshard__operation_drop_subdomain.cpp 
+    schemeshard__operation_drop_table.cpp 
+    schemeshard__operation_drop_unsafe.cpp 
+    schemeshard__operation_mkdir.cpp 
+    schemeshard__operation_modify_acl.cpp 
+    schemeshard__operation_move_table.cpp 
+    schemeshard__operation_move_tables.cpp 
+    schemeshard__operation_move_table_index.cpp 
+    schemeshard__operation_part.cpp 
+    schemeshard__operation_part.h 
+    schemeshard__operation_rmdir.cpp 
+    schemeshard__operation_split_merge.cpp 
+    schemeshard__operation_just_reject.cpp 
+    schemeshard__operation_upgrade_subdomain.cpp 
+    schemeshard__operation_initiate_build_index.cpp 
+    schemeshard__operation_finalize_build_index.cpp 
+    schemeshard__operation_create_build_index.cpp 
+    schemeshard__operation_apply_build_index.cpp 
+    schemeshard__operation_cansel_build_index.cpp 
+    schemeshard__operation_drop_index.cpp 
     schemeshard__operation_create_cdc_stream.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_drop_cdc_stream.cpp
     schemeshard__publish_to_scheme_board.cpp
-    schemeshard__state_changed_reply.cpp
+    schemeshard__state_changed_reply.cpp 
     schemeshard__table_stats.cpp
-    schemeshard__table_stats_histogram.cpp
-    schemeshard__upgrade_schema.cpp
-    schemeshard__upgrade_access_database.cpp
-    schemeshard__make_access_database_no_inheritable.cpp
-    schemeshard_impl.cpp
-    schemeshard_impl.h
+    schemeshard__table_stats_histogram.cpp 
+    schemeshard__upgrade_schema.cpp 
+    schemeshard__upgrade_access_database.cpp 
+    schemeshard__make_access_database_no_inheritable.cpp 
+    schemeshard_impl.cpp 
+    schemeshard_impl.h 
     schemeshard_billing_helpers.cpp
-    schemeshard_domain_links.h
-    schemeshard_domain_links.cpp
-    schemeshard_effective_acl.h
-    schemeshard_effective_acl.cpp
-    schemeshard_identificators.cpp
-    schemeshard_info_types.cpp
-    schemeshard_info_types.h
+    schemeshard_domain_links.h 
+    schemeshard_domain_links.cpp 
+    schemeshard_effective_acl.h 
+    schemeshard_effective_acl.cpp 
+    schemeshard_identificators.cpp 
+    schemeshard_info_types.cpp 
+    schemeshard_info_types.h 
     schemeshard_path_describer.cpp
-    schemeshard_path_element.h
-    schemeshard_path.cpp
-    schemeshard_path.h
-    schemeshard_schema.h
-    schemeshard_tx_infly.h
-    schemeshard_types.cpp
-    schemeshard_types.h
-    schemeshard_ui64id.cpp
+    schemeshard_path_element.h 
+    schemeshard_path.cpp 
+    schemeshard_path.h 
+    schemeshard_schema.h 
+    schemeshard_tx_infly.h 
+    schemeshard_types.cpp 
+    schemeshard_types.h 
+    schemeshard_ui64id.cpp 
     schemeshard_user_attr_limits.h
-    schemeshard_utils.cpp
-    schemeshard_utils.h
+    schemeshard_utils.cpp 
+    schemeshard_utils.h 
     schemeshard_export__cancel.cpp
     schemeshard_export__create.cpp
     schemeshard_export__forget.cpp
@@ -196,20 +196,20 @@ SRCS(
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
     schemeshard_import.cpp
-    schemeshard_build_index.cpp
-    schemeshard_build_index__cancel.cpp
-    schemeshard_build_index__forget.cpp
-    schemeshard_build_index__list.cpp
-    schemeshard_build_index__create.cpp
-    schemeshard_build_index__get.cpp
-    schemeshard_build_index__progress.cpp
+    schemeshard_build_index.cpp 
+    schemeshard_build_index__cancel.cpp 
+    schemeshard_build_index__forget.cpp 
+    schemeshard_build_index__list.cpp 
+    schemeshard_build_index__create.cpp 
+    schemeshard_build_index__get.cpp 
+    schemeshard_build_index__progress.cpp 
     schemeshard_validate_ttl.cpp
     operation_queue_timer.h
 )
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
-GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
+GENERATE_ENUM_SERIALIZATION(schemeshard_types.h) 
 
 PEERDIR(
     contrib/libs/protobuf

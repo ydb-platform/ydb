@@ -6,10 +6,10 @@
 #include <util/string/cast.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 template <typename TInfo, typename TEvRequest, typename TEvResponse, typename TDerived>
-struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
+struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase { 
     using TTxListBase = TTxList<TInfo, TEvRequest, TEvResponse, TDerived>;
 
     static constexpr ui64 DefaultPageSize = 10;
@@ -87,5 +87,5 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
 
 }; // TTxList
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

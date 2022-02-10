@@ -100,8 +100,8 @@ message IndexBuildState {
         STATE_DONE = 4;
         STATE_CANCELLATION = 5;
         STATE_CANCELLED = 6;
-        STATE_REJECTION = 7;
-        STATE_REJECTED = 8;
+        STATE_REJECTION = 7; 
+        STATE_REJECTED = 8; 
     }
 }
 
@@ -511,50 +511,50 @@ message CopyTableResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message CopyTableItem {
-    // Copy from path
-    string source_path = 1;
-    // Copy to path
-    string destination_path = 2;
-    // Copy options
-    bool omit_indexes = 3;
+message CopyTableItem { 
+    // Copy from path 
+    string source_path = 1; 
+    // Copy to path 
+    string destination_path = 2; 
+    // Copy options 
+    bool omit_indexes = 3; 
 }
-
-// Creates consistent copy of given tables.
-message CopyTablesRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+ 
+// Creates consistent copy of given tables. 
+message CopyTablesRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Session identifier
-    string session_id = 2;
-    // Source and destination paths which describe copies
-    repeated CopyTableItem tables = 3;
+    string session_id = 2; 
+    // Source and destination paths which describe copies 
+    repeated CopyTableItem tables = 3; 
 }
-
-message CopyTablesResponse {
-    Ydb.Operations.Operation operation = 1;
+ 
+message CopyTablesResponse { 
+    Ydb.Operations.Operation operation = 1; 
 }
-
-message RenameTableItem {
-    // Full path
-    string source_path = 1;
-    // Full path
-    string destination_path = 2;
-    // Move options
-    bool replace_destination = 3;
-}
-
-// Moves given tables
-message RenameTablesRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Session identifier
-    string session_id = 2;
-    // Source and destination paths inside RenameTableItem describe rename actions
-    repeated RenameTableItem tables = 3;
-}
-
-message RenameTablesResponse {
-    Ydb.Operations.Operation operation = 1;
-}
-
+ 
+message RenameTableItem { 
+    // Full path 
+    string source_path = 1; 
+    // Full path 
+    string destination_path = 2; 
+    // Move options 
+    bool replace_destination = 3; 
+} 
+ 
+// Moves given tables 
+message RenameTablesRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Session identifier 
+    string session_id = 2; 
+    // Source and destination paths inside RenameTableItem describe rename actions 
+    repeated RenameTableItem tables = 3; 
+} 
+ 
+message RenameTablesResponse { 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
 // Describe table with given path
 message DescribeTableRequest {
     // Session identifier

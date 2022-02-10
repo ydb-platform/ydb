@@ -38,7 +38,7 @@ protected:
 
         const auto settingsKind = restore.GetSettingsCase();
         switch (settingsKind) {
-        case NKikimrSchemeOp::TRestoreTask::kS3Settings:
+        case NKikimrSchemeOp::TRestoreTask::kS3Settings: 
         #ifndef KIKIMR_DISABLE_S3_OPS
             tx->SetAsyncJobActor(ctx.Register(CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
                 TMailboxType::HTSwap, AppData(ctx)->BatchPoolId));

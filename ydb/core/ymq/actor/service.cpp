@@ -350,7 +350,7 @@ STATEFN(TSqsService::StateFunc) {
 
         // Details
         hFunc(TEvWakeup, HandleWakeup);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
+        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult); 
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
         hFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeClientDisconnected);
         hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeClientConnected);
@@ -387,7 +387,7 @@ void TSqsService::RequestSqsUsersList() {
     RequestingUsersList_ = true;
     LOG_SQS_INFO("Request SQS users list");
     THolder<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
-    NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
+    NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath(); 
     record->SetPath(Cfg().GetRoot());
     Send(MakeTxProxyID(), navigateRequest.Release());
 }
@@ -599,14 +599,14 @@ void TSqsService::ProcessConfigurationRequestForQueue(TSqsEvents::TEvGetConfigur
     }
 }
 
-void TSqsService::HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+void TSqsService::HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
     RequestingUsersList_ = false;
     LastRequestUsersListTime_ = TActivationContext::Now();
     const auto& record = ev->Get()->GetRecord();
     const auto& desc = record.GetPathDescription();
 
     LOG_SQS_DEBUG("Got info for main folder (user list): " << record);
-    if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
+    if (record.GetStatus() != NKikimrScheme::StatusSuccess) { 
         LOG_SQS_WARN("Failed to get user list: " << record);
         AnswerErrorToRequests();
 
@@ -621,7 +621,7 @@ void TSqsService::HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDe
     }
 
     for (const auto& child : desc.children()) {
-        if (child.GetPathType() == NKikimrSchemeOp::EPathTypeDir) {
+        if (child.GetPathType() == NKikimrSchemeOp::EPathTypeDir) { 
             bool moved = false;
             TUserInfoPtr user = MutableUser(child.GetName(), true, &moved);
             usersNotProcessed.erase(child.GetName());

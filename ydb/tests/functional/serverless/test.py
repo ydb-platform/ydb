@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
-import logging
-import os
-import time
+# -*- coding: utf-8 -*- 
+import logging 
+import os 
+import time 
 import functools
-
+ 
 import pytest
 from hamcrest import (
     assert_that,
@@ -12,139 +12,139 @@ from hamcrest import (
 )
 
 import ydb
-
+ 
 from tornado import gen
 from tornado.ioloop import IOLoop
 
-logger = logging.getLogger(__name__)
-
-
-def test_fixtures(ydb_hostel_db, ydb_serverless_db):
-    logger.debug(
-        "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db
-    )
-
-
-def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_file_path, ydb_private_client):
-    logger.debug(
-        "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db
-    )
-
-    database = ydb_serverless_db
-
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        database
-    )
-    logger.info(" database is %s", database)
-
-    driver = ydb.Driver(driver_config)
-    driver.wait(120)
-
-    driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
-
-    driver.scheme_client.make_directory(os.path.join(database, "dirA1"))
-    driver.scheme_client.make_directory(os.path.join(database, "dirA1", "dirB1"))
-
-    with ydb.SessionPool(driver) as pool:
-        def create_table(session, path):
-            session.create_table(
-                path,
-                ydb.TableDescription()
-                .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-                .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8)))
-                .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
-                .with_primary_key('id')
-            )
-
-        pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
-        pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table1"))
-
-        def write_some_data(session, path):
-            session.transaction().execute(
-                """
+logger = logging.getLogger(__name__) 
+ 
+ 
+def test_fixtures(ydb_hostel_db, ydb_serverless_db): 
+    logger.debug( 
+        "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db 
+    ) 
+ 
+ 
+def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_file_path, ydb_private_client): 
+    logger.debug( 
+        "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db 
+    ) 
+ 
+    database = ydb_serverless_db 
+ 
+    driver_config = ydb.DriverConfig( 
+        ydb_endpoint, 
+        database 
+    ) 
+    logger.info(" database is %s", database) 
+ 
+    driver = ydb.Driver(driver_config) 
+    driver.wait(120) 
+ 
+    driver.scheme_client.make_directory(os.path.join(database, "dirA0")) 
+ 
+    driver.scheme_client.make_directory(os.path.join(database, "dirA1")) 
+    driver.scheme_client.make_directory(os.path.join(database, "dirA1", "dirB1")) 
+ 
+    with ydb.SessionPool(driver) as pool: 
+        def create_table(session, path): 
+            session.create_table( 
+                path, 
+                ydb.TableDescription() 
+                .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64))) 
+                .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8))) 
+                .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64))) 
+                .with_primary_key('id') 
+            ) 
+ 
+        pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table")) 
+        pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table1")) 
+ 
+        def write_some_data(session, path): 
+            session.transaction().execute( 
+                """ 
                 UPSERT INTO `{}` (id, value_string, value_num)
-                           VALUES (1u, "Ok", 0u),
-                                  (2u, "Also_Ok", 0u),
-                                  (3u, "And_Ok_With_Locks", 0u);
-                                  """.format(path),
-                commit_tx=True)
+                           VALUES (1u, "Ok", 0u), 
+                                  (2u, "Also_Ok", 0u), 
+                                  (3u, "And_Ok_With_Locks", 0u); 
+                                  """.format(path), 
+                commit_tx=True) 
+ 
+        pool.retry_operation_sync(write_some_data, None, os.path.join(database, "dirA1", "dirB1", "table")) 
+ 
+        def drop_table(session, path): 
+            session.drop_table( 
+                path 
+            ) 
+ 
+        pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table")) 
 
-        pool.retry_operation_sync(write_some_data, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
-        def drop_table(session, path):
-            session.drop_table(
-                path
-            )
-
-        pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
-
-
-def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_file_path, ydb_private_client):
-    logger.debug(
-        "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db
-    )
-
-    database = ydb_serverless_db
-
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        database
-    )
-    logger.info(" database is %s", database)
-
-    driver = ydb.Driver(driver_config)
-    driver.wait(120)
-
-    driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
-
-    driver.scheme_client.make_directory(os.path.join(database, "dirA1"))
-    driver.scheme_client.make_directory(os.path.join(database, "dirA1", "dirB1"))
-
-    with ydb.SessionPool(driver) as pool:
-        def create_table(session, path):
-            session.create_table(
-                path,
-                ydb.TableDescription()
-                .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-                .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8)))
-                .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64)))
-                .with_primary_key('id')
-            )
-
-        pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
-        pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table1"))
-
-        def write_some_data(session, path):
-            session.transaction().execute(
-                """
+def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_file_path, ydb_private_client): 
+    logger.debug( 
+        "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db 
+    ) 
+ 
+    database = ydb_serverless_db 
+ 
+    driver_config = ydb.DriverConfig( 
+        ydb_endpoint, 
+        database 
+    ) 
+    logger.info(" database is %s", database) 
+ 
+    driver = ydb.Driver(driver_config) 
+    driver.wait(120) 
+ 
+    driver.scheme_client.make_directory(os.path.join(database, "dirA0")) 
+ 
+    driver.scheme_client.make_directory(os.path.join(database, "dirA1")) 
+    driver.scheme_client.make_directory(os.path.join(database, "dirA1", "dirB1")) 
+ 
+    with ydb.SessionPool(driver) as pool: 
+        def create_table(session, path): 
+            session.create_table( 
+                path, 
+                ydb.TableDescription() 
+                .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64))) 
+                .with_column(ydb.Column('value_string', ydb.OptionalType(ydb.DataType.Utf8))) 
+                .with_column(ydb.Column('value_num', ydb.OptionalType(ydb.DataType.Uint64))) 
+                .with_primary_key('id') 
+            ) 
+ 
+        pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table")) 
+        pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA1", "dirB1", "table1")) 
+ 
+        def write_some_data(session, path): 
+            session.transaction().execute( 
+                """ 
                 UPSERT INTO `{}` (id, value_string, value_num)
-                           VALUES (1u, "Ok", 0u),
-                                  (2u, "Also_Ok", 0u),
-                                  (3u, "And_Ok_With_Locks", 0u);
-                                  """.format(path),
-                commit_tx=True)
-
-        pool.retry_operation_sync(write_some_data, None, os.path.join(database, "dirA1", "dirB1", "table"))
-
-        ydb_private_client.add_config_item("FeatureFlags { AllowServerlessStorageBillingForSchemeShard: true }")
-        while True:
-            with open(metering_file_path, 'r') as metering_file:
-                lines = metering_file.readlines()
-                if lines:
-                    logger.info(" metering has data %s", lines[-1])
-                    break
-                logger.info(" wait data in metering file %s", metering_file_path)
-                time.sleep(15)
-
-        def drop_table(session, path):
-            session.drop_table(
-                path
-            )
-
-        pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
-
-
+                           VALUES (1u, "Ok", 0u), 
+                                  (2u, "Also_Ok", 0u), 
+                                  (3u, "And_Ok_With_Locks", 0u); 
+                                  """.format(path), 
+                commit_tx=True) 
+ 
+        pool.retry_operation_sync(write_some_data, None, os.path.join(database, "dirA1", "dirB1", "table")) 
+ 
+        ydb_private_client.add_config_item("FeatureFlags { AllowServerlessStorageBillingForSchemeShard: true }") 
+        while True: 
+            with open(metering_file_path, 'r') as metering_file: 
+                lines = metering_file.readlines() 
+                if lines: 
+                    logger.info(" metering has data %s", lines[-1]) 
+                    break 
+                logger.info(" wait data in metering file %s", metering_file_path) 
+                time.sleep(15) 
+ 
+        def drop_table(session, path): 
+            session.drop_table( 
+                path 
+            ) 
+ 
+        pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table")) 
+ 
+ 
 def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_endpoint, ydb_cluster):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_quoted_serverless_db, ydb_hostel_db

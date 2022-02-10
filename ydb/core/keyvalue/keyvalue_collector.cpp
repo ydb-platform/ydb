@@ -106,7 +106,7 @@ public:
         ui32 groupId = CollectorForGroupForChannel.begin()->second.begin()->first;
 
         CollectorErrors++;
-        if (status == NKikimrProto::RACE || status == NKikimrProto::BLOCKED || status == NKikimrProto::NO_GROUP || CollectorErrors > CollectorMaxErrors) {
+        if (status == NKikimrProto::RACE || status == NKikimrProto::BLOCKED || status == NKikimrProto::NO_GROUP || CollectorErrors > CollectorMaxErrors) { 
             LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "Tablet# " << TabletInfo->TabletID
                 << " Collector got Status# " << NKikimrProto::EReplyStatus_Name(status)
                 << " from Group# " << groupId << " Channel# " << channelIdx

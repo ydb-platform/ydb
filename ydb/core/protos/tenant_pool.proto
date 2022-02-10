@@ -37,7 +37,7 @@ message TSlotStatus {
     optional string AssignedTenant = 3;
     optional NKikimrTabletBase.TMetrics ResourceLimit = 4;
     optional string Label = 5;
-    repeated NKikimrSchemeOp.TUserAttribute TenantAttributes = 6;
+    repeated NKikimrSchemeOp.TUserAttribute TenantAttributes = 6; 
     optional EState State = 7;
     optional NKikimrSubDomains.TDomainKey DomainKey = 8;
 }

@@ -55,29 +55,29 @@ namespace {
             valid = IsSame(path, record.GetPath());
         }
 
-        if (!valid && (record.HasPathOwnerId() && record.HasLocalPathId())) {
-            valid = IsSame(path, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
+        if (!valid && (record.HasPathOwnerId() && record.HasLocalPathId())) { 
+            valid = IsSame(path, TPathId(record.GetPathOwnerId(), record.GetLocalPathId())); 
         }
 
         return valid;
     }
 
-    struct TPathVersion {
-        TPathId PathId;
-        ui64 Version;
-
-        TPathVersion()
-            : PathId(TPathId())
-            , Version(0)
-        {
-        }
-
+    struct TPathVersion { 
+        TPathId PathId; 
+        ui64 Version; 
+ 
+        TPathVersion() 
+            : PathId(TPathId()) 
+            , Version(0) 
+        { 
+        } 
+ 
         explicit TPathVersion(const TPathId& pathId, const ui64 version)
-            : PathId(pathId)
-            , Version(version)
-        {
-        }
-
+            : PathId(pathId) 
+            , Version(version) 
+        { 
+        } 
+ 
         static TPathVersion FromNotify(const NKikimrSchemeBoard::TEvNotify& record) {
             TPathId pathId;
             if (record.HasPathOwnerId() && record.HasLocalPathId()) {
@@ -87,44 +87,44 @@ namespace {
             return TPathVersion(pathId, record.GetVersion());
         }
 
-        TString ToString() const {
-            TString result;
-            TStringOutput out(result);
-            Out(out);
-            return result;
-        }
-
-        void Out(IOutputStream& o) const {
+        TString ToString() const { 
+            TString result; 
+            TStringOutput out(result); 
+            Out(out); 
+            return result; 
+        } 
+ 
+        void Out(IOutputStream& o) const { 
             if (!*this) {
                 PathId.Out(o);
             } else {
                 o << "(PathId: " << PathId.ToString() << ", Version: " << Version << ")";
             }
-        }
-
-        bool operator<(const TPathVersion& x) const {
-            return PathId != x.PathId ? PathId < x.PathId : Version < x.Version;
-        }
-        bool operator>(const TPathVersion& x) const {
-            return x < *this;
-        }
-        bool operator<=(const TPathVersion& x) const {
-            return PathId != x.PathId ? PathId < x.PathId : Version <= x.Version;
-        }
-        bool operator>=(const TPathVersion& x) const {
-            return x <= *this;
-        }
-        bool operator==(const TPathVersion& x) const {
-            return PathId == x.PathId && Version == x.Version;
-        }
-        bool operator!=(const TPathVersion& x) const {
-            return PathId != x.PathId || Version != x.Version;
-        }
-        operator bool() const {
-            return bool(PathId);
-        }
-    };
-
+        } 
+ 
+        bool operator<(const TPathVersion& x) const { 
+            return PathId != x.PathId ? PathId < x.PathId : Version < x.Version; 
+        } 
+        bool operator>(const TPathVersion& x) const { 
+            return x < *this; 
+        } 
+        bool operator<=(const TPathVersion& x) const { 
+            return PathId != x.PathId ? PathId < x.PathId : Version <= x.Version; 
+        } 
+        bool operator>=(const TPathVersion& x) const { 
+            return x <= *this; 
+        } 
+        bool operator==(const TPathVersion& x) const { 
+            return PathId == x.PathId && Version == x.Version; 
+        } 
+        bool operator!=(const TPathVersion& x) const { 
+            return PathId != x.PathId || Version != x.Version; 
+        } 
+        operator bool() const { 
+            return bool(PathId); 
+        } 
+    }; 
+ 
     struct TState {
         bool Deleted = false;
         bool Strong = false;
@@ -203,7 +203,7 @@ namespace {
                 return true;
             }
 
-            if (Version.PathId.OwnerId == other.Version.PathId.OwnerId) {
+            if (Version.PathId.OwnerId == other.Version.PathId.OwnerId) { 
                 if (other.Version <= Version) {
                     reason = "Path was already updated";
                     return false;
@@ -213,16 +213,16 @@ namespace {
                 return true;
             }
 
-            if (!DomainId && Deleted) {
-                if (other.Version <= Version) {
-                    reason = "Path was already deleted";
-                    return false;
-                }
-
-                reason = "Path was updated to new version";
-                return true;
-            }
-
+            if (!DomainId && Deleted) { 
+                if (other.Version <= Version) { 
+                    reason = "Path was already deleted"; 
+                    return false; 
+                } 
+ 
+                reason = "Path was updated to new version"; 
+                return true; 
+            } 
+ 
             // it is only because we need to manage undo of upgrade subdomain, finally remove it
 
             if (Version.PathId == other.DomainId) { //Update from TSS, GSS->TSS
@@ -245,22 +245,22 @@ namespace {
                 return false;
             }
 
-            if (DomainId == other.DomainId) {
-                if (other.Version <= Version) {
-                    reason = "Path was already updated";
-                    return false;
-                }
-
-                reason = "Path was updated to new version";
-                return true;
-            } else  if (DomainId < other.DomainId) {
-                reason = "New domain is detected, it is newer path then we know";
-                return true;
-            } else {
-                reason = "Totally ignore the update";
-                return false;
-            }
-
+            if (DomainId == other.DomainId) { 
+                if (other.Version <= Version) { 
+                    reason = "Path was already updated"; 
+                    return false; 
+                } 
+ 
+                reason = "Path was updated to new version"; 
+                return true; 
+            } else  if (DomainId < other.DomainId) { 
+                reason = "New domain is detected, it is newer path then we know"; 
+                return true; 
+            } else { 
+                reason = "Totally ignore the update"; 
+                return false; 
+            } 
+ 
             Y_FAIL_S("Unknown update"
                 << ": state# " << *this
                 << ", other state# " << other);
@@ -600,8 +600,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         if (record.HasPath()) {
             path = record.GetPath();
         }
-        if (record.HasPathOwnerId() && record.HasLocalPathId()) {
-            pathId = TPathId(record.GetPathOwnerId(), record.GetLocalPathId());
+        if (record.HasPathOwnerId() && record.HasLocalPathId()) { 
+            pathId = TPathId(record.GetPathOwnerId(), record.GetLocalPathId()); 
         }
 
         Y_VERIFY(path || pathId);
@@ -686,7 +686,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             SBS_LOG_E("Suspicious notification"
                 << ": sender# " << ev->Sender
                 << ", other path# " << record.GetPath()
-                << ", other pathId# " << TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
+                << ", other pathId# " << TPathId(record.GetPathOwnerId(), record.GetLocalPathId())); 
             return;
         }
 
@@ -726,14 +726,14 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 << ": owner# " << Owner
                 << ", state# " << *State
                 << ", other state# " << newestState);
-            return;
-        }
+            return; 
+        } 
 
         if (!record.GetIsDeletion()) {
-            this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyUpdate>(record, std::move(*record.MutableDescribeSchemeResult())));
+            this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyUpdate>(record, std::move(*record.MutableDescribeSchemeResult()))); 
         } else {
             this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyDelete>(record, record.GetStrong()));
-        }
+        } 
     }
 
     void Handle(TSchemeBoardEvents::TEvSyncRequest::TPtr& ev) {
@@ -1049,10 +1049,10 @@ IActor* CreateSchemeBoardSubscriber(
 }
 
 } // NKikimr
-
+ 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeBoard::TPathVersion, o, x) {
-    return x.Out(o);
-}
+    return x.Out(o); 
+} 
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeBoard::TState, o, x) {
     return x.Out(o);

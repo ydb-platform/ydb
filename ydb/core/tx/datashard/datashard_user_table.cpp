@@ -11,7 +11,7 @@ using NTabletFlatExecutor::TTransactionContext;
 
 namespace NDataShard {
 
-TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
+TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid) 
     : LocalTid(localTid)
     , ShadowTid(shadowTid)
 {
@@ -21,40 +21,40 @@ TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& 
     ParseProto(descr);
 }
 
-TUserTable::TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr)
+TUserTable::TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) 
     : TUserTable(table)
 {
-    Y_VERIFY_S(Name == descr.GetName(), "Name: " << Name << " descr.Name: " << descr.GetName());
+    Y_VERIFY_S(Name == descr.GetName(), "Name: " << Name << " descr.Name: " << descr.GetName()); 
     ParseProto(descr);
     AlterSchema();
 }
 
 void TUserTable::SetPath(const TString &path)
 {
-    auto name = ExtractBase(path);
-    if (!name) {
-        return;
-    }
-
-    Name = name;
+    auto name = ExtractBase(path); 
+    if (!name) { 
+        return; 
+    } 
+ 
+    Name = name; 
     Path = path;
     AlterSchema();
 }
-
-void TUserTable::SetTableSchemaVersion(ui64 schemaVersion)
-{
-    NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema);
-    schema.SetTableSchemaVersion(schemaVersion);
-    SetSchema(schema);
-
-    TableSchemaVersion = schemaVersion;
-}
-
+ 
+void TUserTable::SetTableSchemaVersion(ui64 schemaVersion) 
+{ 
+    NKikimrSchemeOp::TTableDescription schema; 
+    GetSchema(schema); 
+    schema.SetTableSchemaVersion(schemaVersion); 
+    SetSchema(schema); 
+ 
+    TableSchemaVersion = schemaVersion; 
+} 
+ 
 bool TUserTable::ResetTableSchemaVersion()
 {
     if (TableSchemaVersion) {
-        NKikimrSchemeOp::TTableDescription schema;
+        NKikimrSchemeOp::TTableDescription schema; 
         GetSchema(schema);
 
         schema.ClearTableSchemaVersion();
@@ -67,7 +67,7 @@ bool TUserTable::ResetTableSchemaVersion()
     return false;
 }
 
-void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
+void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) { 
     Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
     const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
 
@@ -78,7 +78,7 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     Indexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns));
     AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
 
-    NKikimrSchemeOp::TTableDescription schema;
+    NKikimrSchemeOp::TTableDescription schema; 
     GetSchema(schema);
 
     schema.MutableTableIndexes()->Add()->CopyFrom(indexDesc);
@@ -94,7 +94,7 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
     AsyncIndexCount -= ui32(it->second.Type == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
     Indexes.erase(it);
 
-    NKikimrSchemeOp::TTableDescription schema;
+    NKikimrSchemeOp::TTableDescription schema; 
     GetSchema(schema);
 
     for (auto it = schema.GetTableIndexes().begin(); it != schema.GetTableIndexes().end(); ++it) {
@@ -115,7 +115,7 @@ bool TUserTable::HasAsyncIndexes() const {
     return AsyncIndexCount > 0;
 }
 
-void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
+void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) { 
     Y_VERIFY(streamDesc.HasPathId());
     const auto streamPathId = TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId());
 
@@ -125,7 +125,7 @@ void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& stre
 
     CdcStreams.emplace(streamPathId, TCdcStream(streamDesc));
 
-    NKikimrSchemeOp::TTableDescription schema;
+    NKikimrSchemeOp::TTableDescription schema; 
     GetSchema(schema);
 
     schema.MutableCdcStreams()->Add()->CopyFrom(streamDesc);
@@ -140,7 +140,7 @@ void TUserTable::DisableCdcStream(const TPathId& streamPathId) {
 
     it->second.State = TCdcStream::EState::ECdcStreamStateDisabled;
 
-    NKikimrSchemeOp::TTableDescription schema;
+    NKikimrSchemeOp::TTableDescription schema; 
     GetSchema(schema);
 
     for (auto it = schema.MutableCdcStreams()->begin(); it != schema.MutableCdcStreams()->end(); ++it) {
@@ -165,7 +165,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
 
     CdcStreams.erase(it);
 
-    NKikimrSchemeOp::TTableDescription schema;
+    NKikimrSchemeOp::TTableDescription schema; 
     GetSchema(schema);
 
     for (auto it = schema.GetCdcStreams().begin(); it != schema.GetCdcStreams().end(); ++it) {
@@ -186,32 +186,32 @@ bool TUserTable::HasCdcStreams() const {
     return !CdcStreams.empty();
 }
 
-void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
+void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr) 
 {
     // We expect schemeshard to send us full list of storage rooms
     if (descr.GetPartitionConfig().StorageRoomsSize()) {
         Rooms.clear();
     }
 
-    for (const auto& roomDescr : descr.GetPartitionConfig().GetStorageRooms()) {
-        TStorageRoom::TPtr room = new TStorageRoom(roomDescr);
-        Rooms[room->GetId()] = room;
-    }
-
+    for (const auto& roomDescr : descr.GetPartitionConfig().GetStorageRooms()) { 
+        TStorageRoom::TPtr room = new TStorageRoom(roomDescr); 
+        Rooms[room->GetId()] = room; 
+    } 
+ 
     for (const auto& family : descr.GetPartitionConfig().GetColumnFamilies()) {
         auto it = Families.find(family.GetId());
         if (it == Families.end()) {
-            it = Families.emplace(std::make_pair(family.GetId(), TUserFamily(family))).first;
+            it = Families.emplace(std::make_pair(family.GetId(), TUserFamily(family))).first; 
         } else {
             it->second.Update(family);
         }
     }
-
+ 
     for (auto& kv : Families) {
         auto roomIt = Rooms.find(kv.second.GetRoomId());
-        if (roomIt != Rooms.end()) {
+        if (roomIt != Rooms.end()) { 
             kv.second.Update(roomIt->second);
-        }
+        } 
     }
 
     for (const auto& col : descr.GetColumns()) {
@@ -300,15 +300,15 @@ void TUserTable::CheckSpecialColumns() {
 }
 
 void TUserTable::AlterSchema() {
-    NKikimrSchemeOp::TTableDescription schema;
+    NKikimrSchemeOp::TTableDescription schema; 
     GetSchema(schema);
 
     auto& partConfig = *schema.MutablePartitionConfig();
-    partConfig.ClearStorageRooms();
-    for (const auto& room : Rooms) {
-        partConfig.AddStorageRooms()->CopyFrom(*room.second);
-    }
-
+    partConfig.ClearStorageRooms(); 
+    for (const auto& room : Rooms) { 
+        partConfig.AddStorageRooms()->CopyFrom(*room.second); 
+    } 
+ 
     // FIXME: these generated column families are incorrect!
     partConfig.ClearColumnFamilies();
     for (const auto& f : Families) {
@@ -339,7 +339,7 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
-    schema.SetPath(Name);
+    schema.SetPath(Name); 
     schema.SetPath(Path);
 
     SetSchema(schema);
@@ -347,21 +347,21 @@ void TUserTable::AlterSchema() {
 
 void TUserTable::ApplyCreate(
         TTransactionContext& txc, const TString& tableName,
-        const NKikimrSchemeOp::TPartitionConfig& partConfig) const
+        const NKikimrSchemeOp::TPartitionConfig& partConfig) const 
 {
     DoApplyCreate(txc, tableName, false, partConfig);
 }
 
 void TUserTable::ApplyCreateShadow(
         TTransactionContext& txc, const TString& tableName,
-        const NKikimrSchemeOp::TPartitionConfig& partConfig) const
+        const NKikimrSchemeOp::TPartitionConfig& partConfig) const 
 {
     DoApplyCreate(txc, tableName, true, partConfig);
 }
 
 void TUserTable::DoApplyCreate(
         TTransactionContext& txc, const TString& tableName, bool shadow,
-        const NKikimrSchemeOp::TPartitionConfig& partConfig) const
+        const NKikimrSchemeOp::TPartitionConfig& partConfig) const 
 {
     const ui32 tid = shadow ? ShadowTid : LocalTid;
 
@@ -432,10 +432,10 @@ void TUserTable::DoApplyCreate(
 
 void TUserTable::ApplyAlter(
         TTransactionContext& txc, const TUserTable& oldTable,
-        const NKikimrSchemeOp::TTableDescription& delta, TString& strError)
+        const NKikimrSchemeOp::TTableDescription& delta, TString& strError) 
 {
     const auto& configDelta = delta.GetPartitionConfig();
-    NKikimrSchemeOp::TTableDescription schema;
+    NKikimrSchemeOp::TTableDescription schema; 
     GetSchema(schema);
     auto& config = *schema.MutablePartitionConfig();
 
@@ -583,7 +583,7 @@ void TUserTable::ApplyDefaults(TTransactionContext& txc) const
         return;
     }
 
-    NKikimrSchemeOp::TTableDescription schema;
+    NKikimrSchemeOp::TTableDescription schema; 
     GetSchema(schema);
     const auto& config = schema.GetPartitionConfig();
 

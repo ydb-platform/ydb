@@ -1,11 +1,11 @@
-#include "proxy.h"
+#include "proxy.h" 
 
 namespace NKikimr {
 
 TActorId MakeTxProxyID() {
     return TActorId(0, TStringBuf("TxProxyServ"));
-}
-
+} 
+ 
 }
 
 

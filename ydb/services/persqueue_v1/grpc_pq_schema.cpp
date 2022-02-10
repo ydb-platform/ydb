@@ -103,9 +103,9 @@ void TDropTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& 
                                          const TString& workingDir, const TString& name)
 {
     Y_UNUSED(ctx);
-    NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
+    NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme()); 
     modifyScheme.SetWorkingDir(workingDir);
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup); 
     modifyScheme.MutableDrop()->SetName(name);
 }
 
@@ -281,9 +281,9 @@ void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TAddReadRuleActor::ModifyPersqueueConfig(
     const TActorContext& ctx,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
+    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+    const NKikimrSchemeOp::TDirEntry& selfInfo 
 ) {
     Y_UNUSED(pqGroupDescription);
 
@@ -320,9 +320,9 @@ void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TRemoveReadRuleActor::ModifyPersqueueConfig(
     const TActorContext& ctx,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
+    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+    const NKikimrSchemeOp::TDirEntry& selfInfo 
 ) {
     Y_UNUSED(selfInfo);
 
@@ -369,7 +369,7 @@ void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                             const TString& workingDir, const TString& name)
 {
-    NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
+    NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme()); 
     modifyScheme.SetWorkingDir(workingDir);
 
     {
@@ -398,7 +398,7 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
 
 void TAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                             const TString& workingDir, const TString& name) {
-    NKikimrSchemeOp::TModifyScheme &modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
+    NKikimrSchemeOp::TModifyScheme &modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme()); 
     modifyScheme.SetWorkingDir(workingDir);
     TString error;
     auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, true, error);

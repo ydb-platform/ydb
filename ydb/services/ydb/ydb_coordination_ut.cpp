@@ -647,7 +647,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClientAuth) {
                         { "ydb.deprecated.create_table" }))
                 ));
 
-            TClient::RefreshPathCache(server.Server_->GetRuntime(), "/Root");
+            TClient::RefreshPathCache(server.Server_->GetRuntime(), "/Root"); 
         }
 
         // Make some requests with user_a
@@ -682,8 +682,8 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClientAuth) {
                         .AddGrantPermissions(TPermissions(
                             "user_b@builtin",
                             std::move(permissions)))));
-
-                TClient::RefreshPathCache(server.Server_->GetRuntime(), path);
+ 
+                TClient::RefreshPathCache(server.Server_->GetRuntime(), path); 
             }
         }
 

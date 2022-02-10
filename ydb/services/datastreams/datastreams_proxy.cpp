@@ -38,7 +38,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         template<class TRequest>
-        bool ValidateRetentionPeriod(const TRequest& req, const NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+        bool ValidateRetentionPeriod(const TRequest& req, const NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
                                      TMaybe<bool> increase, TString& errorText)
         {
             if (req.retention_period_hours() > 24) {
@@ -69,7 +69,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         template<class TRequest>
-        bool ValidateShardsCount(const TRequest& req, const NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, TString& errorText) {
+        bool ValidateShardsCount(const TRequest& req, const NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, TString& errorText) { 
             if (req.target_shard_count() < (i32)groupConfig.GetTotalGroupCount()) {
                 errorText = TStringBuilder() << "Shard count must be non-decreasing, old value is "
                                              << groupConfig.GetTotalGroupCount()
@@ -138,7 +138,7 @@ namespace NKikimr::NDataStreams::V1 {
     void TCreateStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
             const TActorContext& ctx, const TString& workingDir, const TString& name)
     {
-        NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
+        NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme()); 
 
         Ydb::PersQueue::V1::TopicSettings topicSettings;
         topicSettings.set_partitions_count(GetProtoRequest()->shard_count());
@@ -172,7 +172,7 @@ namespace NKikimr::NDataStreams::V1 {
         auto msg = ev->Get();
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
-            && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
+            && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) 
         {
             return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
                                   Ydb::PersQueue::ErrorCode::ERROR,
@@ -227,9 +227,9 @@ namespace NKikimr::NDataStreams::V1 {
                                                 const TString& name)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "WorkingDir = " << workingDir << ", name = " << name);
-        NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
+        NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme()); 
         modifyScheme.SetWorkingDir(workingDir);
-        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup); 
         modifyScheme.MutableDrop()->SetName(name);
     }
 
@@ -264,9 +264,9 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const TActorContext& ctx);
         void ModifyPersqueueConfig(const TActorContext& ctx,
-                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
+                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo); 
     };
 
     void TUpdateShardCountActor::Bootstrap(const TActorContext& ctx) {
@@ -277,9 +277,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TUpdateShardCountActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
-        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-        const NKikimrSchemeOp::TDirEntry& selfInfo
+        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+        const NKikimrSchemeOp::TDirEntry& selfInfo 
     ) {
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
@@ -305,9 +305,9 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const TActorContext& ctx);
         void ModifyPersqueueConfig(const TActorContext& ctx,
-                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
+                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo); 
     };
 
     void TUpdateStreamActor::Bootstrap(const TActorContext& ctx) {
@@ -318,9 +318,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TUpdateStreamActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
-        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-        const NKikimrSchemeOp::TDirEntry& selfInfo
+        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+        const NKikimrSchemeOp::TDirEntry& selfInfo 
     ) {
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
@@ -352,9 +352,9 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const TActorContext& ctx);
         void ModifyPersqueueConfig(const TActorContext& ctx,
-                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
+                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo); 
     };
 
     void TSetWriteQuotaActor::Bootstrap(const TActorContext& ctx) {
@@ -365,9 +365,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TSetWriteQuotaActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
-        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-        const NKikimrSchemeOp::TDirEntry& selfInfo
+        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+        const NKikimrSchemeOp::TDirEntry& selfInfo 
     ) {
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
@@ -401,9 +401,9 @@ namespace NKikimr::NDataStreams::V1 {
 
         void ModifyPersqueueConfig(
             const TActorContext& ctx,
-            NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-            const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-            const NKikimrSchemeOp::TDirEntry& selfInfo
+            NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+            const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+            const NKikimrSchemeOp::TDirEntry& selfInfo 
         ) {
             Y_UNUSED(pqGroupDescription);
             Y_UNUSED(selfInfo);
@@ -465,8 +465,8 @@ namespace NKikimr::NDataStreams::V1 {
     private:
         void ReplyAndDie(const TActorContext& ctx);
 
-        NKikimrSchemeOp::TDirEntry SelfInfo;
-        NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
+        NKikimrSchemeOp::TDirEntry SelfInfo; 
+        NKikimrSchemeOp::TPersQueueGroupDescription PQGroup; 
         std::vector<TActorId> Pipes;
         ui32 RequestsInfly = 0;
         std::map<ui64, std::pair<ui64, ui64>> StartEndOffsetsPerPartition;
@@ -873,10 +873,10 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
         void ModifyPersqueueConfig(const TActorContext& ctx,
-                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
-        void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
+                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo); 
+        void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override; 
 
     private:
         TString ConsumerName;
@@ -895,9 +895,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TRegisterStreamConsumerActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
-        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-        const NKikimrSchemeOp::TDirEntry& selfInfo
+        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+        const NKikimrSchemeOp::TDirEntry& selfInfo 
     ) {
         Y_UNUSED(pqGroupDescription);
 
@@ -925,7 +925,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TRegisterStreamConsumerActor::ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    void TRegisterStreamConsumerActor::ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) { 
         Y_UNUSED(ev);
         Ydb::DataStreams::V1::RegisterStreamConsumerResult result;
         auto consumer = result.Mutableconsumer();
@@ -948,9 +948,9 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
         void ModifyPersqueueConfig(const TActorContext& ctx,
-                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                                   const NKikimrSchemeOp::TDirEntry& selfInfo);
+                                   NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+                                   const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+                                   const NKikimrSchemeOp::TDirEntry& selfInfo); 
 
     private:
         TString ConsumerName;
@@ -969,9 +969,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TDeregisterStreamConsumerActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
-        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-        const NKikimrSchemeOp::TDirEntry& selfInfo
+        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, 
+        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription, 
+        const NKikimrSchemeOp::TDirEntry& selfInfo 
     ) {
         Y_UNUSED(selfInfo);
         auto error = RemoveReadRuleFromConfig(
@@ -1235,7 +1235,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
 
-        if (response.Self->Info.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+        if (response.Self->Info.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) { 
             const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
             for (auto& partition : partitions) {
                 auto partitionId = partition.GetPartitionId();
@@ -1333,7 +1333,7 @@ namespace NKikimr::NDataStreams::V1 {
         TNextToken NextToken;
         ui32 MaxResults = DEFAULT_MAX_RESULTS;
         std::map<ui64, std::pair<ui64, ui64>> StartEndOffsetsPerPartition;
-        std::vector<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> Shards;
+        std::vector<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> Shards; 
         ui32 LeftToRead = 0;
         ui32 AllShardsCount = 0;
         std::atomic<ui32> GotOffsetResponds;
@@ -1413,7 +1413,7 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
-        using TPartition = NKikimrSchemeOp::TPersQueueGroupDescription::TPartition;
+        using TPartition = NKikimrSchemeOp::TPersQueueGroupDescription::TPartition; 
         const auto& partitions = topicInfo.PQGroupInfo->Description.GetPartitions();
         TString startingShardId = this->GetProtoRequest()->Getexclusive_start_shard_id();
         ui64 startingTimepoint{0};
@@ -1586,8 +1586,8 @@ namespace NKikimr::NDataStreams::V1 {
     private:
         void SendResponse(const TActorContext& ctx);
 
-        NKikimrSchemeOp::TDirEntry SelfInfo;
-        NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
+        NKikimrSchemeOp::TDirEntry SelfInfo; 
+        NKikimrSchemeOp::TPersQueueGroupDescription PQGroup; 
     };
 
     TDescribeStreamSummaryActor::TDescribeStreamSummaryActor(

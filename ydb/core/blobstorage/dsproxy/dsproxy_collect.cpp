@@ -67,7 +67,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
                 : QuorumTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
                 return ReplyAndDie(newStatus);
-
+ 
             case NKikimrProto::UNKNOWN:
                 break;
 

@@ -626,7 +626,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
         pipeClient = it->second;
     }
     if (tabletId == SchemeShardId) {
-        NTabletPipe::SendData(ctx, pipeClient, new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(tabletId, PathId));
+        NTabletPipe::SendData(ctx, pipeClient, new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(tabletId, PathId)); 
     } else {
         NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus());
     }
@@ -670,13 +670,13 @@ void TPersQueueReadBalancer::AnswerWaitingRequests(const TActorContext& ctx) {
 
 }
 
-void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) { 
     Y_UNUSED(ctx);
     if (!WaitingForACL) //ignore if already processed
         return;
     WaitingForACL = false;
     const auto& record = ev->Get()->GetRecord();
-    if (record.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+    if (record.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) { 
         ACL.Clear();
         Y_PROTOBUF_SUPPRESS_NODISCARD ACL.MutableACL()->ParseFromString(record.GetPathDescription().GetSelf().GetEffectiveACL());
         LastACLUpdate = ctx.Now();

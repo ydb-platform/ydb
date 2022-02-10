@@ -135,7 +135,7 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        NKikimrSchemeOp::TModifyScript protoScript;
+        NKikimrSchemeOp::TModifyScript protoScript; 
         ParseProtobuf(&protoScript, config.ParseResult->GetFreeArgs()[0]);
         for (const auto& modifyScheme : protoScript.GetModifyScheme()) {
             TAutoPtr<NKikimrClient::TSchemeOperation> request = new NKikimrClient::TSchemeOperation();
@@ -249,14 +249,14 @@ public:
         }
     }
 
-    void PrintEntry(const NKikimrSchemeOp::TPathDescription& path) {
-        const NKikimrSchemeOp::TDirEntry& entry(path.GetSelf());
+    void PrintEntry(const NKikimrSchemeOp::TPathDescription& path) { 
+        const NKikimrSchemeOp::TDirEntry& entry(path.GetSelf()); 
         TString type;
         switch(entry.GetPathType()) {
-        case NKikimrSchemeOp::EPathTypeDir:
+        case NKikimrSchemeOp::EPathTypeDir: 
             type = "<dir>";
             break;
-        case NKikimrSchemeOp::EPathTypeTable:
+        case NKikimrSchemeOp::EPathTypeTable: 
             type = "<table>";
             break;
         case NKikimrSchemeOp::EPathTypeColumnStore:
@@ -265,13 +265,13 @@ public:
         case NKikimrSchemeOp::EPathTypeColumnTable:
             type = "<column table>";
             break;
-        case NKikimrSchemeOp::EPathTypeSequence:
+        case NKikimrSchemeOp::EPathTypeSequence: 
             type = "<sequence>";
             break;
         case NKikimrSchemeOp::EPathTypeReplication:
             type = "<replication>";
             break;
-        case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        case NKikimrSchemeOp::EPathTypePersQueueGroup: 
             type = "<pq group>";
             break;
         default:
@@ -304,11 +304,11 @@ public:
         Cout << id << type << name << owner << acl << Endl;
         if (Details) {
             switch(entry.GetPathType()) {
-            case NKikimrSchemeOp::EPathTypeTable: {
-                const NKikimrSchemeOp::TTableDescription& table(path.GetTable());
+            case NKikimrSchemeOp::EPathTypeTable: { 
+                const NKikimrSchemeOp::TTableDescription& table(path.GetTable()); 
                 size_t szWidth = id.size() + type.size() + entry.GetName().size();
                 size_t szColumns[3] = {0, 0, 0};
-                for (const NKikimrSchemeOp::TColumnDescription& column : table.GetColumns()) {
+                for (const NKikimrSchemeOp::TColumnDescription& column : table.GetColumns()) { 
                     szColumns[0] = std::max(szColumns[0], ToString(column.GetId()).size());
                     szColumns[1] = std::max(szColumns[1], column.GetType().size());
                     szColumns[2] = std::max(szColumns[2], column.GetName().size());
@@ -323,7 +323,7 @@ public:
                 }
                 Cout << Endl;
                 const auto& keyColumnIds(table.GetKeyColumnIds());
-                for (const NKikimrSchemeOp::TColumnDescription& column : table.GetColumns()) {
+                for (const NKikimrSchemeOp::TColumnDescription& column : table.GetColumns()) { 
                     TString id(ToString(column.GetId()));
                     TString type(column.GetType());
                     TString name(column.GetName());
@@ -339,8 +339,8 @@ public:
                 }
                 break;
             }
-            case NKikimrSchemeOp::EPathTypePersQueueGroup: {
-                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroup(path.GetPersQueueGroup());
+            case NKikimrSchemeOp::EPathTypePersQueueGroup: { 
+                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroup(path.GetPersQueueGroup()); 
                 for (ui32 pi = 0; pi < pqGroup.PartitionsSize(); ++pi) {
                     const auto& partition = pqGroup.GetPartitions(pi);
                     TString partitionId = Sprintf("  %6" PRIu32 " ", partition.GetPartitionId());
@@ -354,7 +354,7 @@ public:
         }
         if (BackupInfo) {
             if (path.HasBackupProgress()) {
-                NKikimrSchemeOp::TBackupProgress backup = path.GetBackupProgress();
+                NKikimrSchemeOp::TBackupProgress backup = path.GetBackupProgress(); 
                 ui32 total = backup.GetTotal();
                 ui32 notYet = backup.GetNotCompleteYet();
                 Cout << "backup in progress: " << (total - notYet) << "/" << total;
@@ -394,7 +394,7 @@ public:
         if (Request != nullptr)
             request->Record.MergeFrom(*Request);
 
-        TList<NKikimrSchemeOp::TPathDescription> entries;
+        TList<NKikimrSchemeOp::TPathDescription> entries; 
 
         for(;;) {
             MessageBusCall<NMsgBusProxy::TBusSchemeDescribe, NMsgBusProxy::TBusResponse>(config, request,
@@ -416,7 +416,7 @@ public:
         }
         int cnt = 0;
         //Cout << Path << Endl;
-        for (const NKikimrSchemeOp::TPathDescription& entry : entries) {
+        for (const NKikimrSchemeOp::TPathDescription& entry : entries) { 
             if (cnt > 0) {
                 Cout << TString((cnt - 1) * 3, ' ');
                 Cout << "└─ ";
@@ -459,19 +459,19 @@ public:
         });
     }
 
-    static void PrintEntry(const NKikimrSchemeOp::TDirEntry& entry) {
+    static void PrintEntry(const NKikimrSchemeOp::TDirEntry& entry) { 
         TString type;
         switch(entry.GetPathType()) {
-        case NKikimrSchemeOp::EPathTypeDir:
+        case NKikimrSchemeOp::EPathTypeDir: 
             type = "<dir>";
             break;
-        case NKikimrSchemeOp::EPathTypeSubDomain:
+        case NKikimrSchemeOp::EPathTypeSubDomain: 
             type = "<database>";
             break;
-        case NKikimrSchemeOp::EPathTypeTable:
+        case NKikimrSchemeOp::EPathTypeTable: 
             type = "<table>";
             break;
-        case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        case NKikimrSchemeOp::EPathTypePersQueueGroup: 
             type = "<pq group>";
             break;
         case NKikimrSchemeOp::EPathTypeColumnStore:
@@ -480,7 +480,7 @@ public:
         case NKikimrSchemeOp::EPathTypeColumnTable:
             type = "<column table>";
             break;
-        case NKikimrSchemeOp::EPathTypeSequence:
+        case NKikimrSchemeOp::EPathTypeSequence: 
             type = "<sequence>";
             break;
         case NKikimrSchemeOp::EPathTypeReplication:
@@ -497,8 +497,8 @@ public:
     int PrintResponse(const NMsgBusProxy::TBusResponse& response) const {
         const NKikimrClient::TResponse& record(response.Record);
         const auto& description(record.GetPathDescription());
-        if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir
-            || description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain
+        if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir 
+            || description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain 
             || description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeColumnStore) {
             for (const auto& entry : description.GetChildren()) {
                 PrintEntry(entry);
@@ -599,7 +599,7 @@ public:
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         NKikimrClient::TSchemeOperation& record(request->Record);
         auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL); 
         modifyScheme.SetWorkingDir(base);
         auto& modifyAcl = *modifyScheme.MutableModifyACL();
         modifyAcl.SetName(name);
@@ -697,7 +697,7 @@ public:
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         NKikimrClient::TSchemeOperation& record(request->Record);
         auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL); 
         modifyScheme.SetWorkingDir(Base);
         auto& modifyAcl = *modifyScheme.MutableModifyACL();
         modifyAcl.SetName(Name);
@@ -768,7 +768,7 @@ public:
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         NKikimrClient::TSchemeOperation& record(request->Record);
         auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL); 
         modifyScheme.SetWorkingDir(Base);
         auto& modifyAcl = *modifyScheme.MutableModifyACL();
         modifyAcl.SetName(Name);
@@ -921,94 +921,94 @@ public:
     }
 };
 
-class TClientCommandSchemaTableCopy : public TClientCommand {
-public:
+class TClientCommandSchemaTableCopy : public TClientCommand { 
+public: 
     NGrpc::TGRpcClientConfig ClientConfig;
-    TString DatabaseName;
-    TVector<TString> SrcValues;
-    TVector<TString> DstValues;
-
-    TClientCommandSchemaTableCopy()
-        : TClientCommand("copy", {}, "Copy table")
-    {}
-
-    virtual void Config(TConfig& config) override {
-        TClientCommand::Config(config);
-
-        config.SetFreeArgsNum(0);
+    TString DatabaseName; 
+    TVector<TString> SrcValues; 
+    TVector<TString> DstValues; 
+ 
+    TClientCommandSchemaTableCopy() 
+        : TClientCommand("copy", {}, "Copy table") 
+    {} 
+ 
+    virtual void Config(TConfig& config) override { 
+        TClientCommand::Config(config); 
+ 
+        config.SetFreeArgsNum(0); 
         config.Opts->AddLongOption("database", "Database name").AddLongName("db").Required().RequiredArgument("DB").StoreResult(&DatabaseName);
         config.Opts->AddLongOption("source", "Source table path").AddLongName("src").RequiredArgument("PATH").AppendTo(&SrcValues);
         config.Opts->AddLongOption("destination", "Destination table path").AddLongName("dst").RequiredArgument("PATH").AppendTo(&DstValues);
-    }
-
-    virtual void Parse(TConfig& config) override {
-        TClientCommand::Parse(config);
-
+    } 
+ 
+    virtual void Parse(TConfig& config) override { 
+        TClientCommand::Parse(config); 
+ 
         if (!CommandConfig.ClientConfig.Defined()) {
-            return;
-        }
-
+            return; 
+        } 
+ 
         auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
-        if (!p) {
-            return;
-        }
-
-        ClientConfig = *p;
-    }
-
-    virtual int Run(TConfig& config) override {
-        if (!ClientConfig.Locator) {
-            Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
-            return -2;
-        }
-
-        if (!DatabaseName) {
-            Cerr << "Invalid paramets: database name is empty." << Endl;
-            return -2;
-        }
-
-        if (SrcValues.size() != DstValues.size()) {
-            Cerr << "Invalid paramets: sources count is not equal to count destinations count." << Endl;
-            return -2;
-        }
-
-        if (SrcValues.size() == 0 || DstValues.size() == 0) {
-            Cerr << "Invalid paramets: either sources or destinations are not preset." << Endl;
-            return -2;
-        }
-
-        Y_VERIFY(SrcValues.size() == DstValues.size());
-        const ui32 itemCount = SrcValues.size();
-
-        TVector<NYdb::NTable::TCopyItem> copyItems;
-        copyItems.reserve(itemCount);
-        for (ui32 i = 0; i < itemCount; ++i) {
-            copyItems.emplace_back(SrcValues[i], DstValues[i]);
-        }
-
-        auto driverConfig = NYdb::TDriverConfig()
-                                .SetEndpoint(ClientConfig.Locator)
-                                .SetDatabase(DatabaseName)
-                                .SetAuthToken(config.SecurityToken);
-
-        NYdb::TDriver driver(driverConfig);
-
-        NYdb::NTable::TTableClient client(driver);
-
-        auto status = client.RetryOperationSync([copyItems{std::move(copyItems)}](NYdb::NTable::TSession session) {
-            return session.CopyTables(copyItems).GetValueSync();
-        });
-
-        if (!status.IsSuccess()) {
-            Cerr << "Copying tables failed with status: " << status.GetStatus() << Endl;
-            status.GetIssues().PrintTo(Cerr);
-            return -1;
-        }
-
-        return 0;
-    }
-};
-
+        if (!p) { 
+            return; 
+        } 
+ 
+        ClientConfig = *p; 
+    } 
+ 
+    virtual int Run(TConfig& config) override { 
+        if (!ClientConfig.Locator) { 
+            Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl; 
+            return -2; 
+        } 
+ 
+        if (!DatabaseName) { 
+            Cerr << "Invalid paramets: database name is empty." << Endl; 
+            return -2; 
+        } 
+ 
+        if (SrcValues.size() != DstValues.size()) { 
+            Cerr << "Invalid paramets: sources count is not equal to count destinations count." << Endl; 
+            return -2; 
+        } 
+ 
+        if (SrcValues.size() == 0 || DstValues.size() == 0) { 
+            Cerr << "Invalid paramets: either sources or destinations are not preset." << Endl; 
+            return -2; 
+        } 
+ 
+        Y_VERIFY(SrcValues.size() == DstValues.size()); 
+        const ui32 itemCount = SrcValues.size(); 
+ 
+        TVector<NYdb::NTable::TCopyItem> copyItems; 
+        copyItems.reserve(itemCount); 
+        for (ui32 i = 0; i < itemCount; ++i) { 
+            copyItems.emplace_back(SrcValues[i], DstValues[i]); 
+        } 
+ 
+        auto driverConfig = NYdb::TDriverConfig() 
+                                .SetEndpoint(ClientConfig.Locator) 
+                                .SetDatabase(DatabaseName) 
+                                .SetAuthToken(config.SecurityToken); 
+ 
+        NYdb::TDriver driver(driverConfig); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+ 
+        auto status = client.RetryOperationSync([copyItems{std::move(copyItems)}](NYdb::NTable::TSession session) { 
+            return session.CopyTables(copyItems).GetValueSync(); 
+        }); 
+ 
+        if (!status.IsSuccess()) { 
+            Cerr << "Copying tables failed with status: " << status.GetStatus() << Endl; 
+            status.GetIssues().PrintTo(Cerr); 
+            return -1; 
+        } 
+ 
+        return 0; 
+    } 
+}; 
+ 
 class TClientCommandSchemaTable : public TClientCommandTree {
 public:
     TClientCommandSchemaTable()
@@ -1050,7 +1050,7 @@ public:
         }
     }
 
-    static void Print(const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>& items) {
+    static void Print(const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>& items) { 
         for (const auto& item : items) {
             Cout << item.GetKey() << ": " << item.GetValue() << Endl;
         }
@@ -1071,30 +1071,30 @@ public:
     }
 };
 
-std::pair<TString, TString> SplitPath(const TClientCommand::TConfig& config, const TString& pathname) {
-    std::pair<TString, TString> result;
-
-    size_t pos = pathname.rfind('/');
-    if (config.Path) {
-        // Profile path is set
-        if (!pathname.StartsWith('/')) {
-            result.first = config.Path;
-            result.second = pathname;
-        } else {
-            WarnProfilePathSet();
-            result.first = pathname.substr(0, pos);
-            result.second = pathname.substr(pos + 1);
-        }
-    } else {
-        result.first = pathname.substr(0, pos);
-        result.second = pathname.substr(pos + 1);
-    }
-
-    return result;
-}
-
+std::pair<TString, TString> SplitPath(const TClientCommand::TConfig& config, const TString& pathname) { 
+    std::pair<TString, TString> result; 
+ 
+    size_t pos = pathname.rfind('/'); 
+    if (config.Path) { 
+        // Profile path is set 
+        if (!pathname.StartsWith('/')) { 
+            result.first = config.Path; 
+            result.second = pathname; 
+        } else { 
+            WarnProfilePathSet(); 
+            result.first = pathname.substr(0, pos); 
+            result.second = pathname.substr(pos + 1); 
+        } 
+    } else { 
+        result.first = pathname.substr(0, pos); 
+        result.second = pathname.substr(pos + 1); 
+    } 
+ 
+    return result; 
+} 
+ 
 class TClientCommandSchemaUserAttributeSet: public TClientCommand {
-    using TUserAttributesLimits = NSchemeShard::TUserAttributesLimits;
+    using TUserAttributesLimits = NSchemeShard::TUserAttributesLimits; 
 
 public:
     TClientCommandSchemaUserAttributeSet()
@@ -1116,7 +1116,7 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-        std::tie(Base, Name) = SplitPath(config, config.ParseResult->GetFreeArgs()[0]);
+        std::tie(Base, Name) = SplitPath(config, config.ParseResult->GetFreeArgs()[0]); 
 
         for (ui32 i = 1; i < config.ParseResult->GetFreeArgCount(); ++i) {
             TString attr = config.ParseResult->GetFreeArgs()[i];
@@ -1155,7 +1155,7 @@ public:
         NKikimrClient::TSchemeOperation& record(request->Record);
 
         auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes); 
         modifyScheme.SetWorkingDir(Base);
 
         auto& alter = *modifyScheme.MutableAlterUserAttributes();
@@ -1180,71 +1180,71 @@ public:
     }
 };
 
-class TClientCommandSchemaUserAttributeDel: public TClientCommand {
-    using TUserAttributesLimits = NSchemeShard::TUserAttributesLimits;
-
-public:
-    TClientCommandSchemaUserAttributeDel()
-        : TClientCommand("del", {}, "Delete user attribute(s)")
-    {}
-
-    virtual void Config(TConfig& config) override {
-        TClientCommand::Config(config);
-        config.SetFreeArgsMin(2);
-        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
-            "            Or short pathname if profile path is set (e.g. test1/test2).");
-        SetFreeArgTitle(1, "<ATTRIBUTE>", "NAME");
-    }
-
-    TString Base;
-    TString Name;
-    TSet<TString> Attributes;
-
-    virtual void Parse(TConfig& config) override {
-        TClientCommand::Parse(config);
-
-        std::tie(Base, Name) = SplitPath(config, config.ParseResult->GetFreeArgs()[0]);
-
-        for (ui32 i = 1; i < config.ParseResult->GetFreeArgCount(); ++i) {
-            TString key = config.ParseResult->GetFreeArgs()[i];
-
-            if (Attributes.contains(key)) {
-                Cerr << "Duplicate value for key: " << key << Endl;
-            }
-
-            Attributes.insert(key);
-        }
-    }
-
-    virtual int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        NKikimrClient::TSchemeOperation& record(request->Record);
-
-        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
-        modifyScheme.SetWorkingDir(Base);
-
-        auto& alter = *modifyScheme.MutableAlterUserAttributes();
-        alter.SetPathName(Name);
-        auto& attributes = *alter.MutableUserAttributes();
-        attributes.Reserve(Attributes.size());
-        for (const auto& key : Attributes) {
-            auto& attribute = *attributes.Add();
-            attribute.SetKey(key);
-        }
-
-        return MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
-            [](const NMsgBusProxy::TBusResponse& response) -> int {
-                if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-                    Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
-                    return 1;
-                }
-                return 0;
-            }
-        );
-    }
-};
-
+class TClientCommandSchemaUserAttributeDel: public TClientCommand { 
+    using TUserAttributesLimits = NSchemeShard::TUserAttributesLimits; 
+ 
+public: 
+    TClientCommandSchemaUserAttributeDel() 
+        : TClientCommand("del", {}, "Delete user attribute(s)") 
+    {} 
+ 
+    virtual void Config(TConfig& config) override { 
+        TClientCommand::Config(config); 
+        config.SetFreeArgsMin(2); 
+        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n" 
+            "            Or short pathname if profile path is set (e.g. test1/test2)."); 
+        SetFreeArgTitle(1, "<ATTRIBUTE>", "NAME"); 
+    } 
+ 
+    TString Base; 
+    TString Name; 
+    TSet<TString> Attributes; 
+ 
+    virtual void Parse(TConfig& config) override { 
+        TClientCommand::Parse(config); 
+ 
+        std::tie(Base, Name) = SplitPath(config, config.ParseResult->GetFreeArgs()[0]); 
+ 
+        for (ui32 i = 1; i < config.ParseResult->GetFreeArgCount(); ++i) { 
+            TString key = config.ParseResult->GetFreeArgs()[i]; 
+ 
+            if (Attributes.contains(key)) { 
+                Cerr << "Duplicate value for key: " << key << Endl; 
+            } 
+ 
+            Attributes.insert(key); 
+        } 
+    } 
+ 
+    virtual int Run(TConfig& config) override { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        NKikimrClient::TSchemeOperation& record(request->Record); 
+ 
+        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme(); 
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes); 
+        modifyScheme.SetWorkingDir(Base); 
+ 
+        auto& alter = *modifyScheme.MutableAlterUserAttributes(); 
+        alter.SetPathName(Name); 
+        auto& attributes = *alter.MutableUserAttributes(); 
+        attributes.Reserve(Attributes.size()); 
+        for (const auto& key : Attributes) { 
+            auto& attribute = *attributes.Add(); 
+            attribute.SetKey(key); 
+        } 
+ 
+        return MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request, 
+            [](const NMsgBusProxy::TBusResponse& response) -> int { 
+                if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) { 
+                    Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl; 
+                    return 1; 
+                } 
+                return 0; 
+            } 
+        ); 
+    } 
+}; 
+ 
 class TClientCommandSchemaUserAttribute: public TClientCommandTree {
 public:
     TClientCommandSchemaUserAttribute()

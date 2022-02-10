@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <library/cpp/string_utils/quote/quote.h>
-#include <library/cpp/bucket_quoter/bucket_quoter.h>
+#include <library/cpp/bucket_quoter/bucket_quoter.h> 
 
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
@@ -752,8 +752,8 @@ class TDataWriter: public NPrivate::IDataWriter {
         TDuration retrySleep = TDuration::MilliSeconds(500);
 
         for (ui32 retryNumber = 0; retryNumber <= maxRetries; ++retryNumber) {
-            while (!RequestLimiter.IsAvail()) {
-                Sleep(Min(TDuration::MicroSeconds(RequestLimiter.GetWaitTime()), RateLimiterSettings.ReactionTime_));
+            while (!RequestLimiter.IsAvail()) { 
+                Sleep(Min(TDuration::MicroSeconds(RequestLimiter.GetWaitTime()), RateLimiterSettings.ReactionTime_)); 
                 if (IsStopped()) {
                     return false;
                 }
@@ -763,8 +763,8 @@ class TDataWriter: public NPrivate::IDataWriter {
                 return false;
             }
 
-            RequestLimiter.Use(1);
-
+            RequestLimiter.Use(1); 
+ 
             auto importResult = ImportClient.ImportData(Path, data, Settings).GetValueSync();
 
             if (importResult.IsSuccess()) {
@@ -842,7 +842,7 @@ public:
         , TableClient(tableClient)
         , Accumulator(dynamic_cast<TDataAccumulator*>(accumulator))
         , RateLimiterSettings(settings.RateLimiterSettings_)
-        , RequestLimiter(RateLimiterSettings.GetRps(), RateLimiterSettings.GetRps())
+        , RequestLimiter(RateLimiterSettings.GetRps(), RateLimiterSettings.GetRps()) 
     {
         Y_ENSURE(Accumulator);
 
@@ -878,8 +878,8 @@ private:
     TDataAccumulator* Accumulator;
 
     const TRateLimiterSettings RateLimiterSettings;
-
-    using TRpsLimiter = TBucketQuoter<ui64>;
+ 
+    using TRpsLimiter = TBucketQuoter<ui64>; 
     TRpsLimiter RequestLimiter;
 
     THolder<IThreadPool> TasksQueue;

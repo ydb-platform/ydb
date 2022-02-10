@@ -120,7 +120,7 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
         auto create = modifyScheme->MutableCreateColumnStore();
@@ -155,12 +155,12 @@ public:
 private:
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
             default: TBase::StateWork(ev, ctx);
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) { 
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         if (record.HasReason()) {
@@ -169,7 +169,7 @@ private:
         }
         Ydb::LogStore::DescribeLogStoreResult describeLogStoreResult;
         switch (status) {
-            case NKikimrScheme::StatusSuccess: {
+            case NKikimrScheme::StatusSuccess: { 
                 const auto& pathDescription = record.GetPathDescription();
                 Ydb::Scheme::Entry* selfEntry = describeLogStoreResult.mutable_self();
                 selfEntry->set_name(pathDescription.GetSelf().GetName());
@@ -193,16 +193,16 @@ private:
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeLogStoreResult, ctx);
             }
 
-            case NKikimrScheme::StatusPathDoesNotExist:
-            case NKikimrScheme::StatusSchemeError: {
+            case NKikimrScheme::StatusPathDoesNotExist: 
+            case NKikimrScheme::StatusSchemeError: { 
                 return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
             }
 
-            case NKikimrScheme::StatusAccessDenied: {
+            case NKikimrScheme::StatusAccessDenied: { 
                 return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
             }
 
-            case NKikimrScheme::StatusNotAvailable: {
+            case NKikimrScheme::StatusNotAvailable: { 
                 return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
             }
 
@@ -218,14 +218,14 @@ private:
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
-        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
+        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath(); 
         record->SetPath(req->path());
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
 };
 
-template <class TEv, NKikimrSchemeOp::EOperationType EOpType>
+template <class TEv, NKikimrSchemeOp::EOperationType EOpType> 
 class TDropLogRPC : public TRpcSchemeRequestActor<TDropLogRPC<TEv, EOpType>, TEv> {
     using TSelf = TDropLogRPC<TEv, EOpType>;
     using TBase = TRpcSchemeRequestActor<TSelf, TEv>;
@@ -257,7 +257,7 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = this->CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
         modifyScheme->SetOperationType(EOpType);
         auto drop = modifyScheme->MutableDrop();
@@ -309,7 +309,7 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
         auto create = modifyScheme->MutableCreateColumnTable();
@@ -355,12 +355,12 @@ public:
 private:
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
             default: TBase::StateWork(ev, ctx);
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) { 
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         if (record.HasReason()) {
@@ -369,7 +369,7 @@ private:
         }
         Ydb::LogStore::DescribeLogTableResult describeLogTableResult;
         switch (status) {
-            case NKikimrScheme::StatusSuccess: {
+            case NKikimrScheme::StatusSuccess: { 
                 const auto& pathDescription = record.GetPathDescription();
                 Ydb::Scheme::Entry* selfEntry = describeLogTableResult.mutable_self();
                 selfEntry->set_name(pathDescription.GetSelf().GetName());
@@ -394,17 +394,17 @@ private:
                     const auto& inTTL = tableDescription.GetTtlSettings().GetEnabled();
 
                     switch (inTTL.GetColumnUnit()) {
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: { 
                         auto& outTTL = *describeLogTableResult.mutable_ttl_settings()->mutable_date_type_column();
                         outTTL.set_column_name(inTTL.GetColumnName());
                         outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
                         break;
                     }
 
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS: 
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS: 
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS: 
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: { 
                         auto& outTTL = *describeLogTableResult.mutable_ttl_settings()->mutable_value_since_unix_epoch();
                         outTTL.set_column_name(inTTL.GetColumnName());
                         outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
@@ -420,16 +420,16 @@ private:
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeLogTableResult, ctx);
             }
 
-            case NKikimrScheme::StatusPathDoesNotExist:
-            case NKikimrScheme::StatusSchemeError: {
+            case NKikimrScheme::StatusPathDoesNotExist: 
+            case NKikimrScheme::StatusSchemeError: { 
                 return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
             }
 
-            case NKikimrScheme::StatusAccessDenied: {
+            case NKikimrScheme::StatusAccessDenied: { 
                 return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
             }
 
-            case NKikimrScheme::StatusNotAvailable: {
+            case NKikimrScheme::StatusNotAvailable: { 
                 return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
             }
 
@@ -445,7 +445,7 @@ private:
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
-        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
+        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath(); 
         record->SetPath(req->path());
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
@@ -487,7 +487,7 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme->SetWorkingDir(workingDir);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
         auto alter = modifyScheme->MutableAlterColumnTable();

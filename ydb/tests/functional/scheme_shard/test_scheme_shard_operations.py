@@ -192,7 +192,7 @@ class TestSchemeShardSimpleOps(object):
             callee,
             raises(
                 ydb.SchemeError,
-                'path has children'
+                'path has children' 
             )
         )
 

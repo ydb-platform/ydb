@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             auto edge = runtime.AllocateEdgeActor(0);
             auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
             auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
-            tx->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+            tx->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence); 
             tx->SetWorkingDir(workingDir);
             auto* op = tx->MutableSequence();
             bool parseResult = ::google::protobuf::TextFormat::ParseFromString(scheme, op);
@@ -99,10 +99,10 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             Y_VERIFY(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
             ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-            auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+            auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(); 
             notifyReq->Record.SetTxId(msg->Record.GetTxId());
             runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
-            runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
+            runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge); 
         }
 
         void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {

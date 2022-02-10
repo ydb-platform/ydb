@@ -61,7 +61,7 @@ namespace NActors {
         ActorSystemMonotonic = nullptr;
     }
 
-    void TTestActorRuntimeBase::TNodeDataBase::Stop() {
+    void TTestActorRuntimeBase::TNodeDataBase::Stop() { 
         if (Poller)
             Poller->Stop();
 
@@ -77,11 +77,11 @@ namespace NActors {
         Poller.Reset();
     }
 
-    TTestActorRuntimeBase::TNodeDataBase::~TNodeDataBase() {
-        Stop();
-    }
+    TTestActorRuntimeBase::TNodeDataBase::~TNodeDataBase() { 
+        Stop(); 
+    } 
 
-
+ 
     class TTestActorRuntimeBase::TEdgeActor : public TActor<TEdgeActor> {
     public:
         static constexpr EActivityType ActorActivityType() {
@@ -1660,9 +1660,9 @@ namespace NActors {
             common->Settings.Handshake = TDuration::Max();
         }
 
-        common->ClusterUUID = ClusterUUID;
-        common->AcceptUUID = {ClusterUUID};
-
+        common->ClusterUUID = ClusterUUID; 
+        common->AcceptUUID = {ClusterUUID}; 
+ 
         for (ui32 proxyNodeIndex = 0; proxyNodeIndex < NodeCount; ++proxyNodeIndex) {
             if (proxyNodeIndex == nodeIndex)
                 continue;

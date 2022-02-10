@@ -31,7 +31,7 @@ static void ResortColumns(
 
 TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
         const TMap<ui32, TUserTable::TUserColumn>& columns,
-        const NKikimrSchemeOp::TPathDescription& pathDesc)
+        const NKikimrSchemeOp::TPathDescription& pathDesc) 
 {
     if (!pathDesc.HasTable()) {
         return Nothing();

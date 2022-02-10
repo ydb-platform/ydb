@@ -23,14 +23,14 @@ TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy(ui32 threshold,
     , ResourceBrokerTask(resourceBrokerTask)
 {}
 
-TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy(const NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy &policyPb)
+TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy(const NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy &policyPb) 
     : Threshold(policyPb.HasThreshold() ? policyPb.GetThreshold() : 101)
     , PriorityBase(policyPb.HasPriorityBase() ? policyPb.GetPriorityBase() : 100)
     , TimeFactor(policyPb.HasTimeFactor() ? policyPb.GetTimeFactor() : 1.0)
     , ResourceBrokerTask(policyPb.HasResourceBrokerTask() ? policyPb.GetResourceBrokerTask() : BackgroundCompactionTaskName)
 {}
 
-void TCompactionPolicy::TBackgroundPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy& policyPb) const
+void TCompactionPolicy::TBackgroundPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy& policyPb) const 
 {
     policyPb.SetThreshold(Threshold);
     policyPb.SetPriorityBase(PriorityBase);
@@ -60,7 +60,7 @@ TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(ui64 sizeToCompact,
     , UpliftPartSize(sizeToCompact / countToCompact)
 {}
 
-TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(const NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy &policyPb)
+TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(const NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy &policyPb) 
     : SizeToCompact(policyPb.HasSizeToCompact() ? policyPb.GetSizeToCompact() : 0)
     , CountToCompact(policyPb.HasCountToCompact() ? policyPb.GetCountToCompact() : 5)
     , ForceCountToCompact(policyPb.HasForceCountToCompact() ? policyPb.GetForceCountToCompact() : 8)
@@ -79,7 +79,7 @@ TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(const NKikimrSchemeOp::T
         ResourceBrokerTask = LegacyQueueIdToTaskName(CompactionBrokerQueue);
 }
 
-void TCompactionPolicy::TGenerationPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy& policyPb) const
+void TCompactionPolicy::TGenerationPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy& policyPb) const 
 {
     policyPb.SetSizeToCompact(SizeToCompact);
     policyPb.SetCountToCompact(CountToCompact);
@@ -115,11 +115,11 @@ TCompactionPolicy::TCompactionPolicy()
     , LogOverheadSizeToSnapshot(16 * 1024 * 1024)
     , LogOverheadCountToSnapshot(500)
     , DroppedRowsPercentToCompact(50)
-    , CompactionStrategy(NKikimrSchemeOp::CompactionStrategyUnset)
+    , CompactionStrategy(NKikimrSchemeOp::CompactionStrategyUnset) 
     , KeepEraseMarkers(false)
 {}
 
-TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb)
+TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb) 
     : InMemSizeToSnapshot(policyPb.HasInMemSizeToSnapshot() ? policyPb.GetInMemSizeToSnapshot() : 4 * 1024 * 1024)
     , InMemStepsToSnapshot(policyPb.HasInMemStepsToSnapshot() ? policyPb.GetInMemStepsToSnapshot() : 300)
     , InMemForceStepsToSnapshot(policyPb.HasInMemForceStepsToSnapshot() ? policyPb.GetInMemForceStepsToSnapshot() : 500)
@@ -158,7 +158,7 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& p
     }
 }
 
-void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const {
+void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const { 
     policyPb.SetInMemSizeToSnapshot(InMemSizeToSnapshot);
     policyPb.SetInMemStepsToSnapshot(InMemStepsToSnapshot);
     policyPb.SetInMemForceStepsToSnapshot(InMemForceStepsToSnapshot);
@@ -177,7 +177,7 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
     policyPb.SetLogOverheadSizeToSnapshot(LogOverheadSizeToSnapshot);
     policyPb.SetLogOverheadCountToSnapshot(LogOverheadCountToSnapshot);
     policyPb.SetDroppedRowsPercentToCompact(DroppedRowsPercentToCompact);
-    if (CompactionStrategy != NKikimrSchemeOp::CompactionStrategyUnset) {
+    if (CompactionStrategy != NKikimrSchemeOp::CompactionStrategyUnset) { 
         policyPb.SetCompactionStrategy(CompactionStrategy);
     }
     if (KeepEraseMarkers) {
@@ -197,7 +197,7 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
 TCompactionPolicyPtr CreateDefaultTablePolicy() {
     TCompactionPolicyPtr policy = new TCompactionPolicy;
 #if KIKIMR_DEFAULT_SHARDED_COMPACTION
-    policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
+    policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded; 
     policy->ShardPolicy.SetTaskPriorityBase(100);
 #endif
     return policy;
@@ -213,7 +213,7 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
     userPolicy->Generations.push_back({400 * 1024 * 1024, 5, 16, 16ull * 1024 * 1024 * 1024,
                 LegacyQueueIdToTaskName(3), false});
 #if KIKIMR_DEFAULT_SHARDED_COMPACTION
-    userPolicy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
+    userPolicy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded; 
 #endif
     return userPolicy;
 }

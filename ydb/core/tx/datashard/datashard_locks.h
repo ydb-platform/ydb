@@ -9,7 +9,7 @@
 
 #include <library/cpp/cache/cache.h>
 #include <util/generic/queue.h>
-#include <util/generic/set.h>
+#include <util/generic/set.h> 
 
 #include <util/system/valgrind.h>
 #include <util/system/sanitizers.h>
@@ -320,7 +320,7 @@ public:
     }
 
     void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo);
-    void RemoveSchema(const TPathId& tableId);
+    void RemoveSchema(const TPathId& tableId); 
     bool ForceShardLock(const THashSet<TPathId>& rangeTables) const;
 
     // optimisation: set to remove broken lock at next Remove()
@@ -460,10 +460,10 @@ public:
         Locker.UpdateSchema(tableId, tableInfo);
     }
 
-    void RemoveSchema(const TPathId& tableId) {
-        Locker.RemoveSchema(tableId);
-    }
-
+    void RemoveSchema(const TPathId& tableId) { 
+        Locker.RemoveSchema(tableId); 
+    } 
+ 
     TVector<TLock> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;

@@ -1,11 +1,11 @@
 #include "scheme_cache.h"
 
 #include <ydb/core/base/path.h>
-
+ 
 #include <util/string/builder.h>
-
+ 
 namespace NKikimr {
-namespace NSchemeCache {
+namespace NSchemeCache { 
 
 TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters)
     : Counters(counters)
@@ -15,15 +15,15 @@ TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDy
 
     for (const auto& [_, domain] : appData->DomainsInfo->Domains) {
         Y_VERIFY(domain);
-
+ 
         if (!domain->SchemeRoot) {
             continue;
         }
 
         Roots.emplace_back(domain->DomainRootTag(), domain->SchemeRoot, domain->Name);
-    }
+    } 
 }
-
+ 
 TString TDomainInfo::ToString() const {
     return TStringBuilder() << "{"
         << " DomainKey: " << DomainKey
@@ -50,8 +50,8 @@ TString TSchemeCacheNavigate::TEntry::ToString() const {
 TString TSchemeCacheNavigate::TEntry::ToString(const NScheme::TTypeRegistry& typeRegistry) const {
     Y_UNUSED(typeRegistry);
     return ToString();
-}
-
+} 
+ 
 template <typename TResultSet>
 static TString ResultSetToString(const TResultSet& rs, const NScheme::TTypeRegistry& typeRegistry) {
     TStringBuilder out;
@@ -59,7 +59,7 @@ static TString ResultSetToString(const TResultSet& rs, const NScheme::TTypeRegis
     for (ui32 i = 0; i < rs.size(); ++i) {
         if (i) {
             out << ",";
-        }
+        } 
 
         out << rs.at(i).ToString(typeRegistry);
     }
@@ -105,12 +105,12 @@ TString TSchemeCacheRequest::TEntry::ToString(const NScheme::TTypeRegistry& type
 
         if (KeyDescription->Range.Point) {
             out << " Point: " << DbgPrintTuple(from, typeRegistry);
-        } else {
+        } else { 
             out << " From: " << DbgPrintTuple(from, typeRegistry)
                 << " IncFrom: " << KeyDescription->Range.InclusiveFrom
                 << " To: " << DbgPrintTuple(to, typeRegistry)
                 << " IncTo: " << KeyDescription->Range.InclusiveTo;
-        }
+        } 
     }
 
     out << " }";

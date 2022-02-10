@@ -450,7 +450,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
     trans->SetWorkingDir(workingDir);
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir); 
     trans->MutableMkDir()->SetName(dirName);
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
@@ -518,7 +518,7 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
 STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TSqsEvents::TEvExecuted, OnExecuted);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, OnDescribeSchemeResult);
+        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, OnDescribeSchemeResult); 
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTableDescription);
         hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
         cFunc(TEvPoisonPill::EventType, PassAway);
@@ -642,11 +642,11 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     }
 }
 
-void TCreateQueueSchemaActorV2::OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+void TCreateQueueSchemaActorV2::OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
     RLOG_SQS_TRACE("OnDescribeSchemeResult for leader tablet: " << ev->Get()->GetRecord());
     const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
 
-    if (ev->Get()->GetRecord().GetStatus() != NKikimrScheme::StatusSuccess || pathDescription.TablePartitionsSize() == 0 || !pathDescription.GetTablePartitions(0).GetDatashardId()) {
+    if (ev->Get()->GetRecord().GetStatus() != NKikimrScheme::StatusSuccess || pathDescription.TablePartitionsSize() == 0 || !pathDescription.GetTablePartitions(0).GetDatashardId()) { 
         // fail
         auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
         resp->State = EQueueState::Creating;

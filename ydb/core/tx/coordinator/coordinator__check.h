@@ -1,7 +1,7 @@
 #pragma once
 
-#include "coordinator_impl.h"
-
+#include "coordinator_impl.h" 
+ 
 #include <util/generic/hash_set.h>
 
 namespace NKikimr {
@@ -37,7 +37,7 @@ struct TTxCoordinator::TTxConsistencyCheck : public TTransactionBase<TTxCoordina
             if (!rowset.IsReady())
                 return false;
             while (!rowset.EndOfSet()) {
-                TTabletId medId = rowset.GetValue<Schema::AffectedSet::MediatorID>();
+                TTabletId medId = rowset.GetValue<Schema::AffectedSet::MediatorID>(); 
                 TTxId txId = rowset.GetValue<Schema::AffectedSet::TransactionID>();
                 auto itTransaction = transactions.find(txId);
                 Y_ENSURE(itTransaction != transactions.end(), "Could not find mediator's transaction");

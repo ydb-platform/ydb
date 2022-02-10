@@ -129,10 +129,10 @@ public:
     }
 
 public:
-    bool IsTokenRequired() const {
-        return GetEnforceUserTokenRequirement() || (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty());
-    }
-
+    bool IsTokenRequired() const { 
+        return GetEnforceUserTokenRequirement() || (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty()); 
+    } 
+ 
     void Bootstrap(const TActorContext& ctx) {
         if (IsTokenRequired() && !IsTokenExists()) {
             return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Access denied without user token", false}, ctx);

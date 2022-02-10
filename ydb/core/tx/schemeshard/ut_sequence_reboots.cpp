@@ -1,8 +1,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-using namespace NKikimr::NSchemeShard;
+using namespace NKikimr::NSchemeShard; 
 using namespace NKikimr;
-using namespace NKikimrSchemeOp;
+using namespace NKikimrSchemeOp; 
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSequenceReboots) {
@@ -56,17 +56,17 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 CreateSequenceRequest(t.TxId += 3, "/MyRoot", R"(
                     Name: "seq1"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->ReliablePropose(runtime,
                 CreateSequenceRequest(t.TxId - 1, "/MyRoot", R"(
                     Name: "seq2"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->ReliablePropose(runtime,
                 CreateSequenceRequest(t.TxId - 2, "/MyRoot", R"(
                     Name: "seq3"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 2, t.TxId - 1, t.TxId});
 
             {
@@ -102,14 +102,14 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 CreateSequenceRequest(++t.TxId, "/MyRoot", R"(
                     Name: "seq"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
 
             t.TestEnv->ReliablePropose(runtime,
                 DropSequenceRequest(++t.TxId, "/MyRoot", "seq"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestLs(runtime, "/MyRoot/seq", false, NLs::PathNotExist);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 CreateSequenceRequest(++t.TxId, "/MyRoot", R"(
                     Name: "seq"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                         Name: "seq2"
                     }
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestLs(runtime, "/MyRoot/Table/seq1", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
 
             t.TestEnv->ReliablePropose(runtime,
                 DropTableRequest(++t.TxId, "/MyRoot", "Table"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);

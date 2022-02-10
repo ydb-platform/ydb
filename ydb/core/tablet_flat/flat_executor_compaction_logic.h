@@ -81,7 +81,7 @@ struct TCompactionLogicState {
 
         // This identifies currently active strategy type
         // The default value is used as a marker for uninitialized strategies
-        NKikimrSchemeOp::ECompactionStrategy StrategyType = NKikimrSchemeOp::CompactionStrategyUnset;
+        NKikimrSchemeOp::ECompactionStrategy StrategyType = NKikimrSchemeOp::CompactionStrategyUnset; 
 
         THolder<NTable::ICompactionStrategy> Strategy;
 
@@ -122,7 +122,7 @@ struct TCompactionLogicState {
         // The default value is used for compatibility, i.e. tablets that did
         // not have any strategy markers in their history are assumed to have
         // used the generational compaction.
-        NKikimrSchemeOp::ECompactionStrategy Strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
+        NKikimrSchemeOp::ECompactionStrategy Strategy = NKikimrSchemeOp::CompactionStrategyGenerational; 
     };
 
     TMap<ui32, TTableInfo> Tables;
@@ -133,7 +133,7 @@ class TFlatTableScan;
 
 struct TTableCompactionResult {
     NTable::TCompactionChanges Changes;
-    NKikimrSchemeOp::ECompactionStrategy Strategy;
+    NKikimrSchemeOp::ECompactionStrategy Strategy; 
     TVector<TIntrusivePtr<TTableSnapshotContext>> CompleteSnapshots;
     bool MemCompacted = false;
 };
@@ -141,13 +141,13 @@ struct TTableCompactionResult {
 struct TTableCompactionChanges {
     ui32 Table;
     NTable::TCompactionChanges Changes;
-    NKikimrSchemeOp::ECompactionStrategy Strategy;
+    NKikimrSchemeOp::ECompactionStrategy Strategy; 
 };
 
 struct TReflectSchemeChangesResult {
     struct TStrategyChange {
         ui32 Table;
-        NKikimrSchemeOp::ECompactionStrategy Strategy;
+        NKikimrSchemeOp::ECompactionStrategy Strategy; 
     };
 
     TVector<TStrategyChange> StrategyChanges;
@@ -173,7 +173,7 @@ class TCompactionLogic {
 
     bool BeginMemTableCompaction(ui64 taskId, ui32 tableId);
 
-    THolder<NTable::ICompactionStrategy> CreateStrategy(ui32 tableId, NKikimrSchemeOp::ECompactionStrategy);
+    THolder<NTable::ICompactionStrategy> CreateStrategy(ui32 tableId, NKikimrSchemeOp::ECompactionStrategy); 
 
     void StopTable(TCompactionLogicState::TTableInfo &table);
     void StrategyChanging(TCompactionLogicState::TTableInfo &table);

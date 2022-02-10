@@ -160,7 +160,7 @@ protected:
     void OnMessage(TBusMessageContext &msg);
     IActor* CreateMessageBusTraceService() override;
 private:
-    IActor* CreateProxy() override;
+    IActor* CreateProxy() override; 
     void OnError(TAutoPtr<NBus::TBusMessage> message, NBus::EMessageStatus status) override;
 
     void GetTypes(TBusMessageContext &msg);

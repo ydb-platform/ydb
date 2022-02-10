@@ -80,20 +80,20 @@ public:
             if (!Event->Get()->UserToken.empty()) {
                 request->Record.SetUserToken(Event->Get()->UserToken);
             }
-            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
+            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath(); 
             record->SetPath(params.Get("path"));
-
+ 
             TActorId txproxy = MakeTxProxyID();
             TBase::Send(txproxy, request.Release());
             Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-        } else {
+        } else { 
             TBase::Bootstrap();
         }
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev) {
-        THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release();
-        if (describeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+        THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release(); 
+        if (describeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) { 
             Tablets.reserve(describeResult->GetRecord().GetPathDescription().TablePartitionsSize());
             for (const auto& partition : describeResult->GetRecord().GetPathDescription().GetTablePartitions()) {
                 Tablets.emplace_back(partition.GetDatashardId());

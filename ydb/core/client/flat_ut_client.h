@@ -22,7 +22,7 @@ public:
     {}
 
     void InitRoot() {
-        InitRootScheme();
+        InitRootScheme(); 
     }
 
     using TClient::FlatQuery;
@@ -64,7 +64,7 @@ public:
         TActorId txProxy = MakeTxProxyID();
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<TEvTxUserProxy::TEvInvalidateTable> ev(new TEvTxUserProxy::TEvInvalidateTable(tableId));
-        runtime->Send(new IEventHandle(txProxy, sender, ev.Release()));
+        runtime->Send(new IEventHandle(txProxy, sender, ev.Release())); 
         TAutoPtr<IEventHandle> handle;
         auto readSchemeStringResult = runtime->GrabEdgeEventRethrow<TEvTxUserProxy::TEvInvalidateTableResult>(handle);
         Y_UNUSED(readSchemeStringResult);
@@ -100,7 +100,7 @@ public:
     void TrySplitTablePartition(const TString& tablePath, const TString& splitDescription, NKikimrClient::TResponse& response) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions); 
         UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(splitDescription, op->MutableSplitMergeTablePartitions()));
         op->MutableSplitMergeTablePartitions()->SetTablePath(tablePath);
 

@@ -6,7 +6,7 @@
 #include <util/string/cast.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 ui64 TRUCalculator::ReadTable(ui64 bytes) {
     return 128 * ((bytes + 1_MB - 1) / 1_MB);
@@ -16,5 +16,5 @@ ui64 TRUCalculator::BulkUpsert(ui64 bytes, ui64 rows) {
     return (Max(rows, (bytes + 1_KB - 1) / 1_KB) + 1) / 2;
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

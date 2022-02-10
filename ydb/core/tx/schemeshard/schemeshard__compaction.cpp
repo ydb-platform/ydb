@@ -1,7 +1,7 @@
 #include "schemeshard_impl.h"
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TShardIdx& shardId) {
     TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE].Set(CompactionQueue->Size());
@@ -35,7 +35,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) { 
     const auto& record = ev->Get()->Record;
 
     const TTabletId tabletId(record.GetTabletId());
@@ -78,5 +78,5 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     }
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

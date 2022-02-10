@@ -4,14 +4,14 @@
 #include <ydb/core/tx/datashard/datashard.h>
 
 using namespace NKikimr;
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 using namespace NSchemeShardUT_Private;
 
 static void CheckTTLSettings(TTestActorRuntime& runtime, const char* tableName = "TTLEnabledTable") {
     TestDescribeResult(
         DescribePath(runtime, Sprintf("/MyRoot/%s", tableName)), {
             NLs::PathExist,
-            NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) { 
                 const auto& table = record.GetPathDescription().GetTable();
                 UNIT_ASSERT(table.HasTTLSettings());
 
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "created_at"
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
     }
 
     Y_UNIT_TEST(CreateTableShouldFailOnWrongColumnType) {
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
     }
 
     void CreateTableShouldFailOnWrongUnit(const char* ttlColumnType, const char* unit) {
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnUnit: %s
               }
             }
-        )", ttlColumnType, unit), {NKikimrScheme::StatusSchemeError});
+        )", ttlColumnType, unit), {NKikimrScheme::StatusSchemeError}); 
     }
 
     Y_UNIT_TEST(CreateTableShouldFailOnWrongUnit) {
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             KeyColumnNames: ["key"]
             TTLSettings {
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
     }
 
     void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType, bool enableTtlOnAsyncIndexedTables = false) {
@@ -152,8 +152,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         const bool shouldSucceed = (indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync || enableTtlOnAsyncIndexedTables);
         const auto status = shouldSucceed
-            ? NKikimrScheme::StatusAccepted
-            : NKikimrScheme::StatusPreconditionFailed;
+            ? NKikimrScheme::StatusAccepted 
+            : NKikimrScheme::StatusPreconditionFailed; 
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
             DropColumns { Name: "modified_at" }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusInvalidParameter}); 
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TestDescribeResult(
             DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
                 NLs::PathExist,
-                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) { 
                     const auto& table = record.GetPathDescription().GetTable();
                     UNIT_ASSERT(table.HasTTLSettings());
                     UNIT_ASSERT(table.GetTTLSettings().HasDisabled());
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
               }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusInvalidParameter}); 
     }
 
     void AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType, bool enableTtlOnAsyncIndexedTables = false) {
@@ -319,8 +319,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         const bool shouldSucceed = (indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync || enableTtlOnAsyncIndexedTables);
         const auto status = shouldSucceed
-            ? NKikimrScheme::StatusAccepted
-            : NKikimrScheme::StatusPreconditionFailed;
+            ? NKikimrScheme::StatusAccepted 
+            : NKikimrScheme::StatusPreconditionFailed; 
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
@@ -355,43 +355,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             .EnableAsyncIndexes(true)
             .EnableTtlOnAsyncIndexedTables(enableTtlOnAsyncIndexedTables);
 
-        TTestBasicRuntime runtime;
+        TTestBasicRuntime runtime; 
         TTestEnv env(runtime, opts);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TTLEnabledTable"
-            Columns { Name: "key" Type: "Uint64" }
-            Columns { Name: "value" Type: "Uint64" }
-            Columns { Name: "modified_at" Type: "Timestamp" }
-            KeyColumnNames: ["key"]
-            TTLSettings {
-              Enabled {
-                ColumnName: "modified_at"
-                ExpireAfterSeconds: 3600
-              }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-        CheckTTLSettings(runtime);
-
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "TTLEnabledTable" 
+            Columns { Name: "key" Type: "Uint64" } 
+            Columns { Name: "value" Type: "Uint64" } 
+            Columns { Name: "modified_at" Type: "Timestamp" } 
+            KeyColumnNames: ["key"] 
+            TTLSettings { 
+              Enabled { 
+                ColumnName: "modified_at" 
+                ExpireAfterSeconds: 3600 
+              } 
+            } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+        CheckTTLSettings(runtime); 
+ 
         const bool shouldSucceed = (indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync || enableTtlOnAsyncIndexedTables);
         const auto status = shouldSucceed
             ? Ydb::StatusIds::SUCCESS
             : Ydb::StatusIds::PRECONDITION_FAILED;
-
+ 
         TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TTLEnabledTable",
             TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}}, status);
 
         if (shouldSucceed) {
             env.TestWaitNotification(runtime, txId);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
-                NLs::PathExist,
-                NLs::Finished,
+                NLs::PathExist, 
+                NLs::Finished, 
                 NLs::IndexesCount(1),
             });
         }
-    }
+    } 
 
     Y_UNIT_TEST(BuildIndexShouldSucceed) {
         BuildIndex(NKikimrSchemeOp::EIndexTypeGlobal);
@@ -739,7 +739,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 }
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusSchemeError}); 
     }
 
     Y_UNIT_TEST(ShouldSkipDroppedColumn) {

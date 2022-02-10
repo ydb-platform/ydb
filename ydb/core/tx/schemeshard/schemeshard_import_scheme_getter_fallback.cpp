@@ -5,7 +5,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
 class TSchemeGetterFallback: public TActorBootstrapped<TSchemeGetterFallback> {
 public:
@@ -32,5 +32,5 @@ IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo
     return new TSchemeGetterFallback(replyTo, importInfo, itemIdx);
 }
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

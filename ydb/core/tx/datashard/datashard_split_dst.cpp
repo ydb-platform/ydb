@@ -28,29 +28,29 @@ public:
             return true;
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-
+        NIceDb::TNiceDb db(txc.DB); 
+ 
         const bool initializeSchema = Ev->Get()->Record.HasCreateTable();
         if (initializeSchema) {
             // Schema changes must go first in a transaction
-            const NKikimrSchemeOp::TTableDescription& createTable = Ev->Get()->Record.GetCreateTable();
-
+            const NKikimrSchemeOp::TTableDescription& createTable = Ev->Get()->Record.GetCreateTable(); 
+ 
             TPathId tableId(Self->GetPathOwnerId(), createTable.GetId_Deprecated());
-            if (createTable.HasPathId()) {
-                Y_VERIFY(Self->GetPathOwnerId() == createTable.GetPathId().GetOwnerId() || Self->GetPathOwnerId() == INVALID_TABLET_ID);
+            if (createTable.HasPathId()) { 
+                Y_VERIFY(Self->GetPathOwnerId() == createTable.GetPathId().GetOwnerId() || Self->GetPathOwnerId() == INVALID_TABLET_ID); 
                 tableId.OwnerId = createTable.GetPathId().GetOwnerId();
                 tableId.LocalPathId = createTable.GetPathId().GetLocalId();
             } else if (tableId.OwnerId == INVALID_TABLET_ID) {
                 // Legacy schemeshard before migrations, shouldn't be possible
                 tableId.OwnerId = Ev->Get()->Record.GetSchemeshardTabletId();
-            }
-
+            } 
+ 
             auto info = Self->CreateUserTable(txc, createTable);
             Self->AddUserTable(tableId, info);
-
-            if (Self->GetPathOwnerId() == INVALID_TABLET_ID) {
+ 
+            if (Self->GetPathOwnerId() == INVALID_TABLET_ID) { 
                 Self->PersistOwnerPathId(tableId.OwnerId, txc);
-            }
+            } 
         }
 
         Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
@@ -74,15 +74,15 @@ public:
         Self->State = TShardState::SplitDstReceivingSnapshot;
         Self->PersistSys(db, Schema::Sys_State, Self->State);
 
-        Self->CurrentSchemeShardId = Ev->Get()->Record.GetSchemeshardTabletId();
+        Self->CurrentSchemeShardId = Ev->Get()->Record.GetSchemeshardTabletId(); 
         Self->PersistSys(db, Schema::Sys_CurrentSchemeShardId, Self->CurrentSchemeShardId);
 
-        if (!Self->ProcessingParams && Ev->Get()->Record.HasProcessingParams()) {
+        if (!Self->ProcessingParams && Ev->Get()->Record.HasProcessingParams()) { 
             Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
-            Self->ProcessingParams->CopyFrom(Ev->Get()->Record.GetProcessingParams());
-            Self->PersistSys(db, Schema::Sys_SubDomainInfo, Self->ProcessingParams->SerializeAsString());
-        }
-
+            Self->ProcessingParams->CopyFrom(Ev->Get()->Record.GetProcessingParams()); 
+            Self->PersistSys(db, Schema::Sys_SubDomainInfo, Self->ProcessingParams->SerializeAsString()); 
+        } 
+ 
         if (Self->CurrentSchemeShardId && Ev->Get()->Record.HasSubDomainPathId()) {
             Self->PersistSubDomainPathId(Self->CurrentSchemeShardId, Ev->Get()->Record.GetSubDomainPathId(), txc);
             Self->StopFindSubDomainPathId();
@@ -102,7 +102,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack init split/merge destination OpId " << opId);
 
         ctx.Send(ackTo, new TEvDataShard::TEvInitSplitMergeDestinationAck(opId, Self->TabletID()));
-        Self->SendRegistrationRequestTimeCast(ctx);
+        Self->SendRegistrationRequestTimeCast(ctx); 
     }
 };
 
@@ -130,7 +130,7 @@ public:
         const auto& tableScheme = Ev->Get()->Record.GetUserTableScheme();
         TString tableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName();
         if (!txc.DB.GetScheme().TableNames.contains(tableName)) { // TODO: properly check if table has already been created
-            NKikimrSchemeOp::TTableDescription newTableScheme(tableScheme);
+            NKikimrSchemeOp::TTableDescription newTableScheme(tableScheme); 
 
             // Get this shard's range boundaries from the split/merge description
             TString rangeBegin, rangeEnd;
@@ -248,7 +248,7 @@ public:
             // Mark versions not accessible via snapshots as deleted
             for (const auto& kv : Self->GetUserTables()) {
                 // FIXME: tables need to always have owner id
-                ui64 ownerId = Self->GetPathOwnerId();
+                ui64 ownerId = Self->GetPathOwnerId(); 
                 ui64 tableId = kv.first;
                 ui32 localTableId = kv.second->LocalTid;
                 TRowVersion vlower = TRowVersion::Min();

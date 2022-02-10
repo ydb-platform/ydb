@@ -181,8 +181,8 @@ message TResponse {
     repeated NKikimrWhiteboard.TTabletStateInfo TabletStateInfo = 500;
 
     // TSchemeDescribe
-    optional NKikimrSchemeOp.TPathDescription PathDescription = 600;
-    optional string Path = 601;
+    optional NKikimrSchemeOp.TPathDescription PathDescription = 600; 
+    optional string Path = 601; 
 
     // TSchemeOperation
     optional TFlatTxId FlatTxId = 700;
@@ -332,8 +332,8 @@ message THiveCreateTablet {
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // mandatory, tablet type, see ydb/core/base/tablet_types.h
         optional uint32 ChannelsProfile = 4; // mandatory, channels profile index (use 0 for default profile)
         repeated uint32 AllowedNodeIDs = 5;
-        repeated NKikimrSubDomains.TDomainKey AllowedDomains = 6;
-        repeated NKikimrStoragePool.TChannelBind BindedChannels = 7;
+        repeated NKikimrSubDomains.TDomainKey AllowedDomains = 6; 
+        repeated NKikimrStoragePool.TChannelBind BindedChannels = 7; 
     }
 
     message TCmdLookupTablet {
@@ -440,15 +440,15 @@ message TSchemeDescribe {
     optional uint64 PathId = 2;
     optional uint64 SchemeshardId = 3;
     optional string SecurityToken = 5;
-    optional NKikimrSchemeOp.TDescribeOptions Options = 6;
+    optional NKikimrSchemeOp.TDescribeOptions Options = 6; 
 };
 
 message TFlatDescribeResponse {
     option deprecated = true;
     optional uint32 Status = 1;
-
-    optional string Path = 9;
-    optional NKikimrSchemeOp.TPathDescription PathDescription = 2;
+ 
+    optional string Path = 9; 
+    optional NKikimrSchemeOp.TPathDescription PathDescription = 2; 
     optional string ErrorReason = 3; // When present contains human-readable error description
     optional int32 SchemeStatus = 4;
 

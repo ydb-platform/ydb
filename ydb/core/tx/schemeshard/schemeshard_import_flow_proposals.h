@@ -3,37 +3,37 @@
 #include "schemeshard_impl.h"
 
 namespace NKikimr {
-namespace NSchemeShard {
+namespace NSchemeShard { 
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
-    TSchemeShard* ss,
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose( 
+    TSchemeShard* ss, 
     TTxId txId,
     TImportInfo::TPtr importInfo,
     ui32 itemIdx,
     TString& error
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
-    TSchemeShard* ss,
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose( 
+    TSchemeShard* ss, 
     TTxId txId,
     TImportInfo::TPtr importInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
-    TSchemeShard* ss,
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose( 
+    TSchemeShard* ss, 
     TTxId txId,
     TImportInfo::TPtr importInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
+THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose( 
     TImportInfo::TPtr importInfo,
     TTxId restoreTxId
 );
 
 THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
-    TSchemeShard* ss,
+    TSchemeShard* ss, 
     TTxId txId,
     TImportInfo::TPtr importInfo,
     ui32 itemIdx,
@@ -41,10 +41,10 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 );
 
 THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
-    TSchemeShard* ss,
+    TSchemeShard* ss, 
     TImportInfo::TPtr importInfo,
     TTxId indexBuildId
 );
 
-} // NSchemeShard
+} // NSchemeShard 
 } // NKikimr

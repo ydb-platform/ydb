@@ -14,16 +14,16 @@
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 
 namespace NActors {
-
-    void TTestActorRuntime::TNodeData::Stop() {
-        if (Mon) {
-            Mon->Stop();
-        }
-        TNodeDataBase::Stop();
-    }
-
+ 
+    void TTestActorRuntime::TNodeData::Stop() { 
+        if (Mon) { 
+            Mon->Stop(); 
+        } 
+        TNodeDataBase::Stop(); 
+    } 
+ 
     TTestActorRuntime::TNodeData::~TNodeData() {
-        Stop();
+        Stop(); 
     }
 
     ui64 TTestActorRuntime::TNodeData::GetLoggerPoolId() const {

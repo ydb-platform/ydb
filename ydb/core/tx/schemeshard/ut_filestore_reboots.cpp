@@ -5,14 +5,14 @@
 #include <google/protobuf/text_format.h>
 
 using namespace NKikimr;
-using namespace NSchemeShard;
+using namespace NSchemeShard; 
 using namespace NSchemeShardUT_Private;
 
 namespace {
 
 auto& InitCreateFileStoreConfig(
     const TString& name,
-    NKikimrSchemeOp::TFileStoreDescription& vdescr)
+    NKikimrSchemeOp::TFileStoreDescription& vdescr) 
 {
     vdescr.SetName(name);
     auto& vc = *vdescr.MutableConfig();
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.RestoreLogging();
 
-            NKikimrSchemeOp::TFileStoreDescription vdescr;
+            NKikimrSchemeOp::TFileStoreDescription vdescr; 
             InitCreateFileStoreConfig("FS_1", vdescr);
             TestCreateFileStore(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.RestoreLogging();
 
-            NKikimrSchemeOp::TFileStoreDescription vdescr;
+            NKikimrSchemeOp::TFileStoreDescription vdescr; 
             auto& vc = InitCreateFileStoreConfig("FS_2", vdescr);
             TestCreateFileStore(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.RestoreLogging();
 
-            NKikimrSchemeOp::TFileStoreDescription vdescr;
+            NKikimrSchemeOp::TFileStoreDescription vdescr; 
             auto& vc = InitCreateFileStoreConfig("FS_2", vdescr);
             TestCreateFileStore(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.RestoreLogging();
 
-            NKikimrSchemeOp::TFileStoreDescription vdescr;
+            NKikimrSchemeOp::TFileStoreDescription vdescr; 
             InitCreateFileStoreConfig("FS_3", vdescr);
             TestCreateFileStore(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
 
@@ -130,14 +130,14 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
 
     Y_UNIT_TEST(CreateWithIntermediateDirs) {
-        NKikimrSchemeOp::TFileStoreDescription vdescr;
+        NKikimrSchemeOp::TFileStoreDescription vdescr; 
         InitCreateFileStoreConfig("Valid/x/y/z", vdescr);
         const auto validScheme = vdescr.DebugString();
         vdescr.Clear();
         InitCreateFileStoreConfig("Invalid/wr0ng n@me", vdescr);
         const auto invalidScheme = vdescr.DebugString();
-        const auto validStatus = NKikimrScheme::StatusAccepted;
-        const auto invalidStatus = NKikimrScheme::StatusSchemeError;
+        const auto validStatus = NKikimrScheme::StatusAccepted; 
+        const auto invalidStatus = NKikimrScheme::StatusSchemeError; 
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateFileStore(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
     Y_UNIT_TEST(CreateWithIntermediateDirsForceDrop) {
         CreateWithIntermediateDirsForceDrop(
             [](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
-                NKikimrSchemeOp::TFileStoreDescription vdescr;
+                NKikimrSchemeOp::TFileStoreDescription vdescr; 
                 InitCreateFileStoreConfig("x/y/z", vdescr);
                 AsyncCreateFileStore(runtime, txId, root, vdescr.DebugString());
             });
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            NKikimrSchemeOp::TFileStoreDescription vdescr;
+            NKikimrSchemeOp::TFileStoreDescription vdescr; 
             InitCreateFileStoreConfig("FS_1", vdescr);
             TestCreateFileStore(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", vdescr.DebugString());
 
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
     Y_UNIT_TEST(AlterAssignDrop) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            NKikimrSchemeOp::TFileStoreDescription vdescr;
+            NKikimrSchemeOp::TFileStoreDescription vdescr; 
             auto& vc = InitCreateFileStoreConfig("FS", vdescr);
 
             {
@@ -213,14 +213,14 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
             InitAlterFileStoreConfig(vc);
             AsyncAlterFileStore(runtime, ++t.TxId, "/MyRoot", vdescr.DebugString());
 
-            TestDropFileStore(runtime, ++t.TxId, "/MyRoot", "FS", {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted});
+            TestDropFileStore(runtime, ++t.TxId, "/MyRoot", "FS", {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted}); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId - 1); // wait Alter
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDropFileStore(runtime, ++t.TxId, "/MyRoot", "FS", {NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusAccepted});
+                TestDropFileStore(runtime, ++t.TxId, "/MyRoot", "FS", {NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusAccepted}); 
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/FS"),
                                    {NLs::PathNotExist});
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.RestoreLogging();
 
-            NKikimrSchemeOp::TFileStoreDescription vdescr;
+            NKikimrSchemeOp::TFileStoreDescription vdescr; 
             auto& vc = InitCreateFileStoreConfig("FS_2", vdescr);
             TestCreateFileStore(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);

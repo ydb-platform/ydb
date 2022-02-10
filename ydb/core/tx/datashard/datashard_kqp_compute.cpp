@@ -200,24 +200,24 @@ void TKqpDatashardComputeContext::Clear() {
     LockTxId = 0;
 }
 
-bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidatedKey>& keys, ui64 pageFaultCount) {
-    ui64 limitMultiplier = 1;
-    if (pageFaultCount >= 2) {
-        if (pageFaultCount <= 63) {
-            limitMultiplier <<= pageFaultCount - 1;
-        } else {
-            limitMultiplier = Max<ui64>();
-        }
-    }
-
-    auto adjustLimit = [limitMultiplier](ui64 limit) -> ui64 {
-        if (limit >= Max<ui64>() / limitMultiplier) {
-            return Max<ui64>();
-        } else {
-            return limit * limitMultiplier;
-        }
-    };
-
+bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidatedKey>& keys, ui64 pageFaultCount) { 
+    ui64 limitMultiplier = 1; 
+    if (pageFaultCount >= 2) { 
+        if (pageFaultCount <= 63) { 
+            limitMultiplier <<= pageFaultCount - 1; 
+        } else { 
+            limitMultiplier = Max<ui64>(); 
+        } 
+    } 
+ 
+    auto adjustLimit = [limitMultiplier](ui64 limit) -> ui64 { 
+        if (limit >= Max<ui64>() / limitMultiplier) { 
+            return Max<ui64>(); 
+        } else { 
+            return limit * limitMultiplier; 
+        } 
+    }; 
+ 
     bool ret = true;
     auto& scheme = Database->GetScheme();
 
@@ -256,8 +256,8 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          key.Range.Point ? from : to,
                                          columnTags,
                                          0 /* readFlags */,
-                                         adjustLimit(key.RangeLimits.ItemsLimit),
-                                         adjustLimit(key.RangeLimits.BytesLimit),
+                                         adjustLimit(key.RangeLimits.ItemsLimit), 
+                                         adjustLimit(key.RangeLimits.BytesLimit), 
                                          key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
                                          GetReadVersion());
 

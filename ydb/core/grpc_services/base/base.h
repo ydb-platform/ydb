@@ -83,10 +83,10 @@ struct TRpcServices {
         EvListEndpoints,
         EvDescribeTenantOptions,
         EvDescribeTableOptions,
-        EvCreateCoordinationNode,
-        EvAlterCoordinationNode,
-        EvDropCoordinationNode,
-        EvDescribeCoordinationNode,
+        EvCreateCoordinationNode, 
+        EvAlterCoordinationNode, 
+        EvDropCoordinationNode, 
+        EvDescribeCoordinationNode, 
         EvCancelOperation,
         EvForgetOperation,
         EvExecDataQueryAst,
@@ -114,9 +114,9 @@ struct TRpcServices {
         EvListRateLimiterResources,
         EvDescribeRateLimiterResource,
         EvAcquireRateLimiterResource,
-        EvKikhouseCreateSnapshot,
-        EvKikhouseRefreshSnapshot,
-        EvKikhouseDiscardSnapshot,
+        EvKikhouseCreateSnapshot, 
+        EvKikhouseRefreshSnapshot, 
+        EvKikhouseDiscardSnapshot, 
         EvExportToS3,
         EvSelfCheck,
         EvStreamExecuteScanQuery,
@@ -127,8 +127,8 @@ struct TRpcServices {
         EvPQAddReadRule,
         EvPQRemoveReadRule,
         EvGetDiskSpaceUsage,
-        EvStopServingDatabase,
-        EvCoordinationSession,
+        EvStopServingDatabase, 
+        EvCoordinationSession, 
         EvImportFromS3,
         EvLongTxBegin,
         EvLongTxCommit,
@@ -883,10 +883,10 @@ public:
         return Ctx_->GetPeer();
     }
 
-    bool SslServer() const {
-        return Ctx_->SslServer();
-    }
-
+    bool SslServer() const { 
+        return Ctx_->SslServer(); 
+    } 
+ 
     template<typename T>
     static const TRequest* GetProtoRequest(const T& req) {
         auto request = dynamic_cast<const TRequest*>(req->GetRequest());

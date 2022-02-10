@@ -53,58 +53,58 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                         loadFactor += GetLocalityShift();
                     }
                 }
-
-                TStringType sslTargetNameOverride = endpoint.ssl_target_name_override();
-                auto getIpSslTargetNameOverride = [&]() -> TStringType {
-                    if (!sslTargetNameOverride.empty()) {
-                        return sslTargetNameOverride;
-                    }
-                    if (endpoint.ssl()) {
-                        return endpoint.address();
-                    }
-                    return TStringType();
-                };
-
-                bool addDefault = true;
-                for (const auto& addr : endpoint.ip_v6()) {
-                    if (addr.empty()) {
-                        continue;
-                    }
-                    TStringBuilder endpointBuilder;
-                    endpointBuilder << "ipv6:";
-                    if (addr[0] != '[') {
-                        endpointBuilder << "[";
-                    }
-                    endpointBuilder << addr;
-                    if (addr[addr.size()-1] != ']') {
-                        endpointBuilder << "]";
-                    }
-                    endpointBuilder << ":" << endpoint.port();
-                    TStringType endpointString = std::move(endpointBuilder);
-                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride());
-                    addDefault = false;
-                }
-                for (const auto& addr : endpoint.ip_v4()) {
-                    if (addr.empty()) {
-                        continue;
-                    }
-                    TStringType endpointString =
-                        TStringBuilder()
-                            << "ipv4:"
-                            << addr
-                            << ":"
-                            << endpoint.port();
-                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride());
-                    addDefault = false;
-                }
-                if (addDefault) {
-                    TStringType endpointString =
-                        TStringBuilder()
-                            << endpoint.address()
-                            << ":"
-                            << endpoint.port();
-                    records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride));
-                }
+ 
+                TStringType sslTargetNameOverride = endpoint.ssl_target_name_override(); 
+                auto getIpSslTargetNameOverride = [&]() -> TStringType { 
+                    if (!sslTargetNameOverride.empty()) { 
+                        return sslTargetNameOverride; 
+                    } 
+                    if (endpoint.ssl()) { 
+                        return endpoint.address(); 
+                    } 
+                    return TStringType(); 
+                }; 
+ 
+                bool addDefault = true; 
+                for (const auto& addr : endpoint.ip_v6()) { 
+                    if (addr.empty()) { 
+                        continue; 
+                    } 
+                    TStringBuilder endpointBuilder; 
+                    endpointBuilder << "ipv6:"; 
+                    if (addr[0] != '[') { 
+                        endpointBuilder << "["; 
+                    } 
+                    endpointBuilder << addr; 
+                    if (addr[addr.size()-1] != ']') { 
+                        endpointBuilder << "]"; 
+                    } 
+                    endpointBuilder << ":" << endpoint.port(); 
+                    TStringType endpointString = std::move(endpointBuilder); 
+                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride()); 
+                    addDefault = false; 
+                } 
+                for (const auto& addr : endpoint.ip_v4()) { 
+                    if (addr.empty()) { 
+                        continue; 
+                    } 
+                    TStringType endpointString = 
+                        TStringBuilder() 
+                            << "ipv4:" 
+                            << addr 
+                            << ":" 
+                            << endpoint.port(); 
+                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride()); 
+                    addDefault = false; 
+                } 
+                if (addDefault) { 
+                    TStringType endpointString = 
+                        TStringBuilder() 
+                            << endpoint.address() 
+                            << ":" 
+                            << endpoint.port(); 
+                    records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride)); 
+                } 
             }
             LastUpdateTime_ = TInstant::Now().MicroSeconds();
             removed = Elector_.SetNewState(std::move(records));
@@ -121,7 +121,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
     return {future, true};
 }
 
-TEndpointRecord TEndpointPool::GetEndpoint(const TStringType& preferredEndpoint) const {
+TEndpointRecord TEndpointPool::GetEndpoint(const TStringType& preferredEndpoint) const { 
     return Elector_.GetEndpoint(preferredEndpoint);
 }
 

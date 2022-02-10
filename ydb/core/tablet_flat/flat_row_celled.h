@@ -10,7 +10,7 @@ namespace NTable {
     struct TCelled {
         using TRaw = TArrayRef<const TRawTypeValue>;
 
-        TCelled(TRaw key, const TKeyNulls &nulls, bool extend)
+        TCelled(TRaw key, const TKeyNulls &nulls, bool extend) 
             : Size(extend ? nulls->size() : Min(nulls->size(), key.size()))
             , Large(Size > Small.size() ? Size : 0)
             , Cells(Large ? Large.begin() : Small.begin())
@@ -20,7 +20,7 @@ namespace NTable {
             for (ui32 it = 0; it < Size; it++) {
                 if (it >= key.size()) {
                     Cells[it] = nulls[it];
-                } else if (key[it] && key[it].Type() != nulls.Types[it].GetTypeId()) {
+                } else if (key[it] && key[it].Type() != nulls.Types[it].GetTypeId()) { 
                     Y_FAIL("Key does not comply table schema");
                 } else {
                     Cells[it] = TCell((char*)key[it].Data(), key[it].Size());

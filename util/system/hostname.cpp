@@ -49,13 +49,13 @@ namespace {
             hints.ai_flags = AI_CANONNAME;
             res = getaddrinfo(buf, nullptr, &hints, &ais);
             if (res) {
-                if (res != EAI_NONAME) {
-                    ythrow TSystemError() << "can not get FQDN (return code is " << res << ", hostname is \"" << buf << "\")";
-                }
-                FQDNHostName = buf;
-            } else {
-                FQDNHostName = ais->ai_canonname;
-                freeaddrinfo(ais);
+                if (res != EAI_NONAME) { 
+                    ythrow TSystemError() << "can not get FQDN (return code is " << res << ", hostname is \"" << buf << "\")"; 
+                } 
+                FQDNHostName = buf; 
+            } else { 
+                FQDNHostName = ais->ai_canonname; 
+                freeaddrinfo(ais); 
             }
             FQDNHostName.to_lower();
         }

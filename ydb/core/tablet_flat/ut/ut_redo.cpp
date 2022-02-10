@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(Redo) {
             if (1 == serial) {
                 /* Just applied initial alter script, nothing to check */
 
-                UNIT_ASSERT(me->Subset(1, TEpoch::Max(), { }, { })->Head == TEpoch::FromIndex(1));
+                UNIT_ASSERT(me->Subset(1, TEpoch::Max(), { }, { })->Head == TEpoch::FromIndex(1)); 
 
             } else if (2 == serial) {
                 me.Iter(1).Has(foo).HasN(nullptr, 77_u64).NoKey(bar);
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(Redo) {
             } else if (4 == serial) {
                 /* Table flush (snapshot) event received with scheme updates */
 
-                UNIT_ASSERT(me->Subset(1, TEpoch::Max(), { }, { })->Head == TEpoch::FromIndex(2));
+                UNIT_ASSERT(me->Subset(1, TEpoch::Max(), { }, { })->Head == TEpoch::FromIndex(2)); 
 
             } else if (5 == serial) {
                 me.Iter(1, false).NoKey(foo).NoVal(bar);

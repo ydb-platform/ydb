@@ -4,7 +4,7 @@
 #include <ydb/core/mon/mon.h>
 
 #include <library/cpp/actors/testlib/test_runtime.h>
-#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/unittest/tests_data.h> 
 
 namespace NKikimr {
     struct TAppData;
@@ -20,10 +20,10 @@ namespace NActors {
     using TKeyConfigGenerator = std::function<NKikimrProto::TKeyConfig (ui32)>;
 
 
-    class TTestActorRuntime
-        : private TPortManager
-        , public TTestActorRuntimeBase
-    {
+    class TTestActorRuntime 
+        : private TPortManager 
+        , public TTestActorRuntimeBase 
+    { 
     private:
         struct TNodeData: public TNodeDataBase {
             void Stop();
@@ -54,8 +54,8 @@ namespace NActors {
 
         virtual void Initialize(TEgg);
 
-        ui16 GetMonPort(ui32 nodeIndex = 0) const;
-
+        ui16 GetMonPort(ui32 nodeIndex = 0) const; 
+ 
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,
             const NKikimr::NTabletPipe::TClientConfig& pipeConfig = NKikimr::NTabletPipe::TClientConfig(), TActorId clientId = TActorId(), ui64 cookie = 0);
         void SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
@@ -63,10 +63,10 @@ namespace NActors {
         TActorId ConnectToPipe(ui64 tabletId, const TActorId& sender, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig);
         NKikimr::TAppData& GetAppData(ui32 nodeIndex = 0);
 
-        TPortManager& GetPortManager() {
-            return *this;
-        }
-
+        TPortManager& GetPortManager() { 
+            return *this; 
+        } 
+ 
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
     private:
         void Initialize() override;
@@ -86,6 +86,6 @@ namespace NActors {
         THolder<NKikimr::TAppData> App0;
         TKeyConfigGenerator KeyConfigGenerator;
         THolder<IDestructable> Opaque;
-        TVector<ui16> MonPorts;
+        TVector<ui16> MonPorts; 
     };
 } // namespace NActors

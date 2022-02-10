@@ -27,7 +27,7 @@ SRCS(
     ydb_clickhouse_internal.proto
     ydb_cms.proto
     ydb_common.proto
-    ydb_coordination.proto
+    ydb_coordination.proto 
     ydb_discovery.proto
     ydb_experimental.proto
     ydb_export.proto

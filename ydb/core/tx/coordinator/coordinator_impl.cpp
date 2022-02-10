@@ -11,8 +11,8 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-static constexpr TDuration MaxEmptyPlanDelay = TDuration::Seconds(1);
-
+static constexpr TDuration MaxEmptyPlanDelay = TDuration::Seconds(1); 
+ 
 static void SendTransactionStatus(const TActorId &proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus status,
         ui64 txid, ui64 stepId, const TActorContext &ctx, ui64 tabletId) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << tabletId << " txid# " << txid
@@ -28,9 +28,9 @@ static TAutoPtr<TTransactionProposal> MakeTransactionProposal(TEvTxProxy::TEvPro
     const ui64 txId = txrec.HasTxId() ? txrec.GetTxId() : 0;
     const ui64 minStep = txrec.HasMinStep() ? txrec.GetMinStep() : 0;
     const ui64 maxStep = txrec.HasMaxStep() ? txrec.GetMaxStep() : Max<ui64>();
-    const bool ignoreLowDiskSpace = txrec.GetIgnoreLowDiskSpace();
+    const bool ignoreLowDiskSpace = txrec.GetIgnoreLowDiskSpace(); 
 
-    TAutoPtr<TTransactionProposal> proposal(new TTransactionProposal(sender, txId, minStep, maxStep, ignoreLowDiskSpace));
+    TAutoPtr<TTransactionProposal> proposal(new TTransactionProposal(sender, txId, minStep, maxStep, ignoreLowDiskSpace)); 
     proposal->AffectedSet.resize(txrec.AffectedSetSize());
     for (ui32 i = 0, e = txrec.AffectedSetSize(); i != e; ++i) {
         const auto &x = txrec.GetAffectedSet(i);
@@ -86,12 +86,12 @@ void TTxCoordinator::PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TAct
                                      , proposal->TxId, 0, ctx, TabletID());
     }
 
-    if (Stopping) {
-        return SendTransactionStatus(proposal->Proxy,
-                TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
-                proposal->TxId, 0, ctx, TabletID());
-    }
-
+    if (Stopping) { 
+        return SendTransactionStatus(proposal->Proxy, 
+                TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting, 
+                proposal->TxId, 0, ctx, TabletID()); 
+    } 
+ 
     bool forRapidExecution = (proposal->MinStep <= VolatileState.LastPlanned);
     ui64 planStep = 0;
 
@@ -154,12 +154,12 @@ void TTxCoordinator::HandleEnqueue(TEvTxProxy::TEvProposeTransaction::TPtr &ev, 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " txid# " << proposal->TxId
         << " HANDLE Enqueue EvProposeTransaction");
 
-    if (Y_UNLIKELY(Stopping)) {
-        return SendTransactionStatus(proposal->Proxy,
-                TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
-                proposal->TxId, 0, ctx, TabletID());
-    }
-
+    if (Y_UNLIKELY(Stopping)) { 
+        return SendTransactionStatus(proposal->Proxy, 
+                TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting, 
+                proposal->TxId, 0, ctx, TabletID()); 
+    } 
+ 
     if (!VolatileState.Queue.Unsorted)
         VolatileState.Queue.Unsorted.Reset(new TQueueType::TQ());
 
@@ -208,24 +208,24 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
     VolatileState.LastPlanned = next;
     SchedulePlanTick(ctx);
 
-    // Check if we have an empty step
-    if (slots.empty()) {
-        auto monotonic = ctx.Monotonic();
-        if (VolatileState.LastEmptyPlanAt &&
-            VolatileState.LastAcquired < VolatileState.LastEmptyStep &&
-            Config.Coordinators.size() == 1 &&
-            (monotonic - VolatileState.LastEmptyPlanAt) < MaxEmptyPlanDelay)
-        {
-            // Avoid empty plan steps more than once a second for a lonely coordinator
-            return;
-        }
-        VolatileState.LastEmptyStep = next;
-        VolatileState.LastEmptyPlanAt = monotonic;
-    } else {
-        VolatileState.LastEmptyStep = 0;
-        VolatileState.LastEmptyPlanAt = { };
-    }
-
+    // Check if we have an empty step 
+    if (slots.empty()) { 
+        auto monotonic = ctx.Monotonic(); 
+        if (VolatileState.LastEmptyPlanAt && 
+            VolatileState.LastAcquired < VolatileState.LastEmptyStep && 
+            Config.Coordinators.size() == 1 && 
+            (monotonic - VolatileState.LastEmptyPlanAt) < MaxEmptyPlanDelay) 
+        { 
+            // Avoid empty plan steps more than once a second for a lonely coordinator 
+            return; 
+        } 
+        VolatileState.LastEmptyStep = next; 
+        VolatileState.LastEmptyPlanAt = monotonic; 
+    } else { 
+        VolatileState.LastEmptyStep = 0; 
+        VolatileState.LastEmptyPlanAt = { }; 
+    } 
+ 
     Execute(CreateTxPlanStep(next, slots, false), ctx);
 }
 
@@ -288,7 +288,7 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
         mediators.push_back(id);
     }
 
-    Execute(CreateTxConfigure(ackTo, record.GetVersion(), record.GetPlanResolution(), mediators, record), ctx);
+    Execute(CreateTxConfigure(ackTo, record.GetVersion(), record.GetPlanResolution(), mediators, record), ctx); 
 }
 
 void TTxCoordinator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
@@ -354,7 +354,7 @@ void TTxCoordinator::SendMediatorStep(TMediator &mediator, const TActorContext &
                 << ", txid# " << tx.TxId << " marker# C2");
         }
 
-        VolatileState.LastSentStep = Max(VolatileState.LastSentStep, extracted->Step);
+        VolatileState.LastSentStep = Max(VolatileState.LastSentStep, extracted->Step); 
         ctx.Send(mediator.QueueActor, new TEvTxCoordinator::TEvMediatorQueueStep(mediator.GenCookie, extracted));
     }
 }
@@ -375,63 +375,63 @@ bool TTxCoordinator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const
     return true;
 }
 
-void TTxCoordinator::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
-    const auto* msg = ev->Get();
-
-    LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR, "OnTabletStop: " << TabletID() << " reason = " << msg->GetReason());
-
-    switch (msg->GetReason()) {
-        case TEvTablet::TEvTabletStop::ReasonStop:
-        case TEvTablet::TEvTabletStop::ReasonDemoted:
-        case TEvTablet::TEvTabletStop::ReasonIsolated:
-            // Keep trying to stop gracefully
-            if (!Stopping) {
-                Stopping = true;
-                OnStopGuardStarting(ctx);
-                Execute(CreateTxStopGuard(), ctx);
-            }
-            return;
-
-        case TEvTablet::TEvTabletStop::ReasonUnknown:
-        case TEvTablet::TEvTabletStop::ReasonStorageBlocked:
-        case TEvTablet::TEvTabletStop::ReasonStorageFailure:
-            // New commits are impossible, stop immediately
-            break;
-    }
-
-    Stopping = true;
-    return TTabletExecutedFlat::OnTabletStop(ev, ctx);
+void TTxCoordinator::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) { 
+    const auto* msg = ev->Get(); 
+ 
+    LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR, "OnTabletStop: " << TabletID() << " reason = " << msg->GetReason()); 
+ 
+    switch (msg->GetReason()) { 
+        case TEvTablet::TEvTabletStop::ReasonStop: 
+        case TEvTablet::TEvTabletStop::ReasonDemoted: 
+        case TEvTablet::TEvTabletStop::ReasonIsolated: 
+            // Keep trying to stop gracefully 
+            if (!Stopping) { 
+                Stopping = true; 
+                OnStopGuardStarting(ctx); 
+                Execute(CreateTxStopGuard(), ctx); 
+            } 
+            return; 
+ 
+        case TEvTablet::TEvTabletStop::ReasonUnknown: 
+        case TEvTablet::TEvTabletStop::ReasonStorageBlocked: 
+        case TEvTablet::TEvTabletStop::ReasonStorageFailure: 
+            // New commits are impossible, stop immediately 
+            break; 
+    } 
+ 
+    Stopping = true; 
+    return TTabletExecutedFlat::OnTabletStop(ev, ctx); 
 }
 
-void TTxCoordinator::OnStopGuardStarting(const TActorContext &ctx) {
-    auto processQueue = [&](auto &queue) {
-        while (TAutoPtr<TTransactionProposal> proposal = queue.Pop()) {
-            SendTransactionStatus(proposal->Proxy,
-                    TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
-                    proposal->TxId, 0, ctx, TabletID());
-        }
-    };
-
-    if (VolatileState.Queue.Unsorted) {
-        processQueue(*VolatileState.Queue.Unsorted);
-        VolatileState.Queue.Unsorted.Destroy();
-    }
-
-    processQueue(*VolatileState.Queue.RapidSlot.Queue);
-
-    for (auto &kv : VolatileState.Queue.Low) {
-        processQueue(*kv.second.Queue);
-    }
-    VolatileState.Queue.Low.clear();
-}
-
-void TTxCoordinator::OnStopGuardComplete(const TActorContext &ctx) {
-    // We have cleanly completed the last commit
-    ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped());
-}
-
-}
-
+void TTxCoordinator::OnStopGuardStarting(const TActorContext &ctx) { 
+    auto processQueue = [&](auto &queue) { 
+        while (TAutoPtr<TTransactionProposal> proposal = queue.Pop()) { 
+            SendTransactionStatus(proposal->Proxy, 
+                    TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting, 
+                    proposal->TxId, 0, ctx, TabletID()); 
+        } 
+    }; 
+ 
+    if (VolatileState.Queue.Unsorted) { 
+        processQueue(*VolatileState.Queue.Unsorted); 
+        VolatileState.Queue.Unsorted.Destroy(); 
+    } 
+ 
+    processQueue(*VolatileState.Queue.RapidSlot.Queue); 
+ 
+    for (auto &kv : VolatileState.Queue.Low) { 
+        processQueue(*kv.second.Queue); 
+    } 
+    VolatileState.Queue.Low.clear(); 
+} 
+ 
+void TTxCoordinator::OnStopGuardComplete(const TActorContext &ctx) { 
+    // We have cleanly completed the last commit 
+    ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped()); 
+} 
+ 
+} 
+ 
 IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info) {
     return new NFlatTxCoordinator::TTxCoordinator(info, tablet);
 }

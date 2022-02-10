@@ -9,55 +9,55 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
     using namespace NKikimr;
 
-    Y_UNIT_TEST(EmptyOwnedCellVec) {
-        TOwnedCellVec empty;
-        UNIT_ASSERT_VALUES_EQUAL(empty.size(), 0u);
-        TOwnedCellVec copy(empty);
-        UNIT_ASSERT_VALUES_EQUAL(copy.size(), 0u);
-        copy = empty;
-        UNIT_ASSERT_VALUES_EQUAL(copy.size(), 0u);
-        TOwnedCellVec moved(std::move(empty));
-        UNIT_ASSERT_VALUES_EQUAL(moved.size(), 0u);
-        moved = std::move(copy);
-        UNIT_ASSERT_VALUES_EQUAL(moved.size(), 0u);
-    }
-
-    Y_UNIT_TEST(NonEmptyOwnedCellVec) {
-        ui64 intVal = 42;
-        char bigStrVal[] = "This is a large string value that shouldn't be inlined";
-
-        TVector<TCell> cells;
-        cells.emplace_back(TCell::Make(intVal));
-        cells.emplace_back(bigStrVal, sizeof(bigStrVal));
-
-        TOwnedCellVec initial = TOwnedCellVec::Make(cells);
-        UNIT_ASSERT_VALUES_EQUAL(initial.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(initial[0].AsValue<ui64>(), intVal);
-        UNIT_ASSERT_VALUES_EQUAL(initial[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal)));
-
-        TOwnedCellVec copied(initial);
-        UNIT_ASSERT_VALUES_EQUAL(copied.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(copied[0].AsValue<ui64>(), intVal);
-        UNIT_ASSERT_VALUES_EQUAL(copied[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal)));
-
-        TOwnedCellVec moved(std::move(initial));
-        UNIT_ASSERT_VALUES_EQUAL(initial.size(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(moved.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(moved[0].AsValue<ui64>(), intVal);
-        UNIT_ASSERT_VALUES_EQUAL(moved[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal)));
-
-        initial = copied;
-        UNIT_ASSERT_VALUES_EQUAL(initial.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(initial[0].AsValue<ui64>(), intVal);
-        UNIT_ASSERT_VALUES_EQUAL(initial[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal)));
-
-        moved = std::move(initial);
-        UNIT_ASSERT_VALUES_EQUAL(initial.size(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(moved.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(moved[0].AsValue<ui64>(), intVal);
-        UNIT_ASSERT_VALUES_EQUAL(moved[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal)));
-    }
-
+    Y_UNIT_TEST(EmptyOwnedCellVec) { 
+        TOwnedCellVec empty; 
+        UNIT_ASSERT_VALUES_EQUAL(empty.size(), 0u); 
+        TOwnedCellVec copy(empty); 
+        UNIT_ASSERT_VALUES_EQUAL(copy.size(), 0u); 
+        copy = empty; 
+        UNIT_ASSERT_VALUES_EQUAL(copy.size(), 0u); 
+        TOwnedCellVec moved(std::move(empty)); 
+        UNIT_ASSERT_VALUES_EQUAL(moved.size(), 0u); 
+        moved = std::move(copy); 
+        UNIT_ASSERT_VALUES_EQUAL(moved.size(), 0u); 
+    } 
+ 
+    Y_UNIT_TEST(NonEmptyOwnedCellVec) { 
+        ui64 intVal = 42; 
+        char bigStrVal[] = "This is a large string value that shouldn't be inlined"; 
+ 
+        TVector<TCell> cells; 
+        cells.emplace_back(TCell::Make(intVal)); 
+        cells.emplace_back(bigStrVal, sizeof(bigStrVal)); 
+ 
+        TOwnedCellVec initial = TOwnedCellVec::Make(cells); 
+        UNIT_ASSERT_VALUES_EQUAL(initial.size(), 2u); 
+        UNIT_ASSERT_VALUES_EQUAL(initial[0].AsValue<ui64>(), intVal); 
+        UNIT_ASSERT_VALUES_EQUAL(initial[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal))); 
+ 
+        TOwnedCellVec copied(initial); 
+        UNIT_ASSERT_VALUES_EQUAL(copied.size(), 2u); 
+        UNIT_ASSERT_VALUES_EQUAL(copied[0].AsValue<ui64>(), intVal); 
+        UNIT_ASSERT_VALUES_EQUAL(copied[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal))); 
+ 
+        TOwnedCellVec moved(std::move(initial)); 
+        UNIT_ASSERT_VALUES_EQUAL(initial.size(), 0u); 
+        UNIT_ASSERT_VALUES_EQUAL(moved.size(), 2u); 
+        UNIT_ASSERT_VALUES_EQUAL(moved[0].AsValue<ui64>(), intVal); 
+        UNIT_ASSERT_VALUES_EQUAL(moved[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal))); 
+ 
+        initial = copied; 
+        UNIT_ASSERT_VALUES_EQUAL(initial.size(), 2u); 
+        UNIT_ASSERT_VALUES_EQUAL(initial[0].AsValue<ui64>(), intVal); 
+        UNIT_ASSERT_VALUES_EQUAL(initial[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal))); 
+ 
+        moved = std::move(initial); 
+        UNIT_ASSERT_VALUES_EQUAL(initial.size(), 0u); 
+        UNIT_ASSERT_VALUES_EQUAL(moved.size(), 2u); 
+        UNIT_ASSERT_VALUES_EQUAL(moved[0].AsValue<ui64>(), intVal); 
+        UNIT_ASSERT_VALUES_EQUAL(moved[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal))); 
+    } 
+ 
     Y_UNIT_TEST(TSerializedCellVec) {
         ui64 intVal = 42;
         char smallStrVal[] = "str1";
@@ -207,80 +207,80 @@ Y_UNIT_TEST_SUITE(Scheme) {
         }
     }
 
-    /**
-     * CompareOrder test for cell1 < cell2 < cell3 given a type id
-     */
-    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeId type) {
-        TCell nullCell;
-
-        NScheme::TTypeIdOrder typeDescending(type, NScheme::EOrder::Descending);
-
-        // NULL is always equal to itself, both ascending and descending
-        UNIT_ASSERT_EQUAL(CompareTypedCells(nullCell, nullCell, type), 0);
-        UNIT_ASSERT_EQUAL(CompareTypedCells(nullCell, nullCell, typeDescending), 0);
-
-        // NULL is always the first value, both ascending and descending
-        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell1, type), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell2, type), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell3, type), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell1, typeDescending), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell2, typeDescending), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell3, typeDescending), 0);
-
-        // Values should be equal to themselves, both ascending and descending
-        UNIT_ASSERT_EQUAL(CompareTypedCells(cell1, cell1, type), 0);
-        UNIT_ASSERT_EQUAL(CompareTypedCells(cell2, cell2, type), 0);
-        UNIT_ASSERT_EQUAL(CompareTypedCells(cell3, cell3, type), 0);
-        UNIT_ASSERT_EQUAL(CompareTypedCells(cell1, cell1, typeDescending), 0);
-        UNIT_ASSERT_EQUAL(CompareTypedCells(cell2, cell2, typeDescending), 0);
-        UNIT_ASSERT_EQUAL(CompareTypedCells(cell3, cell3, typeDescending), 0);
-
-        // Check all ascending permutations
-        UNIT_ASSERT_LT(CompareTypedCells(cell1, cell2, type), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(cell1, cell3, type), 0);
-        UNIT_ASSERT_GT(CompareTypedCells(cell2, cell1, type), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(cell2, cell3, type), 0);
-        UNIT_ASSERT_GT(CompareTypedCells(cell3, cell1, type), 0);
-        UNIT_ASSERT_GT(CompareTypedCells(cell3, cell2, type), 0);
-
-        // Check all descending permutations
-        UNIT_ASSERT_GT(CompareTypedCells(cell1, cell2, typeDescending), 0);
-        UNIT_ASSERT_GT(CompareTypedCells(cell1, cell3, typeDescending), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(cell2, cell1, typeDescending), 0);
-        UNIT_ASSERT_GT(CompareTypedCells(cell2, cell3, typeDescending), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(cell3, cell1, typeDescending), 0);
-        UNIT_ASSERT_LT(CompareTypedCells(cell3, cell2, typeDescending), 0);
-    }
-
-    Y_UNIT_TEST(CompareOrder) {
-        ui64 intVal42 = 42;
-        ui64 intVal51 = 51;
-        ui64 intVal99 = 99;
-        DoTestCompareOrder(
-            TCell((const char*)&intVal42, sizeof(intVal42)),
-            TCell((const char*)&intVal51, sizeof(intVal51)),
-            TCell((const char*)&intVal99, sizeof(intVal99)),
-            NScheme::NTypeIds::Uint64);
-
-        char strVal1[] = "This is the first value";
-        char strVal2[] = "This is the first value2";
-        char strVal3[] = "This is the last value";
-        DoTestCompareOrder(
-            TCell((const char*)&strVal1, sizeof(strVal1) - 1),
-            TCell((const char*)&strVal2, sizeof(strVal2) - 1),
-            TCell((const char*)&strVal3, sizeof(strVal3) - 1),
-            NScheme::NTypeIds::String);
-
-        std::pair<ui64, i64> decVal1{ 41, 41 };
-        std::pair<ui64, i64> decVal2{ 51, 41 };
-        std::pair<ui64, i64> decVal3{ 41, 51 };
-        DoTestCompareOrder(
-            TCell((const char*)&decVal1, sizeof(decVal1)),
-            TCell((const char*)&decVal2, sizeof(decVal2)),
-            TCell((const char*)&decVal3, sizeof(decVal3)),
-            NScheme::NTypeIds::Decimal);
-    }
-
+    /** 
+     * CompareOrder test for cell1 < cell2 < cell3 given a type id 
+     */ 
+    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeId type) { 
+        TCell nullCell; 
+ 
+        NScheme::TTypeIdOrder typeDescending(type, NScheme::EOrder::Descending); 
+ 
+        // NULL is always equal to itself, both ascending and descending 
+        UNIT_ASSERT_EQUAL(CompareTypedCells(nullCell, nullCell, type), 0); 
+        UNIT_ASSERT_EQUAL(CompareTypedCells(nullCell, nullCell, typeDescending), 0); 
+ 
+        // NULL is always the first value, both ascending and descending 
+        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell1, type), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell2, type), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell3, type), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell1, typeDescending), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell2, typeDescending), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(nullCell, cell3, typeDescending), 0); 
+ 
+        // Values should be equal to themselves, both ascending and descending 
+        UNIT_ASSERT_EQUAL(CompareTypedCells(cell1, cell1, type), 0); 
+        UNIT_ASSERT_EQUAL(CompareTypedCells(cell2, cell2, type), 0); 
+        UNIT_ASSERT_EQUAL(CompareTypedCells(cell3, cell3, type), 0); 
+        UNIT_ASSERT_EQUAL(CompareTypedCells(cell1, cell1, typeDescending), 0); 
+        UNIT_ASSERT_EQUAL(CompareTypedCells(cell2, cell2, typeDescending), 0); 
+        UNIT_ASSERT_EQUAL(CompareTypedCells(cell3, cell3, typeDescending), 0); 
+ 
+        // Check all ascending permutations 
+        UNIT_ASSERT_LT(CompareTypedCells(cell1, cell2, type), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(cell1, cell3, type), 0); 
+        UNIT_ASSERT_GT(CompareTypedCells(cell2, cell1, type), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(cell2, cell3, type), 0); 
+        UNIT_ASSERT_GT(CompareTypedCells(cell3, cell1, type), 0); 
+        UNIT_ASSERT_GT(CompareTypedCells(cell3, cell2, type), 0); 
+ 
+        // Check all descending permutations 
+        UNIT_ASSERT_GT(CompareTypedCells(cell1, cell2, typeDescending), 0); 
+        UNIT_ASSERT_GT(CompareTypedCells(cell1, cell3, typeDescending), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(cell2, cell1, typeDescending), 0); 
+        UNIT_ASSERT_GT(CompareTypedCells(cell2, cell3, typeDescending), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(cell3, cell1, typeDescending), 0); 
+        UNIT_ASSERT_LT(CompareTypedCells(cell3, cell2, typeDescending), 0); 
+    } 
+ 
+    Y_UNIT_TEST(CompareOrder) { 
+        ui64 intVal42 = 42; 
+        ui64 intVal51 = 51; 
+        ui64 intVal99 = 99; 
+        DoTestCompareOrder( 
+            TCell((const char*)&intVal42, sizeof(intVal42)), 
+            TCell((const char*)&intVal51, sizeof(intVal51)), 
+            TCell((const char*)&intVal99, sizeof(intVal99)), 
+            NScheme::NTypeIds::Uint64); 
+ 
+        char strVal1[] = "This is the first value"; 
+        char strVal2[] = "This is the first value2"; 
+        char strVal3[] = "This is the last value"; 
+        DoTestCompareOrder( 
+            TCell((const char*)&strVal1, sizeof(strVal1) - 1), 
+            TCell((const char*)&strVal2, sizeof(strVal2) - 1), 
+            TCell((const char*)&strVal3, sizeof(strVal3) - 1), 
+            NScheme::NTypeIds::String); 
+ 
+        std::pair<ui64, i64> decVal1{ 41, 41 }; 
+        std::pair<ui64, i64> decVal2{ 51, 41 }; 
+        std::pair<ui64, i64> decVal3{ 41, 51 }; 
+        DoTestCompareOrder( 
+            TCell((const char*)&decVal1, sizeof(decVal1)), 
+            TCell((const char*)&decVal2, sizeof(decVal2)), 
+            TCell((const char*)&decVal3, sizeof(decVal3)), 
+            NScheme::NTypeIds::Decimal); 
+    } 
+ 
     Y_UNIT_TEST(YqlTypesMustBeDefined) {
         const char charArr[64] = { 0 };
 

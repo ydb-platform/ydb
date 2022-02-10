@@ -19,9 +19,9 @@
 #endif
 
 #define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
+#define BLOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream) 
 #define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
+#define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream) 
 #define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
 
@@ -106,8 +106,8 @@ public:
 
     TSubscriber::TPtr FindSubscriber(TActorId aid);
 
-    void SendNotificationResponse(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
-
+    void SendNotificationResponse(TEvConsole::TEvConfigNotificationRequest::TPtr &ev); 
+ 
     void MaybeSendNotificationResponse(TSubscription::TPtr subscription);
 
     void CreateSubscriberActor(ui32 kind, bool replace);
@@ -231,9 +231,9 @@ private:
     THashMap<TDynBitMap, TSubscription::TPtr> SubscriptionsByKinds;
     THashMap<TActorId, TSubscriber::TPtr> Subscribers;
 
-    // Messages that had an unknown subscription id at the time they are received
-    THashMap<ui64, TEvConsole::TEvConfigNotificationRequest::TPtr> OutOfOrderConfigNotifications;
-
+    // Messages that had an unknown subscription id at the time they are received 
+    THashMap<ui64, TEvConsole::TEvConfigNotificationRequest::TPtr> OutOfOrderConfigNotifications; 
+ 
     // Cookies are used to tie CMS requests to kinds they were generated for.
     THashMap<ui64, TDynBitMap> RequestCookies;
     ui64 NextRequestCookie;
@@ -357,16 +357,16 @@ TConfigsDispatcher::TSubscriber::TPtr TConfigsDispatcher::FindSubscriber(TActorI
     return it->second;
 }
 
-void TConfigsDispatcher::SendNotificationResponse(TEvConsole::TEvConfigNotificationRequest::TPtr &ev)
-{
-    const auto &rec = ev->Get()->Record;
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
-
-    BLOG_TRACE("Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
-
-    Send(ev->Sender, resp.Release(), 0, ev->Cookie);
-}
-
+void TConfigsDispatcher::SendNotificationResponse(TEvConsole::TEvConfigNotificationRequest::TPtr &ev) 
+{ 
+    const auto &rec = ev->Get()->Record; 
+    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec); 
+ 
+    BLOG_TRACE("Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString()); 
+ 
+    Send(ev->Sender, resp.Release(), 0, ev->Cookie); 
+} 
+ 
 void TConfigsDispatcher::MaybeSendNotificationResponse(TSubscription::TPtr subscription)
 {
     if (!subscription->UpdateInProcess || !subscription->SubscribersToUpdate.empty())
@@ -382,7 +382,7 @@ void TConfigsDispatcher::MaybeSendNotificationResponse(TSubscription::TPtr subsc
                 << " subscriptionid=" << subscription->SubscriptionId
                 << " configid=" << TConfigId(rec.GetConfigId()).ToString());
 
-    SendNotificationResponse(subscription->UpdateInProcess);
+    SendNotificationResponse(subscription->UpdateInProcess); 
 
     subscription->UpdateInProcess = nullptr;
 }
@@ -524,7 +524,7 @@ void TConfigsDispatcher::AddSubscription(TActorId subscriber,
 
 void TConfigsDispatcher::CleanUpSubscriptions()
 {
-    BLOG_N("Cleaning up all current subscriptions");
+    BLOG_N("Cleaning up all current subscriptions"); 
 
     // If there are active subscriptions then we should
     // mark them as removed by reseting their IDs
@@ -537,7 +537,7 @@ void TConfigsDispatcher::CleanUpSubscriptions()
     }
     SubscriptionsById.clear();
     RequestCookies.clear();
-    OutOfOrderConfigNotifications.clear();
+    OutOfOrderConfigNotifications.clear(); 
 
     // We should invalidate configs cache to avoid its usage until
     // updated configs are received.
@@ -557,7 +557,7 @@ void TConfigsDispatcher::CleanUpSubscriptions()
 
 void TConfigsDispatcher::ProcessAddedSubscription(TSubscription::TPtr subscription, ui64 id)
 {
-    BLOG_N("Confirmed CMS subscription"
+    BLOG_N("Confirmed CMS subscription" 
                 << " kinds=" << KindsToString(subscription->Kinds)
                 << " id=" << id);
 
@@ -571,20 +571,20 @@ void TConfigsDispatcher::ProcessAddedSubscription(TSubscription::TPtr subscripti
         Send(subscriber, new TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
     }
 
-    auto it = OutOfOrderConfigNotifications.find(id);
-    if (it != OutOfOrderConfigNotifications.end()) {
-        auto ev = std::move(it->second);
-        OutOfOrderConfigNotifications.erase(it);
-        Handle(ev);
-    }
-
-    while (!(SubscriptionsById.size() < Subscriptions.size()) && !OutOfOrderConfigNotifications.empty()) {
-        auto it = OutOfOrderConfigNotifications.begin();
-        auto ev = std::move(it->second);
-        OutOfOrderConfigNotifications.erase(it);
-        SendNotificationResponse(ev);
-    }
-
+    auto it = OutOfOrderConfigNotifications.find(id); 
+    if (it != OutOfOrderConfigNotifications.end()) { 
+        auto ev = std::move(it->second); 
+        OutOfOrderConfigNotifications.erase(it); 
+        Handle(ev); 
+    } 
+ 
+    while (!(SubscriptionsById.size() < Subscriptions.size()) && !OutOfOrderConfigNotifications.empty()) { 
+        auto it = OutOfOrderConfigNotifications.begin(); 
+        auto ev = std::move(it->second); 
+        OutOfOrderConfigNotifications.erase(it); 
+        SendNotificationResponse(ev); 
+    } 
+ 
     // Probably there are no more subscribers for this subscription.
     // In that case it should be removed.
     if (subscription->Subscribers.empty())
@@ -825,20 +825,20 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     auto &rec = ev->Get()->Record;
     auto subscription = FindSubscription(rec.GetSubscriptionId());
     if (!subscription) {
-        BLOG_W("Got notification for unknown subscription id=" << rec.GetSubscriptionId());
+        BLOG_W("Got notification for unknown subscription id=" << rec.GetSubscriptionId()); 
 
-        if (SubscriptionsById.size() < Subscriptions.size()) {
-            // There are subscriptions that don't have an id yet
-            // Delay processing until we know ids of all subscriptions
-            auto &prev = OutOfOrderConfigNotifications[rec.GetSubscriptionId()];
-            if (prev) {
-                SendNotificationResponse(prev);
-            }
-            prev = ev;
-            return;
-        }
+        if (SubscriptionsById.size() < Subscriptions.size()) { 
+            // There are subscriptions that don't have an id yet 
+            // Delay processing until we know ids of all subscriptions 
+            auto &prev = OutOfOrderConfigNotifications[rec.GetSubscriptionId()]; 
+            if (prev) { 
+                SendNotificationResponse(prev); 
+            } 
+            prev = ev; 
+            return; 
+        } 
 
-        SendNotificationResponse(ev);
+        SendNotificationResponse(ev); 
         return;
     }
 
@@ -929,7 +929,7 @@ void TConfigsDispatcher::Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev)
     if (CurrentTenants != tenants || Subscriptions.empty()) {
         CurrentTenants = tenants;
 
-        BLOG_N("Update list of assigned tenants: " << JoinSeq(", ", CurrentTenants));
+        BLOG_N("Update list of assigned tenants: " << JoinSeq(", ", CurrentTenants)); 
 
         CleanUpSubscriptions();
     }

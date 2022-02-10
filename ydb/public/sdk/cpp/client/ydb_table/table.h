@@ -15,8 +15,8 @@
 namespace Ydb {
 namespace Table {
 
-class StorageSettings;
-class ColumnFamily;
+class StorageSettings; 
+class ColumnFamily; 
 class CreateTableRequest;
 class DescribeTableResult;
 class PartitioningSettings;
@@ -83,53 +83,53 @@ private:
     TMaybe<TKeyBound> To_;
 };
 
-struct TTableColumn {
-    TString Name;
-    TType Type;
-    TString Family;
-
-    TTableColumn() = default;
-
-    TTableColumn(TString name, TType type, TString family = TString())
-        : Name(std::move(name))
-        , Type(std::move(type))
-        , Family(std::move(family))
-    { }
-
-    // Conversion from TColumn for API compatibility
-    TTableColumn(const TColumn& column)
-        : Name(column.Name)
-        , Type(column.Type)
-    { }
-
-    // Conversion from TColumn for API compatibility
-    TTableColumn(TColumn&& column)
-        : Name(std::move(column.Name))
-        , Type(std::move(column.Type))
-    { }
-
-    // Conversion to TColumn for API compatibility
-    operator TColumn() const {
-        return TColumn(Name, Type);
-    }
-};
-
-struct TAlterTableColumn {
-    TString Name;
-    TString Family;
-
-    TAlterTableColumn() = default;
-
-    explicit TAlterTableColumn(TString name)
-        : Name(std::move(name))
-    { }
-
-    TAlterTableColumn(TString name, TString family)
-        : Name(std::move(name))
-        , Family(std::move(family))
-    { }
-};
-
+struct TTableColumn { 
+    TString Name; 
+    TType Type; 
+    TString Family; 
+ 
+    TTableColumn() = default; 
+ 
+    TTableColumn(TString name, TType type, TString family = TString()) 
+        : Name(std::move(name)) 
+        , Type(std::move(type)) 
+        , Family(std::move(family)) 
+    { } 
+ 
+    // Conversion from TColumn for API compatibility 
+    TTableColumn(const TColumn& column) 
+        : Name(column.Name) 
+        , Type(column.Type) 
+    { } 
+ 
+    // Conversion from TColumn for API compatibility 
+    TTableColumn(TColumn&& column) 
+        : Name(std::move(column.Name)) 
+        , Type(std::move(column.Type)) 
+    { } 
+ 
+    // Conversion to TColumn for API compatibility 
+    operator TColumn() const { 
+        return TColumn(Name, Type); 
+    } 
+}; 
+ 
+struct TAlterTableColumn { 
+    TString Name; 
+    TString Family; 
+ 
+    TAlterTableColumn() = default; 
+ 
+    explicit TAlterTableColumn(TString name) 
+        : Name(std::move(name)) 
+    { } 
+ 
+    TAlterTableColumn(TString name, TString family) 
+        : Name(std::move(name)) 
+        , Family(std::move(family)) 
+    { } 
+}; 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents index description
@@ -307,41 +307,41 @@ private:
     > Action_;
 };
 
-//! Represents table storage settings
-class TStorageSettings {
-public:
-    TStorageSettings();
-    explicit TStorageSettings(const Ydb::Table::StorageSettings& proto);
-
-    const Ydb::Table::StorageSettings& GetProto() const;
-
-    TMaybe<TString> GetTabletCommitLog0() const;
-    TMaybe<TString> GetTabletCommitLog1() const;
-    TMaybe<TString> GetExternal() const;
-    TMaybe<bool> GetStoreExternalBlobs() const;
-
-private:
-    class TImpl;
-    std::shared_ptr<TImpl> Impl_;
-};
-
-//! Represents column family description
-class TColumnFamilyDescription {
-public:
-    explicit TColumnFamilyDescription(const Ydb::Table::ColumnFamily& desc);
-
-    const Ydb::Table::ColumnFamily& GetProto() const;
-
-    const TString& GetName() const;
-    TMaybe<TString> GetData() const;
-    TMaybe<EColumnFamilyCompression> GetCompression() const;
-    TMaybe<bool> GetKeepInMemory() const;
-
-private:
-    class TImpl;
-    std::shared_ptr<TImpl> Impl_;
-};
-
+//! Represents table storage settings 
+class TStorageSettings { 
+public: 
+    TStorageSettings(); 
+    explicit TStorageSettings(const Ydb::Table::StorageSettings& proto); 
+ 
+    const Ydb::Table::StorageSettings& GetProto() const; 
+ 
+    TMaybe<TString> GetTabletCommitLog0() const; 
+    TMaybe<TString> GetTabletCommitLog1() const; 
+    TMaybe<TString> GetExternal() const; 
+    TMaybe<bool> GetStoreExternalBlobs() const; 
+ 
+private: 
+    class TImpl; 
+    std::shared_ptr<TImpl> Impl_; 
+}; 
+ 
+//! Represents column family description 
+class TColumnFamilyDescription { 
+public: 
+    explicit TColumnFamilyDescription(const Ydb::Table::ColumnFamily& desc); 
+ 
+    const Ydb::Table::ColumnFamily& GetProto() const; 
+ 
+    const TString& GetName() const; 
+    TMaybe<TString> GetData() const; 
+    TMaybe<EColumnFamilyCompression> GetCompression() const; 
+    TMaybe<bool> GetKeepInMemory() const; 
+ 
+private: 
+    class TImpl; 
+    std::shared_ptr<TImpl> Impl_; 
+}; 
+ 
 //! Represents table partitioning settings
 class TPartitioningSettings {
 public:
@@ -393,9 +393,9 @@ public:
     TTableDescription(Ydb::Table::DescribeTableResult&& desc, const TDescribeTableSettings& describeSettings);
 
     const TVector<TString>& GetPrimaryKeyColumns() const;
-    // DEPRECATED: use GetTableColumns()
+    // DEPRECATED: use GetTableColumns() 
     TVector<TColumn> GetColumns() const;
-    TVector<TTableColumn> GetTableColumns() const;
+    TVector<TTableColumn> GetTableColumns() const; 
     TVector<TIndexDescription> GetIndexDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
 
@@ -422,12 +422,12 @@ public:
     // flag WithTableStatistics and WithPartitionStatistics must be set
     const TVector<TPartitionStats>& GetPartitionStats() const;
 
-    // Returns storage settings of the table
-    const TStorageSettings& GetStorageSettings() const;
-
-    // Returns column families of the table
-    const TVector<TColumnFamilyDescription>& GetColumnFamilies() const;
-
+    // Returns storage settings of the table 
+    const TStorageSettings& GetStorageSettings() const; 
+ 
+    // Returns column families of the table 
+    const TVector<TColumnFamilyDescription>& GetColumnFamilies() const; 
+ 
     // Attributes
     const THashMap<TString, TString>& GetAttributes() const;
 
@@ -447,7 +447,7 @@ private:
     TTableDescription();
     explicit TTableDescription(const Ydb::Table::CreateTableRequest& request);
 
-    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family);
+    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family); 
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
 
     // common
@@ -466,8 +466,8 @@ private:
     void SetTtlSettings(TTtlSettings&& settings);
     void SetTtlSettings(const TTtlSettings& settings);
 
-    void SetStorageSettings(const TStorageSettings& settings);
-    void AddColumnFamily(const TColumnFamilyDescription& desc);
+    void SetStorageSettings(const TStorageSettings& settings); 
+    void AddColumnFamily(const TColumnFamilyDescription& desc); 
     void AddAttribute(const TString& key, const TString& value);
     void SetAttributes(const THashMap<TString, TString>& attrs);
     void SetAttributes(THashMap<TString, TString>&& attrs);
@@ -485,25 +485,25 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TStorageSettingsBuilder {
-public:
-    TStorageSettingsBuilder();
-    ~TStorageSettingsBuilder();
-
-    TStorageSettingsBuilder& SetTabletCommitLog0(const TString& media);
-    TStorageSettingsBuilder& SetTabletCommitLog1(const TString& media);
-    TStorageSettingsBuilder& SetExternal(const TString& media);
-    TStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled);
-
-    TStorageSettings Build() const;
-
-private:
-    class TImpl;
-    std::unique_ptr<TImpl> Impl_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
+class TStorageSettingsBuilder { 
+public: 
+    TStorageSettingsBuilder(); 
+    ~TStorageSettingsBuilder(); 
+ 
+    TStorageSettingsBuilder& SetTabletCommitLog0(const TString& media); 
+    TStorageSettingsBuilder& SetTabletCommitLog1(const TString& media); 
+    TStorageSettingsBuilder& SetExternal(const TString& media); 
+    TStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled); 
+ 
+    TStorageSettings Build() const; 
+ 
+private: 
+    class TImpl; 
+    std::unique_ptr<TImpl> Impl_; 
+}; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 class TPartitioningSettingsBuilder {
 public:
     TPartitioningSettingsBuilder();
@@ -524,82 +524,82 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TColumnFamilyBuilder {
-public:
-    explicit TColumnFamilyBuilder(const TString& name);
-    ~TColumnFamilyBuilder();
-
-    TColumnFamilyBuilder& SetData(const TString& media);
-    TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
-
-    TColumnFamilyDescription Build() const;
-
-private:
-    class TImpl;
-    std::unique_ptr<TImpl> Impl_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TTableBuilder;
-
-class TTableStorageSettingsBuilder {
-public:
-    explicit TTableStorageSettingsBuilder(TTableBuilder& parent)
-        : Parent_(parent)
-    { }
-
-    TTableStorageSettingsBuilder& SetTabletCommitLog0(const TString& media) {
-        Builder_.SetTabletCommitLog0(media);
-        return *this;
-    }
-
-    TTableStorageSettingsBuilder& SetTabletCommitLog1(const TString& media) {
-        Builder_.SetTabletCommitLog1(media);
-        return *this;
-    }
-
-    TTableStorageSettingsBuilder& SetExternal(const TString& media) {
-        Builder_.SetExternal(media);
-        return *this;
-    }
-
-    TTableStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled) {
-        Builder_.SetStoreExternalBlobs(enabled);
-        return *this;
-    }
-
-    TTableBuilder& EndStorageSettings();
-
-private:
-    TTableBuilder& Parent_;
-    TStorageSettingsBuilder Builder_;
-};
-
-class TTableColumnFamilyBuilder {
-public:
-    TTableColumnFamilyBuilder(TTableBuilder& parent, const TString& name)
-        : Parent_(parent)
-        , Builder_(name)
-    { }
-
-    TTableColumnFamilyBuilder& SetData(const TString& media) {
-        Builder_.SetData(media);
-        return *this;
-    }
-
-    TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
-        Builder_.SetCompression(compression);
-        return *this;
-    }
-
-    TTableBuilder& EndColumnFamily();
-
-private:
-    TTableBuilder& Parent_;
-    TColumnFamilyBuilder Builder_;
-};
-
+class TColumnFamilyBuilder { 
+public: 
+    explicit TColumnFamilyBuilder(const TString& name); 
+    ~TColumnFamilyBuilder(); 
+ 
+    TColumnFamilyBuilder& SetData(const TString& media); 
+    TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression); 
+ 
+    TColumnFamilyDescription Build() const; 
+ 
+private: 
+    class TImpl; 
+    std::unique_ptr<TImpl> Impl_; 
+}; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+class TTableBuilder; 
+ 
+class TTableStorageSettingsBuilder { 
+public: 
+    explicit TTableStorageSettingsBuilder(TTableBuilder& parent) 
+        : Parent_(parent) 
+    { } 
+ 
+    TTableStorageSettingsBuilder& SetTabletCommitLog0(const TString& media) { 
+        Builder_.SetTabletCommitLog0(media); 
+        return *this; 
+    } 
+ 
+    TTableStorageSettingsBuilder& SetTabletCommitLog1(const TString& media) { 
+        Builder_.SetTabletCommitLog1(media); 
+        return *this; 
+    } 
+ 
+    TTableStorageSettingsBuilder& SetExternal(const TString& media) { 
+        Builder_.SetExternal(media); 
+        return *this; 
+    } 
+ 
+    TTableStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled) { 
+        Builder_.SetStoreExternalBlobs(enabled); 
+        return *this; 
+    } 
+ 
+    TTableBuilder& EndStorageSettings(); 
+ 
+private: 
+    TTableBuilder& Parent_; 
+    TStorageSettingsBuilder Builder_; 
+}; 
+ 
+class TTableColumnFamilyBuilder { 
+public: 
+    TTableColumnFamilyBuilder(TTableBuilder& parent, const TString& name) 
+        : Parent_(parent) 
+        , Builder_(name) 
+    { } 
+ 
+    TTableColumnFamilyBuilder& SetData(const TString& media) { 
+        Builder_.SetData(media); 
+        return *this; 
+    } 
+ 
+    TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) { 
+        Builder_.SetCompression(compression); 
+        return *this; 
+    } 
+ 
+    TTableBuilder& EndColumnFamily(); 
+ 
+private: 
+    TTableBuilder& Parent_; 
+    TColumnFamilyBuilder Builder_; 
+}; 
+ 
 class TTablePartitioningSettingsBuilder {
 public:
     explicit TTablePartitioningSettingsBuilder(TTableBuilder& parent)
@@ -638,16 +638,16 @@ private:
     TPartitioningSettingsBuilder Builder_;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 class TTableBuilder {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
 public:
     TTableBuilder() = default;
 
-    TTableBuilder& AddNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family = TString());
-    TTableBuilder& AddNullableColumn(const TString& name, const TDecimalType& type, const TString& family = TString());
+    TTableBuilder& AddNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family = TString()); 
+    TTableBuilder& AddNullableColumn(const TString& name, const TDecimalType& type, const TString& family = TString()); 
     TTableBuilder& AddNonNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family = TString());
     TTableBuilder& AddNonNullableColumn(const TString& name, const TDecimalType& type, const TString& family = TString());
     TTableBuilder& SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
@@ -678,10 +678,10 @@ public:
     TTableBuilder& SetTtlSettings(const TString& columnName, const TDuration& expireAfter = TDuration::Zero());
     TTableBuilder& SetTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter = TDuration::Zero());
 
-    TTableBuilder& SetStorageSettings(const TStorageSettings& settings);
-
-    TTableBuilder& AddColumnFamily(const TColumnFamilyDescription& desc);
-
+    TTableBuilder& SetStorageSettings(const TStorageSettings& settings); 
+ 
+    TTableBuilder& AddColumnFamily(const TColumnFamilyDescription& desc); 
+ 
     TTableBuilder& AddAttribute(const TString& key, const TString& value);
     TTableBuilder& SetAttributes(const THashMap<TString, TString>& attrs);
     TTableBuilder& SetAttributes(THashMap<TString, TString>&& attrs);
@@ -698,14 +698,14 @@ public:
 
     TTableBuilder& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount);
 
-    TTableStorageSettingsBuilder BeginStorageSettings() {
-        return TTableStorageSettingsBuilder(*this);
-    }
-
-    TTableColumnFamilyBuilder BeginColumnFamily(const TString& name) {
-        return TTableColumnFamilyBuilder(*this, name);
-    }
-
+    TTableStorageSettingsBuilder BeginStorageSettings() { 
+        return TTableStorageSettingsBuilder(*this); 
+    } 
+ 
+    TTableColumnFamilyBuilder BeginColumnFamily(const TString& name) { 
+        return TTableColumnFamilyBuilder(*this, name); 
+    } 
+ 
     TTablePartitioningSettingsBuilder BeginPartitioningSettings() {
         return TTablePartitioningSettingsBuilder(*this);
     }
@@ -716,14 +716,14 @@ private:
     TTableDescription TableDescription_;
 };
 
-inline TTableBuilder& TTableStorageSettingsBuilder::EndStorageSettings() {
-    return Parent_.SetStorageSettings(Builder_.Build());
-}
-
-inline TTableBuilder& TTableColumnFamilyBuilder::EndColumnFamily() {
-    return Parent_.AddColumnFamily(Builder_.Build());
-}
-
+inline TTableBuilder& TTableStorageSettingsBuilder::EndStorageSettings() { 
+    return Parent_.SetStorageSettings(Builder_.Build()); 
+} 
+ 
+inline TTableBuilder& TTableColumnFamilyBuilder::EndColumnFamily() { 
+    return Parent_.AddColumnFamily(Builder_.Build()); 
+} 
+ 
 inline TTableBuilder& TTablePartitioningSettingsBuilder::EndPartitioningSettings() {
     return Parent_.SetPartitioningSettings(Builder_.Build());
 }
@@ -848,7 +848,7 @@ struct TSessionPoolSettings {
     FLUENT_SETTING_DEFAULT(ui32, MinPoolSize, 10);
 };
 
-struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
+struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> { 
     using TSelf = TClientSettings;
 
     // Enable client query cache. Client query cache is used to map query text to
@@ -1102,20 +1102,20 @@ enum class EAutoPartitioningPolicy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TColumnFamilyPolicy {
-    using TSelf = TColumnFamilyPolicy;
-
-    FLUENT_SETTING_OPTIONAL(TString, Name);
-
-    FLUENT_SETTING_OPTIONAL(TString, Data);
-
-    FLUENT_SETTING_OPTIONAL(TString, External);
-
-    FLUENT_SETTING_OPTIONAL(bool, KeepInMemory);
-
-    FLUENT_SETTING_OPTIONAL(bool, Compressed);
-};
-
+struct TColumnFamilyPolicy { 
+    using TSelf = TColumnFamilyPolicy; 
+ 
+    FLUENT_SETTING_OPTIONAL(TString, Name); 
+ 
+    FLUENT_SETTING_OPTIONAL(TString, Data); 
+ 
+    FLUENT_SETTING_OPTIONAL(TString, External); 
+ 
+    FLUENT_SETTING_OPTIONAL(bool, KeepInMemory); 
+ 
+    FLUENT_SETTING_OPTIONAL(bool, Compressed); 
+}; 
+ 
 struct TStoragePolicy {
     using TSelf = TStoragePolicy;
 
@@ -1128,8 +1128,8 @@ struct TStoragePolicy {
     FLUENT_SETTING_OPTIONAL(TString, Data);
 
     FLUENT_SETTING_OPTIONAL(TString, External);
-
-    FLUENT_SETTING_VECTOR(TColumnFamilyPolicy, ColumnFamilies);
+ 
+    FLUENT_SETTING_VECTOR(TColumnFamilyPolicy, ColumnFamilies); 
 };
 
 struct TExplicitPartitions {
@@ -1180,72 +1180,72 @@ struct TCreateTableSettings : public TOperationRequestSettings<TCreateTableSetti
     FLUENT_SETTING_OPTIONAL(TReplicationPolicy, ReplicationPolicy);
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 struct TDropTableSettings : public TOperationRequestSettings<TDropTableSettings> {};
 
-////////////////////////////////////////////////////////////////////////////////
-
-struct TAlterTableSettings;
-
-class TAlterStorageSettingsBuilder {
-public:
-    explicit TAlterStorageSettingsBuilder(TAlterTableSettings& parent)
-        : Parent_(parent)
-    { }
-
-    TAlterStorageSettingsBuilder& SetTabletCommitLog0(const TString& media) {
-        Builder_.SetTabletCommitLog0(media);
-        return *this;
-    }
-
-    TAlterStorageSettingsBuilder& SetTabletCommitLog1(const TString& media) {
-        Builder_.SetTabletCommitLog1(media);
-        return *this;
-    }
-
-    TAlterStorageSettingsBuilder& SetExternal(const TString& media) {
-        Builder_.SetExternal(media);
-        return *this;
-    }
-
-    TAlterStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled) {
-        Builder_.SetStoreExternalBlobs(enabled);
-        return *this;
-    }
-
-    TAlterTableSettings& EndAlterStorageSettings();
-
-private:
-    TAlterTableSettings& Parent_;
-    TStorageSettingsBuilder Builder_;
-};
-
-class TAlterColumnFamilyBuilder {
-public:
-    TAlterColumnFamilyBuilder(TAlterTableSettings& parent, const TString& name)
-        : Parent_(parent)
-        , Builder_(name)
-    { }
-
-    TAlterColumnFamilyBuilder& SetData(const TString& media) {
-        Builder_.SetData(media);
-        return *this;
-    }
-
-    TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
-        Builder_.SetCompression(compression);
-        return *this;
-    }
-
-    TAlterTableSettings& EndAddColumnFamily();
-    TAlterTableSettings& EndAlterColumnFamily();
-
-private:
-    TAlterTableSettings& Parent_;
-    TColumnFamilyBuilder Builder_;
-};
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+struct TAlterTableSettings; 
+ 
+class TAlterStorageSettingsBuilder { 
+public: 
+    explicit TAlterStorageSettingsBuilder(TAlterTableSettings& parent) 
+        : Parent_(parent) 
+    { } 
+ 
+    TAlterStorageSettingsBuilder& SetTabletCommitLog0(const TString& media) { 
+        Builder_.SetTabletCommitLog0(media); 
+        return *this; 
+    } 
+ 
+    TAlterStorageSettingsBuilder& SetTabletCommitLog1(const TString& media) { 
+        Builder_.SetTabletCommitLog1(media); 
+        return *this; 
+    } 
+ 
+    TAlterStorageSettingsBuilder& SetExternal(const TString& media) { 
+        Builder_.SetExternal(media); 
+        return *this; 
+    } 
+ 
+    TAlterStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled) { 
+        Builder_.SetStoreExternalBlobs(enabled); 
+        return *this; 
+    } 
+ 
+    TAlterTableSettings& EndAlterStorageSettings(); 
+ 
+private: 
+    TAlterTableSettings& Parent_; 
+    TStorageSettingsBuilder Builder_; 
+}; 
+ 
+class TAlterColumnFamilyBuilder { 
+public: 
+    TAlterColumnFamilyBuilder(TAlterTableSettings& parent, const TString& name) 
+        : Parent_(parent) 
+        , Builder_(name) 
+    { } 
+ 
+    TAlterColumnFamilyBuilder& SetData(const TString& media) { 
+        Builder_.SetData(media); 
+        return *this; 
+    } 
+ 
+    TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) { 
+        Builder_.SetCompression(compression); 
+        return *this; 
+    } 
+ 
+    TAlterTableSettings& EndAddColumnFamily(); 
+    TAlterTableSettings& EndAlterColumnFamily(); 
+ 
+private: 
+    TAlterTableSettings& Parent_; 
+    TColumnFamilyBuilder Builder_; 
+}; 
+ 
 class TAlterTtlSettingsBuilder {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -1337,26 +1337,26 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
 
     TAlterTableSettings();
 
-    FLUENT_SETTING_VECTOR(TTableColumn, AddColumns);
+    FLUENT_SETTING_VECTOR(TTableColumn, AddColumns); 
 
     FLUENT_SETTING_VECTOR(TString, DropColumns);
-
-    FLUENT_SETTING_VECTOR(TAlterTableColumn, AlterColumns);
-
+ 
+    FLUENT_SETTING_VECTOR(TAlterTableColumn, AlterColumns); 
+ 
     FLUENT_SETTING_VECTOR(TString, DropIndexes);
 
     FLUENT_SETTING_VECTOR(TIndexDescription, AddIndexes);
 
-    TSelf& AlterColumnFamily(TString name, TString family) {
-        AlterColumns_.emplace_back(std::move(name), std::move(family));
-        return *this;
-    }
-
-    FLUENT_SETTING_OPTIONAL(TStorageSettings, AlterStorageSettings);
-
-    FLUENT_SETTING_VECTOR(TColumnFamilyDescription, AddColumnFamilies);
-    FLUENT_SETTING_VECTOR(TColumnFamilyDescription, AlterColumnFamilies);
-
+    TSelf& AlterColumnFamily(TString name, TString family) { 
+        AlterColumns_.emplace_back(std::move(name), std::move(family)); 
+        return *this; 
+    } 
+ 
+    FLUENT_SETTING_OPTIONAL(TStorageSettings, AlterStorageSettings); 
+ 
+    FLUENT_SETTING_VECTOR(TColumnFamilyDescription, AddColumnFamilies); 
+    FLUENT_SETTING_VECTOR(TColumnFamilyDescription, AlterColumnFamilies); 
+ 
     // workaround for MSVC
     TSelf& AlterTtlSettings(const TMaybe<TAlterTtlSettings>& value);
     const TMaybe<TAlterTtlSettings>& GetAlterTtlSettings() const;
@@ -1375,17 +1375,17 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
         return *this;
     }
 
-    TAlterStorageSettingsBuilder BeginAlterStorageSettings() {
-        return TAlterStorageSettingsBuilder(*this);
-    }
-
-    TAlterColumnFamilyBuilder BeginAddColumnFamily(const TString& name) {
-        return TAlterColumnFamilyBuilder(*this, name);
-    }
-
-    TAlterColumnFamilyBuilder BeginAlterColumnFamily(const TString& name) {
-        return TAlterColumnFamilyBuilder(*this, name);
-    }
+    TAlterStorageSettingsBuilder BeginAlterStorageSettings() { 
+        return TAlterStorageSettingsBuilder(*this); 
+    } 
+ 
+    TAlterColumnFamilyBuilder BeginAddColumnFamily(const TString& name) { 
+        return TAlterColumnFamilyBuilder(*this, name); 
+    } 
+ 
+    TAlterColumnFamilyBuilder BeginAlterColumnFamily(const TString& name) { 
+        return TAlterColumnFamilyBuilder(*this, name); 
+    } 
 
     TAlterTtlSettingsBuilder BeginAlterTtlSettings() {
         return TAlterTtlSettingsBuilder(*this);
@@ -1404,18 +1404,18 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-inline TAlterTableSettings& TAlterStorageSettingsBuilder::EndAlterStorageSettings() {
-    return Parent_.AlterStorageSettings(Builder_.Build());
-}
-
-inline TAlterTableSettings& TAlterColumnFamilyBuilder::EndAddColumnFamily() {
-    return Parent_.AppendAddColumnFamilies(Builder_.Build());
-}
-
-inline TAlterTableSettings& TAlterColumnFamilyBuilder::EndAlterColumnFamily() {
-    return Parent_.AppendAlterColumnFamilies(Builder_.Build());
-}
-
+inline TAlterTableSettings& TAlterStorageSettingsBuilder::EndAlterStorageSettings() { 
+    return Parent_.AlterStorageSettings(Builder_.Build()); 
+} 
+ 
+inline TAlterTableSettings& TAlterColumnFamilyBuilder::EndAddColumnFamily() { 
+    return Parent_.AppendAddColumnFamilies(Builder_.Build()); 
+} 
+ 
+inline TAlterTableSettings& TAlterColumnFamilyBuilder::EndAlterColumnFamily() { 
+    return Parent_.AppendAlterColumnFamilies(Builder_.Build()); 
+} 
+ 
 inline TAlterTableSettings& TAlterAttributesBuilder::EndAlterAttributes() {
     return Parent_.AlterAttributes(AlterAttributes_);
 }
@@ -1424,8 +1424,8 @@ inline TAlterTableSettings& TAlterPartitioningSettingsBuilder::EndAlterPartition
     return Parent_.AlterPartitioningSettings(Builder_.Build());
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 struct TCopyTableSettings : public TOperationRequestSettings<TCopyTableSettings> {};
 
 struct TCopyTablesSettings : public TOperationRequestSettings<TCopyTablesSettings> {};
@@ -1475,8 +1475,8 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_FLAG(Ordered);
 
     FLUENT_SETTING_OPTIONAL(ui64, RowLimit);
-
-    FLUENT_SETTING_OPTIONAL(bool, UseSnapshot);
+ 
+    FLUENT_SETTING_OPTIONAL(bool, UseSnapshot); 
 };
 
 //! Represents all session operations

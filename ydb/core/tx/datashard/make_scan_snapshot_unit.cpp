@@ -31,42 +31,42 @@ TMakeScanSnapshotUnit::~TMakeScanSnapshotUnit()
 {
 }
 
-bool TMakeScanSnapshotUnit::IsReadyToExecute(TOperation::TPtr op) const
+bool TMakeScanSnapshotUnit::IsReadyToExecute(TOperation::TPtr op) const 
 {
-    // Pass aborted operations
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
-        return true;
-    }
-
-    return op->HasUsingSnapshotFlag() || !op->HasRuntimeConflicts();
+    // Pass aborted operations 
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) { 
+        return true; 
+    } 
+ 
+    return op->HasUsingSnapshotFlag() || !op->HasRuntimeConflicts(); 
 }
 
 EExecutionStatus TMakeScanSnapshotUnit::Execute(TOperation::TPtr op,
                                                 TTransactionContext &,
-                                                const TActorContext &ctx)
+                                                const TActorContext &ctx) 
 {
-    // Pass aborted operations
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
-        return EExecutionStatus::Executed;
-    }
-
-    if (op->HasUsingSnapshotFlag() || DataShard.IsMvccEnabled()) {
-        // Already set for ReadTable from persistent snapshots
-        return EExecutionStatus::Executed;
-    }
-
+    // Pass aborted operations 
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) { 
+        return EExecutionStatus::Executed; 
+    } 
+ 
+    if (op->HasUsingSnapshotFlag() || DataShard.IsMvccEnabled()) { 
+        // Already set for ReadTable from persistent snapshots 
+        return EExecutionStatus::Executed; 
+    } 
+ 
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-    const auto& record = tx->GetDataTx()->GetReadTableTransaction();
-
-    auto tid = record.GetTableId().GetTableId();
+    const auto& record = tx->GetDataTx()->GetReadTableTransaction(); 
+ 
+    auto tid = record.GetTableId().GetTableId(); 
     auto &info = *DataShard.GetUserTables().at(tid);
 
-    if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-        Y_FAIL("Unexpected MakeScanSnapshot on ReadTable from a persistent snapshot");
-    }
-
+    if (record.HasSnapshotStep() && record.HasSnapshotTxId()) { 
+        Y_FAIL("Unexpected MakeScanSnapshot on ReadTable from a persistent snapshot"); 
+    } 
+ 
     tx->SetScanSnapshotId(DataShard.MakeScanSnapshot(info.LocalTid));
     Pipeline.MarkOpAsUsingSnapshot(op);
 

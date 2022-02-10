@@ -4,8 +4,8 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 
-#include <util/random/random.h>
-
+#include <util/random/random.h> 
+ 
 namespace NKikimr {
 
 class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
@@ -17,71 +17,71 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
 
     TIntrusivePtr<TTabletStorageInfo> Info;
     NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
-    NMetrics::TTabletIopsRawValue GroupWrittenOps;
+    NMetrics::TTabletIopsRawValue GroupWrittenOps; 
 
-    ui64 RequestCookies = 0;
-    ui64 ResponseCookies = 0;
-
+    ui64 RequestCookies = 0; 
+    ui64 ResponseCookies = 0; 
+ 
     ui32 RepliesToWait;
     TVector<ui32> YellowMoveChannels;
     TVector<ui32> YellowStopChannels;
 
     void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext &ctx) {
-        return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable", ctx);
+        return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable", ctx); 
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
         TEvBlobStorage::TEvPutResult *msg = ev->Get();
-
+ 
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
             YellowMoveChannels.push_back(msg->Id.Channel());
-        }
+        } 
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
             YellowStopChannels.push_back(msg->Id.Channel());
         }
-
+ 
         switch (msg->Status) {
         case NKikimrProto::OK:
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false));
 
             GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId)] += msg->Id.BlobSize();
-            GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId)] += 1;
+            GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId)] += 1; 
 
-            ResponseCookies ^= ev->Cookie;
-
-            if (--RepliesToWait == 0) {
-                if (Y_UNLIKELY(RequestCookies != ResponseCookies)) {
-                    return ReplyAndDie(NKikimrProto::ERROR, "TEvPut and TEvPutResult cookies don't match", ctx);
-                }
-
-                return ReplyAndDie(NKikimrProto::OK, { }, ctx);
-            }
+            ResponseCookies ^= ev->Cookie; 
+ 
+            if (--RepliesToWait == 0) { 
+                if (Y_UNLIKELY(RequestCookies != ResponseCookies)) { 
+                    return ReplyAndDie(NKikimrProto::ERROR, "TEvPut and TEvPutResult cookies don't match", ctx); 
+                } 
+ 
+                return ReplyAndDie(NKikimrProto::OK, { }, ctx); 
+            } 
 
             return;
         case NKikimrProto::RACE: // TODO: must be handled with retry
         case NKikimrProto::BLOCKED:
-            return ReplyAndDie(NKikimrProto::BLOCKED, msg->ErrorReason, ctx);
+            return ReplyAndDie(NKikimrProto::BLOCKED, msg->ErrorReason, ctx); 
         default:
-            return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason, ctx);
+            return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason, ctx); 
         }
     }
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason, const TActorContext &ctx) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason, const TActorContext &ctx) { 
         if (YellowMoveChannels) {
             SortUnique(YellowMoveChannels);
-        }
+        } 
         if (YellowStopChannels) {
             SortUnique(YellowStopChannels);
         }
-
-        ctx.Send(Owner, new TEvTabletBase::TEvWriteLogResult(
-            status,
-            LogEntryID,
+ 
+        ctx.Send(Owner, new TEvTabletBase::TEvWriteLogResult( 
+            status, 
+            LogEntryID, 
             std::move(YellowMoveChannels),
             std::move(YellowStopChannels),
-            std::move(GroupWrittenBytes),
-            std::move(GroupWrittenOps),
-            reason));
+            std::move(GroupWrittenBytes), 
+            std::move(GroupWrittenOps), 
+            reason)); 
         Die(ctx);
     }
 
@@ -92,10 +92,10 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         Y_VERIFY(channelInfo);
         const TTabletChannelInfo::THistoryEntry *x = channelInfo->LatestEntry();
         Y_VERIFY(x->FromGeneration <= id.Generation());
-
-        ui64 cookie = RandomNumber<ui64>();
-        RequestCookies ^= cookie;
-
+ 
+        ui64 cookie = RandomNumber<ui64>(); 
+        RequestCookies ^= cookie; 
+ 
         SendPutToGroup(ctx, x->GroupID, Info.Get(), MakeHolder<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), handleClass, CommitTactic), cookie);
     }
 

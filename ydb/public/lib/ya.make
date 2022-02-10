@@ -1,7 +1,7 @@
 OWNER(g:kikimr)
 
 RECURSE(
-    base
+    base 
     deprecated
     experimental
     idx_test

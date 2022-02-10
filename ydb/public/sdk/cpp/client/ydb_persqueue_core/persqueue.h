@@ -1451,7 +1451,7 @@ public:
     virtual ~IReadSession() = default;
 };
 
-struct TPersQueueClientSettings : public TCommonClientSettingsBase<TPersQueueClientSettings> {
+struct TPersQueueClientSettings : public TCommonClientSettingsBase<TPersQueueClientSettings> { 
     using TSelf = TPersQueueClientSettings;
 
     //! Default executor for compression tasks.

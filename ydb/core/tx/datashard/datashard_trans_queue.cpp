@@ -8,29 +8,29 @@ namespace NDataShard {
 const TSet<TStepOrder> TTransQueue::EMPTY_PLAN;
 
 void TTransQueue::AddTxInFly(TOperation::TPtr op) {
-    const ui64 txId = op->GetTxId();
-    const ui64 maxStep = op->GetMaxStep();
-    Y_VERIFY_S(!TxsInFly.contains(txId), "Adding duplicate txId " << txId);
-    TxsInFly[txId] = op;
-    if (Y_LIKELY(!op->GetStep())) {
-        ++PlanWaitingTxCount;
-    }
-    if (maxStep != Max<ui64>()) {
-        DeadlineQueue.emplace(std::make_pair(maxStep, txId));
-    }
+    const ui64 txId = op->GetTxId(); 
+    const ui64 maxStep = op->GetMaxStep(); 
+    Y_VERIFY_S(!TxsInFly.contains(txId), "Adding duplicate txId " << txId); 
+    TxsInFly[txId] = op; 
+    if (Y_LIKELY(!op->GetStep())) { 
+        ++PlanWaitingTxCount; 
+    } 
+    if (maxStep != Max<ui64>()) { 
+        DeadlineQueue.emplace(std::make_pair(maxStep, txId)); 
+    } 
     Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
 }
 
 void TTransQueue::RemoveTxInFly(ui64 txId) {
-    auto it = TxsInFly.find(txId);
-    if (it != TxsInFly.end()) {
-        if (!it->second->GetStep()) {
-            --PlanWaitingTxCount;
-        }
-        TxsInFly.erase(it);
-        ProposeDelayers.erase(txId);
-        Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
-    }
+    auto it = TxsInFly.find(txId); 
+    if (it != TxsInFly.end()) { 
+        if (!it->second->GetStep()) { 
+            --PlanWaitingTxCount; 
+        } 
+        TxsInFly.erase(it); 
+        ProposeDelayers.erase(txId); 
+        Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size()); 
+    } 
 }
 
 bool TTransQueue::Load(NIceDb::TNiceDb& db) {
@@ -39,10 +39,10 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
     // Load must be idempotent
     Y_VERIFY(TxsInFly.empty());
     Y_VERIFY(SchemaOps.empty());
-    Y_VERIFY(PlannedTxs.empty());
-    Y_VERIFY(DeadlineQueue.empty());
-    Y_VERIFY(ProposeDelayers.empty());
-    Y_VERIFY(PlanWaitingTxCount == 0);
+    Y_VERIFY(PlannedTxs.empty()); 
+    Y_VERIFY(DeadlineQueue.empty()); 
+    Y_VERIFY(ProposeDelayers.empty()); 
+    Y_VERIFY(PlanWaitingTxCount == 0); 
 
     TInstant now = AppData()->TimeProvider->Now();
 
@@ -53,36 +53,36 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             return false;
         while (!rowset.EndOfSet()) {
             ui64 txId = rowset.GetValue<Schema::TxMain::TxId>();
-            ui64 flags;
-            if (rowset.HaveValue<Schema::TxMain::Flags64>()) {
-                flags = rowset.GetValue<Schema::TxMain::Flags64>();
-            } else {
-                flags = rowset.GetValue<Schema::TxMain::Flags>();
-            }
+            ui64 flags; 
+            if (rowset.HaveValue<Schema::TxMain::Flags64>()) { 
+                flags = rowset.GetValue<Schema::TxMain::Flags64>(); 
+            } else { 
+                flags = rowset.GetValue<Schema::TxMain::Flags>(); 
+            } 
             ui64 maxStep = rowset.GetValue<Schema::TxMain::MaxStep>();
             EOperationKind kind = rowset.GetValue<Schema::TxMain::Kind>();
             ui64 received = rowset.GetValueOrDefault<Schema::TxMain::ReceivedAt>(now.GetValue());
             if (kind == EOperationKind::SchemeTx)
                 schemaTxs.insert(txId);
 
-            if (flags & TTxFlags::Immediate) {
-                // Workaround for KIKIMR-8005
-                flags |= TTxFlags::ForceOnline;
-            }
-
-            // We have loaded transaction from the database
-            flags |= TTxFlags::Stored;
-
-            TBasicOpInfo info(txId, kind, flags, maxStep, TInstant::FromValue(received), Self->NextTieBreakerIndex++);
-            auto op = MakeIntrusive<TActiveTransaction>(info);
-            if (rowset.HaveValue<Schema::TxMain::Source>()) {
-                op->SetTarget(rowset.GetValue<Schema::TxMain::Source>());
-            }
-            if (rowset.HaveValue<Schema::TxMain::Cookie>()) {
-                op->SetCookie(rowset.GetValue<Schema::TxMain::Cookie>());
-            }
-            AddTxInFly(std::move(op));
-
+            if (flags & TTxFlags::Immediate) { 
+                // Workaround for KIKIMR-8005 
+                flags |= TTxFlags::ForceOnline; 
+            } 
+ 
+            // We have loaded transaction from the database 
+            flags |= TTxFlags::Stored; 
+ 
+            TBasicOpInfo info(txId, kind, flags, maxStep, TInstant::FromValue(received), Self->NextTieBreakerIndex++); 
+            auto op = MakeIntrusive<TActiveTransaction>(info); 
+            if (rowset.HaveValue<Schema::TxMain::Source>()) { 
+                op->SetTarget(rowset.GetValue<Schema::TxMain::Source>()); 
+            } 
+            if (rowset.HaveValue<Schema::TxMain::Cookie>()) { 
+                op->SetCookie(rowset.GetValue<Schema::TxMain::Cookie>()); 
+            } 
+            AddTxInFly(std::move(op)); 
+ 
             if (!rowset.Next())
                 return false;
         }
@@ -99,17 +99,17 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
 
             auto op = FindTxInFly(txId);
             if (op) {
-                if (Y_LIKELY(!op->GetStep())) {
-                    op->SetStep(step);
-                    --PlanWaitingTxCount;
-                    if (op->HasFlag(TTxFlags::BlockingImmediateOps) ||
-                        op->HasFlag(TTxFlags::BlockingImmediateWrites))
-                    {
-                        ProposeDelayers.insert(txId);
-                    }
-                }
+                if (Y_LIKELY(!op->GetStep())) { 
+                    op->SetStep(step); 
+                    --PlanWaitingTxCount; 
+                    if (op->HasFlag(TTxFlags::BlockingImmediateOps) || 
+                        op->HasFlag(TTxFlags::BlockingImmediateWrites)) 
+                    { 
+                        ProposeDelayers.insert(txId); 
+                    } 
+                } 
                 PlannedTxsByKind[op->GetKind()].emplace(TStepOrder(step, txId));
-                DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId()));
+                DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId())); 
             }
 
             if (!rowset.Next())
@@ -215,52 +215,52 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
     TSchemaOperation * savedOp = &saved.first->second;
     Y_VERIFY(savedOp->TabletId);
     Self->Pipeline.SetSchemaOp(savedOp);
-
-    db.NoMoreReadsForTx();
+ 
+    db.NoMoreReadsForTx(); 
 }
 
 void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody) {
     using Schema = TDataShard::Schema;
 
-    const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
-
+    const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask; 
+ 
     AddTxInFly(op);
-    db.Table<Schema::TxMain>().Key(op->GetTxId()).Update(
-        NIceDb::TUpdate<Schema::TxMain::Kind>(op->GetKind()),
-        NIceDb::TUpdate<Schema::TxMain::Flags>(op->GetFlags() & preserveFlagsMask),
-        NIceDb::TUpdate<Schema::TxMain::MaxStep>(op->GetMaxStep()),
-        NIceDb::TUpdate<Schema::TxMain::ReceivedAt>(op->GetReceivedAt().GetValue()),
-        NIceDb::TUpdate<Schema::TxMain::Flags64>(op->GetFlags() & preserveFlagsMask),
-        NIceDb::TUpdate<Schema::TxMain::Source>(source),
-        NIceDb::TUpdate<Schema::TxMain::Cookie>(op->GetCookie()));
+    db.Table<Schema::TxMain>().Key(op->GetTxId()).Update( 
+        NIceDb::TUpdate<Schema::TxMain::Kind>(op->GetKind()), 
+        NIceDb::TUpdate<Schema::TxMain::Flags>(op->GetFlags() & preserveFlagsMask), 
+        NIceDb::TUpdate<Schema::TxMain::MaxStep>(op->GetMaxStep()), 
+        NIceDb::TUpdate<Schema::TxMain::ReceivedAt>(op->GetReceivedAt().GetValue()), 
+        NIceDb::TUpdate<Schema::TxMain::Flags64>(op->GetFlags() & preserveFlagsMask), 
+        NIceDb::TUpdate<Schema::TxMain::Source>(source), 
+        NIceDb::TUpdate<Schema::TxMain::Cookie>(op->GetCookie())); 
 
-    db.Table<Schema::TxDetails>().Key(op->GetTxId(), Self->TabletID()).Update(
-        NIceDb::TUpdate<Schema::TxDetails::Body>(TString(txBody)),
-        NIceDb::TUpdate<Schema::TxDetails::Source>(source));
+    db.Table<Schema::TxDetails>().Key(op->GetTxId(), Self->TabletID()).Update( 
+        NIceDb::TUpdate<Schema::TxDetails::Body>(TString(txBody)), 
+        NIceDb::TUpdate<Schema::TxDetails::Source>(source)); 
 
-    // NOTE: we no longer add rows to the DeadlineQueue table
-    db.NoMoreReadsForTx();
+    // NOTE: we no longer add rows to the DeadlineQueue table 
+    db.NoMoreReadsForTx(); 
 }
 
-void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
+void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) { 
     using Schema = TDataShard::Schema;
-
-    Y_VERIFY(TxsInFly.contains(txId));
-
-    const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
-
-    db.Table<Schema::TxMain>().Key(txId)
-        .Update<Schema::TxMain::Flags>(flags & preserveFlagsMask)
-        .Update<Schema::TxMain::Flags64>(flags & preserveFlagsMask);
-}
-
-void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody) {
+ 
+    Y_VERIFY(TxsInFly.contains(txId)); 
+ 
+    const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask; 
+ 
+    db.Table<Schema::TxMain>().Key(txId) 
+        .Update<Schema::TxMain::Flags>(flags & preserveFlagsMask) 
+        .Update<Schema::TxMain::Flags64>(flags & preserveFlagsMask); 
+} 
+ 
+void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody) { 
     using Schema = TDataShard::Schema;
-
-    db.Table<Schema::TxDetails>().Key(txId, Self->TabletID())
-        .Update<Schema::TxDetails::Body>(TString(txBody));
-}
-
+ 
+    db.Table<Schema::TxDetails>().Key(txId, Self->TabletID()) 
+        .Update<Schema::TxDetails::Body>(TString(txBody)); 
+} 
+ 
 void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
                            const TOperation &op) {
     using Schema = TDataShard::Schema;
@@ -275,7 +275,7 @@ void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
     RemoveTxInFly(op.GetTxId());
     PlannedTxs.erase(op.GetStepOrder());
     PlannedTxsByKind[op.GetKind()].erase(op.GetStepOrder());
-    db.NoMoreReadsForTx();
+    db.NoMoreReadsForTx(); 
 }
 
 void TTransQueue::RemoveSchemaOperation(NIceDb::TNiceDb& db, ui64 txId) {
@@ -302,17 +302,17 @@ void TTransQueue::GetPlannedTxId(ui64& step, ui64& txId) const {
     step = txId = 0;
 }
 
-bool TTransQueue::GetNextPlannedTxId(ui64& step, ui64& txId) const {
-    auto it = PlannedTxs.upper_bound(TStepOrder(step, txId));
-    if (it != PlannedTxs.end()) {
-        step = it->Step;
-        txId = it->TxId;
-        return true;
-    }
-
-    return false;
-}
-
+bool TTransQueue::GetNextPlannedTxId(ui64& step, ui64& txId) const { 
+    auto it = PlannedTxs.upper_bound(TStepOrder(step, txId)); 
+    if (it != PlannedTxs.end()) { 
+        step = it->Step; 
+        txId = it->TxId; 
+        return true; 
+    } 
+ 
+    return false; 
+} 
+ 
 bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
                                 ui64 txId,
                                 TActorId &target,
@@ -345,11 +345,11 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
 bool TTransQueue::ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId) {
     using Schema = TDataShard::Schema;
 
-    auto txdRowset = db.Table<Schema::TxDetails>().Prefix(txId).Select();
+    auto txdRowset = db.Table<Schema::TxDetails>().Prefix(txId).Select(); 
     if (!txdRowset.IsReady())
         return false;
     while (!txdRowset.EndOfSet()) {
-        Y_VERIFY(txId == txdRowset.GetValue<Schema::TxDetails::TxId>());
+        Y_VERIFY(txId == txdRowset.GetValue<Schema::TxDetails::TxId>()); 
         ui64 origin = txdRowset.GetValue<Schema::TxDetails::Origin>();
         db.Table<Schema::TxDetails>().Key(txId, origin).Delete();
         if (!txdRowset.Next())
@@ -382,11 +382,11 @@ bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
     return true;
 }
 
-// Cleanup outdated transactions.
-// The argument outdatedStep specifies the maximum step for which we received
-// all planned transactions.
-// NOTE: DeadlineQueue no longer contains planned transactions.
-ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs) {
+// Cleanup outdated transactions. 
+// The argument outdatedStep specifies the maximum step for which we received 
+// all planned transactions. 
+// NOTE: DeadlineQueue no longer contains planned transactions. 
+ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs) { 
     using Schema = TDataShard::Schema;
 
     outdatedTxs.reserve(batchSize);
@@ -395,14 +395,14 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
     for (const auto& pr : DeadlineQueue) {
         ui64 maxStep = pr.first;
         ui64 txId = pr.second;
-        if (maxStep > outdatedStep)
+        if (maxStep > outdatedStep) 
             break;
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Cleaning up tx " << txId << " with maxStep " << maxStep << " at outdatedStep " << outdatedStep);
-
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
+                "Cleaning up tx " << txId << " with maxStep " << maxStep << " at outdatedStep " << outdatedStep); 
+ 
         if (!ClearTxDetails(db, txId))
-            return ECleanupStatus::Restart;
+            return ECleanupStatus::Restart; 
 
         db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete();
         db.Table<Schema::TxMain>().Key(txId).Delete();
@@ -413,52 +413,52 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
             break;
     }
 
-    if (outdatedTxs.empty())
-        return ECleanupStatus::None;
-
-    // Removing outdated txIds from in-memory set, so transactions must not restart after this
-    db.NoMoreReadsForTx();
+    if (outdatedTxs.empty()) 
+        return ECleanupStatus::None; 
+ 
+    // Removing outdated txIds from in-memory set, so transactions must not restart after this 
+    db.NoMoreReadsForTx(); 
     for (const auto& pr : erasedDeadlines) {
         DeadlineQueue.erase(pr);
     }
-    for (ui64 txId : outdatedTxs) {
-        RemoveTxInFly(txId);
+    for (ui64 txId : outdatedTxs) { 
+        RemoveTxInFly(txId); 
     }
 
     Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, outdatedTxs.size());
-    return ECleanupStatus::Success;
+    return ECleanupStatus::Success; 
 }
 
 void TTransQueue::PlanTx(TOperation::TPtr op,
                          ui64 step,
                          NIceDb::TNiceDb &db)
 {
-    Y_VERIFY_DEBUG(TxsInFly.contains(op->GetTxId()) && TxsInFly.at(op->GetTxId()) == op);
-
-    if (Y_LIKELY(!op->GetStep())) {
-        op->SetStep(step);
-        --PlanWaitingTxCount;
-    } else {
-        Y_VERIFY_S(op->GetStep() == step,
-                "Tx " << op->GetTxId() << " must not change step from " << op->GetStep() << " to " << step);
-    }
-
+    Y_VERIFY_DEBUG(TxsInFly.contains(op->GetTxId()) && TxsInFly.at(op->GetTxId()) == op); 
+ 
+    if (Y_LIKELY(!op->GetStep())) { 
+        op->SetStep(step); 
+        --PlanWaitingTxCount; 
+    } else { 
+        Y_VERIFY_S(op->GetStep() == step, 
+                "Tx " << op->GetTxId() << " must not change step from " << op->GetStep() << " to " << step); 
+    } 
+ 
     using Schema = TDataShard::Schema;
     db.Table<Schema::PlanQueue>().Key(step, op->GetTxId()).Update();
     PlannedTxs.emplace(op->GetStepOrder());
     PlannedTxsByKind[op->GetKind()].emplace(op->GetStepOrder());
-    DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId()));
+    DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId())); 
 }
 
-void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId)
+void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId) 
 {
     using Schema = TDataShard::Schema;
-    db.Table<Schema::PlanQueue>().Key(step, txId).Delete();
-    PlannedTxs.erase(TStepOrder(step, txId));
-    for (auto& kv : PlannedTxsByKind) {
-        // We don't know the exact tx kind, so have to clear all of them
-        kv.second.erase(TStepOrder(step, txId));
-    }
+    db.Table<Schema::PlanQueue>().Key(step, txId).Delete(); 
+    PlannedTxs.erase(TStepOrder(step, txId)); 
+    for (auto& kv : PlannedTxsByKind) { 
+        // We don't know the exact tx kind, so have to clear all of them 
+        kv.second.erase(TStepOrder(step, txId)); 
+    } 
     Self->IncCounter(COUNTER_TX_PROGRESS_DUPLICATE);
 }
 

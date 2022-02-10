@@ -14,22 +14,22 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateCheckDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckSchemeTx:
         return CreateCheckSchemeTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CheckSnapshotTx:
-        return CreateCheckSnapshotTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CheckSnapshotTx: 
+        return CreateCheckSnapshotTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::CheckDistributedEraseTx:
         return CreateCheckDistributedEraseTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CheckCommitWritesTx:
-        return CreateCheckCommitWritesTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CheckCommitWritesTx: 
+        return CreateCheckCommitWritesTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::StoreDataTx:
         return CreateStoreDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreSchemeTx:
         return CreateStoreSchemeTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::StoreSnapshotTx:
-        return CreateStoreSnapshotTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::StoreSnapshotTx: 
+        return CreateStoreSnapshotTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::StoreDistributedEraseTx:
         return CreateStoreDistributedEraseTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::StoreCommitWritesTx:
-        return CreateStoreCommitWritesTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::StoreCommitWritesTx: 
+        return CreateStoreCommitWritesTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::BuildAndWaitDependencies:
         return CreateBuildAndWaitDependenciesUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinishPropose:
@@ -42,10 +42,10 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreatePlanQueueUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadTxDetails:
         return CreateLoadTxDetailsUnit(dataShard, pipeline);
-    case EExecutionUnitKind::FinalizeDataTxPlan:
-        return CreateFinalizeDataTxPlanUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ProtectSchemeEchoes:
-        return CreateProtectSchemeEchoesUnit(dataShard, pipeline);
+    case EExecutionUnitKind::FinalizeDataTxPlan: 
+        return CreateFinalizeDataTxPlanUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::ProtectSchemeEchoes: 
+        return CreateProtectSchemeEchoesUnit(dataShard, pipeline); 
     case EExecutionUnitKind::BuildDataTxOutRS:
         return CreateBuildDataTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildDistributedEraseTxOutRS:
@@ -68,8 +68,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateExecuteKqpDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteDistributedEraseTx:
         return CreateExecuteDistributedEraseTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ExecuteCommitWritesTx:
-        return CreateExecuteCommitWritesTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::ExecuteCommitWritesTx: 
+        return CreateExecuteCommitWritesTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::CompleteOperation:
         return CreateCompleteOperationUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpScanTx:
@@ -94,22 +94,22 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateCreateTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::ReceiveSnapshot:
         return CreateReceiveSnapshotUnit(dataShard, pipeline);
-    case EExecutionUnitKind::AlterMoveShadow:
-        return CreateAlterMoveShadowUnit(dataShard, pipeline);
+    case EExecutionUnitKind::AlterMoveShadow: 
+        return CreateAlterMoveShadowUnit(dataShard, pipeline); 
     case EExecutionUnitKind::AlterTable:
         return CreateAlterTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropTable:
         return CreateDropTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::DirectOp:
         return CreateDirectOpUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CreatePersistentSnapshot:
-        return CreateCreatePersistentSnapshotUnit(dataShard, pipeline);
-    case EExecutionUnitKind::DropPersistentSnapshot:
-        return CreateDropPersistentSnapshotUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CreateVolatileSnapshot:
-        return CreateCreateVolatileSnapshotUnit(dataShard, pipeline);
-    case EExecutionUnitKind::DropVolatileSnapshot:
-        return CreateDropVolatileSnapshotUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CreatePersistentSnapshot: 
+        return CreateCreatePersistentSnapshotUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::DropPersistentSnapshot: 
+        return CreateDropPersistentSnapshotUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::CreateVolatileSnapshot: 
+        return CreateCreateVolatileSnapshotUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::DropVolatileSnapshot: 
+        return CreateDropVolatileSnapshotUnit(dataShard, pipeline); 
     case EExecutionUnitKind::InitiateBuildIndex:
         return CreateInitiateBuildIndexUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinalizeBuildIndex:
@@ -131,56 +131,56 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     return nullptr;
 }
 
-bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
-    // Reject operations after receiving EvSplit
-    // This is to avoid races when split is in progress
-    if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight ||
-        DataShard.GetState() == TShardState::SplitSrcMakeSnapshot ||
-        DataShard.GetState() == TShardState::SplitSrcSendingSnapshot ||
-        DataShard.GetState() == TShardState::SplitSrcWaitForPartitioningChanged)
-    {
-        TString err = TStringBuilder()
-            << "Wrong shard state: " << (TShardState)DataShard.GetState()
-            << " tablet id: " << DataShard.TabletID();
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
-            ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
-
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Tablet " << DataShard.TabletID() << " rejecting tx due to split");
-
-        op->Abort();
-        return true;
-    }
-
-    // Check if shard state is not appropriate for tx execution
-    if (DataShard.GetState() != TShardState::Ready &&
-        DataShard.GetState() != TShardState::Readonly &&
-        !(DataShard.GetState() == TShardState::Frozen && op->IsReadOnly()))
-    {
-        TString err = TStringBuilder()
-            << "Wrong shard state: " << (TShardState)DataShard.GetState()
-            << " tablet id: " << DataShard.TabletID();
-        // TODO: Return SCHEME_CHANGED if the shard has been split
-        BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
-
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-        op->Abort();
-        return true;
-    }
-
-    if (DataShard.IsStopping()) {
-        TString err = TStringBuilder()
-            << "Tablet " << DataShard.TabletID() << " is restarting";
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
-            ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
-
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-        op->Abort();
-        return true;
-    }
-
+bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) { 
+    // Reject operations after receiving EvSplit 
+    // This is to avoid races when split is in progress 
+    if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight || 
+        DataShard.GetState() == TShardState::SplitSrcMakeSnapshot || 
+        DataShard.GetState() == TShardState::SplitSrcSendingSnapshot || 
+        DataShard.GetState() == TShardState::SplitSrcWaitForPartitioningChanged) 
+    { 
+        TString err = TStringBuilder() 
+            << "Wrong shard state: " << (TShardState)DataShard.GetState() 
+            << " tablet id: " << DataShard.TabletID(); 
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED) 
+            ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err); 
+ 
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, 
+            "Tablet " << DataShard.TabletID() << " rejecting tx due to split"); 
+ 
+        op->Abort(); 
+        return true; 
+    } 
+ 
+    // Check if shard state is not appropriate for tx execution 
+    if (DataShard.GetState() != TShardState::Ready && 
+        DataShard.GetState() != TShardState::Readonly && 
+        !(DataShard.GetState() == TShardState::Frozen && op->IsReadOnly())) 
+    { 
+        TString err = TStringBuilder() 
+            << "Wrong shard state: " << (TShardState)DataShard.GetState() 
+            << " tablet id: " << DataShard.TabletID(); 
+        // TODO: Return SCHEME_CHANGED if the shard has been split 
+        BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err); 
+ 
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err); 
+ 
+        op->Abort(); 
+        return true; 
+    } 
+ 
+    if (DataShard.IsStopping()) { 
+        TString err = TStringBuilder() 
+            << "Tablet " << DataShard.TabletID() << " is restarting"; 
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED) 
+            ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err); 
+ 
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err); 
+ 
+        op->Abort(); 
+        return true; 
+    } 
+ 
     if (DataShard.GetMvccSwitchState() == TSwitchState::SWITCHING) {
         TString err = TStringBuilder()
                 << "Wrong shard state: " << (TShardState)DataShard.GetState()
@@ -208,29 +208,29 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    return false;
-}
-
-bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
-    if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight ||
-        DataShard.GetState() == TShardState::SplitSrcMakeSnapshot ||
-        DataShard.GetState() == TShardState::SplitSrcSendingSnapshot ||
-        DataShard.GetState() == TShardState::SplitSrcWaitForPartitioningChanged)
-    {
-        return true;
-    }
-
-    if (DataShard.GetState() != TShardState::Ready &&
-        DataShard.GetState() != TShardState::Readonly &&
-        !(DataShard.GetState() == TShardState::Frozen && op->IsReadOnly()))
-    {
-        return true;
-    }
-
-    if (DataShard.IsStopping()) {
-        return true;
-    }
-
+    return false; 
+} 
+ 
+bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const { 
+    if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight || 
+        DataShard.GetState() == TShardState::SplitSrcMakeSnapshot || 
+        DataShard.GetState() == TShardState::SplitSrcSendingSnapshot || 
+        DataShard.GetState() == TShardState::SplitSrcWaitForPartitioningChanged) 
+    { 
+        return true; 
+    } 
+ 
+    if (DataShard.GetState() != TShardState::Ready && 
+        DataShard.GetState() != TShardState::Readonly && 
+        !(DataShard.GetState() == TShardState::Frozen && op->IsReadOnly())) 
+    { 
+        return true; 
+    } 
+ 
+    if (DataShard.IsStopping()) { 
+        return true; 
+    } 
+ 
     if (DataShard.GetMvccSwitchState() == TSwitchState::SWITCHING)
     {
         return true;
@@ -240,9 +240,9 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
         return true;
     }
 
-    return false;
-}
-
+    return false; 
+} 
+ 
 TOutputOpData::TResultPtr &TExecutionUnit::BuildResult(TOperation::TPtr op,
                                                        NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status)
 {

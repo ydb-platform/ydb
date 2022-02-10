@@ -43,10 +43,10 @@ TReadTableScanUnit::~TReadTableScanUnit()
 
 bool TReadTableScanUnit::IsReadyToExecute(TOperation::TPtr op) const
 {
-    // Pass aborted operations
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op))
-        return true;
-
+    // Pass aborted operations 
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) 
+        return true; 
+ 
     if (!op->IsWaitingForScan())
         return true;
 
@@ -60,81 +60,81 @@ bool TReadTableScanUnit::IsReadyToExecute(TOperation::TPtr op) const
 }
 
 EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
-                                             TTransactionContext &txc,
+                                             TTransactionContext &txc, 
                                              const TActorContext &ctx)
 {
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
+ 
+    // Pass aborted operations (e.g. while waiting for stream clearance, or because of a split/merge) 
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) { 
+        op->ResetWaitingForScanFlag(); 
 
-    // Pass aborted operations (e.g. while waiting for stream clearance, or because of a split/merge)
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
-        op->ResetWaitingForScanFlag();
-
-        // Ignore scan result (if any)
-        if (op->HasScanResult()) {
-            tx->SetScanTask(0);
-            op->SetScanResult(nullptr);
-        }
-
-        if (tx->GetScanSnapshotId()) {
-            DataShard.DropScanSnapshot(tx->GetScanSnapshotId());
-            tx->SetScanSnapshotId(0);
-        } else if (tx->GetScanTask()) {
-            auto tid = tx->GetDataTx()->GetReadTableTransaction().GetTableId().GetTableId();
-            auto info = DataShard.GetUserTables().at(tid);
-
-            DataShard.CancelScan(info->LocalTid, tx->GetScanTask());
-            tx->SetScanTask(0);
-        }
-
-        return EExecutionStatus::Executed;
-    }
-
-    bool hadWrites = false;
-
-    if (!op->IsWaitingForScan()) {
-        const auto& record = tx->GetDataTx()->GetReadTableTransaction();
-
-        if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-            Y_VERIFY(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
-        } else if (!DataShard.IsMvccEnabled()) {
-            Y_VERIFY(tx->GetScanSnapshotId(), "Missing snapshot in ReadTable tx");
-        }
-
-        auto tid = record.GetTableId().GetTableId();
+        // Ignore scan result (if any) 
+        if (op->HasScanResult()) { 
+            tx->SetScanTask(0); 
+            op->SetScanResult(nullptr); 
+        } 
+ 
+        if (tx->GetScanSnapshotId()) { 
+            DataShard.DropScanSnapshot(tx->GetScanSnapshotId()); 
+            tx->SetScanSnapshotId(0); 
+        } else if (tx->GetScanTask()) { 
+            auto tid = tx->GetDataTx()->GetReadTableTransaction().GetTableId().GetTableId(); 
+            auto info = DataShard.GetUserTables().at(tid); 
+ 
+            DataShard.CancelScan(info->LocalTid, tx->GetScanTask()); 
+            tx->SetScanTask(0); 
+        } 
+ 
+        return EExecutionStatus::Executed; 
+    } 
+ 
+    bool hadWrites = false; 
+ 
+    if (!op->IsWaitingForScan()) { 
+        const auto& record = tx->GetDataTx()->GetReadTableTransaction(); 
+ 
+        if (record.HasSnapshotStep() && record.HasSnapshotTxId()) { 
+            Y_VERIFY(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx"); 
+        } else if (!DataShard.IsMvccEnabled()) { 
+            Y_VERIFY(tx->GetScanSnapshotId(), "Missing snapshot in ReadTable tx"); 
+        } 
+ 
+        auto tid = record.GetTableId().GetTableId(); 
         auto info = DataShard.GetUserTables().at(tid);
 
-        auto scan = CreateReadTableScan(op->GetTxId(), DataShard.TabletID(), info, record,
+        auto scan = CreateReadTableScan(op->GetTxId(), DataShard.TabletID(), info, record, 
                                         tx->GetStreamSink(), DataShard.SelfId());
 
-        TScanOptions options;
-
-        if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-            // With persistent snapshots we don't need to mark any preceding transactions
-            auto readVersion = TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
-            options.SetSnapshotRowVersion(readVersion);
-        } else if (DataShard.IsMvccEnabled()) {
-            // With mvcc we have to mark all preceding transactions as logically complete
-            auto readVersion = DataShard.GetReadWriteVersions(tx).ReadVersion;
-            hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(readVersion, txc);
-            if (op->IsMvccSnapshotRepeatable() || !op->IsImmediate()) {
-                hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc);
-            }
-            options.SetSnapshotRowVersion(readVersion);
-        } else {
-            // Without mvcc transactions are already marked using legacy rules
-            options.SetSnapshotId(tx->GetScanSnapshotId());
-
-            tx->SetScanSnapshotId(0);
-        }
-
-        // FIXME: we need to tie started scan to a write above being committed
-
-        tx->SetScanTask(DataShard.QueueScan(info->LocalTid, scan, op->GetTxId(), options));
-
+        TScanOptions options; 
+ 
+        if (record.HasSnapshotStep() && record.HasSnapshotTxId()) { 
+            // With persistent snapshots we don't need to mark any preceding transactions 
+            auto readVersion = TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId()); 
+            options.SetSnapshotRowVersion(readVersion); 
+        } else if (DataShard.IsMvccEnabled()) { 
+            // With mvcc we have to mark all preceding transactions as logically complete 
+            auto readVersion = DataShard.GetReadWriteVersions(tx).ReadVersion; 
+            hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(readVersion, txc); 
+            if (op->IsMvccSnapshotRepeatable() || !op->IsImmediate()) { 
+                hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc); 
+            } 
+            options.SetSnapshotRowVersion(readVersion); 
+        } else { 
+            // Without mvcc transactions are already marked using legacy rules 
+            options.SetSnapshotId(tx->GetScanSnapshotId()); 
+ 
+            tx->SetScanSnapshotId(0); 
+        } 
+ 
+        // FIXME: we need to tie started scan to a write above being committed 
+ 
+        tx->SetScanTask(DataShard.QueueScan(info->LocalTid, scan, op->GetTxId(), options)); 
+ 
         op->SetWaitingForScanFlag();
-
-        Y_VERIFY_DEBUG(!op->HasScanResult());
+ 
+        Y_VERIFY_DEBUG(!op->HasScanResult()); 
     }
 
     if (op->HasScanResult()) {
@@ -146,15 +146,15 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
 
         tx->SetScanTask(0);
 
-        if (result->SchemaChanged) {
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)
-                ->AddError(NKikimrTxDataShard::TError::SCHEME_CHANGED, result->Error);
-        } else if (result->Error) {
+        if (result->SchemaChanged) { 
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR) 
+                ->AddError(NKikimrTxDataShard::TError::SCHEME_CHANGED, result->Error); 
+        } else if (result->Error) { 
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE,
                                       result->Error);
-        } else {
+        } else { 
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
-        }
+        } 
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
         op->SetScanResult(nullptr);
@@ -169,10 +169,10 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
     if (op->IsWaitingForScan())
         return EExecutionStatus::Continue;
 
-    if (hadWrites)
-        return EExecutionStatus::ExecutedNoMoreRestarts;
-
-    return EExecutionStatus::Executed;
+    if (hadWrites) 
+        return EExecutionStatus::ExecutedNoMoreRestarts; 
+ 
+    return EExecutionStatus::Executed; 
 }
 
 void TReadTableScanUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &ev,

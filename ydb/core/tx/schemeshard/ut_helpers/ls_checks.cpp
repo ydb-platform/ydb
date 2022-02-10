@@ -521,12 +521,12 @@ TCheckFunc PathIdEqual(TPathId pathId) {
     };
 }
 
-TCheckFunc PathStringEqual(const TString& expected) {
+TCheckFunc PathStringEqual(const TString& expected) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), expected);
-    };
-}
-
+    }; 
+} 
+ 
 TCheckFunc PathsInsideDomain(ui64 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
@@ -856,47 +856,47 @@ TCheckFunc IsBackupTable(bool value) {
     };
 }
 
-TCheckFunc HasOlapTableSchemaPreset(const TString& presetName) {
+TCheckFunc HasOlapTableSchemaPreset(const TString& presetName) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
-        UNIT_ASSERT_VALUES_EQUAL(table.GetSchemaPresetName(), presetName);
-    };
-}
-
-TCheckFunc HasOlapTableSchemaVersion(ui64 schemaVersion) {
+        UNIT_ASSERT_VALUES_EQUAL(table.GetSchemaPresetName(), presetName); 
+    }; 
+} 
+ 
+TCheckFunc HasOlapTableSchemaVersion(ui64 schemaVersion) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
-        UNIT_ASSERT_VALUES_EQUAL(table.GetSchema().GetVersion(), schemaVersion);
-    };
-}
-
-TCheckFunc HasOlapTableTtlSettingsVersion(ui64 ttlSettingsVersion) {
+        UNIT_ASSERT_VALUES_EQUAL(table.GetSchema().GetVersion(), schemaVersion); 
+    }; 
+} 
+ 
+TCheckFunc HasOlapTableTtlSettingsVersion(ui64 ttlSettingsVersion) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
-        UNIT_ASSERT_VALUES_EQUAL(table.GetTtlSettings().GetVersion(), ttlSettingsVersion);
-    };
-}
-
-TCheckFunc HasOlapTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter) {
+        UNIT_ASSERT_VALUES_EQUAL(table.GetTtlSettings().GetVersion(), ttlSettingsVersion); 
+    }; 
+} 
+ 
+TCheckFunc HasOlapTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
-        UNIT_ASSERT(table.HasTtlSettings());
-        const auto& ttl = table.GetTtlSettings();
-        UNIT_ASSERT(ttl.HasEnabled());
-        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
-        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), expireAfter.Seconds());
-    };
-}
-
-TCheckFunc HasOlapTableTtlSettingsDisabled() {
+        UNIT_ASSERT(table.HasTtlSettings()); 
+        const auto& ttl = table.GetTtlSettings(); 
+        UNIT_ASSERT(ttl.HasEnabled()); 
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName); 
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), expireAfter.Seconds()); 
+    }; 
+} 
+ 
+TCheckFunc HasOlapTableTtlSettingsDisabled() { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
-        UNIT_ASSERT(table.HasTtlSettings());
-        const auto& ttl = table.GetTtlSettings();
-        UNIT_ASSERT(ttl.HasDisabled());
-    };
-}
-
+        UNIT_ASSERT(table.HasTtlSettings()); 
+        const auto& ttl = table.GetTtlSettings(); 
+        UNIT_ASSERT(ttl.HasDisabled()); 
+    }; 
+} 
+ 
 TCheckFunc HasOlapTableTtlSettingsTiering(ui32 tierNo, const TString& tierName, const TString& columnName,
                                           const TDuration& evictAfter) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

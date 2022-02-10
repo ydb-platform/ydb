@@ -114,15 +114,15 @@ struct TSchemeCacheNavigate {
         KindTable = 3,
         KindTopic = 4,
         KindRtmr = 5,
-        KindKesus = 6,
+        KindKesus = 6, 
         KindSolomon = 7,
         KindSubdomain = 8,
         KindExtSubdomain = 9,
         KindIndex = 10,
-        KindOlapStore = 11,
-        KindOlapTable = 12,
+        KindOlapStore = 11, 
+        KindOlapTable = 12, 
         KindCdcStream = 13,
-        KindSequence = 14,
+        KindSequence = 14, 
         KindReplication = 15,
     };
 
@@ -164,11 +164,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TRtmrVolumeDescription Description;
     };
 
-    struct TKesusInfo : public TAtomicRefCount<TKesusInfo> {
-        EKind Kind = KindUnknown;
+    struct TKesusInfo : public TAtomicRefCount<TKesusInfo> { 
+        EKind Kind = KindUnknown; 
         NKikimrSchemeOp::TKesusDescription Description;
-    };
-
+    }; 
+ 
     struct TSolomonVolumeInfo : public TAtomicRefCount<TSolomonVolumeInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TSolomonVolumeDescription Description;
@@ -179,23 +179,23 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TColumnStoreDescription Description;
     };
 
-    struct TOlapTableInfo : public TAtomicRefCount<TOlapTableInfo> {
-        EKind Kind = KindUnknown;
+    struct TOlapTableInfo : public TAtomicRefCount<TOlapTableInfo> { 
+        EKind Kind = KindUnknown; 
         NKikimrSchemeOp::TColumnTableDescription Description;
-        TTableId OlapStoreId;
-    };
-
+        TTableId OlapStoreId; 
+    }; 
+ 
     struct TCdcStreamInfo : public TAtomicRefCount<TCdcStreamInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TCdcStreamDescription Description;
         TPathId PathId;
     };
 
-    struct TSequenceInfo : public TAtomicRefCount<TSequenceInfo> {
-        EKind Kind = KindUnknown;
+    struct TSequenceInfo : public TAtomicRefCount<TSequenceInfo> { 
+        EKind Kind = KindUnknown; 
         NKikimrSchemeOp::TSequenceDescription Description;
-    };
-
+    }; 
+ 
     struct TReplicationInfo : public TAtomicRefCount<TReplicationInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TReplicationDescription Description;
@@ -238,12 +238,12 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
         TIntrusiveConstPtr<TPQGroupInfo> PQGroupInfo;
         TIntrusiveConstPtr<TRtmrVolumeInfo> RTMRVolumeInfo;
-        TIntrusiveConstPtr<TKesusInfo> KesusInfo;
+        TIntrusiveConstPtr<TKesusInfo> KesusInfo; 
         TIntrusiveConstPtr<TSolomonVolumeInfo> SolomonVolumeInfo;
         TIntrusiveConstPtr<TOlapStoreInfo> OlapStoreInfo;
-        TIntrusiveConstPtr<TOlapTableInfo> OlapTableInfo;
+        TIntrusiveConstPtr<TOlapTableInfo> OlapTableInfo; 
         TIntrusiveConstPtr<TCdcStreamInfo> CdcStreamInfo;
-        TIntrusiveConstPtr<TSequenceInfo> SequenceInfo;
+        TIntrusiveConstPtr<TSequenceInfo> SequenceInfo; 
         TIntrusiveConstPtr<TReplicationInfo> ReplicationInfo;
 
         TString ToString() const;
@@ -299,9 +299,9 @@ struct TSchemeCacheRequest {
 
     struct TEntry {
         // in
-        THolder<TKeyDesc> KeyDescription;
+        THolder<TKeyDesc> KeyDescription; 
         ui32 Access = 0;
-        uintptr_t UserData = 0;
+        uintptr_t UserData = 0; 
         bool SyncVersion = false;
 
         // out
@@ -311,12 +311,12 @@ struct TSchemeCacheRequest {
 
         explicit TEntry(THolder<TKeyDesc> keyDesc)
             : KeyDescription(std::move(keyDesc))
-        {
-            Y_VERIFY_DEBUG(KeyDescription);
-        }
+        { 
+            Y_VERIFY_DEBUG(KeyDescription); 
+        } 
 
         TEntry(TKeyDesc* keyDesc) = delete;
-
+ 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
     };
@@ -361,42 +361,42 @@ struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext
     {}
 };
 
-class TDescribeResult
-    : public TAtomicRefCount<TDescribeResult>
+class TDescribeResult 
+    : public TAtomicRefCount<TDescribeResult> 
     , public NKikimrScheme::TEvDescribeSchemeResult
-{
-public:
-    using TPtr = TIntrusivePtr<TDescribeResult>;
-    using TCPtr = TIntrusiveConstPtr<TDescribeResult>;
-
-public:
-    TDescribeResult() = default;
-
-    TDescribeResult(const TDescribeResult&) = delete;
-    TDescribeResult(TDescribeResult&&) = delete;
-
-    TDescribeResult& operator=(const TDescribeResult&) = delete;
-    TDescribeResult& operator=(TDescribeResult&&) = delete;
-
-private:
+{ 
+public: 
+    using TPtr = TIntrusivePtr<TDescribeResult>; 
+    using TCPtr = TIntrusiveConstPtr<TDescribeResult>; 
+ 
+public: 
+    TDescribeResult() = default; 
+ 
+    TDescribeResult(const TDescribeResult&) = delete; 
+    TDescribeResult(TDescribeResult&&) = delete; 
+ 
+    TDescribeResult& operator=(const TDescribeResult&) = delete; 
+    TDescribeResult& operator=(TDescribeResult&&) = delete; 
+ 
+private: 
     explicit TDescribeResult(const NKikimrScheme::TEvDescribeSchemeResult& result)
-        : TEvDescribeSchemeResult(result)
-    {}
-
+        : TEvDescribeSchemeResult(result) 
+    {} 
+ 
     explicit TDescribeResult(NKikimrScheme::TEvDescribeSchemeResult&& result)
-        : TEvDescribeSchemeResult(std::move(result))
-    {}
-
-public:
+        : TEvDescribeSchemeResult(std::move(result)) 
+    {} 
+ 
+public: 
     static TPtr Create(const NKikimrScheme::TEvDescribeSchemeResult& result) {
-        return new TDescribeResult(result);
-    }
-
+        return new TDescribeResult(result); 
+    } 
+ 
     static TPtr Create(NKikimrScheme::TEvDescribeSchemeResult&& result) {
-        return new TDescribeResult(std::move(result));
-    }
-};
-
+        return new TDescribeResult(std::move(result)); 
+    } 
+}; 
+ 
 } // NSchemeCache
 
 struct TEvTxProxySchemeCache {
@@ -408,11 +408,11 @@ struct TEvTxProxySchemeCache {
         EvNavigateKeySetResult,
         EvInvalidateTable,
         EvInvalidateTableResult,
-        EvWatchPathId,
-        EvWatchRemove,
-        EvWatchNotifyUpdated,
-        EvWatchNotifyDeleted,
-        EvWatchNotifyUnavailable,
+        EvWatchPathId, 
+        EvWatchRemove, 
+        EvWatchNotifyUpdated, 
+        EvWatchNotifyDeleted, 
+        EvWatchNotifyUnavailable, 
 
         EvEnd,
     };
@@ -463,64 +463,64 @@ public:
             : Sender(sender)
         {}
     };
-
-    struct TEvWatchPathId : public TEventLocal<TEvWatchPathId, EvWatchPathId> {
-        const TPathId PathId;
-        const ui64 Key;
-
-        explicit TEvWatchPathId(const TPathId& pathId, ui64 key = 0)
-            : PathId(pathId)
-            , Key(key)
-        {}
-    };
-
-    struct TEvWatchRemove : public TEventLocal<TEvWatchRemove, EvWatchRemove> {
-        const ui64 Key;
-
-        explicit TEvWatchRemove(ui64 key = 0)
-            : Key(key)
-        {}
-    };
-
-    struct TEvWatchNotifyUpdated : public TEventLocal<TEvWatchNotifyUpdated, EvWatchNotifyUpdated> {
+ 
+    struct TEvWatchPathId : public TEventLocal<TEvWatchPathId, EvWatchPathId> { 
+        const TPathId PathId; 
+        const ui64 Key; 
+ 
+        explicit TEvWatchPathId(const TPathId& pathId, ui64 key = 0) 
+            : PathId(pathId) 
+            , Key(key) 
+        {} 
+    }; 
+ 
+    struct TEvWatchRemove : public TEventLocal<TEvWatchRemove, EvWatchRemove> { 
+        const ui64 Key; 
+ 
+        explicit TEvWatchRemove(ui64 key = 0) 
+            : Key(key) 
+        {} 
+    }; 
+ 
+    struct TEvWatchNotifyUpdated : public TEventLocal<TEvWatchNotifyUpdated, EvWatchNotifyUpdated> { 
         using TDescribeResult = NSchemeCache::TDescribeResult;
 
-        const ui64 Key;
-        const TString Path;
-        const TPathId PathId;
+        const ui64 Key; 
+        const TString Path; 
+        const TPathId PathId; 
         TDescribeResult::TCPtr Result;
-
+ 
         TEvWatchNotifyUpdated(ui64 key, const TString& path, const TPathId& pathId, TDescribeResult::TCPtr result)
-            : Key(key)
-            , Path(path)
-            , PathId(pathId)
-            , Result(std::move(result))
-        {}
-    };
-
-    struct TEvWatchNotifyDeleted : public TEventLocal<TEvWatchNotifyDeleted, EvWatchNotifyDeleted> {
-        const ui64 Key;
-        const TString Path;
-        const TPathId PathId;
-
-        TEvWatchNotifyDeleted(ui64 key, const TString& path, const TPathId& pathId)
-            : Key(key)
-            , Path(path)
-            , PathId(pathId)
-        {}
-    };
-
-    struct TEvWatchNotifyUnavailable : public TEventLocal<TEvWatchNotifyUnavailable, EvWatchNotifyUnavailable> {
-        const ui64 Key;
-        const TString Path;
-        const TPathId PathId;
-
-        TEvWatchNotifyUnavailable(ui64 key, const TString& path, const TPathId& pathId)
-            : Key(key)
-            , Path(path)
-            , PathId(pathId)
-        {}
-    };
+            : Key(key) 
+            , Path(path) 
+            , PathId(pathId) 
+            , Result(std::move(result)) 
+        {} 
+    }; 
+ 
+    struct TEvWatchNotifyDeleted : public TEventLocal<TEvWatchNotifyDeleted, EvWatchNotifyDeleted> { 
+        const ui64 Key; 
+        const TString Path; 
+        const TPathId PathId; 
+ 
+        TEvWatchNotifyDeleted(ui64 key, const TString& path, const TPathId& pathId) 
+            : Key(key) 
+            , Path(path) 
+            , PathId(pathId) 
+        {} 
+    }; 
+ 
+    struct TEvWatchNotifyUnavailable : public TEventLocal<TEvWatchNotifyUnavailable, EvWatchNotifyUnavailable> { 
+        const ui64 Key; 
+        const TString Path; 
+        const TPathId PathId; 
+ 
+        TEvWatchNotifyUnavailable(ui64 key, const TString& path, const TPathId& pathId) 
+            : Key(key) 
+            , Path(path) 
+            , PathId(pathId) 
+        {} 
+    }; 
 };
 
 inline TActorId MakeSchemeCacheID() {

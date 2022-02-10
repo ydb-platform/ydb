@@ -31,29 +31,29 @@ TDropTableUnit::~TDropTableUnit()
 {
 }
 
-bool TDropTableUnit::IsReadyToExecute(TOperation::TPtr op) const
+bool TDropTableUnit::IsReadyToExecute(TOperation::TPtr op) const 
 {
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-
-    auto &schemeTx = tx->GetSchemeTx();
-    if (!schemeTx.HasDropTable())
-        return true;
-
-    if (op->GetSpecialDependencies().empty()) {
-        // We must wait for all immediate ops to complete first
-        // This is probably not necessary, because we add all dependencies
-        // when transaction is first added to pipeline, but it's better
-        // to wait again if some transaction manages to sneak thru.
-        for (auto &pr : Pipeline.GetImmediateOps()) {
-            op->AddSpecialDependency(pr.second);
-        }
-    }
-
-    // We shouldn't have any normal dependencies
-    Y_VERIFY(op->GetDependencies().empty());
-
-    return op->GetSpecialDependencies().empty();
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
+ 
+    auto &schemeTx = tx->GetSchemeTx(); 
+    if (!schemeTx.HasDropTable()) 
+        return true; 
+ 
+    if (op->GetSpecialDependencies().empty()) { 
+        // We must wait for all immediate ops to complete first 
+        // This is probably not necessary, because we add all dependencies 
+        // when transaction is first added to pipeline, but it's better 
+        // to wait again if some transaction manages to sneak thru. 
+        for (auto &pr : Pipeline.GetImmediateOps()) { 
+            op->AddSpecialDependency(pr.second); 
+        } 
+    } 
+ 
+    // We shouldn't have any normal dependencies 
+    Y_VERIFY(op->GetDependencies().empty()); 
+ 
+    return op->GetSpecialDependencies().empty(); 
 }
 
 EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
@@ -77,18 +77,18 @@ EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
     }
     DataShard.DropUserTable(txc, tableId);
 
-    // FIXME: transactions need to specify ownerId
-    TVector<TSnapshotKey> snapshotsToRemove;
+    // FIXME: transactions need to specify ownerId 
+    TVector<TSnapshotKey> snapshotsToRemove; 
     TSnapshotTableKey snapshotsScope(DataShard.GetPathOwnerId(), tableId);
-    for (const auto& kv : DataShard.GetSnapshotManager().GetSnapshots(snapshotsScope)) {
-        snapshotsToRemove.push_back(kv.first);
-    }
-
-    for (const auto& key : snapshotsToRemove) {
-        NIceDb::TNiceDb db(txc.DB);
-        DataShard.GetSnapshotManager().PersistRemoveSnapshot(db, key);
-    }
-
+    for (const auto& kv : DataShard.GetSnapshotManager().GetSnapshots(snapshotsScope)) { 
+        snapshotsToRemove.push_back(kv.first); 
+    } 
+ 
+    for (const auto& key : snapshotsToRemove) { 
+        NIceDb::TNiceDb db(txc.DB); 
+        DataShard.GetSnapshotManager().PersistRemoveSnapshot(db, key); 
+    } 
+ 
     txc.DB.NoMoreReadsForTx();
     DataShard.SetPersistState(TShardState::PreOffline, txc);
 

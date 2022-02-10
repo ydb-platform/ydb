@@ -25,8 +25,8 @@ public:
     }
 
     TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const TString& query, HTTP_METHOD method)
-        : Config(config)
-        , TargetTablet(targetTablet)
+        : Config(config) 
+        , TargetTablet(targetTablet) 
         , ForceFollower(forceFollower)
         , Sender(sender)
         , Query(query)
@@ -41,8 +41,8 @@ public:
         NTabletPipe::TClientConfig config;
         config.AllowFollower = ForceFollower;
         config.ForceFollower = ForceFollower;
-        config.PreferLocal = Config.PreferLocal;
-        config.RetryPolicy = Config.RetryPolicy;
+        config.PreferLocal = Config.PreferLocal; 
+        config.RetryPolicy = Config.RetryPolicy; 
 
         PipeClient = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, TargetTablet, config));
         NTabletPipe::SendData(ctx, PipeClient, new NMon::TEvRemoteHttpInfo(Query, Method));
@@ -110,7 +110,7 @@ public:
     }
 
 private:
-    const TTabletMonitoringProxyConfig Config;
+    const TTabletMonitoringProxyConfig Config; 
     const ui64 TargetTablet;
     const bool ForceFollower;
     const TActorId Sender;
@@ -129,7 +129,7 @@ public:
     }
 
     //
-    TTabletMonitoringProxyActor(TTabletMonitoringProxyConfig config);
+    TTabletMonitoringProxyActor(TTabletMonitoringProxyConfig config); 
     virtual ~TTabletMonitoringProxyActor();
 
     //
@@ -141,16 +141,16 @@ public:
 private:
     //
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
-
-private:
-    TTabletMonitoringProxyConfig Config;
+ 
+private: 
+    TTabletMonitoringProxyConfig Config; 
 };
 
 ////////////////////////////////////////////
 /// The TTabletMonitoringProxyActor class
 ////////////////////////////////////////////
-TTabletMonitoringProxyActor::TTabletMonitoringProxyActor(TTabletMonitoringProxyConfig config)
-    : Config(std::move(config))
+TTabletMonitoringProxyActor::TTabletMonitoringProxyActor(TTabletMonitoringProxyConfig config) 
+    : Config(std::move(config)) 
 {}
 
 ////////////////////////////////////////////
@@ -398,8 +398,8 @@ STFUNC(TTabletMonitoringProxyActor::StateWork) {
 ////////////////////////////////////////////
 /// actor make function
 ////////////////////////////////////////////
-IActor* CreateTabletMonitoringProxy(TTabletMonitoringProxyConfig config) {
-    return new TTabletMonitoringProxyActor(std::move(config));
+IActor* CreateTabletMonitoringProxy(TTabletMonitoringProxyConfig config) { 
+    return new TTabletMonitoringProxyActor(std::move(config)); 
 }
 
 } } // end of the NKikimr::NCompactionService namespace

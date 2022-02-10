@@ -2,7 +2,7 @@
 
 #include "flat_page_label.h"
 #include "flat_bloom_hash.h"
-#include "util_deref.h"
+#include "util_deref.h" 
 
 namespace NKikimr {
 namespace NTable {
@@ -24,19 +24,19 @@ namespace NPage {
 
         static_assert(sizeof(THeader) == 16, "Invalid TBloom page header");
 
-        TBloom(TSharedData page)
+        TBloom(TSharedData page) 
             : Raw(std::move(page))
         {
             const auto got = NPage::THello().Read(Raw, EPage::Bloom);
 
             Y_VERIFY(got == ECodec::Plain && got.Version == 0);
 
-            auto *header = TDeref<THeader>::At(got.Page.data(), 0);
+            auto *header = TDeref<THeader>::At(got.Page.data(), 0); 
 
             if (sizeof(THeader) > got.Page.size())
                 Y_FAIL("NPage::TBloom header is out of its blob");
 
-            auto *ptr = TDeref<ui64>::At(got.Page.data(), sizeof(THeader));
+            auto *ptr = TDeref<ui64>::At(got.Page.data(), sizeof(THeader)); 
 
             Hashes = header->Hashes;
             Items = header->Items;
@@ -73,7 +73,7 @@ namespace NPage {
         }
 
     public:
-        const TSharedData Raw;
+        const TSharedData Raw; 
 
     private:
         TArrayRef<const ui64> Array;

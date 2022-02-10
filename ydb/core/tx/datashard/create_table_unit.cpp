@@ -50,10 +50,10 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     const auto &createTableTx = schemeTx.GetCreateTable();
 
-    TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
+    TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated()); 
     if (createTableTx.HasPathId()) {
-        Y_VERIFY(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
-        tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
+        Y_VERIFY(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId()); 
+        tableId.LocalPathId = createTableTx.GetPathId().GetLocalId(); 
     }
 
     const ui64 schemaVersion = createTableTx.HasTableSchemaVersion() ? createTableTx.GetTableSchemaVersion() : 0u;

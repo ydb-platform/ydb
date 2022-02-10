@@ -148,11 +148,11 @@ using TTablePathHashSet = THashSet<TTableId, TTablePathHashFn, TTablePathEqualFn
 // [{a, 1}, {b, 3}] => { (a, 1), (b, 3), inclusive = true, inclusive = true) } (probably most used case w/o any corner cases
 class TTableRange {
 public:
-    TConstArrayRef<TCell> From;
-    TConstArrayRef<TCell> To;
-    bool InclusiveFrom;
-    bool InclusiveTo;
-    bool Point;
+    TConstArrayRef<TCell> From; 
+    TConstArrayRef<TCell> To; 
+    bool InclusiveFrom; 
+    bool InclusiveTo; 
+    bool Point; 
 
     explicit TTableRange(TConstArrayRef<TCell> point)
         : From(point)
@@ -352,148 +352,148 @@ inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY,
     return 0; // overlapped
 }
 
-/// @note returns true on any overlap
-inline bool CheckRangesOverlap(
-        const TTableRange& rangeX,
-        const TTableRange& rangeY,
-        const TConstArrayRef<NScheme::TTypeId> typesX,
-        const TConstArrayRef<NScheme::TTypeId> typesY)
-{
-    if (rangeX.Point && rangeY.Point) {
-        // Works like ComparePointKeys
-        return 0 == CompareTypedCellVectors(
-            rangeX.From.data(),
-            rangeY.From.data(),
-            typesX.data(),
-            typesX.size());
-    } else if (rangeX.Point) {
-        return 0 == ComparePointAndRange(rangeX.From, rangeY, typesX, typesY);
-    } else if (rangeY.Point) {
-        return 0 == ComparePointAndRange(rangeY.From, rangeX, typesY, typesX);
-    } else {
-        return 0 == CompareRanges(rangeX, rangeY, typesX);
-    }
-}
+/// @note returns true on any overlap 
+inline bool CheckRangesOverlap( 
+        const TTableRange& rangeX, 
+        const TTableRange& rangeY, 
+        const TConstArrayRef<NScheme::TTypeId> typesX, 
+        const TConstArrayRef<NScheme::TTypeId> typesY) 
+{ 
+    if (rangeX.Point && rangeY.Point) { 
+        // Works like ComparePointKeys 
+        return 0 == CompareTypedCellVectors( 
+            rangeX.From.data(), 
+            rangeY.From.data(), 
+            typesX.data(), 
+            typesX.size()); 
+    } else if (rangeX.Point) { 
+        return 0 == ComparePointAndRange(rangeX.From, rangeY, typesX, typesY); 
+    } else if (rangeY.Point) { 
+        return 0 == ComparePointAndRange(rangeY.From, rangeX, typesY, typesX); 
+    } else { 
+        return 0 == CompareRanges(rangeX, rangeY, typesX); 
+    } 
+} 
+ 
+// TTableRange that owns its cell data and may be safely copied/moved 
+class TOwnedTableRange 
+    : public TTableRange 
+{ 
+private: 
+    struct TInit { 
+        TTableRange Range; 
+        TOwnedCellVec FromKey; 
+        TOwnedCellVec ToKey; 
+    }; 
 
-// TTableRange that owns its cell data and may be safely copied/moved
-class TOwnedTableRange
-    : public TTableRange
-{
-private:
-    struct TInit {
-        TTableRange Range;
-        TOwnedCellVec FromKey;
-        TOwnedCellVec ToKey;
-    };
+    TOwnedTableRange(TInit init) 
+        : TTableRange(std::move(init.Range)) 
+        , FromKey_(std::move(init.FromKey)) 
+        , ToKey_(std::move(init.ToKey)) 
+    { } 
 
-    TOwnedTableRange(TInit init)
-        : TTableRange(std::move(init.Range))
-        , FromKey_(std::move(init.FromKey))
-        , ToKey_(std::move(init.ToKey))
-    { }
-
-    static TInit Allocate(TOwnedCellVec fromKey, bool inclusiveFrom,
-                          TOwnedCellVec toKey, bool inclusiveTo,
-                          bool point)
-    {
-        TTableRange range(fromKey, inclusiveFrom, toKey, inclusiveTo, point);
-        return TInit{ std::move(range), std::move(fromKey), std::move(toKey) };
-    }
-
-    static TInit Allocate(TConstArrayRef<TCell> fromValues, bool inclusiveFrom,
-                          TConstArrayRef<TCell> toValues, bool inclusiveTo,
-                          bool point)
-    {
-        TOwnedCellVec fromKey(fromValues);
-        bool sameKey = fromValues.data() == toValues.data() && fromValues.size() == toValues.size();
-        TOwnedCellVec toKey = sameKey ? fromKey : TOwnedCellVec(toValues);
-        return Allocate(std::move(fromKey), inclusiveFrom, std::move(toKey), inclusiveTo, point);
-    }
-
-    TTableRange& UnsafeTableRange() {
-        return static_cast<TTableRange&>(*this);
-    }
-
-    void InvalidateTableRange() {
-        From = { };
-        To = { };
-        InclusiveFrom = false;
-        InclusiveTo = false;
-        Point = false;
-    }
-
+    static TInit Allocate(TOwnedCellVec fromKey, bool inclusiveFrom, 
+                          TOwnedCellVec toKey, bool inclusiveTo, 
+                          bool point) 
+    { 
+        TTableRange range(fromKey, inclusiveFrom, toKey, inclusiveTo, point); 
+        return TInit{ std::move(range), std::move(fromKey), std::move(toKey) }; 
+    } 
+ 
+    static TInit Allocate(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, 
+                          TConstArrayRef<TCell> toValues, bool inclusiveTo, 
+                          bool point) 
+    { 
+        TOwnedCellVec fromKey(fromValues); 
+        bool sameKey = fromValues.data() == toValues.data() && fromValues.size() == toValues.size(); 
+        TOwnedCellVec toKey = sameKey ? fromKey : TOwnedCellVec(toValues); 
+        return Allocate(std::move(fromKey), inclusiveFrom, std::move(toKey), inclusiveTo, point); 
+    } 
+ 
+    TTableRange& UnsafeTableRange() { 
+        return static_cast<TTableRange&>(*this); 
+    } 
+ 
+    void InvalidateTableRange() { 
+        From = { }; 
+        To = { }; 
+        InclusiveFrom = false; 
+        InclusiveTo = false; 
+        Point = false; 
+    } 
+ 
 public:
-    TOwnedTableRange()
-        : TTableRange({ }, false, { }, false, false)
-    { }
+    TOwnedTableRange() 
+        : TTableRange({ }, false, { }, false, false) 
+    { } 
 
-    explicit TOwnedTableRange(TOwnedCellVec point)
-        : TOwnedTableRange(Allocate(std::move(point), true, TOwnedCellVec(), true, true))
-    { }
+    explicit TOwnedTableRange(TOwnedCellVec point) 
+        : TOwnedTableRange(Allocate(std::move(point), true, TOwnedCellVec(), true, true)) 
+    { } 
+ 
+    explicit TOwnedTableRange(TConstArrayRef<TCell> point) 
+        : TOwnedTableRange(Allocate(TOwnedCellVec(point), true, TOwnedCellVec(), true, true)) 
+    { } 
 
-    explicit TOwnedTableRange(TConstArrayRef<TCell> point)
-        : TOwnedTableRange(Allocate(TOwnedCellVec(point), true, TOwnedCellVec(), true, true))
-    { }
-
-    TOwnedTableRange(TOwnedCellVec fromKey, bool inclusiveFrom, TOwnedCellVec toKey, bool inclusiveTo, bool point = false)
-        : TOwnedTableRange(Allocate(std::move(fromKey), inclusiveFrom, std::move(toKey), inclusiveTo, point))
-    { }
-
-    TOwnedTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues, bool inclusiveTo, bool point = false)
-        : TOwnedTableRange(Allocate(fromValues, inclusiveFrom, toValues, inclusiveTo, point))
-    { }
-
-    explicit TOwnedTableRange(const TTableRange& range)
-        : TOwnedTableRange(Allocate(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point))
-    { }
-
-    TOwnedTableRange(const TOwnedTableRange& rhs) noexcept
-        : TTableRange(rhs)
-        , FromKey_(rhs.FromKey_)
-        , ToKey_(rhs.ToKey_)
-    { }
-
-    TOwnedTableRange(TOwnedTableRange&& rhs) noexcept
-        : TTableRange(rhs)
-        , FromKey_(std::move(rhs.FromKey_))
-        , ToKey_(std::move(rhs.ToKey_))
-    {
-        rhs.InvalidateTableRange();
-    }
-
-    TOwnedTableRange& operator=(const TOwnedTableRange& rhs) noexcept {
-        if (Y_LIKELY(this != &rhs)) {
-            FromKey_ = rhs.FromKey_;
-            ToKey_ = rhs.ToKey_;
-            UnsafeTableRange() = rhs;
-        }
-
-        return *this;
-    }
-
-    TOwnedTableRange& operator=(TOwnedTableRange&& rhs) noexcept {
-        if (Y_LIKELY(this != &rhs)) {
-            FromKey_ = std::move(rhs.FromKey_);
-            ToKey_ = std::move(rhs.ToKey_);
-            UnsafeTableRange() = rhs;
-            rhs.InvalidateTableRange();
-        }
-
-        return *this;
-    }
-
-public:
-    const TOwnedCellVec& GetOwnedFrom() const noexcept {
-        return FromKey_;
-    }
-
-    const TOwnedCellVec& GetOwnedTo() const noexcept {
-        return ToKey_;
-    }
-
-private:
-    TOwnedCellVec FromKey_;
-    TOwnedCellVec ToKey_;
+    TOwnedTableRange(TOwnedCellVec fromKey, bool inclusiveFrom, TOwnedCellVec toKey, bool inclusiveTo, bool point = false) 
+        : TOwnedTableRange(Allocate(std::move(fromKey), inclusiveFrom, std::move(toKey), inclusiveTo, point)) 
+    { } 
+ 
+    TOwnedTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues, bool inclusiveTo, bool point = false) 
+        : TOwnedTableRange(Allocate(fromValues, inclusiveFrom, toValues, inclusiveTo, point)) 
+    { } 
+ 
+    explicit TOwnedTableRange(const TTableRange& range) 
+        : TOwnedTableRange(Allocate(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point)) 
+    { } 
+ 
+    TOwnedTableRange(const TOwnedTableRange& rhs) noexcept 
+        : TTableRange(rhs) 
+        , FromKey_(rhs.FromKey_) 
+        , ToKey_(rhs.ToKey_) 
+    { } 
+ 
+    TOwnedTableRange(TOwnedTableRange&& rhs) noexcept 
+        : TTableRange(rhs) 
+        , FromKey_(std::move(rhs.FromKey_)) 
+        , ToKey_(std::move(rhs.ToKey_)) 
+    { 
+        rhs.InvalidateTableRange(); 
+    } 
+ 
+    TOwnedTableRange& operator=(const TOwnedTableRange& rhs) noexcept { 
+        if (Y_LIKELY(this != &rhs)) { 
+            FromKey_ = rhs.FromKey_; 
+            ToKey_ = rhs.ToKey_; 
+            UnsafeTableRange() = rhs; 
+        } 
+ 
+        return *this; 
+    } 
+ 
+    TOwnedTableRange& operator=(TOwnedTableRange&& rhs) noexcept { 
+        if (Y_LIKELY(this != &rhs)) { 
+            FromKey_ = std::move(rhs.FromKey_); 
+            ToKey_ = std::move(rhs.ToKey_); 
+            UnsafeTableRange() = rhs; 
+            rhs.InvalidateTableRange(); 
+        } 
+ 
+        return *this; 
+    } 
+ 
+public: 
+    const TOwnedCellVec& GetOwnedFrom() const noexcept { 
+        return FromKey_; 
+    } 
+ 
+    const TOwnedCellVec& GetOwnedTo() const noexcept { 
+        return ToKey_; 
+    } 
+ 
+private: 
+    TOwnedCellVec FromKey_; 
+    TOwnedCellVec ToKey_; 
 };
 
 struct TReadTarget {
@@ -625,7 +625,7 @@ public:
         EColumnOperation Operation;
         ui32 ExpectedType;
         ui32 InplaceUpdateMode;
-        ui32 ImmediateUpdateSize;
+        ui32 ImmediateUpdateSize; 
     };
 
     // one column info (out)
@@ -664,12 +664,12 @@ public:
 
     // in
     const TTableId TableId;
-    const TOwnedTableRange Range;
+    const TOwnedTableRange Range; 
     const TRangeLimits RangeLimits;
     const ERowOperation RowOperation;
     const TVector<NScheme::TTypeId> KeyColumnTypes; // For SelectRange there can be not full key
     const TVector<TColumnOp> Columns;
-    const bool Reverse;
+    const bool Reverse; 
     TReadTarget ReadTarget; // Set for Read row operation
 
     // out
@@ -681,16 +681,16 @@ public:
     bool IsSystemView() const { return Partitions.empty(); }
 
     template<typename TKeyColumnTypes, typename TColumns>
-    TKeyDesc(const TTableId& tableId, const TTableRange& range, ERowOperation rowOperation,
-            const TKeyColumnTypes &keyColumnTypes, const TColumns &columns,
-            ui64 itemsLimit = 0, ui64 bytesLimit = 0, bool reverse = false)
+    TKeyDesc(const TTableId& tableId, const TTableRange& range, ERowOperation rowOperation, 
+            const TKeyColumnTypes &keyColumnTypes, const TColumns &columns, 
+            ui64 itemsLimit = 0, ui64 bytesLimit = 0, bool reverse = false) 
         : TableId(tableId)
-        , Range(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point)
+        , Range(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point) 
         , RangeLimits(itemsLimit, bytesLimit)
         , RowOperation(rowOperation)
         , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
         , Columns(columns.begin(), columns.end())
-        , Reverse(reverse)
+        , Reverse(reverse) 
         , Status(EStatus::Unknown)
     {}
 };

@@ -26,24 +26,24 @@ SRCS(
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp
     change_sender_common_ops.cpp
-    check_commit_writes_tx_unit.cpp
+    check_commit_writes_tx_unit.cpp 
     check_data_tx_unit.cpp
     check_distributed_erase_tx_unit.cpp
     check_scheme_tx_unit.cpp
-    check_snapshot_tx_unit.cpp
+    check_snapshot_tx_unit.cpp 
     complete_data_tx_unit.cpp
     completed_operations_unit.cpp
     create_cdc_stream_unit.cpp
-    create_persistent_snapshot_unit.cpp
+    create_persistent_snapshot_unit.cpp 
     create_table_unit.cpp
-    create_volatile_snapshot_unit.cpp
+    create_volatile_snapshot_unit.cpp 
     datashard__build_index.cpp
     datashard__cancel_tx_proposal.cpp
-    datashard__compact_borrowed.cpp
+    datashard__compact_borrowed.cpp 
     datashard__compaction.cpp
-    datashard__cleanup_borrowed.cpp
+    datashard__cleanup_borrowed.cpp 
     datashard__cleanup_in_rs.cpp
-    datashard__cleanup_tx.cpp
+    datashard__cleanup_tx.cpp 
     datashard__conditional_erase_rows.cpp
     datashard__engine_host.cpp
     datashard__engine_host.h
@@ -52,7 +52,7 @@ SRCS(
     datashard__migrate_schemeshard.cpp
     datashard__init.cpp
     datashard__monitoring.cpp
-    datashard__mon_reset_schema_version.cpp
+    datashard__mon_reset_schema_version.cpp 
     datashard__op_rows.cpp
     datashard__plan_step.cpp
     datashard__progress_resend_rs.cpp
@@ -65,14 +65,14 @@ SRCS(
     datashard__s3_download_txs.cpp
     datashard__s3_upload_txs.cpp
     datashard__kqp_scan.cpp
-    datashard__snapshot_txs.cpp
+    datashard__snapshot_txs.cpp 
     datashard__stats.cpp
     datashard__store_table_path.cpp
     datashard__store_scan_state.cpp
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
-    datashard_counters.cpp
+    datashard_counters.cpp 
     datashard_loans.cpp
     datashard_locks.h
     datashard_locks.cpp
@@ -93,14 +93,14 @@ SRCS(
     datashard_distributed_erase.cpp
     datashard_failpoints.cpp
     datashard_failpoints.h
-    datashard_dep_tracker.cpp
-    datashard_dep_tracker.h
+    datashard_dep_tracker.cpp 
+    datashard_dep_tracker.h 
     datashard_pipeline.cpp
     datashard_pipeline.h
     datashard_s3_downloads.cpp
     datashard_s3_uploads.cpp
     datashard_schema_snapshots.cpp
-    datashard_snapshots.cpp
+    datashard_snapshots.cpp 
     datashard_unsafe_upload.cpp
     datashard_user_table.cpp
     datashard_user_table.h
@@ -114,11 +114,11 @@ SRCS(
     datashard_kqp_delete_rows.cpp
     datashard_kqp.cpp
     datashard_kqp.h
-    datashard_repl_apply.cpp
-    datashard_repl_offsets.cpp
-    datashard_repl_offsets_client.cpp
-    datashard_repl_offsets_server.cpp
-    datashard_subdomain_path_id.cpp
+    datashard_repl_apply.cpp 
+    datashard_repl_offsets.cpp 
+    datashard_repl_offsets_client.cpp 
+    datashard_repl_offsets_server.cpp 
+    datashard_subdomain_path_id.cpp 
     datashard_txs.h
     datashard.cpp
     datashard.h
@@ -126,11 +126,11 @@ SRCS(
     direct_tx_unit.cpp
     drop_cdc_stream_unit.cpp
     drop_index_notice_unit.cpp
-    drop_persistent_snapshot_unit.cpp
+    drop_persistent_snapshot_unit.cpp 
     drop_table_unit.cpp
-    drop_volatile_snapshot_unit.cpp
+    drop_volatile_snapshot_unit.cpp 
     erase_rows_condition.cpp
-    execute_commit_writes_tx_unit.cpp
+    execute_commit_writes_tx_unit.cpp 
     execute_data_tx_unit.cpp
     execute_distributed_erase_tx_unit.cpp
     execute_kqp_data_tx_unit.cpp
@@ -161,23 +161,23 @@ SRCS(
     prepare_kqp_data_tx_in_rs_unit.cpp
     prepare_scheme_tx_in_rs_unit.cpp
     progress_queue.h
-    protect_scheme_echoes_unit.cpp
+    protect_scheme_echoes_unit.cpp 
     read_table_scan.h
     read_table_scan.cpp
     read_table_scan_unit.cpp
     receive_snapshot_unit.cpp
-    range_avl_tree.cpp
+    range_avl_tree.cpp 
     range_ops.cpp
-    range_treap.cpp
+    range_treap.cpp 
     read_iterator.h
     restore_unit.cpp
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp
-    store_commit_writes_tx_unit.cpp
+    store_commit_writes_tx_unit.cpp 
     store_data_tx_unit.cpp
     store_distributed_erase_tx_unit.cpp
     store_scheme_tx_unit.cpp
-    store_snapshot_tx_unit.cpp
+    store_snapshot_tx_unit.cpp 
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
     upload_stats.cpp
@@ -205,7 +205,7 @@ RESOURCE(
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/containers/flat_hash
+    library/cpp/containers/flat_hash 
     library/cpp/html/pcdata
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
@@ -252,7 +252,7 @@ RECURSE_FOR_TESTS(
     ut_build_index
     ut_change_collector
     ut_change_exchange
-    ut_compaction
+    ut_compaction 
     ut_erase_rows
     ut_followers
     ut_init

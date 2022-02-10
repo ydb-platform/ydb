@@ -82,8 +82,8 @@ namespace NActors {
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
 
-        for (const auto& kv : Subscribers) {
-            Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
+        for (const auto& kv : Subscribers) { 
+            Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second); 
         }
         Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         Subscribers.clear();
@@ -186,13 +186,13 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
-        const auto [it, inserted] = Subscribers.emplace(ev->Sender, ev->Cookie);
+        const auto [it, inserted] = Subscribers.emplace(ev->Sender, ev->Cookie); 
         if (inserted) {
             Proxy->Metrics->IncSubscribersCount();
-        } else {
-            it->second = ev->Cookie;
+        } else { 
+            it->second = ev->Cookie; 
         }
-        Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, ev->Cookie);
+        Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, ev->Cookie); 
     }
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {

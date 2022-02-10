@@ -199,12 +199,12 @@ void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
         }
         TabletCounters->Cumulative()[COUNTER_WRITE_BYTES_CHANNEL_0 + channel].Increment(pr.second);
     }
-    for (const auto& pr : stat.GroupReadIops) {
-        ResourceMetrics->ReadIops[pr.first].Increment(pr.second, now);
-    }
-    for (const auto& pr : stat.GroupWrittenIops) {
-        ResourceMetrics->WriteIops[pr.first].Increment(pr.second, now);
-    }
+    for (const auto& pr : stat.GroupReadIops) { 
+        ResourceMetrics->ReadIops[pr.first].Increment(pr.second, now); 
+    } 
+    for (const auto& pr : stat.GroupWrittenIops) { 
+        ResourceMetrics->WriteIops[pr.first].Increment(pr.second, now); 
+    } 
 
     if (status == NMsgBusProxy::MSTATUS_OK) {
         TabletCounters->Cumulative()[COUNTER_CMD_READ_BYTES_OK].Increment(stat.ReadBytes);

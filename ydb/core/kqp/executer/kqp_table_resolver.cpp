@@ -174,7 +174,7 @@ private:
 
         auto timer = std::make_unique<NCpuTime::TCpuTimer>(CpuTime);
 
-        auto& results = ev->Get()->Request->ResultSet;
+        auto& results = ev->Get()->Request->ResultSet; 
         LOG_D("Resolved key sets: " << results.size());
 
         for (auto& entry : results) {
@@ -201,9 +201,9 @@ private:
             }
 
             LOG_D("Resolved key: " << entry.ToString(*AppData()->TypeRegistry));
-
-            auto& stageInfo = DecodeStageInfo(entry.UserData);
-            stageInfo.Meta.ShardKey = std::move(entry.KeyDescription);
+ 
+            auto& stageInfo = DecodeStageInfo(entry.UserData); 
+            stageInfo.Meta.ShardKey = std::move(entry.KeyDescription); 
             stageInfo.Meta.ShardKind = std::move(entry.Kind);
         }
 
@@ -271,8 +271,8 @@ private:
 
                 stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, operation);
 
-                auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
-                entry.UserData = EncodeStageInfo(stageInfo);
+                auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey)); 
+                entry.UserData = EncodeStageInfo(stageInfo); 
                 switch (operation) {
                     case TKeyDesc::ERowOperation::Read:
                         entry.Access = NACLib::EAccessRights::SelectRow;
@@ -308,14 +308,14 @@ private:
         return TSerializedTableRange(fromValues, /* inclusiveFrom */ true, toValues, /* inclusiveTo */ false);
     }
 
-    static uintptr_t EncodeStageInfo(TKqpTasksGraph::TStageInfoType& stageInfo) {
-        return reinterpret_cast<uintptr_t>(&stageInfo);
-    }
-
-    static TKqpTasksGraph::TStageInfoType& DecodeStageInfo(uintptr_t userData) {
-        return *reinterpret_cast<TKqpTasksGraph::TStageInfoType*>(userData);
-    }
-
+    static uintptr_t EncodeStageInfo(TKqpTasksGraph::TStageInfoType& stageInfo) { 
+        return reinterpret_cast<uintptr_t>(&stageInfo); 
+    } 
+ 
+    static TKqpTasksGraph::TStageInfoType& DecodeStageInfo(uintptr_t userData) { 
+        return *reinterpret_cast<TKqpTasksGraph::TStageInfoType*>(userData); 
+    } 
+ 
 private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
         LOG_C("TKqpTableResolver, unexpected event: " << eventType << ", at state:" << state << ", self: " << SelfId());

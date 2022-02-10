@@ -32,7 +32,7 @@ TCompletedOperationsUnit::~TCompletedOperationsUnit()
 
 bool TCompletedOperationsUnit::IsReadyToExecute(TOperation::TPtr op) const
 {
-    Y_UNUSED(op);
+    Y_UNUSED(op); 
     return true;
 }
 

@@ -76,12 +76,12 @@ class TestChannelsOps(object):
             timeout_seconds=TIMEOUT_SECONDS
         )
 
-        # Gather current generations for created tablets
-        tablet_generations = {
-            state.TabletId: state.Generation
-            for state in self.client.tablet_state(tablet_ids=tablet_ids).TabletStateInfo
-        }
-
+        # Gather current generations for created tablets 
+        tablet_generations = { 
+            state.TabletId: state.Generation 
+            for state in self.client.tablet_state(tablet_ids=tablet_ids).TabletStateInfo 
+        } 
+ 
         key = 'key'
         key2 = 'key2'
         # Act
@@ -94,8 +94,8 @@ class TestChannelsOps(object):
         create_tablets_and_wait_for_start(
             self.client, number_of_tablets,
             batch_size=number_of_tablets,
-            timeout_seconds=TIMEOUT_SECONDS,
-            skip_generations=tablet_generations,
+            timeout_seconds=TIMEOUT_SECONDS, 
+            skip_generations=tablet_generations, 
         )
 
         for tablet_id in tablet_ids:

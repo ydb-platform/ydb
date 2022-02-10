@@ -314,7 +314,7 @@ class TClientCommandTenantCreate
                                       decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase),
                                       &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase> {
     TVector<TString> Attributes;
-    bool Serverless = false;
+    bool Serverless = false; 
 
 public:
     TClientCommandTenantCreate()
@@ -325,12 +325,12 @@ public:
     {
         TTenantClientGRpcCommand::Config(config);
 
-        config.Opts->AddLongOption("no-tx", "Disable tenant services for database")
+        config.Opts->AddLongOption("no-tx", "Disable tenant services for database") 
             .NoArgument();
         config.Opts->AddLongOption("attr", "Attach attribute name=value to database")
             .RequiredArgument("NAME=VALUE").AppendTo(&Attributes);
-        config.Opts->AddLongOption("serverless", "Create a serverless database (free arg must specify shared database for resources)")
-            .NoArgument().StoreTrue(&Serverless);
+        config.Opts->AddLongOption("serverless", "Create a serverless database (free arg must specify shared database for resources)") 
+            .NoArgument().StoreTrue(&Serverless); 
         config.SetFreeArgsMin(1);
         config.Opts->SetFreeArgDefaultTitle("<pool type>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
     }
@@ -350,14 +350,14 @@ public:
             (*GRpcRequest.mutable_attributes())[items[0]] = items[1];
         }
 
-        if (Serverless) {
-            const auto& args = config.ParseResult->GetFreeArgs();
-            if (args.size() != 1)
-                ythrow yexception() << "exactly one free arg must specify a path to shared database";
-            GRpcRequest.mutable_serverless_resources()->set_shared_database_path(args[0]);
-            return;
-        }
-
+        if (Serverless) { 
+            const auto& args = config.ParseResult->GetFreeArgs(); 
+            if (args.size() != 1) 
+                ythrow yexception() << "exactly one free arg must specify a path to shared database"; 
+            GRpcRequest.mutable_serverless_resources()->set_shared_database_path(args[0]); 
+            return; 
+        } 
+ 
         TVector<std::pair<TString, ui64>> pools;
         ParseStoragePools(config, pools);
         for (auto &pool : pools) {

@@ -20,12 +20,12 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        if (Self->State == TShardState::Offline) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxRemoveOldInReadSets::Execute (skip) at " << Self->TabletID());
-            return true;
-        }
-
+        if (Self->State == TShardState::Offline) { 
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
+                "TTxRemoveOldInReadSets::Execute (skip) at " << Self->TabletID()); 
+            return true; 
+        } 
+ 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxRemoveOldInReadSets::Execute at " << Self->TabletID());
 
@@ -50,12 +50,12 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        if (Self->State == TShardState::Offline) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxRemoveOldInReadSets::Complete (skip) at " << Self->TabletID());
-            return;
-        }
-
+        if (Self->State == TShardState::Offline) { 
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
+                "TTxRemoveOldInReadSets::Complete (skip) at " << Self->TabletID()); 
+            return; 
+        } 
+ 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxRemoveOldInReadSets::Complete " << Self->InRSToRemove.size()
                     << " outdated read sets remain at " << Self->TabletID());
@@ -86,12 +86,12 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        if (Self->State == TShardState::Offline) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxCheckInReadSets::Execute (skip) at " << Self->TabletID());
-            return true;
-        }
-
+        if (Self->State == TShardState::Offline) { 
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
+                "TTxCheckInReadSets::Execute (skip) at " << Self->TabletID()); 
+            return true; 
+        } 
+ 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxCheckInReadSets::Execute at " << Self->TabletID());
 
@@ -128,12 +128,12 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        if (Self->State == TShardState::Offline) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxCheckInReadSets::Complete (skip) at " << Self->TabletID());
-            return;
-        }
-
+        if (Self->State == TShardState::Offline) { 
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
+                "TTxCheckInReadSets::Complete (skip) at " << Self->TabletID()); 
+            return; 
+        } 
+ 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxCheckInReadSets::Complete found " << Self->InRSToRemove.size()
                     << " read sets to remove in " << Self->TabletID());

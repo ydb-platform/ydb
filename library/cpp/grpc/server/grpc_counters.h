@@ -83,13 +83,13 @@ public:
     }
 
     void CountRequestBytes(ui32 requestSize) override {
-        *RequestBytes += requestSize;
-    }
-
+        *RequestBytes += requestSize; 
+    } 
+ 
     void CountResponseBytes(ui32 responseSize) override {
-        *ResponseBytes += responseSize;
-    }
-
+        *ResponseBytes += responseSize; 
+    } 
+ 
     void StartProcessing(ui32 requestSize) override {
         TotalCounter->Inc();
         InflyCounter->Inc();

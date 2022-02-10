@@ -111,22 +111,22 @@ poly1305_block_copy(uint8_t *dst, const uint8_t *src, size_t bytes)
         src += 16;
     }
     if (bytes &  8) {
-        WriteUnaligned<uint64_t>(dst, ReadUnaligned<uint64_t>(src));
+        WriteUnaligned<uint64_t>(dst, ReadUnaligned<uint64_t>(src)); 
         dst += 8;
         src += 8;
     }
     if (bytes &  4) {
-        WriteUnaligned<uint32_t>(dst, ReadUnaligned<uint32_t>(src));
+        WriteUnaligned<uint32_t>(dst, ReadUnaligned<uint32_t>(src)); 
         dst += 4;
         src += 4;
     }
     if (bytes &  2) {
-        WriteUnaligned<uint16_t>(dst, ReadUnaligned<uint16_t>(src));
+        WriteUnaligned<uint16_t>(dst, ReadUnaligned<uint16_t>(src)); 
         dst += 2;
         src += 2;
     }
     if (bytes &  1) {
-        WriteUnaligned<uint8_t>(dst, ReadUnaligned<uint8_t>(src));
+        WriteUnaligned<uint8_t>(dst, ReadUnaligned<uint8_t>(src)); 
     }
 }
 

@@ -16,7 +16,7 @@ namespace NTest {
         Forward = 2,    /* use forward cache loads      */
     };
 
-    template<typename TWrap, typename TEggs, EDirection Direction = EDirection::Forward>
+    template<typename TWrap, typename TEggs, EDirection Direction = EDirection::Forward> 
     class TWreck {
     public:
         TWreck(const TMass &mass, ui64 seed = 666)
@@ -26,18 +26,18 @@ namespace NTest {
 
         }
 
-        template<class... TArgs>
-        void Do(EWreck cache, const TEggs &eggs, TArgs&&... args)
+        template<class... TArgs> 
+        void Do(EWreck cache, const TEggs &eggs, TArgs&&... args) 
         {
             if (cache == EWreck::Cached) {
                 auto make = []() { return new TTestEnv; };
 
-                TWrap wrap(eggs, { make(), 0 /* no retries allowed */, false }, std::forward<TArgs>(args)...);
+                TWrap wrap(eggs, { make(), 0 /* no retries allowed */, false }, std::forward<TArgs>(args)...); 
 
                 DoPointReads(wrap), DoRangedScans(wrap, make, true);
 
             } else if (cache == EWreck::Evicted) {
-                TWrap wrap(eggs, { nullptr, 66 /* try at most */, false }, std::forward<TArgs>(args)...);
+                TWrap wrap(eggs, { nullptr, 66 /* try at most */, false }, std::forward<TArgs>(args)...); 
 
                 auto make = [this]() {
                     return new TFailEnv<decltype(Rnd)>(Rnd, 0.25);
@@ -48,9 +48,9 @@ namespace NTest {
                 DoPointReads(wrap), DoRangedScans(wrap, make, true);
 
             } else if (cache == EWreck::Forward) {
-                Y_VERIFY(Direction == EDirection::Forward, "ForwardEnv may only be used with forward iteration");
-
-                TWrap wrap(eggs, { nullptr, 4 /* worst case: main, next, groups, blobs */, false }, std::forward<TArgs>(args)...);
+                Y_VERIFY(Direction == EDirection::Forward, "ForwardEnv may only be used with forward iteration"); 
+ 
+                TWrap wrap(eggs, { nullptr, 4 /* worst case: main, next, groups, blobs */, false }, std::forward<TArgs>(args)...); 
 
                 auto make = []() { return new TForwardEnv(512, 1024); };
 
@@ -78,7 +78,7 @@ namespace NTest {
 
                 auto &row = *Mass.Holes.Any(Rnd);
 
-                if (auto *after = Mass.SnapBy(row, Direction == EDirection::Forward, true)) {
+                if (auto *after = Mass.SnapBy(row, Direction == EDirection::Forward, true)) { 
                     wrap.Seek(row, ESeek::Upper).Is(*after);
                     wrap.Seek(row, ESeek::Lower).Is(*after);
                 } else {
@@ -93,7 +93,7 @@ namespace NTest {
 
                 wrap.To(20000 + it).Seek(row, ESeek::Lower).Is(row);
 
-                if (auto *after = Mass.SnapBy(row, Direction == EDirection::Forward, false)) {
+                if (auto *after = Mass.SnapBy(row, Direction == EDirection::Forward, false)) { 
                     wrap.Seek(row, ESeek::Upper).Is(*after);
                 } else {
                     wrap.Seek(row, ESeek::Upper).Is(EReady::Gone);
@@ -122,14 +122,14 @@ namespace NTest {
             { /*_ 60_000 Full sequence scan of all saved records */
                 wrap.To(60000).Seek({}, ESeek::Lower);
 
-                if constexpr (Direction == EDirection::Reverse) {
-                    auto it = Mass.Saved.end();
-                    while (it != Mass.Saved.begin()) {
-                        wrap.Is(*--it).Next();
-                    }
-                } else {
-                    for (auto &row: Mass.Saved) wrap.Is(row).Next();
-                }
+                if constexpr (Direction == EDirection::Reverse) { 
+                    auto it = Mass.Saved.end(); 
+                    while (it != Mass.Saved.begin()) { 
+                        wrap.Is(*--it).Next(); 
+                    } 
+                } else { 
+                    for (auto &row: Mass.Saved) wrap.Is(row).Next(); 
+                } 
 
                 wrap.Is(EReady::Gone); /* should have no more rows */
             }
@@ -146,18 +146,18 @@ namespace NTest {
 
                 wrap.To(61000 + seq).Seek(*it, ESeek::Lower);
 
-                if constexpr (Direction == EDirection::Reverse) {
-                    while (len-- > 0) {
-                        wrap.Is(*it).Next();
-                        if (it == Mass.Saved.begin()) {
-                            break;
-                        }
-                        --it;
-                    }
-                } else {
-                    while (len-- > 0 && it != Mass.Saved.end())
-                        wrap.Is(*it++).Next();
-                }
+                if constexpr (Direction == EDirection::Reverse) { 
+                    while (len-- > 0) { 
+                        wrap.Is(*it).Next(); 
+                        if (it == Mass.Saved.begin()) { 
+                            break; 
+                        } 
+                        --it; 
+                    } 
+                } else { 
+                    while (len-- > 0 && it != Mass.Saved.end()) 
+                        wrap.Is(*it++).Next(); 
+                } 
             }
 
             wrap.template Displace<IPages>(originEnv);

@@ -13,10 +13,10 @@ namespace NKikimr {
 struct TEvTxProxy {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_PROXY),
-        EvAcquireReadStep,
+        EvAcquireReadStep, 
 
         EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
-        EvAcquireReadStepResult,
+        EvAcquireReadStepResult, 
 
         EvEnd
     };
@@ -36,7 +36,7 @@ struct TEvTxProxy {
             StatusOutdated,
             StatusAborted,
             StatusDeclinedNoSpace,
-            StatusRestarting, // coordinator is restarting (tx dropped)
+            StatusRestarting, // coordinator is restarting (tx dropped) 
 
             StatusAccepted = 16, // accepted by coordinator
             StatusPlanned, // planned by coordinator
@@ -53,27 +53,27 @@ struct TEvTxProxy {
             return static_cast<EStatus>(Record.GetStatus());
         }
     };
-
-    struct TEvAcquireReadStep
-        : public TEventPB<TEvAcquireReadStep, NKikimrTx::TEvAcquireReadStep, EvAcquireReadStep>
-    {
-        TEvAcquireReadStep() = default;
-
-        explicit TEvAcquireReadStep(ui64 coordinator) {
-            Record.SetCoordinatorID(coordinator);
-        }
-    };
-
-    struct TEvAcquireReadStepResult
-        : public TEventPB<TEvAcquireReadStepResult, NKikimrTx::TEvAcquireReadStepResult, EvAcquireReadStepResult>
-    {
-        TEvAcquireReadStepResult() = default;
-
-        TEvAcquireReadStepResult(ui64 coordinator, ui64 step) {
-            Record.SetCoordinatorID(coordinator);
-            Record.SetStep(step);
-        }
-    };
+ 
+    struct TEvAcquireReadStep 
+        : public TEventPB<TEvAcquireReadStep, NKikimrTx::TEvAcquireReadStep, EvAcquireReadStep> 
+    { 
+        TEvAcquireReadStep() = default; 
+ 
+        explicit TEvAcquireReadStep(ui64 coordinator) { 
+            Record.SetCoordinatorID(coordinator); 
+        } 
+    }; 
+ 
+    struct TEvAcquireReadStepResult 
+        : public TEventPB<TEvAcquireReadStepResult, NKikimrTx::TEvAcquireReadStepResult, EvAcquireReadStepResult> 
+    { 
+        TEvAcquireReadStepResult() = default; 
+ 
+        TEvAcquireReadStepResult(ui64 coordinator, ui64 step) { 
+            Record.SetCoordinatorID(coordinator); 
+            Record.SetStep(step); 
+        } 
+    }; 
 };
 
 // basic

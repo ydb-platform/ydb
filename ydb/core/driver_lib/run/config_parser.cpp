@@ -62,9 +62,9 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
-    opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST");
-    opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT");
-    opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT");
+    opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST"); 
+    opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT"); 
+    opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT"); 
     opts.AddLongOption("pq-file", "PQ config file").OptionalArgument("PATH");
     opts.AddLongOption("pqcd-file", "PQCD config file").OptionalArgument("PATH");
     opts.AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
@@ -153,21 +153,21 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         conf.SetSslPort(FromString<ui16>(res.Get("grpcs-port")));
     }
 
-    if (res.Has("grpc-public-host")) {
-        auto& conf = *Config.AppConfig.MutableGRpcConfig();
-        conf.SetPublicHost(res.Get("grpc-public-host"));
-    }
-
-    if (res.Has("grpc-public-port")) {
-        auto& conf = *Config.AppConfig.MutableGRpcConfig();
-        conf.SetPublicPort(FromString<ui16>(res.Get("grpc-public-port")));
-    }
-
-    if (res.Has("grpcs-public-port")) {
-        auto& conf = *Config.AppConfig.MutableGRpcConfig();
-        conf.SetPublicSslPort(FromString<ui16>(res.Get("grpcs-public-port")));
-    }
-
+    if (res.Has("grpc-public-host")) { 
+        auto& conf = *Config.AppConfig.MutableGRpcConfig(); 
+        conf.SetPublicHost(res.Get("grpc-public-host")); 
+    } 
+ 
+    if (res.Has("grpc-public-port")) { 
+        auto& conf = *Config.AppConfig.MutableGRpcConfig(); 
+        conf.SetPublicPort(FromString<ui16>(res.Get("grpc-public-port"))); 
+    } 
+ 
+    if (res.Has("grpcs-public-port")) { 
+        auto& conf = *Config.AppConfig.MutableGRpcConfig(); 
+        conf.SetPublicSslPort(FromString<ui16>(res.Get("grpcs-public-port"))); 
+    } 
+ 
     if (res.Has("pq-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("pq-file"), Config.AppConfig.MutablePQConfig()));
     }

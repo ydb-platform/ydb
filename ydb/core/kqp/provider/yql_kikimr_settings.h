@@ -41,7 +41,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> KqpPushOlapProcess;
 
     /* Compile time */
-    NCommon::TConfSetting<bool, false> _AllowReverseRange;
+    NCommon::TConfSetting<bool, false> _AllowReverseRange; 
     NCommon::TConfSetting<ui64, false> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<ui32, false> _CommitReadsLimit;
     NCommon::TConfSetting<TString, false> _DefaultCluster;
@@ -77,7 +77,7 @@ struct TKikimrSettings {
     bool HasAllowKqpNewEngine() const;
     bool HasKqpForceNewEngine() const;
     bool HasUseNewEngine() const;
-    bool AllowReverseRange() const;
+    bool AllowReverseRange() const; 
     bool HasDefaultCluster() const;
     bool HasAllowKqpUnsafeCommit() const;
     bool SystemColumnsEnabled() const;

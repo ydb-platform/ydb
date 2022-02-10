@@ -14,7 +14,7 @@ namespace NFwd {
 
         template<size_t Items>
         struct TRound {
-            const TSharedData* Get(TPageId pageId) const
+            const TSharedData* Get(TPageId pageId) const 
             {
                 if (pageId < Edge) {
                     const auto pred = [pageId](const NPageCollection::TLoadedPage &page) {
@@ -58,8 +58,8 @@ namespace NFwd {
         TCache() = delete;
 
         TCache(const NPage::TIndex& index, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
-            : Index(index, 1, bounds)
-        { }
+            : Index(index, 1, bounds) 
+        { } 
 
         ~TCache()
         {

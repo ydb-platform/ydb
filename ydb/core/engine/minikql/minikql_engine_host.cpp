@@ -142,20 +142,20 @@ void TEngineHost::DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env
     ConvertKeys(tableInfo, key.Range.From, keyFrom);
     ConvertKeys(tableInfo, key.Range.To, keyTo);
 
-    TSmallVec<NTable::TTag> tags;
-    for (const auto& column : key.Columns) {
-        if (Y_LIKELY(column.Operation == TKeyDesc::EColumnOperation::Read)) {
-            tags.push_back(column.Column);
-        }
-    }
-
+    TSmallVec<NTable::TTag> tags; 
+    for (const auto& column : key.Columns) { 
+        if (Y_LIKELY(column.Operation == TKeyDesc::EColumnOperation::Read)) { 
+            tags.push_back(column.Column); 
+        } 
+    } 
+ 
     Db.CalculateReadSize(env, localTid,
                                keyFrom,
                                keyTo,
-                               tags,
+                               tags, 
                                0,
-                               key.RangeLimits.ItemsLimit, key.RangeLimits.BytesLimit,
-                               key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward);
+                               key.RangeLimits.ItemsLimit, key.RangeLimits.BytesLimit, 
+                               key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward); 
 }
 
 ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const {
@@ -182,24 +182,24 @@ ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const {
     }
 }
 
-void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) {
-    ui64 limitMultiplier = 1;
-    if (pageFaultCount >= 2) {
-        if (pageFaultCount <= 63) {
-            limitMultiplier <<= pageFaultCount - 1;
-        } else {
-            limitMultiplier = Max<ui64>();
-        }
-    }
-
-    auto adjustLimit = [limitMultiplier](ui64 limit) -> ui64 {
-        if (limit >= Max<ui64>() / limitMultiplier) {
-            return Max<ui64>();
-        } else {
-            return limit * limitMultiplier;
-        }
-    };
-
+void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) { 
+    ui64 limitMultiplier = 1; 
+    if (pageFaultCount >= 2) { 
+        if (pageFaultCount <= 63) { 
+            limitMultiplier <<= pageFaultCount - 1; 
+        } else { 
+            limitMultiplier = Max<ui64>(); 
+        } 
+    } 
+ 
+    auto adjustLimit = [limitMultiplier](ui64 limit) -> ui64 { 
+        if (limit >= Max<ui64>() / limitMultiplier) { 
+            return Max<ui64>(); 
+        } else { 
+            return limit * limitMultiplier; 
+        } 
+    }; 
+ 
     bool ret = true;
     for (const auto& ki : keys) {
         const TKeyDesc& key = *ki;
@@ -236,20 +236,20 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         ConvertKeys(tableInfo, key.Range.From, keyFrom);
         ConvertKeys(tableInfo, key.Range.To, keyTo);
 
-        TSmallVec<NTable::TTag> tags;
-        for (const auto& column : key.Columns) {
+        TSmallVec<NTable::TTag> tags; 
+        for (const auto& column : key.Columns) { 
             if (columnOpFilter.contains(column.Operation)) {
-                tags.push_back(column.Column);
-            }
-        }
-
+                tags.push_back(column.Column); 
+            } 
+        } 
+ 
         bool ready =  Db.Precharge(localTid,
                                    keyFrom,
                                    key.Range.Point ? keyFrom : keyTo,
-                                   tags,
+                                   tags, 
                                    Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0,
-                                   adjustLimit(key.RangeLimits.ItemsLimit),
-                                   adjustLimit(key.RangeLimits.BytesLimit),
+                                   adjustLimit(key.RangeLimits.ItemsLimit), 
+                                   adjustLimit(key.RangeLimits.BytesLimit), 
                                    key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
                                    GetReadVersion(key.TableId));
         ret &= ready;
@@ -466,19 +466,19 @@ private:
 
 class TSelectRangeLazyRowsList : public TCustomListValue {
 public:
-    template<class>
+    template<class> 
     friend class TIterator;
-
-    template<class TTableIt>
-    class TIterator : public TComputationValue<TIterator<TTableIt>> {
+ 
+    template<class TTableIt> 
+    class TIterator : public TComputationValue<TIterator<TTableIt>> { 
         static const ui32 PeriodicCallbackIterations = 1000;
 
-        using TBase = TComputationValue<TIterator<TTableIt>>;
-
+        using TBase = TComputationValue<TIterator<TTableIt>>; 
+ 
     public:
         TIterator(TMemoryUsageInfo* memInfo, const TSelectRangeLazyRowsList& list, TAutoPtr<TTableIt>&& iter,
             const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId)
-            : TBase(memInfo)
+            : TBase(memInfo) 
             , List(list)
             , Iter(iter.Release())
             , HasCurrent(false)
@@ -493,7 +493,7 @@ public:
 
             Clear();
 
-            while (Iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
+            while (Iter->Next(NTable::ENext::Data) == NTable::EReady::Data) { 
                 TDbTupleRef tuple = Iter->GetKey();
 
                 ++Iterations;
@@ -570,7 +570,7 @@ public:
 
             List.EngineHost.GetCounters().SelectRangeDeletedRowSkips += std::exchange(Iter->Stats.DeletedRowSkips, 0);
             List.EngineHost.GetCounters().InvisibleRowSkips += std::exchange(Iter->Stats.InvisibleRowSkips, 0);
-
+ 
             if (Iter->Last() ==  NTable::EReady::Page) {
                 if (auto collector = List.EngineHost.GetChangeCollector(List.TableId)) {
                     collector->Reset();
@@ -641,7 +641,7 @@ public:
         , ItemsLimit(itemsLimit)
         , BytesLimit(bytesLimit)
         , RangeHolder(range)
-        , Reverse(reverse)
+        , Reverse(reverse) 
         , EngineHost(engineHost)
         , KeyAccessSampler(keyAccessSampler)
     {}
@@ -651,28 +651,28 @@ public:
         auto tableRange = RangeHolder.ToTableRange();
 
         TSmallVec<TRawTypeValue> keyFrom;
-        TSmallVec<TRawTypeValue> keyTo;
+        TSmallVec<TRawTypeValue> keyTo; 
         ConvertTableKeys(Scheme, tableInfo, tableRange.From, keyFrom, nullptr);
         ConvertTableKeys(Scheme, tableInfo, tableRange.To, keyTo, nullptr);
 
-        NTable::TKeyRange keyRange;
-        keyRange.MinKey = keyFrom;
-        keyRange.MaxKey = keyTo;
+        NTable::TKeyRange keyRange; 
+        keyRange.MinKey = keyFrom; 
+        keyRange.MaxKey = keyTo; 
         keyRange.MinInclusive = tableRange.InclusiveFrom;
         keyRange.MaxInclusive = tableRange.InclusiveTo;
-        if (Reverse) {
+        if (Reverse) { 
             auto read = Db.IterateRangeReverse(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId));
-
+ 
             return NUdf::TUnboxedValuePod(
                 new TIterator<NTable::TTableReverseIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
             );
-        } else {
+        } else { 
             auto read = Db.IterateRange(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId));
-
+ 
             return NUdf::TUnboxedValuePod(
                 new TIterator<NTable::TTableIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
             );
-        }
+        } 
     }
 
     NUdf::TUnboxedValue GetTruncated() const {
@@ -717,7 +717,7 @@ private:
     ui64 ItemsLimit;
     ui64 BytesLimit;
     TSerializedTableRange RangeHolder;
-    bool Reverse;
+    bool Reverse; 
 
     mutable TMaybe<bool> Truncated;
     mutable TMaybe<TString> FirstKey;
@@ -910,7 +910,7 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     }
 
     Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId));
-
+ 
     Settings.KeyAccessSampler->AddSample(tableId, row);
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;

@@ -215,9 +215,9 @@ public:
 
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
         const auto& userAttrsDetails = Transaction.GetAlterUserAttributes();
-        if (!userAttrs->ApplyPatch(EUserAttributesOp::MkDir, userAttrsDetails, errStr) ||
-            !userAttrs->CheckLimits(errStr))
-        {
+        if (!userAttrs->ApplyPatch(EUserAttributesOp::MkDir, userAttrsDetails, errStr) || 
+            !userAttrs->CheckLimits(errStr)) 
+        { 
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }

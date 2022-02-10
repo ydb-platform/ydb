@@ -41,7 +41,7 @@ public:
     void WriteToLog(TLogCommit &logEntry);
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
-    void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage
+    void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage 
     void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);             // notification on any garbage collection results
     void ApplyLogEntry(TGCLogEntry &entry);                                                      // apply one log entry, used during recovery and also from WriteToLog
     void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers);
@@ -96,8 +96,8 @@ protected:
     };
 
     ui32 SnapshotStep;
-    ui32 PrevSnapshotStep;
-    ui32 ConfirmedOnSendStep;
+    ui32 PrevSnapshotStep; 
+    ui32 ConfirmedOnSendStep; 
     THashMap<ui32, TChannelInfo> ChannelInfo;
     TMap<TGCTime, TGCLogEntry> UncommittedDeltaLog;
     TSet<TGCTime> HoldBarriersSet;

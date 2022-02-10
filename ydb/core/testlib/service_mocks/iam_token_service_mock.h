@@ -11,7 +11,7 @@ public:
         if (!Identity.empty()) {
             auto[reqIdBegin, reqIdEnd] = context->client_metadata().equal_range("authorization");
             UNIT_ASSERT_C(reqIdBegin != reqIdEnd, "Authorization is expected.");
-            if (Identity != TStringBuf(reqIdBegin->second.cbegin(), reqIdBegin->second.cend())) {
+            if (Identity != TStringBuf(reqIdBegin->second.cbegin(), reqIdBegin->second.cend())) { 
                 return grpc::Status(grpc::StatusCode::UNAUTHENTICATED,
                                     TStringBuilder() << "Access for user " << Identity << " is forbidden");
             }

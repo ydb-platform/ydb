@@ -38,50 +38,50 @@ TExecuteKqpDataTxUnit::TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& p
 
 TExecuteKqpDataTxUnit::~TExecuteKqpDataTxUnit() {}
 
-bool TExecuteKqpDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
-        return true;
-    }
-
-    if (DataShard.IsStopping()) {
-        // Avoid doing any new work when datashard is stopping
-        return false;
-    }
-
-    return !op->HasRuntimeConflicts();
+bool TExecuteKqpDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const { 
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) { 
+        return true; 
+    } 
+ 
+    if (DataShard.IsStopping()) { 
+        // Avoid doing any new work when datashard is stopping 
+        return false; 
+    } 
+ 
+    return !op->HasRuntimeConflicts(); 
 }
 
 EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
     const TActorContext& ctx)
 {
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
-        return EExecutionStatus::Executed;
-    }
-
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) { 
+        return EExecutionStatus::Executed; 
+    } 
+ 
     // We remember current time now, but will only count it when transaction succeeds
     TDuration waitExecuteLatency = op->GetCurrentElapsed();
     TDuration waitTotalLatency = op->GetTotalElapsed();
 
-    if (op->IsImmediate()) {
-        // Every time we execute immediate transaction we may choose a new mvcc version
-        op->MvccReadWriteVersion.reset();
-    }
-
+    if (op->IsImmediate()) { 
+        // Every time we execute immediate transaction we may choose a new mvcc version 
+        op->MvccReadWriteVersion.reset(); 
+    } 
+ 
     TSetupSysLocks guardLocks(op, DataShard);
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     DataShard.ReleaseCache(*tx);
 
-    if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
-            case ERestoreDataStatus::Ok:
-                break;
-            case ERestoreDataStatus::Restart:
-                return EExecutionStatus::Restart;
-            case ERestoreDataStatus::Error:
-                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
-        }
+    if (tx->IsTxDataReleased()) { 
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) { 
+            case ERestoreDataStatus::Ok: 
+                break; 
+            case ERestoreDataStatus::Restart: 
+                return EExecutionStatus::Restart; 
+            case ERestoreDataStatus::Error: 
+                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str()); 
+        } 
     }
 
     ui64 tabletId = DataShard.TabletID();
@@ -129,7 +129,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
         dataTx->SetReadVersion(readVersion);
         dataTx->SetWriteVersion(writeVersion);
-
+ 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
         auto result = KqpCompleteTransaction(ctx, tabletId, op->GetTxId(),
@@ -152,7 +152,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         AddLocksToResult(op, ctx);
 
         if (op->IsImmediate() && !op->IsReadOnly()) {
-            DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
+            DataShard.PromoteCompleteEdge(writeVersion.Step, txc); 
         }
 
         if (auto changes = dataTx->GetCollectedChanges()) {

@@ -23,41 +23,41 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
     if (deadline && deadline < AppData()->TimeProvider->Now()) {
         SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Deadline exceeded");
-        return true;
+        return true; 
     }
 
     const ui64 tableId = record.GetTableId();
-    const TTableId fullTableId(self->GetPathOwnerId(), tableId);
-    const ui64 localTableId = self->GetLocalTableId(fullTableId);
+    const TTableId fullTableId(self->GetPathOwnerId(), tableId); 
+    const ui64 localTableId = self->GetLocalTableId(fullTableId); 
     if (localTableId == 0) {
         SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Unknown table id %" PRIu64, tableId));
-        return true;
+        return true; 
     }
-    const ui64 shadowTableId = self->GetShadowTableId(fullTableId);
+    const ui64 shadowTableId = self->GetShadowTableId(fullTableId); 
 
-    const TUserTable& tableInfo = *self->GetUserTables().at(tableId); /// ... find
+    const TUserTable& tableInfo = *self->GetUserTables().at(tableId); /// ... find 
     Y_VERIFY(tableInfo.LocalTid == localTableId);
-    Y_VERIFY(tableInfo.ShadowTid == shadowTableId);
+    Y_VERIFY(tableInfo.ShadowTid == shadowTableId); 
 
     // Check schemas
     if (record.GetRowScheme().KeyColumnIdsSize() != tableInfo.KeyColumnIds.size()) {
         SetError(NKikimrTxDataShard::TError::SCHEME_ERROR,
             Sprintf("Key column count mismatch: got %" PRIu64 ", expected %" PRIu64,
                 record.GetRowScheme().KeyColumnIdsSize(), tableInfo.KeyColumnIds.size()));
-        return true;
+        return true; 
     }
 
     for (size_t i = 0; i < tableInfo.KeyColumnIds.size(); ++i) {
         if (record.GetRowScheme().GetKeyColumnIds(i) != tableInfo.KeyColumnIds[i]) {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Key column schema at position %" PRISZT, i));
-            return true;
+            return true; 
         }
     }
 
     const bool writeToTableShadow = record.GetWriteToTableShadow();
-    const bool readForTableShadow = writeToTableShadow && !shadowTableId;
-    const ui32 writeTableId = writeToTableShadow && shadowTableId ? shadowTableId : localTableId;
-
+    const bool readForTableShadow = writeToTableShadow && !shadowTableId; 
+    const ui32 writeTableId = writeToTableShadow && shadowTableId ? shadowTableId : localTableId; 
+ 
     if (CollectChanges) {
         ChangeCollector.Reset(CreateChangeCollector(*self, txc.DB, tableInfo, true));
         ChangeCollector->SetWriteVersion(writeVersion);
@@ -67,18 +67,18 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     }
 
     // Prepare (id, Type) vector for value columns
-    TVector<NTable::TTag> tagsForSelect;
+    TVector<NTable::TTag> tagsForSelect; 
     TVector<std::pair<ui32, NScheme::TTypeId>> valueCols;
     for (const auto& colId : record.GetRowScheme().GetValueColumnIds()) {
-        if (readForTableShadow) {
-            tagsForSelect.push_back(colId);
-        }
-        auto* col = tableInfo.Columns.FindPtr(colId);
-        if (!col) {
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Missing column with id=%" PRIu32, colId));
-            return true;
-        }
-        valueCols.emplace_back(colId, col->Type);
+        if (readForTableShadow) { 
+            tagsForSelect.push_back(colId); 
+        } 
+        auto* col = tableInfo.Columns.FindPtr(colId); 
+        if (!col) { 
+            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Missing column with id=%" PRIu32, colId)); 
+            return true; 
+        } 
+        valueCols.emplace_back(colId, col->Type); 
     }
 
     TVector<TRawTypeValue> key;
@@ -87,9 +87,9 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     TSerializedCellVec keyCells;
     TSerializedCellVec valueCells;
 
-    bool pageFault = false;
-    NTable::TRowState rowState;
-
+    bool pageFault = false; 
+    NTable::TRowState rowState; 
+ 
     ui64 bytes = 0;
     for (const auto& r : record.GetRows()) {
         // TODO: use safe parsing!
@@ -102,7 +102,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             valueCells.GetCells().size() != valueCols.size())
         {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cell count doesn't match row scheme");
-            return true;
+            return true; 
         }
 
         key.clear();
@@ -112,7 +112,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             const TCell& c = keyCells.GetCells()[ki];
             if (kt == NScheme::NTypeIds::Uint8 && !c.IsNull() && c.AsValue<ui8>() > 127) {
                 SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "Keys with Uint8 column values >127 are currently prohibited");
-                return true;
+                return true; 
             }
 
             keyBytes += c.Size();
@@ -124,27 +124,27 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
                      Sprintf("Row key size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
                              keyBytes, NLimits::MaxWriteKeySize));
-            return true;
+            return true; 
         }
 
-        if (readForTableShadow) {
-            rowState.Init(tagsForSelect.size());
-
+        if (readForTableShadow) { 
+            rowState.Init(tagsForSelect.size()); 
+ 
             auto ready = txc.DB.Select(localTableId, key, tagsForSelect, rowState, 0 /* readFlags */, readVersion);
-            if (ready == NTable::EReady::Page) {
-                pageFault = true;
-            }
-
+            if (ready == NTable::EReady::Page) { 
+                pageFault = true; 
+            } 
+ 
             if (pageFault) {
                 continue;
             }
 
             if (rowState == NTable::ERowOp::Erase || rowState == NTable::ERowOp::Reset) {
-                // Row has been erased in the past, ignore this upsert
-                continue;
-            }
-        }
-
+                // Row has been erased in the past, ignore this upsert 
+                continue; 
+            } 
+        } 
+ 
         value.clear();
         size_t vi = 0;
         for (const auto& vt : valueCols) {
@@ -152,26 +152,26 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                 SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
                          Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
                                  valueCells.GetBuffer().Size(), NLimits::MaxWriteValueSize));
-                return true;
+                return true; 
             }
 
-            bool allowUpdate = true;
+            bool allowUpdate = true; 
             if (readForTableShadow && rowState == NTable::ERowOp::Upsert && rowState.GetOp(vi) != NTable::ECellOp::Empty) {
-                // We don't want to overwrite columns that already has some value
-                allowUpdate = false;
-            }
-
-            if (allowUpdate) {
+                // We don't want to overwrite columns that already has some value 
+                allowUpdate = false; 
+            } 
+ 
+            if (allowUpdate) { 
                 value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second)));
-            }
+            } 
             ++vi;
         }
 
         if (readForTableShadow && rowState != NTable::ERowOp::Absent && value.empty()) {
-            // We don't want to issue an Upsert when key already exists and there are no updates
-            continue;
-        }
-
+            // We don't want to issue an Upsert when key already exists and there are no updates 
+            continue; 
+        } 
+ 
         if (!writeToTableShadow) {
             if (ChangeCollector) {
                 Y_VERIFY(CollectChanges);
@@ -188,24 +188,24 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             if (BreakLocks) {
                 self->SysLocksTable().BreakLock(fullTableId, keyCells.GetCells());
             }
-        }
-
+        } 
+ 
         txc.DB.Update(writeTableId, NTable::ERowOp::Upsert, key, value, writeVersion);
     }
 
-    if (pageFault) {
+    if (pageFault) { 
         if (ChangeCollector) {
             ChangeCollector->Reset();
         }
 
-        return false;
-    }
-
+        return false; 
+    } 
+ 
     self->IncCounter(COUNTER_UPLOAD_ROWS, record.GetRows().size());
     self->IncCounter(COUNTER_UPLOAD_ROWS_BYTES, bytes);
 
     tableInfo.Stats.UpdateTime = TAppData::TimeProvider->Now();
-    return true;
+    return true; 
 }
 
 template <typename TEvRequest, typename TEvResponse>

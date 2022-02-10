@@ -24,10 +24,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG); 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG); 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
     }
@@ -132,17 +132,17 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
         NYdb::NLongTx::TClient client(kikimr.GetDriver());
 
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
+        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
 
-        auto txId = resBeginTx.GetResult().tx_id();
+        auto txId = resBeginTx.GetResult().tx_id(); 
         TString data = TestBlob(pathIdBegin, tsBegin, rowCount);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
 
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
+        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
     }
 
@@ -746,8 +746,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000); 
         }
 
         // EnableDebugLogging(kikimr);

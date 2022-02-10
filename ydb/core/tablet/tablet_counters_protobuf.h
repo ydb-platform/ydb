@@ -25,7 +25,7 @@ public:
     explicit TAppParsedOpts(const size_t diff = 0)
         : Size(AppCountersDesc()->value_count() + diff)
     {
-        const NProtoBuf::EnumDescriptor* appDesc = AppCountersDesc();
+        const NProtoBuf::EnumDescriptor* appDesc = AppCountersDesc(); 
         NamesStrings.reserve(Size);
         Names.reserve(Size);
         Ranges.reserve(Size);
@@ -34,17 +34,17 @@ public:
         for (int i = 0; i < appDesc->value_count(); i++) {
             const NProtoBuf::EnumValueDescriptor* vdesc = appDesc->value(i);
             Y_VERIFY(vdesc->number() == vdesc->index(), "counter '%s' number (%d) != index (%d)",
-                   vdesc->full_name().c_str(), vdesc->number(), vdesc->index());
-            if (!vdesc->options().HasExtension(CounterOpts)) {
-                NamesStrings.emplace_back(); // empty name
-                Ranges.emplace_back(); // empty ranges
-                Integral.push_back(false);
-                continue;
-            }
+                   vdesc->full_name().c_str(), vdesc->number(), vdesc->index()); 
+            if (!vdesc->options().HasExtension(CounterOpts)) { 
+                NamesStrings.emplace_back(); // empty name 
+                Ranges.emplace_back(); // empty ranges 
+                Integral.push_back(false); 
+                continue; 
+            } 
             const TCounterOptions& co = vdesc->options().GetExtension(CounterOpts);
-            TString cntName = co.GetName();
-            Y_VERIFY(!cntName.empty(), "counter '%s' number (%d) cannot have an empty counter name",
-                    vdesc->full_name().c_str(), vdesc->number());
+            TString cntName = co.GetName(); 
+            Y_VERIFY(!cntName.empty(), "counter '%s' number (%d) cannot have an empty counter name", 
+                    vdesc->full_name().c_str(), vdesc->number()); 
             TString nameString;
             if (IsHistogramAggregateSimpleName(cntName)) {
                 nameString = co.GetName();
@@ -58,7 +58,7 @@ public:
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
         for (const TString& s : NamesStrings) {
-            Names.push_back(s.empty() ? nullptr : s.c_str());
+            Names.push_back(s.empty() ? nullptr : s.c_str()); 
         }
 
         // Parse protobuf options for enums itself
@@ -81,7 +81,7 @@ public:
             if (!AppGlobalRanges.empty())
                 return AppGlobalRanges;
         }
-        Y_FAIL("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
+        Y_FAIL("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str()); 
     }
 
     virtual bool GetIntegral(size_t idx) const {
@@ -104,7 +104,7 @@ protected:
         ranges.reserve(co.RangesSize());
         for (size_t j = 0; j < co.RangesSize(); j++) {
             const TRange& r = co.GetRanges(j);
-            ranges.push_back(TTabletPercentileCounter::TRangeDef{r.GetValue(), r.GetName().c_str()});
+            ranges.push_back(TTabletPercentileCounter::TRangeDef{r.GetValue(), r.GetName().c_str()}); 
         }
         return ranges;
     }
@@ -133,8 +133,8 @@ public:
         , TxOffset(AppCountersDesc()->value_count())
         , TxCountersSize(TxCountersDesc()->value_count())
     {
-        const NProtoBuf::EnumDescriptor* txDesc = TxCountersDesc();
-        const NProtoBuf::EnumDescriptor* typesDesc = TxTypesDesc();
+        const NProtoBuf::EnumDescriptor* txDesc = TxCountersDesc(); 
+        const NProtoBuf::EnumDescriptor* typesDesc = TxTypesDesc(); 
 
         // Parse protobuf options for enum values for tx counters
         // Create a group of tx counters for each tx type
@@ -142,24 +142,24 @@ public:
             const NProtoBuf::EnumValueDescriptor* tt = typesDesc->value(j);
             TTxType txType = tt->number();
             Y_VERIFY((int)txType == tt->index(), "tx type '%s' number (%d) != index (%d)",
-                   tt->full_name().c_str(), txType, tt->index());
-            Y_VERIFY(tt->options().HasExtension(TxTypeOpts), "tx type '%s' number (%d) is missing TxTypeOpts",
-                    tt->full_name().c_str(), txType);
+                   tt->full_name().c_str(), txType, tt->index()); 
+            Y_VERIFY(tt->options().HasExtension(TxTypeOpts), "tx type '%s' number (%d) is missing TxTypeOpts", 
+                    tt->full_name().c_str(), txType); 
             const TTxTypeOptions& tto = tt->options().GetExtension(TxTypeOpts);
             TString txPrefix = tto.GetName() + "/";
             for (int i = 0; i < txDesc->value_count(); i++) {
                 const NProtoBuf::EnumValueDescriptor* v = txDesc->value(i);
                 Y_VERIFY(v->number() == v->index(), "counter '%s' number (%d) != index (%d)",
-                       v->full_name().c_str(), v->number(), v->index());
-                if (!v->options().HasExtension(CounterOpts)) {
-                    NamesStrings.emplace_back(); // empty name
-                    Ranges.emplace_back(); // empty ranges
-                    Integral.push_back(false);
-                    continue;
-                }
+                       v->full_name().c_str(), v->number(), v->index()); 
+                if (!v->options().HasExtension(CounterOpts)) { 
+                    NamesStrings.emplace_back(); // empty name 
+                    Ranges.emplace_back(); // empty ranges 
+                    Integral.push_back(false); 
+                    continue; 
+                } 
                 const TCounterOptions& co = v->options().GetExtension(CounterOpts);
-                Y_VERIFY(!co.GetName().empty(), "counter '%s' number (%d) has an empty name",
-                        v->full_name().c_str(), v->number());
+                Y_VERIFY(!co.GetName().empty(), "counter '%s' number (%d) has an empty name", 
+                        v->full_name().c_str(), v->number()); 
                 TVector<TTabletPercentileCounter::TRangeDef> ranges = TBase::ParseRanges(co);
                 NamesStrings.push_back(TBase::GetFilePrefix(typesDesc->file()) + txPrefix + co.GetName());
                 Ranges.push_back(TBase::ParseRanges(co));
@@ -168,8 +168,8 @@ public:
         }
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
         for (size_t i = TxOffset; i < Size; ++i) {
-            const TString& s = NamesStrings[i];
-            Names.push_back(s.empty() ? nullptr : s.c_str());
+            const TString& s = NamesStrings[i]; 
+            Names.push_back(s.empty() ? nullptr : s.c_str()); 
         }
 
         // Parse protobuf options for enums itself
@@ -193,10 +193,10 @@ public:
             }
         }
         if (idx < TxOffset) {
-            Y_FAIL("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
+            Y_FAIL("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str()); 
         } else {
             size_t idx2 = (idx - TxOffset) % TxCountersSize;
-            Y_FAIL("Ranges for percentile counter '%s' are not defined", TxCountersDesc()->value(idx2)->full_name().c_str());
+            Y_FAIL("Ranges for percentile counter '%s' are not defined", TxCountersDesc()->value(idx2)->full_name().c_str()); 
         }
     }
 };
@@ -277,7 +277,7 @@ public:
     explicit TLabeledCounterParsedOpts()
         : Size(LabeledCountersDesc()->value_count())
     {
-        const NProtoBuf::EnumDescriptor* labeledCounterDesc = LabeledCountersDesc();
+        const NProtoBuf::EnumDescriptor* labeledCounterDesc = LabeledCountersDesc(); 
         NamesStrings.reserve(Size);
         Names.reserve(Size);
         AggregateFuncs.reserve(Size);
@@ -476,9 +476,9 @@ private:
         // Initialize percentile counters
         const auto* opts = PercentileOpts();
         for (size_t i = 0; i < opts->Size; i++) {
-            if (!opts->GetNames()[i]) {
-                continue;
-            }
+            if (!opts->GetNames()[i]) { 
+                continue; 
+            } 
             const auto& vec = opts->GetRanges(i);
             Percentile()[i].Initialize(vec.size(), vec.begin(), opts->GetIntegral(i));
         }
@@ -529,9 +529,9 @@ private:
         // Initialize percentile counters
         const auto* opts = PercentileOpts();
         for (size_t i = 0; i < opts->Size; i++) {
-            if (!opts->GetNames()[i]) {
-                continue;
-            }
+            if (!opts->GetNames()[i]) { 
+                continue; 
+            } 
             const auto& vec = opts->GetRanges(i);
             Percentile()[i].Initialize(vec.size(), vec.begin(), opts->GetIntegral(i));
         }

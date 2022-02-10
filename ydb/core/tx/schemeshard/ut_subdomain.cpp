@@ -70,13 +70,13 @@ NLs::TCheckFunc LsCheckSubDomainParamsInMassiveCase(const TString name = "",
     };
 }
 
-NLs::TCheckFunc LsCheckDiskQuotaExceeded(bool value = true) {
+NLs::TCheckFunc LsCheckDiskQuotaExceeded(bool value = true) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        auto& desc = record.GetPathDescription().GetDomainDescription();
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetDomainState().GetDiskQuotaExceeded(), value);
-    };
-}
-
+        auto& desc = record.GetPathDescription().GetDomainDescription(); 
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetDomainState().GetDiskQuotaExceeded(), value); 
+    }; 
+} 
+ 
 Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     Y_UNIT_TEST(Create) {
         TTestBasicRuntime runtime;
@@ -417,21 +417,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
                             "TimeCastBucketsPerMediator: 2 "
-                            "Name: \"USER_0\"");
+                            "Name: \"USER_0\""); 
 
-        env.TestWaitNotification(runtime, 100);
-
+        env.TestWaitNotification(runtime, 100); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(0)});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateSubDomainWithoutSomeTablets) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
                             "TimeCastBucketsPerMediator: 2 "
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_2\"",
                             {NKikimrScheme::StatusInvalidParameter});
 
-        env.TestWaitNotification(runtime, {100, 101});
+        env.TestWaitNotification(runtime, {100, 101}); 
 
         TestLs(runtime, "/MyRoot/USER_1", false, NLs::PathNotExist);
         TestLs(runtime, "/MyRoot/USER_2", false, NLs::PathNotExist);
@@ -456,53 +456,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenMkDir) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateSubDomain(runtime, txId++,  "/MyRoot",
-                            "PlanResolution: 50 "
-                            "TimeCastBucketsPerMediator: 2 "
-                            "Name: \"USER_0\"");
-
-        env.TestWaitNotification(runtime, 100);
-
-        TestMkDir(runtime, txId++, "/MyRoot/USER_0", "MyDir");
-
-        env.TestWaitNotification(runtime, 101);
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateSubDomain(runtime, txId++,  "/MyRoot", 
+                            "PlanResolution: 50 " 
+                            "TimeCastBucketsPerMediator: 2 " 
+                            "Name: \"USER_0\""); 
+ 
+        env.TestWaitNotification(runtime, 100); 
+ 
+        TestMkDir(runtime, txId++, "/MyRoot/USER_0", "MyDir"); 
+ 
+        env.TestWaitNotification(runtime, 101); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(0)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(0)});
         TestLs(runtime, "/MyRoot/USER_0/MyDir", false, NLs::PathExist);
 
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateSubDomain(runtime, txId++,  "/MyRoot",
-                            "PlanResolution: 50 "
-                            "TimeCastBucketsPerMediator: 2 "
-                            "Name: \"USER_0\"");
-
-        env.TestWaitNotification(runtime, 100);
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateSubDomain(runtime, txId++,  "/MyRoot", 
+                            "PlanResolution: 50 " 
+                            "TimeCastBucketsPerMediator: 2 " 
+                            "Name: \"USER_0\""); 
+ 
+        env.TestWaitNotification(runtime, 100); 
         UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
         UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-
-        TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
-
-        env.TestWaitNotification(runtime, 101);
-
+ 
+        TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0"); 
+ 
+        env.TestWaitNotification(runtime, 101); 
+ 
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenForceDrop) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -895,7 +895,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {NLs::PathExist,
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3, 4, 5, 6})});
-
+ 
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
@@ -930,7 +930,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathVersionEqual(7), // version 6 if deletion is simultaneous with creation
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(0)});
-
+ 
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
@@ -1194,26 +1194,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
     }
 
-    Y_UNIT_TEST(CreateAlterNbsChannels) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, /* nchannels */ 3 + 4);
-        ui64 txId = 100;
-
-        TestCreateSubDomain(runtime, txId++,  "/MyRoot",
-                            "PlanResolution: 50 "
-                            "Coordinators: 1 "
-                            "Mediators: 1 "
-                            "TimeCastBucketsPerMediator: 2 "
-                            "Name: \"USER_0\" "
-                            "StoragePools {"
-                            "  Name: \"name_USER_0_kind_hdd-1\""
-                            "  Kind: \"storage-pool-number-1\""
-                            "}"
-                            "StoragePools {"
-                            "  Name: \"name_USER_0_kind_hdd-2\""
-                            "  Kind: \"storage-pool-number-2\""
-                            "}");
-
+    Y_UNIT_TEST(CreateAlterNbsChannels) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime, /* nchannels */ 3 + 4); 
+        ui64 txId = 100; 
+ 
+        TestCreateSubDomain(runtime, txId++,  "/MyRoot", 
+                            "PlanResolution: 50 " 
+                            "Coordinators: 1 " 
+                            "Mediators: 1 " 
+                            "TimeCastBucketsPerMediator: 2 " 
+                            "Name: \"USER_0\" " 
+                            "StoragePools {" 
+                            "  Name: \"name_USER_0_kind_hdd-1\"" 
+                            "  Kind: \"storage-pool-number-1\"" 
+                            "}" 
+                            "StoragePools {" 
+                            "  Name: \"name_USER_0_kind_hdd-2\"" 
+                            "  Kind: \"storage-pool-number-2\"" 
+                            "}"); 
+ 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
@@ -1224,7 +1224,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             ecp->SetPoolKind("storage-pool-number-1");
             ecp->SetSize(111);
         }
-
+ 
         {
             auto* ecp = vc.AddExplicitChannelProfiles();
             ecp->SetPoolKind("storage-pool-number-2");
@@ -1233,19 +1233,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestCreateBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString());
 
-        env.TestWaitNotification(runtime, {txId-2, txId-1});
-
-        const TFakeHiveTabletInfo* tablet = nullptr;
-        for (auto& kv : env.GetHiveState()->Tablets) {
-            if (kv.second.Type == TTabletTypes::BlockStorePartition) {
-                tablet = &kv.second;
-                break;
-            }
-        }
-        UNIT_ASSERT(tablet != nullptr);
-
-        // Tablet should be created with 3 + 1 storage pool bound channels
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels.size(), 4u);
+        env.TestWaitNotification(runtime, {txId-2, txId-1}); 
+ 
+        const TFakeHiveTabletInfo* tablet = nullptr; 
+        for (auto& kv : env.GetHiveState()->Tablets) { 
+            if (kv.second.Type == TTabletTypes::BlockStorePartition) { 
+                tablet = &kv.second; 
+                break; 
+            } 
+        } 
+        UNIT_ASSERT(tablet != nullptr); 
+ 
+        // Tablet should be created with 3 + 1 storage pool bound channels 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels.size(), 4u); 
         UNIT_ASSERT_VALUES_EQUAL(
             tablet->BoundChannels[0].GetStoragePoolName(),
             "name_USER_0_kind_hdd-1"
@@ -1266,13 +1266,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             "name_USER_0_kind_hdd-2"
         );
         UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[3].GetSize(), 222);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                             {NLs::SubdomainWithNoEmptyStoragePools});
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/BSVolume"),
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/BSVolume"), 
                             {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4)});
-
+ 
         vc.ClearBlockSize();
         vc.ClearPartitions();
         vc.SetVersion(1);
@@ -1298,36 +1298,36 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             ecp->SetSize(444);
         }
         TestAlterBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString());
-
-        env.TestWaitNotification(runtime, txId-1);
-
-        // Tablet should be recreated with 3 + 2 storage pool bound channels
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels.size(), 5u);
+ 
+        env.TestWaitNotification(runtime, txId-1); 
+ 
+        // Tablet should be recreated with 3 + 2 storage pool bound channels 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels.size(), 5u); 
         UNIT_ASSERT_VALUES_EQUAL(
             tablet->BoundChannels[4].GetStoragePoolName(),
             "name_USER_0_kind_hdd-2"
         );
         UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[4].GetSize(), 444);
-
+ 
         vc.SetVersion(3);
         for (ui32 i = 0; i < 251; ++i) {
             vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-2");
         }
         TestAlterBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString());
-
-        env.TestWaitNotification(runtime, txId-1);
-
-        // Tablet should be recreated with 3 + 253 storage pool bound channels
-        // Note that channel profile does not have that many entries
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels.size(), 256u);
-
-        TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
-        env.TestWaitNotification(runtime, txId-1);
-
-        TestLs(runtime, "/MyRoot/USER_0/BSVolume", false, NLs::PathNotExist);
-        TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
-    }
-
+ 
+        env.TestWaitNotification(runtime, txId-1); 
+ 
+        // Tablet should be recreated with 3 + 253 storage pool bound channels 
+        // Note that channel profile does not have that many entries 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels.size(), 256u); 
+ 
+        TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0"); 
+        env.TestWaitNotification(runtime, txId-1); 
+ 
+        TestLs(runtime, "/MyRoot/USER_0/BSVolume", false, NLs::PathNotExist); 
+        TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist); 
+    } 
+ 
     Y_UNIT_TEST(Restart) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -2612,200 +2612,200 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
         }
     }
-
-    Y_UNIT_TEST(SchemeLimitsCreatePq) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TSchemeLimits lowLimits;
-        lowLimits.MaxDepth = 4;
-        lowLimits.MaxPaths = 5;
-        lowLimits.MaxChildrenInDir = 3;
-        lowLimits.MaxTableIndices = 4;
-        lowLimits.MaxShards = 7;
-        lowLimits.MaxShardsInPath = 4;
-        lowLimits.ExtraPathSymbolsAllowed = "_.-";
-        SetSchemeshardSchemaLimits(runtime, lowLimits);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist,
-                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards)});
-
-        // 1 balancer + 4 partitions = 5 (over path limit)
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 40 "
-                        "PartitionPerTablet: 10 "
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}",
+ 
+    Y_UNIT_TEST(SchemeLimitsCreatePq) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TSchemeLimits lowLimits; 
+        lowLimits.MaxDepth = 4; 
+        lowLimits.MaxPaths = 5; 
+        lowLimits.MaxChildrenInDir = 3; 
+        lowLimits.MaxTableIndices = 4; 
+        lowLimits.MaxShards = 7; 
+        lowLimits.MaxShardsInPath = 4; 
+        lowLimits.ExtraPathSymbolsAllowed = "_.-"; 
+        SetSchemeshardSchemaLimits(runtime, lowLimits); 
+ 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), 
+                           {NLs::PathExist, 
+                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards)}); 
+ 
+        // 1 balancer + 4 partitions = 5 (over path limit) 
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 40 " 
+                        "PartitionPerTablet: 10 " 
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}", 
                         {NKikimrScheme::StatusResourceExhausted});
-
-        // 1 balancer + 3 partitions = 4 (within path limit)
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 30 "
-                        "PartitionPerTablet: 10 "
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
-
-        // 1 balancer + 3 partitions = 4 (over tenant limit)
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup_2\""
-                        "TotalGroupCount: 30 "
-                        "PartitionPerTablet: 10 "
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}",
+ 
+        // 1 balancer + 3 partitions = 4 (within path limit) 
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 30 " 
+                        "PartitionPerTablet: 10 " 
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"); 
+ 
+        // 1 balancer + 3 partitions = 4 (over tenant limit) 
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", 
+                        "Name: \"PQGroup_2\"" 
+                        "TotalGroupCount: 30 " 
+                        "PartitionPerTablet: 10 " 
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}", 
                         {NKikimrScheme::StatusResourceExhausted});
-
-        // 1 balancer + 2 partitions = 3 (within tenant limit)
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup_2\""
-                        "TotalGroupCount: 20 "
-                        "PartitionPerTablet: 10 "
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
-    }
-
-    Y_UNIT_TEST(SchemeQuotas) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 123;
-
-        // Subdomain with two quotas: once per minute and twice per 10 minutes
-        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"(
-                        Name: "USER_0"
-                        PlanResolution: 50
-                        Coordinators: 1
-                        Mediators: 1
-                        TimeCastBucketsPerMediator: 2
-                        StoragePools {
-                            Name: "name_USER_0_kind_hdd-1"
-                            Kind: "hdd-1"
-                        }
-                        StoragePools {
-                            Name: "name_USER_0_kind_hdd-2"
-                            Kind: "hdd-2"
-                        }
-                        DeclaredSchemeQuotas {
-                            SchemeQuotas {
-                                BucketSize: 1
-                                BucketSeconds: 60
-                            }
-                            SchemeQuotas {
-                                BucketSize: 2
-                                BucketSeconds: 600
-                            }
-                        }
-                )");
-        env.TestWaitNotification(runtime, txId);
-
-        // First table should succeed
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table1"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+ 
+        // 1 balancer + 2 partitions = 3 (within tenant limit) 
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", 
+                        "Name: \"PQGroup_2\"" 
+                        "TotalGroupCount: 20 " 
+                        "PartitionPerTablet: 10 " 
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"); 
+    } 
+ 
+    Y_UNIT_TEST(SchemeQuotas) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 123; 
+ 
+        // Subdomain with two quotas: once per minute and twice per 10 minutes 
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"( 
+                        Name: "USER_0" 
+                        PlanResolution: 50 
+                        Coordinators: 1 
+                        Mediators: 1 
+                        TimeCastBucketsPerMediator: 2 
+                        StoragePools { 
+                            Name: "name_USER_0_kind_hdd-1" 
+                            Kind: "hdd-1" 
+                        } 
+                        StoragePools { 
+                            Name: "name_USER_0_kind_hdd-2" 
+                            Kind: "hdd-2" 
+                        } 
+                        DeclaredSchemeQuotas { 
+                            SchemeQuotas { 
+                                BucketSize: 1 
+                                BucketSeconds: 60 
+                            } 
+                            SchemeQuotas { 
+                                BucketSize: 2 
+                                BucketSeconds: 600 
+                            } 
+                        } 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // First table should succeed 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table1" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-
-        // Second table should fail (out of per-minute quota)
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table2"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+ 
+        // Second table should fail (out of per-minute quota) 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table2" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusQuotaExceeded});
-
-        // After a minute we should be able to create one more table
-        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table3"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+ 
+        // After a minute we should be able to create one more table 
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1)); 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table3" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table4"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table4" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusQuotaExceeded});
-
-        // After 1 more minute we should still fail because of per 10 minute quota
-        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table5"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+ 
+        // After 1 more minute we should still fail because of per 10 minute quota 
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1)); 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table5" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusQuotaExceeded});
-
-        // After 3 more minutes we should succeed, because enough per 10 minute quota regenerates
-        runtime.AdvanceCurrentTime(TDuration::Minutes(3));
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table6"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+ 
+        // After 3 more minutes we should succeed, because enough per 10 minute quota regenerates 
+        runtime.AdvanceCurrentTime(TDuration::Minutes(3)); 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table6" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-
-        // Quotas consuption is persistent, on reboot they should stay consumed
-        {
-            TActorId sender = runtime.AllocateEdgeActor();
+ 
+        // Quotas consuption is persistent, on reboot they should stay consumed 
+        { 
+            TActorId sender = runtime.AllocateEdgeActor(); 
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-        }
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table7"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+        } 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table7" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusQuotaExceeded});
-
-        // Need 5 more minutes to create a table
-        runtime.AdvanceCurrentTime(TDuration::Minutes(5));
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table7"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+ 
+        // Need 5 more minutes to create a table 
+        runtime.AdvanceCurrentTime(TDuration::Minutes(5)); 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table7" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-
-        // Reset quotas for the subdomain
-        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
-                        Name: "USER_0"
-                        DeclaredSchemeQuotas {
-                        }
-                )");
-        env.TestWaitNotification(runtime, txId);
-
-        // Now two consecutive create table operations should succeed
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table8"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+ 
+        // Reset quotas for the subdomain 
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"( 
+                        Name: "USER_0" 
+                        DeclaredSchemeQuotas { 
+                        } 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Now two consecutive create table operations should succeed 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table8" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table9"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table9" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-
-        // Quotas removal is persistent, on reboot they should not reactivate
-        {
-            TActorId sender = runtime.AllocateEdgeActor();
+ 
+        // Quotas removal is persistent, on reboot they should not reactivate 
+        { 
+            TActorId sender = runtime.AllocateEdgeActor(); 
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-        }
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table10"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+        } 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table10" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table11"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table11" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-    }
+    } 
 
     Y_UNIT_TEST(DiskSpaceUsage) {
         TTestBasicRuntime runtime;
@@ -2895,88 +2895,88 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             UNIT_ASSERT_VALUES_EQUAL(du.ShortDebugString(), getDiskSpaceUsage().ShortDebugString());
         }
     }
-
-    Y_UNIT_TEST(DiskSpaceQuotas) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnablePersistentPartitionStats(true));
-        ui64 txId = 100;
-
-        auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) {
-            NKikimrMiniKQL::TResult result;
-            TString error;
+ 
+    Y_UNIT_TEST(DiskSpaceQuotas) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime, TTestEnvOptions().EnablePersistentPartitionStats(true)); 
+        ui64 txId = 100; 
+ 
+        auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) { 
+            NKikimrMiniKQL::TResult result; 
+            TString error; 
             NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-                (
-                    (let key   '( '('key (Uint32 '%u ) ) ) )
-                    (let row   '( '('value (Utf8 '%s) ) ) )
-                    (return (AsList (UpdateRow '__user__%s key row) ))
-                )
-            )", key, value.c_str(), table), result, error);
-
+                ( 
+                    (let key   '( '('key (Uint32 '%u ) ) ) ) 
+                    (let row   '( '('value (Utf8 '%s) ) ) ) 
+                    (return (AsList (UpdateRow '__user__%s key row) )) 
+                ) 
+            )", key, value.c_str(), table), result, error); 
+ 
             UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "");
-        };
-
-        auto waitForTableStats = [&](ui32 shards) {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvPeriodicTableStats, shards));
-            runtime.DispatchEvents(options);
-        };
-
-        auto waitForSchemaChanged = [&](ui32 shards) {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvSchemaChanged, shards));
-            runtime.DispatchEvents(options);
-        };
-
-        // Subdomain with a 1-byte data size quota
-        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"(
-                        Name: "USER_0"
-                        PlanResolution: 50
-                        Coordinators: 1
-                        Mediators: 1
-                        TimeCastBucketsPerMediator: 2
-                        StoragePools {
-                            Name: "name_USER_0_kind_hdd-1"
-                            Kind: "hdd-1"
-                        }
-                        StoragePools {
-                            Name: "name_USER_0_kind_hdd-2"
-                            Kind: "hdd-2"
-                        }
-                        DatabaseQuotas {
-                            data_size_hard_quota: 1
-                        }
-                )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(false)});
-
-        // skip a single coordinator and mediator
+            UNIT_ASSERT_VALUES_EQUAL(error, ""); 
+        }; 
+ 
+        auto waitForTableStats = [&](ui32 shards) { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvPeriodicTableStats, shards)); 
+            runtime.DispatchEvents(options); 
+        }; 
+ 
+        auto waitForSchemaChanged = [&](ui32 shards) { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvSchemaChanged, shards)); 
+            runtime.DispatchEvents(options); 
+        }; 
+ 
+        // Subdomain with a 1-byte data size quota 
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"( 
+                        Name: "USER_0" 
+                        PlanResolution: 50 
+                        Coordinators: 1 
+                        Mediators: 1 
+                        TimeCastBucketsPerMediator: 2 
+                        StoragePools { 
+                            Name: "name_USER_0_kind_hdd-1" 
+                            Kind: "hdd-1" 
+                        } 
+                        StoragePools { 
+                            Name: "name_USER_0_kind_hdd-2" 
+                            Kind: "hdd-2" 
+                        } 
+                        DatabaseQuotas { 
+                            data_size_hard_quota: 1 
+                        } 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
+                           {LsCheckDiskQuotaExceeded(false)}); 
+ 
+        // skip a single coordinator and mediator 
         ui64 tabletId = TTestTxConfig::FakeHiveTablets + 2;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table1"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
+                            Name: "Table1" 
+                            Columns { Name: "key"        Type: "Uint32"} 
+                            Columns { Name: "value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key"] 
                 )", {NKikimrScheme::StatusAccepted});
-        env.TestWaitNotification(runtime, txId);
-
-        writeRow(tabletId, 1, "value1", "Table1");
-        waitForTableStats(1);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(true)});
-
-        TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table1");
-        waitForSchemaChanged(1);
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(false)});
-    }
-
+        env.TestWaitNotification(runtime, txId); 
+ 
+        writeRow(tabletId, 1, "value1", "Table1"); 
+        waitForTableStats(1); 
+ 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
+                           {LsCheckDiskQuotaExceeded(true)}); 
+ 
+        TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table1"); 
+        waitForSchemaChanged(1); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
+                           {LsCheckDiskQuotaExceeded(false)}); 
+    } 
+ 
     Y_UNIT_TEST(SchemeDatabaseQuotaRejects) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

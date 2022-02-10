@@ -22,11 +22,11 @@ void PrintDeps(const TOperation *op,
                IOutputStream &os)
 {
     os << "OPERATION " << *op << " DEPS IN";
-    for (auto &dep: op->GetDependencies())
-        PrintDepTx(dep.Get(), os);
+    for (auto &dep: op->GetDependencies()) 
+        PrintDepTx(dep.Get(), os); 
     os << " OUT";
-    for (auto &dep: op->GetDependents())
-        PrintDepTx(dep.Get(), os);
+    for (auto &dep: op->GetDependents()) 
+        PrintDepTx(dep.Get(), os); 
     os << Endl;
 }
 }
@@ -76,109 +76,109 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
     }
 }
 
-void TOperation::AddDependency(const TOperation::TPtr &op) {
-    Y_VERIFY(this != op.Get());
-
-    if (Dependencies.insert(op).second) {
-        op->Dependents.insert(this);
+void TOperation::AddDependency(const TOperation::TPtr &op) { 
+    Y_VERIFY(this != op.Get()); 
+ 
+    if (Dependencies.insert(op).second) { 
+        op->Dependents.insert(this); 
+    } 
+} 
+ 
+void TOperation::AddSpecialDependency(const TOperation::TPtr &op) { 
+    Y_VERIFY(this != op.Get()); 
+ 
+    if (SpecialDependencies.insert(op).second) { 
+        op->SpecialDependents.insert(this); 
+    } 
+} 
+ 
+void TOperation::AddImmediateConflict(const TOperation::TPtr &op) { 
+    Y_VERIFY(this != op.Get()); 
+    Y_VERIFY_DEBUG(!IsImmediate()); 
+    Y_VERIFY_DEBUG(op->IsImmediate()); 
+ 
+    if (HasFlag(TTxFlags::BlockingImmediateOps) || 
+        HasFlag(TTxFlags::BlockingImmediateWrites) && !op->IsReadOnly()) 
+    { 
+        return op->AddDependency(this); 
+    } 
+ 
+    if (ImmediateConflicts.insert(op).second) { 
+        op->PlannedConflicts.insert(this); 
     }
 }
 
-void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
-    Y_VERIFY(this != op.Get());
-
-    if (SpecialDependencies.insert(op).second) {
-        op->SpecialDependents.insert(this);
-    }
+void TOperation::PromoteImmediateConflicts() { 
+    for (auto& op : ImmediateConflicts) { 
+        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this)); 
+        op->PlannedConflicts.erase(this); 
+        op->AddDependency(this); 
+    } 
+    ImmediateConflicts.clear(); 
 }
 
-void TOperation::AddImmediateConflict(const TOperation::TPtr &op) {
-    Y_VERIFY(this != op.Get());
-    Y_VERIFY_DEBUG(!IsImmediate());
-    Y_VERIFY_DEBUG(op->IsImmediate());
-
-    if (HasFlag(TTxFlags::BlockingImmediateOps) ||
-        HasFlag(TTxFlags::BlockingImmediateWrites) && !op->IsReadOnly())
-    {
-        return op->AddDependency(this);
-    }
-
-    if (ImmediateConflicts.insert(op).second) {
-        op->PlannedConflicts.insert(this);
-    }
-}
-
-void TOperation::PromoteImmediateConflicts() {
-    for (auto& op : ImmediateConflicts) {
-        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this));
-        op->PlannedConflicts.erase(this);
-        op->AddDependency(this);
-    }
-    ImmediateConflicts.clear();
-}
-
-void TOperation::PromoteImmediateWriteConflicts() {
-    for (auto it = ImmediateConflicts.begin(); it != ImmediateConflicts.end();) {
-        auto& op = *it;
-        if (op->IsReadOnly()) {
-            ++it;
-            continue;
-        }
-        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this));
-        op->PlannedConflicts.erase(this);
-        op->AddDependency(this);
-        auto last = it;
-        ++it;
-        ImmediateConflicts.erase(last);
-    }
-}
-
-void TOperation::ClearDependents() {
-    for (auto &op : Dependents) {
-        Y_VERIFY_DEBUG(op->Dependencies.contains(this));
-        op->Dependencies.erase(this);
-    }
-    Dependents.clear();
-}
-
-void TOperation::ClearDependencies() {
-    for (auto &op : Dependencies) {
-        Y_VERIFY_DEBUG(op->Dependents.contains(this));
-        op->Dependents.erase(this);
+void TOperation::PromoteImmediateWriteConflicts() { 
+    for (auto it = ImmediateConflicts.begin(); it != ImmediateConflicts.end();) { 
+        auto& op = *it; 
+        if (op->IsReadOnly()) { 
+            ++it; 
+            continue; 
+        } 
+        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this)); 
+        op->PlannedConflicts.erase(this); 
+        op->AddDependency(this); 
+        auto last = it; 
+        ++it; 
+        ImmediateConflicts.erase(last); 
+    } 
+} 
+ 
+void TOperation::ClearDependents() { 
+    for (auto &op : Dependents) { 
+        Y_VERIFY_DEBUG(op->Dependencies.contains(this)); 
+        op->Dependencies.erase(this); 
+    } 
+    Dependents.clear(); 
+} 
+ 
+void TOperation::ClearDependencies() { 
+    for (auto &op : Dependencies) { 
+        Y_VERIFY_DEBUG(op->Dependents.contains(this)); 
+        op->Dependents.erase(this); 
     }
     Dependencies.clear();
 }
 
-void TOperation::ClearSpecialDependents() {
-    for (auto &op : SpecialDependents) {
-        Y_VERIFY_DEBUG(op->SpecialDependencies.contains(this));
-        op->SpecialDependencies.erase(this);
+void TOperation::ClearSpecialDependents() { 
+    for (auto &op : SpecialDependents) { 
+        Y_VERIFY_DEBUG(op->SpecialDependencies.contains(this)); 
+        op->SpecialDependencies.erase(this); 
     }
-    SpecialDependents.clear();
+    SpecialDependents.clear(); 
 }
 
-void TOperation::ClearSpecialDependencies() {
-    for (auto &op : SpecialDependencies) {
-        Y_VERIFY_DEBUG(op->SpecialDependents.contains(this));
-        op->SpecialDependents.erase(this);
-    }
-    SpecialDependencies.clear();
+void TOperation::ClearSpecialDependencies() { 
+    for (auto &op : SpecialDependencies) { 
+        Y_VERIFY_DEBUG(op->SpecialDependents.contains(this)); 
+        op->SpecialDependents.erase(this); 
+    } 
+    SpecialDependencies.clear(); 
 }
 
-void TOperation::ClearPlannedConflicts() {
-    for (auto &op : PlannedConflicts) {
-        Y_VERIFY_DEBUG(op->ImmediateConflicts.contains(this));
-        op->ImmediateConflicts.erase(this);
+void TOperation::ClearPlannedConflicts() { 
+    for (auto &op : PlannedConflicts) { 
+        Y_VERIFY_DEBUG(op->ImmediateConflicts.contains(this)); 
+        op->ImmediateConflicts.erase(this); 
     }
-    PlannedConflicts.clear();
+    PlannedConflicts.clear(); 
 }
 
-void TOperation::ClearImmediateConflicts() {
-    for (auto &op : ImmediateConflicts) {
-        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this));
-        op->PlannedConflicts.erase(this);
-    }
-    ImmediateConflicts.clear();
+void TOperation::ClearImmediateConflicts() { 
+    for (auto &op : ImmediateConflicts) { 
+        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this)); 
+        op->PlannedConflicts.erase(this); 
+    } 
+    ImmediateConflicts.clear(); 
 }
 
 TString TOperation::DumpDependencies() const
@@ -237,11 +237,11 @@ void TOperation::AdvanceExecutionPlan()
     ExecutionProfile.StartUnitAt = now;
 }
 
-void TOperation::Abort()
-{
-    SetAbortedFlag();
-}
-
+void TOperation::Abort() 
+{ 
+    SetAbortedFlag(); 
+} 
+ 
 void TOperation::Abort(EExecutionUnitKind unit)
 {
     SetAbortedFlag();
@@ -264,11 +264,11 @@ TString TOperation::ExecutionProfileLogString(ui64 tabletId) const
     return ss.Str();
 }
 
-bool TOperation::HasRuntimeConflicts() const noexcept
-{
-    // We may acquire some new dependencies at runtime
-    return !Dependencies.empty();
-}
-
+bool TOperation::HasRuntimeConflicts() const noexcept 
+{ 
+    // We may acquire some new dependencies at runtime 
+    return !Dependencies.empty(); 
+} 
+ 
 } // namespace NDataShard
 } // namespace NKikimr

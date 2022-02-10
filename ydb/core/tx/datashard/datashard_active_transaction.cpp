@@ -52,17 +52,17 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
     if (Tx.HasReadTableTransaction()) {
         auto &tx = Tx.GetReadTableTransaction();
-        if (self->TableInfos.contains(tx.GetTableId().GetTableId())) {
-            auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get();
-            Y_VERIFY(info, "Unexpected missing table info");
+        if (self->TableInfos.contains(tx.GetTableId().GetTableId())) { 
+            auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get(); 
+            Y_VERIFY(info, "Unexpected missing table info"); 
             TSerializedTableRange range(tx.GetRange());
-            EngineBay.AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
-                                            tx.GetTableId().GetTableId()),
+            EngineBay.AddReadRange(TTableId(tx.GetTableId().GetOwnerId(), 
+                                            tx.GetTableId().GetTableId()), 
                                    {}, range.ToTableRange(), info->KeyColumnTypes);
-        } else {
-            ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-            ErrStr = "Trying to read from table that doesn't exist";
-        }
+        } else { 
+            ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR; 
+            ErrStr = "Trying to read from table that doesn't exist"; 
+        } 
     } else if (IsKqpTx()) {
         if (Y_UNLIKELY(!IsKqpDataTx())) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Unexpected KQP transaction type, shard: " << TabletId()
@@ -221,23 +221,23 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
     return KeysCount();
 }
 
-bool TValidatedDataTx::ReValidateKeys()
-{
-    using EResult = NMiniKQL::IEngineFlat::EResult;
-
-    EResult result = EngineBay.ReValidateKeys();
-    if (result != EResult::Ok) {
-        ErrStr = EngineBay.GetEngine()->GetErrors();
-        ErrCode = ConvertErrCode(result);
-        return false;
-    }
-
-    return true;
-}
-
+bool TValidatedDataTx::ReValidateKeys() 
+{ 
+    using EResult = NMiniKQL::IEngineFlat::EResult; 
+ 
+    EResult result = EngineBay.ReValidateKeys(); 
+    if (result != EResult::Ok) { 
+        ErrStr = EngineBay.GetEngine()->GetErrors(); 
+        ErrCode = ConvertErrCode(result); 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 ETxOrder TValidatedDataTx::CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const {
-    Y_VERIFY(TxInfo().Loaded);
-    Y_VERIFY(dataTx.TxInfo().Loaded);
+    Y_VERIFY(TxInfo().Loaded); 
+    Y_VERIFY(dataTx.TxInfo().Loaded); 
 
     if (KeysCount() > MaxReorderTxKeys())
         return ETxOrder::Unknown;
@@ -399,12 +399,12 @@ void TActiveTransaction::FillTxData(TDataShard *self,
             SetStreamSink(DataTx->GetSink());
     } else if (IsSchemeTx()) {
         BuildSchemeTx();
-    } else if (IsSnapshotTx()) {
-        BuildSnapshotTx();
+    } else if (IsSnapshotTx()) { 
+        BuildSnapshotTx(); 
     } else if (IsDistributedEraseTx()) {
         BuildDistributedEraseTx();
-    } else if (IsCommitWritesTx()) {
-        BuildCommitWritesTx();
+    } else if (IsCommitWritesTx()) { 
+        BuildCommitWritesTx(); 
     }
 
     TrackMemory();
@@ -419,8 +419,8 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
         Y_VERIFY(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
                                                     GetReceivedAt(), TxBody);
-        if (DataTx->HasStreamResponse())
-            SetStreamSink(DataTx->GetSink());
+        if (DataTx->HasStreamResponse()) 
+            SetStreamSink(DataTx->GetSink()); 
     }
     return DataTx;
 }
@@ -439,7 +439,7 @@ bool TActiveTransaction::BuildSchemeTx()
         + (ui32)SchemeTx->HasBackup()
         + (ui32)SchemeTx->HasRestore()
         + (ui32)SchemeTx->HasSendSnapshot()
-        + (ui32)SchemeTx->HasCreatePersistentSnapshot()
+        + (ui32)SchemeTx->HasCreatePersistentSnapshot() 
         + (ui32)SchemeTx->HasDropPersistentSnapshot()
         + (ui32)SchemeTx->HasInitiateBuildIndex()
         + (ui32)SchemeTx->HasFinalizeBuildIndex()
@@ -463,9 +463,9 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeRestore;
     else if (SchemeTx->HasSendSnapshot())
         SchemeTxType = TSchemaOperation::ETypeCopy;
-    else if (SchemeTx->HasCreatePersistentSnapshot())
+    else if (SchemeTx->HasCreatePersistentSnapshot()) 
         SchemeTxType = TSchemaOperation::ETypeCreatePersistentSnapshot;
-    else if (SchemeTx->HasDropPersistentSnapshot())
+    else if (SchemeTx->HasDropPersistentSnapshot()) 
         SchemeTxType = TSchemaOperation::ETypeDropPersistentSnapshot;
     else if (SchemeTx->HasInitiateBuildIndex())
         SchemeTxType = TSchemaOperation::ETypeInitiateBuildIndex;
@@ -487,24 +487,24 @@ bool TActiveTransaction::BuildSchemeTx()
     return SchemeTxType != TSchemaOperation::ETypeUnknown;
 }
 
-bool TActiveTransaction::BuildSnapshotTx()
-{
-    Y_VERIFY(TxBody);
+bool TActiveTransaction::BuildSnapshotTx() 
+{ 
+    Y_VERIFY(TxBody); 
     SnapshotTx.Reset(new NKikimrTxDataShard::TSnapshotTransaction);
-    if (!SnapshotTx->ParseFromArray(TxBody.data(), TxBody.size())) {
-        return false;
-    }
-
-    size_t count = (
-        SnapshotTx->HasCreateVolatileSnapshot() +
-        SnapshotTx->HasDropVolatileSnapshot());
-    if (count != 1) {
-        return false;
-    }
-
-    return true;
-}
-
+    if (!SnapshotTx->ParseFromArray(TxBody.data(), TxBody.size())) { 
+        return false; 
+    } 
+ 
+    size_t count = ( 
+        SnapshotTx->HasCreateVolatileSnapshot() + 
+        SnapshotTx->HasDropVolatileSnapshot()); 
+    if (count != 1) { 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 bool TDistributedEraseTx::TryParse(const TString& serialized) {
     if (!Body.ParseFromArray(serialized.data(), serialized.size())) {
         return false;
@@ -521,22 +521,22 @@ bool TActiveTransaction::BuildDistributedEraseTx() {
 
 //
 
-bool TCommitWritesTx::TryParse(const TString& serialized) {
-    if (!Body.ParseFromArray(serialized.data(), serialized.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool TActiveTransaction::BuildCommitWritesTx() {
-    Y_VERIFY(TxBody);
-    CommitWritesTx.Reset(new TCommitWritesTx);
-    return CommitWritesTx->TryParse(TxBody);
-}
-
-//
-
+bool TCommitWritesTx::TryParse(const TString& serialized) { 
+    if (!Body.ParseFromArray(serialized.data(), serialized.size())) { 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
+bool TActiveTransaction::BuildCommitWritesTx() { 
+    Y_VERIFY(TxBody); 
+    CommitWritesTx.Reset(new TCommitWritesTx); 
+    return CommitWritesTx->TryParse(TxBody); 
+} 
+ 
+// 
+ 
 void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider,
                                        const TActorContext &ctx) {
     ReleasedTxDataSize = provider.GetMemoryLimit() + provider.GetRequestedMemory();
@@ -603,14 +603,14 @@ ui64 TActiveTransaction::GetMemoryConsumption() const {
     return res;
 }
 
-ERestoreDataStatus TActiveTransaction::RestoreTxData(
+ERestoreDataStatus TActiveTransaction::RestoreTxData( 
         TDataShard *self,
-        TTransactionContext &txc,
-        const TActorContext &ctx)
+        TTransactionContext &txc, 
+        const TActorContext &ctx) 
 {
     if (!DataTx) {
         ReleasedTxDataSize = 0;
-        return ERestoreDataStatus::Ok;
+        return ERestoreDataStatus::Ok; 
     }
 
     UntrackMemory();
@@ -626,7 +626,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         if (!ok) {
             TxBody.clear();
             ArtifactFlags = 0;
-            return ERestoreDataStatus::Restart;
+            return ERestoreDataStatus::Restart; 
         }
     } else {
         Y_VERIFY(TxBody);
@@ -640,95 +640,95 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
                                                 GetReceivedAt(), TxBody);
-    if (DataTx->Ready() && extractKeys) {
-        DataTx->ExtractKeys(true);
-    }
+    if (DataTx->Ready() && extractKeys) { 
+        DataTx->ExtractKeys(true); 
+    } 
 
-    if (!DataTx->Ready()) {
-        return ERestoreDataStatus::Error;
-    }
-
+    if (!DataTx->Ready()) { 
+        return ERestoreDataStatus::Error; 
+    } 
+ 
     ReleasedTxDataSize = 0;
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "tx " << GetTxId() << " at "
                 << self->TabletID() << " restored its data");
 
-    return ERestoreDataStatus::Ok;
+    return ERestoreDataStatus::Ok; 
 }
 
-void TActiveTransaction::FinalizeDataTxPlan()
-{
-    Y_VERIFY(IsDataTx());
-    Y_VERIFY(!IsImmediate());
+void TActiveTransaction::FinalizeDataTxPlan() 
+{ 
+    Y_VERIFY(IsDataTx()); 
+    Y_VERIFY(!IsImmediate()); 
     Y_VERIFY(!IsKqpScanTransaction());
-
-    TVector<EExecutionUnitKind> plan;
-
-    plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-    if (IsKqpDataTransaction()) {
-        plan.push_back(EExecutionUnitKind::BuildKqpDataTxOutRS);
-        plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
-        plan.push_back(EExecutionUnitKind::PrepareKqpDataTxInRS);
-        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
-        plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
-    } else {
-        plan.push_back(EExecutionUnitKind::BuildDataTxOutRS);
-        plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
-        plan.push_back(EExecutionUnitKind::PrepareDataTxInRS);
-        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
-        plan.push_back(EExecutionUnitKind::ExecuteDataTx);
-    }
-    plan.push_back(EExecutionUnitKind::CompleteOperation);
-    plan.push_back(EExecutionUnitKind::CompletedOperations);
-
-    RewriteExecutionPlan(plan);
-}
-
-class TFinalizeDataTxPlanUnit : public TExecutionUnit {
-public:
+ 
+    TVector<EExecutionUnitKind> plan; 
+ 
+    plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies); 
+    if (IsKqpDataTransaction()) { 
+        plan.push_back(EExecutionUnitKind::BuildKqpDataTxOutRS); 
+        plan.push_back(EExecutionUnitKind::StoreAndSendOutRS); 
+        plan.push_back(EExecutionUnitKind::PrepareKqpDataTxInRS); 
+        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS); 
+        plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx); 
+    } else { 
+        plan.push_back(EExecutionUnitKind::BuildDataTxOutRS); 
+        plan.push_back(EExecutionUnitKind::StoreAndSendOutRS); 
+        plan.push_back(EExecutionUnitKind::PrepareDataTxInRS); 
+        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS); 
+        plan.push_back(EExecutionUnitKind::ExecuteDataTx); 
+    } 
+    plan.push_back(EExecutionUnitKind::CompleteOperation); 
+    plan.push_back(EExecutionUnitKind::CompletedOperations); 
+ 
+    RewriteExecutionPlan(plan); 
+} 
+ 
+class TFinalizeDataTxPlanUnit : public TExecutionUnit { 
+public: 
     TFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline)
-        : TExecutionUnit(EExecutionUnitKind::FinalizeDataTxPlan, false, dataShard, pipeline)
-    { }
-
-    bool IsReadyToExecute(TOperation::TPtr) const override {
-        return true;
-    }
-
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override
-    {
-        Y_UNUSED(txc);
-        Y_UNUSED(ctx);
-
-        TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-        Y_VERIFY_S(tx->IsDataTx(), "unexpected non-data tx");
-
-        if (auto dataTx = tx->GetDataTx()) {
-            // Restore transaction type flags
-            if (dataTx->IsKqpDataTx() && !tx->IsKqpDataTransaction())
-                tx->SetKqpDataTransactionFlag();
+        : TExecutionUnit(EExecutionUnitKind::FinalizeDataTxPlan, false, dataShard, pipeline) 
+    { } 
+ 
+    bool IsReadyToExecute(TOperation::TPtr) const override { 
+        return true; 
+    } 
+ 
+    EExecutionStatus Execute(TOperation::TPtr op, 
+                             TTransactionContext &txc, 
+                             const TActorContext &ctx) override 
+    { 
+        Y_UNUSED(txc); 
+        Y_UNUSED(ctx); 
+ 
+        TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
+        Y_VERIFY_S(tx->IsDataTx(), "unexpected non-data tx"); 
+ 
+        if (auto dataTx = tx->GetDataTx()) { 
+            // Restore transaction type flags 
+            if (dataTx->IsKqpDataTx() && !tx->IsKqpDataTransaction()) 
+                tx->SetKqpDataTransactionFlag(); 
             Y_VERIFY_S(!dataTx->IsKqpScanTx(), "unexpected kqp scan tx");
-        }
-
-        tx->FinalizeDataTxPlan();
-
-        return EExecutionStatus::Executed;
-    }
-
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override
-    {
-        Y_UNUSED(op);
-        Y_UNUSED(ctx);
-    }
-};
-
+        } 
+ 
+        tx->FinalizeDataTxPlan(); 
+ 
+        return EExecutionStatus::Executed; 
+    } 
+ 
+    void Complete(TOperation::TPtr op, 
+                  const TActorContext &ctx) override 
+    { 
+        Y_UNUSED(op); 
+        Y_UNUSED(ctx); 
+    } 
+}; 
+ 
 THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline) {
     return THolder(new TFinalizeDataTxPlanUnit(dataShard, pipeline));
-}
-
+} 
+ 
 void TActiveTransaction::BuildExecutionPlan(bool loaded)
 {
     Y_VERIFY(GetExecutionPlan().empty());
@@ -757,55 +757,55 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
                 plan.push_back(EExecutionUnitKind::WaitForPlan);
             plan.push_back(EExecutionUnitKind::PlanQueue);
             plan.push_back(EExecutionUnitKind::LoadTxDetails);
-            plan.push_back(EExecutionUnitKind::FinalizeDataTxPlan);
+            plan.push_back(EExecutionUnitKind::FinalizeDataTxPlan); 
         }
     } else if (IsReadTable()) {
-        if (IsImmediate()) {
+        if (IsImmediate()) { 
             plan.push_back(EExecutionUnitKind::CheckDataTx);
-        } else {
-            if (!loaded) {
-                plan.push_back(EExecutionUnitKind::CheckDataTx);
-                plan.push_back(EExecutionUnitKind::StoreDataTx);
-                plan.push_back(EExecutionUnitKind::FinishPropose);
-            }
-            if (!GetStep())
-                plan.push_back(EExecutionUnitKind::WaitForPlan);
-            plan.push_back(EExecutionUnitKind::PlanQueue);
-            plan.push_back(EExecutionUnitKind::LoadTxDetails);
+        } else { 
+            if (!loaded) { 
+                plan.push_back(EExecutionUnitKind::CheckDataTx); 
+                plan.push_back(EExecutionUnitKind::StoreDataTx); 
+                plan.push_back(EExecutionUnitKind::FinishPropose); 
+            } 
+            if (!GetStep()) 
+                plan.push_back(EExecutionUnitKind::WaitForPlan); 
+            plan.push_back(EExecutionUnitKind::PlanQueue); 
+            plan.push_back(EExecutionUnitKind::LoadTxDetails); 
         }
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
         plan.push_back(EExecutionUnitKind::MakeScanSnapshot);
         plan.push_back(EExecutionUnitKind::WaitForStreamClearance);
         plan.push_back(EExecutionUnitKind::ReadTableScan);
-        if (IsImmediate()) {
-            plan.push_back(EExecutionUnitKind::FinishPropose);
-        } else {
-            plan.push_back(EExecutionUnitKind::CompleteOperation);
-        }
+        if (IsImmediate()) { 
+            plan.push_back(EExecutionUnitKind::FinishPropose); 
+        } else { 
+            plan.push_back(EExecutionUnitKind::CompleteOperation); 
+        } 
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    } else if (IsSnapshotTx()) {
-        if (IsImmediate()) {
-            plan.push_back(EExecutionUnitKind::CheckSnapshotTx);
-        } else {
-            if (!loaded) {
-                plan.push_back(EExecutionUnitKind::CheckSnapshotTx);
-                plan.push_back(EExecutionUnitKind::StoreSnapshotTx);
-                plan.push_back(EExecutionUnitKind::FinishPropose);
-            }
-            if (!GetStep())
-                plan.push_back(EExecutionUnitKind::WaitForPlan);
-            plan.push_back(EExecutionUnitKind::PlanQueue);
-            plan.push_back(EExecutionUnitKind::LoadTxDetails);
-        }
-        plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-        plan.push_back(EExecutionUnitKind::CreateVolatileSnapshot);
-        plan.push_back(EExecutionUnitKind::DropVolatileSnapshot);
-        if (IsImmediate()) {
-            plan.push_back(EExecutionUnitKind::FinishPropose);
-        } else {
-            plan.push_back(EExecutionUnitKind::CompleteOperation);
-        }
-        plan.push_back(EExecutionUnitKind::CompletedOperations);
+    } else if (IsSnapshotTx()) { 
+        if (IsImmediate()) { 
+            plan.push_back(EExecutionUnitKind::CheckSnapshotTx); 
+        } else { 
+            if (!loaded) { 
+                plan.push_back(EExecutionUnitKind::CheckSnapshotTx); 
+                plan.push_back(EExecutionUnitKind::StoreSnapshotTx); 
+                plan.push_back(EExecutionUnitKind::FinishPropose); 
+            } 
+            if (!GetStep()) 
+                plan.push_back(EExecutionUnitKind::WaitForPlan); 
+            plan.push_back(EExecutionUnitKind::PlanQueue); 
+            plan.push_back(EExecutionUnitKind::LoadTxDetails); 
+        } 
+        plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies); 
+        plan.push_back(EExecutionUnitKind::CreateVolatileSnapshot); 
+        plan.push_back(EExecutionUnitKind::DropVolatileSnapshot); 
+        if (IsImmediate()) { 
+            plan.push_back(EExecutionUnitKind::FinishPropose); 
+        } else { 
+            plan.push_back(EExecutionUnitKind::CompleteOperation); 
+        } 
+        plan.push_back(EExecutionUnitKind::CompletedOperations); 
     } else if (IsDistributedEraseTx()) {
         if (!loaded) {
             plan.push_back(EExecutionUnitKind::CheckDistributedEraseTx);
@@ -825,29 +825,29 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::ExecuteDistributedEraseTx);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    } else if (IsCommitWritesTx()) {
-        if (IsImmediate()) {
-            Y_VERIFY(!loaded);
-            plan.push_back(EExecutionUnitKind::CheckCommitWritesTx);
-            plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-            plan.push_back(EExecutionUnitKind::ExecuteCommitWritesTx);
-            plan.push_back(EExecutionUnitKind::FinishPropose);
-        } else {
-            if (!loaded) {
-                plan.push_back(EExecutionUnitKind::CheckCommitWritesTx);
-                plan.push_back(EExecutionUnitKind::StoreCommitWritesTx);
-                plan.push_back(EExecutionUnitKind::FinishPropose);
-            }
-            if (!GetStep()) {
-                plan.push_back(EExecutionUnitKind::WaitForPlan);
-            }
-            plan.push_back(EExecutionUnitKind::PlanQueue);
-            plan.push_back(EExecutionUnitKind::LoadTxDetails);
-            plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-            plan.push_back(EExecutionUnitKind::ExecuteCommitWritesTx);
-            plan.push_back(EExecutionUnitKind::CompleteOperation);
-        }
-        plan.push_back(EExecutionUnitKind::CompletedOperations);
+    } else if (IsCommitWritesTx()) { 
+        if (IsImmediate()) { 
+            Y_VERIFY(!loaded); 
+            plan.push_back(EExecutionUnitKind::CheckCommitWritesTx); 
+            plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies); 
+            plan.push_back(EExecutionUnitKind::ExecuteCommitWritesTx); 
+            plan.push_back(EExecutionUnitKind::FinishPropose); 
+        } else { 
+            if (!loaded) { 
+                plan.push_back(EExecutionUnitKind::CheckCommitWritesTx); 
+                plan.push_back(EExecutionUnitKind::StoreCommitWritesTx); 
+                plan.push_back(EExecutionUnitKind::FinishPropose); 
+            } 
+            if (!GetStep()) { 
+                plan.push_back(EExecutionUnitKind::WaitForPlan); 
+            } 
+            plan.push_back(EExecutionUnitKind::PlanQueue); 
+            plan.push_back(EExecutionUnitKind::LoadTxDetails); 
+            plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies); 
+            plan.push_back(EExecutionUnitKind::ExecuteCommitWritesTx); 
+            plan.push_back(EExecutionUnitKind::CompleteOperation); 
+        } 
+        plan.push_back(EExecutionUnitKind::CompletedOperations); 
     } else if (IsSchemeTx()) {
         if (!loaded) {
             plan.push_back(EExecutionUnitKind::CheckSchemeTx);
@@ -858,7 +858,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::WaitForPlan);
         plan.push_back(EExecutionUnitKind::PlanQueue);
         plan.push_back(EExecutionUnitKind::LoadTxDetails);
-        plan.push_back(EExecutionUnitKind::ProtectSchemeEchoes);
+        plan.push_back(EExecutionUnitKind::ProtectSchemeEchoes); 
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
         plan.push_back(EExecutionUnitKind::MakeSnapshot);
         plan.push_back(EExecutionUnitKind::BuildSchemeTxOutRS);
@@ -869,11 +869,11 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::Restore);
         plan.push_back(EExecutionUnitKind::CreateTable);
         plan.push_back(EExecutionUnitKind::ReceiveSnapshot);
-        plan.push_back(EExecutionUnitKind::AlterMoveShadow);
+        plan.push_back(EExecutionUnitKind::AlterMoveShadow); 
         plan.push_back(EExecutionUnitKind::AlterTable);
         plan.push_back(EExecutionUnitKind::DropTable);
-        plan.push_back(EExecutionUnitKind::CreatePersistentSnapshot);
-        plan.push_back(EExecutionUnitKind::DropPersistentSnapshot);
+        plan.push_back(EExecutionUnitKind::CreatePersistentSnapshot); 
+        plan.push_back(EExecutionUnitKind::DropPersistentSnapshot); 
         plan.push_back(EExecutionUnitKind::InitiateBuildIndex);
         plan.push_back(EExecutionUnitKind::FinalizeBuildIndex);
         plan.push_back(EExecutionUnitKind::DropIndexNotice);

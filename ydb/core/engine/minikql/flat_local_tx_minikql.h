@@ -1,6 +1,6 @@
 #pragma once
 
-#include "flat_local_tx_factory.h"
+#include "flat_local_tx_factory.h" 
 #include "flat_local_minikql_host.h"
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -74,7 +74,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     ui64 TabletId = Max<ui64>();
     const TActorId Sender;
     const TLocalMiniKQLProgram SourceProgram;
-    const TMiniKQLFactory* const Factory;
+    const TMiniKQLFactory* const Factory; 
 
     TString SerializedMiniKQLProgram;
     TString SerializedMiniKQLParams;
@@ -84,7 +84,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     IEngineFlat::EResult EngineResultStatusCode;
     IEngineFlat::EStatus EngineResponseStatus;
     TAutoPtr<NKikimrMiniKQL::TResult> EngineEvaluatedResponse;
-    ui64 PageFaultCount = 0;
+    ui64 PageFaultCount = 0; 
 
     bool ParseProgram(TStringBuf program, NYql::TIssues &errors, NYql::TExprContainer &expr) {
         NYql::TAstParseResult astResult = NYql::ParseAst(program);
@@ -288,7 +288,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 proxyEngine->AfterShardProgramsExtracted();
 
                 TEngineHostCounters hostCounters;
-                TLocalMiniKQLHost host(txc.DB, hostCounters, TEngineHostSettings(TabletId, false), Factory);
+                TLocalMiniKQLHost host(txc.DB, hostCounters, TEngineHostSettings(TabletId, false), Factory); 
                 TEngineFlatSettings engineSettings(
                     IEngineFlat::EProtocol::V1,
                     functionRegistry,
@@ -305,7 +305,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(engine.Get(), ctx);
 
-                EngineResultStatusCode = engine->PinPages(PageFaultCount);
+                EngineResultStatusCode = engine->PinPages(PageFaultCount); 
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(engine.Get(), ctx);
 
@@ -343,7 +343,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             return true;
         } catch (const TNotReadyTabletException& ex) {
             Y_UNUSED(ex);
-            ++PageFaultCount;
+            ++PageFaultCount; 
             return false;
         } catch (...) {
             Y_FAIL("there must be no leaked exceptions");
@@ -354,15 +354,15 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         if (EngineResultStatusCode != IEngineFlat::EResult::Unknown)
             MakeResponse(nullptr, ctx);
     }
-
+ 
 public:
-    TFlatLocalMiniKQL(
+    TFlatLocalMiniKQL( 
             TActorId sender,
-            const TLocalMiniKQLProgram &program,
-            const TMiniKQLFactory* factory)
+            const TLocalMiniKQLProgram &program, 
+            const TMiniKQLFactory* factory) 
         : Sender(sender)
         , SourceProgram(program)
-        , Factory(factory)
+        , Factory(factory) 
     {}
 };
 

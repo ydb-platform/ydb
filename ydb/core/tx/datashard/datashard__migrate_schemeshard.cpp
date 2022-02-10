@@ -47,15 +47,15 @@ bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const 
     Self->PersistCurrentSchemeShardId(newId, txc);
     Self->ResetLastSchemeOpSeqNo(txc);
 
-    // Invalidate current subdomain path id, it's no longer correct after migration
-    Self->SubDomainPathId.reset();
-    Self->StopWatchingSubDomainPathId();
-
-    // Stop any finder actor querying the old schemeshard, then start a new
-    // actor querying the new schemeshard.
-    Self->StopFindSubDomainPathId();
-    Self->StartFindSubDomainPathId(/* delayFirstRequest */ false);
-
+    // Invalidate current subdomain path id, it's no longer correct after migration 
+    Self->SubDomainPathId.reset(); 
+    Self->StopWatchingSubDomainPathId(); 
+ 
+    // Stop any finder actor querying the old schemeshard, then start a new 
+    // actor querying the new schemeshard. 
+    Self->StopFindSubDomainPathId(); 
+    Self->StartFindSubDomainPathId(/* delayFirstRequest */ false); 
+ 
     Reply->Record.SetStatus(TResponse::Success);
     return true;
 }

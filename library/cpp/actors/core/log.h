@@ -232,7 +232,7 @@ namespace NActors {
         // Directly call logger instead of sending a message
         void Log(TInstant time, NLog::EPriority priority, NLog::EComponent component, const char* c, ...);
 
-        static void Throttle(const NLog::TSettings& settings);
+        static void Throttle(const NLog::TSettings& settings); 
 
     private:
         TIntrusivePtr<NLog::TSettings> Settings;
@@ -322,7 +322,7 @@ namespace NActors {
     inline void DeliverLogMessage(TCtx& ctx, NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str)
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
-        TLoggerActor::Throttle(*mSettings);
+        TLoggerActor::Throttle(*mSettings); 
         ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
     }
 

@@ -2,9 +2,9 @@
 
 #include <ydb/core/base/localdb.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
-
-#include <util/generic/hash.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
+ 
+#include <util/generic/hash.h> 
 #include <util/string/join.h>
 
 namespace NKikimr {
@@ -14,19 +14,19 @@ using namespace NKikimrResourceBroker;
 
 TResourceLimit::TResourceLimit(const NKikimrResourceBroker::TResources &limit)
 {
-    Limit.fill(Max<ui64>());
-    for (size_t i = 0; i < Limit.size() && i < limit.ResourceSize(); ++i) {
-        Limit[i] = limit.GetResource(i);
+    Limit.fill(Max<ui64>()); 
+    for (size_t i = 0; i < Limit.size() && i < limit.ResourceSize(); ++i) { 
+        Limit[i] = limit.GetResource(i); 
     }
-
-    if (limit.HasCpu()) {
-        Limit[NKikimrResourceBroker::CPU] = limit.GetCpu();
-    }
-
-    if (limit.HasMemory()) {
-        Limit[NKikimrResourceBroker::MEMORY] = limit.GetMemory();
-    }
-
+ 
+    if (limit.HasCpu()) { 
+        Limit[NKikimrResourceBroker::CPU] = limit.GetCpu(); 
+    } 
+ 
+    if (limit.HasMemory()) { 
+        Limit[NKikimrResourceBroker::MEMORY] = limit.GetMemory(); 
+    } 
+ 
     Used.fill(0);
 }
 
@@ -595,18 +595,18 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
             pending.insert(queue);
     }
 
-    ui64 blockedResources = 0;
+    ui64 blockedResources = 0; 
     while (!pending.empty()) {
         auto queue = *pending.begin();
         pending.erase(pending.begin());
 
         auto task = queue->FrontTask();
-        if (task->GetRequiredResourcesMask() & blockedResources) {
-            LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-                      "Skip queue %s blocked by an earlier queue",
-                      queue->Name.c_str());
-            continue;
-        }
+        if (task->GetRequiredResourcesMask() & blockedResources) { 
+            LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
+                      "Skip queue %s blocked by an earlier queue", 
+                      queue->Name.c_str()); 
+            continue; 
+        } 
 
         // If task is out of total limits then we have to wait until
         // resources are released.
@@ -616,8 +616,8 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
             LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                       "Not enough resources to start task %s",
                       task->GetIdString().data());
-            blockedResources |= task->GetRequiredResourcesMask();
-            continue;
+            blockedResources |= task->GetRequiredResourcesMask(); 
+            continue; 
         }
 
         // If task is out of queue limits then skip it.
@@ -741,8 +741,8 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
     ResourceLimit = new TResourceLimit(config.GetResourceLimit());
 
     // Create new queues.
-    for (const auto &queueConfig : config.GetQueues()) {
-        TTaskQueuePtr queue = new TTaskQueue(queueConfig, Counters,
+    for (const auto &queueConfig : config.GetQueues()) { 
+        TTaskQueuePtr queue = new TTaskQueue(queueConfig, Counters, 
                                              ResourceLimit, TotalCounters);
         Queues.emplace(queue->Name, queue);
     }
@@ -1191,20 +1191,20 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         queues.insert(queue.GetName());
     for (auto &task : rec.GetTasks()) {
         if (!queues.contains(task.GetQueueName())) {
-            error = Sprintf("task '%s' uses unknown queue '%s'", task.GetName().data(), task.GetQueueName().data());
+            error = Sprintf("task '%s' uses unknown queue '%s'", task.GetName().data(), task.GetQueueName().data()); 
             success = false;
             break;
         }
         tasks.insert(task.GetName());
     }
-    if (success && !queues.contains(NLocalDb::DefaultQueueName)) {
-        error = Sprintf("queue '%s' is required", NLocalDb::DefaultQueueName.c_str());
-        success = false;
-    }
-    if (success && !tasks.contains(NLocalDb::UnknownTaskName)) {
-        error = Sprintf("task '%s' is required", NLocalDb::UnknownTaskName.c_str());
-        success = false;
-    }
+    if (success && !queues.contains(NLocalDb::DefaultQueueName)) { 
+        error = Sprintf("queue '%s' is required", NLocalDb::DefaultQueueName.c_str()); 
+        success = false; 
+    } 
+    if (success && !tasks.contains(NLocalDb::UnknownTaskName)) { 
+        error = Sprintf("task '%s' is required", NLocalDb::UnknownTaskName.c_str()); 
+        success = false; 
+    } 
 
     if (!success) {
         response->Record.SetSuccess(false);
@@ -1266,10 +1266,10 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
 
     const ui64 DefaultQueueCPU = 2;
 
-    const ui64 KqpRmQueueCPU = 4;
+    const ui64 KqpRmQueueCPU = 4; 
     const ui64 KqpRmQueueMemory = 10ULL << 30;
 
-    const ui64 TotalCPU = 20;
+    const ui64 TotalCPU = 20; 
     const ui64 TotalMemory = 16ULL << 30;
 
     static_assert(KqpRmQueueMemory < TotalMemory);
@@ -1277,68 +1277,68 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     auto queue = config.AddQueues();
     queue->SetName(NLocalDb::DefaultQueueName);
     queue->SetWeight(30);
-    queue->MutableLimit()->SetCpu(DefaultQueueCPU);
+    queue->MutableLimit()->SetCpu(DefaultQueueCPU); 
 
     queue = config.AddQueues();
     queue->SetName("queue_compaction_gen0");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(10);
+    queue->MutableLimit()->SetCpu(10); 
 
     queue = config.AddQueues();
     queue->SetName("queue_compaction_gen1");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(6);
+    queue->MutableLimit()->SetCpu(6); 
 
     queue = config.AddQueues();
     queue->SetName("queue_compaction_gen2");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(3);
+    queue->MutableLimit()->SetCpu(3); 
 
     queue = config.AddQueues();
     queue->SetName("queue_compaction_gen3");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(3);
+    queue->MutableLimit()->SetCpu(3); 
 
     queue = config.AddQueues();
-    queue->SetName("queue_compaction_borrowed");
-    queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(3);
-
-    queue = config.AddQueues();
+    queue->SetName("queue_compaction_borrowed"); 
+    queue->SetWeight(100); 
+    queue->MutableLimit()->SetCpu(3); 
+ 
+    queue = config.AddQueues(); 
     queue->SetName("queue_transaction");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(4);
+    queue->MutableLimit()->SetCpu(4); 
 
     queue = config.AddQueues();
     queue->SetName("queue_background_compaction");
     queue->SetWeight(10);
-    queue->MutableLimit()->SetCpu(1);
+    queue->MutableLimit()->SetCpu(1); 
 
     queue = config.AddQueues();
     queue->SetName("queue_scan");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(10);
+    queue->MutableLimit()->SetCpu(10); 
 
     queue = config.AddQueues();
-    queue->SetName("queue_backup");
-    queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(2);
-
-    queue = config.AddQueues();
+    queue->SetName("queue_backup"); 
+    queue->SetWeight(100); 
+    queue->MutableLimit()->SetCpu(2); 
+ 
+    queue = config.AddQueues(); 
     queue->SetName("queue_restore");
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(10);
 
     queue = config.AddQueues();
     queue->SetName(NLocalDb::KqpResourceManagerQueue);
-    queue->SetWeight(30);
-    queue->MutableLimit()->SetCpu(KqpRmQueueCPU);
-    queue->MutableLimit()->SetMemory(KqpRmQueueMemory);
+    queue->SetWeight(30); 
+    queue->MutableLimit()->SetCpu(KqpRmQueueCPU); 
+    queue->MutableLimit()->SetMemory(KqpRmQueueMemory); 
 
     queue = config.AddQueues();
     queue->SetName("queue_build_index");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(10);
+    queue->MutableLimit()->SetCpu(10); 
 
     auto task = config.AddTasks();
     task->SetName(NLocalDb::UnknownTaskName);
@@ -1366,11 +1366,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();
-    task->SetName("compaction_borrowed");
-    task->SetQueueName("queue_compaction_borrowed");
-    task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
-
-    task = config.AddTasks();
+    task->SetName("compaction_borrowed"); 
+    task->SetQueueName("queue_compaction_borrowed"); 
+    task->SetDefaultDuration(TDuration::Minutes(10).GetValue()); 
+ 
+    task = config.AddTasks(); 
     task->SetName(NLocalDb::TransactionTaskName);
     task->SetQueueName("queue_transaction");
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
@@ -1406,11 +1406,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetDefaultDuration(TDuration::Minutes(5).GetValue());
 
     task = config.AddTasks();
-    task->SetName("backup");
-    task->SetQueueName("queue_backup");
-    task->SetDefaultDuration(TDuration::Minutes(5).GetValue());
-
-    task = config.AddTasks();
+    task->SetName("backup"); 
+    task->SetQueueName("queue_backup"); 
+    task->SetDefaultDuration(TDuration::Minutes(5).GetValue()); 
+ 
+    task = config.AddTasks(); 
     task->SetName("restore");
     task->SetQueueName("queue_restore");
     task->SetDefaultDuration(TDuration::Minutes(5).GetValue());
@@ -1425,118 +1425,118 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetQueueName("queue_build_index");
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
-    config.MutableResourceLimit()->SetCpu(TotalCPU);
-    config.MutableResourceLimit()->SetMemory(TotalMemory);
+    config.MutableResourceLimit()->SetCpu(TotalCPU); 
+    config.MutableResourceLimit()->SetMemory(TotalMemory); 
 
     return config;
 }
 
-void MergeConfigResources(
-        NKikimrResourceBroker::TResources &dst,
-        const NKikimrResourceBroker::TResources &src)
-{
-    // Check if src contains old-style settings
-    for (size_t index = 0; index < src.ResourceSize(); ++index) {
-        auto value = src.GetResource(index);
-        switch (index) {
-            case NKikimrResourceBroker::CPU:
-                dst.SetCpu(value);
-                break;
-            case NKikimrResourceBroker::MEMORY:
-                dst.SetMemory(value);
-                break;
-        }
-        if (index < dst.ResourceSize()) {
-            // Make sure legacy settings are also updated (if they already exist)
-            dst.SetResource(index, value);
-        }
-    }
-
-    // Apply new style cpu settings
-    if (src.HasCpu()) {
-        dst.SetCpu(src.GetCpu());
-        if (dst.ResourceSize() > NKikimrResourceBroker::CPU) {
-            // Make sure legacy settings are also updated (if they already exist)
-            dst.SetResource(NKikimrResourceBroker::CPU, src.GetCpu());
-        }
-    }
-
-    // Apply new style memory settings
-    if (src.HasMemory()) {
-        dst.SetMemory(src.GetMemory());
-        if (dst.ResourceSize() > NKikimrResourceBroker::MEMORY) {
-            // Make sure legacy settings are also updated (if they already exist)
-            dst.SetResource(NKikimrResourceBroker::MEMORY, src.GetMemory());
-        }
-    }
-}
-
-void MergeConfigUpdates(
-        NKikimrResourceBroker::TResourceBrokerConfig &config,
-        const NKikimrResourceBroker::TResourceBrokerConfig &updates)
-{
-    THashMap<TString, size_t> queueToIndex;
-    for (size_t index = 0; index < config.QueuesSize(); ++index) {
-        queueToIndex.emplace(config.GetQueues(index).GetName(), index);
-    }
-    auto getQueue = [&](const TString &name) -> NKikimrResourceBroker::TQueueConfig& {
-        auto it = queueToIndex.find(name);
-        if (it != queueToIndex.end()) {
-            return *config.MutableQueues(it->second);
-        }
-        size_t index = config.QueuesSize();
-        auto &queue = *config.AddQueues();
-        queue.SetName(name);
-        queueToIndex.emplace(name, index);
-        return queue;
-    };
-
-    for (const auto &src : updates.GetQueues()) {
-        auto &dst = getQueue(src.GetName());
-
-        if (src.HasWeight()) {
-            dst.SetWeight(src.GetWeight());
-        }
-
-        if (src.HasLimit()) {
-            MergeConfigResources(*dst.MutableLimit(), src.GetLimit());
-        }
-    }
-
-    THashMap<TString, size_t> taskToIndex;
-    for (size_t index = 0; index < config.TasksSize(); ++index) {
-        taskToIndex.emplace(config.GetTasks(index).GetName(), index);
-    }
-    auto getTask = [&](const TString &name) -> NKikimrResourceBroker::TTaskConfig& {
-        auto it = taskToIndex.find(name);
-        if (it != taskToIndex.end()) {
-            return *config.MutableTasks(it->second);
-        }
-        size_t index = config.TasksSize();
-        auto &task = *config.AddTasks();
-        task.SetName(name);
-        taskToIndex.emplace(name, index);
-        return task;
-    };
-
-    for (const auto &src : updates.GetTasks()) {
-        auto &dst = getTask(src.GetName());
-
-        if (src.HasQueueName()) {
-            dst.SetQueueName(src.GetQueueName());
-        }
-
-        if (src.HasDefaultDuration()) {
-            dst.SetDefaultDuration(src.GetDefaultDuration());
-        }
-    }
-
-    if (updates.HasResourceLimit()) {
-        MergeConfigResources(*config.MutableResourceLimit(), updates.GetResourceLimit());
-    }
-}
-
-
+void MergeConfigResources( 
+        NKikimrResourceBroker::TResources &dst, 
+        const NKikimrResourceBroker::TResources &src) 
+{ 
+    // Check if src contains old-style settings 
+    for (size_t index = 0; index < src.ResourceSize(); ++index) { 
+        auto value = src.GetResource(index); 
+        switch (index) { 
+            case NKikimrResourceBroker::CPU: 
+                dst.SetCpu(value); 
+                break; 
+            case NKikimrResourceBroker::MEMORY: 
+                dst.SetMemory(value); 
+                break; 
+        } 
+        if (index < dst.ResourceSize()) { 
+            // Make sure legacy settings are also updated (if they already exist) 
+            dst.SetResource(index, value); 
+        } 
+    } 
+ 
+    // Apply new style cpu settings 
+    if (src.HasCpu()) { 
+        dst.SetCpu(src.GetCpu()); 
+        if (dst.ResourceSize() > NKikimrResourceBroker::CPU) { 
+            // Make sure legacy settings are also updated (if they already exist) 
+            dst.SetResource(NKikimrResourceBroker::CPU, src.GetCpu()); 
+        } 
+    } 
+ 
+    // Apply new style memory settings 
+    if (src.HasMemory()) { 
+        dst.SetMemory(src.GetMemory()); 
+        if (dst.ResourceSize() > NKikimrResourceBroker::MEMORY) { 
+            // Make sure legacy settings are also updated (if they already exist) 
+            dst.SetResource(NKikimrResourceBroker::MEMORY, src.GetMemory()); 
+        } 
+    } 
+} 
+ 
+void MergeConfigUpdates( 
+        NKikimrResourceBroker::TResourceBrokerConfig &config, 
+        const NKikimrResourceBroker::TResourceBrokerConfig &updates) 
+{ 
+    THashMap<TString, size_t> queueToIndex; 
+    for (size_t index = 0; index < config.QueuesSize(); ++index) { 
+        queueToIndex.emplace(config.GetQueues(index).GetName(), index); 
+    } 
+    auto getQueue = [&](const TString &name) -> NKikimrResourceBroker::TQueueConfig& { 
+        auto it = queueToIndex.find(name); 
+        if (it != queueToIndex.end()) { 
+            return *config.MutableQueues(it->second); 
+        } 
+        size_t index = config.QueuesSize(); 
+        auto &queue = *config.AddQueues(); 
+        queue.SetName(name); 
+        queueToIndex.emplace(name, index); 
+        return queue; 
+    }; 
+ 
+    for (const auto &src : updates.GetQueues()) { 
+        auto &dst = getQueue(src.GetName()); 
+ 
+        if (src.HasWeight()) { 
+            dst.SetWeight(src.GetWeight()); 
+        } 
+ 
+        if (src.HasLimit()) { 
+            MergeConfigResources(*dst.MutableLimit(), src.GetLimit()); 
+        } 
+    } 
+ 
+    THashMap<TString, size_t> taskToIndex; 
+    for (size_t index = 0; index < config.TasksSize(); ++index) { 
+        taskToIndex.emplace(config.GetTasks(index).GetName(), index); 
+    } 
+    auto getTask = [&](const TString &name) -> NKikimrResourceBroker::TTaskConfig& { 
+        auto it = taskToIndex.find(name); 
+        if (it != taskToIndex.end()) { 
+            return *config.MutableTasks(it->second); 
+        } 
+        size_t index = config.TasksSize(); 
+        auto &task = *config.AddTasks(); 
+        task.SetName(name); 
+        taskToIndex.emplace(name, index); 
+        return task; 
+    }; 
+ 
+    for (const auto &src : updates.GetTasks()) { 
+        auto &dst = getTask(src.GetName()); 
+ 
+        if (src.HasQueueName()) { 
+            dst.SetQueueName(src.GetQueueName()); 
+        } 
+ 
+        if (src.HasDefaultDuration()) { 
+            dst.SetDefaultDuration(src.GetDefaultDuration()); 
+        } 
+    } 
+ 
+    if (updates.HasResourceLimit()) { 
+        MergeConfigResources(*config.MutableResourceLimit(), updates.GetResourceLimit()); 
+    } 
+} 
+ 
+ 
 IActor* CreateResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config,
                                   const NMonitoring::TDynamicCounterPtr &counters)
 {

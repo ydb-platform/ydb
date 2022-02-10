@@ -39,14 +39,14 @@ void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
         static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
 }
 
-const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept {
-    return static_cast<TExecutor*>(Executor())->Scheme();
-}
-
+const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept { 
+    return static_cast<TExecutor*>(Executor())->Scheme(); 
+} 
+ 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     // Notify sys tablet that leader supports graceful shutdown
-    ctx.Send(Tablet(), new TEvTablet::TEvFeatures(TEvTablet::TEvFeatures::GracefulStop));
-
+    ctx.Send(Tablet(), new TEvTablet::TEvFeatures(TEvTablet::TEvFeatures::GracefulStop)); 
+ 
     const auto& msg = *ev->Get();
     UpdateTabletInfo(msg.TabletStorageInfo, msg.Launcher);
     CreateExecutor(ctx)->Boot(ev, ExecutorCtx(ctx));
@@ -93,20 +93,20 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
         Executor()->UpdateConfig(ev);
 }
 
-void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev);
-    // Default implementation just confirms it's ok to be stopped
-    ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped());
-}
-
-void TTabletExecutedFlat::HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
-    if (Executor() && Executor()->GetStats().IsActive) {
-        OnTabletStop(ev, ctx);
-    } else {
-        ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped());
-    }
-}
-
+void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) { 
+    Y_UNUSED(ev); 
+    // Default implementation just confirms it's ok to be stopped 
+    ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped()); 
+} 
+ 
+void TTabletExecutedFlat::HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) { 
+    if (Executor() && Executor()->GetStats().IsActive) { 
+        OnTabletStop(ev, ctx); 
+    } else { 
+        ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped()); 
+    } 
+} 
+ 
 void TTabletExecutedFlat::HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
     if (Executor0) {
         Executor0->DetachTablet(ExecutorCtx(ctx));
@@ -250,7 +250,7 @@ bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
         hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
         hFunc(TEvTablet::TEvNewFollowerAttached, Handle);
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
-        HFunc(TEvTablet::TEvTabletStop, HandleTabletStop);
+        HFunc(TEvTablet::TEvTabletStop, HandleTabletStop); 
         HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
         HFunc(TEvTablet::TEvLocalMKQL, HandleLocalMKQL);
         HFunc(TEvTablet::TEvLocalSchemeTx, HandleLocalSchemeTx);
@@ -272,7 +272,7 @@ void TTabletExecutedFlat::StateInitImpl(STFUNC_SIG) {
         hFunc(TEvTablet::TEvFAuxUpdate, Handle);
         hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
         HFunc(TEvTablet::TEvRestored, Handle);
-        HFunc(TEvTablet::TEvTabletStop, HandleTabletStop);
+        HFunc(TEvTablet::TEvTabletStop, HandleTabletStop); 
         HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);

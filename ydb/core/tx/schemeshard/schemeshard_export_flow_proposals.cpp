@@ -21,7 +21,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
-    modifyScheme.SetInternal(true);
+    modifyScheme.SetInternal(true); 
 
     const TPath domainPath = TPath::Init(exportInfo->DomainPathId, ss);
     modifyScheme.SetWorkingDir(domainPath.PathString());
@@ -46,7 +46,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables);
-    modifyScheme.SetInternal(true);
+    modifyScheme.SetInternal(true); 
 
     auto& copyTables = *modifyScheme.MutableCreateConsistentCopyTables()->MutableCopyTableDescriptions();
     copyTables.Reserve(exportInfo->Items.size());
@@ -92,7 +92,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
     auto& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpBackup);
-    modifyScheme.SetInternal(true);
+    modifyScheme.SetInternal(true); 
 
     const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
     const TString& exportPathName = exportPath.PathString();
@@ -164,7 +164,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
 
     auto& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
-    modifyScheme.SetInternal(true);
+    modifyScheme.SetInternal(true); 
 
     const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
     modifyScheme.SetWorkingDir(exportPath.PathString());
@@ -184,7 +184,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
 
     auto& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
-    modifyScheme.SetInternal(true);
+    modifyScheme.SetInternal(true); 
 
     const TPath domainPath = TPath::Init(exportInfo->DomainPathId, ss);
     modifyScheme.SetWorkingDir(domainPath.PathString());

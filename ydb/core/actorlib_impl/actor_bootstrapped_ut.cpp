@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(ActorBootstrapped) {
         TActorId Edge;
     };
 
-    class TTestBoostrappedParent: public TActorBootstrapped<TTestBoostrappedParent>
+    class TTestBoostrappedParent: public TActorBootstrapped<TTestBoostrappedParent> 
     {
     public:
         TTestBoostrappedParent(const TActorId& edge)

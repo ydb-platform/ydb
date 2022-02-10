@@ -34,38 +34,38 @@ namespace NTest {
         }
     };
 
-    class TDumpValue {
-    public:
-        TDumpValue(const TRawTypeValue& value)
-            : Value(value)
-        { }
-
-        friend IOutputStream& operator<<(IOutputStream& out, const TDumpValue& v) {
-            if (!v.Value.Data()) {
-                out << "NULL";
-                return out;
-            }
-            TCell cell = { static_cast<const char*>(v.Value.Data()), v.Value.Size() };
-            switch (v.Value.Type()) {
-                case NScheme::NTypeIds::Uint8: out << cell.AsValue<ui8>(); break;
-                case NScheme::NTypeIds::Uint16: out << cell.AsValue<ui16>(); break;
-                case NScheme::NTypeIds::Uint32: out << cell.AsValue<ui32>(); break;
-                case NScheme::NTypeIds::Uint64: out << cell.AsValue<ui64>(); break;
-                case NScheme::NTypeIds::Int8: out << cell.AsValue<i8>(); break;
-                case NScheme::NTypeIds::Int16: out << cell.AsValue<i16>(); break;
-                case NScheme::NTypeIds::Int32: out << cell.AsValue<i32>(); break;
-                case NScheme::NTypeIds::Int64: out << cell.AsValue<i64>(); break;
-                case NScheme::NTypeIds::Float: out << cell.AsValue<float>(); break;
-                case NScheme::NTypeIds::Double: out << cell.AsValue<double>(); break;
-                default: out << v.Value; break;
-            }
-            return out;
-        }
-
-    private:
-        const TRawTypeValue& Value;
-    };
-
+    class TDumpValue { 
+    public: 
+        TDumpValue(const TRawTypeValue& value) 
+            : Value(value) 
+        { } 
+ 
+        friend IOutputStream& operator<<(IOutputStream& out, const TDumpValue& v) { 
+            if (!v.Value.Data()) { 
+                out << "NULL"; 
+                return out; 
+            } 
+            TCell cell = { static_cast<const char*>(v.Value.Data()), v.Value.Size() }; 
+            switch (v.Value.Type()) { 
+                case NScheme::NTypeIds::Uint8: out << cell.AsValue<ui8>(); break; 
+                case NScheme::NTypeIds::Uint16: out << cell.AsValue<ui16>(); break; 
+                case NScheme::NTypeIds::Uint32: out << cell.AsValue<ui32>(); break; 
+                case NScheme::NTypeIds::Uint64: out << cell.AsValue<ui64>(); break; 
+                case NScheme::NTypeIds::Int8: out << cell.AsValue<i8>(); break; 
+                case NScheme::NTypeIds::Int16: out << cell.AsValue<i16>(); break; 
+                case NScheme::NTypeIds::Int32: out << cell.AsValue<i32>(); break; 
+                case NScheme::NTypeIds::Int64: out << cell.AsValue<i64>(); break; 
+                case NScheme::NTypeIds::Float: out << cell.AsValue<float>(); break; 
+                case NScheme::NTypeIds::Double: out << cell.AsValue<double>(); break; 
+                default: out << v.Value; break; 
+            } 
+            return out; 
+        } 
+ 
+    private: 
+        const TRawTypeValue& Value; 
+    }; 
+ 
     struct TDump {
         using TKeys = TArrayRef<const TRawTypeValue>;
         using TOps = TArrayRef<const TUpdateOp>;
@@ -108,54 +108,54 @@ namespace NTest {
                 << ": " << TNames::Do(rop) << "." << unsigned(rop)
                 << ", " << key.size() << " keys (" << keyBytes << "b)"
                 << " " << ops.size() << " ops (" << opsBytes << "b)"
-                << " " << rowVersion
+                << " " << rowVersion 
                 << Endl;
-
-            for (const auto& keyValue : key) {
-                Out << "   > key: " << TDumpValue(keyValue) << " <" << Endl;
-            }
-            for (const auto& op : ops) {
-                Out << "   > col " << op.Tag << ": " << TDumpValue(op.Value) << " <" << Endl;
-            }
+ 
+            for (const auto& keyValue : key) { 
+                Out << "   > key: " << TDumpValue(keyValue) << " <" << Endl; 
+            } 
+            for (const auto& op : ops) { 
+                Out << "   > col " << op.Tag << ": " << TDumpValue(op.Value) << " <" << Endl; 
+            } 
         }
 
         void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept
-        {
-            ui32 keyBytes = 0, opsBytes = 0;
-
-            for (auto &one: key) keyBytes += one.Size();
-            for (auto &one: ops) opsBytes += one.AsRef().size();
-
-            Updates++, KeyBytes += keyBytes, OpsBytes += opsBytes;
-            KeyItems += key.size(), OpsItems += ops.size();
-
-            Out
-                << " | UpdateTx " << tid
-                << ": " << TNames::Do(rop) << "." << unsigned(rop)
-                << ", " << key.size() << " keys (" << keyBytes << "b)"
-                << " " << ops.size() << " ops (" << opsBytes << "b)"
-                << " txId " << txId
-                << Endl;
-
-            for (const auto& keyValue : key) {
-                Out << "   > key: " << TDumpValue(keyValue) << " <" << Endl;
-            }
-            for (const auto& op : ops) {
-                Out << "   > col " << op.Tag << ": " << TDumpValue(op.Value) << " <" << Endl;
-            }
-        }
-
-        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion) noexcept
-        {
-            Out << " | CommitTx " << tid << " txId " << txId << " @" << rowVersion << Endl;
-        }
-
-        void DoRemoveTx(ui32 tid, ui64 txId) noexcept
-        {
-            Out << " | RemoveTx " << tid << " txId " << txId << Endl;
-        }
-
-        void DoFlush(ui32 tid, ui64 stamp, TEpoch epoch) noexcept
+        { 
+            ui32 keyBytes = 0, opsBytes = 0; 
+ 
+            for (auto &one: key) keyBytes += one.Size(); 
+            for (auto &one: ops) opsBytes += one.AsRef().size(); 
+ 
+            Updates++, KeyBytes += keyBytes, OpsBytes += opsBytes; 
+            KeyItems += key.size(), OpsItems += ops.size(); 
+ 
+            Out 
+                << " | UpdateTx " << tid 
+                << ": " << TNames::Do(rop) << "." << unsigned(rop) 
+                << ", " << key.size() << " keys (" << keyBytes << "b)" 
+                << " " << ops.size() << " ops (" << opsBytes << "b)" 
+                << " txId " << txId 
+                << Endl; 
+ 
+            for (const auto& keyValue : key) { 
+                Out << "   > key: " << TDumpValue(keyValue) << " <" << Endl; 
+            } 
+            for (const auto& op : ops) { 
+                Out << "   > col " << op.Tag << ": " << TDumpValue(op.Value) << " <" << Endl; 
+            } 
+        } 
+ 
+        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion) noexcept 
+        { 
+            Out << " | CommitTx " << tid << " txId " << txId << " @" << rowVersion << Endl; 
+        } 
+ 
+        void DoRemoveTx(ui32 tid, ui64 txId) noexcept 
+        { 
+            Out << " | RemoveTx " << tid << " txId " << txId << Endl; 
+        } 
+ 
+        void DoFlush(ui32 tid, ui64 stamp, TEpoch epoch) noexcept 
         {
             Out
                 << " | Flush " << tid << ", " << epoch << " eph"
@@ -199,50 +199,50 @@ namespace NTest {
     private:
         IOutputStream &Out;
     };
-
-    void DumpPart(const NKikimrExecutorFlat::TLogTableSnap& part) {
-        Cerr << " | Table " << part.GetTable() << " level " << part.GetCompactionLevel() << Endl;
-        for (auto& bundle : part.GetBundles()) {
-            Cerr << " | + bundle";
+ 
+    void DumpPart(const NKikimrExecutorFlat::TLogTableSnap& part) { 
+        Cerr << " | Table " << part.GetTable() << " level " << part.GetCompactionLevel() << Endl; 
+        for (auto& bundle : part.GetBundles()) { 
+            Cerr << " | + bundle"; 
             for (auto& pageCollection : bundle.GetPageCollections()) {
                 Y_VERIFY(pageCollection.HasLargeGlobId(), "Found a page collection without a largeGlobId");
                 Cerr << " " << LogoBlobIDFromLogoBlobID(pageCollection.GetLargeGlobId().GetLead());
-            }
-            Cerr << Endl;
-            if (bundle.HasLegacy() || bundle.HasOpaque()) {
-                auto overlay = NKikimr::NTable::TOverlay::Decode(bundle.GetLegacy(), bundle.GetOpaque());
-                if (overlay.Screen) {
-                    for (auto& hole : *overlay.Screen) {
-                        Cerr << " |   screen [" << hole.Begin << ", " << hole.End << ")" << Endl;
-                    }
-                }
-                for (auto& slice : *overlay.Slices) {
-                    Cerr << " |   slice ";
-                    Cerr << (slice.FirstInclusive ? '[' : '(');
-                    Cerr << "row " << slice.FirstRowId;
-                    for (auto cell : slice.FirstKey.GetCells()) {
+            } 
+            Cerr << Endl; 
+            if (bundle.HasLegacy() || bundle.HasOpaque()) { 
+                auto overlay = NKikimr::NTable::TOverlay::Decode(bundle.GetLegacy(), bundle.GetOpaque()); 
+                if (overlay.Screen) { 
+                    for (auto& hole : *overlay.Screen) { 
+                        Cerr << " |   screen [" << hole.Begin << ", " << hole.End << ")" << Endl; 
+                    } 
+                } 
+                for (auto& slice : *overlay.Slices) { 
+                    Cerr << " |   slice "; 
+                    Cerr << (slice.FirstInclusive ? '[' : '('); 
+                    Cerr << "row " << slice.FirstRowId; 
+                    for (auto cell : slice.FirstKey.GetCells()) { 
                         Cerr << " cell " << TString{cell.AsBuf()}.Quote();
-                    }
-                    Cerr << ", ";
-                    Cerr << "row " << slice.LastRowId;
-                    for (auto cell : slice.LastKey.GetCells()) {
+                    } 
+                    Cerr << ", "; 
+                    Cerr << "row " << slice.LastRowId; 
+                    for (auto cell : slice.LastKey.GetCells()) { 
                         Cerr << " cell " << TString{cell.AsBuf()}.Quote();
-                    }
-                    Cerr << (slice.LastInclusive ? ']' : ')');
-                    Cerr << Endl;
-                }
-            }
-        }
-    }
-
-    void DumpPart(const NKikimrExecutorFlat::TLogTxStatusSnap& part) {
-        Cerr << " | Table " << part.GetTable() << Endl;
-        for (auto& txStatus : part.GetTxStatus()) {
-            Cerr << " | + tx status " << LogoBlobIDFromLogoBlobID(txStatus.GetDataId().GetLead())
-                 << " epoch " << txStatus.GetEpoch() << Endl;
-        }
-    }
-
+                    } 
+                    Cerr << (slice.LastInclusive ? ']' : ')'); 
+                    Cerr << Endl; 
+                } 
+            } 
+        } 
+    } 
+ 
+    void DumpPart(const NKikimrExecutorFlat::TLogTxStatusSnap& part) { 
+        Cerr << " | Table " << part.GetTable() << Endl; 
+        for (auto& txStatus : part.GetTxStatus()) { 
+            Cerr << " | + tx status " << LogoBlobIDFromLogoBlobID(txStatus.GetDataId().GetLead()) 
+                 << " epoch " << txStatus.GetEpoch() << Endl; 
+        } 
+    } 
+ 
 }
 }
 }
@@ -287,65 +287,65 @@ int main(int argc, char *argv[])
         NTest::TProtoDump<NTabletFlatScheme::TSchemeChanges>(Cerr).Do(raw);
     } else if (!strcmp(res->Get("blob"), "snap")) {
         NTest::TProtoDump<NKikimrExecutorFlat::TLogSnapshot>(Cerr).Do(raw);
-
-        TProtoBox<NKikimrExecutorFlat::TLogSnapshot> proto(raw);
-
-        for (const auto &ref : proto.GetNonSnapLogBodies()) {
-            auto logo = LogoBlobIDFromLogoBlobID(ref);
-
-            Cerr << " | NonSnapLog " << logo << Endl;
-        }
-
-        for (const auto &ref : proto.GetSchemeInfoBodies()) {
-            auto logo = LogoBlobIDFromLogoBlobID(ref);
-
-            Cerr << " | SchemeInfo " << logo << Endl;
-        }
-
-        for (const auto &ref : proto.GetBorrowInfoIds()) {
-            auto logo = LogoBlobIDFromLogoBlobID(ref);
-
-            Cerr << " | BorrowInfo " << logo << Endl;
-        }
-
-        for (const auto& ref : proto.GetGcSnapDiscovered()) {
-            auto logo = LogoBlobIDFromLogoBlobID(ref);
-
-            Cerr << " | GC+ " << logo << Endl;
-        }
-
-        for (const auto& ref : proto.GetGcSnapLeft()) {
-            auto logo = LogoBlobIDFromLogoBlobID(ref);
-
-            Cerr << " | GC- " << logo << Endl;
-        }
-
-        for (const auto& part : proto.GetDbParts()) {
-            NTest::DumpPart(part);
-        }
-
-        for (const auto& part : proto.GetTxStatusParts()) {
-            NTest::DumpPart(part);
-        }
-
-        for (const auto& log : proto.GetEmbeddedLogBodies()) {
-            Cerr << " | >>>>>>>> Log entry " << log.GetGeneration() << ":" << log.GetStep() << Endl;
-            Cerr << " --------------------" << Endl;
-            auto logBody = NBlockCodecs::Codec("lz4fast")->Decode(log.GetBody());
-            NTest::TDump dump(Cerr);
-            NRedo::TPlayer<NTest::TDump>(dump).Replay(logBody);
-            dump.Finalize();
-            Cerr << " --------------------" << Endl;
-        }
-
+ 
+        TProtoBox<NKikimrExecutorFlat::TLogSnapshot> proto(raw); 
+ 
+        for (const auto &ref : proto.GetNonSnapLogBodies()) { 
+            auto logo = LogoBlobIDFromLogoBlobID(ref); 
+ 
+            Cerr << " | NonSnapLog " << logo << Endl; 
+        } 
+ 
+        for (const auto &ref : proto.GetSchemeInfoBodies()) { 
+            auto logo = LogoBlobIDFromLogoBlobID(ref); 
+ 
+            Cerr << " | SchemeInfo " << logo << Endl; 
+        } 
+ 
+        for (const auto &ref : proto.GetBorrowInfoIds()) { 
+            auto logo = LogoBlobIDFromLogoBlobID(ref); 
+ 
+            Cerr << " | BorrowInfo " << logo << Endl; 
+        } 
+ 
+        for (const auto& ref : proto.GetGcSnapDiscovered()) { 
+            auto logo = LogoBlobIDFromLogoBlobID(ref); 
+ 
+            Cerr << " | GC+ " << logo << Endl; 
+        } 
+ 
+        for (const auto& ref : proto.GetGcSnapLeft()) { 
+            auto logo = LogoBlobIDFromLogoBlobID(ref); 
+ 
+            Cerr << " | GC- " << logo << Endl; 
+        } 
+ 
+        for (const auto& part : proto.GetDbParts()) { 
+            NTest::DumpPart(part); 
+        } 
+ 
+        for (const auto& part : proto.GetTxStatusParts()) { 
+            NTest::DumpPart(part); 
+        } 
+ 
+        for (const auto& log : proto.GetEmbeddedLogBodies()) { 
+            Cerr << " | >>>>>>>> Log entry " << log.GetGeneration() << ":" << log.GetStep() << Endl; 
+            Cerr << " --------------------" << Endl; 
+            auto logBody = NBlockCodecs::Codec("lz4fast")->Decode(log.GetBody()); 
+            NTest::TDump dump(Cerr); 
+            NRedo::TPlayer<NTest::TDump>(dump).Replay(logBody); 
+            dump.Finalize(); 
+            Cerr << " --------------------" << Endl; 
+        } 
+ 
     } else if (!strcmp(res->Get("blob"), "switch")) {
         NTest::TProtoDump<NKikimrExecutorFlat::TTablePartSwitch>(Cerr).Do(raw);
-
-        TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(raw);
-        if (proto.HasIntroducedParts()) {
-            NTest::DumpPart(proto.GetIntroducedParts());
-        }
-
+ 
+        TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(raw); 
+        if (proto.HasIntroducedParts()) { 
+            NTest::DumpPart(proto.GetIntroducedParts()); 
+        } 
+ 
     } else if (!strcmp(res->Get("blob"), "borrow")) {
         NTest::TProtoDump<NKikimrExecutorFlat::TBorrowedPart>(Cerr).Do(raw);
     } else if (!strcmp(res->Get("blob"), "tablet")) {
@@ -365,20 +365,20 @@ int main(int argc, char *argv[])
             Cerr << " | GC+ " << logo << Endl;
         }
 
-        for (const auto &ref : proto.GetGcLeft()) {
-            auto logo = LogoBlobIDFromLogoBlobID(ref);
-
-            Cerr << " | GC- " << logo << Endl;
-        }
-
-        if (auto rawBody = proto.GetEmbeddedLogBody()) {
-            Cerr << " | Embedded log body" << Endl;
-            auto logBody = NBlockCodecs::Codec("lz4fast")->Decode(rawBody);
-            NTest::TDump dump(Cerr);
-            NRedo::TPlayer<NTest::TDump>(dump).Replay(logBody);
-            dump.Finalize();
-        }
-
+        for (const auto &ref : proto.GetGcLeft()) { 
+            auto logo = LogoBlobIDFromLogoBlobID(ref); 
+ 
+            Cerr << " | GC- " << logo << Endl; 
+        } 
+ 
+        if (auto rawBody = proto.GetEmbeddedLogBody()) { 
+            Cerr << " | Embedded log body" << Endl; 
+            auto logBody = NBlockCodecs::Codec("lz4fast")->Decode(rawBody); 
+            NTest::TDump dump(Cerr); 
+            NRedo::TPlayer<NTest::TDump>(dump).Replay(logBody); 
+            dump.Finalize(); 
+        } 
+ 
     } else if (!strcmp(res->Get("blob"), "unlog")) {
         TProtoBox<NKikimrTabletBase::TTabletLogEntry> proto(raw);
 

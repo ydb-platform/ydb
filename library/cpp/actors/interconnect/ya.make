@@ -33,7 +33,7 @@ SRCS(
     interconnect_nameserver_table.cpp
     interconnect_proxy_wrapper.cpp
     interconnect_proxy_wrapper.h
-    interconnect_resolve.cpp
+    interconnect_resolve.cpp 
     interconnect_stream.cpp
     interconnect_stream.h
     interconnect_tcp_input_session.cpp
@@ -76,7 +76,7 @@ PEERDIR(
     contrib/libs/openssl
     library/cpp/actors/core
     library/cpp/actors/dnscachelib
-    library/cpp/actors/dnsresolver
+    library/cpp/actors/dnsresolver 
     library/cpp/actors/helpers
     library/cpp/actors/prof
     library/cpp/actors/protos

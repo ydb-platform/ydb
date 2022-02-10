@@ -18,41 +18,41 @@ namespace NKikimr {
 namespace NTable {
 
 namespace {
-    static NPage::TConf Conf(ui32 page = NPage::TConf().Groups.at(0).PageSize) noexcept
+    static NPage::TConf Conf(ui32 page = NPage::TConf().Groups.at(0).PageSize) noexcept 
     {
         NPage::TConf conf;
 
-        conf.Group(0).PageSize = page;
+        conf.Group(0).PageSize = page; 
         conf.LargeEdge = 29;  /* neet to cover external blob usage */
 
         return conf;
     }
 
     const NTest::TMass Mass0(new NTest::TModelStd(false), 6666);
-
+ 
     static void VerifySingleLevelNonTrivial(const TAutoPtr<TSubset>& subset)
-    {
-        /* parts form a single run and have non-trivial pages */
-        TLevels levels(subset->Scheme->Keys);
-
+    { 
+        /* parts form a single run and have non-trivial pages */ 
+        TLevels levels(subset->Scheme->Keys); 
+ 
         for (const auto &partView : subset->Flatten) {
             levels.Add(partView.Part, partView.Slices);
-
+ 
             auto *partStore = partView.As<NTest::TPartStore>();
-
+ 
             if (partStore->Store->PageCollectionArray(0).size() * 3 > partStore->Stat.Rows) {
-                UNIT_ASSERT_C(false, "Part has too few rows per page"
+                UNIT_ASSERT_C(false, "Part has too few rows per page" 
                     << ", rows " << partStore->Stat.Rows
                     << ", pages " << partStore->Store->PageCollectionArray(0).size());
-            }
-        }
-
-        UNIT_ASSERT_C(levels.size() == 1, "Levels size " << levels.size());
-    }
+            } 
+        } 
+ 
+        UNIT_ASSERT_C(levels.size() == 1, "Levels size " << levels.size()); 
+    } 
 }
 
 using TCheckIt = NTest::TChecker<NTest::TWrapIter, TSubset>;
-using TCheckReverseIt = NTest::TChecker<NTest::TWrapReverseIter, TSubset>;
+using TCheckReverseIt = NTest::TChecker<NTest::TWrapReverseIter, TSubset>; 
 
 Y_UNIT_TEST_SUITE(TIterator) {
     using namespace NTest;
@@ -111,13 +111,13 @@ Y_UNIT_TEST_SUITE(TIterator) {
         TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset);
     }
 
-    Y_UNIT_TEST(SingleReverse)
-    {
-        auto subset = TMake(Mass0, Conf()).Mixed(0, 1, TMixerOne{ });
-
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
-    }
-
+    Y_UNIT_TEST(SingleReverse) 
+    { 
+        auto subset = TMake(Mass0, Conf()).Mixed(0, 1, TMixerOne{ }); 
+ 
+        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset); 
+    } 
+ 
     Y_UNIT_TEST(Mixed)
     {
         auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, TMixerRnd(4));
@@ -127,37 +127,37 @@ Y_UNIT_TEST_SUITE(TIterator) {
         TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Forward, *subset);
     }
 
-    Y_UNIT_TEST(MixedReverse)
-    {
-        auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, TMixerRnd(4));
-
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset);
-    }
-
+    Y_UNIT_TEST(MixedReverse) 
+    { 
+        auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, TMixerRnd(4)); 
+ 
+        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset); 
+        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset); 
+    } 
+ 
     Y_UNIT_TEST(Serial)
     {
         TMixerSeq mixer(4, Mass0.Saved.Size());
 
         auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, mixer);
 
-        VerifySingleLevelNonTrivial(subset);
+        VerifySingleLevelNonTrivial(subset); 
 
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset);
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Evicted, *subset);
-        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Forward, *subset);
-    }
+        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Cached, *subset); 
+        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Evicted, *subset); 
+        TWreck<TCheckIt, TSubset>(Mass0, 666).Do(EWreck::Forward, *subset); 
+    } 
 
-    Y_UNIT_TEST(SerialReverse)
-    {
-        TMixerSeq mixer(4, Mass0.Saved.Size());
+    Y_UNIT_TEST(SerialReverse) 
+    { 
+        TMixerSeq mixer(4, Mass0.Saved.Size()); 
 
-        auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, mixer);
+        auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, mixer); 
 
-        VerifySingleLevelNonTrivial(subset);
+        VerifySingleLevelNonTrivial(subset); 
 
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset);
+        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset); 
+        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset); 
     }
 
 }

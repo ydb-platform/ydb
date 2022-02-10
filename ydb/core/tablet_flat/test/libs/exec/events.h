@@ -19,8 +19,8 @@ namespace NFake {
         EvResult    = Base_ + 12,
         EvReturn    = Base_ + 13,
         EvCompacted = Base_ + 14,
-        EvCompact   = Base_ + 15,
-        EvCall      = Base_ + 16,
+        EvCompact   = Base_ + 15, 
+        EvCall      = Base_ + 16, 
     };
 
     struct TEvTerm : public TEventLocal<TEvTerm, EvTerm> { };
@@ -52,15 +52,15 @@ namespace NFake {
         using ITransaction = NTabletFlatExecutor::ITransaction;
 
         TEvExecute(TAutoPtr<ITransaction> func) {
-            THolder<ITransaction> h(func.Release());
-            Funcs.push_back(std::move(h));
-        }
+            THolder<ITransaction> h(func.Release()); 
+            Funcs.push_back(std::move(h)); 
+        } 
 
-        TEvExecute(TVector<THolder<ITransaction>> funcs)
-            : Funcs(std::move(funcs))
-        { }
-
-        TVector<THolder<ITransaction>> Funcs;
+        TEvExecute(TVector<THolder<ITransaction>> funcs) 
+            : Funcs(std::move(funcs)) 
+        { } 
+ 
+        TVector<THolder<ITransaction>> Funcs; 
     };
 
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
@@ -76,24 +76,24 @@ namespace NFake {
         ui64 Table;
     };
 
-    struct TEvCompact : public TEventLocal<TEvCompact, EvCompact> {
-        TEvCompact(ui32 table, bool memOnly = false)
-            : Table(table)
-            , MemOnly(memOnly)
-        { }
-
-        ui64 Table;
-        bool MemOnly;
-    };
-
-    struct TEvCall : public TEventLocal<TEvCall, EvCall> {
-        using IExecutor = NTabletFlatExecutor::NFlatExecutorSetup::IExecutor;
-        using TCallback = std::function<void(IExecutor*, const TActorContext&)>;
-
-        TEvCall(TCallback callback) : Callback(std::move(callback)) { }
-
-        TCallback Callback;
-    };
-
+    struct TEvCompact : public TEventLocal<TEvCompact, EvCompact> { 
+        TEvCompact(ui32 table, bool memOnly = false) 
+            : Table(table) 
+            , MemOnly(memOnly) 
+        { } 
+ 
+        ui64 Table; 
+        bool MemOnly; 
+    }; 
+ 
+    struct TEvCall : public TEventLocal<TEvCall, EvCall> { 
+        using IExecutor = NTabletFlatExecutor::NFlatExecutorSetup::IExecutor; 
+        using TCallback = std::function<void(IExecutor*, const TActorContext&)>; 
+ 
+        TEvCall(TCallback callback) : Callback(std::move(callback)) { } 
+ 
+        TCallback Callback; 
+    }; 
+ 
 }
 }

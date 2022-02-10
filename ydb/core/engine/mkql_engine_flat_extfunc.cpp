@@ -628,21 +628,21 @@ namespace {
             }
 
             MKQL_ENSURE(firstKey.size() >= sizeof(ui32), "Corrupted key");
-            ui32 partKeyColumnsCount = ReadUnaligned<ui32>(firstKey.data());
+            ui32 partKeyColumnsCount = ReadUnaligned<ui32>(firstKey.data()); 
             ui32 typesSize = sizeof(ui32) + partKeyColumnsCount * sizeof(NUdf::TDataTypeId);
             MKQL_ENSURE(firstKey.size() >= typesSize, "Corrupted key");
-            const char* partTypes = firstKey.data() + sizeof(ui32);
+            const char* partTypes = firstKey.data() + sizeof(ui32); 
             if (!keyColumnsCount) {
                 keyColumnsCount = partKeyColumnsCount;
-                for (ui32 i = 0; i < partKeyColumnsCount; ++i) {
-                    auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId));
-                    types.push_back(partType);
-                }
+                for (ui32 i = 0; i < partKeyColumnsCount; ++i) { 
+                    auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId)); 
+                    types.push_back(partType); 
+                } 
             } else {
                 MKQL_ENSURE(keyColumnsCount == partKeyColumnsCount, "Mismatch of key columns count");
                 for (ui32 i = 0; i < keyColumnsCount; ++i) {
-                    auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId));
-                    MKQL_ENSURE(partType == types[i], "Mismatch of key columns type");
+                    auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId)); 
+                    MKQL_ENSURE(partType == types[i], "Mismatch of key columns type"); 
                 }
             }
 
@@ -654,17 +654,17 @@ namespace {
             std::get<0>(parts[i]) = dataBuffers[i].GetCells().data();
         }
 
-        bool reverse = false;
-        if (callable.GetInputsCount() >= 11) {
-            reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>();
-        }
-
+        bool reverse = false; 
+        if (callable.GetInputsCount() >= 11) { 
+            reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>(); 
+        } 
+ 
         Sort(parts, [&](const TPartKey& lhs, const TPartKey& rhs) {
-            if (reverse) {
-                return CompareTypedCellVectors(std::get<0>(rhs), std::get<0>(lhs), types.data(), keyColumnsCount) < 0;
-            } else {
-                return CompareTypedCellVectors(std::get<0>(lhs), std::get<0>(rhs), types.data(), keyColumnsCount) < 0;
-            }
+            if (reverse) { 
+                return CompareTypedCellVectors(std::get<0>(rhs), std::get<0>(lhs), types.data(), keyColumnsCount) < 0; 
+            } else { 
+                return CompareTypedCellVectors(std::get<0>(lhs), std::get<0>(rhs), types.data(), keyColumnsCount) < 0; 
+            } 
         });
 
         ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>();
@@ -995,11 +995,11 @@ NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost
         skipNullKeys = AS_VALUE(TListLiteral, callable.GetInput(9));
     }
 
-    bool reverse = false;
-    if (callable.GetInputsCount() > 10) {
-        reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>();
-    }
-
+    bool reverse = false; 
+    if (callable.GetInputsCount() > 10) { 
+        reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>(); 
+    } 
+ 
     std::pair<TListLiteral*, TListLiteral*> forbidNullArgs{nullptr, nullptr};
     if (callable.GetInputsCount() > 12) {
         forbidNullArgs.first = AS_VALUE(TListLiteral, callable.GetInput(11));

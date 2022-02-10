@@ -139,13 +139,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TTabletPipePeNodeCachesInitializer : public IKikimrServicesInitializer {
-public:
-    TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+class TTabletPipePeNodeCachesInitializer : public IKikimrServicesInitializer { 
+public: 
+    TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig); 
+ 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+}; 
+ 
 class TTabletMonitoringProxyInitializer : public IKikimrServicesInitializer {
 public:
     TTabletMonitoringProxyInitializer(const TKikimrRunConfig& runConfig);
@@ -211,20 +211,20 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TLongTxServiceInitializer : public IKikimrServicesInitializer {
-public:
-    TLongTxServiceInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
-class TSequenceProxyServiceInitializer : public IKikimrServicesInitializer {
-public:
-    TSequenceProxyServiceInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+class TLongTxServiceInitializer : public IKikimrServicesInitializer { 
+public: 
+    TLongTxServiceInitializer(const TKikimrRunConfig& runConfig); 
+ 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+}; 
+ 
+class TSequenceProxyServiceInitializer : public IKikimrServicesInitializer { 
+public: 
+    TSequenceProxyServiceInitializer(const TKikimrRunConfig& runConfig); 
+ 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+}; 
+ 
 class TMiniKQLCompileServiceInitializer : public IKikimrServicesInitializer {
 public:
     TMiniKQLCompileServiceInitializer(const TKikimrRunConfig& runConfig);

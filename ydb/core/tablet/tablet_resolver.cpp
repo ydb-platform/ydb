@@ -18,14 +18,14 @@
 namespace NKikimr {
 
 const TDuration TabletResolverNegativeCacheTimeout = TDuration::MilliSeconds(300);
-const TDuration TabletResolverRefreshNodesPeriod = TDuration::Seconds(60);
+const TDuration TabletResolverRefreshNodesPeriod = TDuration::Seconds(60); 
 
 class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     struct TEvPrivate {
         enum EEv {
             EvPingTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvStopListRemoval,
-            EvRefreshNodes,
+            EvRefreshNodes, 
             EvEnd
         };
 
@@ -60,9 +60,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             {}
         };
 
-        struct TEvRefreshNodes : public TEventLocal<TEvRefreshNodes, EvRefreshNodes> {
-        };
-
+        struct TEvRefreshNodes : public TEventLocal<TEvRefreshNodes, EvRefreshNodes> { 
+        }; 
+ 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
     };
 
@@ -100,7 +100,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         typedef TOneOneQueueInplace<TQueueEntry *, 64> TQueueType;
 
-        EState State = StInit;
+        EState State = StInit; 
 
         TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue;
         TActorId KnownLeader;
@@ -113,10 +113,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         TVector<std::pair<TActorId, TActorId>> KnownFollowers;
 
-        ui64 CacheEpoch = 0;
-        ui64 LastCheckEpoch = 0;
-
-        TEntry() {}
+        ui64 CacheEpoch = 0; 
+        ui64 LastCheckEpoch = 0; 
+ 
+        TEntry() {} 
     };
 
     struct TResolveInfo {
@@ -168,21 +168,21 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     THashSet<ui64> TabletsOnStopList;
     THashMap<ui32, TString> NodeToDcMapping;
 
-    THashMap<ui32, ui64> NodeProblems;
-    ui64 LastNodeProblemsUpdateEpoch = 0;
-
-    ui64 LastCacheEpoch = 0;
-
+    THashMap<ui32, ui64> NodeProblems; 
+    ui64 LastNodeProblemsUpdateEpoch = 0; 
+ 
+    ui64 LastCacheEpoch = 0; 
+ 
     NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderLocal;
     NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderLocalDc;
     NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderOtherDc;
-
+ 
     NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerLocal;
     NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerLocalDc;
     NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerOtherDc;
-
-    NMonitoring::TDynamicCounters::TCounterPtr SelectedNone;
-
+ 
+    NMonitoring::TDynamicCounters::TCounterPtr SelectedNone; 
+ 
     NMonitoring::TDynamicCounters::TCounterPtr InFlyResolveCounter;
 
     std::optional<TString> FindNodeDc(ui32 nodeId) const {
@@ -210,29 +210,29 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         const std::optional<TString> selfDc = FindNodeDc(selfNode);
         const std::optional<TString> leaderDc = FindNodeDc(entry.KnownLeader.NodeId());
 
-        struct TCandidate {
+        struct TCandidate { 
             TActorId KnownLeader;
             TActorId KnownLeaderTablet;
-            bool IsLocal;
-            bool IsLocalDc;
+            bool IsLocal; 
+            bool IsLocalDc; 
             bool IsLeader;
-        };
-
+        }; 
+ 
         ui32 disallowed = 0; // do not save (prio == 0), just count
 
-        ui32 winnersPrio = 0;
-        TStackVec<TCandidate, 8> winners;
-
-        auto addCandidate = [&](ui32 prio, TCandidate&& candidate) {
-            if (winnersPrio < prio) {
-                winnersPrio = prio;
-                winners.clear();
-            }
-            if (winnersPrio == prio) {
-                winners.push_back(std::move(candidate));
-            }
-        };
-
+        ui32 winnersPrio = 0; 
+        TStackVec<TCandidate, 8> winners; 
+ 
+        auto addCandidate = [&](ui32 prio, TCandidate&& candidate) { 
+            if (winnersPrio < prio) { 
+                winnersPrio = prio; 
+                winners.clear(); 
+            } 
+            if (winnersPrio == prio) { 
+                winners.push_back(std::move(candidate)); 
+            } 
+        }; 
+ 
         bool countLeader = (entry.State == TEntry::StNormal || entry.State == TEntry::StFollowerUpdate);
         if (countLeader) {
             bool isLocal = (entry.KnownLeader.NodeId() == selfNode);
@@ -254,7 +254,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
                 ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, true);
                 if (prio)
-                    addCandidate(prio, TCandidate{ x.first, x.second, isLocal, isLocalDc, false });
+                    addCandidate(prio, TCandidate{ x.first, x.second, isLocal, isLocalDc, false }); 
                 else
                     ++disallowed;
             }
@@ -262,10 +262,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         auto dcName = [](const std::optional<TString>& x) { return x ? x->data() : "<none>"; };
 
-        if (!winners.empty()) {
-            size_t winnerIndex = (winners.size() == 1 ? 0 : (AppData(ctx)->RandomProvider->GenRand64() % winners.size()));
-            const TCandidate& winner = winners[winnerIndex];
-
+        if (!winners.empty()) { 
+            size_t winnerIndex = (winners.size() == 1 ? 0 : (AppData(ctx)->RandomProvider->GenRand64() % winners.size())); 
+            const TCandidate& winner = winners[winnerIndex]; 
+ 
             LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                 "SelectForward node %" PRIu32 " selfDC %s leaderDC %s %s"
                 " local %" PRIu32 " localDc %" PRIu32 " other %" PRIu32 " disallowed %" PRIu32
@@ -277,21 +277,21 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 winner.KnownLeader.ToString().c_str());
 
             if (winner.IsLeader) {
-                if (winner.IsLocal)
+                if (winner.IsLocal) 
                     SelectedLeaderLocal->Inc();
-                if (winner.IsLocal || winner.IsLocalDc)
+                if (winner.IsLocal || winner.IsLocalDc) 
                     SelectedLeaderLocalDc->Inc();
-                else
+                else 
                     SelectedLeaderOtherDc->Inc();
-            } else {
-                if (winner.IsLocal)
+            } else { 
+                if (winner.IsLocal) 
                     SelectedFollowerLocal->Inc();
-                if (winner.IsLocal || winner.IsLocalDc)
+                if (winner.IsLocal || winner.IsLocalDc) 
                     SelectedFollowerLocalDc->Inc();
-                else
+                else 
                     SelectedFollowerOtherDc->Inc();
-            }
-
+            } 
+ 
             return std::make_pair(winner.KnownLeader, winner.KnownLeaderTablet);
         }
 
@@ -300,9 +300,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             " local %" PRIu32 " localDc %" PRIu32 " other %" PRIu32 " disallowed %" PRIu32,
             selfNode, dcName(selfDc), dcName(leaderDc), info.ResFlags.ToString().data(),
             info.NumLocal, info.NumLocalDc, info.NumOtherDc, disallowed);
-
-        SelectedNone->Inc();
-
+ 
+        SelectedNone->Inc(); 
+ 
         return std::make_pair(TActorId(), TActorId());
     }
 
@@ -311,9 +311,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         TResolveInfo info(*msg, ctx.Now() - entry.LastResolved, needFollowerUpdate); // fills needFollowerUpdate in dtor
         const std::pair<TActorId, TActorId> endpoint = SelectForward(ctx, entry, info, msg->TabletID);
         if (endpoint.first) {
-            ctx.Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch));
+            ctx.Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch)); 
             if (!!msg->Ev)
-                ctx.ExecutorThread.Send(msg->Ev->Forward(msg->SelectActor(endpoint.second, endpoint.first)));
+                ctx.ExecutorThread.Send(msg->Ev->Forward(msg->SelectActor(endpoint.second, endpoint.first))); 
             return true;
         } else {
             return false;
@@ -344,7 +344,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         entry.KnownLeaderTablet = msg.CurrentLeaderTablet;
         entry.LastResolved = ctx.Now();
         entry.KnownFollowers = std::move(msg.Followers);
-        entry.CacheEpoch = ++LastCacheEpoch;
+        entry.CacheEpoch = ++LastCacheEpoch; 
 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                   "ApplyEntry leader tabletId: %" PRIu64 " followers: %" PRIu64,
@@ -405,62 +405,62 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         Y_VERIFY(ResolvedTablets.Erase(tabletId));
     }
 
-    void CheckDelayedNodeProblem(ui64 tabletId, const TActorContext &ctx) {
-        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
-        if (!entryHolder) {
-            return;
-        }
-
-        TEntry &entry = *entryHolder->Get();
-
-        switch (entry.State) {
-        case TEntry::StNormal:
+    void CheckDelayedNodeProblem(ui64 tabletId, const TActorContext &ctx) { 
+        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId); 
+        if (!entryHolder) { 
+            return; 
+        } 
+ 
+        TEntry &entry = *entryHolder->Get(); 
+ 
+        switch (entry.State) { 
+        case TEntry::StNormal: 
         case TEntry::StFollowerUpdate:
-            if (entry.CacheEpoch < LastNodeProblemsUpdateEpoch && entry.LastCheckEpoch < LastNodeProblemsUpdateEpoch) {
-                entry.LastCheckEpoch = LastCacheEpoch;
-
+            if (entry.CacheEpoch < LastNodeProblemsUpdateEpoch && entry.LastCheckEpoch < LastNodeProblemsUpdateEpoch) { 
+                entry.LastCheckEpoch = LastCacheEpoch; 
+ 
                 auto *pMaxProblemEpoch = NodeProblems.FindPtr(entry.KnownLeader.NodeId());
-                if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
-                    LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
-                            "Delayed invalidation of tabletId: %" PRIu64
+                if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) { 
+                    LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, 
+                            "Delayed invalidation of tabletId: %" PRIu64 
                             " leader: %s by NodeId", tabletId, entry.KnownLeader.ToString().c_str());
-                    ResolveRequest(tabletId, ctx);
-                    entry.State = TEntry::StProblemResolve;
-                    MoveEntryToUnresolved(tabletId, *entryHolder);
-                    return;
-                }
-
+                    ResolveRequest(tabletId, ctx); 
+                    entry.State = TEntry::StProblemResolve; 
+                    MoveEntryToUnresolved(tabletId, *entryHolder); 
+                    return; 
+                } 
+ 
                 auto itDst = entry.KnownFollowers.begin();
                 auto itSrc = entry.KnownFollowers.begin();
                 while (itSrc != entry.KnownFollowers.end()) {
-                    pMaxProblemEpoch = NodeProblems.FindPtr(itSrc->first.NodeId());
-                    if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
-                        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
-                            "Delayed invalidation of tabletId: %" PRIu64
+                    pMaxProblemEpoch = NodeProblems.FindPtr(itSrc->first.NodeId()); 
+                    if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) { 
+                        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, 
+                            "Delayed invalidation of tabletId: %" PRIu64 
                             " follower: %s by nodeId", tabletId, itSrc->first.ToString().c_str());
-                        ++itSrc;
-                        continue;
-                    }
-                    if (itDst != itSrc) {
-                        *itDst = *itSrc;
-                    }
-                    ++itDst;
-                    ++itSrc;
-                }
-
-                if (itDst != itSrc) {
+                        ++itSrc; 
+                        continue; 
+                    } 
+                    if (itDst != itSrc) { 
+                        *itDst = *itSrc; 
+                    } 
+                    ++itDst; 
+                    ++itSrc; 
+                } 
+ 
+                if (itDst != itSrc) { 
                     entry.KnownFollowers.erase(itDst, itSrc);
-                    ResolveRequest(tabletId, ctx);
+                    ResolveRequest(tabletId, ctx); 
                     entry.State = TEntry::StFollowerUpdate;
-                }
-            }
-            break;
-
-        default:
-            break;
-        }
-    }
-
+                } 
+            } 
+            break; 
+ 
+        default: 
+            break; 
+        } 
+    } 
+ 
     void Handle(TEvTabletResolver::TEvForward::TPtr &ev, const TActorContext &ctx) {
         TEvTabletResolver::TEvForward *msg = ev->Get();
         const ui64 tabletId = msg->TabletID;
@@ -471,8 +471,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             return;
         }
 
-        CheckDelayedNodeProblem(tabletId, ctx);
-
+        CheckDelayedNodeProblem(tabletId, ctx); 
+ 
         TAutoPtr<TEntry> &entryHolder = GetEntry(tabletId, ctx);
         TEntry& entry = *entryHolder.Get();
 
@@ -569,24 +569,24 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
     }
 
-    void Handle(TEvTabletResolver::TEvNodeProblem::TPtr &ev, const TActorContext &ctx) {
-        TEvTabletResolver::TEvNodeProblem *msg = ev->Get();
-        const ui32 nodeId = msg->NodeId;
-        const ui64 problemEpoch = msg->CacheEpoch;
-
-        ui64 &maxProblemEpoch = NodeProblems[nodeId];
-        if (maxProblemEpoch < problemEpoch) {
-            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvNodeProblem nodeId: %" PRIu32
-                " max(problemEpoch): %" PRIu64, nodeId, problemEpoch);
-            maxProblemEpoch = problemEpoch;
-            LastNodeProblemsUpdateEpoch = ++LastCacheEpoch;
-        } else {
-            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvNodeProblem nodeId: %" PRIu32
-                " problemEpoch: %" PRIu64 " <= max(problemEpoch): %" PRIu64,
-                nodeId, problemEpoch, maxProblemEpoch);
-        }
-    }
-
+    void Handle(TEvTabletResolver::TEvNodeProblem::TPtr &ev, const TActorContext &ctx) { 
+        TEvTabletResolver::TEvNodeProblem *msg = ev->Get(); 
+        const ui32 nodeId = msg->NodeId; 
+        const ui64 problemEpoch = msg->CacheEpoch; 
+ 
+        ui64 &maxProblemEpoch = NodeProblems[nodeId]; 
+        if (maxProblemEpoch < problemEpoch) { 
+            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvNodeProblem nodeId: %" PRIu32 
+                " max(problemEpoch): %" PRIu64, nodeId, problemEpoch); 
+            maxProblemEpoch = problemEpoch; 
+            LastNodeProblemsUpdateEpoch = ++LastCacheEpoch; 
+        } else { 
+            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvNodeProblem nodeId: %" PRIu32 
+                " problemEpoch: %" PRIu64 " <= max(problemEpoch): %" PRIu64, 
+                nodeId, problemEpoch, maxProblemEpoch); 
+        } 
+    } 
+ 
     void Handle(TEvStateStorage::TEvInfo::TPtr &ev, const TActorContext &ctx) {
         InFlyResolveCounter->Dec();
 
@@ -629,11 +629,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (success) {
                 if (msg->CurrentLeaderTablet) {
                     entry.State = TEntry::StNormal;
-                    ApplyEntryInfo(*msg, entry, ctx);
+                    ApplyEntryInfo(*msg, entry, ctx); 
                 } else {
                     // HACK: Don't cache invalid CurrentLeaderTablet
                     // FIXME: Use subscription + cache here to reduce the workload
-                    ApplyEntryInfo(*msg, entry, ctx);
+                    ApplyEntryInfo(*msg, entry, ctx); 
                     DropEntry(tabletId, entry, ctx);
                 }
             } else {
@@ -653,10 +653,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 } else {
                     if (msg->CurrentLeaderTablet) {
                         entry.State = TEntry::StNormal;
-                        ApplyEntryInfo(*msg, entry, ctx);
+                        ApplyEntryInfo(*msg, entry, ctx); 
                         MoveEntryToResolved(tabletId, *entryHolder);
                     } else {
-                        ApplyEntryInfo(*msg, entry, ctx);
+                        ApplyEntryInfo(*msg, entry, ctx); 
                         DropEntry(tabletId, entry, ctx);
                     }
                 }
@@ -787,18 +787,18 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         if (!distinct)
             NodeToDcMapping.clear();
-
-        ctx.Schedule(TabletResolverRefreshNodesPeriod, new TEvPrivate::TEvRefreshNodes);
+ 
+        ctx.Schedule(TabletResolverRefreshNodesPeriod, new TEvPrivate::TEvRefreshNodes); 
     }
 
-    void Handle(TEvPrivate::TEvRefreshNodes::TPtr &, const TActorContext &ctx) {
-        RefreshNodes(ctx);
-    }
-
-    void RefreshNodes(const TActorContext &ctx) {
+    void Handle(TEvPrivate::TEvRefreshNodes::TPtr &, const TActorContext &ctx) { 
+        RefreshNodes(ctx); 
+    } 
+ 
+    void RefreshNodes(const TActorContext &ctx) { 
         ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
-    }
-
+    } 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_RESOLVER_ACTOR;
@@ -832,33 +832,33 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        RefreshNodes(ctx);
+        RefreshNodes(ctx); 
         Become(&TThis::StateWork);
 
-        auto tablets = GetServiceCounters(AppData()->Counters, "tablets");
-
+        auto tablets = GetServiceCounters(AppData()->Counters, "tablets"); 
+ 
         SelectedLeaderLocal = tablets->GetCounter("TabletResolver/SelectedLeaderLocal", true);
         SelectedLeaderLocalDc = tablets->GetCounter("TabletResolver/SelectedLeaderLocalDc", true);
         SelectedLeaderOtherDc = tablets->GetCounter("TabletResolver/SelectedLeaderOtherDc", true);
         SelectedFollowerLocal = tablets->GetCounter("TabletResolver/SelectedFollowerLocal", true);
         SelectedFollowerLocalDc = tablets->GetCounter("TabletResolver/SelectedFollowerLocalDc", true);
         SelectedFollowerOtherDc = tablets->GetCounter("TabletResolver/SelectedFollowerOtherDc", true);
-        SelectedNone = tablets->GetCounter("TabletResolver/SelectedNone", true);
-
-        InFlyResolveCounter = tablets->GetCounter("TabletResolver/InFly");
+        SelectedNone = tablets->GetCounter("TabletResolver/SelectedNone", true); 
+ 
+        InFlyResolveCounter = tablets->GetCounter("TabletResolver/InFly"); 
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletResolver::TEvForward, Handle);
             HFunc(TEvTabletResolver::TEvTabletProblem, Handle);
-            HFunc(TEvTabletResolver::TEvNodeProblem, Handle);
+            HFunc(TEvTabletResolver::TEvNodeProblem, Handle); 
             HFunc(TEvStateStorage::TEvInfo, Handle);
             HFunc(TEvTablet::TEvPong, Handle);
             HFunc(TEvPrivate::TEvPingTimeout, Handle);
             HFunc(TEvPrivate::TEvStopListRemoval, Handle);
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            HFunc(TEvPrivate::TEvRefreshNodes, Handle);
+            HFunc(TEvPrivate::TEvRefreshNodes, Handle); 
             HFunc(TEvents::TEvUndelivered, Handle);
             default:
                 LOG_WARN(ctx, NKikimrServices::TABLET_RESOLVER, "TTabletResolver::StateWork unexpected event type: %" PRIx32

@@ -259,7 +259,7 @@ public:
         newIndexPath->PathType = TPathElement::EPathType::EPathTypeTableIndex;
 
         context.SS->Indexes[newIndexPath->PathId] = newIndexData;
-        context.SS->IncrementPathDbRefCount(newIndexPath->PathId);
+        context.SS->IncrementPathDbRefCount(newIndexPath->PathId); 
 
         if (!acl.empty()) {
             newIndexPath->ApplyACL(acl);

@@ -223,9 +223,9 @@ namespace NActors {
         }
     }
 
-    void TLoggerActor::Throttle(const NLog::TSettings& settings) {
+    void TLoggerActor::Throttle(const NLog::TSettings& settings) { 
         if (AtomicGet(IsOverflow))
-            Sleep(settings.ThrottleDelay);
+            Sleep(settings.ThrottleDelay); 
     }
 
     void TLoggerActor::LogIgnoredCount(TInstant now) {

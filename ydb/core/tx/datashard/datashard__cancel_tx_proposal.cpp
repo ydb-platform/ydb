@@ -32,13 +32,13 @@ bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
                 << " txId " << TxId);
 
     NIceDb::TNiceDb db(txc.DB);
-    return Self->Pipeline.CancelPropose(db, ctx, TxId);
+    return Self->Pipeline.CancelPropose(db, ctx, TxId); 
 }
 
 void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx)
 {
-    Self->CheckSplitCanStart(ctx);
-    Self->CheckMvccStateChangeCanStart(ctx);
+    Self->CheckSplitCanStart(ctx); 
+    Self->CheckMvccStateChangeCanStart(ctx); 
 }
 
 } // namespace NDataShard

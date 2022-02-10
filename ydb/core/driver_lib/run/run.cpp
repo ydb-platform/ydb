@@ -906,10 +906,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->HiveConfig.CopyFrom(runConfig.AppConfig.GetHiveConfig());
     }
 
-    if (runConfig.AppConfig.HasDataShardConfig()) {
-        AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig();
-    }
-
+    if (runConfig.AppConfig.HasDataShardConfig()) { 
+        AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig(); 
+    } 
+ 
     if (runConfig.AppConfig.HasMeteringConfig()) {
         AppData->MeteringConfig = runConfig.AppConfig.GetMeteringConfig();
     }
@@ -1182,7 +1182,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
     if (serviceMask.EnableTabletResolver) {
         sil->AddServiceInitializer(new TTabletResolverInitializer(runConfig));
-        sil->AddServiceInitializer(new TTabletPipePeNodeCachesInitializer(runConfig));
+        sil->AddServiceInitializer(new TTabletPipePeNodeCachesInitializer(runConfig)); 
     }
     if (serviceMask.EnableTabletMonitoringProxy) {
         sil->AddServiceInitializer(new TTabletMonitoringProxyInitializer(runConfig));
@@ -1307,10 +1307,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TMeteringWriterInitializer(runConfig));
     }
 
-    if (serviceMask.EnableLongTxService) {
-        sil->AddServiceInitializer(new TLongTxServiceInitializer(runConfig));
-    }
-
+    if (serviceMask.EnableLongTxService) { 
+        sil->AddServiceInitializer(new TLongTxServiceInitializer(runConfig)); 
+    } 
+ 
     if (serviceMask.EnableKqp || serviceMask.EnableYandexQuery) {
         sil->AddServiceInitializer(new TYqlLogsInitializer(runConfig));
     }
@@ -1321,10 +1321,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TYandexQueryInitializer(runConfig, ModuleFactories, YqSharedResources));
     }
 
-    if (serviceMask.EnableSequenceProxyService) {
-        sil->AddServiceInitializer(new TSequenceProxyServiceInitializer(runConfig));
-    }
-
+    if (serviceMask.EnableSequenceProxyService) { 
+        sil->AddServiceInitializer(new TSequenceProxyServiceInitializer(runConfig)); 
+    } 
+ 
     return sil;
 }
 
@@ -1339,7 +1339,7 @@ void RegisterBaseTagForMemoryProfiling(TActorSystem* as) {
         const char* currName = NKikimrServices::TActivity::EType_Name(current).c_str();
         if (currName[0] == '\0') {
             holders.push_back("EActivityType_" + ToString<ui32>(i));
-            currName = holders.back().c_str();
+            currName = holders.back().c_str(); 
         }
         activityNames.push_back(currName);
     }

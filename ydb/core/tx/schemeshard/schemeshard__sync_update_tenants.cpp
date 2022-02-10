@@ -101,19 +101,19 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             TStoragePools storagePools(record.GetStoragePools().begin(), record.GetStoragePools().end());
             subdomain->SetStoragePools(storagePools, record.GetSubdomainVersion());
 
-            if (record.HasDeclaredSchemeQuotas()) {
-                subdomain->ApplyDeclaredSchemeQuotas(record.GetDeclaredSchemeQuotas(), ctx.Now());
-                // Note: subdomain version is persisted in PersistStoragePools below
-                Self->PersistSubDomainDeclaredSchemeQuotas(db, Self->RootPathId(), *subdomain);
-                Self->PersistSubDomainSchemeQuotas(db, Self->RootPathId(), *subdomain);
-            }
-
-            if (record.HasDatabaseQuotas()) {
-                subdomain->SetDatabaseQuotas(record.GetDatabaseQuotas(), Self);
-                // Note: subdomain version is persisted in PersistStoragePools below
-                Self->PersistSubDomainDatabaseQuotas(db, Self->RootPathId(), *subdomain);
-            }
-
+            if (record.HasDeclaredSchemeQuotas()) { 
+                subdomain->ApplyDeclaredSchemeQuotas(record.GetDeclaredSchemeQuotas(), ctx.Now()); 
+                // Note: subdomain version is persisted in PersistStoragePools below 
+                Self->PersistSubDomainDeclaredSchemeQuotas(db, Self->RootPathId(), *subdomain); 
+                Self->PersistSubDomainSchemeQuotas(db, Self->RootPathId(), *subdomain); 
+            } 
+ 
+            if (record.HasDatabaseQuotas()) { 
+                subdomain->SetDatabaseQuotas(record.GetDatabaseQuotas(), Self); 
+                // Note: subdomain version is persisted in PersistStoragePools below 
+                Self->PersistSubDomainDatabaseQuotas(db, Self->RootPathId(), *subdomain); 
+            } 
+ 
             Self->PersistStoragePools(db, Self->RootPathId(), *subdomain);
             SideEffects.PublishToSchemeBoard(InvalidOperationId, Self->RootPathId());
             MakeSync();
@@ -124,7 +124,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             {
                 TString errStr;
                 TUserAttributes::TPtr userAttrs = new TUserAttributes(record.GetUserAttributesVersion());
-                bool isOk = userAttrs->ApplyPatch(EUserAttributesOp::SyncUpdateTenants, record.GetUserAttributes(), errStr);
+                bool isOk = userAttrs->ApplyPatch(EUserAttributesOp::SyncUpdateTenants, record.GetUserAttributes(), errStr); 
                 Y_VERIFY_S(isOk, errStr);
                 path->UserAttrs->AlterData = userAttrs;
             }
@@ -135,20 +135,20 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
         }
 
         auto addPrivateShard = [&] (TTabletId tabletId, TTabletTypes::EType tabletType) {
-            const auto shardIdx = Self->RegisterShardInfo(
-                TShardInfo(InvalidTxId, Self->RootPathId(), tabletType)
-                    .WithTabletID(tabletId));
+            const auto shardIdx = Self->RegisterShardInfo( 
+                TShardInfo(InvalidTxId, Self->RootPathId(), tabletType) 
+                    .WithTabletID(tabletId)); 
             Self->PersistUpdateNextShardIdx(db);
 
-            Self->PersistShardMapping(db, shardIdx, tabletId, Self->RootPathId(), InvalidTxId, tabletType);
+            Self->PersistShardMapping(db, shardIdx, tabletId, Self->RootPathId(), InvalidTxId, tabletType); 
 
             Y_VERIFY(record.GetSubdomainVersion() >= subdomain->GetVersion());
             if (record.GetSubdomainVersion() > subdomain->GetVersion()) {
                 subdomain->SetVersion(record.GetSubdomainVersion());
             }
 
-            subdomain->AddPrivateShard(shardIdx);
-            subdomain->AddInternalShard(shardIdx);
+            subdomain->AddPrivateShard(shardIdx); 
+            subdomain->AddInternalShard(shardIdx); 
 
             subdomain->Initialize(Self->ShardInfos);
             Self->PersistSubDomain(db, Self->RootPathId(), *subdomain);

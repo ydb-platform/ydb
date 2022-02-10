@@ -489,16 +489,16 @@ TString JoinPath(const TString& workingDir, const TString& name) {
                << name;
 }
 
-TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& tx, const TOperationContext& context) {
-    TConsumeQuotaResult result;
-
-    // Internal operations never consume quota
-    if (tx.GetInternal()) {
-        return result;
-    }
-
-    // These operations never consume quota
-    switch (tx.GetOperationType()) {
+TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& tx, const TOperationContext& context) { 
+    TConsumeQuotaResult result; 
+ 
+    // Internal operations never consume quota 
+    if (tx.GetInternal()) { 
+        return result; 
+    } 
+ 
+    // These operations never consume quota 
+    switch (tx.GetOperationType()) { 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
@@ -509,35 +509,35 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
-        return result;
-    default:
-        break;
-    }
-
-    const TString workingDir = tx.GetWorkingDir();
-    TPath path = TPath::Resolve(workingDir, context.SS);
-
-    // Find the first directory that actually exists
-    path.RiseUntilExisted();
-
-    // Don't fail on some completely invalid path
-    if (!path.IsResolved()) {
-        return result;
-    }
-
-    auto domainId = path.DomainId();
-    auto domainInfo = path.DomainInfo();
-    if (!domainInfo->TryConsumeSchemeQuota(context.Ctx.Now())) {
+        return result; 
+    default: 
+        break; 
+    } 
+ 
+    const TString workingDir = tx.GetWorkingDir(); 
+    TPath path = TPath::Resolve(workingDir, context.SS); 
+ 
+    // Find the first directory that actually exists 
+    path.RiseUntilExisted(); 
+ 
+    // Don't fail on some completely invalid path 
+    if (!path.IsResolved()) { 
+        return result; 
+    } 
+ 
+    auto domainId = path.DomainId(); 
+    auto domainInfo = path.DomainInfo(); 
+    if (!domainInfo->TryConsumeSchemeQuota(context.Ctx.Now())) { 
         result.Status = NKikimrScheme::StatusQuotaExceeded;
-        result.Reason = "Request exceeded a limit on the number of schema operations, try again later.";
-    }
-
-    // Even if operation fails later we want to persist updated/consumed quotas
-    NIceDb::TNiceDb db(context.Txc.DB);
-    context.SS->PersistSubDomainSchemeQuotas(db, domainId, *domainInfo);
-    return result;
-}
-
+        result.Reason = "Request exceeded a limit on the number of schema operations, try again later."; 
+    } 
+ 
+    // Even if operation fails later we want to persist updated/consumed quotas 
+    NIceDb::TNiceDb db(context.Txc.DB); 
+    context.SS->PersistSubDomainSchemeQuotas(db, domainId, *domainInfo); 
+    return result; 
+} 
+ 
 TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
     TSplitTransactionsResult result;
 
@@ -599,10 +599,10 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
         targetName = tx.GetCreateColumnStore().GetName();
-        break;
+        break; 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
         targetName = tx.GetCreateColumnTable().GetName();
-        break;
+        break; 
     default:
         result.Transactions.push_back(tx);
         return result;
@@ -686,10 +686,10 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
             create.MutableCreateColumnStore()->SetName(name);
-            break;
+            break; 
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
             create.MutableCreateColumnTable()->SetName(name);
-            break;
+            break; 
         default:
             Y_UNREACHABLE();
         }
@@ -795,16 +795,16 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
             return CreateNewRTMR(NextPartId(), txState);
         case TTxState::ETxType::TxCreateOlapStore:
             return CreateNewOlapStore(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterOlapStore:
-            return CreateAlterOlapStore(NextPartId(), txState);
-        case TTxState::ETxType::TxDropOlapStore:
-            return CreateDropOlapStore(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateOlapTable:
-            return CreateNewOlapTable(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterOlapTable:
-            return CreateAlterOlapTable(NextPartId(), txState);
-        case TTxState::ETxType::TxDropOlapTable:
-            return CreateDropOlapTable(NextPartId(), txState);
+        case TTxState::ETxType::TxAlterOlapStore: 
+            return CreateAlterOlapStore(NextPartId(), txState); 
+        case TTxState::ETxType::TxDropOlapStore: 
+            return CreateDropOlapStore(NextPartId(), txState); 
+        case TTxState::ETxType::TxCreateOlapTable: 
+            return CreateNewOlapTable(NextPartId(), txState); 
+        case TTxState::ETxType::TxAlterOlapTable: 
+            return CreateAlterOlapTable(NextPartId(), txState); 
+        case TTxState::ETxType::TxDropOlapTable: 
+            return CreateDropOlapTable(NextPartId(), txState); 
         case TTxState::ETxType::TxCreatePQGroup:
             return CreateNewPQ(NextPartId(), txState);
         case TTxState::ETxType::TxAlterPQGroup:
@@ -886,14 +886,14 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
         case TTxState::ETxType::TxDropCdcStreamAtTable:
             return CreateDropCdcStreamAtTable(NextPartId(), txState);
 
-        // Sequences
-        case TTxState::ETxType::TxCreateSequence:
-            return CreateNewSequence(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterSequence:
-            Y_FAIL("TODO: implement");
-        case TTxState::ETxType::TxDropSequence:
-            return CreateDropSequence(NextPartId(), txState);
-
+        // Sequences 
+        case TTxState::ETxType::TxCreateSequence: 
+            return CreateNewSequence(NextPartId(), txState); 
+        case TTxState::ETxType::TxAlterSequence: 
+            Y_FAIL("TODO: implement"); 
+        case TTxState::ETxType::TxDropSequence: 
+            return CreateDropSequence(NextPartId(), txState); 
+ 
         case TTxState::ETxType::TxFillIndex:
             Y_FAIL("deprecated");
 
@@ -954,15 +954,15 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
         return CreateNewOlapStore(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore:
-        return CreateAlterOlapStore(NextPartId(), tx);
+        return CreateAlterOlapStore(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
-        return CreateDropOlapStore(NextPartId(), tx);
+        return CreateDropOlapStore(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-        return CreateNewOlapTable(NextPartId(), tx);
+        return CreateNewOlapTable(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
-        return CreateAlterOlapTable(NextPartId(), tx);
+        return CreateAlterOlapTable(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
-        return CreateDropOlapTable(NextPartId(), tx);
+        return CreateDropOlapTable(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         return CreateNewPQ(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
@@ -1028,14 +1028,14 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
         return CreateAlterLogin(NextPartId(), tx);
 
-    // Sequence
+    // Sequence 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
-        return CreateNewSequence(NextPartId(), tx);
+        return CreateNewSequence(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
-        Y_FAIL("TODO: implement");
+        Y_FAIL("TODO: implement"); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
-        return CreateDropSequence(NextPartId(), tx);
-
+        return CreateDropSequence(NextPartId(), tx); 
+ 
     // Index
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         Y_FAIL("multipart operations are handled before, also they require transaction details");
@@ -1258,8 +1258,8 @@ void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TA
         const TStepId maxStep = TStepId(Max<ui64>());
         THolder<TEvTxProxy::TEvProposeTransaction> message(
             new TEvTxProxy::TEvProposeTransaction(ui64(coordinatorId), ui64(TxId), execLevel, ui64(effectiveMinStep), ui64(maxStep)));
-        auto* proposal = message->Record.MutableTransaction();
-        auto* reqAffectedSet = proposal->MutableAffectedSet();
+        auto* proposal = message->Record.MutableTransaction(); 
+        auto* reqAffectedSet = proposal->MutableAffectedSet(); 
         reqAffectedSet->Reserve(shards.size());
         for (auto affectedTablet : shards) {
             auto* x = reqAffectedSet->Add();
@@ -1267,9 +1267,9 @@ void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TA
             x->SetFlags(2 /*todo: use generic enum*/);
         }
 
-        // TODO: probably want this for drops only
-        proposal->SetIgnoreLowDiskSpace(true);
-
+        // TODO: probably want this for drops only 
+        proposal->SetIgnoreLowDiskSpace(true); 
+ 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TOperation DoPropose"
                         << " send propose"
@@ -1348,36 +1348,36 @@ TSubTxId TOperation::FindRelatedPartByShardIdx(TShardIdx shardIdx, const TActorC
     return partId;
 }
 
-void TOperation::WaitShardCreated(TShardIdx shardIdx, TSubTxId partId) {
-    WaitingShardCreatedByShard[shardIdx].insert(partId);
-    WaitingShardCreatedByPart[partId].insert(shardIdx);
+void TOperation::WaitShardCreated(TShardIdx shardIdx, TSubTxId partId) { 
+    WaitingShardCreatedByShard[shardIdx].insert(partId); 
+    WaitingShardCreatedByPart[partId].insert(shardIdx); 
 }
-
-TVector<TSubTxId> TOperation::ActivateShardCreated(TShardIdx shardIdx) {
-    TVector<TSubTxId> parts;
-
-    auto it = WaitingShardCreatedByShard.find(shardIdx);
-    if (it != WaitingShardCreatedByShard.end()) {
-        for (auto partId : it->second) {
-            auto itByPart = WaitingShardCreatedByPart.find(partId);
-            Y_VERIFY(itByPart != WaitingShardCreatedByPart.end());
-            itByPart->second.erase(shardIdx);
-            if (itByPart->second.empty()) {
-                WaitingShardCreatedByPart.erase(itByPart);
-                parts.push_back(partId);
-            }
-        }
-        WaitingShardCreatedByShard.erase(it);
-    }
-
-    return parts;
+ 
+TVector<TSubTxId> TOperation::ActivateShardCreated(TShardIdx shardIdx) { 
+    TVector<TSubTxId> parts; 
+ 
+    auto it = WaitingShardCreatedByShard.find(shardIdx); 
+    if (it != WaitingShardCreatedByShard.end()) { 
+        for (auto partId : it->second) { 
+            auto itByPart = WaitingShardCreatedByPart.find(partId); 
+            Y_VERIFY(itByPart != WaitingShardCreatedByPart.end()); 
+            itByPart->second.erase(shardIdx); 
+            if (itByPart->second.empty()) { 
+                WaitingShardCreatedByPart.erase(itByPart); 
+                parts.push_back(partId); 
+            } 
+        } 
+        WaitingShardCreatedByShard.erase(it); 
+    } 
+ 
+    return parts; 
 }
-
+ 
 void TOperation::RegisterWaitPublication(TSubTxId partId, TPathId pathId, ui64 pathVersion) {
     auto publication = TPublishPath(pathId, pathVersion);
     WaitingPublicationsByPart[partId].insert(publication);
     WaitingPublicationsByPath[publication].insert(partId);
-}
+} 
 
 TSet<TOperationId> TOperation::ActivatePartsWaitPublication(TPathId pathId, ui64 pathVersion) {
     TSet<TOperationId> activateParts;
@@ -1407,7 +1407,7 @@ TSet<TOperationId> TOperation::ActivatePartsWaitPublication(TPathId pathId, ui64
     }
 
     return activateParts;
-}
+} 
 
 ui64 TOperation::CountWaitPublication(TOperationId opId) {
     if (WaitingPublicationsByPart.contains(opId.GetSubTxId())) {

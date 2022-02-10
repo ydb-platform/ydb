@@ -34,17 +34,17 @@ def wait_for_matcher(callable_, matcher, timeout_seconds=60.0, step_seconds=1.0,
     """
     matcher = wrap_matcher(matcher)
     horizontal_line = '\n' + '=' * 80 + '\n'
-    last_result = [None]
+    last_result = [None] 
 
     def predicate():
         result = callable_()
         if log_progress:
             logger.info('Result from callable = ' + horizontal_line + str(result) + horizontal_line)
-        last_result[0] = result
+        last_result[0] = result 
         return matcher.matches(result)
 
-    wait_for(predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=step_seconds)
-    return last_result[0]
+    wait_for(predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=step_seconds) 
+    return last_result[0] 
 
 
 def wait_for_and_assert(callable_, matcher, message='', timeout_seconds=60, step_seconds=1.0, log_progress=False):
@@ -63,12 +63,12 @@ def wait_for_and_assert(callable_, matcher, message='', timeout_seconds=60, step
     :return: return value of last callable_ invocation
     """
     matcher = wrap_matcher(matcher)
-    result = wait_for_matcher(
-        callable_,
-        matcher,
-        timeout_seconds=timeout_seconds,
-        step_seconds=step_seconds,
-        log_progress=log_progress,
-    )
+    result = wait_for_matcher( 
+        callable_, 
+        matcher, 
+        timeout_seconds=timeout_seconds, 
+        step_seconds=step_seconds, 
+        log_progress=log_progress, 
+    ) 
     assert_that(result, matcher, message)
     return result

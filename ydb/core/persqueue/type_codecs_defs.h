@@ -7,7 +7,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/singleton.h>
 #include <util/system/types.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 
 #include <string.h>
 
@@ -381,7 +381,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 inline IChunkDecoder::TPtr IChunkDecoder::ReadChunk(const TDataRef& data, const TTypeCodecs* codecs) {
     Y_VERIFY_DEBUG(data.Size() >= sizeof(TCodecSig));
-    const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data());
+    const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data()); 
     auto codec = codecs->GetCodec(sig);
     Y_VERIFY(codec, "Unregistered codec (%u).", ui16(sig));
     return codec->ReadChunk(data);

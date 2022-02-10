@@ -77,13 +77,13 @@ struct TGlobalTimestamp {
     }
 };
 
-
-enum class ETableColumnDefaultKind : ui32 {
-    None = 0,
-    FromSequence = 1,
-};
-
-
+ 
+enum class ETableColumnDefaultKind : ui32 { 
+    None = 0, 
+    FromSequence = 1, 
+}; 
+ 
+ 
 enum class EAttachChildResult : ui32 {
     Undefined = 0,
 

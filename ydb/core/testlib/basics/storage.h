@@ -13,7 +13,7 @@
 
 namespace NKikimr {
 
-    struct TTestStorageFactory {
+    struct TTestStorageFactory { 
         using TRuntime = TTestActorRuntime;
 
         static constexpr ui64 MEM_DISK_SIZE = ui64(32) << 30;
@@ -25,22 +25,22 @@ namespace NKikimr {
         static constexpr bool USE_SYNC_PDISK = false;
         static constexpr bool USE_MEM_SYNC_PDISK = true;
 
-        TTestStorageFactory(TRuntime &runtime, NFake::TStorage conf, bool mock)
+        TTestStorageFactory(TRuntime &runtime, NFake::TStorage conf, bool mock) 
             : DomainsNum(TBlobStorageGroupType(BootGroupErasure).BlobSubgroupSize())
             , Mock(mock)
-            , Conf(FixConf(conf))
+            , Conf(FixConf(conf)) 
             , Runtime(runtime)
         {
             /* Do not use real backend for storage mock, it is useless */
 
             if (!Conf.UseDisk && !Mock) {
                 static TIntrusivePtr<NPDisk::TSectorMap> unsafeSectorMap;
-                static TMutex unsafeBufferLock;
-                with_lock (unsafeBufferLock) {
+                static TMutex unsafeBufferLock; 
+                with_lock (unsafeBufferLock) { 
                     unsafeSectorMap.Reset(new NPDisk::TSectorMap());
                     unsafeSectorMap->ForceSize(Conf.DiskSize);
                     SectorMap = unsafeSectorMap;
-                }
+                } 
             }
 
             const bool strandedPDisk = STRAND_PDISK && !Runtime.IsRealThreads();
@@ -70,7 +70,7 @@ namespace NKikimr {
             }
         }
 
-        static NFake::TStorage FixConf(NFake::TStorage conf) noexcept
+        static NFake::TStorage FixConf(NFake::TStorage conf) noexcept 
         {
             if (conf.DiskSize == 0) {
                 conf.DiskSize = conf.UseDisk ? DISK_SIZE : MEM_DISK_SIZE;

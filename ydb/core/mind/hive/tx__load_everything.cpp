@@ -381,18 +381,18 @@ public:
                     tablet.Category = &Self->GetTabletCategory(categoryId);
                     tablet.Category->Tablets.insert(&tablet);
                 }
-                tablet.BootMode = tabletRowset.GetValue<Schema::Tablet::BootMode>();
-                tablet.LockedToActor = tabletRowset.GetValueOrDefault<Schema::Tablet::LockedToActor>();
-                tablet.LockedReconnectTimeout = TDuration::MilliSeconds(tabletRowset.GetValueOrDefault<Schema::Tablet::LockedReconnectTimeout>());
-                if (tablet.LockedToActor) {
-                    TNodeId nodeId = tablet.LockedToActor.NodeId();
+                tablet.BootMode = tabletRowset.GetValue<Schema::Tablet::BootMode>(); 
+                tablet.LockedToActor = tabletRowset.GetValueOrDefault<Schema::Tablet::LockedToActor>(); 
+                tablet.LockedReconnectTimeout = TDuration::MilliSeconds(tabletRowset.GetValueOrDefault<Schema::Tablet::LockedReconnectTimeout>()); 
+                if (tablet.LockedToActor) { 
+                    TNodeId nodeId = tablet.LockedToActor.NodeId(); 
                     auto it = Self->Nodes.find(nodeId);
                     if (it == Self->Nodes.end()) {
-                        // Tablet was locked to a node that had no local service
+                        // Tablet was locked to a node that had no local service 
                         it = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first;
-                    }
-                    it->second.LockedTablets.insert(&tablet);
-                }
+                    } 
+                    it->second.LockedTablets.insert(&tablet); 
+                } 
 
                 tablet.SeizedByChild = tabletRowset.GetValueOrDefault<Schema::Tablet::SeizedByChild>();
                 tablet.NeedToReleaseFromParent = tabletRowset.GetValueOrDefault<Schema::Tablet::NeedToReleaseFromParent>();
@@ -636,10 +636,10 @@ public:
         Self->SetCounterTabletsTotal(tabletsTotal);
         Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_READY;
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvBootTablets());
-
-        for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
+ 
+        for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) { 
             Self->ScheduleUnlockTabletExecution(it->second);
-        }
+        } 
     }
 };
 

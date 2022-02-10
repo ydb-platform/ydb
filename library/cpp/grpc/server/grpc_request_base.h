@@ -108,9 +108,9 @@ public:
 
     //! Returns peer address
     virtual TString GetPeer() const = 0;
-
-    //! Returns true if server is using ssl
-    virtual bool SslServer() const = 0;
+ 
+    //! Returns true if server is using ssl 
+    virtual bool SslServer() const = 0; 
 };
 
 } // namespace NGrpc

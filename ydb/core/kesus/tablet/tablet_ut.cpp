@@ -1,60 +1,60 @@
-#include "tablet.h"
-#include "events.h"
-#include "ut_helpers.h"
+#include "tablet.h" 
+#include "events.h" 
+#include "ut_helpers.h" 
 #include "rate_accounting.h"
-
+ 
 #include <ydb/core/metering/metering.h>
 
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
-
-#include <util/random/random.h>
-
+ 
+#include <util/random/random.h> 
+ 
 #include <limits>
 
-namespace NKikimr {
-namespace NKesus {
-
-namespace {
-    struct TDyingActor : public TActorBootstrapped<TDyingActor> {
-        void Bootstrap(const TActorContext& ctx) {
-            Die(ctx);
-        }
-    };
-
-    Ydb::Coordination::Config MakeConfig(const TString& kesusPath) {
-        Ydb::Coordination::Config config;
-        config.set_path(kesusPath);
-        return config;
-    }
-
-    void EnableRelaxedAttach(TTestContext& ctx) {
-        Ydb::Coordination::Config config;
-        config.set_attach_consistency_mode(Ydb::Coordination::CONSISTENCY_MODE_RELAXED);
+namespace NKikimr { 
+namespace NKesus { 
+ 
+namespace { 
+    struct TDyingActor : public TActorBootstrapped<TDyingActor> { 
+        void Bootstrap(const TActorContext& ctx) { 
+            Die(ctx); 
+        } 
+    }; 
+ 
+    Ydb::Coordination::Config MakeConfig(const TString& kesusPath) { 
+        Ydb::Coordination::Config config; 
+        config.set_path(kesusPath); 
+        return config; 
+    } 
+ 
+    void EnableRelaxedAttach(TTestContext& ctx) { 
+        Ydb::Coordination::Config config; 
+        config.set_attach_consistency_mode(Ydb::Coordination::CONSISTENCY_MODE_RELAXED); 
         ctx.SetConfig(12345, config, 42);
-    }
-}
-
+    } 
+} 
+ 
 Y_UNIT_TEST_SUITE(TKesusTest) {
     Y_UNIT_TEST(TestKesusConfig) {
-        TTestContext ctx;
-        ctx.Setup();
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+ 
         ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 42);
 
-        {
+        { 
             const auto getConfigResult = ctx.GetConfig();
             UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz");
             UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetVersion(), 42);
             UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_AGGREGATED, "Record: " << getConfigResult);
-        }
-
-        {
+        } 
+ 
+        { 
 
             auto configWithModes = MakeConfig("/foo/bar/baz");
             configWithModes.set_rate_limiter_counters_mode(Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED);
             ctx.SetConfig(12345, configWithModes, 42);
-        }
-
+        } 
+ 
         {
             const auto getConfigResult = ctx.GetConfig();
             UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz");
@@ -62,1254 +62,1254 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED, "Record: " << getConfigResult);
         }
 
-        // Verify it is restored after reboot
-        ctx.RebootTablet();
+        // Verify it is restored after reboot 
+        ctx.RebootTablet(); 
 
-        {
+        { 
             const auto getConfigResult = ctx.GetConfig();
             UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz");
             UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetVersion(), 42);
             UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED, "Record: " << getConfigResult);
-        }
-
-        // Verify it is ok to repeat the event
+        } 
+ 
+        // Verify it is ok to repeat the event 
         ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 42);
-
-        // Verify it is not ok to downgrade
+ 
+        // Verify it is not ok to downgrade 
         ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 41, Ydb::StatusIds::PRECONDITION_FAILED);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestRegisterProxy) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.VerifyProxyRegistered(proxy, 1);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.VerifyProxyRegistered(proxy, 1); 
+    } 
+ 
     Y_UNIT_TEST(TestRegisterProxyBadGeneration) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        // cannot use generation 0
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        // cannot use generation 0 
         ctx.MustRegisterProxy(proxy, 0, Ydb::StatusIds::BAD_REQUEST);
-        ctx.MustRegisterProxy(proxy, 2);
-        // cannot reuse the same generation
+        ctx.MustRegisterProxy(proxy, 2); 
+        // cannot reuse the same generation 
         ctx.MustRegisterProxy(proxy, 2, Ydb::StatusIds::BAD_REQUEST);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestRegisterProxyFromDeadActor) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->Register(new TDyingActor());
-        ctx.SendFromProxy(proxy, 1, new TEvKesus::TEvRegisterProxy("", 1));
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back((ui32)TEvents::TEvUndelivered::EventType);
-            ctx.Runtime->DispatchEvents(options);
-        }
-        ctx.VerifyProxyNotRegistered(proxy);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->Register(new TDyingActor()); 
+        ctx.SendFromProxy(proxy, 1, new TEvKesus::TEvRegisterProxy("", 1)); 
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.emplace_back((ui32)TEvents::TEvUndelivered::EventType); 
+            ctx.Runtime->DispatchEvents(options); 
+        } 
+        ctx.VerifyProxyNotRegistered(proxy); 
+    } 
+ 
     Y_UNIT_TEST(TestRegisterProxyLinkFailure) {
-        TTestContext ctx;
-        ctx.Setup(2);
-        // register proxy from the second node
-        auto proxy = ctx.Runtime->AllocateEdgeActor(1);
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.VerifyProxyRegistered(proxy, 1);
-        // drop link between 2 nodes
-        {
-            ctx.Runtime->Send(
-                new IEventHandle(
-                    ctx.Runtime->GetInterconnectProxy(0, 1),
+        TTestContext ctx; 
+        ctx.Setup(2); 
+        // register proxy from the second node 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(1); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.VerifyProxyRegistered(proxy, 1); 
+        // drop link between 2 nodes 
+        { 
+            ctx.Runtime->Send( 
+                new IEventHandle( 
+                    ctx.Runtime->GetInterconnectProxy(0, 1), 
                     TActorId(),
-                    new TEvInterconnect::TEvDisconnect()),
-                0, true);
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
-            ctx.Runtime->DispatchEvents(options);
-        }
-        ctx.VerifyProxyNotRegistered(proxy);
-    }
-
+                    new TEvInterconnect::TEvDisconnect()), 
+                0, true); 
+            TDispatchOptions options; 
+            options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected); 
+            ctx.Runtime->DispatchEvents(options); 
+        } 
+        ctx.VerifyProxyNotRegistered(proxy); 
+    } 
+ 
     Y_UNIT_TEST(TestUnregisterProxy) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustUnregisterProxy(proxy, 1);
-        ctx.VerifyProxyNotRegistered(proxy);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustUnregisterProxy(proxy, 1); 
+        ctx.VerifyProxyNotRegistered(proxy); 
+    } 
+ 
     Y_UNIT_TEST(TestUnregisterProxyBadGeneration) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustRegisterProxy(proxy, 2);
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustRegisterProxy(proxy, 2); 
         ctx.MustUnregisterProxy(proxy, 1, Ydb::StatusIds::BAD_SESSION);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestAttachNewSessions) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.MustAttachSession(proxy, 1, 0), 1);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.MustAttachSession(proxy, 1, 0), 2);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1, 2});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.MustAttachSession(proxy, 1, 0), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.MustAttachSession(proxy, 1, 0), 2); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {1, 2}); 
+    } 
+ 
     Y_UNIT_TEST(TestAttachMissingSession) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        auto result = ctx.AttachSession(proxy, 1, 1);
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        auto result = ctx.AttachSession(proxy, 1, 1); 
         UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SESSION_EXPIRED);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestAttachOldGeneration) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.RegisterProxy(proxy, 2); // register with generation 2
-        auto result1 = ctx.AttachSession(proxy, 1, 0); // attach with generation 1
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.RegisterProxy(proxy, 2); // register with generation 2 
+        auto result1 = ctx.AttachSession(proxy, 1, 0); // attach with generation 1 
         UNIT_ASSERT_VALUES_EQUAL(result1.GetError().GetStatus(), Ydb::StatusIds::BAD_SESSION);
-        ui64 sessionId = ctx.MustAttachSession(proxy, 2, 0); // retry with generation 2
-        UNIT_ASSERT_VALUES_EQUAL(sessionId, 1);
-        ctx.VerifyProxyHasSessions(proxy, 2, {1});
-    }
-
+        ui64 sessionId = ctx.MustAttachSession(proxy, 2, 0); // retry with generation 2 
+        UNIT_ASSERT_VALUES_EQUAL(sessionId, 1); 
+        ctx.VerifyProxyHasSessions(proxy, 2, {1}); 
+    } 
+ 
     Y_UNIT_TEST(TestAttachOutOfSequence) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.RegisterProxy(proxy1, 1);
-        ctx.RegisterProxy(proxy2, 1);
-        ctx.MustAttachSession(proxy1, 1, 0, 0, "", 222);
-        auto result = ctx.AttachSession(proxy2, 1, 1, 0, "", 111);
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.RegisterProxy(proxy1, 1); 
+        ctx.RegisterProxy(proxy2, 1); 
+        ctx.MustAttachSession(proxy1, 1, 0, 0, "", 222); 
+        auto result = ctx.AttachSession(proxy2, 1, 1, 0, "", 111); 
         UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::BAD_SESSION);
-
-        // verify proxy2 did not steal the session
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-    }
-
+ 
+        // verify proxy2 did not steal the session 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+    } 
+ 
     Y_UNIT_TEST(TestAttachOutOfSequenceInTx) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.RegisterProxy(proxy, 1);
-        ctx.SendAttachSession(111, proxy, 1, 0, 0, "", 42);
-        ctx.SendAttachSession(222, proxy, 1, 1, 0, "", 41);
-        ctx.ExpectAttachSessionResult(111, proxy, 1);
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.RegisterProxy(proxy, 1); 
+        ctx.SendAttachSession(111, proxy, 1, 0, 0, "", 42); 
+        ctx.SendAttachSession(222, proxy, 1, 1, 0, "", 41); 
+        ctx.ExpectAttachSessionResult(111, proxy, 1); 
         ctx.ExpectAttachSessionResult(222, proxy, 1, Ydb::StatusIds::BAD_SESSION);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1});
-    }
-
+        ctx.VerifyProxyHasSessions(proxy, 1, {1}); 
+    } 
+ 
     Y_UNIT_TEST(TestAttachThenReRegister) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ui64 sessionId = ctx.MustAttachSession(proxy, 1, 0);
-        UNIT_ASSERT_VALUES_EQUAL(sessionId, 1);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1});
-        ctx.MustRegisterProxy(proxy, 2);
-        ctx.VerifyProxyHasSessions(proxy, 2, {});
-        ctx.VerifySessionExists(1);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ui64 sessionId = ctx.MustAttachSession(proxy, 1, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(sessionId, 1); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {1}); 
+        ctx.MustRegisterProxy(proxy, 2); 
+        ctx.VerifyProxyHasSessions(proxy, 2, {}); 
+        ctx.VerifySessionExists(1); 
+    } 
+ 
     Y_UNIT_TEST(TestAttachFastPath) {
-        TTestContext ctx;
-        ctx.Setup();
-        EnableRelaxedAttach(ctx);
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 1);
-        ctx.MustRegisterProxy(proxy2, 1);
-        // Create new session1 from proxy1
-        ctx.MustAttachSession(proxy1, 1, 0);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        // Now send two attaches for session2 and session1 from proxy2
-        ctx.SendAttachSession(111, proxy2, 1, 0);
-        ctx.SendAttachSession(222, proxy2, 1, 1);
-        // Even though request session2 was first, session1 must attach out of order
-        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(222, proxy2, 1), 1);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(111, proxy2, 1), 2);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        EnableRelaxedAttach(ctx); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 1); 
+        ctx.MustRegisterProxy(proxy2, 1); 
+        // Create new session1 from proxy1 
+        ctx.MustAttachSession(proxy1, 1, 0); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        // Now send two attaches for session2 and session1 from proxy2 
+        ctx.SendAttachSession(111, proxy2, 1, 0); 
+        ctx.SendAttachSession(222, proxy2, 1, 1); 
+        // Even though request session2 was first, session1 must attach out of order 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(222, proxy2, 1), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(111, proxy2, 1), 2); 
+    } 
+ 
     Y_UNIT_TEST(TestAttachFastPathBlocked) {
-        TTestContext ctx;
-        ctx.Setup();
-        EnableRelaxedAttach(ctx);
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 1);
-        ctx.MustRegisterProxy(proxy2, 1);
-        // Create new session1 from proxy1
-        ctx.MustAttachSession(proxy1, 1, 0);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        // Now send lock request from proxy1 and two attaches from proxy2
-        ctx.SendAcquireLock(123, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.SyncProxy(proxy1, 1);
-        ctx.SendAttachSession(111, proxy2, 1, 0);
-        ctx.SendAttachSession(222, proxy2, 1, 1);
-        // Now that there's a concurrent request from session1 it must no be out of order
-        ctx.ExpectAcquireLockResult(123, proxy1, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(111, proxy2, 1), 2);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(222, proxy2, 1), 1);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        EnableRelaxedAttach(ctx); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 1); 
+        ctx.MustRegisterProxy(proxy2, 1); 
+        // Create new session1 from proxy1 
+        ctx.MustAttachSession(proxy1, 1, 0); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        // Now send lock request from proxy1 and two attaches from proxy2 
+        ctx.SendAcquireLock(123, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.SyncProxy(proxy1, 1); 
+        ctx.SendAttachSession(111, proxy2, 1, 0); 
+        ctx.SendAttachSession(222, proxy2, 1, 1); 
+        // Now that there's a concurrent request from session1 it must no be out of order 
+        ctx.ExpectAcquireLockResult(123, proxy1, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(111, proxy2, 1), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(222, proxy2, 1), 1); 
+    } 
+ 
     Y_UNIT_TEST(TestSessionDetach) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 1);
-        ctx.MustAttachSession(proxy1, 1, 0, 1000);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        // Cannot detach using wrong generation
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 1); 
+        ctx.MustAttachSession(proxy1, 1, 0, 1000); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        // Cannot detach using wrong generation 
         ctx.MustDetachSession(proxy1, 2, 1, Ydb::StatusIds::BAD_SESSION);
-        // Cannot detach from unregistered proxy
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
+        // Cannot detach from unregistered proxy 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
         ctx.MustDetachSession(proxy2, 1, 1, Ydb::StatusIds::BAD_SESSION);
-        // Cannot detach from registered non-owner proxy
-        ctx.MustRegisterProxy(proxy2, 1);
+        // Cannot detach from registered non-owner proxy 
+        ctx.MustRegisterProxy(proxy2, 1); 
         ctx.MustDetachSession(proxy2, 1, 1, Ydb::StatusIds::BAD_SESSION);
-        // Cannot detach sessions that don't exist
+        // Cannot detach sessions that don't exist 
         ctx.MustDetachSession(proxy1, 1, 2, Ydb::StatusIds::SESSION_EXPIRED);
-        // OK to detach if everything checks out
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        ctx.MustDetachSession(proxy1, 1, 1);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {});
-        // Cannot detach it twice in a row
+        // OK to detach if everything checks out 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        ctx.MustDetachSession(proxy1, 1, 1); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {}); 
+        // Cannot detach it twice in a row 
         ctx.MustDetachSession(proxy1, 1, 1, Ydb::StatusIds::BAD_SESSION);
-        // Attach it again and make sure it works with in-flight transactions
-        ctx.MustAttachSession(proxy1, 1, 1);
-        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.MustDetachSession(proxy1, 1, 1);
-    }
-
+        // Attach it again and make sure it works with in-flight transactions 
+        ctx.MustAttachSession(proxy1, 1, 1); 
+        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.MustDetachSession(proxy1, 1, 1); 
+    } 
+ 
     Y_UNIT_TEST(TestSessionDetachFutureId) {
-        TTestContext ctx;
-        ctx.Setup();
-        EnableRelaxedAttach(ctx);
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        // start attaching session1
-        ctx.SendAttachSession(111, proxy, 1, 0);
-        // detach before receiving a reply should succeed (fast path disabled)
-        ctx.MustDetachSession(proxy, 1, 1);
-        // verify attach result was successful too
-        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(111, proxy, 1), 1);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        EnableRelaxedAttach(ctx); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        // start attaching session1 
+        ctx.SendAttachSession(111, proxy, 1, 0); 
+        // detach before receiving a reply should succeed (fast path disabled) 
+        ctx.MustDetachSession(proxy, 1, 1); 
+        // verify attach result was successful too 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(111, proxy, 1), 1); 
+    } 
+ 
     Y_UNIT_TEST(TestSessionDestroy) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 1);
-        ctx.MustAttachSession(proxy1, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        ctx.MustDestroySession(proxy1, 1, 1);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {});
-        ctx.VerifySessionNotFound(1);
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy2, 1);
-        ctx.MustAttachSession(proxy2, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {});
-        ctx.VerifyProxyHasSessions(proxy2, 1, {2});
-        // proxy1 must be able to destroy the session
-        ctx.MustDestroySession(proxy1, 1, 2);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {});
-        ctx.VerifyProxyHasSessions(proxy2, 1, {});
-        // proxy2 must receive notification
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionExpired>(proxy2);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 2);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 1); 
+        ctx.MustAttachSession(proxy1, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        ctx.MustDestroySession(proxy1, 1, 1); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {}); 
+        ctx.VerifySessionNotFound(1); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy2, 1); 
+        ctx.MustAttachSession(proxy2, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {}); 
+        ctx.VerifyProxyHasSessions(proxy2, 1, {2}); 
+        // proxy1 must be able to destroy the session 
+        ctx.MustDestroySession(proxy1, 1, 2); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {}); 
+        ctx.VerifyProxyHasSessions(proxy2, 1, {}); 
+        // proxy2 must receive notification 
+        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionExpired>(proxy2); 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 2); 
+    } 
+ 
     Y_UNIT_TEST(TestAttachTimeoutTooBig) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.RegisterProxy(proxy, 1);
-        auto result = ctx.AttachSession(proxy, 1, 0, TDuration::Days(2).MilliSeconds());
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.RegisterProxy(proxy, 1); 
+        auto result = ctx.AttachSession(proxy, 1, 0, TDuration::Days(2).MilliSeconds()); 
         UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::BAD_REQUEST);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestSessionTimeoutAfterDetach) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 60000);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1});
-        ctx.MustDetachSession(proxy, 1, 1);
-        ctx.VerifySessionExists(1);
-        ctx.VerifyProxyHasSessions(proxy, 1, {});
-        ctx.Sleep(60001); // must timeout after 60001ms
-        ctx.VerifySessionNotFound(1);
-        ctx.VerifyProxyHasSessions(proxy, 1, {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 60000); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {1}); 
+        ctx.MustDetachSession(proxy, 1, 1); 
+        ctx.VerifySessionExists(1); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {}); 
+        ctx.Sleep(60001); // must timeout after 60001ms 
+        ctx.VerifySessionNotFound(1); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {}); 
+    } 
+ 
     Y_UNIT_TEST(TestSessionTimeoutAfterReboot) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 60000);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1});
-        ctx.RebootTablet();
-        ctx.VerifyProxyNotRegistered(proxy);
-        ctx.VerifySessionExists(1);
-        ctx.Sleep(70001); // must timeout after 60001ms + grace period (10s)
-        ctx.VerifySessionNotFound(1);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 60000); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {1}); 
+        ctx.RebootTablet(); 
+        ctx.VerifyProxyNotRegistered(proxy); 
+        ctx.VerifySessionExists(1); 
+        ctx.Sleep(70001); // must timeout after 60001ms + grace period (10s) 
+        ctx.VerifySessionNotFound(1); 
+    } 
+ 
     Y_UNIT_TEST(TestSessionTimeoutAfterUnregister) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 60000);
-        ctx.VerifySessionExists(1);
-        ctx.MustUnregisterProxy(proxy, 1);
-        ctx.Sleep(60001); // must timeout after 60001ms
-        ctx.VerifySessionNotFound(1);
-        // even unregistered proxy must receive notification
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionExpired>(proxy);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 60000); 
+        ctx.VerifySessionExists(1); 
+        ctx.MustUnregisterProxy(proxy, 1); 
+        ctx.Sleep(60001); // must timeout after 60001ms 
+        ctx.VerifySessionNotFound(1); 
+        // even unregistered proxy must receive notification 
+        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionExpired>(proxy); 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1); 
+    } 
+ 
     Y_UNIT_TEST(TestSessionStealing) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 111);
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy2, 222);
-        ctx.SendAttachSession(12345, proxy1, 111, 0);
-        ctx.ExpectAttachSessionResult(12345, proxy1, 111);
-        ctx.VerifyProxyHasSessions(proxy1, 111, {1});
-        ctx.SendAttachSession(23456, proxy2, 222, 1);
-        ctx.ExpectAttachSessionResult(23456, proxy2, 222);
-        ctx.VerifyProxyHasSessions(proxy1, 111, {});
-        ctx.VerifyProxyHasSessions(proxy2, 222, {1});
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
-    }
-
-    Y_UNIT_TEST(TestSessionStealingAnyKey) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 111);
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy2, 222);
-        ctx.SendAttachSession(12345, proxy1, 111, 0);
-        ctx.ExpectAttachSessionResult(12345, proxy1, 111);
-        ctx.VerifyProxyHasSessions(proxy1, 111, {1});
-        ctx.SendAttachSession(23456, proxy2, 222, 1, 0, "", 0, "foobar");
-        ctx.ExpectAttachSessionResult(23456, proxy2, 222);
-        ctx.VerifyProxyHasSessions(proxy1, 111, {});
-        ctx.VerifyProxyHasSessions(proxy2, 222, {1});
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
-    }
-
-    Y_UNIT_TEST(TestSessionStealingSameKey) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 111);
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy2, 222);
-        ctx.SendAttachSession(12345, proxy1, 111, 0, 0, "", 0, "foobar");
-        ctx.ExpectAttachSessionResult(12345, proxy1, 111);
-        ctx.VerifyProxyHasSessions(proxy1, 111, {1});
-        ctx.SendAttachSession(23456, proxy2, 222, 1, 0, "", 0, "foobar");
-        ctx.ExpectAttachSessionResult(23456, proxy2, 222);
-        ctx.VerifyProxyHasSessions(proxy1, 111, {});
-        ctx.VerifyProxyHasSessions(proxy2, 222, {1});
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
-    }
-
-    Y_UNIT_TEST(TestSessionStealingDifferentKey) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 111);
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy2, 222);
-        ctx.SendAttachSession(12345, proxy1, 111, 0, 0, "", 0, "foobar");
-        ctx.ExpectAttachSessionResult(12345, proxy1, 111);
-        ctx.VerifyProxyHasSessions(proxy1, 111, {1});
-        ctx.SendAttachSession(23456, proxy2, 222, 1, 0, "", 0, "foobaz");
-        ctx.ExpectAttachSessionResult(23456, proxy2, 222, Ydb::StatusIds::BAD_SESSION);
-        ctx.VerifyProxyHasSessions(proxy1, 111, {1});
-        ctx.VerifyProxyHasSessions(proxy2, 222, {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 111); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy2, 222); 
+        ctx.SendAttachSession(12345, proxy1, 111, 0); 
+        ctx.ExpectAttachSessionResult(12345, proxy1, 111); 
+        ctx.VerifyProxyHasSessions(proxy1, 111, {1}); 
+        ctx.SendAttachSession(23456, proxy2, 222, 1); 
+        ctx.ExpectAttachSessionResult(23456, proxy2, 222); 
+        ctx.VerifyProxyHasSessions(proxy1, 111, {}); 
+        ctx.VerifyProxyHasSessions(proxy2, 222, {1}); 
+        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345); 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111); 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1); 
+    } 
+ 
+    Y_UNIT_TEST(TestSessionStealingAnyKey) { 
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 111); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy2, 222); 
+        ctx.SendAttachSession(12345, proxy1, 111, 0); 
+        ctx.ExpectAttachSessionResult(12345, proxy1, 111); 
+        ctx.VerifyProxyHasSessions(proxy1, 111, {1}); 
+        ctx.SendAttachSession(23456, proxy2, 222, 1, 0, "", 0, "foobar"); 
+        ctx.ExpectAttachSessionResult(23456, proxy2, 222); 
+        ctx.VerifyProxyHasSessions(proxy1, 111, {}); 
+        ctx.VerifyProxyHasSessions(proxy2, 222, {1}); 
+        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345); 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111); 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1); 
+    } 
+ 
+    Y_UNIT_TEST(TestSessionStealingSameKey) { 
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 111); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy2, 222); 
+        ctx.SendAttachSession(12345, proxy1, 111, 0, 0, "", 0, "foobar"); 
+        ctx.ExpectAttachSessionResult(12345, proxy1, 111); 
+        ctx.VerifyProxyHasSessions(proxy1, 111, {1}); 
+        ctx.SendAttachSession(23456, proxy2, 222, 1, 0, "", 0, "foobar"); 
+        ctx.ExpectAttachSessionResult(23456, proxy2, 222); 
+        ctx.VerifyProxyHasSessions(proxy1, 111, {}); 
+        ctx.VerifyProxyHasSessions(proxy2, 222, {1}); 
+        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345); 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111); 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1); 
+    } 
+ 
+    Y_UNIT_TEST(TestSessionStealingDifferentKey) { 
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 111); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy2, 222); 
+        ctx.SendAttachSession(12345, proxy1, 111, 0, 0, "", 0, "foobar"); 
+        ctx.ExpectAttachSessionResult(12345, proxy1, 111); 
+        ctx.VerifyProxyHasSessions(proxy1, 111, {1}); 
+        ctx.SendAttachSession(23456, proxy2, 222, 1, 0, "", 0, "foobaz"); 
+        ctx.ExpectAttachSessionResult(23456, proxy2, 222, Ydb::StatusIds::BAD_SESSION); 
+        ctx.VerifyProxyHasSessions(proxy1, 111, {1}); 
+        ctx.VerifyProxyHasSessions(proxy2, 222, {}); 
+    } 
+ 
     Y_UNIT_TEST(TestLockNotFound) {
-        TTestContext ctx;
-        ctx.Setup();
-        ctx.VerifyLockNotFound("Lock1");
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        ctx.VerifyLockNotFound("Lock1"); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireLocks) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 40000);
-        ctx.MustAttachSession(proxy, 1, 0, 60000);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1, 2});
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE, 30000);
-        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock2", LOCK_MODE_SHARED, 30000);
-        ctx.SendAcquireLock(333, proxy, 1, 1, "Lock2", LOCK_MODE_SHARED, 30000);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        ctx.ExpectAcquireLockResult(222, proxy, 1);
-        ctx.ExpectAcquireLockResult(333, proxy, 1);
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockShared("Lock2", {1, 2});
-
-        // verify state after reboot
-        ctx.RebootTablet();
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockShared("Lock2", {1, 2});
-
-        // locks have 30s timeout, but taken locks never expire
-        ctx.Sleep(30001);
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockShared("Lock2", {1, 2});
-
-        // at 50001ms: session1 expired, with lock ownership
-        ctx.Sleep(20000);
-        ctx.VerifyLockNotFound("Lock1");
-        ctx.VerifyLockShared("Lock2", {2});
-        ctx.VerifySessionNotFound(1);
-
-        // at 70001ms: session2 expired, with lock ownership
-        ctx.Sleep(20000);
-        ctx.VerifyLockNotFound("Lock2");
-        ctx.VerifySessionNotFound(2);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 40000); 
+        ctx.MustAttachSession(proxy, 1, 0, 60000); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {1, 2}); 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE, 30000); 
+        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock2", LOCK_MODE_SHARED, 30000); 
+        ctx.SendAcquireLock(333, proxy, 1, 1, "Lock2", LOCK_MODE_SHARED, 30000); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        ctx.ExpectAcquireLockResult(222, proxy, 1); 
+        ctx.ExpectAcquireLockResult(333, proxy, 1); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockShared("Lock2", {1, 2}); 
+ 
+        // verify state after reboot 
+        ctx.RebootTablet(); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockShared("Lock2", {1, 2}); 
+ 
+        // locks have 30s timeout, but taken locks never expire 
+        ctx.Sleep(30001); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockShared("Lock2", {1, 2}); 
+ 
+        // at 50001ms: session1 expired, with lock ownership 
+        ctx.Sleep(20000); 
+        ctx.VerifyLockNotFound("Lock1"); 
+        ctx.VerifyLockShared("Lock2", {2}); 
+        ctx.VerifySessionNotFound(1); 
+ 
+        // at 70001ms: session2 expired, with lock ownership 
+        ctx.Sleep(20000); 
+        ctx.VerifyLockNotFound("Lock2"); 
+        ctx.VerifySessionNotFound(2); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireRepeat) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1});
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(222, proxy, 1);
-        ctx.VerifyLockExclusive("Lock1", 1);
-
-        // verify state after reboot
-        ctx.RebootTablet();
-        ctx.VerifyLockExclusive("Lock1", 1);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {1}); 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(222, proxy, 1); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+ 
+        // verify state after reboot 
+        ctx.RebootTablet(); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireDowngrade) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1});
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(222, proxy, 1);
-        ctx.VerifyLockShared("Lock1", {1});
-
-        // verify state after reboot
-        ctx.RebootTablet();
-        ctx.VerifyLockShared("Lock1", {1});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {1}); 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(222, proxy, 1); 
+        ctx.VerifyLockShared("Lock1", {1}); 
+ 
+        // verify state after reboot 
+        ctx.RebootTablet(); 
+        ctx.VerifyLockShared("Lock1", {1}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireUpgrade) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy, 1, {1});
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy, 1, {1}); 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
         ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
-        ctx.VerifyLockShared("Lock1", {1}); // still locked in shared mode
-    }
-
+        ctx.VerifyLockShared("Lock1", {1}); // still locked in shared mode 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireTimeout) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 1);
-        ctx.MustRegisterProxy(proxy2, 1);
-        ctx.MustAttachSession(proxy1, 1, 0, 30000);
-        ctx.MustAttachSession(proxy2, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        ctx.VerifyProxyHasSessions(proxy2, 1, {2});
-        // session1 takes two locks
-        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy1, 1);
-        ctx.SendAcquireLock(112, proxy1, 1, 1, "Lock2", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(112, proxy1, 1);
-        // another session should fail both attempts immediately
-        ctx.SendAcquireLock(222, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED);
-        ctx.SendAcquireLock(223, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(222, proxy2, 1, false);
-        ctx.ExpectAcquireLockResult(223, proxy2, 1, false);
-        // another session should fail both attemps after a timeout
-        ctx.SendAcquireLock(333, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000);
-        ctx.SendAcquireLock(334, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE, 30000);
-        // note the inverted order of replies
-        ctx.ExpectAcquireLockResult(334, proxy2, 1, false);
-        ctx.ExpectAcquireLockResult(333, proxy2, 1, false);
-        // verify final lock ownership
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockShared("Lock2", {1});
-
-        // verify state after reboot
-        ctx.RebootTablet();
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockShared("Lock2", {1});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 1); 
+        ctx.MustRegisterProxy(proxy2, 1); 
+        ctx.MustAttachSession(proxy1, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy2, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        ctx.VerifyProxyHasSessions(proxy2, 1, {2}); 
+        // session1 takes two locks 
+        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy1, 1); 
+        ctx.SendAcquireLock(112, proxy1, 1, 1, "Lock2", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(112, proxy1, 1); 
+        // another session should fail both attempts immediately 
+        ctx.SendAcquireLock(222, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED); 
+        ctx.SendAcquireLock(223, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(222, proxy2, 1, false); 
+        ctx.ExpectAcquireLockResult(223, proxy2, 1, false); 
+        // another session should fail both attemps after a timeout 
+        ctx.SendAcquireLock(333, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000); 
+        ctx.SendAcquireLock(334, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE, 30000); 
+        // note the inverted order of replies 
+        ctx.ExpectAcquireLockResult(334, proxy2, 1, false); 
+        ctx.ExpectAcquireLockResult(333, proxy2, 1, false); 
+        // verify final lock ownership 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockShared("Lock2", {1}); 
+ 
+        // verify state after reboot 
+        ctx.RebootTablet(); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockShared("Lock2", {1}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireBeforeTimeoutViaRelease) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 1);
-        ctx.MustRegisterProxy(proxy2, 1);
-        ctx.MustAttachSession(proxy1, 1, 0, 30000);
-        ctx.MustAttachSession(proxy2, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        ctx.VerifyProxyHasSessions(proxy2, 1, {2});
-        // session1 takes two locks
-        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy1, 1);
-        ctx.SendAcquireLock(112, proxy1, 1, 1, "Lock2", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(112, proxy1, 1);
-        // session2 tries to take two locks with a big enough timeout
-        ctx.SendAcquireLock(222, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000);
-        ctx.SendAcquireLock(223, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE, 60000);
-        // now we explicitly release both locks
-        ctx.MustReleaseLock(333, proxy1, 1, 1, "Lock1");
-        ctx.MustReleaseLock(334, proxy1, 1, 1, "Lock2");
-        // locks must already be atomically locked by session2
-        ctx.VerifyLockShared("Lock1", {2});
-        ctx.VerifyLockExclusive("Lock2", 2);
-        // and session2 should receive successful results
-        ctx.ExpectAcquireLockResult(222, proxy2, 1);
-        ctx.ExpectAcquireLockResult(223, proxy2, 1);
-
-        // verify state after reboot
-        ctx.RebootTablet();
-        ctx.VerifyLockShared("Lock1", {2});
-        ctx.VerifyLockExclusive("Lock2", 2);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 1); 
+        ctx.MustRegisterProxy(proxy2, 1); 
+        ctx.MustAttachSession(proxy1, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy2, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        ctx.VerifyProxyHasSessions(proxy2, 1, {2}); 
+        // session1 takes two locks 
+        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy1, 1); 
+        ctx.SendAcquireLock(112, proxy1, 1, 1, "Lock2", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(112, proxy1, 1); 
+        // session2 tries to take two locks with a big enough timeout 
+        ctx.SendAcquireLock(222, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000); 
+        ctx.SendAcquireLock(223, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE, 60000); 
+        // now we explicitly release both locks 
+        ctx.MustReleaseLock(333, proxy1, 1, 1, "Lock1"); 
+        ctx.MustReleaseLock(334, proxy1, 1, 1, "Lock2"); 
+        // locks must already be atomically locked by session2 
+        ctx.VerifyLockShared("Lock1", {2}); 
+        ctx.VerifyLockExclusive("Lock2", 2); 
+        // and session2 should receive successful results 
+        ctx.ExpectAcquireLockResult(222, proxy2, 1); 
+        ctx.ExpectAcquireLockResult(223, proxy2, 1); 
+ 
+        // verify state after reboot 
+        ctx.RebootTablet(); 
+        ctx.VerifyLockShared("Lock1", {2}); 
+        ctx.VerifyLockExclusive("Lock2", 2); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireBeforeTimeoutViaSessionTimeout) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 1);
-        ctx.MustRegisterProxy(proxy2, 1);
-        ctx.MustAttachSession(proxy1, 1, 0, 30000);
-        ctx.MustAttachSession(proxy2, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        ctx.VerifyProxyHasSessions(proxy2, 1, {2});
-        // session1 takes two locks
-        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy1, 1);
-        ctx.SendAcquireLock(112, proxy1, 1, 1, "Lock2", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(112, proxy1, 1);
-        // session2 tries to take two locks with a big enough timeout
-        ctx.SendAcquireLock(222, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000);
-        ctx.SendAcquireLock(223, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE, 60000);
-        // now we unregister the first proxy, starting timeout for session1
-        ctx.MustUnregisterProxy(proxy1, 1);
-        // note that ownership still belongs to session1
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockShared("Lock2", {1});
-        // some time passes and session2 receives successful results
-        ctx.ExpectAcquireLockResult(222, proxy2, 1);
-        ctx.ExpectAcquireLockResult(223, proxy2, 1);
-        // now session2 is owner of those locks
-        ctx.VerifyLockShared("Lock1", {2});
-        ctx.VerifyLockExclusive("Lock2", 2);
-        ctx.VerifySessionNotFound(1);
-
-        // verify state after reboot
-        ctx.RebootTablet();
-        ctx.VerifySessionNotFound(1);
-        ctx.VerifyLockShared("Lock1", {2});
-        ctx.VerifyLockExclusive("Lock2", 2);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 1); 
+        ctx.MustRegisterProxy(proxy2, 1); 
+        ctx.MustAttachSession(proxy1, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy2, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        ctx.VerifyProxyHasSessions(proxy2, 1, {2}); 
+        // session1 takes two locks 
+        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy1, 1); 
+        ctx.SendAcquireLock(112, proxy1, 1, 1, "Lock2", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(112, proxy1, 1); 
+        // session2 tries to take two locks with a big enough timeout 
+        ctx.SendAcquireLock(222, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000); 
+        ctx.SendAcquireLock(223, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE, 60000); 
+        // now we unregister the first proxy, starting timeout for session1 
+        ctx.MustUnregisterProxy(proxy1, 1); 
+        // note that ownership still belongs to session1 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockShared("Lock2", {1}); 
+        // some time passes and session2 receives successful results 
+        ctx.ExpectAcquireLockResult(222, proxy2, 1); 
+        ctx.ExpectAcquireLockResult(223, proxy2, 1); 
+        // now session2 is owner of those locks 
+        ctx.VerifyLockShared("Lock1", {2}); 
+        ctx.VerifyLockExclusive("Lock2", 2); 
+        ctx.VerifySessionNotFound(1); 
+ 
+        // verify state after reboot 
+        ctx.RebootTablet(); 
+        ctx.VerifySessionNotFound(1); 
+        ctx.VerifyLockShared("Lock1", {2}); 
+        ctx.VerifyLockExclusive("Lock2", 2); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireBeforeTimeoutViaModeChange) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy1 = ctx.Runtime->AllocateEdgeActor();
-        auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy1, 1);
-        ctx.MustRegisterProxy(proxy2, 1);
-        ctx.MustAttachSession(proxy1, 1, 0, 30000);
-        ctx.MustAttachSession(proxy2, 1, 0, 30000);
-        ctx.VerifyProxyHasSessions(proxy1, 1, {1});
-        ctx.VerifyProxyHasSessions(proxy2, 1, {2});
-        // session1 takes two locks
-        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy1, 1);
-        ctx.SendAcquireLock(112, proxy1, 1, 1, "Lock2", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(112, proxy1, 1);
-        // session2 tries to take two locks with a big enough timeout
-        ctx.SendAcquireLock(222, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000);
-        ctx.SendAcquireLock(223, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE, 60000);
-        // now session1 changes mode to shared, allowing session2 to proceed
-        ctx.SendAcquireLock(333, proxy1, 1, 1, "Lock1", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(333, proxy1, 1);
-        ctx.VerifyLockShared("Lock1", {1, 2});
-        ctx.VerifyLockShared("Lock2", {1});
-        ctx.VerifyLockWaiters("Lock1", {}); // nobody should wait for Lock1
-        ctx.ExpectAcquireLockResult(222, proxy2, 1); // verify session2 gets the reply
-        ctx.VerifyLockWaiters("Lock2", {2}); // verify session2 still waiting for Lock2
-        // now session2 changes mode to shared, old request is dropped, new request succeeds
-        ctx.SendAcquireLock(444, proxy2, 1, 2, "Lock2", LOCK_MODE_SHARED);
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy1 = ctx.Runtime->AllocateEdgeActor(); 
+        auto proxy2 = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy1, 1); 
+        ctx.MustRegisterProxy(proxy2, 1); 
+        ctx.MustAttachSession(proxy1, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy2, 1, 0, 30000); 
+        ctx.VerifyProxyHasSessions(proxy1, 1, {1}); 
+        ctx.VerifyProxyHasSessions(proxy2, 1, {2}); 
+        // session1 takes two locks 
+        ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy1, 1); 
+        ctx.SendAcquireLock(112, proxy1, 1, 1, "Lock2", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(112, proxy1, 1); 
+        // session2 tries to take two locks with a big enough timeout 
+        ctx.SendAcquireLock(222, proxy2, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000); 
+        ctx.SendAcquireLock(223, proxy2, 1, 2, "Lock2", LOCK_MODE_EXCLUSIVE, 60000); 
+        // now session1 changes mode to shared, allowing session2 to proceed 
+        ctx.SendAcquireLock(333, proxy1, 1, 1, "Lock1", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(333, proxy1, 1); 
+        ctx.VerifyLockShared("Lock1", {1, 2}); 
+        ctx.VerifyLockShared("Lock2", {1}); 
+        ctx.VerifyLockWaiters("Lock1", {}); // nobody should wait for Lock1 
+        ctx.ExpectAcquireLockResult(222, proxy2, 1); // verify session2 gets the reply 
+        ctx.VerifyLockWaiters("Lock2", {2}); // verify session2 still waiting for Lock2 
+        // now session2 changes mode to shared, old request is dropped, new request succeeds 
+        ctx.SendAcquireLock(444, proxy2, 1, 2, "Lock2", LOCK_MODE_SHARED); 
         ctx.ExpectAcquireLockResult(223, proxy2, 1, Ydb::StatusIds::ABORTED);
-        ctx.ExpectAcquireLockResult(444, proxy2, 1);
-        ctx.VerifyLockShared("Lock2", {1, 2});
-        ctx.VerifyLockWaiters("Lock2", {});
-
-        // verify after reboot locks stay valid
-        ctx.RebootTablet();
-        ctx.VerifyLockShared("Lock1", {1, 2});
-        ctx.VerifyLockShared("Lock2", {1, 2});
-    }
-
+        ctx.ExpectAcquireLockResult(444, proxy2, 1); 
+        ctx.VerifyLockShared("Lock2", {1, 2}); 
+        ctx.VerifyLockWaiters("Lock2", {}); 
+ 
+        // verify after reboot locks stay valid 
+        ctx.RebootTablet(); 
+        ctx.VerifyLockShared("Lock1", {1, 2}); 
+        ctx.VerifyLockShared("Lock2", {1, 2}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireSharedBlocked) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        // session1 takes shared lock
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        // session2 enqueues an exclusive lock
-        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_EXCLUSIVE, 60000);
-        // session3 enqueues a shared lock (blocked by enqueued exclusive lock)
-        ctx.SendAcquireLock(333, proxy, 1, 3, "Lock1", LOCK_MODE_SHARED, 60000);
-        // synchronize and verify lock state
-        ctx.SyncProxy(proxy, 1, true);
-        ctx.VerifyLockShared("Lock1", {1});
-        ctx.VerifyLockWaiters("Lock1", {2, 3});
-        // destroy session2, release everything it owns
-        ctx.MustDestroySession(proxy, 1, 2);
-        // observe session3 taking the lock too
-        ctx.ExpectAcquireLockResult(333, proxy, 1);
-        ctx.VerifyLockShared("Lock1", {1, 3});
-        ctx.VerifyLockWaiters("Lock1", {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        // session1 takes shared lock 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        // session2 enqueues an exclusive lock 
+        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_EXCLUSIVE, 60000); 
+        // session3 enqueues a shared lock (blocked by enqueued exclusive lock) 
+        ctx.SendAcquireLock(333, proxy, 1, 3, "Lock1", LOCK_MODE_SHARED, 60000); 
+        // synchronize and verify lock state 
+        ctx.SyncProxy(proxy, 1, true); 
+        ctx.VerifyLockShared("Lock1", {1}); 
+        ctx.VerifyLockWaiters("Lock1", {2, 3}); 
+        // destroy session2, release everything it owns 
+        ctx.MustDestroySession(proxy, 1, 2); 
+        // observe session3 taking the lock too 
+        ctx.ExpectAcquireLockResult(333, proxy, 1); 
+        ctx.VerifyLockShared("Lock1", {1, 3}); 
+        ctx.VerifyLockWaiters("Lock1", {}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireTimeoutAfterReboot) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 60000);
-        ctx.MustAttachSession(proxy, 1, 0, 60000);
-        // session1 takes exclusive lock
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        // session2 enqueues a shared lock
-        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000);
-        // synchronize and verify lock state
-        ctx.SyncProxy(proxy, 1, true);
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockWaiters("Lock1", {2});
-        // reboot and reattach
-        ctx.RebootTablet();
-        ctx.MustRegisterProxy(proxy, 2);
-        ctx.MustAttachSession(proxy, 2, 1, 60000);
-        ctx.MustAttachSession(proxy, 2, 2, 60000);
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockWaiters("Lock1", {2});
-        // at 60001ms mark the lock times out (even though sessions are alive)
-        ctx.Sleep(60001);
-        ctx.VerifySessionExists(1);
-        ctx.VerifySessionExists(2);
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockWaiters("Lock1", {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 60000); 
+        ctx.MustAttachSession(proxy, 1, 0, 60000); 
+        // session1 takes exclusive lock 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        // session2 enqueues a shared lock 
+        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 60000); 
+        // synchronize and verify lock state 
+        ctx.SyncProxy(proxy, 1, true); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockWaiters("Lock1", {2}); 
+        // reboot and reattach 
+        ctx.RebootTablet(); 
+        ctx.MustRegisterProxy(proxy, 2); 
+        ctx.MustAttachSession(proxy, 2, 1, 60000); 
+        ctx.MustAttachSession(proxy, 2, 2, 60000); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockWaiters("Lock1", {2}); 
+        // at 60001ms mark the lock times out (even though sessions are alive) 
+        ctx.Sleep(60001); 
+        ctx.VerifySessionExists(1); 
+        ctx.VerifySessionExists(2); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockWaiters("Lock1", {}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireWaiterDowngrade) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        // session1 takes shared lock
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        // session2 enqueues an exclusive lock
-        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_EXCLUSIVE, 30000);
-        // now it immediately changes mode to shared
-        ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000);
-        // first request gets cancelled, second succeeds
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        // session1 takes shared lock 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        // session2 enqueues an exclusive lock 
+        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_EXCLUSIVE, 30000); 
+        // now it immediately changes mode to shared 
+        ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000); 
+        // first request gets cancelled, second succeeds 
         ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED);
-        ctx.ExpectAcquireLockResult(333, proxy, 1);
-        ctx.VerifyLockShared("Lock1", {1, 2});
-    }
-
+        ctx.ExpectAcquireLockResult(333, proxy, 1); 
+        ctx.VerifyLockShared("Lock1", {1, 2}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireWaiterUpgrade) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        // session1 takes exclusive lock
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        // session2 enqueues a shared lock
-        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000);
-        // now it immediately changes mode to exclusive
-        ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_EXCLUSIVE, 30000);
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        // session1 takes exclusive lock 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        // session2 enqueues a shared lock 
+        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000); 
+        // now it immediately changes mode to exclusive 
+        ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_EXCLUSIVE, 30000); 
         ctx.ExpectAcquireLockResult(333, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
-        // the old request must still be waiting
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockWaiters("Lock1", {2});
-    }
-
+        // the old request must still be waiting 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockWaiters("Lock1", {2}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireWaiterChangeTimeoutToZero) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        // first make sure tablet doesn't use any timers
-        ctx.Runtime->EnableScheduleForActor(ctx.GetTabletActorId(), false);
-        // session1 takes exclusive lock
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        // session2 enqueues a shared lock
-        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000);
-        // now it immediately changes timeout to zero
-        ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 0);
-        // it must receive correct replies
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        // first make sure tablet doesn't use any timers 
+        ctx.Runtime->EnableScheduleForActor(ctx.GetTabletActorId(), false); 
+        // session1 takes exclusive lock 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        // session2 enqueues a shared lock 
+        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000); 
+        // now it immediately changes timeout to zero 
+        ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 0); 
+        // it must receive correct replies 
         ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED);
-        ctx.ExpectAcquireLockResult(333, proxy, 1, false);
-        // there must be no waiters
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockWaiters("Lock1", {});
-
-        // reboot and double check the state
-        ctx.RebootTablet();
-        ctx.VerifyLockExclusive("Lock1", 1);
-        ctx.VerifyLockWaiters("Lock1", {});
-    }
-
+        ctx.ExpectAcquireLockResult(333, proxy, 1, false); 
+        // there must be no waiters 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockWaiters("Lock1", {}); 
+ 
+        // reboot and double check the state 
+        ctx.RebootTablet(); 
+        ctx.VerifyLockExclusive("Lock1", 1); 
+        ctx.VerifyLockWaiters("Lock1", {}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireWaiterRelease) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        // session1 takes exclusive lock
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-        // session2 enqueues a shared lock
-        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000);
-        // now it immediately tries to release it
-        ctx.MustReleaseLock(333, proxy, 1, 2, "Lock1");
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        // session1 takes exclusive lock 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+        // session2 enqueues a shared lock 
+        ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000); 
+        // now it immediately tries to release it 
+        ctx.MustReleaseLock(333, proxy, 1, 2, "Lock1"); 
         ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestReleaseLockFailure) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        // session1 cannot release missing lock
-        ctx.MustReleaseLock(111, proxy, 1, 1, "Lock1", false);
-        // session1 takes exclusive lock
-        ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(222, proxy, 1);
-        // session2 cannot release lock it doesn't have locked
-        ctx.MustReleaseLock(333, proxy, 1, 2, "Lock1", false);
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        // session1 cannot release missing lock 
+        ctx.MustReleaseLock(111, proxy, 1, 1, "Lock1", false); 
+        // session1 takes exclusive lock 
+        ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(222, proxy, 1); 
+        // session2 cannot release lock it doesn't have locked 
+        ctx.MustReleaseLock(333, proxy, 1, 2, "Lock1", false); 
+    } 
+ 
     Y_UNIT_TEST(TestCreateSemaphore) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+ 
         ctx.CreateSemaphore("Sem1", 0, Ydb::StatusIds::BAD_REQUEST);
-        ctx.CreateSemaphore("Sem1", 42);
+        ctx.CreateSemaphore("Sem1", 42); 
         ctx.CreateSemaphore("Sem1", 42, Ydb::StatusIds::ALREADY_EXISTS);
         ctx.CreateSemaphore("Sem1", 51, Ydb::StatusIds::ALREADY_EXISTS);
         ctx.CreateSemaphore("Lock1", 42, Ydb::StatusIds::PRECONDITION_FAILED);
         ctx.CreateSemaphore("Lock1", -1, Ydb::StatusIds::PRECONDITION_FAILED);
-        ctx.VerifySemaphoreOwners("Sem1", {});
-        ctx.VerifySemaphoreNotFound("Sem2");
-
-        ctx.RebootTablet();
-        ctx.VerifySemaphoreOwners("Sem1", {});
-        ctx.VerifySemaphoreNotFound("Sem2");
-    }
-
+        ctx.VerifySemaphoreOwners("Sem1", {}); 
+        ctx.VerifySemaphoreNotFound("Sem2"); 
+ 
+        ctx.RebootTablet(); 
+        ctx.VerifySemaphoreOwners("Sem1", {}); 
+        ctx.VerifySemaphoreNotFound("Sem2"); 
+    } 
+ 
     Y_UNIT_TEST(TestDeleteSemaphore) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(111, proxy, 1);
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE); 
+        ctx.ExpectAcquireLockResult(111, proxy, 1); 
+ 
         ctx.DeleteSemaphore("Lock1", Ydb::StatusIds::PRECONDITION_FAILED);
         ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::NOT_FOUND);
-        ctx.CreateSemaphore("Sem1", 42);
-        ctx.DeleteSemaphore("Sem1");
+        ctx.CreateSemaphore("Sem1", 42); 
+        ctx.DeleteSemaphore("Sem1"); 
         ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::NOT_FOUND);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestAcquireSemaphore) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1);
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1); 
         ctx.ExpectAcquireSemaphoreResult(111, proxy, 1, Ydb::StatusIds::NOT_FOUND);
-
-        ctx.CreateSemaphore("Sem1", 1);
-
-        // cannot acquire 0 tokens
-        ctx.SendAcquireSemaphore(222, proxy, 1, 1, "Sem1", 0);
+ 
+        ctx.CreateSemaphore("Sem1", 1); 
+ 
+        // cannot acquire 0 tokens 
+        ctx.SendAcquireSemaphore(222, proxy, 1, 1, "Sem1", 0); 
         ctx.ExpectAcquireSemaphoreResult(222, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
-
-        // cannot acquire more tokens than available
-        ctx.SendAcquireSemaphore(333, proxy, 1, 1, "Sem1", 100500);
+ 
+        // cannot acquire more tokens than available 
+        ctx.SendAcquireSemaphore(333, proxy, 1, 1, "Sem1", 100500); 
         ctx.ExpectAcquireSemaphoreResult(333, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
-
-        ctx.SendAcquireSemaphore(222, proxy, 1, 1, "Sem1", 1);
-        ctx.SendAcquireSemaphore(333, proxy, 1, 2, "Sem1", 1, 60000);
-        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1);
-        ctx.ExpectAcquireSemaphorePending(333, proxy, 1);
-        ctx.VerifySemaphoreOwners("Sem1", {1});
-        ctx.VerifySemaphoreWaiters("Sem1", {2});
-
-        // Cannot destroy semaphore unless forced
+ 
+        ctx.SendAcquireSemaphore(222, proxy, 1, 1, "Sem1", 1); 
+        ctx.SendAcquireSemaphore(333, proxy, 1, 2, "Sem1", 1, 60000); 
+        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1); 
+        ctx.ExpectAcquireSemaphorePending(333, proxy, 1); 
+        ctx.VerifySemaphoreOwners("Sem1", {1}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {2}); 
+ 
+        // Cannot destroy semaphore unless forced 
         ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::PRECONDITION_FAILED);
-        ctx.DeleteSemaphore("Sem1", true);
-
-        // Forced destruction aborts the request
+        ctx.DeleteSemaphore("Sem1", true); 
+ 
+        // Forced destruction aborts the request 
         ctx.ExpectAcquireSemaphoreResult(333, proxy, 1, Ydb::StatusIds::ABORTED);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestReleaseSemaphore) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ctx.CreateSemaphore("Sem1", 1);
-        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1);
-        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1, 60000);
-        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1);
-        ctx.ExpectAcquireSemaphorePending(222, proxy, 1);
-        ctx.VerifySemaphoreOwners("Sem1", {1});
-        ctx.VerifySemaphoreWaiters("Sem1", {2});
-
-        // But it's ok to release with ephemeral=false
-        ctx.MustReleaseSemaphore(333, proxy, 1, 2, "Sem1");
-        ctx.VerifySemaphoreOwners("Sem1", {1});
-        ctx.VerifySemaphoreWaiters("Sem1", {});
-
-        ctx.MustReleaseSemaphore(444, proxy, 1, 1, "Sem1");
-        ctx.VerifySemaphoreOwners("Sem1", {});
-        ctx.VerifySemaphoreWaiters("Sem1", {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ctx.CreateSemaphore("Sem1", 1); 
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1); 
+        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1, 60000); 
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1); 
+        ctx.ExpectAcquireSemaphorePending(222, proxy, 1); 
+        ctx.VerifySemaphoreOwners("Sem1", {1}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {2}); 
+ 
+        // But it's ok to release with ephemeral=false 
+        ctx.MustReleaseSemaphore(333, proxy, 1, 2, "Sem1"); 
+        ctx.VerifySemaphoreOwners("Sem1", {1}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {}); 
+ 
+        ctx.MustReleaseSemaphore(444, proxy, 1, 1, "Sem1"); 
+        ctx.VerifySemaphoreOwners("Sem1", {}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireSemaphoreTimeout) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ctx.CreateSemaphore("Sem1", 1);
-        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1);
-        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1, 60000);
-        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1);
-        ctx.ExpectAcquireSemaphorePending(222, proxy, 1);
-        ctx.VerifySemaphoreOwners("Sem1", {1});
-        ctx.VerifySemaphoreWaiters("Sem1", {2});
-
-        ctx.Sleep(60001);
-        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1, false);
-        ctx.VerifySemaphoreOwners("Sem1", {1});
-        ctx.VerifySemaphoreWaiters("Sem1", {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ctx.CreateSemaphore("Sem1", 1); 
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1); 
+        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1, 60000); 
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1); 
+        ctx.ExpectAcquireSemaphorePending(222, proxy, 1); 
+        ctx.VerifySemaphoreOwners("Sem1", {1}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {2}); 
+ 
+        ctx.Sleep(60001); 
+        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1, false); 
+        ctx.VerifySemaphoreOwners("Sem1", {1}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireSemaphoreTimeoutTooBig) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ctx.CreateSemaphore("Sem1", 1);
-        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1, TDuration::Days(2).MilliSeconds());
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ctx.CreateSemaphore("Sem1", 1); 
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1, TDuration::Days(2).MilliSeconds()); 
         ctx.ExpectAcquireSemaphoreResult(111, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestAcquireSemaphoreTimeoutInfinite) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ctx.CreateSemaphore("Sem1", 1);
-        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1);
-        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1, Max<ui64>());
-        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1);
-        ctx.ExpectAcquireSemaphorePending(222, proxy, 1);
-
-        // No way to test if timeout is not firing...
-        ctx.VerifySemaphoreOwners("Sem1", {1});
-        ctx.VerifySemaphoreWaiters("Sem1", {2});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ctx.CreateSemaphore("Sem1", 1); 
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1); 
+        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1, Max<ui64>()); 
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1); 
+        ctx.ExpectAcquireSemaphorePending(222, proxy, 1); 
+ 
+        // No way to test if timeout is not firing... 
+        ctx.VerifySemaphoreOwners("Sem1", {1}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {2}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireSemaphoreRebootTimeout) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ctx.CreateSemaphore("Sem1", 1);
-        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1);
-        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1);
-
-        ctx.RebootTablet();
-        ctx.VerifySemaphoreOwners("Sem1", {1});
-        ctx.Sleep(40001);
-        ctx.VerifySemaphoreOwners("Sem1", {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ctx.CreateSemaphore("Sem1", 1); 
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1); 
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1); 
+ 
+        ctx.RebootTablet(); 
+        ctx.VerifySemaphoreOwners("Sem1", {1}); 
+        ctx.Sleep(40001); 
+        ctx.VerifySemaphoreOwners("Sem1", {}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireSemaphoreViaDecrease) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ctx.CreateSemaphore("Sem1", 3);
-        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 2);
-        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1);
-        ctx.SendAcquireSemaphore(333, proxy, 1, 3, "Sem1", 1, 60000);
-        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1);
-        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1);
-        ctx.ExpectAcquireSemaphorePending(333, proxy, 1);
-        ctx.VerifySemaphoreOwners("Sem1", {1, 2});
-        ctx.VerifySemaphoreWaiters("Sem1", {3});
-
-        // now decrease count in session1
-        ctx.SendAcquireSemaphore(444, proxy, 1, 1, "Sem1", 1);
-        ctx.ExpectAcquireSemaphoreResult(444, proxy, 1);
-        ctx.ExpectAcquireSemaphoreResult(333, proxy, 1);
-        ctx.VerifySemaphoreOwners("Sem1", {1, 2, 3});
-        ctx.VerifySemaphoreWaiters("Sem1", {});
-
-        // double check state after reboot
-        ctx.RebootTablet();
-        ctx.VerifySemaphoreOwners("Sem1", {1, 2, 3});
-        ctx.VerifySemaphoreWaiters("Sem1", {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ctx.CreateSemaphore("Sem1", 3); 
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 2); 
+        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1); 
+        ctx.SendAcquireSemaphore(333, proxy, 1, 3, "Sem1", 1, 60000); 
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1); 
+        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1); 
+        ctx.ExpectAcquireSemaphorePending(333, proxy, 1); 
+        ctx.VerifySemaphoreOwners("Sem1", {1, 2}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {3}); 
+ 
+        // now decrease count in session1 
+        ctx.SendAcquireSemaphore(444, proxy, 1, 1, "Sem1", 1); 
+        ctx.ExpectAcquireSemaphoreResult(444, proxy, 1); 
+        ctx.ExpectAcquireSemaphoreResult(333, proxy, 1); 
+        ctx.VerifySemaphoreOwners("Sem1", {1, 2, 3}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {}); 
+ 
+        // double check state after reboot 
+        ctx.RebootTablet(); 
+        ctx.VerifySemaphoreOwners("Sem1", {1, 2, 3}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {}); 
+    } 
+ 
     Y_UNIT_TEST(TestAcquireSemaphoreViaRelease) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ctx.CreateSemaphore("Sem1", 3);
-        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 2);
-        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 2, 60000);
-        ctx.SendAcquireSemaphore(333, proxy, 1, 3, "Sem1", 1, 60000);
-        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1);
-        ctx.ExpectAcquireSemaphorePending(222, proxy, 1);
-        ctx.ExpectAcquireSemaphorePending(333, proxy, 1);
-        ctx.VerifySemaphoreOwners("Sem1", {1});
-        ctx.VerifySemaphoreWaiters("Sem1", {2, 3});
-
-        ctx.MustReleaseSemaphore(444, proxy, 1, 1, "Sem1");
-        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1);
-        ctx.ExpectAcquireSemaphoreResult(333, proxy, 1);
-        ctx.VerifySemaphoreOwners("Sem1", {2, 3});
-        ctx.VerifySemaphoreWaiters("Sem1", {});
-    }
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ctx.CreateSemaphore("Sem1", 3); 
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 2); 
+        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 2, 60000); 
+        ctx.SendAcquireSemaphore(333, proxy, 1, 3, "Sem1", 1, 60000); 
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1); 
+        ctx.ExpectAcquireSemaphorePending(222, proxy, 1); 
+        ctx.ExpectAcquireSemaphorePending(333, proxy, 1); 
+        ctx.VerifySemaphoreOwners("Sem1", {1}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {2, 3}); 
+ 
+        ctx.MustReleaseSemaphore(444, proxy, 1, 1, "Sem1"); 
+        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1); 
+        ctx.ExpectAcquireSemaphoreResult(333, proxy, 1); 
+        ctx.VerifySemaphoreOwners("Sem1", {2, 3}); 
+        ctx.VerifySemaphoreWaiters("Sem1", {}); 
+    } 
+ 
     Y_UNIT_TEST(TestSemaphoreData) {
-        TTestContext ctx;
-        ctx.Setup();
-
-        ctx.CreateSemaphore("Sem1", 1);
-        ctx.CreateSemaphore("Sem2", 1, "\x81\x82\x83\x84");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "\x81\x82\x83\x84");
-
-        // Verify it persists across reboots
-        ctx.RebootTablet();
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "\x81\x82\x83\x84");
-
-        // ALREADY_EXISTS should not update the data
+        TTestContext ctx; 
+        ctx.Setup(); 
+ 
+        ctx.CreateSemaphore("Sem1", 1); 
+        ctx.CreateSemaphore("Sem2", 1, "\x81\x82\x83\x84"); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, ""); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "\x81\x82\x83\x84"); 
+ 
+        // Verify it persists across reboots 
+        ctx.RebootTablet(); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, ""); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "\x81\x82\x83\x84"); 
+ 
+        // ALREADY_EXISTS should not update the data 
         ctx.CreateSemaphore("Sem1", 1, "\x81\x82\x83\x84", Ydb::StatusIds::ALREADY_EXISTS);
         ctx.CreateSemaphore("Sem2", 1, "", Ydb::StatusIds::ALREADY_EXISTS);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "\x81\x82\x83\x84");
-
-        ctx.UpdateSemaphore("Sem1", "\x85\x86\x87\x88");
-        ctx.UpdateSemaphore("Sem2", "foobar");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, ""); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "\x81\x82\x83\x84"); 
+ 
+        ctx.UpdateSemaphore("Sem1", "\x85\x86\x87\x88"); 
+        ctx.UpdateSemaphore("Sem2", "foobar"); 
         ctx.UpdateSemaphore("Sem3", "foobarbaz", Ydb::StatusIds::NOT_FOUND);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "\x85\x86\x87\x88");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "foobar");
-        ctx.VerifySemaphoreNotFound("Sem3");
-
-        // Verify it persists across reboots
-        ctx.RebootTablet();
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "\x85\x86\x87\x88");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "foobar");
-        ctx.VerifySemaphoreNotFound("Sem3");
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "\x85\x86\x87\x88"); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "foobar"); 
+        ctx.VerifySemaphoreNotFound("Sem3"); 
+ 
+        // Verify it persists across reboots 
+        ctx.RebootTablet(); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "\x85\x86\x87\x88"); 
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "foobar"); 
+        ctx.VerifySemaphoreNotFound("Sem3"); 
+    } 
+ 
     Y_UNIT_TEST(TestDescribeSemaphoreWatches) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustDetachSession(proxy, 1, 2);
-
-        ui64 reqId = 111;
-
-        ctx.CreateSemaphore("Sem1", 3);
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 1, "Sem1");
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 2, "Sem1");
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustDetachSession(proxy, 1, 2); 
+ 
+        ui64 reqId = 111; 
+ 
+        ctx.CreateSemaphore("Sem1", 3); 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 1, "Sem1"); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 2, "Sem1"); 
         ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1, Ydb::StatusIds::BAD_SESSION);
-
-        ctx.MustAttachSession(proxy, 1, 2, 30000);
-
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 1, "Sem1", false, true);
-        {
-            auto desc = ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-            UNIT_ASSERT_VALUES_EQUAL(desc.WatchAdded, true);
-        }
-        ui64 watch1 = reqId;
-
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 2, "Sem1", true, false);
-        {
-            auto desc = ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-            UNIT_ASSERT_VALUES_EQUAL(desc.WatchAdded, true);
-        }
-        ui64 watch2 = reqId;
-
-        ctx.UpdateSemaphore("Sem1", "new data");
-        {
-            auto changes = ctx.ExpectDescribeSemaphoreChanged(watch2, proxy, 1);
-            UNIT_ASSERT_VALUES_EQUAL(changes.DataChanged, true);
-            UNIT_ASSERT_VALUES_EQUAL(changes.OwnersChanged, false);
-        }
-
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem1", 1);
-        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1);
-        {
-            auto changes = ctx.ExpectDescribeSemaphoreChanged(watch1, proxy, 1);
-            UNIT_ASSERT_VALUES_EQUAL(changes.DataChanged, false);
-            UNIT_ASSERT_VALUES_EQUAL(changes.OwnersChanged, true);
-        }
-
-        // Arrange for Sem1 to have:
-        // - session 1 count 1
-        // - session 2 count 2
-        // - session 3 count 1 (waiting)
-        // - session 4 count 1 (waiting)
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 2, "Sem1", 2);
-        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 3, "Sem1", 1, 30000);
-        ctx.ExpectAcquireSemaphorePending(reqId, proxy, 1);
-        ui64 acquire3 = reqId;
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 4, "Sem1", 1, 30000);
-        ctx.ExpectAcquireSemaphorePending(reqId, proxy, 1);
-        ui64 acquire4 = reqId;
-
-        // Add owner watch in session 4
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 4, "Sem1", false, true);
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        ui64 watch3 = reqId;
-
-        // Changing acquire3 data shouldn't trigger a change notification
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 3, "Sem1", 1, 30000, "waiter3");
+ 
+        ctx.MustAttachSession(proxy, 1, 2, 30000); 
+ 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 1, "Sem1", false, true); 
+        { 
+            auto desc = ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+            UNIT_ASSERT_VALUES_EQUAL(desc.WatchAdded, true); 
+        } 
+        ui64 watch1 = reqId; 
+ 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 2, "Sem1", true, false); 
+        { 
+            auto desc = ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+            UNIT_ASSERT_VALUES_EQUAL(desc.WatchAdded, true); 
+        } 
+        ui64 watch2 = reqId; 
+ 
+        ctx.UpdateSemaphore("Sem1", "new data"); 
+        { 
+            auto changes = ctx.ExpectDescribeSemaphoreChanged(watch2, proxy, 1); 
+            UNIT_ASSERT_VALUES_EQUAL(changes.DataChanged, true); 
+            UNIT_ASSERT_VALUES_EQUAL(changes.OwnersChanged, false); 
+        } 
+ 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem1", 1); 
+        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1); 
+        { 
+            auto changes = ctx.ExpectDescribeSemaphoreChanged(watch1, proxy, 1); 
+            UNIT_ASSERT_VALUES_EQUAL(changes.DataChanged, false); 
+            UNIT_ASSERT_VALUES_EQUAL(changes.OwnersChanged, true); 
+        } 
+ 
+        // Arrange for Sem1 to have: 
+        // - session 1 count 1 
+        // - session 2 count 2 
+        // - session 3 count 1 (waiting) 
+        // - session 4 count 1 (waiting) 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 2, "Sem1", 2); 
+        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 3, "Sem1", 1, 30000); 
+        ctx.ExpectAcquireSemaphorePending(reqId, proxy, 1); 
+        ui64 acquire3 = reqId; 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 4, "Sem1", 1, 30000); 
+        ctx.ExpectAcquireSemaphorePending(reqId, proxy, 1); 
+        ui64 acquire4 = reqId; 
+ 
+        // Add owner watch in session 4 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 4, "Sem1", false, true); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        ui64 watch3 = reqId; 
+ 
+        // Changing acquire3 data shouldn't trigger a change notification 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 3, "Sem1", 1, 30000, "waiter3"); 
         ctx.ExpectAcquireSemaphoreResult(acquire3, proxy, 1, Ydb::StatusIds::ABORTED);
-        ctx.ExpectAcquireSemaphorePending(reqId, proxy, 1);
-        acquire3 = reqId;
-        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
-
-        // However changing session 2 data should trigger it (since it is an owner)
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 2, "Sem1", 2, 0, "owner2");
-        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1);
-        ctx.ExpectDescribeSemaphoreChanged(watch3, proxy, 1);
-
-        // Add owner watches in sessions 2 and 4
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 2, "Sem1", false, true);
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        ui64 watch4 = reqId;
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 4, "Sem1", false, true);
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        ui64 watch5 = reqId;
-
-        // Now destroy session 2 (which releases its ownership)
-        ctx.MustDestroySession(proxy, 1, 2);
-        ctx.ExpectAcquireSemaphoreResult(acquire3, proxy, 1);
-        ctx.ExpectAcquireSemaphoreResult(acquire4, proxy, 1);
-
-        // Session 4 should receive notification
-        ctx.ExpectDescribeSemaphoreChanged(watch5, proxy, 1);
-
-        // However session 2 is destroyed and should not
-        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
-        Y_UNUSED(watch4);
-
-        // Add owners watch in session 5
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem1", false, true);
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        ui64 watch6 = reqId;
-
-        // Forcibly destroying semaphore should produce notification with both flags set
-        ctx.DeleteSemaphore("Sem1", true);
-        {
-            auto changes = ctx.ExpectDescribeSemaphoreChanged(watch6, proxy, 1);
-            UNIT_ASSERT_VALUES_EQUAL(changes.DataChanged, true);
-            UNIT_ASSERT_VALUES_EQUAL(changes.OwnersChanged, true);
-        }
-
-        // Create a new semaphore, lock it and watch for owners changes
-        ctx.CreateSemaphore("Sem2", 3);
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 3);
-        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1);
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem2", false, true);
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        ui64 watch7 = reqId;
-
-        // No changes should result in no notification
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 3);
-        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1);
-        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
-
-        // Changing count should produce notification
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 2);
-        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1);
-        ctx.ExpectDescribeSemaphoreChanged(watch7, proxy, 1);
-
-        // Changing both count and data should produce owners notification
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem2", false, true);
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        ui64 watch8 = reqId;
-        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 1, 0, "some data");
-        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1);
-        ctx.ExpectDescribeSemaphoreChanged(watch8, proxy, 1);
-
-        // Replacing watch should produce an empty notification
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem2", false, true);
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        ui64 watch9 = reqId;
-        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem2", true, false);
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
-        {
-            auto changes = ctx.ExpectDescribeSemaphoreChanged(watch9, proxy, 1);
-            UNIT_ASSERT_VALUES_EQUAL(changes.DataChanged, false);
-            UNIT_ASSERT_VALUES_EQUAL(changes.OwnersChanged, false);
-        }
-    }
-
+        ctx.ExpectAcquireSemaphorePending(reqId, proxy, 1); 
+        acquire3 = reqId; 
+        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1)); 
+ 
+        // However changing session 2 data should trigger it (since it is an owner) 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 2, "Sem1", 2, 0, "owner2"); 
+        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1); 
+        ctx.ExpectDescribeSemaphoreChanged(watch3, proxy, 1); 
+ 
+        // Add owner watches in sessions 2 and 4 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 2, "Sem1", false, true); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        ui64 watch4 = reqId; 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 4, "Sem1", false, true); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        ui64 watch5 = reqId; 
+ 
+        // Now destroy session 2 (which releases its ownership) 
+        ctx.MustDestroySession(proxy, 1, 2); 
+        ctx.ExpectAcquireSemaphoreResult(acquire3, proxy, 1); 
+        ctx.ExpectAcquireSemaphoreResult(acquire4, proxy, 1); 
+ 
+        // Session 4 should receive notification 
+        ctx.ExpectDescribeSemaphoreChanged(watch5, proxy, 1); 
+ 
+        // However session 2 is destroyed and should not 
+        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1)); 
+        Y_UNUSED(watch4); 
+ 
+        // Add owners watch in session 5 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem1", false, true); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        ui64 watch6 = reqId; 
+ 
+        // Forcibly destroying semaphore should produce notification with both flags set 
+        ctx.DeleteSemaphore("Sem1", true); 
+        { 
+            auto changes = ctx.ExpectDescribeSemaphoreChanged(watch6, proxy, 1); 
+            UNIT_ASSERT_VALUES_EQUAL(changes.DataChanged, true); 
+            UNIT_ASSERT_VALUES_EQUAL(changes.OwnersChanged, true); 
+        } 
+ 
+        // Create a new semaphore, lock it and watch for owners changes 
+        ctx.CreateSemaphore("Sem2", 3); 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 3); 
+        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1); 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem2", false, true); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        ui64 watch7 = reqId; 
+ 
+        // No changes should result in no notification 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 3); 
+        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1); 
+        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1)); 
+ 
+        // Changing count should produce notification 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 2); 
+        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1); 
+        ctx.ExpectDescribeSemaphoreChanged(watch7, proxy, 1); 
+ 
+        // Changing both count and data should produce owners notification 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem2", false, true); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        ui64 watch8 = reqId; 
+        ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 1, 0, "some data"); 
+        ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1); 
+        ctx.ExpectDescribeSemaphoreChanged(watch8, proxy, 1); 
+ 
+        // Replacing watch should produce an empty notification 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem2", false, true); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        ui64 watch9 = reqId; 
+        ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 5, "Sem2", true, false); 
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1); 
+        { 
+            auto changes = ctx.ExpectDescribeSemaphoreChanged(watch9, proxy, 1); 
+            UNIT_ASSERT_VALUES_EQUAL(changes.DataChanged, false); 
+            UNIT_ASSERT_VALUES_EQUAL(changes.OwnersChanged, false); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestSemaphoreSessionFailures) {
-        TTestContext ctx;
-        ctx.Setup();
-        auto proxy = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustRegisterProxy(proxy, 1);
-        ctx.MustAttachSession(proxy, 1, 0, 30000);
-
-        ui64 reqId = 111;
-
-        ctx.SessionCreateSemaphore(++reqId, proxy, 1, 1, "Sem1", 5, "some data");
-        ctx.SessionUpdateSemaphore(++reqId, proxy, 1, 1, "Sem1", "other data");
-        ctx.SessionDeleteSemaphore(++reqId, proxy, 1, 1, "Sem1");
-
+        TTestContext ctx; 
+        ctx.Setup(); 
+        auto proxy = ctx.Runtime->AllocateEdgeActor(); 
+        ctx.MustRegisterProxy(proxy, 1); 
+        ctx.MustAttachSession(proxy, 1, 0, 30000); 
+ 
+        ui64 reqId = 111; 
+ 
+        ctx.SessionCreateSemaphore(++reqId, proxy, 1, 1, "Sem1", 5, "some data"); 
+        ctx.SessionUpdateSemaphore(++reqId, proxy, 1, 1, "Sem1", "other data"); 
+        ctx.SessionDeleteSemaphore(++reqId, proxy, 1, 1, "Sem1"); 
+ 
         auto testAllFailures = [&](Ydb::StatusIds::StatusCode status) {
-            ctx.SessionCreateSemaphore(++reqId, proxy, 1, 1, "Sem1", 5, "some data", status);
-            ctx.SessionUpdateSemaphore(++reqId, proxy, 1, 1, "Sem1", "other data", status);
-            ctx.SessionDeleteSemaphore(++reqId, proxy, 1, 1, "Sem1", status);
-            ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem1", 1);
-            ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1, status);
-            ctx.MustReleaseSemaphore(++reqId, proxy, 1, 1, "Sem1", status);
-            ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 1, "Sem1");
-            ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1, status);
-        };
-
-        ctx.MustDetachSession(proxy, 1, 1);
+            ctx.SessionCreateSemaphore(++reqId, proxy, 1, 1, "Sem1", 5, "some data", status); 
+            ctx.SessionUpdateSemaphore(++reqId, proxy, 1, 1, "Sem1", "other data", status); 
+            ctx.SessionDeleteSemaphore(++reqId, proxy, 1, 1, "Sem1", status); 
+            ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem1", 1); 
+            ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1, status); 
+            ctx.MustReleaseSemaphore(++reqId, proxy, 1, 1, "Sem1", status); 
+            ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 1, "Sem1"); 
+            ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1, status); 
+        }; 
+ 
+        ctx.MustDetachSession(proxy, 1, 1); 
         testAllFailures(Ydb::StatusIds::BAD_SESSION);
-        ctx.MustDestroySession(proxy, 1, 1);
+        ctx.MustDestroySession(proxy, 1, 1); 
         testAllFailures(Ydb::StatusIds::SESSION_EXPIRED);
-        ctx.MustRegisterProxy(proxy, 2);
+        ctx.MustRegisterProxy(proxy, 2); 
         testAllFailures(Ydb::StatusIds::BAD_SESSION);
-    }
+    } 
 
     Y_UNIT_TEST(TestQuoterResourceDescribe) {
         TTestContext ctx;
@@ -2234,7 +2234,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Runtime->Send(new IEventHandle(edgeAndSession2.second, edgeAndSession2.first, new TEvents::TEvPoisonPill()));
         WaitAllocation(edgeAndSession1.first, 10); // Now first session is the only active session and it receives all resource.
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

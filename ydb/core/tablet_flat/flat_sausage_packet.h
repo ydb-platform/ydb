@@ -51,15 +51,15 @@ namespace NPageCollection {
                 && Meta.GetPageChecksum(page) == Checksum(body);
         }
 
-        size_t BackingSize() const noexcept override
-        {
-            return Meta.BackingSize();
-        }
-
+        size_t BackingSize() const noexcept override 
+        { 
+            return Meta.BackingSize(); 
+        } 
+ 
         template<typename TContainer>
         void SaveAllBlobIdsTo(TContainer &vec) const
         {
-            LargeGlobId.MaterializeTo(vec);
+            LargeGlobId.MaterializeTo(vec); 
 
             {
                 const auto &blobs = Meta.Blobs();

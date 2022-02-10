@@ -2,7 +2,7 @@
 
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
-#include "util_basics.h"
+#include "util_basics.h" 
 
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/scheme_log.pb.h>
@@ -17,7 +17,7 @@ namespace NTable {
 using namespace NTabletFlatScheme;
 
 using NKikimrSchemeOp::ECompactionStrategy;
-
+ 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
 class TScheme {
@@ -87,7 +87,7 @@ public:
         TTableInfo(TString name, ui32 id)
             : Id(id)
             , Name(std::move(name))
-            , CompactionPolicy(NLocalDb::CreateDefaultTablePolicy())
+            , CompactionPolicy(NLocalDb::CreateDefaultTablePolicy()) 
         {
             Families[TColumn::LeaderFamily];
             Rooms[DefaultRoom];
@@ -99,11 +99,11 @@ public:
         THashMap<ui32, TFamily> Families;
 
         TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
-        bool ColdBorrow = false;
+        bool ColdBorrow = false; 
         bool ByKeyFilter = false;
-        bool EraseCacheEnabled = false;
-        ui32 EraseCacheMinRows = 0; // 0 means use default
-        ui32 EraseCacheMaxBytes = 0; // 0 means use default
+        bool EraseCacheEnabled = false; 
+        ui32 EraseCacheMinRows = 0; // 0 means use default 
+        ui32 EraseCacheMaxBytes = 0; // 0 means use default 
     };
 
     struct TRedo {
@@ -123,7 +123,7 @@ public:
     };
 
     struct TExecutorInfo {
-        ui64 CacheSize = 384 * 1024;
+        ui64 CacheSize = 384 * 1024; 
         bool AllowLogBatching = false;
         bool LogFastTactic = true;
         TDuration LogFlushPeriod = TDuration::MicroSeconds(500);
@@ -176,24 +176,24 @@ public:
         return family ? family->Cache : ECache::None;
     }
 
-    ECompactionStrategy CompactionStrategyFor(ui32 id) const noexcept
-    {
-        if (auto *table = GetTableInfo(id)) {
-            auto strategy = table->CompactionPolicy->CompactionStrategy;
+    ECompactionStrategy CompactionStrategyFor(ui32 id) const noexcept 
+    { 
+        if (auto *table = GetTableInfo(id)) { 
+            auto strategy = table->CompactionPolicy->CompactionStrategy; 
             if (strategy != NKikimrSchemeOp::CompactionStrategyUnset) {
                 if (table->ColdBorrow && strategy == NKikimrSchemeOp::CompactionStrategySharded) {
-                    // Sharded strategy does not support cold borrow
-                    // Use the safe generational strategy instead
+                    // Sharded strategy does not support cold borrow 
+                    // Use the safe generational strategy instead 
                     strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
-                }
-                return strategy;
-            }
-        }
+                } 
+                return strategy; 
+            } 
+        } 
 
-        return Executor.DefaultCompactionStrategy;
-    }
-
-
+        return Executor.DefaultCompactionStrategy; 
+    } 
+ 
+ 
     THashMap<ui32, TTableInfo> Tables;
     THashMap<TString, ui32> TableNames;
     TExecutorInfo Executor;
@@ -231,8 +231,8 @@ public:
     TAlter& SetExecutorResourceProfile(const TString &name);
     TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy);
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
-    TAlter& SetColdBorrow(ui32 tableId, bool enabled);
-    TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
+    TAlter& SetColdBorrow(ui32 tableId, bool enabled); 
+    TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes); 
 
     TAutoPtr<TSchemeChanges> Flush();
 protected:

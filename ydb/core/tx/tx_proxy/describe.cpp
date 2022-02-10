@@ -43,8 +43,8 @@ class TDescribeReq : public TActor<TDescribeReq> {
 
         if (SchemeRequest != nullptr) {
             const auto &record = SchemeRequest->Ev->Get()->Record;
-            if (record.GetDescribePath().HasPath()) {
-                result->Record.SetPath(record.GetDescribePath().GetPath());
+            if (record.GetDescribePath().HasPath()) { 
+                result->Record.SetPath(record.GetDescribePath().GetPath()); 
             }
         }
 

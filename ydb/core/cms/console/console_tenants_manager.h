@@ -304,11 +304,11 @@ public:
             Config.SetNumGroups(Config.GetNumGroups() + count);
         }
 
-        void RevertRequiredGroups()
-        {
-            Config.SetNumGroups(AllocatedNumGroups);
-        }
-
+        void RevertRequiredGroups() 
+        { 
+            Config.SetNumGroups(AllocatedNumGroups); 
+        } 
+ 
         ui64 GetGroups() const
         {
             return Config.GetNumGroups();
@@ -339,7 +339,7 @@ public:
         EState State;
         TString Issue;
         TActorId Worker;
-        size_t GroupFitErrors = 0;
+        size_t GroupFitErrors = 0; 
     };
 
     struct TTenantSlotKind {
@@ -521,11 +521,11 @@ public:
         bool IsExternalSysViewProcessor;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
-
-        TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
-        TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
-        TString CreateIdempotencyKey;
-        TString AlterIdempotencyKey;
+ 
+        TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas; 
+        TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas; 
+        TString CreateIdempotencyKey; 
+        TString AlterIdempotencyKey; 
     };
 
     struct TRemovedTenant {
@@ -536,8 +536,8 @@ public:
         Ydb::StatusIds::StatusCode Code;
         // Error code copied from tenant state.
         Ydb::StatusIds::StatusCode ErrorCode;
-        // Idempotency key used in a creation request
-        TString CreateIdempotencyKey;
+        // Idempotency key used in a creation request 
+        TString CreateIdempotencyKey; 
     };
 
     struct TSlotStats {
@@ -701,7 +701,7 @@ public:
     class TTxRemoveTenantFailed;
     class TTxUpdateConfirmedSubdomain;
     class TTxUpdatePoolState;
-    class TTxRevertPoolState;
+    class TTxRevertPoolState; 
     class TTxUpdateSubDomainKey;
     class TTxUpdateTenantState;
 
@@ -726,9 +726,9 @@ public:
                                           TStoragePool::TPtr pool,
                                           TActorId worker,
                                           TStoragePool::EState state);
-    ITransaction *CreateTxRevertPoolState(TTenant::TPtr tenant,
-                                          TStoragePool::TPtr pool,
-                                          TActorId worker);
+    ITransaction *CreateTxRevertPoolState(TTenant::TPtr tenant, 
+                                          TStoragePool::TPtr pool, 
+                                          TActorId worker); 
 
     void ClearState();
     void SetConfig(const NKikimrConsole::TTenantsConfig &config);
@@ -769,7 +769,7 @@ public:
                      Ydb::StatusIds::StatusCode &code,
                      TString &error,
                      const TActorContext &ctx);
-    Ydb::TOperationId MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action);
+    Ydb::TOperationId MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action); 
     Ydb::TOperationId MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action);
     TStoragePool::TPtr MakeStoragePool(TTenant::TPtr tenant, const TString &kind, ui64 size);
 
@@ -862,10 +862,10 @@ public:
                                Ydb::StatusIds::StatusCode code,
                                TTransactionContext &txc,
                                const TActorContext &ctx);
-    void DbUpdateTenantAlterIdempotencyKey(TTenant::TPtr tenant,
-                                           const TString &idempotencyKey,
-                                           TTransactionContext &txc,
-                                           const TActorContext &ctx);
+    void DbUpdateTenantAlterIdempotencyKey(TTenant::TPtr tenant, 
+                                           const TString &idempotencyKey, 
+                                           TTransactionContext &txc, 
+                                           const TActorContext &ctx); 
     void DbUpdateTenantUserAttributes(TTenant::TPtr tenant,
                                       const NKikimrSchemeOp::TAlterUserAttributes &attributes,
                                       TTransactionContext &txc,
@@ -891,14 +891,14 @@ public:
                                   ui64 version,
                                   TTransactionContext &txc,
                                   const TActorContext &ctx);
-    void DbUpdateSchemaOperationQuotas(TTenant::TPtr tenant,
-                                       const Ydb::Cms::SchemaOperationQuotas &quotas,
-                                       TTransactionContext &txc,
-                                       const TActorContext &ctx);
-    void DbUpdateDatabaseQuotas(TTenant::TPtr tenant,
-                                const Ydb::Cms::DatabaseQuotas &quotas,
-                                TTransactionContext &txc,
-                                const TActorContext &ctx);
+    void DbUpdateSchemaOperationQuotas(TTenant::TPtr tenant, 
+                                       const Ydb::Cms::SchemaOperationQuotas &quotas, 
+                                       TTransactionContext &txc, 
+                                       const TActorContext &ctx); 
+    void DbUpdateDatabaseQuotas(TTenant::TPtr tenant, 
+                                const Ydb::Cms::DatabaseQuotas &quotas, 
+                                TTransactionContext &txc, 
+                                const TActorContext &ctx); 
 
     void Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx);

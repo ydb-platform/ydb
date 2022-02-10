@@ -1,20 +1,20 @@
-#include "shared_data.h"
-
+#include "shared_data.h" 
+ 
 #include <library/cpp/actors/core/memory_tracker.h>
 
-#include <util/system/sys_alloc.h>
-#include <util/system/sanitizers.h>
-
-namespace NKikimr {
-
+#include <util/system/sys_alloc.h> 
+#include <util/system/sanitizers.h> 
+ 
+namespace NKikimr { 
+ 
     static constexpr char MemoryLabelSharedData[] = "Tablet/TSharedData/Buffers";
 
-    char* TSharedData::Allocate(size_t size) {
-        char* data = nullptr;
-        if (size > 0) {
-            if (size >= MaxDataSize) {
+    char* TSharedData::Allocate(size_t size) { 
+        char* data = nullptr; 
+        if (size > 0) { 
+            if (size >= MaxDataSize) { 
                 throw std::length_error("Allocate size overflow");
-            }
+            } 
             auto allocSize = OverheadSize + size;
             char* raw = reinterpret_cast<char*>(y_allocate(allocSize));
 
@@ -23,27 +23,27 @@ namespace NKikimr {
             NActors::NMemory::TLabel<MemoryLabelSharedData>::Add(allocSize);
 
             auto* header = reinterpret_cast<THeader*>(raw + PrivateHeaderSize);
-            header->RefCount = 1;
-            header->Owner = nullptr;
+            header->RefCount = 1; 
+            header->Owner = nullptr; 
 
             data = raw + OverheadSize;
-            NSan::Poison(data, size);
-        }
-        return data;
-    }
-
-    void TSharedData::Deallocate(char* data) noexcept {
-        if (data) {
+            NSan::Poison(data, size); 
+        } 
+        return data; 
+    } 
+ 
+    void TSharedData::Deallocate(char* data) noexcept { 
+        if (data) { 
             char* raw = data - OverheadSize;
 
             auto* privateHeader = reinterpret_cast<TPrivateHeader*>(raw);
             NActors::NMemory::TLabel<MemoryLabelSharedData>::Sub(privateHeader->AllocSize);
 
             auto* header = reinterpret_cast<THeader*>(raw + PrivateHeaderSize);
-            Y_VERIFY_DEBUG(header->Owner == nullptr);
+            Y_VERIFY_DEBUG(header->Owner == nullptr); 
 
-            y_deallocate(raw);
-        }
-    }
-
-}
+            y_deallocate(raw); 
+        } 
+    } 
+ 
+} 

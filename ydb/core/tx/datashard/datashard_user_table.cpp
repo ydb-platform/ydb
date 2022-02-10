@@ -13,7 +13,7 @@ namespace NDataShard {
 
 TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
     : LocalTid(localTid)
-    , ShadowTid(shadowTid)
+    , ShadowTid(shadowTid) 
 {
     Y_PROTOBUF_SUPPRESS_NODISCARD descr.SerializeToString(&Schema);
     Name = descr.GetName();
@@ -51,22 +51,22 @@ void TUserTable::SetTableSchemaVersion(ui64 schemaVersion)
     TableSchemaVersion = schemaVersion;
 }
 
-bool TUserTable::ResetTableSchemaVersion()
-{
-    if (TableSchemaVersion) {
+bool TUserTable::ResetTableSchemaVersion() 
+{ 
+    if (TableSchemaVersion) { 
         NKikimrSchemeOp::TTableDescription schema;
-        GetSchema(schema);
-
-        schema.ClearTableSchemaVersion();
-        TableSchemaVersion = 0;
-
-        SetSchema(schema);
-        return true;
-    }
-
-    return false;
-}
-
+        GetSchema(schema); 
+ 
+        schema.ClearTableSchemaVersion(); 
+        TableSchemaVersion = 0; 
+ 
+        SetSchema(schema); 
+        return true; 
+    } 
+ 
+    return false; 
+} 
+ 
 void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
     const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
@@ -188,11 +188,11 @@ bool TUserTable::HasCdcStreams() const {
 
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 {
-    // We expect schemeshard to send us full list of storage rooms
-    if (descr.GetPartitionConfig().StorageRoomsSize()) {
-        Rooms.clear();
-    }
-
+    // We expect schemeshard to send us full list of storage rooms 
+    if (descr.GetPartitionConfig().StorageRoomsSize()) { 
+        Rooms.clear(); 
+    } 
+ 
     for (const auto& roomDescr : descr.GetPartitionConfig().GetStorageRooms()) {
         TStorageRoom::TPtr room = new TStorageRoom(roomDescr);
         Rooms[room->GetId()] = room;
@@ -205,12 +205,12 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         } else {
             it->second.Update(family);
         }
-    }
+    } 
 
-    for (auto& kv : Families) {
-        auto roomIt = Rooms.find(kv.second.GetRoomId());
+    for (auto& kv : Families) { 
+        auto roomIt = Rooms.find(kv.second.GetRoomId()); 
         if (roomIt != Rooms.end()) {
-            kv.second.Update(roomIt->second);
+            kv.second.Update(roomIt->second); 
         }
     }
 
@@ -262,7 +262,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     }
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
-    IsBackup = descr.GetIsBackup();
+    IsBackup = descr.GetIsBackup(); 
 
     CheckSpecialColumns();
 
@@ -309,7 +309,7 @@ void TUserTable::AlterSchema() {
         partConfig.AddStorageRooms()->CopyFrom(*room.second);
     }
 
-    // FIXME: these generated column families are incorrect!
+    // FIXME: these generated column families are incorrect! 
     partConfig.ClearColumnFamilies();
     for (const auto& f : Families) {
         const TUserFamily& family = f.second;
@@ -319,7 +319,7 @@ void TUserTable::AlterSchema() {
         columnFamily->SetStorage(family.Storage);
         columnFamily->SetColumnCodec(family.ColumnCodec);
         columnFamily->SetColumnCache(family.ColumnCache);
-        columnFamily->SetRoom(family.GetRoomId());
+        columnFamily->SetRoom(family.GetRoomId()); 
     }
 
     schema.ClearColumns();
@@ -345,43 +345,43 @@ void TUserTable::AlterSchema() {
     SetSchema(schema);
 }
 
-void TUserTable::ApplyCreate(
-        TTransactionContext& txc, const TString& tableName,
+void TUserTable::ApplyCreate( 
+        TTransactionContext& txc, const TString& tableName, 
         const NKikimrSchemeOp::TPartitionConfig& partConfig) const
 {
-    DoApplyCreate(txc, tableName, false, partConfig);
-}
-
-void TUserTable::ApplyCreateShadow(
-        TTransactionContext& txc, const TString& tableName,
+    DoApplyCreate(txc, tableName, false, partConfig); 
+} 
+ 
+void TUserTable::ApplyCreateShadow( 
+        TTransactionContext& txc, const TString& tableName, 
         const NKikimrSchemeOp::TPartitionConfig& partConfig) const
-{
-    DoApplyCreate(txc, tableName, true, partConfig);
-}
-
-void TUserTable::DoApplyCreate(
-        TTransactionContext& txc, const TString& tableName, bool shadow,
+{ 
+    DoApplyCreate(txc, tableName, true, partConfig); 
+} 
+ 
+void TUserTable::DoApplyCreate( 
+        TTransactionContext& txc, const TString& tableName, bool shadow, 
         const NKikimrSchemeOp::TPartitionConfig& partConfig) const
-{
-    const ui32 tid = shadow ? ShadowTid : LocalTid;
-
-    Y_VERIFY(tid != 0 && tid != Max<ui32>(), "Creating table %s with bad id %" PRIu32, tableName.c_str(), tid);
-
+{ 
+    const ui32 tid = shadow ? ShadowTid : LocalTid; 
+ 
+    Y_VERIFY(tid != 0 && tid != Max<ui32>(), "Creating table %s with bad id %" PRIu32, tableName.c_str(), tid); 
+ 
     auto &alter = txc.DB.Alter();
-    alter.AddTable(tableName, tid);
+    alter.AddTable(tableName, tid); 
 
-    THashSet<ui32> appliedRooms;
+    THashSet<ui32> appliedRooms; 
     for (const auto& fam : Families) {
         ui32 familyId = fam.first;
         const TUserFamily& family = fam.second;
 
-        alter.AddFamily(tid, familyId, family.GetRoomId());
-        alter.SetFamily(tid, familyId, family.Cache, family.Codec);
-        alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
-        if (appliedRooms.insert(family.GetRoomId()).second) {
-            // Call SetRoom once per room
-            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
-        }
+        alter.AddFamily(tid, familyId, family.GetRoomId()); 
+        alter.SetFamily(tid, familyId, family.Cache, family.Codec); 
+        alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold()); 
+        if (appliedRooms.insert(family.GetRoomId()).second) { 
+            // Call SetRoom once per room 
+            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel()); 
+        } 
     }
 
     for (const auto& col : Columns) {
@@ -389,49 +389,49 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         alter.AddColumn(tid, column.Name, columnId, column.Type, column.NotNull);
-        alter.AddColumnToFamily(tid, columnId, column.Family);
+        alter.AddColumnToFamily(tid, columnId, column.Family); 
     }
 
     for (size_t i = 0; i < KeyColumnIds.size(); ++i) {
-        alter.AddColumnToKey(tid, KeyColumnIds[i]);
+        alter.AddColumnToKey(tid, KeyColumnIds[i]); 
     }
 
     if (partConfig.HasCompactionPolicy()) {
         NLocalDb::TCompactionPolicyPtr policy = new NLocalDb::TCompactionPolicy(partConfig.GetCompactionPolicy());
-        alter.SetCompactionPolicy(tid, *policy);
+        alter.SetCompactionPolicy(tid, *policy); 
     } else {
-        alter.SetCompactionPolicy(tid, *NLocalDb::CreateDefaultUserTablePolicy());
+        alter.SetCompactionPolicy(tid, *NLocalDb::CreateDefaultUserTablePolicy()); 
     }
 
     if (partConfig.HasEnableFilterByKey()) {
-        alter.SetByKeyFilter(tid, partConfig.GetEnableFilterByKey());
+        alter.SetByKeyFilter(tid, partConfig.GetEnableFilterByKey()); 
     }
 
-    // N.B. some settings only apply to the main table
+    // N.B. some settings only apply to the main table 
 
-    if (!shadow) {
-        if (partConfig.HasExecutorCacheSize()) {
-            alter.SetExecutorCacheSize(partConfig.GetExecutorCacheSize());
-        }
-
-        if (partConfig.HasResourceProfile() && partConfig.GetResourceProfile()) {
-            alter.SetExecutorResourceProfile(partConfig.GetResourceProfile());
-        }
-
-        if (partConfig.HasExecutorFastLogPolicy()) {
-            alter.SetExecutorFastLogPolicy(partConfig.GetExecutorFastLogPolicy());
-        }
-
-        alter.SetEraseCache(tid, partConfig.GetEnableEraseCache(), partConfig.GetEraseCacheMinRows(), partConfig.GetEraseCacheMaxBytes());
-
-        if (IsBackup) {
-            alter.SetColdBorrow(tid, true);
-        }
-    }
+    if (!shadow) { 
+        if (partConfig.HasExecutorCacheSize()) { 
+            alter.SetExecutorCacheSize(partConfig.GetExecutorCacheSize()); 
+        } 
+ 
+        if (partConfig.HasResourceProfile() && partConfig.GetResourceProfile()) { 
+            alter.SetExecutorResourceProfile(partConfig.GetResourceProfile()); 
+        } 
+ 
+        if (partConfig.HasExecutorFastLogPolicy()) { 
+            alter.SetExecutorFastLogPolicy(partConfig.GetExecutorFastLogPolicy()); 
+        } 
+ 
+        alter.SetEraseCache(tid, partConfig.GetEnableEraseCache(), partConfig.GetEraseCacheMinRows(), partConfig.GetEraseCacheMaxBytes()); 
+ 
+        if (IsBackup) { 
+            alter.SetColdBorrow(tid, true); 
+        } 
+    } 
 }
 
-void TUserTable::ApplyAlter(
-        TTransactionContext& txc, const TUserTable& oldTable,
+void TUserTable::ApplyAlter( 
+        TTransactionContext& txc, const TUserTable& oldTable, 
         const NKikimrSchemeOp::TTableDescription& delta, TString& strError)
 {
     const auto& configDelta = delta.GetPartitionConfig();
@@ -441,47 +441,47 @@ void TUserTable::ApplyAlter(
 
     auto &alter = txc.DB.Alter();
 
-    // Check if we need to drop shadow table first
-    if (configDelta.HasShadowData()) {
-        if (configDelta.GetShadowData()) {
-            if (!ShadowTid) {
-                // Alter is creating shadow data
-                strError = "Alter cannot create new shadow data";
-            }
-        } else {
-            if (ShadowTid) {
-                // Alter is removing shadow data
-                alter.DropTable(ShadowTid);
-                ShadowTid = 0;
-            }
-            config.ClearShadowData();
-        }
-    }
-
-    // Most settings are applied to both main and shadow table
-    TStackVec<ui32> tids;
-    tids.push_back(LocalTid);
-    if (ShadowTid) {
-        tids.push_back(ShadowTid);
-    }
-
-    THashSet<ui32> appliedRooms;
+    // Check if we need to drop shadow table first 
+    if (configDelta.HasShadowData()) { 
+        if (configDelta.GetShadowData()) { 
+            if (!ShadowTid) { 
+                // Alter is creating shadow data 
+                strError = "Alter cannot create new shadow data"; 
+            } 
+        } else { 
+            if (ShadowTid) { 
+                // Alter is removing shadow data 
+                alter.DropTable(ShadowTid); 
+                ShadowTid = 0; 
+            } 
+            config.ClearShadowData(); 
+        } 
+    } 
+ 
+    // Most settings are applied to both main and shadow table 
+    TStackVec<ui32> tids; 
+    tids.push_back(LocalTid); 
+    if (ShadowTid) { 
+        tids.push_back(ShadowTid); 
+    } 
+ 
+    THashSet<ui32> appliedRooms; 
     for (const auto& f : Families) {
         ui32 familyId = f.first;
         const TUserFamily& family = f.second;
 
-        for (ui32 tid : tids) {
-            alter.AddFamily(tid, familyId, family.GetRoomId());
-            alter.SetFamily(tid, familyId, family.Cache, family.Codec);
-            alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
-        }
-
-        if (appliedRooms.insert(family.GetRoomId()).second) {
-            // Call SetRoom once per room
-            for (ui32 tid : tids) {
-                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
-            }
-        }
+        for (ui32 tid : tids) { 
+            alter.AddFamily(tid, familyId, family.GetRoomId()); 
+            alter.SetFamily(tid, familyId, family.Cache, family.Codec); 
+            alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold()); 
+        } 
+ 
+        if (appliedRooms.insert(family.GetRoomId()).second) { 
+            // Call SetRoom once per room 
+            for (ui32 tid : tids) { 
+                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel()); 
+            } 
+        } 
     }
 
     for (const auto& col : Columns) {
@@ -489,14 +489,14 @@ void TUserTable::ApplyAlter(
         const TUserColumn& column = col.second;
 
         if (!oldTable.Columns.contains(colId)) {
-            for (ui32 tid : tids) {
+            for (ui32 tid : tids) { 
                 alter.AddColumn(tid, column.Name, colId, column.Type, column.NotNull);
-            }
+            } 
         }
-
-        for (ui32 tid : tids) {
-            alter.AddColumnToFamily(tid, colId, column.Family);
-        }
+ 
+        for (ui32 tid : tids) { 
+            alter.AddColumnToFamily(tid, colId, column.Family); 
+        } 
     }
 
     for (const auto& col : delta.GetDropColumns()) {
@@ -506,15 +506,15 @@ void TUserTable::ApplyAlter(
         Y_VERIFY(oldCol->Name == col.GetName());
         Y_VERIFY(!Columns.contains(colId));
 
-        for (ui32 tid : tids) {
-            alter.DropColumn(tid, colId);
-        }
+        for (ui32 tid : tids) { 
+            alter.DropColumn(tid, colId); 
+        } 
     }
 
     for (size_t i = 0; i < KeyColumnIds.size(); ++i) {
-        for (ui32 tid : tids) {
-            alter.AddColumnToKey(tid, KeyColumnIds[i]);
-        }
+        for (ui32 tid : tids) { 
+            alter.AddColumnToKey(tid, KeyColumnIds[i]); 
+        } 
     }
 
     if (configDelta.HasCompactionPolicy()) {
@@ -523,9 +523,9 @@ void TUserTable::ApplyAlter(
         NLocalDb::TCompactionPolicy newPolicy(configDelta.GetCompactionPolicy());
 
         if (NLocalDb::ValidateCompactionPolicyChange(*oldPolicy, newPolicy, strError)) {
-            for (ui32 tid : tids) {
-                alter.SetCompactionPolicy(tid, newPolicy);
-            }
+            for (ui32 tid : tids) { 
+                alter.SetCompactionPolicy(tid, newPolicy); 
+            } 
             config.ClearCompactionPolicy();
             newPolicy.Serialize(*config.MutableCompactionPolicy());
         } else {
@@ -533,22 +533,22 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    if (configDelta.HasEnableFilterByKey()) {
-        config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
-        for (ui32 tid : tids) {
-            alter.SetByKeyFilter(tid, configDelta.GetEnableFilterByKey());
-        }
-    }
-
-    // N.B. some settings only apply to the main table
-
+    if (configDelta.HasEnableFilterByKey()) { 
+        config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey()); 
+        for (ui32 tid : tids) { 
+            alter.SetByKeyFilter(tid, configDelta.GetEnableFilterByKey()); 
+        } 
+    } 
+ 
+    // N.B. some settings only apply to the main table 
+ 
     if (configDelta.HasExecutorCacheSize()) {
         config.SetExecutorCacheSize(configDelta.GetExecutorCacheSize());
         alter.SetExecutorCacheSize(configDelta.GetExecutorCacheSize());
     }
 
-    if (configDelta.HasResourceProfile() && configDelta.GetResourceProfile()) {
-        config.SetResourceProfile(configDelta.GetResourceProfile());
+    if (configDelta.HasResourceProfile() && configDelta.GetResourceProfile()) { 
+        config.SetResourceProfile(configDelta.GetResourceProfile()); 
         alter.SetExecutorResourceProfile(configDelta.GetResourceProfile());
     }
 
@@ -557,43 +557,43 @@ void TUserTable::ApplyAlter(
         alter.SetExecutorFastLogPolicy(configDelta.GetExecutorFastLogPolicy());
     }
 
-    if (configDelta.HasEnableEraseCache() || configDelta.HasEraseCacheMinRows() || configDelta.HasEraseCacheMaxBytes()) {
-        if (configDelta.HasEnableEraseCache()) {
-            config.SetEnableEraseCache(configDelta.GetEnableEraseCache());
-        }
-        if (configDelta.HasEraseCacheMinRows()) {
-            config.SetEraseCacheMinRows(configDelta.GetEraseCacheMinRows());
-        }
-        if (configDelta.HasEraseCacheMaxBytes()) {
-            config.SetEraseCacheMaxBytes(configDelta.GetEraseCacheMaxBytes());
-        }
-        alter.SetEraseCache(LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes());
-    }
-
+    if (configDelta.HasEnableEraseCache() || configDelta.HasEraseCacheMinRows() || configDelta.HasEraseCacheMaxBytes()) { 
+        if (configDelta.HasEnableEraseCache()) { 
+            config.SetEnableEraseCache(configDelta.GetEnableEraseCache()); 
+        } 
+        if (configDelta.HasEraseCacheMinRows()) { 
+            config.SetEraseCacheMinRows(configDelta.GetEraseCacheMinRows()); 
+        } 
+        if (configDelta.HasEraseCacheMaxBytes()) { 
+            config.SetEraseCacheMaxBytes(configDelta.GetEraseCacheMaxBytes()); 
+        } 
+        alter.SetEraseCache(LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes()); 
+    } 
+ 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
 
     SetSchema(schema);
 }
 
-void TUserTable::ApplyDefaults(TTransactionContext& txc) const
-{
-    const auto* tableInfo = txc.DB.GetScheme().GetTableInfo(LocalTid);
-    if (!tableInfo) {
-        // Local table does not exist, no need to apply any defaults
-        return;
-    }
-
+void TUserTable::ApplyDefaults(TTransactionContext& txc) const 
+{ 
+    const auto* tableInfo = txc.DB.GetScheme().GetTableInfo(LocalTid); 
+    if (!tableInfo) { 
+        // Local table does not exist, no need to apply any defaults 
+        return; 
+    } 
+ 
     NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema);
-    const auto& config = schema.GetPartitionConfig();
-
-    if ((!config.HasEnableEraseCache() && config.GetEnableEraseCache() != tableInfo->EraseCacheEnabled) ||
-        (config.GetEnableEraseCache() && !config.HasEraseCacheMinRows() && config.GetEraseCacheMinRows() != tableInfo->EraseCacheMinRows) ||
-        (config.GetEnableEraseCache() && !config.HasEraseCacheMaxBytes() && config.GetEraseCacheMaxBytes() != tableInfo->EraseCacheMaxBytes))
-    {
-        // Protobuf defaults for erase cache changed, apply to local database
-        txc.DB.Alter().SetEraseCache(LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes());
-    }
-}
-
+    GetSchema(schema); 
+    const auto& config = schema.GetPartitionConfig(); 
+ 
+    if ((!config.HasEnableEraseCache() && config.GetEnableEraseCache() != tableInfo->EraseCacheEnabled) || 
+        (config.GetEnableEraseCache() && !config.HasEraseCacheMinRows() && config.GetEraseCacheMinRows() != tableInfo->EraseCacheMinRows) || 
+        (config.GetEnableEraseCache() && !config.HasEraseCacheMaxBytes() && config.GetEraseCacheMaxBytes() != tableInfo->EraseCacheMaxBytes)) 
+    { 
+        // Protobuf defaults for erase cache changed, apply to local database 
+        txc.DB.Alter().SetEraseCache(LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes()); 
+    } 
+} 
+ 
 }}

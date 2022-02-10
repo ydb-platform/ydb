@@ -66,7 +66,7 @@ struct TTableRangeOptions
     TArrayRef<bool> SkipNullKeys;
     TArrayRef<bool> ForbidNullArgsFrom;
     TArrayRef<bool> ForbidNullArgsTo;
-    TRuntimeNode Reverse; // default = <unset>
+    TRuntimeNode Reverse; // default = <unset> 
 };
 
 enum class EInplaceUpdateMode

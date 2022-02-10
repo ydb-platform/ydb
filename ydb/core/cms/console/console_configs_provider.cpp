@@ -1,5 +1,5 @@
 #include "console_configs_provider.h"
-#include "util.h"
+#include "util.h" 
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -57,7 +57,7 @@ public:
     {
         Y_VERIFY(Subscription->Subscriber.TabletId);
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = FastConnectRetryPolicy();
+        pipeConfig.RetryPolicy = FastConnectRetryPolicy(); 
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, Subscription->Subscriber.TabletId, pipeConfig);
         Pipe = ctx.ExecutorThread.RegisterActor(pipe);
     }

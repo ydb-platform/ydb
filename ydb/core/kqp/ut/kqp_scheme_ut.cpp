@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         )";
 
         NPar::LocalExecutor().RunAdditionalThreads(inflight);
-        NPar::LocalExecutor().ExecRange([=, &db](int /*id*/) mutable {
+        NPar::LocalExecutor().ExecRange([=, &db](int /*id*/) mutable { 
             size_t i = limit;
             while (--i) {
                 auto session = db.GetSession().GetValueSync().GetSession();
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const static TString tableName = "/Root/Test1234/KeyValue";
 
         NPar::LocalExecutor().RunAdditionalThreads(inflight);
-        NPar::LocalExecutor().ExecRange([=, &db](int /*id*/) mutable {
+        NPar::LocalExecutor().ExecRange([=, &db](int /*id*/) mutable { 
             size_t i = limit;
             while (--i) {
                 auto session = db.GetSession().GetValueSync().GetSession();
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         TAtomic finishing = false;
         NPar::LocalExecutor().RunAdditionalThreads(Inflight + 1);
-        NPar::LocalExecutor().ExecRange([=, &db, &finishing](int id) mutable {
+        NPar::LocalExecutor().ExecRange([=, &db, &finishing](int id) mutable { 
             if (id == Inflight) {
                 Sleep(WaitDuration);
 

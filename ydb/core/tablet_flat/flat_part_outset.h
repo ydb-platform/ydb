@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h"
+#include "defs.h" 
 #include "flat_sausage_packet.h"
 #include "flat_sausage_fetch.h"
 
@@ -13,8 +13,8 @@ namespace NTable {
         // loaded meta page
         TIntrusiveConstPtr<NPageCollection::TPageCollection> Packet;
         TVector<NPageCollection::TLoadedPage> Sticky;
-
-        void ParsePacket(TSharedData meta);
+ 
+        void ParsePacket(TSharedData meta); 
     };
 
     struct TPartComponents {
@@ -31,8 +31,8 @@ namespace NTable {
         TString Opaque;
         // Optional underlying part epoch
         TEpoch Epoch;
-
-        TEpoch GetEpoch() const;
+ 
+        TEpoch GetEpoch() const; 
     };
 
 }

@@ -193,8 +193,8 @@ TDriver::TDriver(const TDriverConfig& config) {
     Impl_.reset(new TGRpcConnectionsImpl(config.Impl_));
 }
 
-void TDriver::Stop(bool wait) {
-    Impl_->Stop(wait);
-}
-
+void TDriver::Stop(bool wait) { 
+    Impl_->Stop(wait); 
+} 
+ 
 } // namespace NYdb

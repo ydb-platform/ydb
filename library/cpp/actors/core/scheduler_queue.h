@@ -76,10 +76,10 @@ namespace NActors {
             }
 
             void Push(ui64 instantMicrosends, IEventHandle* ev, ISchedulerCookie* cookie) {
-                if (Y_UNLIKELY(instantMicrosends == 0)) {
-                    // Protect against Pop() getting stuck forever
-                    instantMicrosends = 1;
-                }
+                if (Y_UNLIKELY(instantMicrosends == 0)) { 
+                    // Protect against Pop() getting stuck forever 
+                    instantMicrosends = 1; 
+                } 
                 if (WritePosition != TChunk::EntriesCount) {
                     volatile TEntry& entry = WriteTo->Entries[WritePosition];
                     entry.Cookie = cookie;

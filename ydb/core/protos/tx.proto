@@ -19,8 +19,8 @@ message TProxyTransaction {
 
     optional uint64 MinStep = 6; // not plan before
     optional uint64 MaxStep = 7; // not plan after
-
-    optional bool IgnoreLowDiskSpace = 8; // plan even disk space is low
+ 
+    optional bool IgnoreLowDiskSpace = 8; // plan even disk space is low 
 }
 
 message TEvProposeTransaction {
@@ -36,26 +36,26 @@ message TEvProposeTransactionStatus {
     optional fixed64 TxId = 9;
 }
 
-// reader to coordinator
-message TEvAcquireReadStep {
-    optional fixed64 CoordinatorID = 1; // tablet id of target coordinator, for paranoid checks
-}
-
-message TEvAcquireReadStepResult {
-    optional fixed64 CoordinatorID = 1;
-    // Chosen step for a read snapshot
-    // Client is expected to read all effects up to and including this step
-    // Logically this is equivalent to a step of the most recently planned
-    // transaction. The resulting step is linearizable with respect to all
-    // committed transactions at the time of the request, in a sense that
-    // it would not be smaller than the step of the last executed transaction
-    // in the database. This step is usually smaller than step assigned
-    // to a normally planned transaction, but it may still correspond to some
-    // future point in time. It is not guaranteed that this step is the
-    // smallest possible linearizable step, only an approximation.
-    optional fixed64 Step = 2;
-}
-
+// reader to coordinator 
+message TEvAcquireReadStep { 
+    optional fixed64 CoordinatorID = 1; // tablet id of target coordinator, for paranoid checks 
+} 
+ 
+message TEvAcquireReadStepResult { 
+    optional fixed64 CoordinatorID = 1; 
+    // Chosen step for a read snapshot 
+    // Client is expected to read all effects up to and including this step 
+    // Logically this is equivalent to a step of the most recently planned 
+    // transaction. The resulting step is linearizable with respect to all 
+    // committed transactions at the time of the request, in a sense that 
+    // it would not be smaller than the step of the last executed transaction 
+    // in the database. This step is usually smaller than step assigned 
+    // to a normally planned transaction, but it may still correspond to some 
+    // future point in time. It is not guaranteed that this step is the 
+    // smallest possible linearizable step, only an approximation. 
+    optional fixed64 Step = 2; 
+} 
+ 
 // coordinator to mediator
 message TCoordinatorTransaction {
     repeated uint64 AffectedSet = 1; // read and write set - joined and then filtered for concrete mediator
@@ -217,7 +217,7 @@ message TEvReadSet {
     optional uint64 TabletProducer = 5;
     optional bytes ReadSet = 6;
     optional TBalanceTrackList BalanceTrackList = 7;
-    optional uint64 Seqno = 8; // Key in outReadSet table to facilitate erasing on ACK
+    optional uint64 Seqno = 8; // Key in outReadSet table to facilitate erasing on ACK 
 }
 
 // tablet to tablet
@@ -228,7 +228,7 @@ message TEvReadSetAck {
     optional uint64 TabletDest = 4;
     optional uint64 TabletConsumer = 5;
     optional uint32 Flags = 6;
-    optional uint64 Seqno = 7; // Should be equal to TEvReadSet.Seqno which we are ACKing
+    optional uint64 Seqno = 7; // Should be equal to TEvReadSet.Seqno which we are ACKing 
 }
 
 message TKeyRange {

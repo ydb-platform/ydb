@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         NKikimrCms::TClusterStateRequest request;
         request.AddHosts("0");
-        env.RequestState(request, TStatus::NO_SUCH_HOST);
+        env.RequestState(request, TStatus::NO_SUCH_HOST); 
     }
 
     Y_UNIT_TEST(StateRequestUnknownMultipleNodes)
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         NKikimrCms::TClusterStateRequest request;
         request.AddHosts(FQDNHostName() + ".com");
-        env.RequestState(request, TStatus::NO_SUCH_HOST);
+        env.RequestState(request, TStatus::NO_SUCH_HOST); 
     }
 
     Y_UNIT_TEST(RequestRestartServicesOk)
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TCmsTestEnv env(8);
 
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_HOST,
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_HOST, 
                                    MakeAction(TAction::RESTART_SERVICES, "host", 60000000, "storage"));
     }
 
@@ -386,9 +386,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TCmsTestEnv env(8);
 
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
-                                   MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
-
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE, 
+                                   MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path")); 
+ 
         auto rec1 = env.CheckPermissionRequest
             ("user", false, false, false, true, TStatus::ALLOW,
              MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(0)));

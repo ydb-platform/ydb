@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
         TCooker(const TRowScheme &scheme, ui64 rows, float rate)
             : Tool(scheme)
-            , Writer(rows, rate)
+            , Writer(rows, rate) 
         {
 
         }
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
     Y_UNIT_TEST(Conf)
     {
-        NBloom::TEstimator estimator(0.001);
+        NBloom::TEstimator estimator(0.001); 
         UNIT_ASSERT(estimator.Hashes() > 0);
         UNIT_ASSERT(estimator.Bits(0) > 0);
     }
@@ -178,15 +178,15 @@ Y_UNIT_TEST_SUITE(Bloom) {
         me.To(12).Select(1).Has(ru1, ru2).NoKey(no1, no2, no3);
 
         {
-            auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            auto subset = me->Subset(1, TEpoch::Max(), { }, { }); 
 
             UNIT_ASSERT(subset->Flatten.size() == 1 && !subset->Flatten[0]->ByKey);
 
             auto &stats = me.Relax().BackLog().Stats;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.SelectWeeded, 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.SelectSieved, 4); /* ba? keys */
-            UNIT_ASSERT_VALUES_EQUAL(stats.SelectNoKey, 2); /* no? keys */
+            UNIT_ASSERT_VALUES_EQUAL(stats.SelectSieved, 4); /* ba? keys */ 
+            UNIT_ASSERT_VALUES_EQUAL(stats.SelectNoKey, 2); /* no? keys */ 
         }
 
         /*_ 20: Make next part Pw with enabled by key bloom filter */
@@ -196,20 +196,20 @@ Y_UNIT_TEST_SUITE(Bloom) {
         me.To(22).Select(1).Has(ru1, ru2, rw1, rw2, rw3).NoKey(no1, no2, no3);
 
         {
-            auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            auto subset = me->Subset(1, TEpoch::Max(), { }, { }); 
 
             UNIT_ASSERT(
                 subset->Flatten.at(0)->ByKey || subset->Flatten.at(1)->ByKey);
 
             auto &stats = me.Relax().BackLog().Stats;
 
-            /* { Weeded 3 } is { Pw : ru no } - { no3, no1 are out of range },
-              { Sieved 7 } is { Pu : ru rw no } + { Pw : rw } - ...,
-              { NoKey 2 } is { no1, no2 } because no3 is out of range */
+            /* { Weeded 3 } is { Pw : ru no } - { no3, no1 are out of range }, 
+              { Sieved 7 } is { Pu : ru rw no } + { Pw : rw } - ..., 
+              { NoKey 2 } is { no1, no2 } because no3 is out of range */ 
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.SelectWeeded, 3);
-            UNIT_ASSERT_VALUES_EQUAL(stats.SelectSieved, 7);
-            UNIT_ASSERT_VALUES_EQUAL(stats.SelectNoKey, 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.SelectWeeded, 3); 
+            UNIT_ASSERT_VALUES_EQUAL(stats.SelectSieved, 7); 
+            UNIT_ASSERT_VALUES_EQUAL(stats.SelectNoKey, 2); 
         }
 
         /*_ 30: Recompact all parts to one Pz and repeat Select()'s */
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         me.To(31).Select(1).Has(ru1, ru2, rw1, rw2, rw3).NoKey(no1, no2, no3);
 
         {
-            const auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            const auto subset = me->Subset(1, TEpoch::Max(), { }, { }); 
 
             UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Flatten[0]->ByKey);
 
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         me.To(41).Commit().Compact(1, true /* final compaction */);
 
         {
-            const auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            const auto subset = me->Subset(1, TEpoch::Max(), { }, { }); 
 
             UNIT_ASSERT(subset->Flatten.size() == 1 && !subset->Flatten[0]->ByKey);
         }
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         }
 
         {
-            const auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            const auto subset = me->Subset(1, TEpoch::Max(), { }, { }); 
 
             UNIT_ASSERT_VALUES_EQUAL(subset->Flatten.size(), Height);
             UNIT_ASSERT_VALUES_EQUAL(subset->Frozen.size(), 0);

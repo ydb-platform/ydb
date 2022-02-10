@@ -376,57 +376,57 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
 }
 
 static bool IsDefaultFamily(const NKikimrSchemeOp::TFamilyDescription& family) {
-    if (family.HasId() && family.GetId() == 0) {
-        return true; // explicit id 0
-    }
-    if (!family.HasId() && !family.HasName()) {
-        return true; // neither id nor name specified
-    }
-    return false;
-}
-
+    if (family.HasId() && family.GetId() == 0) { 
+        return true; // explicit id 0 
+    } 
+    if (!family.HasId() && !family.HasName()) { 
+        return true; // neither id nor name specified 
+    } 
+    return false; 
+} 
+ 
 template <typename TYdbProto>
 void FillStorageSettingsImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
-    if (!in.HasPartitionConfig()) {
-        return;
-    }
-
-    const auto& partConfig = in.GetPartitionConfig();
-    if (partConfig.ColumnFamiliesSize() == 0) {
-        return;
-    }
-
-    for (size_t i = 0; i < partConfig.ColumnFamiliesSize(); ++i) {
-        const auto& family = partConfig.GetColumnFamilies(i);
-        if (IsDefaultFamily(family)) {
-            // Default family also specifies some per-table storage settings
-            auto* settings = out.mutable_storage_settings();
-            settings->set_store_external_blobs(Ydb::FeatureFlag::DISABLED);
-
-            if (family.HasStorageConfig()) {
-                if (family.GetStorageConfig().HasSysLog()) {
-                    settings->mutable_tablet_commit_log0()->set_media(family.GetStorageConfig().GetSysLog().GetPreferredPoolKind());
-                }
-                if (family.GetStorageConfig().HasLog()) {
-                    settings->mutable_tablet_commit_log1()->set_media(family.GetStorageConfig().GetLog().GetPreferredPoolKind());
-                }
-                if (family.GetStorageConfig().HasExternal()) {
-                    settings->mutable_external()->set_media(family.GetStorageConfig().GetExternal().GetPreferredPoolKind());
-                }
-
-                const ui32 externalThreshold = family.GetStorageConfig().GetExternalThreshold();
-                if (externalThreshold != 0 && externalThreshold != Max<ui32>()) {
-                    settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
-                }
-            }
-
-            // Check legacy settings for enabled external blobs
-            switch (family.GetStorage()) {
+    if (!in.HasPartitionConfig()) { 
+        return; 
+    } 
+ 
+    const auto& partConfig = in.GetPartitionConfig(); 
+    if (partConfig.ColumnFamiliesSize() == 0) { 
+        return; 
+    } 
+ 
+    for (size_t i = 0; i < partConfig.ColumnFamiliesSize(); ++i) { 
+        const auto& family = partConfig.GetColumnFamilies(i); 
+        if (IsDefaultFamily(family)) { 
+            // Default family also specifies some per-table storage settings 
+            auto* settings = out.mutable_storage_settings(); 
+            settings->set_store_external_blobs(Ydb::FeatureFlag::DISABLED); 
+ 
+            if (family.HasStorageConfig()) { 
+                if (family.GetStorageConfig().HasSysLog()) { 
+                    settings->mutable_tablet_commit_log0()->set_media(family.GetStorageConfig().GetSysLog().GetPreferredPoolKind()); 
+                } 
+                if (family.GetStorageConfig().HasLog()) { 
+                    settings->mutable_tablet_commit_log1()->set_media(family.GetStorageConfig().GetLog().GetPreferredPoolKind()); 
+                } 
+                if (family.GetStorageConfig().HasExternal()) { 
+                    settings->mutable_external()->set_media(family.GetStorageConfig().GetExternal().GetPreferredPoolKind()); 
+                } 
+ 
+                const ui32 externalThreshold = family.GetStorageConfig().GetExternalThreshold(); 
+                if (externalThreshold != 0 && externalThreshold != Max<ui32>()) { 
+                    settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED); 
+                } 
+            } 
+ 
+            // Check legacy settings for enabled external blobs 
+            switch (family.GetStorage()) { 
                 case NKikimrSchemeOp::ColumnStorage1:
-                    // default or unset, no legacy external blobs
-                    break;
+                    // default or unset, no legacy external blobs 
+                    break; 
                 case NKikimrSchemeOp::ColumnStorage2:
                 case NKikimrSchemeOp::ColumnStorage1Ext1:
                 case NKikimrSchemeOp::ColumnStorage1Ext2:
@@ -435,15 +435,15 @@ void FillStorageSettingsImpl(TYdbProto& out,
                 case NKikimrSchemeOp::ColumnStorage1Med2Ext2:
                 case NKikimrSchemeOp::ColumnStorage2Med2Ext2:
                 case NKikimrSchemeOp::ColumnStorageTest_1_2_1k:
-                    settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
-                    break;
-            }
-
-            break;
-        }
-    }
-}
-
+                    settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED); 
+                    break; 
+            } 
+ 
+            break; 
+        } 
+    } 
+} 
+ 
 void FillStorageSettings(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillStorageSettingsImpl(out, in);
@@ -458,58 +458,58 @@ template <typename TYdbProto>
 void FillColumnFamiliesImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
-    if (!in.HasPartitionConfig()) {
-        return;
-    }
-
-    const auto& partConfig = in.GetPartitionConfig();
-    if (partConfig.ColumnFamiliesSize() == 0) {
-        return;
-    }
-
-    for (size_t i = 0; i < partConfig.ColumnFamiliesSize(); ++i) {
-        const auto& family = partConfig.GetColumnFamilies(i);
-        auto* r = out.add_column_families();
-
-        if (family.HasName() && !family.GetName().empty()) {
-            r->set_name(family.GetName());
-        } else if (IsDefaultFamily(family)) {
-            r->set_name("default");
-        } else if (family.HasId()) {
-            r->set_name(TStringBuilder() << "<id: " << family.GetId() << ">");
-        } else {
-            r->set_name(family.GetName());
-        }
-
-        if (family.HasStorageConfig() && family.GetStorageConfig().HasData()) {
-            r->mutable_data()->set_media(family.GetStorageConfig().GetData().GetPreferredPoolKind());
-        }
-
-        if (family.HasColumnCodec()) {
-            switch (family.GetColumnCodec()) {
+    if (!in.HasPartitionConfig()) { 
+        return; 
+    } 
+ 
+    const auto& partConfig = in.GetPartitionConfig(); 
+    if (partConfig.ColumnFamiliesSize() == 0) { 
+        return; 
+    } 
+ 
+    for (size_t i = 0; i < partConfig.ColumnFamiliesSize(); ++i) { 
+        const auto& family = partConfig.GetColumnFamilies(i); 
+        auto* r = out.add_column_families(); 
+ 
+        if (family.HasName() && !family.GetName().empty()) { 
+            r->set_name(family.GetName()); 
+        } else if (IsDefaultFamily(family)) { 
+            r->set_name("default"); 
+        } else if (family.HasId()) { 
+            r->set_name(TStringBuilder() << "<id: " << family.GetId() << ">"); 
+        } else { 
+            r->set_name(family.GetName()); 
+        } 
+ 
+        if (family.HasStorageConfig() && family.GetStorageConfig().HasData()) { 
+            r->mutable_data()->set_media(family.GetStorageConfig().GetData().GetPreferredPoolKind()); 
+        } 
+ 
+        if (family.HasColumnCodec()) { 
+            switch (family.GetColumnCodec()) { 
                 case NKikimrSchemeOp::ColumnCodecPlain:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-                    break;
+                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE); 
+                    break; 
                 case NKikimrSchemeOp::ColumnCodecLZ4:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-                    break;
+                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4); 
+                    break; 
                 case NKikimrSchemeOp::ColumnCodecZSTD:
                     break; // FIXME: not supported
-            }
-        } else if (family.GetCodec() == 1) {
-            // Legacy setting, see datashard
-            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-        } else {
-            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-        }
-
-        // Check legacy settings for permanent in-memory cache
+            } 
+        } else if (family.GetCodec() == 1) { 
+            // Legacy setting, see datashard 
+            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4); 
+        } else { 
+            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE); 
+        } 
+ 
+        // Check legacy settings for permanent in-memory cache 
         if (family.GetInMemory() || family.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
-            r->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
-        }
-    }
-}
-
+            r->set_keep_in_memory(Ydb::FeatureFlag::ENABLED); 
+        } 
+    } 
+} 
+ 
 void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillColumnFamiliesImpl(out, in);

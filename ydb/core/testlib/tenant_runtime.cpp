@@ -433,8 +433,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &CreateDefaultHive, DataGroupErasure);
             } else if (type == defaultTabletTypes.SysViewProcessor) {
                 bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
-            } else if (type == defaultTabletTypes.SequenceShard) {
-                bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
+            } else if (type == defaultTabletTypes.SequenceShard) { 
+                bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure); 
             } else if (type == defaultTabletTypes.ReplicationController) {
                 bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
             } else {
@@ -799,7 +799,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         //SetLogPriority(NKikimrServices::PIPE_CLIENT, NLog::PRI_DEBUG);
         //SetLogPriority(NKikimrServices::PIPE_SERVER, NLog::PRI_DEBUG);
 
-        SetupMonitoring();
+        SetupMonitoring(); 
     }
 
     TAppPrepare app;
@@ -807,7 +807,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     app.FeatureFlags = Extension.GetFeatureFlags();
     app.ClearDomainsAndHive();
 
-    ui32 planResolution = 500;
+    ui32 planResolution = 500; 
     // Add domains info.
     for (ui32 i = 0; i < Config.Domains.size(); ++i) {
         auto &domain = Config.Domains[i];
@@ -936,21 +936,21 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         RegisterService(MakeTxProxyID(), txProxyId, i);
     }
 
-    // Create LongTx services
-    for (size_t i = 0; i< Config.Nodes.size(); ++i) {
-        IActor* longTxService = NLongTxService::CreateLongTxService();
-        TActorId longTxServiceId = Register(longTxService, i);
-        EnableScheduleForActor(longTxServiceId, true);
-        RegisterService(NLongTxService::MakeLongTxServiceID(GetNodeId(i)), longTxServiceId, i);
-    }
-
-    // Create sequence proxies
-    for (size_t i = 0; i< Config.Nodes.size(); ++i) {
-        IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy();
-        TActorId sequenceProxyId = Register(sequenceProxy, i);
-        RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, i);
-    }
-
+    // Create LongTx services 
+    for (size_t i = 0; i< Config.Nodes.size(); ++i) { 
+        IActor* longTxService = NLongTxService::CreateLongTxService(); 
+        TActorId longTxServiceId = Register(longTxService, i); 
+        EnableScheduleForActor(longTxServiceId, true); 
+        RegisterService(NLongTxService::MakeLongTxServiceID(GetNodeId(i)), longTxServiceId, i); 
+    } 
+ 
+    // Create sequence proxies 
+    for (size_t i = 0; i< Config.Nodes.size(); ++i) { 
+        IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy(); 
+        TActorId sequenceProxyId = Register(sequenceProxy, i); 
+        RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, i); 
+    } 
+ 
     // Create Hive.
     {
         auto info = CreateTestTabletInfo(Config.HiveId, TTabletTypes::TX_DUMMY, TErasureType::ErasureNone);

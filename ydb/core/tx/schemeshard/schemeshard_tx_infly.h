@@ -93,9 +93,9 @@ struct TTxState {
         item(TxCreateOlapStore, 48) \
         item(TxAlterOlapStore, 49) \
         item(TxDropOlapStore, 50) \
-        item(TxCreateOlapTable, 51) \
-        item(TxAlterOlapTable, 52) \
-        item(TxDropOlapTable, 53) \
+        item(TxCreateOlapTable, 51) \ 
+        item(TxAlterOlapTable, 52) \ 
+        item(TxDropOlapTable, 53) \ 
         item(TxCreateCdcStream, 54) \
         item(TxCreateCdcStreamAtTable, 55) \
         item(TxAlterCdcStream, 56) \
@@ -104,9 +104,9 @@ struct TTxState {
         item(TxDropCdcStreamAtTable, 59) \
         item(TxMoveTable, 60) \
         item(TxMoveTableIndex, 61) \
-        item(TxCreateSequence, 62) \
-        item(TxAlterSequence, 63) \
-        item(TxDropSequence, 64) \
+        item(TxCreateSequence, 62) \ 
+        item(TxAlterSequence, 63) \ 
+        item(TxDropSequence, 64) \ 
         item(TxCreateReplication, 65) \
         item(TxAlterReplication, 66) \
         item(TxDropReplication, 67) \
@@ -294,7 +294,7 @@ struct TTxState {
         case TxCreateTable:
         case TxCopyTable:
         case TxCreateOlapStore:
-        case TxCreateOlapTable:
+        case TxCreateOlapTable: 
         case TxCreatePQGroup:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
@@ -306,7 +306,7 @@ struct TTxState {
         case TxCreateTableIndex:
         case TxFillIndex:
         case TxCreateCdcStream:
-        case TxCreateSequence:
+        case TxCreateSequence: 
         case TxCreateReplication:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
@@ -317,7 +317,7 @@ struct TTxState {
             return false;
         case TxDropTable:
         case TxDropOlapStore:
-        case TxDropOlapTable:
+        case TxDropOlapTable: 
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
@@ -332,13 +332,13 @@ struct TTxState {
         case TxDropTableIndexAtMainTable:
         case TxDropCdcStream:
         case TxDropCdcStreamAtTable:
-        case TxDropSequence:
+        case TxDropSequence: 
         case TxDropReplication:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
         case TxAlterOlapStore:
-        case TxAlterOlapTable:
+        case TxAlterOlapTable: 
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -357,7 +357,7 @@ struct TTxState {
         case TxAlterSolomonVolume:
         case TxAlterCdcStream:
         case TxAlterCdcStreamAtTable:
-        case TxAlterSequence:
+        case TxAlterSequence: 
         case TxAlterReplication:
             return false;
         case TxMoveTable:
@@ -373,7 +373,7 @@ struct TTxState {
         switch (TxType) {
         case TxDropTable:
         case TxDropOlapStore:
-        case TxDropOlapTable:
+        case TxDropOlapTable: 
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
@@ -385,14 +385,14 @@ struct TTxState {
         case TxDropSolomonVolume:
         case TxRmDir:
         case TxDropCdcStream:
-        case TxDropSequence:
+        case TxDropSequence: 
         case TxDropReplication:
             return true;
         case TxMkDir:
         case TxCreateTable:
         case TxCopyTable:
         case TxCreateOlapStore:
-        case TxCreateOlapTable:
+        case TxCreateOlapTable: 
         case TxCreatePQGroup:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
@@ -405,7 +405,7 @@ struct TTxState {
         case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
-        case TxCreateSequence:
+        case TxCreateSequence: 
         case TxCreateReplication:
         case TxInitializeBuildIndex:
         case TxCreateLockForIndexBuild:
@@ -417,7 +417,7 @@ struct TTxState {
         case TxAlterPQGroup:
         case TxAlterTable:
         case TxAlterOlapStore:
-        case TxAlterOlapTable:
+        case TxAlterOlapTable: 
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -436,7 +436,7 @@ struct TTxState {
         case TxAlterSolomonVolume:
         case TxAlterCdcStream:
         case TxAlterCdcStreamAtTable:
-        case TxAlterSequence:
+        case TxAlterSequence: 
         case TxAlterReplication:
             return false;
         case TxMoveTable:
@@ -452,7 +452,7 @@ struct TTxState {
         switch (TxType) {
         case TxDropTable:
         case TxDropOlapStore:
-        case TxDropOlapTable:
+        case TxDropOlapTable: 
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
@@ -464,7 +464,7 @@ struct TTxState {
         case TxSplitTablePartition:
         case TxMergeTablePartition:
         case TxDropCdcStream:
-        case TxDropSequence:
+        case TxDropSequence: 
         case TxDropReplication:
             return true;
         case TxDropTableIndex:
@@ -474,7 +474,7 @@ struct TTxState {
         case TxMkDir:
         case TxCreateTable:
         case TxCreateOlapStore:
-        case TxCreateOlapTable:
+        case TxCreateOlapTable: 
         case TxCopyTable:
         case TxCreatePQGroup:
         case TxCreateSubDomain:
@@ -487,7 +487,7 @@ struct TTxState {
         case TxCreateTableIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
-        case TxCreateSequence:
+        case TxCreateSequence: 
         case TxCreateReplication:
         case TxInitializeBuildIndex:
         case TxCreateLockForIndexBuild:
@@ -498,7 +498,7 @@ struct TTxState {
         case TxAlterPQGroup:
         case TxAlterTable:
         case TxAlterOlapStore:
-        case TxAlterOlapTable:
+        case TxAlterOlapTable: 
         case TxModifyACL:
         case TxBackup:
         case TxRestore:
@@ -518,7 +518,7 @@ struct TTxState {
         case TxAlterCdcStreamAtTable:
         case TxMoveTable:
         case TxMoveTableIndex:
-        case TxAlterSequence:
+        case TxAlterSequence: 
         case TxAlterReplication:
             return false;
         case TxInvalid:

@@ -63,7 +63,7 @@ public:
             return false;
         }
 
-        TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
+        TShardIdx idx = context.SS->MustGetShardIdx(tabletId); 
         txState->ShardsInProgress.erase(idx);
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);

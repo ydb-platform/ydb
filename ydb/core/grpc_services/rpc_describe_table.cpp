@@ -80,13 +80,13 @@ private:
                         GetProtoRequest()->include_partition_stats());
                 }
 
-                FillStorageSettings(describeTableResult, tableDescription);
-                FillColumnFamilies(describeTableResult, tableDescription);
+                FillStorageSettings(describeTableResult, tableDescription); 
+                FillColumnFamilies(describeTableResult, tableDescription); 
                 FillAttributes(describeTableResult, pathDescription);
                 FillPartitioningSettings(describeTableResult, tableDescription);
                 FillKeyBloomFilter(describeTableResult, tableDescription);
                 FillReadReplicasSettings(describeTableResult, tableDescription);
-
+ 
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx);
             }
 

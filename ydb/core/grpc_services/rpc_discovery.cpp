@@ -322,75 +322,75 @@ public:
         result->mutable_endpoints()->Reserve(LookupResponse->InfoEntries.size());
 
         const TSet<TString> services(Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
-        const bool sslServer = Request->SslServer();
+        const bool sslServer = Request->SslServer(); 
 
-        using TEndpointKey = std::pair<TString, ui32>;
-        struct TEndpointState {
-            int Index = -1;
-            int Count = 0;
-            float LoadFactor = 0;
-            THashSet<TString> Locations;
-            THashSet<TString> Services;
-        };
-        THashMap<TEndpointKey, TEndpointState> states;
-
+        using TEndpointKey = std::pair<TString, ui32>; 
+        struct TEndpointState { 
+            int Index = -1; 
+            int Count = 0; 
+            float LoadFactor = 0; 
+            THashSet<TString> Locations; 
+            THashSet<TString> Services; 
+        }; 
+        THashMap<TEndpointKey, TEndpointState> states; 
+ 
         NKikimrStateStorage::TEndpointBoardEntry entry;
         for (const TString *xpayload : entries) {
             Y_PROTOBUF_SUPPRESS_NODISCARD entry.ParseFromString(*xpayload);
             if (!CheckServices(services, entry))
                 continue;
 
-            if (entry.GetSsl() != sslServer)
-                continue;
-
-            Ydb::Discovery::EndpointInfo *xres;
-
-            auto& state = states[TEndpointKey(entry.GetAddress(), entry.GetPort())];
-            if (state.Index >= 0) {
-                xres = result->mutable_endpoints(state.Index);
-                ++state.Count;
-                // FIXME: do we want a mean or a sum here?
-                // xres->set_load_factor(xres->load_factor() + (entry.GetLoad() - xres->load_factor()) / state.Count);
-                xres->set_load_factor(xres->load_factor() + entry.GetLoad());
-            } else {
-                state.Index = result->endpoints_size();
-                state.Count = 1;
-                xres = result->add_endpoints();
-                xres->set_address(entry.GetAddress());
-                xres->set_port(entry.GetPort());
-                if (entry.GetSsl())
-                    xres->set_ssl(true);
-                xres->set_load_factor(entry.GetLoad());
+            if (entry.GetSsl() != sslServer) 
+                continue; 
+ 
+            Ydb::Discovery::EndpointInfo *xres; 
+ 
+            auto& state = states[TEndpointKey(entry.GetAddress(), entry.GetPort())]; 
+            if (state.Index >= 0) { 
+                xres = result->mutable_endpoints(state.Index); 
+                ++state.Count; 
+                // FIXME: do we want a mean or a sum here? 
+                // xres->set_load_factor(xres->load_factor() + (entry.GetLoad() - xres->load_factor()) / state.Count); 
+                xres->set_load_factor(xres->load_factor() + entry.GetLoad()); 
+            } else { 
+                state.Index = result->endpoints_size(); 
+                state.Count = 1; 
+                xres = result->add_endpoints(); 
+                xres->set_address(entry.GetAddress()); 
+                xres->set_port(entry.GetPort()); 
+                if (entry.GetSsl()) 
+                    xres->set_ssl(true); 
+                xres->set_load_factor(entry.GetLoad()); 
                 xres->set_node_id(entry.GetNodeId());
-                if (entry.AddressesV4Size()) {
-                    xres->mutable_ip_v4()->Reserve(entry.AddressesV4Size());
-                    for (const auto& addr : entry.GetAddressesV4()) {
-                        xres->add_ip_v4(addr);
-                    }
-                }
-                if (entry.AddressesV6Size()) {
-                    xres->mutable_ip_v6()->Reserve(entry.AddressesV6Size());
-                    for (const auto& addr : entry.GetAddressesV6()) {
-                        xres->add_ip_v6(addr);
-                    }
-                }
-                xres->set_ssl_target_name_override(entry.GetTargetNameOverride());
-            }
-
-            if (IsSafeLocationMarker(entry.GetDataCenter())) {
-                if (state.Locations.insert(entry.GetDataCenter()).second) {
-                    if (xres->location().empty()) {
-                        xres->set_location(entry.GetDataCenter());
-                    } else {
-                        xres->set_location(xres->location() + "/" + entry.GetDataCenter());
-                    }
-                }
-            }
-
+                if (entry.AddressesV4Size()) { 
+                    xres->mutable_ip_v4()->Reserve(entry.AddressesV4Size()); 
+                    for (const auto& addr : entry.GetAddressesV4()) { 
+                        xres->add_ip_v4(addr); 
+                    } 
+                } 
+                if (entry.AddressesV6Size()) { 
+                    xres->mutable_ip_v6()->Reserve(entry.AddressesV6Size()); 
+                    for (const auto& addr : entry.GetAddressesV6()) { 
+                        xres->add_ip_v6(addr); 
+                    } 
+                } 
+                xres->set_ssl_target_name_override(entry.GetTargetNameOverride()); 
+            } 
+ 
+            if (IsSafeLocationMarker(entry.GetDataCenter())) { 
+                if (state.Locations.insert(entry.GetDataCenter()).second) { 
+                    if (xres->location().empty()) { 
+                        xres->set_location(entry.GetDataCenter()); 
+                    } else { 
+                        xres->set_location(xres->location() + "/" + entry.GetDataCenter()); 
+                    } 
+                } 
+            } 
+ 
             for (auto &service : entry.GetServices()) {
-                if (state.Services.insert(service).second) {
-                    xres->add_service(service);
-                }
+                if (state.Services.insert(service).second) { 
+                    xres->add_service(service); 
+                } 
             }
         }
 

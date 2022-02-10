@@ -56,7 +56,7 @@ namespace NBlockIO {
             return
                 std::accumulate(Blocks.begin(), Blocks.end(), ui64(0),
                     [](ui64 bytes, const NPageCollection::TLoadedPage& block)
-                        { return bytes + block.Data.size(); });
+                        { return bytes + block.Data.size(); }); 
         }
 
         const EStatus Status;

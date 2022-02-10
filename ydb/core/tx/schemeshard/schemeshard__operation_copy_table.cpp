@@ -70,8 +70,8 @@ public:
                  "CopyTable paritition counts don't match");
         const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
 
-        const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId;
-
+        const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId; 
+ 
         for (ui32 i = 0; i < dstTableInfo->GetPartitions().size(); ++i) {
             TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i].ShardIdx;
             TTabletId srcDatashardId = context.SS->ShardInfos[srcShardIdx].TabletID;
@@ -104,7 +104,7 @@ public:
             THolder<TEvDataShard::TEvProposeTransaction> dstEvent =
                 THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
                                                     context.SS->TabletID(),
-                                                    subDomainPathId,
+                                                    subDomainPathId, 
                                                     context.Ctx.SelfID,
                                                     ui64(OperationId.GetTxId()),
                                                     txBody,
@@ -459,10 +459,10 @@ public:
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "source table contains external blobs, copy operation is not safe so prohibited");
                 return result;
             }
-            if (srcPartitionConfig.GetShadowData()) {
+            if (srcPartitionConfig.GetShadowData()) { 
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot copy tables with enabled ShadowData");
-                return result;
-            }
+                return result; 
+            } 
         }
 
         auto schema = Transaction.GetCreateTable();
@@ -495,30 +495,30 @@ public:
 
         TChannelsBindings channelsBinding;
 
-        bool storePerShardConfig = false;
+        bool storePerShardConfig = false; 
         NKikimrSchemeOp::TPartitionConfig perShardConfig;
-
+ 
         if (context.SS->IsStorageConfigLogic(tableInfo)) {
-            TVector<TStorageRoom> storageRooms;
-            THashMap<ui32, ui32> familyRooms;
-            storageRooms.emplace_back(0);
-
-            if (!context.SS->GetBindingsRooms(dstPath.DomainId(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) {
+            TVector<TStorageRoom> storageRooms; 
+            THashMap<ui32, ui32> familyRooms; 
+            storageRooms.emplace_back(0); 
+ 
+            if (!context.SS->GetBindingsRooms(dstPath.DomainId(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) { 
                 errStr = TString("database doesn't have required storage pools to create tablet with storage config, details: ") + errStr;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
-            tableInfo->SetRoom(storageRooms[0]);
-
-            storePerShardConfig = true;
-            for (const auto& room : storageRooms) {
-                perShardConfig.AddStorageRooms()->CopyFrom(room);
-            }
-            for (const auto& familyRoom : familyRooms) {
-                auto* protoFamily = perShardConfig.AddColumnFamilies();
-                protoFamily->SetId(familyRoom.first);
-                protoFamily->SetRoom(familyRoom.second);
-            }
+            tableInfo->SetRoom(storageRooms[0]); 
+ 
+            storePerShardConfig = true; 
+            for (const auto& room : storageRooms) { 
+                perShardConfig.AddStorageRooms()->CopyFrom(room); 
+            } 
+            for (const auto& familyRoom : familyRooms) { 
+                auto* protoFamily = perShardConfig.AddColumnFamilies(); 
+                protoFamily->SetId(familyRoom.first); 
+                protoFamily->SetRoom(familyRoom.second); 
+            } 
         } else if (context.SS->IsCompatibleChannelProfileLogic(dstPath.DomainId(), tableInfo)) {
             if (!context.SS->GetChannelsBindings(dstPath.DomainId(), tableInfo, channelsBinding, errStr)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
@@ -579,7 +579,7 @@ public:
         Y_VERIFY(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
         context.SS->Tables[newTable->PathId] = tableInfo;
-        context.SS->IncrementPathDbRefCount(newTable->PathId);
+        context.SS->IncrementPathDbRefCount(newTable->PathId); 
 
         if (parent.Base()->HasActiveChanges()) {
             TTxId parentTxId = parent.Base()->PlannedToCreate() ? parent.Base()->CreateTxId : parent.Base()->LastTxId;

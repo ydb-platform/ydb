@@ -15,19 +15,19 @@ namespace NTable {
             Tags.assign(tags.begin(), tags.end());
             Relation = seek;
             Key = TSerializedCellVec(TSerializedCellVec::Serialize(key));
-            StopKey = { };
+            StopKey = { }; 
         }
 
-        void Until(TArrayRef<const TCell> key, bool inclusive)
+        void Until(TArrayRef<const TCell> key, bool inclusive) 
         {
-            Y_VERIFY(Valid, "Until must be called after To");
-            StopKey = TSerializedCellVec(TSerializedCellVec::Serialize(key));
-            StopKeyInclusive = inclusive;
+            Y_VERIFY(Valid, "Until must be called after To"); 
+            StopKey = TSerializedCellVec(TSerializedCellVec::Serialize(key)); 
+            StopKeyInclusive = inclusive; 
         }
 
-        explicit operator bool() const noexcept
+        explicit operator bool() const noexcept 
         {
-            return Valid;
+            return Valid; 
         }
 
         void Clear()
@@ -39,8 +39,8 @@ namespace NTable {
         ESeek Relation = ESeek::Exact;
         TVector<ui32> Tags;
         TSerializedCellVec Key;
-        TSerializedCellVec StopKey;
-        bool StopKeyInclusive = true;
+        TSerializedCellVec StopKey; 
+        bool StopKeyInclusive = true; 
     };
 
 }

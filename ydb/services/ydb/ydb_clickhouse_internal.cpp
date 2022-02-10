@@ -58,15 +58,15 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NGrpc::TLoggerPtr 
     ADD_REQUEST(DescribeTable, DescribeTableRequest, DescribeTableResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvKikhouseDescribeTableRequest(ctx));
     })
-    ADD_REQUEST(CreateSnapshot, CreateSnapshotRequest, CreateSnapshotResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvKikhouseCreateSnapshotRequest(ctx));
-    })
-    ADD_REQUEST(RefreshSnapshot, RefreshSnapshotRequest, RefreshSnapshotResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvKikhouseRefreshSnapshotRequest(ctx));
-    })
-    ADD_REQUEST(DiscardSnapshot, DiscardSnapshotRequest, DiscardSnapshotResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvKikhouseDiscardSnapshotRequest(ctx));
-    })
+    ADD_REQUEST(CreateSnapshot, CreateSnapshotRequest, CreateSnapshotResponse, { 
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvKikhouseCreateSnapshotRequest(ctx)); 
+    }) 
+    ADD_REQUEST(RefreshSnapshot, RefreshSnapshotRequest, RefreshSnapshotResponse, { 
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvKikhouseRefreshSnapshotRequest(ctx)); 
+    }) 
+    ADD_REQUEST(DiscardSnapshot, DiscardSnapshotRequest, DiscardSnapshotResponse, { 
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvKikhouseDiscardSnapshotRequest(ctx)); 
+    }) 
 #undef ADD_REQUEST
 }
 

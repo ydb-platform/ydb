@@ -2,10 +2,10 @@
 
 #include "flat_boot_util.h"
 #include "flat_bio_events.h"
-#include "shared_cache_events.h"
+#include "shared_cache_events.h" 
 #include "util_fmt_logger.h"
 #include "util_fmt_desc.h"
-#include "util_basics.h"
+#include "util_basics.h" 
 #include "util_fmt_abort.h"
 #include <util/system/yassert.h>
 
@@ -83,11 +83,11 @@ namespace NBoot {
         }
 
         template<typename TStep, typename ... TArgs>
-        TSpawned Spawn(TArgs&& ... args)
+        TSpawned Spawn(TArgs&& ... args) 
         {
-            Env->Start(new TStep(this, std::forward<TArgs>(args)...));
+            Env->Start(new TStep(this, std::forward<TArgs>(args)...)); 
 
-            return TSpawned(true);
+            return TSpawned(true); 
         }
 
         template<typename TStep>

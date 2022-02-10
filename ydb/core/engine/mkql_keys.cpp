@@ -161,15 +161,15 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
         toValues[i] = MakeCell(keyColumnTypes[i], data, env);
     }
 
-    bool reverse = false;
-    if (callable.GetInputsCount() > 10) {
-        reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>();
-    }
-
+    bool reverse = false; 
+    if (callable.GetInputsCount() > 10) { 
+        reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>(); 
+    } 
+ 
     TTableRange range(TConstArrayRef<TCell>(fromValues.data(), fromValues.size()),
         inclusiveFrom, TConstArrayRef<TCell>(toValues.data(), toValues.size()), inclusiveTo, point);
     THolder<TKeyDesc> desc(
-        new TKeyDesc(tableId, range, TKeyDesc::ERowOperation::Read, keyColumnTypes, columns, itemsLimit, bytesLimit, reverse));
+        new TKeyDesc(tableId, range, TKeyDesc::ERowOperation::Read, keyColumnTypes, columns, itemsLimit, bytesLimit, reverse)); 
     desc->ReadTarget = ExtractFlatReadTarget(callable.GetInput(8));
     return desc;
 }
@@ -188,7 +188,7 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
         TKeyDesc::TColumnOp& op = columns[i];
         op.Column = columnId;
         op.InplaceUpdateMode = 0;
-        op.ImmediateUpdateSize = 0;
+        op.ImmediateUpdateSize = 0; 
         if (cmd.GetStaticType()->IsVoid()) {
             // erase
             op.Operation = TKeyDesc::EColumnOperation::Set;
@@ -207,11 +207,11 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
             op.ExpectedType = UnpackOptionalData(valueNode, isOptional)->GetSchemeType();
             MKQL_ENSURE(!isOptional, "Expected data type for inplace update, not an optional");
             op.InplaceUpdateMode = mode;
-
-            NUdf::TUnboxedValue data;
-            if (ExtractKeyData(valueNode, isOptional, data)) {
-                op.ImmediateUpdateSize = MakeCell(op.ExpectedType, data, env, false).Size();
-            }
+ 
+            NUdf::TUnboxedValue data; 
+            if (ExtractKeyData(valueNode, isOptional, data)) { 
+                op.ImmediateUpdateSize = MakeCell(op.ExpectedType, data, env, false).Size(); 
+            } 
         }
         else {
              // update
@@ -219,11 +219,11 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
              bool isOptional;
              op.ExpectedType = UnpackOptionalData(cmd, isOptional)->GetSchemeType();
              MKQL_ENSURE(op.ExpectedType != 0, "Null type is not allowed");
-
-            NUdf::TUnboxedValue data;
-            if (ExtractKeyData(cmd, isOptional, data)) {
-                op.ImmediateUpdateSize = MakeCell(op.ExpectedType, data, env, false).Size();
-            }
+ 
+            NUdf::TUnboxedValue data; 
+            if (ExtractKeyData(cmd, isOptional, data)) { 
+                op.ImmediateUpdateSize = MakeCell(op.ExpectedType, data, env, false).Size(); 
+            } 
         }
     }
 

@@ -77,7 +77,7 @@ void TGRpcServer::Start() {
     builder.SetMaxReceiveMessageSize(Options_.MaxMessageSize);
     builder.SetMaxSendMessageSize(Options_.MaxMessageSize);
     for (IGRpcServicePtr service : Services_) {
-        service->SetServerOptions(Options_);
+        service->SetServerOptions(Options_); 
         builder.RegisterService(service->GetService());
         service->SetGlobalLimiterHandle(&Limiter_);
     }
@@ -192,14 +192,14 @@ void TGRpcServer::Stop() {
     }
 
     for (ui64 attempt = 0; ; ++attempt) {
-        bool unsafe = false;
+        bool unsafe = false; 
         size_t infly = 0;
         for (auto& service : Services_) {
-            unsafe |= service->IsUnsafeToShutdown();
-            infly += service->RequestsInProgress();
+            unsafe |= service->IsUnsafeToShutdown(); 
+            infly += service->RequestsInProgress(); 
         }
 
-        if (!unsafe && !infly)
+        if (!unsafe && !infly) 
             break;
 
         auto spent = (TInstant::Now() - now).SecondsFloat();
@@ -208,7 +208,7 @@ void TGRpcServer::Stop() {
             Cerr << "GRpc shutdown warning: left infly: " << infly << ", spent: " << spent << " sec" <<  Endl;
         }
 
-        if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat())
+        if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat()) 
             break;
         Sleep(TDuration::MilliSeconds(10));
     }

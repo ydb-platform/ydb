@@ -42,28 +42,28 @@ namespace NBoot {
         template<typename TStep, typename ... TArgs>
         void Spawn(TArgs&& ... args)
         {
-            Start(new TStep(this, std::forward<TArgs>(args)...));
+            Start(new TStep(this, std::forward<TArgs>(args)...)); 
         }
 
         void Execute() noexcept
         {
             for (; Queue; Queue.pop_front()) {
-                auto order = std::move(Queue.front());
+                auto order = std::move(Queue.front()); 
 
-                switch (order.Op) {
-                    case EOp::Start: {
-                        *const_cast<IEnv**>(&order.Step->Env) = this;
+                switch (order.Op) { 
+                    case EOp::Start: { 
+                        *const_cast<IEnv**>(&order.Step->Env) = this; 
 
-                        order.Step->Start();
-                        break;
-                    }
-
-                    case EOp::Finish: {
+                        order.Step->Start(); 
+                        break; 
+                    } 
+ 
+                    case EOp::Finish: { 
                         TIntrusivePtr<IStep> owner = order.Step->Owner;
-
-                        owner->HandleStep(std::move(order.Step));
-                        break;
-                    }
+ 
+                        owner->HandleStep(std::move(order.Step)); 
+                        break; 
+                    } 
                 }
             }
         }
@@ -74,34 +74,34 @@ namespace NBoot {
         void Start(TIntrusivePtr<IStep> step) noexcept override
         {
             Y_VERIFY(step->Env == nullptr, "IStep is already fired");
-            Y_VERIFY(step->Owner, "Start called on step without an owner");
+            Y_VERIFY(step->Owner, "Start called on step without an owner"); 
 
-            Queue.emplace_back(EOp::Start, std::move(step));
+            Queue.emplace_back(EOp::Start, std::move(step)); 
         }
 
         void Finish(TIntrusivePtr<IStep> step) noexcept override
         {
-            Y_VERIFY(step, "Finish called without a step");
-            Y_VERIFY(step->Owner, "Finish called on step without an owner");
-
-            Queue.emplace_back(EOp::Finish, std::move(step));
+            Y_VERIFY(step, "Finish called without a step"); 
+            Y_VERIFY(step->Owner, "Finish called on step without an owner"); 
+ 
+            Queue.emplace_back(EOp::Finish, std::move(step)); 
         }
 
     private:
-        enum class EOp {
-            Start,
-            Finish,
-        };
-
+        enum class EOp { 
+            Start, 
+            Finish, 
+        }; 
+ 
         struct TOrder {
             TOrder(EOp op, TIntrusivePtr<IStep> step)
-                : Op(op)
+                : Op(op) 
                 , Step(std::move(step))
             {
 
             }
 
-            const EOp Op;
+            const EOp Op; 
             TIntrusivePtr<IStep> Step;
         };
 

@@ -676,9 +676,9 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         for (auto& phase : stats.query_phases()) {
             for (auto& table : phase.table_access()) {
-                if (table.has_reads()) {
-                    UNIT_ASSERT_VALUES_EQUAL(table.reads().rows(), 1);
-                }
+                if (table.has_reads()) { 
+                    UNIT_ASSERT_VALUES_EQUAL(table.reads().rows(), 1); 
+                } 
             }
         }
 

@@ -48,18 +48,18 @@ public:
     void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
 
     EResult Validate() {
-        if (Info.Loaded)
+        if (Info.Loaded) 
             return EResult::Ok;
         Y_VERIFY(Engine);
         return Engine->Validate(Info);
     }
 
-    EResult ReValidateKeys() {
-        Y_VERIFY(Info.Loaded);
-        Y_VERIFY(Engine);
-        return Engine->ValidateKeys(Info);
-    }
-
+    EResult ReValidateKeys() { 
+        Y_VERIFY(Info.Loaded); 
+        Y_VERIFY(Engine); 
+        return Engine->ValidateKeys(Info); 
+    } 
+ 
     void AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range,
                       const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
 
@@ -90,10 +90,10 @@ public:
     const TValidationInfo& TxInfo() const { return Info; }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
-    void SetWriteVersion(TRowVersion writeVersion);
+    void SetWriteVersion(TRowVersion writeVersion); 
     void SetReadVersion(TRowVersion readVersion);
     void SetIsImmediateTx();
-
+ 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
 
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }

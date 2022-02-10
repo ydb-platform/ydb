@@ -40,9 +40,9 @@ namespace NTest {
                 pass ? TTestEnv::Locate(part, ref, lob) : TResult{need, nullptr };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override 
         {
-            return Pages ? TTestEnv::TryGetPage(part, ref, groupId) : nullptr;
+            return Pages ? TTestEnv::TryGetPage(part, ref, groupId) : nullptr; 
         }
 
         bool Pages = false;
@@ -96,14 +96,14 @@ namespace NTest {
             }
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override 
         {
-            auto pass = ShouldPass((const void*)part, ref | (ui64(groupId.Raw()) << 32));
+            auto pass = ShouldPass((const void*)part, ref | (ui64(groupId.Raw()) << 32)); 
 
-            return pass ? TTestEnv::TryGetPage(part, ref, groupId) : nullptr;
+            return pass ? TTestEnv::TryGetPage(part, ref, groupId) : nullptr; 
         }
 
-        bool ShouldPass(const void *token, ui64 id)
+        bool ShouldPass(const void *token, ui64 id) 
         {
             const auto pass = IsRecent({ token, id }) || AmILucky();
 
@@ -138,7 +138,7 @@ namespace NTest {
 
     class TForwardEnv : public IPages {
         using TSlot = ui32;
-        using TSlotVec = TSmallVec<TSlot>;
+        using TSlotVec = TSmallVec<TSlot>; 
 
         struct TPageLoadingQueue : private NFwd::IPageLoadingQueue {
             TPageLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 room, TAutoPtr<NFwd::IPageLoadingLogic> line)
@@ -174,7 +174,7 @@ namespace NTest {
             {
                 Fetch.push_back(pageId);
 
-                return Store->GetPage(Room, pageId)->size();
+                return Store->GetPage(Room, pageId)->size(); 
             }
 
         private:
@@ -215,7 +215,7 @@ namespace NTest {
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
-
+ 
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
                 Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
@@ -227,14 +227,14 @@ namespace NTest {
             return Get(part, room).DoLoad(ref, AheadLo, AheadHi);
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override 
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
-
+ 
             Y_VERIFY(groupId.Index < partStore->Store->GetGroupCount());
-
+ 
             ui32 room = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
-            return Get(part, room).DoLoad(pageId, AheadLo, AheadHi).Page;
+            return Get(part, room).DoLoad(pageId, AheadLo, AheadHi).Page; 
         }
 
     private:
@@ -242,28 +242,28 @@ namespace NTest {
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
-            auto& slots = Parts[part];
-            if (slots.empty()) {
+            auto& slots = Parts[part]; 
+            if (slots.empty()) { 
                 slots.reserve(partStore->Store->GetRoomCount() + part->HistoricIndexes.size());
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
                     if (room < partStore->Store->GetGroupCount()) {
-                        NPage::TGroupId groupId(room);
+                        NPage::TGroupId groupId(room); 
                         slots.push_back(Settle(partStore, room, new NFwd::TCache(partStore->GetGroupIndex(groupId))));
                     } else if (room == partStore->Store->GetOuterRoom()) {
                         slots.push_back(Settle(partStore, room, MakeOuter(partStore)));
                     } else if (room == partStore->Store->GetExternRoom()) {
                         slots.push_back(Settle(partStore, room, MakeExtern(partStore)));
-                    } else {
-                        Y_FAIL("Don't know how to work with room %" PRIu32, room);
-                    }
-                }
-                for (ui32 group : xrange(part->HistoricIndexes.size())) {
-                    NPage::TGroupId groupId(group, true);
+                    } else { 
+                        Y_FAIL("Don't know how to work with room %" PRIu32, room); 
+                    } 
+                } 
+                for (ui32 group : xrange(part->HistoricIndexes.size())) { 
+                    NPage::TGroupId groupId(group, true); 
                     slots.push_back(Settle(partStore, group, new NFwd::TCache(partStore->GetGroupIndex(groupId))));
-                }
-            }
+                } 
+            } 
 
-            Y_VERIFY(room < slots.size());
+            Y_VERIFY(room < slots.size()); 
 
             return Queues.at(slots[room]);
         }
@@ -286,7 +286,7 @@ namespace NTest {
 
                 TVector<ui32> edges(large->Stats().Tags.size(), Edge);
 
-                return new NFwd::TBlobs(large, TSlices::All(), edges, false);
+                return new NFwd::TBlobs(large, TSlices::All(), edges, false); 
             } else
                 return nullptr;
         }
@@ -296,7 +296,7 @@ namespace NTest {
             if (auto &small = part->Small) {
                 TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
 
-                return new NFwd::TBlobs(small, TSlices::All(), edge, false);
+                return new NFwd::TBlobs(small, TSlices::All(), edge, false); 
             } else
                 return nullptr;
         }
@@ -306,7 +306,7 @@ namespace NTest {
         const ui64 AheadHi = 0;
         const ui32 Edge = Max<ui32>();
         TDeque<TPageLoadingQueue> Queues;
-        TMap<const TPart*, TSlotVec> Parts;
+        TMap<const TPart*, TSlotVec> Parts; 
         TAutoPtr<NFwd::TMemTableHandler> MemTable;   /* Wrapper for memable blobs    */
     };
 

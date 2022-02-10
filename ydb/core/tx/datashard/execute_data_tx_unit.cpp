@@ -36,77 +36,77 @@ TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard,
 TExecuteDataTxUnit::~TExecuteDataTxUnit() {
 }
 
-bool TExecuteDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
-        return true;
-    }
-
-    if (DataShard.IsStopping()) {
-        // Avoid doing any new work when datashard is stopping
-        return false;
-    }
-
-    return !op->HasRuntimeConflicts();
+bool TExecuteDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const { 
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) { 
+        return true; 
+    } 
+ 
+    if (DataShard.IsStopping()) { 
+        // Avoid doing any new work when datashard is stopping 
+        return false; 
+    } 
+ 
+    return !op->HasRuntimeConflicts(); 
 }
 
 EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext& txc,
-                                             const TActorContext& ctx)
-{
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
-        return EExecutionStatus::Executed;
-    }
-
-    // We remember current time now, but will only count it when transaction succeeds
-    TDuration waitExecuteLatency = op->GetCurrentElapsed();
-    TDuration waitTotalLatency = op->GetTotalElapsed();
-
-    if (op->IsImmediate()) {
-        // Every time we execute immediate transaction we may choose a new mvcc version
-        op->MvccReadWriteVersion.reset();
-    }
-
+                                             const TActorContext& ctx) 
+{ 
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) { 
+        return EExecutionStatus::Executed; 
+    } 
+ 
+    // We remember current time now, but will only count it when transaction succeeds 
+    TDuration waitExecuteLatency = op->GetCurrentElapsed(); 
+    TDuration waitTotalLatency = op->GetTotalElapsed(); 
+ 
+    if (op->IsImmediate()) { 
+        // Every time we execute immediate transaction we may choose a new mvcc version 
+        op->MvccReadWriteVersion.reset(); 
+    } 
+ 
     TSetupSysLocks guardLocks(op, DataShard);
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-    if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
-            case ERestoreDataStatus::Ok:
-                break;
+    if (tx->IsTxDataReleased()) { 
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) { 
+            case ERestoreDataStatus::Ok: 
+                break; 
 
-            case ERestoreDataStatus::Restart:
-                return EExecutionStatus::Restart;
-
-            case ERestoreDataStatus::Error:
-                // For immediate transactions we want to translate this into a propose failure
-                if (op->IsImmediate()) {
-                    const auto& dataTx = tx->GetDataTx();
-                    Y_VERIFY(!dataTx->Ready());
-                    op->SetAbortedFlag();
-                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
-                    op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
-                    return EExecutionStatus::Executed;
-                }
-
-                // For planned transactions errors are not expected
-                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
-        }
-    }
-
+            case ERestoreDataStatus::Restart: 
+                return EExecutionStatus::Restart; 
+ 
+            case ERestoreDataStatus::Error: 
+                // For immediate transactions we want to translate this into a propose failure 
+                if (op->IsImmediate()) { 
+                    const auto& dataTx = tx->GetDataTx(); 
+                    Y_VERIFY(!dataTx->Ready()); 
+                    op->SetAbortedFlag(); 
+                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR); 
+                    op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors()); 
+                    return EExecutionStatus::Executed; 
+                } 
+ 
+                // For planned transactions errors are not expected 
+                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str()); 
+        } 
+    } 
+ 
     IEngineFlat* engine = tx->GetDataTx()->GetEngine();
     Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
-    if (op->IsImmediate() && !tx->ReValidateKeys()) {
-        // Immediate transactions may be reordered with schema changes and become invalid
-        const auto& dataTx = tx->GetDataTx();
-        Y_VERIFY(!dataTx->Ready());
-        op->SetAbortedFlag();
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
-        op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
-        return EExecutionStatus::Executed;
-    }
-
+    if (op->IsImmediate() && !tx->ReValidateKeys()) { 
+        // Immediate transactions may be reordered with schema changes and become invalid 
+        const auto& dataTx = tx->GetDataTx(); 
+        Y_VERIFY(!dataTx->Ready()); 
+        op->SetAbortedFlag(); 
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR); 
+        op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors()); 
+        return EExecutionStatus::Executed; 
+    } 
+ 
     // TODO: cancel tx in special execution unit.
     if (tx->GetDataTx()->CheckCancelled())
         engine->Cancel();
@@ -123,15 +123,15 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     }
 
     try {
-        try {
-            ExecuteDataTx(op, txc, ctx);
-        } catch (const TNotReadyTabletException&) {
-            // We want to try pinning (actually precharging) all required pages
-            // before restarting the transaction, to minimize future restarts.
-            ui64 pageFaultCount = tx->IncrementPageFaultCount();
-            engine->PinPages(pageFaultCount);
-            throw;
-        }
+        try { 
+            ExecuteDataTx(op, txc, ctx); 
+        } catch (const TNotReadyTabletException&) { 
+            // We want to try pinning (actually precharging) all required pages 
+            // before restarting the transaction, to minimize future restarts. 
+            ui64 pageFaultCount = tx->IncrementPageFaultCount(); 
+            engine->PinPages(pageFaultCount); 
+            throw; 
+        } 
     } catch (const TMemoryLimitExceededException&) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
             << " exceeded memory limit " << txc.GetMemoryLimit()
@@ -158,10 +158,10 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Restart;
     }
 
-    DataShard.IncCounter(COUNTER_WAIT_EXECUTE_LATENCY_MS, waitExecuteLatency.MilliSeconds());
-    DataShard.IncCounter(COUNTER_WAIT_TOTAL_LATENCY_MS, waitTotalLatency.MilliSeconds());
-    op->ResetCurrentTimer();
-
+    DataShard.IncCounter(COUNTER_WAIT_EXECUTE_LATENCY_MS, waitExecuteLatency.MilliSeconds()); 
+    DataShard.IncCounter(COUNTER_WAIT_TOTAL_LATENCY_MS, waitTotalLatency.MilliSeconds()); 
+    op->ResetCurrentTimer(); 
+ 
     if (op->IsReadOnly())
         return EExecutionStatus::Executed;
 
@@ -238,7 +238,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         result->SetTxResult(engine->GetShardReply(DataShard.TabletID()));
 
         if (op->IsImmediate() && !op->IsReadOnly())
-            DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
+            DataShard.PromoteCompleteEdge(writeVersion.Step, txc); 
 
         if (auto changes = tx->GetDataTx()->GetCollectedChanges()) {
             op->ChangeRecords().reserve(changes.size());

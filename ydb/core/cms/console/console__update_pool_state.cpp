@@ -55,9 +55,9 @@ public:
         Self->DbUpdatePoolState(Tenant, Pool, State, AllocatedNumGroups, txc, ctx);
 
         // If new pool was added then subdomain version should be incremented.
-        if (Pool->State == TStoragePool::NOT_ALLOCATED && AllocatedNumGroups > 0 ||
-            Pool->State == TStoragePool::NOT_UPDATED && AllocatedNumGroups > 0 && Pool->AllocatedNumGroups == 0)
-        {
+        if (Pool->State == TStoragePool::NOT_ALLOCATED && AllocatedNumGroups > 0 || 
+            Pool->State == TStoragePool::NOT_UPDATED && AllocatedNumGroups > 0 && Pool->AllocatedNumGroups == 0) 
+        { 
             ++SubdomainVersion;
             Self->DbUpdateSubdomainVersion(Tenant, SubdomainVersion, txc, ctx);
         }

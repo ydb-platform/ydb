@@ -28,9 +28,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
 
     alterData->PartitionConfigFull().CopyFrom(op.GetPartitionConfig());
-
+ 
     TColumnFamiliesMerger columnFamilyMerger(alterData->PartitionConfigFull());
-
+ 
     if (source) {
         alterData->AlterVersion = source->AlterVersion + 1;
         alterData->NextColumnId = source->NextColumnId;
@@ -51,7 +51,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
     }
 
-    for (auto& col : *op.MutableColumns()) {
+    for (auto& col : *op.MutableColumns()) { 
         TString colName = col.GetName();
 
         if (colName.size() > limits.MaxTableColumnNameLength) {
@@ -74,10 +74,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             columnFamily = columnFamilyMerger.Get(col.GetFamily(), col.GetFamilyName(), errStr);
         } else if (col.HasFamily()) {
             columnFamily = columnFamilyMerger.Get(col.GetFamily(), errStr);
-        } else if (col.HasFamilyName()) {
+        } else if (col.HasFamilyName()) { 
             columnFamily = columnFamilyMerger.AddOrGet(col.GetFamilyName(), errStr);
-        }
-
+        } 
+ 
         if ((col.HasFamily() || col.HasFamilyName()) && !columnFamily) {
             return nullptr;
         }
@@ -90,7 +90,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (col.HasType()) {
+            if (col.HasType()) { 
                 errStr = Sprintf("Cannot alter type for column '%s'", colName.data());
                 return nullptr;
             }
@@ -101,10 +101,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
-                errStr = Sprintf("Cannot alter default for column '%s'", colName.c_str());
-                return nullptr;
-            }
-
+                errStr = Sprintf("Cannot alter default for column '%s'", colName.c_str()); 
+                return nullptr; 
+            } 
+ 
             ui32 colId = colName2Id[colName];
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = source->Columns[colId];
@@ -115,11 +115,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (source && !col.HasType()) {
-                errStr = Sprintf("Column '%s' cannot be altered (does not exist)", colName.c_str());
-                return nullptr;
-            }
-
+            if (source && !col.HasType()) { 
+                errStr = Sprintf("Column '%s' cannot be altered (does not exist)", colName.c_str()); 
+                return nullptr; 
+            } 
+ 
             if (!type) {
                 errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
                 return nullptr;
@@ -137,11 +137,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (col.HasDefaultFromSequence() && !localSequences.contains(col.GetDefaultFromSequence())) {
-                errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
-                return nullptr;
-            }
-
+            if (col.HasDefaultFromSequence() && !localSequences.contains(col.GetDefaultFromSequence())) { 
+                errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str()); 
+                return nullptr; 
+            } 
+ 
             alterData->NextColumnId = Max(colId + 1, alterData->NextColumnId);
 
             colName2Id[colName] = colId;
@@ -151,16 +151,16 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column.NotNull = col.GetNotNull();
             if (source)
                 column.CreateVersion = alterData->AlterVersion;
-            if (col.HasDefaultFromSequence()) {
-                column.DefaultKind = ETableColumnDefaultKind::FromSequence;
-                column.DefaultValue = col.GetDefaultFromSequence();
-            }
+            if (col.HasDefaultFromSequence()) { 
+                column.DefaultKind = ETableColumnDefaultKind::FromSequence; 
+                column.DefaultValue = col.GetDefaultFromSequence(); 
+            } 
         }
     }
 
     for (const auto& c : alterData->Columns) {
-        if (c.second.Family != 0 && keys.contains(c.second.Id)) {
-            errStr = Sprintf("Key column '%s' must belong to the default family", c.second.Name.data());
+        if (c.second.Family != 0 && keys.contains(c.second.Id)) { 
+            errStr = Sprintf("Key column '%s' must belong to the default family", c.second.Name.data()); 
             return nullptr;
         }
     }
@@ -237,11 +237,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
         if (source && colId < source->NextColumnId && !keys.contains(colId)) {
-            errStr = Sprintf("Cannot add existing column '%s' to key", keyName.data());
+            errStr = Sprintf("Cannot add existing column '%s' to key", keyName.data()); 
             return nullptr;
         }
-        if (column.Family != 0) {
-            errStr = Sprintf("Key column '%s' must belong to the default family", keyName.data());
+        if (column.Family != 0) { 
+            errStr = Sprintf("Key column '%s' must belong to the default family", keyName.data()); 
             return nullptr;
         }
         column.KeyOrder = keyOrder;
@@ -296,9 +296,9 @@ TVector<ui32> TTableInfo::FillDescription(TPathElement::TPtr pathInfo) {
 
         for (auto& c : Columns) {
             const TColumn& column = c.second;
-            if (column.IsDropped()) {
-                continue;
-            }
+            if (column.IsDropped()) { 
+                continue; 
+            } 
             auto colDescr = TableDescription.AddColumns();
             colDescr->SetName(column.Name);
             colDescr->SetId(column.Id);
@@ -313,7 +313,7 @@ TVector<ui32> TTableInfo::FillDescription(TPathElement::TPtr pathInfo) {
     return keyColumnIds;
 }
 
-namespace {
+namespace { 
 template<class TProto, class TGetId, class TPreferred>
 inline THashMap<ui32, size_t> DeduplicateRepeatedById(
     google::protobuf::RepeatedPtrField<TProto>* items,
@@ -321,14 +321,14 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
     const TPreferred& preferred)
 {
     Y_VERIFY(items, "Unexpected nullptr items");
-
+ 
     int size = items->size();
     THashMap<ui32, size_t> posById;
-
+ 
     if (size > 0) {
         posById[getId(items->Get(0))] = 0;
     }
-
+ 
     if (size > 1) {
         // For each item find the correct position
         // We want items sorted in their first-seen order
@@ -341,24 +341,24 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
                 int existing = it->second;
                 if (preferred(items->Get(existing), items->Get(src))) {
                     items->SwapElements(existing, src);
-                }
+                } 
             } else {
                 if (dst != src) {
                     items->SwapElements(dst, src);
                 }
                 posById[id] = dst++;
-            }
+            } 
         }
-
+ 
         if (dst < size) {
             items->Truncate(dst);
-        }
-    }
-
+        } 
+    } 
+ 
     return posById;
-}
-}
-
+} 
+} 
+ 
 NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData) {
     NKikimrSchemeOp::TPartitionConfig cfg;
 
@@ -603,44 +603,44 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         const auto& familyName = dstFamily.GetName();
 
         if (!changedCFamilies.insert(familyId).second) {
-            errDesr = TStringBuilder()
+            errDesr = TStringBuilder() 
                 << "Multiple changes for the same column family are not allowed. ColumnFamily id: " << familyId << " name: " << familyName;
             return false;
         }
 
         if (changesFamily.HasRoom() || changesFamily.HasCodec() || changesFamily.HasInMemory()) {
-            errDesr = TStringBuilder()
+            errDesr = TStringBuilder() 
                 << "Deprecated parameters in column family. ColumnFamily id: " << familyId << " name: " << familyName;
-            return false;
+            return false; 
         }
 
         if (familyId != 0) {
-            const bool allowColumnFamilies = (
+            const bool allowColumnFamilies = ( 
                 KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES ||
                 AppData()->AllowColumnFamiliesForTest);
-            if (!allowColumnFamilies) {
-                errDesr = TStringBuilder()
-                    << "Server support for column families is not yet available";
-                return false;
-            }
+            if (!allowColumnFamilies) { 
+                errDesr = TStringBuilder() 
+                    << "Server support for column families is not yet available"; 
+                return false; 
+            } 
             if (changesFamily.HasStorageConfig()) {
                 if (changesFamily.GetStorageConfig().HasDataThreshold() ||
                     changesFamily.GetStorageConfig().HasExternalThreshold() ||
                     changesFamily.GetStorageConfig().HasSysLog() ||
                     changesFamily.GetStorageConfig().HasLog() ||
                     changesFamily.GetStorageConfig().HasExternal())
-                {
-                    errDesr = TStringBuilder()
+                { 
+                    errDesr = TStringBuilder() 
                         << "Unsupported StorageConfig settings found. Column Family id: " << familyId << " name: " << familyName;
-                    return false;
-                }
-            }
+                    return false; 
+                } 
+            } 
             if (changesFamily.HasStorage()) {
-                errDesr = TStringBuilder()
+                errDesr = TStringBuilder() 
                     << "Deprecated Storage parameter in column family. ColumnFamily id: " << familyId << " name: " << familyName;
-                return false;
-            }
-        }
+                return false; 
+            } 
+        } 
 
         if (changesFamily.HasColumnCodec()) {
             if (changesFamily.GetColumnCodec() == NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) {
@@ -661,31 +661,31 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
 
         if (changesFamily.HasStorageConfig()) {
             const auto& srcStorage = changesFamily.GetStorageConfig();
-            auto& dstStorage = *dstFamily.MutableStorageConfig();
-
-            if (srcStorage.HasSysLog()) {
-                dstStorage.MutableSysLog()->CopyFrom(srcStorage.GetSysLog());
-            }
-
-            if (srcStorage.HasLog()) {
-                dstStorage.MutableLog()->CopyFrom(srcStorage.GetLog());
-            }
-
-            if (srcStorage.HasData()) {
-                dstStorage.MutableData()->CopyFrom(srcStorage.GetData());
-            }
-
-            if (srcStorage.HasExternal()) {
-                dstStorage.MutableExternal()->CopyFrom(srcStorage.GetExternal());
-            }
-
-            if (srcStorage.HasDataThreshold()) {
-                dstStorage.SetDataThreshold(srcStorage.GetDataThreshold());
-            }
-
-            if (srcStorage.HasExternalThreshold()) {
-                dstStorage.SetExternalThreshold(srcStorage.GetExternalThreshold());
-            }
+            auto& dstStorage = *dstFamily.MutableStorageConfig(); 
+ 
+            if (srcStorage.HasSysLog()) { 
+                dstStorage.MutableSysLog()->CopyFrom(srcStorage.GetSysLog()); 
+            } 
+ 
+            if (srcStorage.HasLog()) { 
+                dstStorage.MutableLog()->CopyFrom(srcStorage.GetLog()); 
+            } 
+ 
+            if (srcStorage.HasData()) { 
+                dstStorage.MutableData()->CopyFrom(srcStorage.GetData()); 
+            } 
+ 
+            if (srcStorage.HasExternal()) { 
+                dstStorage.MutableExternal()->CopyFrom(srcStorage.GetExternal()); 
+            } 
+ 
+            if (srcStorage.HasDataThreshold()) { 
+                dstStorage.SetDataThreshold(srcStorage.GetDataThreshold()); 
+            } 
+ 
+            if (srcStorage.HasExternalThreshold()) { 
+                dstStorage.SetExternalThreshold(srcStorage.GetExternalThreshold()); 
+            } 
         }
     }
 
@@ -835,22 +835,22 @@ bool TPartitionConfigMerger::VerifyCreateParams(
         return false;
     }
 
-    bool hasStorageConfig = false;
-    bool hasAuxilaryFamilies = false;
+    bool hasStorageConfig = false; 
+    bool hasAuxilaryFamilies = false; 
 
     for (const auto& family : config.GetColumnFamilies()) {
         ui32 fId = family.GetId();
-        if (fId == 0) {
-            hasStorageConfig = family.HasStorageConfig();
-        } else {
-            hasAuxilaryFamilies = true;
+        if (fId == 0) { 
+            hasStorageConfig = family.HasStorageConfig(); 
+        } else { 
+            hasAuxilaryFamilies = true; 
         }
-    }
+    } 
 
-    if (hasAuxilaryFamilies && !hasStorageConfig) {
-        errDescr = TStringBuilder()
+    if (hasAuxilaryFamilies && !hasStorageConfig) { 
+        errDescr = TStringBuilder() 
                 << "Column families require StorageConfig specification";
-        return false;
+        return false; 
     }
 
     for (const auto& family : config.GetColumnFamilies()) {
@@ -871,9 +871,9 @@ bool TPartitionConfigMerger::VerifyCreateParams(
     }
 
     if (!VerifyCompactionPolicy(config.GetCompactionPolicy(), errDescr)) {
-        return false;
-    }
-
+        return false; 
+    } 
+ 
     return true;
 }
 
@@ -898,22 +898,22 @@ bool TPartitionConfigMerger::VerifyAlterParams(
 
 
     if (dstConfig.GetShadowData() && !srcConfig.GetShadowData()) {
-        errDescr = TStringBuilder() << "Cannot enable ShadowData after table is created";
-        return false;
-    }
-
+        errDescr = TStringBuilder() << "Cannot enable ShadowData after table is created"; 
+        return false; 
+    } 
+ 
     if (dstConfig.HasChannelProfileId()) {
         for (const auto& family : dstConfig.GetColumnFamilies()) {
-            if (family.HasStorageConfig()) {
-                errDescr = TStringBuilder()
+            if (family.HasStorageConfig()) { 
+                errDescr = TStringBuilder() 
                         << "Migration from profile id by storage config is not allowed, was "
                         << srcConfig.GetChannelProfileId() << ", asks storage config";
-                return false;
-            }
+                return false; 
+            } 
         }
 
         if (srcConfig.GetChannelProfileId() != dstConfig.GetChannelProfileId()) {
-            errDescr = TStringBuilder()
+            errDescr = TStringBuilder() 
                     << "Profile modification is not allowed, was "
                     << srcConfig.GetChannelProfileId()
                     << ", asks "
@@ -924,55 +924,55 @@ bool TPartitionConfigMerger::VerifyAlterParams(
 
     const NKikimrSchemeOp::TStorageConfig* wasStorageConfig = nullptr;
     for (const auto& family : srcConfig.GetColumnFamilies()) {
-        if (family.GetId() == 0 && family.HasStorageConfig()) {
-            wasStorageConfig = &family.GetStorageConfig();
-            break;
-        }
-    }
+        if (family.GetId() == 0 && family.HasStorageConfig()) { 
+            wasStorageConfig = &family.GetStorageConfig(); 
+            break; 
+        } 
+    } 
 
     const NKikimrSchemeOp::TStorageConfig* isStorageConfig = nullptr;
     for (const auto& family : dstConfig.GetColumnFamilies()) {
-        if (family.GetId() == 0 && family.HasStorageConfig()) {
-            isStorageConfig = &family.GetStorageConfig();
-            break;
-        }
-    }
-
+        if (family.GetId() == 0 && family.HasStorageConfig()) { 
+            isStorageConfig = &family.GetStorageConfig(); 
+            break; 
+        } 
+    } 
+ 
     if (wasStorageConfig) {
-        Y_VERIFY(isStorageConfig); // by inherit logic
+        Y_VERIFY(isStorageConfig); // by inherit logic 
 
-        auto& srcStorage = *wasStorageConfig;
-        auto& cfgStorage = *isStorageConfig;
+        auto& srcStorage = *wasStorageConfig; 
+        auto& cfgStorage = *isStorageConfig; 
 
-        // SysLog and Log cannot be reassigned
-        if (srcStorage.HasSysLog() != cfgStorage.HasSysLog() ||
+        // SysLog and Log cannot be reassigned 
+        if (srcStorage.HasSysLog() != cfgStorage.HasSysLog() || 
                 srcStorage.HasLog() != cfgStorage.HasLog() ||
                 !IsEquivalent(srcStorage.GetSysLog(), cfgStorage.GetSysLog()) ||
                 !IsEquivalent(srcStorage.GetLog(), cfgStorage.GetLog()))
         {
             errDescr = TStringBuilder()
-                    << "Incompatible alter of storage config in default column family denied."
-                    << " Data either missing or different in request."
+                    << "Incompatible alter of storage config in default column family denied." 
+                    << " Data either missing or different in request." 
                     << " Was '" << srcStorage.ShortDebugString()
                     << "', in request '" << cfgStorage.ShortDebugString() << "'";
             return false;
         }
-
-        if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-            // When feature flag is not enabled we don't allow changes to data channels
-            // This is so we stay compatible without surprises during migration periods
-            if (srcStorage.HasData() != cfgStorage.HasData() ||
+ 
+        if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) { 
+            // When feature flag is not enabled we don't allow changes to data channels 
+            // This is so we stay compatible without surprises during migration periods 
+            if (srcStorage.HasData() != cfgStorage.HasData() || 
                     srcStorage.HasExternal() != cfgStorage.HasExternal() ||
                     !IsEquivalent(srcStorage.GetData(), cfgStorage.GetData()) ||
                     !IsEquivalent(srcStorage.GetExternal(), cfgStorage.GetExternal()))
-            {
-                errDescr = TStringBuilder()
+            { 
+                errDescr = TStringBuilder() 
                         << "Changing column family storage is currently disabled on the server."
                         << " Was '" << srcStorage.ShortDebugString()
                         << "', in request '" << cfgStorage.ShortDebugString() << "'";
-                return false;
-            }
-        }
+                return false; 
+            } 
+        } 
     }
 
     if (isStorageConfig) {
@@ -983,75 +983,75 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         }
     }
 
-    // Verify auxilary families
-    bool srcFamiliesBuilt = false;
+    // Verify auxilary families 
+    bool srcFamiliesBuilt = false; 
     THashMap<ui32, const NKikimrSchemeOp::TFamilyDescription*> srcFamilies;
     for (const auto& family : dstConfig.GetColumnFamilies()) {
-        if (family.GetId() == 0) {
-            // Primary family has already been checked above
-            continue;
-        }
-
-        if (!srcFamiliesBuilt) {
+        if (family.GetId() == 0) { 
+            // Primary family has already been checked above 
+            continue; 
+        } 
+ 
+        if (!srcFamiliesBuilt) { 
             for (const auto& srcFamily : srcConfig.GetColumnFamilies()) {
-                if (srcFamily.GetId() != 0) {
-                    srcFamilies[srcFamily.GetId()] = &srcFamily;
-                }
-            }
-            srcFamiliesBuilt = true;
-        }
-
-        const auto* srcFamily = srcFamilies.Value(family.GetId(), nullptr);
-
-        if (srcFamily && srcFamily->HasStorageConfig()) {
-            Y_VERIFY(family.HasStorageConfig()); // by inherit logic
-
-            const auto& srcStorage = srcFamily->GetStorageConfig();
-            const auto& dstStorage = family.GetStorageConfig();
-
-            // Data may be freely changed, however unsupported settings cannot be handled
-            if (srcStorage.HasSysLog() != dstStorage.HasSysLog() ||
+                if (srcFamily.GetId() != 0) { 
+                    srcFamilies[srcFamily.GetId()] = &srcFamily; 
+                } 
+            } 
+            srcFamiliesBuilt = true; 
+        } 
+ 
+        const auto* srcFamily = srcFamilies.Value(family.GetId(), nullptr); 
+ 
+        if (srcFamily && srcFamily->HasStorageConfig()) { 
+            Y_VERIFY(family.HasStorageConfig()); // by inherit logic 
+ 
+            const auto& srcStorage = srcFamily->GetStorageConfig(); 
+            const auto& dstStorage = family.GetStorageConfig(); 
+ 
+            // Data may be freely changed, however unsupported settings cannot be handled 
+            if (srcStorage.HasSysLog() != dstStorage.HasSysLog() || 
                     srcStorage.HasLog() != dstStorage.HasLog() ||
                     srcStorage.HasExternal() != dstStorage.HasExternal())
-            {
-                errDescr = TStringBuilder()
+            { 
+                errDescr = TStringBuilder() 
                         << "Incompatible alter of storage config in column family " << family.GetId() << " denied."
                         << " Was '" << srcStorage.ShortDebugString()
                         << "', requested '" << dstStorage.ShortDebugString() << "'";
-                return false;
-            }
-
-            if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-                // When feature flag is not enabled we don't allow changes to data channels
-                // This is so we stay compatible without surprises during migration periods
-                if (srcStorage.HasData() != dstStorage.HasData() ||
+                return false; 
+            } 
+ 
+            if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) { 
+                // When feature flag is not enabled we don't allow changes to data channels 
+                // This is so we stay compatible without surprises during migration periods 
+                if (srcStorage.HasData() != dstStorage.HasData() || 
                         !IsEquivalent(srcStorage.GetData(), dstStorage.GetData()))
-                {
-                    errDescr = TStringBuilder()
+                { 
+                    errDescr = TStringBuilder() 
                             << "Changing column family storage is currently disabled on the server."
                             << " Was '" << srcStorage.ShortDebugString()
                             << "', in request '" << dstStorage.ShortDebugString() << "'";
-                    return false;
-                }
-            }
-
-            continue;
-        }
-
-        if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-            // When feature flag is not enabled we don't allow adding StorageConfig
-            if (family.HasStorageConfig() && (!srcFamily || !srcFamily->HasStorageConfig())) {
-                errDescr = TStringBuilder()
+                    return false; 
+                } 
+            } 
+ 
+            continue; 
+        } 
+ 
+        if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) { 
+            // When feature flag is not enabled we don't allow adding StorageConfig 
+            if (family.HasStorageConfig() && (!srcFamily || !srcFamily->HasStorageConfig())) { 
+                errDescr = TStringBuilder() 
                         << "Adding column family storage is currently disabled on the server.";
-                return false;
-            }
-        }
-    }
-
+                return false; 
+            } 
+        } 
+    } 
+ 
     if (dstConfig.HasCompactionPolicy()) {
         if (!VerifyCompactionPolicy(dstConfig.GetCompactionPolicy(), errDescr)) {
-            return false;
-        }
+            return false; 
+        } 
         NLocalDb::TCompactionPolicy oldPolicy(srcConfig.GetCompactionPolicy());
         NLocalDb::TCompactionPolicy newPolicy(dstConfig.GetCompactionPolicy());
         if (!NLocalDb::ValidateCompactionPolicyChange(oldPolicy, newPolicy, errDescr)) {
@@ -1069,29 +1069,29 @@ bool TPartitionConfigMerger::VerifyAlterParams(
 }
 
 bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy &policy, TString &err)
-{
-    if (policy.HasCompactionStrategy()) {
-        switch (policy.GetCompactionStrategy()) {
+{ 
+    if (policy.HasCompactionStrategy()) { 
+        switch (policy.GetCompactionStrategy()) { 
         case NKikimrSchemeOp::CompactionStrategyUnset:
         case NKikimrSchemeOp::CompactionStrategyGenerational:
             break;
         case NKikimrSchemeOp::CompactionStrategySharded:
             if (!KIKIMR_ALLOW_SHARDED_COMPACTION) {
                 err = TStringBuilder()
-                        << "Unsupported compaction strategy.";
+                        << "Unsupported compaction strategy."; 
                 return false;
             }
             break;
         default:
             err = TStringBuilder()
-                    << "Unsupported compaction strategy.";
+                    << "Unsupported compaction strategy."; 
             return false;
-        }
-    }
-
-    return true;
-}
-
+        } 
+    } 
+ 
+    return true; 
+} 
+ 
 bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::TPartitionConfig &srcConfig, const NKikimrSchemeOp::TPartitionConfig &dstConfig)
 {
     if (srcConfig.HasFreezeState() &&
@@ -1115,7 +1115,7 @@ void TTableInfo::FinishAlter() {
         if (oldCol) {
             //oldCol->CreateVersion = col.second.CreateVersion;
             oldCol->DeleteVersion = col.second.DeleteVersion;
-            oldCol->Family = col.second.Family;
+            oldCol->Family = col.second.Family; 
         } else {
             Columns[col.first] = col.second;
             if (col.second.KeyOrder != (ui32)-1) {
@@ -1126,10 +1126,10 @@ void TTableInfo::FinishAlter() {
     }
 
     // Apply partition config changes
-    auto& partitionConfig = MutablePartitionConfig();
+    auto& partitionConfig = MutablePartitionConfig(); 
     if (AlterData->IsFullPartitionConfig()) {
         auto& newConfig = AlterData->PartitionConfigFull();
-        partitionConfig.Swap(&newConfig);
+        partitionConfig.Swap(&newConfig); 
     } else {
         // Copy pase from 18-6
         // Apply partition config changes
@@ -1167,17 +1167,17 @@ void TTableInfo::FinishAlter() {
         if (newConfig.HasExecutorFastLogPolicy()) {
             partitionConfig.SetExecutorFastLogPolicy(newConfig.GetExecutorFastLogPolicy());
         }
-        if (newConfig.HasEnableEraseCache()) {
-            partitionConfig.SetEnableEraseCache(newConfig.GetEnableEraseCache());
-        }
-        if (newConfig.HasEraseCacheMinRows()) {
-            partitionConfig.SetEraseCacheMinRows(newConfig.GetEraseCacheMinRows());
-        }
-        if (newConfig.HasEraseCacheMaxBytes()) {
-            partitionConfig.SetEraseCacheMaxBytes(newConfig.GetEraseCacheMaxBytes());
-        }
+        if (newConfig.HasEnableEraseCache()) { 
+            partitionConfig.SetEnableEraseCache(newConfig.GetEnableEraseCache()); 
+        } 
+        if (newConfig.HasEraseCacheMinRows()) { 
+            partitionConfig.SetEraseCacheMinRows(newConfig.GetEraseCacheMinRows()); 
+        } 
+        if (newConfig.HasEraseCacheMaxBytes()) { 
+            partitionConfig.SetEraseCacheMaxBytes(newConfig.GetEraseCacheMaxBytes()); 
+        } 
         if (newConfig.ColumnFamiliesSize()) {
-            // N.B. there is no deduplication, assumes legacy data
+            // N.B. there is no deduplication, assumes legacy data 
             partitionConfig.ClearColumnFamilies();
             partitionConfig.AddColumnFamilies()->CopyFrom(*newConfig.GetColumnFamilies().rbegin());
         }
@@ -1186,23 +1186,23 @@ void TTableInfo::FinishAlter() {
         }
     }
 
-    // Avoid ShadowData==false in the resulting config
-    if (partitionConfig.HasShadowData() && !partitionConfig.GetShadowData()) {
-        partitionConfig.ClearShadowData();
-    }
-
+    // Avoid ShadowData==false in the resulting config 
+    if (partitionConfig.HasShadowData() && !partitionConfig.GetShadowData()) { 
+        partitionConfig.ClearShadowData(); 
+    } 
+ 
     // Apply TTL params
     if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasTTLSettings()) {
         MutableTTLSettings().Swap(AlterData->TableDescriptionFull->MutableTTLSettings());
     }
 
-    // Force FillDescription to regenerate TableDescription
+    // Force FillDescription to regenerate TableDescription 
     TableDescription.ClearId_Deprecated();
     TableDescription.ClearPathId();
-    TableDescription.ClearName();
-    TableDescription.ClearColumns();
-    TableDescription.ClearKeyColumnIds();
-
+    TableDescription.ClearName(); 
+    TableDescription.ClearColumns(); 
+    TableDescription.ClearKeyColumnIds(); 
+ 
     AlterData.Reset();
 }
 
@@ -1244,8 +1244,8 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.Storage += newStats.Storage;
         newAggregatedStats.ReadThroughput += newStats.ReadThroughput;
         newAggregatedStats.WriteThroughput += newStats.WriteThroughput;
-        newAggregatedStats.ReadIops += newStats.ReadIops;
-        newAggregatedStats.WriteIops += newStats.WriteIops;
+        newAggregatedStats.ReadIops += newStats.ReadIops; 
+        newAggregatedStats.WriteIops += newStats.WriteIops; 
     }
     newAggregatedStats.SetCurrentRawCpuUsage(cpuTotal, AppData()->TimeProvider->Now());
     newAggregatedStats.LastAccessTime = Stats.Aggregated.LastAccessTime;
@@ -1336,8 +1336,8 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newSt
     Stats.Aggregated.Storage += (newStats.Storage - oldStats.Storage);
     Stats.Aggregated.ReadThroughput += (newStats.ReadThroughput - oldStats.ReadThroughput);
     Stats.Aggregated.WriteThroughput += (newStats.WriteThroughput - oldStats.WriteThroughput);
-    Stats.Aggregated.ReadIops += (newStats.ReadIops - oldStats.ReadIops);
-    Stats.Aggregated.WriteIops += (newStats.WriteIops - oldStats.WriteIops);
+    Stats.Aggregated.ReadIops += (newStats.ReadIops - oldStats.ReadIops); 
+    Stats.Aggregated.WriteIops += (newStats.WriteIops - oldStats.WriteIops); 
 
     newStats.SaveCpuUsageHistory(oldStats);
     oldStats = newStats;
@@ -1440,10 +1440,10 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
         return false;
     }
 
-    // We don't want to merge shards that have borrowed non-compacted data
-    if (stats->HasBorrowed)
-        return false;
-
+    // We don't want to merge shards that have borrowed non-compacted data 
+    if (stats->HasBorrowed) 
+        return false; 
+ 
     bool canMerge = false;
 
     // Check if we can try merging by size
@@ -1497,11 +1497,11 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 }
 
 bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const {
-    // Don't split/merge backup tables
+    // Don't split/merge backup tables 
     if (IsBackup) {
-        return false;
+        return false; 
     }
-
+ 
     // Ignore stats from unknown datashard (it could have been split)
     if (!Stats.PartitionStats.contains(shardIdx)) {
         return false;
@@ -1522,12 +1522,12 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TS
     float totalLoad = 0;
     THashSet<TTabletId> partOwners;
 
-    // Make sure we can actually merge current shard first
+    // Make sure we can actually merge current shard first 
     if (!TryAddShardToMerge(splitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
-        return false;
+        return false; 
     }
-
-    for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
+ 
+    for (i64 pi = partitionIdx - 1; pi >= 0; --pi) { 
         if (!TryAddShardToMerge(splitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
             break;
         }
@@ -1545,10 +1545,10 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TS
 }
 
 bool TTableInfo::CheckFastSplitForPartition(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const {
-    // Don't split/merge backup tables
-    if (IsBackup)
-        return false;
-
+    // Don't split/merge backup tables 
+    if (IsBackup) 
+        return false; 
+ 
     // Ignore stats from unknown datashard (it could have been split)
     if (!Stats.PartitionStats.contains(shardIdx))
         return false;
@@ -1583,10 +1583,10 @@ bool TTableInfo::CheckFastSplitForPartition(const TSplitSettings& splitSettings,
 }
 
 bool TTableInfo::CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const {
-    // Don't split/merge backup tables
-    if (IsBackup)
-        return false;
-
+    // Don't split/merge backup tables 
+    if (IsBackup) 
+        return false; 
+ 
     if (!splitSettings.SplitByLoadEnabled)
         return false;
 
@@ -1980,145 +1980,145 @@ NKikimr::NSchemeShard::TBillingStats::operator bool() const {
     return Rows || Bytes;
 }
 
-TOlapStoreInfo::TOlapStoreInfo(
-        ui64 alterVersion,
+TOlapStoreInfo::TOlapStoreInfo( 
+        ui64 alterVersion, 
         NKikimrSchemeOp::TColumnStoreDescription&& description,
         NKikimrSchemeOp::TColumnStoreSharding&& sharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody)
-    : AlterVersion(alterVersion)
-    , Description(std::move(description))
-    , Sharding(std::move(sharding))
-    , AlterBody(std::move(alterBody))
-{
-    size_t schemaPresetIndex = 0;
-    for (const auto& presetProto : Description.GetSchemaPresets()) {
-        Y_VERIFY(presetProto.HasId());
-        Y_VERIFY(presetProto.HasName());
-        Y_VERIFY(presetProto.HasSchema());
-        Y_VERIFY(!SchemaPresets.contains(presetProto.GetId()));
-        auto& preset = SchemaPresets[presetProto.GetId()];
-        preset.Id = presetProto.GetId();
-        preset.Name = presetProto.GetName();
-        preset.ProtoIndex = schemaPresetIndex++;
-        SchemaPresetByName[preset.Name] = preset.Id;
-        for (const auto& colProto : presetProto.GetSchema().GetColumns()) {
-            Y_VERIFY(colProto.HasId());
-            Y_VERIFY(colProto.HasName());
-            Y_VERIFY(!preset.Columns.contains(colProto.GetId()));
-            Y_VERIFY(!preset.ColumnsByName.contains(colProto.GetName()));
-            auto& col = preset.Columns[colProto.GetId()];
-            col.Id = colProto.GetId();
-            col.Name = colProto.GetName();
-            col.TypeId = colProto.GetTypeId();
-            preset.ColumnsByName[col.Name] = col.Id;
-        }
-        for (const auto& keyName : presetProto.GetSchema().GetKeyColumnNames()) {
-            Y_VERIFY(preset.ColumnsByName.contains(keyName));
-            auto& col = *preset.FindColumnByName(keyName);
-            Y_VERIFY(col.KeyOrder == Max<ui32>());
-            col.KeyOrder = preset.KeyColumnIds.size();
-            preset.KeyColumnIds.push_back(col.Id);
-        }
+    : AlterVersion(alterVersion) 
+    , Description(std::move(description)) 
+    , Sharding(std::move(sharding)) 
+    , AlterBody(std::move(alterBody)) 
+{ 
+    size_t schemaPresetIndex = 0; 
+    for (const auto& presetProto : Description.GetSchemaPresets()) { 
+        Y_VERIFY(presetProto.HasId()); 
+        Y_VERIFY(presetProto.HasName()); 
+        Y_VERIFY(presetProto.HasSchema()); 
+        Y_VERIFY(!SchemaPresets.contains(presetProto.GetId())); 
+        auto& preset = SchemaPresets[presetProto.GetId()]; 
+        preset.Id = presetProto.GetId(); 
+        preset.Name = presetProto.GetName(); 
+        preset.ProtoIndex = schemaPresetIndex++; 
+        SchemaPresetByName[preset.Name] = preset.Id; 
+        for (const auto& colProto : presetProto.GetSchema().GetColumns()) { 
+            Y_VERIFY(colProto.HasId()); 
+            Y_VERIFY(colProto.HasName()); 
+            Y_VERIFY(!preset.Columns.contains(colProto.GetId())); 
+            Y_VERIFY(!preset.ColumnsByName.contains(colProto.GetName())); 
+            auto& col = preset.Columns[colProto.GetId()]; 
+            col.Id = colProto.GetId(); 
+            col.Name = colProto.GetName(); 
+            col.TypeId = colProto.GetTypeId(); 
+            preset.ColumnsByName[col.Name] = col.Id; 
+        } 
+        for (const auto& keyName : presetProto.GetSchema().GetKeyColumnNames()) { 
+            Y_VERIFY(preset.ColumnsByName.contains(keyName)); 
+            auto& col = *preset.FindColumnByName(keyName); 
+            Y_VERIFY(col.KeyOrder == Max<ui32>()); 
+            col.KeyOrder = preset.KeyColumnIds.size(); 
+            preset.KeyColumnIds.push_back(col.Id); 
+        } 
         for (const auto& tierConfig : presetProto.GetSchema().GetStorageTiers()) {
             preset.Tiers.insert(tierConfig.GetName());
         }
-        preset.Engine = presetProto.GetSchema().GetEngine();
-        preset.NextColumnId = presetProto.GetSchema().GetNextColumnId();
-        preset.Version = presetProto.GetSchema().GetVersion();
-    }
+        preset.Engine = presetProto.GetSchema().GetEngine(); 
+        preset.NextColumnId = presetProto.GetSchema().GetNextColumnId(); 
+        preset.Version = presetProto.GetSchema().GetVersion(); 
+    } 
 #if 0
-    size_t ttlSettingsPresetIndex = 0;
-    for (const auto& presetProto : Description.GetTtlSettingsPresets()) {
-        Y_VERIFY(presetProto.HasId());
-        Y_VERIFY(presetProto.HasName());
-        Y_VERIFY(presetProto.HasTtlSettings());
-        Y_VERIFY(!TtlSettingsPresets.contains(presetProto.GetId()));
-        auto& preset = TtlSettingsPresets[presetProto.GetId()];
-        preset.Id = presetProto.GetId();
-        preset.Name = presetProto.GetName();
-        preset.ProtoIndex = ttlSettingsPresetIndex++;
-        TtlSettingsPresetByName[preset.Name] = preset.Id;
-        // TODO: parse relevant settings
-        preset.Version = presetProto.GetTtlSettings().GetVersion();
-    }
+    size_t ttlSettingsPresetIndex = 0; 
+    for (const auto& presetProto : Description.GetTtlSettingsPresets()) { 
+        Y_VERIFY(presetProto.HasId()); 
+        Y_VERIFY(presetProto.HasName()); 
+        Y_VERIFY(presetProto.HasTtlSettings()); 
+        Y_VERIFY(!TtlSettingsPresets.contains(presetProto.GetId())); 
+        auto& preset = TtlSettingsPresets[presetProto.GetId()]; 
+        preset.Id = presetProto.GetId(); 
+        preset.Name = presetProto.GetName(); 
+        preset.ProtoIndex = ttlSettingsPresetIndex++; 
+        TtlSettingsPresetByName[preset.Name] = preset.Id; 
+        // TODO: parse relevant settings 
+        preset.Version = presetProto.GetTtlSettings().GetVersion(); 
+    } 
 #endif
-    for (const auto& shardIdx : Sharding.GetColumnShards()) {
-        ColumnShards.push_back(TShardIdx(
-            TOwnerId(shardIdx.GetOwnerId()),
-            TLocalShardIdx(shardIdx.GetLocalId())));
-    }
-}
-
-TOlapTableInfo::TOlapTableInfo(
-        ui64 alterVersion,
+    for (const auto& shardIdx : Sharding.GetColumnShards()) { 
+        ColumnShards.push_back(TShardIdx( 
+            TOwnerId(shardIdx.GetOwnerId()), 
+            TLocalShardIdx(shardIdx.GetLocalId()))); 
+    } 
+} 
+ 
+TOlapTableInfo::TOlapTableInfo( 
+        ui64 alterVersion, 
         NKikimrSchemeOp::TColumnTableDescription&& description,
         NKikimrSchemeOp::TColumnTableSharding&& sharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody)
-    : AlterVersion(alterVersion)
-    , Description(std::move(description))
-    , Sharding(std::move(sharding))
-    , AlterBody(std::move(alterBody))
-{
-    OlapStorePathId = TPathId(
+    : AlterVersion(alterVersion) 
+    , Description(std::move(description)) 
+    , Sharding(std::move(sharding)) 
+    , AlterBody(std::move(alterBody)) 
+{ 
+    OlapStorePathId = TPathId( 
         TOwnerId(Description.GetColumnStorePathId().GetOwnerId()),
         TLocalPathId(Description.GetColumnStorePathId().GetLocalId()));
-
-    ColumnShards.reserve(Sharding.GetColumnShards().size());
-    for (ui64 columnShard : Sharding.GetColumnShards()) {
-        ColumnShards.push_back(columnShard);
-    }
-}
-
-TSequenceInfo::TSequenceInfo(
-        ui64 alterVersion,
+ 
+    ColumnShards.reserve(Sharding.GetColumnShards().size()); 
+    for (ui64 columnShard : Sharding.GetColumnShards()) { 
+        ColumnShards.push_back(columnShard); 
+    } 
+} 
+ 
+TSequenceInfo::TSequenceInfo( 
+        ui64 alterVersion, 
         NKikimrSchemeOp::TSequenceDescription&& description,
         NKikimrSchemeOp::TSequenceSharding&& sharding)
-    : AlterVersion(alterVersion)
-    , Description(std::move(description))
-    , Sharding(std::move(sharding))
-{
-    // TODO: extract necessary info
-}
-
+    : AlterVersion(alterVersion) 
+    , Description(std::move(description)) 
+    , Sharding(std::move(sharding)) 
+{ 
+    // TODO: extract necessary info 
+} 
+ 
 bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& p, TString& err) {
-    if (p.HasPathId() || p.HasVersion() || p.HasSequenceShard()) {
-        err = "CreateSequence does not allow internal fields to be specified";
-        return false;
-    }
-
-    i64 increment = p.HasIncrement() ? p.GetIncrement() : 1;
-    if (increment == 0) {
-        err = "CreateSequence requires Increment != 0";
-        return false;
-    }
-
-    i64 minValue, maxValue, startValue;
-    if (increment > 0) {
-        minValue = p.HasMinValue() ? p.GetMinValue() : 1;
-        maxValue = p.HasMaxValue() ? p.GetMaxValue() : Max<i64>();
-        startValue = p.HasStartValue() ? p.GetStartValue() : minValue;
-    } else {
-        minValue = p.HasMinValue() ? p.GetMinValue() : Min<i64>();
-        maxValue = p.HasMaxValue() ? p.GetMaxValue() : -1;
-        startValue = p.HasStartValue() ? p.GetStartValue() : maxValue;
-    }
-
-    if (!(minValue <= maxValue)) {
-        err = TStringBuilder()
-            << "CreateSequence requires MinValue (" << minValue << ") <= MaxValue (" << maxValue << ")";
-        return false;
-    }
-
-    if (!(minValue <= startValue && startValue <= maxValue)) {
-        err = TStringBuilder()
-            << "CreateSequence requires StartValue (" << startValue << ") between"
-            << " MinValue (" << minValue << ") and MaxValue (" << maxValue << ")";
-        return false;
-    }
-
-    return true;
-}
-
+    if (p.HasPathId() || p.HasVersion() || p.HasSequenceShard()) { 
+        err = "CreateSequence does not allow internal fields to be specified"; 
+        return false; 
+    } 
+ 
+    i64 increment = p.HasIncrement() ? p.GetIncrement() : 1; 
+    if (increment == 0) { 
+        err = "CreateSequence requires Increment != 0"; 
+        return false; 
+    } 
+ 
+    i64 minValue, maxValue, startValue; 
+    if (increment > 0) { 
+        minValue = p.HasMinValue() ? p.GetMinValue() : 1; 
+        maxValue = p.HasMaxValue() ? p.GetMaxValue() : Max<i64>(); 
+        startValue = p.HasStartValue() ? p.GetStartValue() : minValue; 
+    } else { 
+        minValue = p.HasMinValue() ? p.GetMinValue() : Min<i64>(); 
+        maxValue = p.HasMaxValue() ? p.GetMaxValue() : -1; 
+        startValue = p.HasStartValue() ? p.GetStartValue() : maxValue; 
+    } 
+ 
+    if (!(minValue <= maxValue)) { 
+        err = TStringBuilder() 
+            << "CreateSequence requires MinValue (" << minValue << ") <= MaxValue (" << maxValue << ")"; 
+        return false; 
+    } 
+ 
+    if (!(minValue <= startValue && startValue <= maxValue)) { 
+        err = TStringBuilder() 
+            << "CreateSequence requires StartValue (" << startValue << ") between" 
+            << " MinValue (" << minValue << ") and MaxValue (" << maxValue << ")"; 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 } // namespace NSchemeShard
 } // namespace NKikimr
 

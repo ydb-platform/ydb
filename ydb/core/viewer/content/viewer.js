@@ -1502,8 +1502,8 @@ function tabletTypeToSymbol(type) {
         return "OS";
     case "ColumnShard":
         return "CS";
-    case "SequenceShard":
-        return "S";
+    case "SequenceShard": 
+        return "S"; 
     case "ReplicationController":
         return "RC";
     }
@@ -2592,8 +2592,8 @@ function schemaPathTypeToString(pathType) {
         return "Kesus";
     case 10:
         return "Tenant";
-    case 15:
-        return "Sequence";
+    case 15: 
+        return "Sequence"; 
     case 16:
         return "Replication";
     }

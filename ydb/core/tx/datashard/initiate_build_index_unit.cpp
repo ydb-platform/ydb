@@ -50,7 +50,7 @@ public:
         }
 
         Y_VERIFY(tableInfo);
-        DataShard.AddUserTable(pathId, tableInfo);
+        DataShard.AddUserTable(pathId, tableInfo); 
 
         ui64 step = tx->GetStep();
         ui64 txId = tx->GetTxId();

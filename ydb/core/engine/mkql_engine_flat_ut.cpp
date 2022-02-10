@@ -50,7 +50,7 @@ namespace {
 
     struct TShardDbState {
         THashMap<ui64, TAutoPtr<NTable::TDatabase>> Dbs;
-        THashMap<ui64, NTable::TDummyEnv> Envs;
+        THashMap<ui64, NTable::TDummyEnv> Envs; 
         THashMap<ui64, ui32> Steps;
 
         template <typename TSchema>
@@ -69,12 +69,12 @@ namespace {
 
         void BeginTransaction(ui64 tabletId) {
             auto step = ++Steps[tabletId];
-            Dbs[tabletId]->Begin(step, Envs[tabletId]);
+            Dbs[tabletId]->Begin(step, Envs[tabletId]); 
         }
 
         void CommitTransaction(ui64 tabletId) {
             Dbs[tabletId]->Commit(Steps[tabletId], true);
-            Envs.erase(tabletId);
+            Envs.erase(tabletId); 
         }
     };
 
@@ -180,7 +180,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 auto& counters = hostCounters[shardPgm.first];
                 counters.Reset(new TEngineHostCounters());
-                hosts[shardPgm.first].Reset(new TUnversionedEngineHost(
+                hosts[shardPgm.first].Reset(new TUnversionedEngineHost( 
                     *ShardDbState.Dbs[shardPgm.first], *counters, TEngineHostSettings(shardPgm.first, false)));
             }
 
@@ -3791,551 +3791,551 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeReverseWithPartitions) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(42))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(43))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("fgh"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(44))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(45))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("rty"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-        TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+    Y_UNIT_TEST(TestSelectRangeReverseWithPartitions) { 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(42)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(43)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("fgh")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(44)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(45)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("rty")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+        TVector<TSelectColumn> columns; 
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
+        TVector<ui32> keyTypes(1); 
+        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id; 
         TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        options.Reverse = pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true);
-        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Struct
-            Struct {
-              Member {
-                Name: "List"
-                Type {
-                  Kind: List
-                  List {
-                    Item {
-                      Kind: Struct
-                      Struct {
-                        Member {
-                          Name: "2"
-                          Type {
-                            Kind: Optional
-                            Optional {
-                              Item {
-                                Kind: Data
-                                Data {
-                                  Scheme: 4608
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              Member {
-                Name: "Truncated"
-                Type {
-                  Kind: Data
-                  Data {
-                    Scheme: 6
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-      Struct {
-        List {
-          Struct {
-            Optional {
-              Text: "rty"
-            }
-          }
-        }
-        List {
-          Struct {
-            Optional {
-              Text: "qwe"
-            }
-          }
-        }
-        List {
-          Struct {
-            Optional {
-              Text: "fgh"
-            }
-          }
-        }
-        List {
-          Struct {
-            Optional {
-              Text: "asd"
-            }
-          }
-        }
-      }
-      Struct {
-        Bool: false
-      }
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
-    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems1) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(42))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(43))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("fgh"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(44))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(45))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("rty"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-        TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id); 
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.Reverse = pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true); 
+        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Struct 
+            Struct { 
+              Member { 
+                Name: "List" 
+                Type { 
+                  Kind: List 
+                  List { 
+                    Item { 
+                      Kind: Struct 
+                      Struct { 
+                        Member { 
+                          Name: "2" 
+                          Type { 
+                            Kind: Optional 
+                            Optional { 
+                              Item { 
+                                Kind: Data 
+                                Data { 
+                                  Scheme: 4608 
+                                } 
+                              } 
+                            } 
+                          } 
+                        } 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+              Member { 
+                Name: "Truncated" 
+                Type { 
+                  Kind: Data 
+                  Data { 
+                    Scheme: 6 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+      Struct { 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "rty" 
+            } 
+          } 
+        } 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "qwe" 
+            } 
+          } 
+        } 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "fgh" 
+            } 
+          } 
+        } 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "asd" 
+            } 
+          } 
+        } 
+      } 
+      Struct { 
+        Bool: false 
+      } 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
+    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems1) { 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(42)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(43)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("fgh")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(44)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(45)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("rty")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+        TVector<TSelectColumn> columns; 
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
+        TVector<ui32> keyTypes(1); 
+        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id; 
         TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1);
-        options.Reverse = pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true);
-        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Struct
-            Struct {
-              Member {
-                Name: "List"
-                Type {
-                  Kind: List
-                  List {
-                    Item {
-                      Kind: Struct
-                      Struct {
-                        Member {
-                          Name: "2"
-                          Type {
-                            Kind: Optional
-                            Optional {
-                              Item {
-                                Kind: Data
-                                Data {
-                                  Scheme: 4608
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              Member {
-                Name: "Truncated"
-                Type {
-                  Kind: Data
-                  Data {
-                    Scheme: 6
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-      Struct {
-        List {
-          Struct {
-            Optional {
-              Text: "rty"
-            }
-          }
-        }
-      }
-      Struct {
-        Bool: true
-      }
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
-    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems2) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(42))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(43))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("fgh"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(44))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(45))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("rty"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-        TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id); 
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1); 
+        options.Reverse = pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true); 
+        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Struct 
+            Struct { 
+              Member { 
+                Name: "List" 
+                Type { 
+                  Kind: List 
+                  List { 
+                    Item { 
+                      Kind: Struct 
+                      Struct { 
+                        Member { 
+                          Name: "2" 
+                          Type { 
+                            Kind: Optional 
+                            Optional { 
+                              Item { 
+                                Kind: Data 
+                                Data { 
+                                  Scheme: 4608 
+                                } 
+                              } 
+                            } 
+                          } 
+                        } 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+              Member { 
+                Name: "Truncated" 
+                Type { 
+                  Kind: Data 
+                  Data { 
+                    Scheme: 6 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+      Struct { 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "rty" 
+            } 
+          } 
+        } 
+      } 
+      Struct { 
+        Bool: true 
+      } 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
+    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems2) { 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(42)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(43)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("fgh")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(44)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(45)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("rty")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+        TVector<TSelectColumn> columns; 
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
+        TVector<ui32> keyTypes(1); 
+        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id; 
         TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2);
-        options.Reverse = pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true);
-        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Struct
-            Struct {
-              Member {
-                Name: "List"
-                Type {
-                  Kind: List
-                  List {
-                    Item {
-                      Kind: Struct
-                      Struct {
-                        Member {
-                          Name: "2"
-                          Type {
-                            Kind: Optional
-                            Optional {
-                              Item {
-                                Kind: Data
-                                Data {
-                                  Scheme: 4608
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              Member {
-                Name: "Truncated"
-                Type {
-                  Kind: Data
-                  Data {
-                    Scheme: 6
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-      Struct {
-        List {
-          Struct {
-            Optional {
-              Text: "rty"
-            }
-          }
-        }
-        List {
-          Struct {
-            Optional {
-              Text: "qwe"
-            }
-          }
-        }
-      }
-      Struct {
-        Bool: true
-      }
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
-    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems3) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(42))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(43))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("fgh"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(44))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(45))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("rty"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-        TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id); 
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2); 
+        options.Reverse = pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true); 
+        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Struct 
+            Struct { 
+              Member { 
+                Name: "List" 
+                Type { 
+                  Kind: List 
+                  List { 
+                    Item { 
+                      Kind: Struct 
+                      Struct { 
+                        Member { 
+                          Name: "2" 
+                          Type { 
+                            Kind: Optional 
+                            Optional { 
+                              Item { 
+                                Kind: Data 
+                                Data { 
+                                  Scheme: 4608 
+                                } 
+                              } 
+                            } 
+                          } 
+                        } 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+              Member { 
+                Name: "Truncated" 
+                Type { 
+                  Kind: Data 
+                  Data { 
+                    Scheme: 6 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+      Struct { 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "rty" 
+            } 
+          } 
+        } 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "qwe" 
+            } 
+          } 
+        } 
+      } 
+      Struct { 
+        Bool: true 
+      } 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
+    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems3) { 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(42)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(43)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("fgh")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(44)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(45)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("rty")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+        TVector<TSelectColumn> columns; 
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
+        TVector<ui32> keyTypes(1); 
+        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id; 
         TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(3);
-        options.Reverse = pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true);
-        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Struct
-            Struct {
-              Member {
-                Name: "List"
-                Type {
-                  Kind: List
-                  List {
-                    Item {
-                      Kind: Struct
-                      Struct {
-                        Member {
-                          Name: "2"
-                          Type {
-                            Kind: Optional
-                            Optional {
-                              Item {
-                                Kind: Data
-                                Data {
-                                  Scheme: 4608
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              Member {
-                Name: "Truncated"
-                Type {
-                  Kind: Data
-                  Data {
-                    Scheme: 6
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-      Struct {
-        List {
-          Struct {
-            Optional {
-              Text: "rty"
-            }
-          }
-        }
-        List {
-          Struct {
-            Optional {
-              Text: "qwe"
-            }
-          }
-        }
-        List {
-          Struct {
-            Optional {
-              Text: "fgh"
-            }
-          }
-        }
-      }
-      Struct {
-        Bool: true
-      }
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
+        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id); 
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(3); 
+        options.Reverse = pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true); 
+        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Struct 
+            Struct { 
+              Member { 
+                Name: "List" 
+                Type { 
+                  Kind: List 
+                  List { 
+                    Item { 
+                      Kind: Struct 
+                      Struct { 
+                        Member { 
+                          Name: "2" 
+                          Type { 
+                            Kind: Optional 
+                            Optional { 
+                              Item { 
+                                Kind: Data 
+                                Data { 
+                                  Scheme: 4608 
+                                } 
+                              } 
+                            } 
+                          } 
+                        } 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+              Member { 
+                Name: "Truncated" 
+                Type { 
+                  Kind: Data 
+                  Data { 
+                    Scheme: 6 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+      Struct { 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "rty" 
+            } 
+          } 
+        } 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "qwe" 
+            } 
+          } 
+        } 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "fgh" 
+            } 
+          } 
+        } 
+      } 
+      Struct { 
+        Bool: true 
+      } 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
     Y_UNIT_TEST(TestBug998) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;

@@ -43,7 +43,7 @@ enum EPercentileCounters {
         Ranges { Value: 1      Name: "1 ms"      }
     };
 
-    COUNTER_PERCENTILE_IGNORE = 0;
+    COUNTER_PERCENTILE_IGNORE = 0; 
 }
 
 enum ETxTypes {

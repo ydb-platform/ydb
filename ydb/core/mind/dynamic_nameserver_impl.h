@@ -185,12 +185,12 @@ public:
     }
 
     TDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup,
-                       const NKikimrNodeBroker::TNodeInfo &node,
-                       const TDomainsInfo &domains,
-                       ui32 resolvePoolId)
+                       const NKikimrNodeBroker::TNodeInfo &node, 
+                       const TDomainsInfo &domains, 
+                       ui32 resolvePoolId) 
         : TDynamicNameserver(setup, resolvePoolId)
     {
-        ui32 domain = NodeIdToDomain(node.GetNodeId(), domains);
+        ui32 domain = NodeIdToDomain(node.GetNodeId(), domains); 
         TDynamicConfig::TDynamicNodeInfo info(node);
         DynamicConfigs[domain]->DynamicNodes.emplace(node.GetNodeId(), info);
     }
@@ -245,7 +245,7 @@ private:
     std::array<TActorId, DOMAINS_COUNT> NodeBrokerPipes;
     // When ListNodes requests are sent to NodeBroker tablets this
     // bitmap indicates domains which didn't answer yet.
-    TBitMap<DOMAINS_COUNT> PendingRequests;
+    TBitMap<DOMAINS_COUNT> PendingRequests; 
     // Domain -> Epoch ID.
     THashMap<ui32, ui64> EpochUpdates;
     ui32 ResolvePoolId;

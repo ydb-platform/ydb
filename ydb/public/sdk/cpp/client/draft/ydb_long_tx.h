@@ -92,7 +92,7 @@ public:
     }
 };
 
-struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
+struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> { 
     using TSelf = TClientSettings;
 };
 
@@ -106,13 +106,13 @@ public:
 
     TClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());
 
-    TAsyncBeginTxResult BeginWriteTx();
-    TAsyncBeginTxResult BeginReadTx();
-    TAsyncCommitTxResult CommitTx(const TString& txId);
-    TAsyncRollbackTxResult RollbackTx(const TString& txId);
-    TAsyncWriteResult Write(const TString& txId, const TString& table, const TString& dedupId,
+    TAsyncBeginTxResult BeginWriteTx(); 
+    TAsyncBeginTxResult BeginReadTx(); 
+    TAsyncCommitTxResult CommitTx(const TString& txId); 
+    TAsyncRollbackTxResult RollbackTx(const TString& txId); 
+    TAsyncWriteResult Write(const TString& txId, const TString& table, const TString& dedupId, 
                             const TString& data, Ydb::LongTx::Data::Format format);
-    TAsyncReadResult Read(const TString& txId, const TString& table);
+    TAsyncReadResult Read(const TString& txId, const TString& table); 
 
 private:
     class TImpl;

@@ -47,56 +47,56 @@ class CreateTenantRequest(AbstractProtobufBuilder):
     def disable_external_subdomain(self):
         self.protobuf.CreateTenantRequest.Request.options.disable_external_subdomain = True
 
-    def set_schema_quotas(self, schema_quotas):
-        quotas = self.protobuf.CreateTenantRequest.Request.schema_operation_quotas
-        quotas.SetInParent()
-        for (bucket_size, bucket_seconds) in schema_quotas:
-            q = quotas.leaky_bucket_quotas.add()
-            q.bucket_size = bucket_size
-            q.bucket_seconds = bucket_seconds
+    def set_schema_quotas(self, schema_quotas): 
+        quotas = self.protobuf.CreateTenantRequest.Request.schema_operation_quotas 
+        quotas.SetInParent() 
+        for (bucket_size, bucket_seconds) in schema_quotas: 
+            q = quotas.leaky_bucket_quotas.add() 
+            q.bucket_size = bucket_size 
+            q.bucket_seconds = bucket_seconds 
 
-    def set_disk_quotas(self, disk_quotas):
-        quotas = self.protobuf.CreateTenantRequest.Request.database_quotas
-        quotas.SetInParent()
-        hard = disk_quotas.get('hard')
-        if hard is not None:
-            quotas.data_size_hard_quota = hard
-        soft = disk_quotas.get('soft')
-        if soft is not None:
-            quotas.data_size_soft_quota = soft
-
+    def set_disk_quotas(self, disk_quotas): 
+        quotas = self.protobuf.CreateTenantRequest.Request.database_quotas 
+        quotas.SetInParent() 
+        hard = disk_quotas.get('hard') 
+        if hard is not None: 
+            quotas.data_size_hard_quota = hard 
+        soft = disk_quotas.get('soft') 
+        if soft is not None: 
+            quotas.data_size_soft_quota = soft 
+ 
     def set_attribute(self, name, value):
         self.protobuf.CreateTenantRequest.Request.attributes[name] = value
+ 
 
-
-class AlterTenantRequest(AbstractProtobufBuilder):
-    """
+class AlterTenantRequest(AbstractProtobufBuilder): 
+    """ 
     See /arcadia/ydb/public/api/protos/ydb_cms.proto
-    """
-
-    def __init__(self, path):
-        super(AlterTenantRequest, self).__init__(msgbus.TConsoleRequest())
-        self.protobuf.AlterTenantRequest.Request.path = path
-
-    def set_schema_quotas(self, schema_quotas):
-        quotas = self.protobuf.AlterTenantRequest.Request.schema_operation_quotas
-        quotas.SetInParent()
-        for (bucket_size, bucket_seconds) in schema_quotas:
-            q = quotas.leaky_bucket_quotas.add()
-            q.bucket_size = bucket_size
-            q.bucket_seconds = bucket_seconds
-
-    def set_disk_quotas(self, disk_quotas):
-        quotas = self.protobuf.AlterTenantRequest.Request.database_quotas
-        quotas.SetInParent()
-        hard = disk_quotas.get('hard')
-        if hard is not None:
-            quotas.data_size_hard_quota = hard
-        soft = disk_quotas.get('soft')
-        if soft is not None:
-            quotas.data_size_soft_quota = soft
-
-
+    """ 
+ 
+    def __init__(self, path): 
+        super(AlterTenantRequest, self).__init__(msgbus.TConsoleRequest()) 
+        self.protobuf.AlterTenantRequest.Request.path = path 
+ 
+    def set_schema_quotas(self, schema_quotas): 
+        quotas = self.protobuf.AlterTenantRequest.Request.schema_operation_quotas 
+        quotas.SetInParent() 
+        for (bucket_size, bucket_seconds) in schema_quotas: 
+            q = quotas.leaky_bucket_quotas.add() 
+            q.bucket_size = bucket_size 
+            q.bucket_seconds = bucket_seconds 
+ 
+    def set_disk_quotas(self, disk_quotas): 
+        quotas = self.protobuf.AlterTenantRequest.Request.database_quotas 
+        quotas.SetInParent() 
+        hard = disk_quotas.get('hard') 
+        if hard is not None: 
+            quotas.data_size_hard_quota = hard 
+        soft = disk_quotas.get('soft') 
+        if soft is not None: 
+            quotas.data_size_soft_quota = soft 
+ 
+ 
 class GetTenantStatusRequest(AbstractProtobufBuilder):
     """
     See /arcadia/ydb/public/api/protos/ydb_cms.proto
@@ -148,13 +148,13 @@ class SetConfigRequest(AbstractProtobufBuilder):
         unit.TenantSlotType = slot_type
         unit.AvailabilityZoneSet = zone_set
         return self
-
-
-class GetOperationRequest(AbstractProtobufBuilder):
-    """
+ 
+ 
+class GetOperationRequest(AbstractProtobufBuilder): 
+    """ 
     See /arcadia/ydb/core/protos/console.proto
-    """
-
-    def __init__(self, op_id):
-        super(GetOperationRequest, self).__init__(msgbus.TConsoleRequest())
-        self.protobuf.GetOperationRequest.id = op_id
+    """ 
+ 
+    def __init__(self, op_id): 
+        super(GetOperationRequest, self).__init__(msgbus.TConsoleRequest()) 
+        self.protobuf.GetOperationRequest.id = op_id 

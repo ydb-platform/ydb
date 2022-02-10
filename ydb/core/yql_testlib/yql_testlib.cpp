@@ -156,7 +156,7 @@ void TYqlServer::Initialize() {
 
     Runtime.Reset(new TTestActorRuntime(StaticNodes() + DynamicNodes(), true));
 
-    Runtime->SetupMonitoring();
+    Runtime->SetupMonitoring(); 
     Runtime->SetLogBackend(GetSettings().LogBackend);
 
     TAppPrepare app;

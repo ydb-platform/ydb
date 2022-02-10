@@ -1,5 +1,5 @@
 #include "datashard_ut_common.h"
-#include "datashard_ut_common_kqp.h"
+#include "datashard_ut_common_kqp.h" 
 #include "datashard_active_transaction.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -47,7 +47,7 @@ public:
     }
 
     static TActiveTxPtr MakeEmptyTx(ui64 step, ui64 txId) {
-        TBasicOpInfo op(txId, EOperationKind::DataTx, 0, Max<ui64>(), TInstant(), 0);
+        TBasicOpInfo op(txId, EOperationKind::DataTx, 0, Max<ui64>(), TInstant(), 0); 
         op.SetStep(step);
         return std::make_shared<TActiveTransaction>(op);
     }
@@ -61,7 +61,7 @@ public:
         TEngineBay ebay(host.Release(), engine.Release());
         std::shared_ptr<TValidatedDataTx> dataTx(new TValidatedDataTx(std::move(ebay), txId, 0, txBody));
 
-        TBasicOpInfo op(txId, NKikimrTxDataShard::ETransactionKind::TX_KIND_DATA, 0, Max<ui64>(), 0);
+        TBasicOpInfo op(txId, NKikimrTxDataShard::ETransactionKind::TX_KIND_DATA, 0, Max<ui64>(), 0); 
         op.SetStep(step);
         TActiveTransaction tx(op);
         tx.Activate(0, dataTx);
@@ -409,152 +409,152 @@ Y_UNIT_TEST_WITH_MVCC(DelayData) {
 }
 
 Y_UNIT_TEST_WITH_MVCC(ReadWriteReorder) {
-    TTester::TOptions opts;
-    opts.EnableOutOfOrder(10);
+    TTester::TOptions opts; 
+    opts.EnableOutOfOrder(10); 
     opts.EnableMvcc(WithMvcc);
-
-    TTester t(TTester::ESchema_MultiShardKV, opts);
-    TFakeMiniKQLProxy proxy(t);
-
-    const char* programWriteKeys1 = R"((
-        (let key_ '('('key (Uint32 '%u))))
-        (let upd_ '('('value (Utf8 '"%s"))))
-        (return (AsList
-            (UpdateRow 'table1 key_ upd_)
-        ))
-    ))";
-
-    proxy.CheckedExecute(Sprintf(programWriteKeys1, 0, "A"));
-    proxy.CheckedExecute(Sprintf(programWriteKeys1, 1, "B"));
-    proxy.CheckedExecute(Sprintf(programWriteKeys1, 1000, "C"));
-
-    const char* programMoveKey = R"((
-        (let key1_ '('('key (Uint32 '%u))))
-        (let val1_ (FlatMap (SelectRow 'table1 key1_ '('value)) (lambda '(x) (Member x 'value))))
-        (let key2_ '('('key (Uint32 '%u))))
-        (let upd2_ '('('value val1_)))
-        (return (AsList
-            (UpdateRow 'table1 key2_ upd2_)
-        ))
-    ))";
-
-    const char* programWriteKeys2 = R"((
-        (let key1_ '('('key (Uint32 '%u))))
-        (let upd1_ '('('value (Utf8 '"%s"))))
-        (let key2_ '('('key (Uint32 '%u))))
-        (let upd2_ '('('value (Utf8 '"%s"))))
-        (return (AsList
-            (UpdateRow 'table1 key1_ upd1_)
-            (UpdateRow 'table1 key2_ upd2_)
-        ))
-    ))";
-
-    const char* programWriteKeys3 = R"((
-        (let key1_ '('('key (Uint32 '%u))))
-        (let upd1_ '('('value (Utf8 '"%s"))))
-        (let key2_ '('('key (Uint32 '%u))))
-        (let upd2_ '('('value (Utf8 '"%s"))))
-        (let key3_ '('('key (Uint32 '%u))))
-        (let upd3_ '('('value (Utf8 '"%s"))))
-        (return (AsList
-            (UpdateRow 'table1 key1_ upd1_)
-            (UpdateRow 'table1 key2_ upd2_)
-            (UpdateRow 'table1 key3_ upd3_)
-        ))
-    ))";
-
-    const char* programReadKeys3 = R"((
-        (let key1_ '('('key (Uint32 '%u))))
-        (let key2_ '('('key (Uint32 '%u))))
-        (let key3_ '('('key (Uint32 '%u))))
-        (let select_ '('value))
-        (return (AsList
-            (SetResult 'Result (AsList
-                (SelectRow 'table1 key1_ select_)
-                (SelectRow 'table1 key2_ select_)
-                (SelectRow 'table1 key3_ select_)
-            ))
-        ))
-    ))";
-
-    const char* programReadKeys4 = R"((
-        (let key1_ '('('key (Uint32 '%u))))
-        (let key2_ '('('key (Uint32 '%u))))
-        (let key3_ '('('key (Uint32 '%u))))
-        (let key4_ '('('key (Uint32 '%u))))
-        (let select_ '('value))
-        (return (AsList
-            (SetResult 'Result (AsList
-                (SelectRow 'table1 key1_ select_)
-                (SelectRow 'table1 key2_ select_)
-                (SelectRow 'table1 key3_ select_)
-                (SelectRow 'table1 key4_ select_)
-            ))
-        ))
-    ))";
-
-    auto noCheck = [&](TFakeProxyTx&) -> bool {
-        return true;
-    };
+ 
+    TTester t(TTester::ESchema_MultiShardKV, opts); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
+    const char* programWriteKeys1 = R"(( 
+        (let key_ '('('key (Uint32 '%u)))) 
+        (let upd_ '('('value (Utf8 '"%s")))) 
+        (return (AsList 
+            (UpdateRow 'table1 key_ upd_) 
+        )) 
+    ))"; 
+ 
+    proxy.CheckedExecute(Sprintf(programWriteKeys1, 0, "A")); 
+    proxy.CheckedExecute(Sprintf(programWriteKeys1, 1, "B")); 
+    proxy.CheckedExecute(Sprintf(programWriteKeys1, 1000, "C")); 
+ 
+    const char* programMoveKey = R"(( 
+        (let key1_ '('('key (Uint32 '%u)))) 
+        (let val1_ (FlatMap (SelectRow 'table1 key1_ '('value)) (lambda '(x) (Member x 'value)))) 
+        (let key2_ '('('key (Uint32 '%u)))) 
+        (let upd2_ '('('value val1_))) 
+        (return (AsList 
+            (UpdateRow 'table1 key2_ upd2_) 
+        )) 
+    ))"; 
+ 
+    const char* programWriteKeys2 = R"(( 
+        (let key1_ '('('key (Uint32 '%u)))) 
+        (let upd1_ '('('value (Utf8 '"%s")))) 
+        (let key2_ '('('key (Uint32 '%u)))) 
+        (let upd2_ '('('value (Utf8 '"%s")))) 
+        (return (AsList 
+            (UpdateRow 'table1 key1_ upd1_) 
+            (UpdateRow 'table1 key2_ upd2_) 
+        )) 
+    ))"; 
+ 
+    const char* programWriteKeys3 = R"(( 
+        (let key1_ '('('key (Uint32 '%u)))) 
+        (let upd1_ '('('value (Utf8 '"%s")))) 
+        (let key2_ '('('key (Uint32 '%u)))) 
+        (let upd2_ '('('value (Utf8 '"%s")))) 
+        (let key3_ '('('key (Uint32 '%u)))) 
+        (let upd3_ '('('value (Utf8 '"%s")))) 
+        (return (AsList 
+            (UpdateRow 'table1 key1_ upd1_) 
+            (UpdateRow 'table1 key2_ upd2_) 
+            (UpdateRow 'table1 key3_ upd3_) 
+        )) 
+    ))"; 
+ 
+    const char* programReadKeys3 = R"(( 
+        (let key1_ '('('key (Uint32 '%u)))) 
+        (let key2_ '('('key (Uint32 '%u)))) 
+        (let key3_ '('('key (Uint32 '%u)))) 
+        (let select_ '('value)) 
+        (return (AsList 
+            (SetResult 'Result (AsList 
+                (SelectRow 'table1 key1_ select_) 
+                (SelectRow 'table1 key2_ select_) 
+                (SelectRow 'table1 key3_ select_) 
+            )) 
+        )) 
+    ))"; 
+ 
+    const char* programReadKeys4 = R"(( 
+        (let key1_ '('('key (Uint32 '%u)))) 
+        (let key2_ '('('key (Uint32 '%u)))) 
+        (let key3_ '('('key (Uint32 '%u)))) 
+        (let key4_ '('('key (Uint32 '%u)))) 
+        (let select_ '('value)) 
+        (return (AsList 
+            (SetResult 'Result (AsList 
+                (SelectRow 'table1 key1_ select_) 
+                (SelectRow 'table1 key2_ select_) 
+                (SelectRow 'table1 key3_ select_) 
+                (SelectRow 'table1 key4_ select_) 
+            )) 
+        )) 
+    ))"; 
+ 
+    auto noCheck = [&](TFakeProxyTx&) -> bool { 
+        return true; 
+    }; 
     auto txFlags = NDataShard::TTxFlags::Default;
-
-    // tx 7: This moves key 1000 to key 2 (and will be blocked on readsets)
-    proxy.Enqueue(Sprintf(programMoveKey, 1000, 2), noCheck, txFlags);
-    auto txMoveKey = proxy.LastTxId();
-
-    // tx 8: This writes to keys 0, 2 and 1000 (used as a progress blocker)
-    proxy.Enqueue(Sprintf(programWriteKeys3, 0, "D", 2, "E", 1000, "F"), noCheck, txFlags);
-
-    // tx 9: This reads keys 1, 3 and 1000
-    // Does not conflict on the first shard and will be executed out of order
-    NKikimrMiniKQL::TResult read_1_1000_3;
-    proxy.Enqueue(Sprintf(programReadKeys3, 1, 1000, 3), [&](TFakeProxyTx& tx) -> bool {
-        read_1_1000_3 = tx.GetResult();
-        return true;
-    }, txFlags);
-
-    // tx 10: This is an immediate write to keys 0 and 1
-    // It will be proposed after the above read completes, so it must
-    // be ordered after the above read.
-    proxy.Enqueue(Sprintf(programWriteKeys2, 0, "G", 1, "H"), noCheck, txFlags);
-
-    // tx 11: This write to key 3 (force online), will block until the above read
-    // This would unblock writes to keys 0 and 2 and used to add a delay
-    proxy.Enqueue(Sprintf(programWriteKeys1, 3, "Z"));
-    auto txWriteLast = proxy.LastTxId();
-
-    // Delay first shard readsets until last write succeeds
+ 
+    // tx 7: This moves key 1000 to key 2 (and will be blocked on readsets) 
+    proxy.Enqueue(Sprintf(programMoveKey, 1000, 2), noCheck, txFlags); 
+    auto txMoveKey = proxy.LastTxId(); 
+ 
+    // tx 8: This writes to keys 0, 2 and 1000 (used as a progress blocker) 
+    proxy.Enqueue(Sprintf(programWriteKeys3, 0, "D", 2, "E", 1000, "F"), noCheck, txFlags); 
+ 
+    // tx 9: This reads keys 1, 3 and 1000 
+    // Does not conflict on the first shard and will be executed out of order 
+    NKikimrMiniKQL::TResult read_1_1000_3; 
+    proxy.Enqueue(Sprintf(programReadKeys3, 1, 1000, 3), [&](TFakeProxyTx& tx) -> bool { 
+        read_1_1000_3 = tx.GetResult(); 
+        return true; 
+    }, txFlags); 
+ 
+    // tx 10: This is an immediate write to keys 0 and 1 
+    // It will be proposed after the above read completes, so it must 
+    // be ordered after the above read. 
+    proxy.Enqueue(Sprintf(programWriteKeys2, 0, "G", 1, "H"), noCheck, txFlags); 
+ 
+    // tx 11: This write to key 3 (force online), will block until the above read 
+    // This would unblock writes to keys 0 and 2 and used to add a delay 
+    proxy.Enqueue(Sprintf(programWriteKeys1, 3, "Z")); 
+    auto txWriteLast = proxy.LastTxId(); 
+ 
+    // Delay first shard readsets until last write succeeds 
     proxy.DelayReadSet(TExpectedReadSet(txMoveKey, { TTestTxConfig::TxTablet0, txWriteLast }));
-    proxy.ExecQueue();
-
-    // Sanity check: read must go first, otherwise the whole machinery would hang
-    // Read result also proves that tx 8 is logically before tx 9
-    {
-        TValue value = TValue::Create(read_1_1000_3.GetValue(), read_1_1000_3.GetType());
-        TValue rows = value["Result"];
-        UNIT_ASSERT_VALUES_EQUAL(TString(rows[0]["value"]), "B"); // key 1: initial value
-        UNIT_ASSERT_VALUES_EQUAL(TString(rows[1]["value"]), "F"); // key 1000: tx 8 must be visible
-    }
-
-    // Read the final state of important keys
-    NKikimrMiniKQL::TResult read_0_1_2_1000;
-    proxy.Enqueue(Sprintf(programReadKeys4, 0, 1, 2, 1000), [&](TFakeProxyTx& tx) -> bool {
-        read_0_1_2_1000 = tx.GetResult();
-        return true;
-    }, txFlags);
-    proxy.ExecQueue();
-
-    // Sanity check: must see correct state of these keys
-    {
-        TValue value = TValue::Create(read_0_1_2_1000.GetValue(), read_0_1_2_1000.GetType());
-        TValue rows = value["Result"];
-        UNIT_ASSERT_VALUES_EQUAL(TString(rows[0]["value"]), "G"); // key 0: tx 10 must be visible
-        UNIT_ASSERT_VALUES_EQUAL(TString(rows[1]["value"]), "H"); // key 1: tx 10 must be visible
-        UNIT_ASSERT_VALUES_EQUAL(TString(rows[2]["value"]), "E"); // key 2: tx 8 must be visible
-        UNIT_ASSERT_VALUES_EQUAL(TString(rows[3]["value"]), "F"); // key 1000: tx 8 must be visible
-    }
-}
-
+    proxy.ExecQueue(); 
+ 
+    // Sanity check: read must go first, otherwise the whole machinery would hang 
+    // Read result also proves that tx 8 is logically before tx 9 
+    { 
+        TValue value = TValue::Create(read_1_1000_3.GetValue(), read_1_1000_3.GetType()); 
+        TValue rows = value["Result"]; 
+        UNIT_ASSERT_VALUES_EQUAL(TString(rows[0]["value"]), "B"); // key 1: initial value 
+        UNIT_ASSERT_VALUES_EQUAL(TString(rows[1]["value"]), "F"); // key 1000: tx 8 must be visible 
+    } 
+ 
+    // Read the final state of important keys 
+    NKikimrMiniKQL::TResult read_0_1_2_1000; 
+    proxy.Enqueue(Sprintf(programReadKeys4, 0, 1, 2, 1000), [&](TFakeProxyTx& tx) -> bool { 
+        read_0_1_2_1000 = tx.GetResult(); 
+        return true; 
+    }, txFlags); 
+    proxy.ExecQueue(); 
+ 
+    // Sanity check: must see correct state of these keys 
+    { 
+        TValue value = TValue::Create(read_0_1_2_1000.GetValue(), read_0_1_2_1000.GetType()); 
+        TValue rows = value["Result"]; 
+        UNIT_ASSERT_VALUES_EQUAL(TString(rows[0]["value"]), "G"); // key 0: tx 10 must be visible 
+        UNIT_ASSERT_VALUES_EQUAL(TString(rows[1]["value"]), "H"); // key 1: tx 10 must be visible 
+        UNIT_ASSERT_VALUES_EQUAL(TString(rows[2]["value"]), "E"); // key 2: tx 8 must be visible 
+        UNIT_ASSERT_VALUES_EQUAL(TString(rows[3]["value"]), "F"); // key 1000: tx 8 must be visible 
+    } 
+} 
+ 
 //
 
 static inline bool HasFlag(ui32 flags, ui32 pos) {
@@ -1295,15 +1295,15 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
         runtime.DispatchEvents(options);
     }
 
-    // With mvcc (or a better dependency tracking) the read below may start out-of-order,
-    // because transactions above are stuck before performing any writes. Make sure it's
-    // forced to wait for above transactions by commiting a write that is guaranteed
-    // to "happen" after transactions above.
+    // With mvcc (or a better dependency tracking) the read below may start out-of-order, 
+    // because transactions above are stuck before performing any writes. Make sure it's 
+    // forced to wait for above transactions by commiting a write that is guaranteed 
+    // to "happen" after transactions above. 
     ExecSQL(server, sender, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (5, 5);
     )"));
-
+ 
     // This immediate tx should be delayed due to conflict with upserts.
     SendSQL(server, sender, Q_("SELECT * FROM `/Root/table-2`"));
     {
@@ -1399,121 +1399,121 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
 
 }
 
-Y_UNIT_TEST_SUITE(DataShardOutOfOrder) {
-
+Y_UNIT_TEST_SUITE(DataShardOutOfOrder) { 
+ 
 Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
+ 
+    InitRoot(server, sender); 
+ 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
             SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
-        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    auto captureRS = [&](TTestActorRuntimeBase&, 
+                         TAutoPtr<IEventHandle> &event) -> auto { 
+        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) { 
             readSets.push_back(std::move(event));
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
+            return TTestActorRuntime::EEventAction::DROP; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto sender2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-    }
-
-    // Now send a simple request that would upsert a new value into table-1
-    // It would have broken locks if executed before the above commit
-    // However the above commit must succeed (readsets are already being exchanged)
-    auto sender3 = runtime.AllocateEdgeActor();
+ 
+    // Wait until we captured both readsets 
+    { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+    } 
+ 
+    // Now send a simple request that would upsert a new value into table-1 
+    // It would have broken locks if executed before the above commit 
+    // However the above commit must succeed (readsets are already being exchanged) 
+    auto sender3 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender3, MakeSimpleRequest(Q_(
         "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)")));
-
-    // Schedule a simple timer to simulate some time passing
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
-        runtime.Schedule(new IEventHandle(sender4, sender4, new TEvents::TEvWakeup()), TDuration::Seconds(1));
-        runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender4);
-    }
-
-    // Whatever happens we should resend blocked readsets
-    runtime.SetObserverFunc(prevObserverFunc);
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, /* via actor system */ true);
-    }
-    readSets.clear();
-
-    // Read the immediate reply first, it must always succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender3);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Read the commit reply next
-    bool committed;
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        if (response.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
-            // Let's suppose somehow locks still managed to become invalidated
+ 
+    // Schedule a simple timer to simulate some time passing 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
+        runtime.Schedule(new IEventHandle(sender4, sender4, new TEvents::TEvWakeup()), TDuration::Seconds(1)); 
+        runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender4); 
+    } 
+ 
+    // Whatever happens we should resend blocked readsets 
+    runtime.SetObserverFunc(prevObserverFunc); 
+    for (auto& ev : readSets) { 
+        runtime.Send(ev.Release(), 0, /* via actor system */ true); 
+    } 
+    readSets.clear(); 
+ 
+    // Read the immediate reply first, it must always succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender3); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Read the commit reply next 
+    bool committed; 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        if (response.GetYdbStatus() == Ydb::StatusIds::ABORTED) { 
+            // Let's suppose somehow locks still managed to become invalidated 
             NYql::TIssues issues;
             IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
             UNIT_ASSERT(NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-            committed = false;
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-            committed = true;
-        }
-    }
-
-    // Select keys 3 and 4 from both tables, either both or none should be inserted
-    {
-        auto sender5 = runtime.AllocateEdgeActor();
+            committed = false; 
+        } else { 
+            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+            committed = true; 
+        } 
+    } 
+ 
+    // Select keys 3 and 4 from both tables, either both or none should be inserted 
+    { 
+        auto sender5 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(R"(
             $rows = (
                 SELECT key, value FROM `/Root/table-1` WHERE key = 3
@@ -1521,19 +1521,19 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
                 SELECT key, value FROM `/Root/table-2` WHERE key = 4
             );
             SELECT key, value FROM $rows ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected;
-        if (committed) {
-            expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        } else {
-            expected = "Struct { } Struct { Bool: false }";
-        }
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-}
-
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected; 
+        if (committed) { 
+            expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }"; 
+        } else { 
+            expected = "Struct { } Struct { Bool: false }"; 
+        } 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+} 
+ 
 Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
@@ -1679,94 +1679,94 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
         .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false);
 
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
+ 
+    InitRoot(server, sender); 
+ 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
             SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
-        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    auto captureRS = [&](TTestActorRuntimeBase&, 
+                         TAutoPtr<IEventHandle> &event) -> auto { 
+        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) { 
             readSets.push_back(std::move(event));
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
+            return TTestActorRuntime::EEventAction::DROP; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto sender2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-    }
-
-    // Now send a simple read request from table-1
-    // Since it's readonly it cannot affect inflight transaction and shouled be allowed
-    {
-        auto sender3 = runtime.AllocateEdgeActor();
+ 
+    // Wait until we captured both readsets 
+    { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+    } 
+ 
+    // Now send a simple read request from table-1 
+    // Since it's readonly it cannot affect inflight transaction and shouled be allowed 
+    { 
+        auto sender3 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(
             "SELECT key, value FROM `/Root/table-1` ORDER BY key")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-
-    // Whatever happens we should resend blocked readsets
-    runtime.SetObserverFunc(prevObserverFunc);
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, /* via actor system */ true);
-    }
-    readSets.clear();
-
-    // Read the commit reply next, it must succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Select keys 3 and 4 from both tables, both should have been be inserted
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+ 
+    // Whatever happens we should resend blocked readsets 
+    runtime.SetObserverFunc(prevObserverFunc); 
+    for (auto& ev : readSets) { 
+        runtime.Send(ev.Release(), 0, /* via actor system */ true); 
+    } 
+    readSets.clear(); 
+ 
+    // Read the commit reply next, it must succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Select keys 3 and 4 from both tables, both should have been be inserted 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"(
             $rows = (
                 SELECT key, value FROM `/Root/table-1` WHERE key = 3
@@ -1774,115 +1774,115 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
                 SELECT key, value FROM `/Root/table-2` WHERE key = 4
             );
             SELECT key, value FROM $rows ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-}
-
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+} 
+ 
 Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
+ 
+    InitRoot(server, sender); 
+ 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
             SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
-        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    auto captureRS = [&](TTestActorRuntimeBase&, 
+                         TAutoPtr<IEventHandle> &event) -> auto { 
+        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) { 
             readSets.push_back(std::move(event));
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
+            return TTestActorRuntime::EEventAction::DROP; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto sender2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Now send non-conflicting upsert to both tables
-    {
-        auto sender3 = runtime.AllocateEdgeActor();
+ 
+    // Wait until we captured both readsets 
+    if (readSets.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Now send non-conflicting upsert to both tables 
+    { 
+        auto sender3 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Check that immediate non-conflicting upsert is working too
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Check that immediate non-conflicting upsert is working too 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (7, 4)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Resend previousy blocked readsets
-    runtime.SetObserverFunc(prevObserverFunc);
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, /* via actor system */ true);
-    }
-    readSets.clear();
-
-    // Read the commit reply next, it must succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Select keys 3 and 4 from both tables, both should have been inserted
-    {
-        auto sender5 = runtime.AllocateEdgeActor();
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Resend previousy blocked readsets 
+    runtime.SetObserverFunc(prevObserverFunc); 
+    for (auto& ev : readSets) { 
+        runtime.Send(ev.Release(), 0, /* via actor system */ true); 
+    } 
+    readSets.clear(); 
+ 
+    // Read the commit reply next, it must succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Select keys 3 and 4 from both tables, both should have been inserted 
+    { 
+        auto sender5 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(R"(
             $rows = (
                 SELECT key, value FROM `/Root/table-1` WHERE key = 3
@@ -1890,191 +1890,191 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
                 SELECT key, value FROM `/Root/table-2` WHERE key = 4
             );
             SELECT key, value FROM $rows ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-}
-
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+} 
+ 
 Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
         .SetEnableMvcc(false) // intentionally, because we test non-mvcc locks logic
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    // This test requires barrier to be disabled
-    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    // This test requires barrier to be disabled 
+    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
-    auto table2shards = GetTableShards(server, sender, "/Root/table-2");
-
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+    auto table1shards = GetTableShards(server, sender, "/Root/table-1"); 
+    auto table2shards = GetTableShards(server, sender, "/Root/table-2"); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
-        auto sender1 = runtime.AllocateEdgeActor();
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
+        auto sender1 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
             SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
-        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    auto captureRS = [&](TTestActorRuntimeBase&, 
+                         TAutoPtr<IEventHandle> &event) -> auto { 
+        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) { 
             readSets.push_back(std::move(event));
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
+            return TTestActorRuntime::EEventAction::DROP; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto sender2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Reboot table-1 tablet
-    readSets.clear();
+ 
+    // Wait until we captured both readsets 
+    if (readSets.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Reboot table-1 tablet 
+    readSets.clear(); 
     RebootTablet(runtime, table1shards[0], sender);
-
-    // Wait until we captured both readsets again
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Select keys 1 and 3, we expect this immediate tx to succeed
-    // Note that key 3 is not written yet, but we pretend immediate tx
-    // executes before that waiting transaction (no key 3 yet).
-    {
-        auto sender3 = runtime.AllocateEdgeActor();
+ 
+    // Wait until we captured both readsets again 
+    if (readSets.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Select keys 1 and 3, we expect this immediate tx to succeed 
+    // Note that key 3 is not written yet, but we pretend immediate tx 
+    // executes before that waiting transaction (no key 3 yet). 
+    { 
+        auto sender3 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(
             "SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-
-    // Upsert key 1, we expect this immediate tx to timeout
-    // Another tx has already checked locks for that key, we must never
-    // pretend some other conflicting write happened before that tx completes.
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+ 
+    // Upsert key 1, we expect this immediate tx to timeout 
+    // Another tx has already checked locks for that key, we must never 
+    // pretend some other conflicting write happened before that tx completes. 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
         auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
-    }
-
-    // Upsert key 5, this immediate tx should timeout because we currently
-    // lose information on locked keys after reboot and it acts as a global
-    // barrier.
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
+        req->Record.MutableRequest()->SetCancelAfterMs(1000); 
+        req->Record.MutableRequest()->SetTimeoutMs(1000); 
+        auto ev = ExecRequest(runtime, sender4, std::move(req)); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT); 
+    } 
+ 
+    // Upsert key 5, this immediate tx should timeout because we currently 
+    // lose information on locked keys after reboot and it acts as a global 
+    // barrier. 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
         auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
-    }
-
-    // Release readsets allowing tx to progress
-    runtime.SetObserverFunc(prevObserverFunc);
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, /* viaActorSystem */ true);
-    }
-
-    // Select key 3, we expect a success
-    {
-        auto sender9 = runtime.AllocateEdgeActor();
+        req->Record.MutableRequest()->SetCancelAfterMs(1000); 
+        req->Record.MutableRequest()->SetTimeoutMs(1000); 
+        auto ev = ExecRequest(runtime, sender4, std::move(req)); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT); 
+    } 
+ 
+    // Release readsets allowing tx to progress 
+    runtime.SetObserverFunc(prevObserverFunc); 
+    for (auto& ev : readSets) { 
+        runtime.Send(ev.Release(), 0, /* viaActorSystem */ true); 
+    } 
+ 
+    // Select key 3, we expect a success 
+    { 
+        auto sender9 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender9, MakeSimpleRequest(Q_(
             "SELECT key, value FROM `/Root/table-1` WHERE key = 3;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-}
-
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+} 
+ 
 Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
         .SetEnableMvcc(true)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    // This test requires barrier to be disabled
-    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    // This test requires barrier to be disabled 
+    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
+ 
+    InitRoot(server, sender); 
+ 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
-    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
-    auto table2shards = GetTableShards(server, sender, "/Root/table-2");
-
+    auto table1shards = GetTableShards(server, sender, "/Root/table-1"); 
+    auto table2shards = GetTableShards(server, sender, "/Root/table-2"); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
-        auto sender1 = runtime.AllocateEdgeActor();
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
+        auto sender1 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
              SELECT * FROM `/Root/table-1` WHERE key = 1
              UNION ALL
@@ -2220,1425 +2220,1425 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
             SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
-        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    auto captureRS = [&](TTestActorRuntimeBase&, 
+                         TAutoPtr<IEventHandle> &event) -> auto { 
+        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) { 
             readSets.push_back(std::move(event));
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
+            return TTestActorRuntime::EEventAction::DROP; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto sender2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Execute some out-of-order upserts before rebooting
+ 
+    // Wait until we captured both readsets 
+    if (readSets.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Execute some out-of-order upserts before rebooting 
     ExecSQL(server, sender, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))"));
-
-    // Select key 3, we expect a timeout, because logically writes
-    // to 3 and 5 already happened, but physically write to 3 is still waiting.
-    {
-        auto sender3 = runtime.AllocateEdgeActor();
+ 
+    // Select key 3, we expect a timeout, because logically writes 
+    // to 3 and 5 already happened, but physically write to 3 is still waiting. 
+    { 
+        auto sender3 = runtime.AllocateEdgeActor(); 
         auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender3, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
-    }
-
-    // Reboot table-1 tablet
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-    readSets.clear();
+        req->Record.MutableRequest()->SetCancelAfterMs(1000); 
+        req->Record.MutableRequest()->SetTimeoutMs(1000); 
+        auto ev = ExecRequest(runtime, sender3, std::move(req)); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT); 
+    } 
+ 
+    // Reboot table-1 tablet 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+    readSets.clear(); 
     RebootTablet(runtime, table1shards[0], sender);
-
-    // Wait until we captured both readsets again
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Select key 3, we still expect a timeout
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
+ 
+    // Wait until we captured both readsets again 
+    if (readSets.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Select key 3, we still expect a timeout 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
         auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
-    }
-
-    // Select key 5, it shouldn't pose any problems
-    {
-        auto sender5 = runtime.AllocateEdgeActor();
+        req->Record.MutableRequest()->SetCancelAfterMs(1000); 
+        req->Record.MutableRequest()->SetTimeoutMs(1000); 
+        auto ev = ExecRequest(runtime, sender4, std::move(req)); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT); 
+    } 
+ 
+    // Select key 5, it shouldn't pose any problems 
+    { 
+        auto sender5 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(
             "SELECT key, value FROM `/Root/table-1` WHERE key = 5;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 3 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-
-    // Release readsets allowing tx to progress
-    runtime.SetObserverFunc(prevObserverFunc);
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, /* viaActorSystem */ true);
-    }
-
-    // Select key 3, we expect a success
-    {
-        auto sender6 = runtime.AllocateEdgeActor();
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 3 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+ 
+    // Release readsets allowing tx to progress 
+    runtime.SetObserverFunc(prevObserverFunc); 
+    for (auto& ev : readSets) { 
+        runtime.Send(ev.Release(), 0, /* viaActorSystem */ true); 
+    } 
+ 
+    // Select key 3, we expect a success 
+    { 
+        auto sender6 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender6, MakeSimpleRequest(Q_(
             "SELECT key, value FROM `/Root/table-1` WHERE key = 3;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-}
-
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+} 
+ 
 Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    // This test requires barrier to be disabled
-    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    // This test requires barrier to be disabled 
+    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
+ 
+    InitRoot(server, sender); 
+ 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
-    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
-    auto table2shards = GetTableShards(server, sender, "/Root/table-2");
-
+    auto table1shards = GetTableShards(server, sender, "/Root/table-1"); 
+    auto table2shards = GetTableShards(server, sender, "/Root/table-2"); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
-        auto sender1 = runtime.AllocateEdgeActor();
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
+        auto sender1 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
             SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Capture and block all readset messages
-    THashMap<TActorId, ui64> actorToTablet;
-    TVector<THolder<IEventHandle>> readSets;
-    TVector<THolder<IEventHandle>> progressEvents;
-    bool blockProgressEvents = false;
-    size_t bypassProgressEvents = 0;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
-        auto recipient = event->GetRecipientRewrite();
-        switch (event->GetTypeRewrite()) {
-            case TEvTablet::EvBoot: {
-                auto* msg = event->Get<TEvTablet::TEvBoot>();
-                auto tabletId = msg->TabletID;
-                Cerr << "... found " << recipient << " to be tablet " << tabletId << Endl;
-                actorToTablet[recipient] = tabletId;
-                break;
-            }
-            case TEvTxProcessing::EvReadSet: {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Capture and block all readset messages 
+    THashMap<TActorId, ui64> actorToTablet; 
+    TVector<THolder<IEventHandle>> readSets; 
+    TVector<THolder<IEventHandle>> progressEvents; 
+    bool blockProgressEvents = false; 
+    size_t bypassProgressEvents = 0; 
+    auto captureRS = [&](TTestActorRuntimeBase&, 
+                         TAutoPtr<IEventHandle> &event) -> auto { 
+        auto recipient = event->GetRecipientRewrite(); 
+        switch (event->GetTypeRewrite()) { 
+            case TEvTablet::EvBoot: { 
+                auto* msg = event->Get<TEvTablet::TEvBoot>(); 
+                auto tabletId = msg->TabletID; 
+                Cerr << "... found " << recipient << " to be tablet " << tabletId << Endl; 
+                actorToTablet[recipient] = tabletId; 
+                break; 
+            } 
+            case TEvTxProcessing::EvReadSet: { 
                 readSets.push_back(std::move(event));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0 /* EvProgressTransaction */: {
-                ui64 tabletId = actorToTablet.Value(recipient, 0);
-                if (blockProgressEvents && tabletId == table1shards[0]) {
-                    if (bypassProgressEvents == 0) {
-                        Cerr << "... captured TEvProgressTransaction" << Endl;
+                return TTestActorRuntime::EEventAction::DROP; 
+            } 
+            case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0 /* EvProgressTransaction */: { 
+                ui64 tabletId = actorToTablet.Value(recipient, 0); 
+                if (blockProgressEvents && tabletId == table1shards[0]) { 
+                    if (bypassProgressEvents == 0) { 
+                        Cerr << "... captured TEvProgressTransaction" << Endl; 
                         progressEvents.push_back(std::move(event));
-                        return TTestActorRuntime::EEventAction::DROP;
-                    }
-                    Cerr << "... bypass for TEvProgressTransaction" << Endl;
-                    --bypassProgressEvents;
-                }
-                break;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
+                        return TTestActorRuntime::EEventAction::DROP; 
+                    } 
+                    Cerr << "... bypass for TEvProgressTransaction" << Endl; 
+                    --bypassProgressEvents; 
+                } 
+                break; 
+            } 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto sender2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Send some more requests that form a staircase, they would all be blocked as well
-    auto sender3 = runtime.AllocateEdgeActor();
+ 
+    // Wait until we captured both readsets 
+    if (readSets.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Send some more requests that form a staircase, they would all be blocked as well 
+    auto sender3 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3), (5, 3);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 3), (6, 3))")));
-    SimulateSleep(server, TDuration::Seconds(1));
+    SimulateSleep(server, TDuration::Seconds(1)); 
     SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 4), (7, 4);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 4), (8, 4))")));
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // One more request that would be executed out of order
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // One more request that would be executed out of order 
     ExecSQL(server, sender, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (11, 5);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (12, 5))"));
-
-    // Select key 7, we expect a timeout, because logically a write to it already happened
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
+ 
+    // Select key 7, we expect a timeout, because logically a write to it already happened 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
         auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
-    }
-
-    // Reboot table-1 tablet
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-    readSets.clear();
-    blockProgressEvents = true;
-    bypassProgressEvents = 1;
-    Cerr << "... rebooting tablet" << Endl;
+        req->Record.MutableRequest()->SetCancelAfterMs(1000); 
+        req->Record.MutableRequest()->SetTimeoutMs(1000); 
+        auto ev = ExecRequest(runtime, sender4, std::move(req)); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT); 
+    } 
+ 
+    // Reboot table-1 tablet 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+    readSets.clear(); 
+    blockProgressEvents = true; 
+    bypassProgressEvents = 1; 
+    Cerr << "... rebooting tablet" << Endl; 
     RebootTablet(runtime, table1shards[0], sender);
-    Cerr << "... tablet rebooted" << Endl;
-
-    // Wait until we captured both readsets again
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Wait until we have a pending progress event
-    if (progressEvents.size() < 1) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return progressEvents.size() >= 1;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(progressEvents.size(), 1u);
-
-    // Select key 7 again, we still expect a timeout, because logically a write to it already happened
-    {
-        auto sender5 = runtime.AllocateEdgeActor();
+    Cerr << "... tablet rebooted" << Endl; 
+ 
+    // Wait until we captured both readsets again 
+    if (readSets.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Wait until we have a pending progress event 
+    if (progressEvents.size() < 1) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return progressEvents.size() >= 1; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(progressEvents.size(), 1u); 
+ 
+    // Select key 7 again, we still expect a timeout, because logically a write to it already happened 
+    { 
+        auto sender5 = runtime.AllocateEdgeActor(); 
         auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender5, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
-    }
-
-    // Stop blocking readsets and unblock progress
-    runtime.SetObserverFunc(prevObserverFunc);
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, true);
-    }
-    for (auto& ev : progressEvents) {
-        runtime.Send(ev.Release(), 0, true);
-    }
-
-    // Select key 7 again, this time is should succeed
-    {
-        auto sender6 = runtime.AllocateEdgeActor();
+        req->Record.MutableRequest()->SetCancelAfterMs(1000); 
+        req->Record.MutableRequest()->SetTimeoutMs(1000); 
+        auto ev = ExecRequest(runtime, sender5, std::move(req)); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT); 
+    } 
+ 
+    // Stop blocking readsets and unblock progress 
+    runtime.SetObserverFunc(prevObserverFunc); 
+    for (auto& ev : readSets) { 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+    for (auto& ev : progressEvents) { 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+ 
+    // Select key 7 again, this time is should succeed 
+    { 
+        auto sender6 = runtime.AllocateEdgeActor(); 
         auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"));
-        auto ev = ExecRequest(runtime, sender6, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 4 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-}
-
-namespace {
-    ui64 AsyncCreateCopyTable(
-            Tests::TServer::TPtr server,
+        auto ev = ExecRequest(runtime, sender6, std::move(req)); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 4 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+} 
+ 
+namespace { 
+    ui64 AsyncCreateCopyTable( 
+            Tests::TServer::TPtr server, 
             TActorId sender,
-            const TString &root,
-            const TString &name,
-            const TString &from)
-    {
-        auto &runtime = *server->GetRuntime();
-
-        // Create table with four shards.
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetExecTimeoutPeriod(Max<ui64>());
-        auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+            const TString &root, 
+            const TString &name, 
+            const TString &from) 
+    { 
+        auto &runtime = *server->GetRuntime(); 
+ 
+        // Create table with four shards. 
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
+        request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
+        auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-        tx.SetWorkingDir(root);
-        auto &desc = *tx.MutableCreateTable();
-        desc.SetName(name);
-        desc.SetCopyFromTable(from);
-
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-        auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
-        return ev->Get()->Record.GetTxId();
-    }
-}
-
+        tx.SetWorkingDir(root); 
+        auto &desc = *tx.MutableCreateTable(); 
+        desc.SetName(name); 
+        desc.SetCopyFromTable(from); 
+ 
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
+        auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
+        return ev->Get()->Record.GetTxId(); 
+    } 
+} 
+ 
 Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
+ 
+    InitRoot(server, sender); 
+ 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId,Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
             SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    TVector<THolder<IEventHandle>> txProposes;
-    size_t seenPlanSteps = 0;
-    bool captureReadSets = true;
-    bool captureTxProposes = false;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvTxProcessing::EvPlanStep:
-                Cerr << "---- observed EvPlanStep ----" << Endl;
-                ++seenPlanSteps;
-                break;
-            case TEvTxProcessing::EvReadSet:
-                Cerr << "---- observed EvReadSet ----" << Endl;
-                if (captureReadSets) {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    TVector<THolder<IEventHandle>> txProposes; 
+    size_t seenPlanSteps = 0; 
+    bool captureReadSets = true; 
+    bool captureTxProposes = false; 
+    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvTxProcessing::EvPlanStep: 
+                Cerr << "---- observed EvPlanStep ----" << Endl; 
+                ++seenPlanSteps; 
+                break; 
+            case TEvTxProcessing::EvReadSet: 
+                Cerr << "---- observed EvReadSet ----" << Endl; 
+                if (captureReadSets) { 
                     readSets.push_back(std::move(event));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            case TEvTxProxy::EvProposeTransaction:
-                Cerr << "---- observed EvProposeTransaction ----" << Endl;
-                if (captureTxProposes) {
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            case TEvTxProxy::EvProposeTransaction: 
+                Cerr << "---- observed EvProposeTransaction ----" << Endl; 
+                if (captureTxProposes) { 
                     txProposes.push_back(std::move(event));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto senderCommit = runtime.AllocateEdgeActor();
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto senderCommit = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    captureTxProposes = true;
-
-    // Now we send a distributed read, while stopping coordinator proposals
-    auto senderRead = runtime.AllocateEdgeActor();
+ 
+    // Wait until we captured both readsets 
+    if (readSets.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return readSets.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    captureTxProposes = true; 
+ 
+    // Now we send a distributed read, while stopping coordinator proposals 
+    auto senderRead = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, senderRead, MakeSimpleRequest(Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`)")));
-
-    // Wait until we capture the propose request
-    if (txProposes.size() < 1) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return txProposes.size() >= 1;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 1u);
-
-    Cerr << "---- captured propose for data tx ----" << Endl;
-
-    // Now we send a copy table request, again blocking coordinator proposal
-    auto senderCopy = runtime.AllocateEdgeActor();
-    auto txIdCopy = AsyncCreateCopyTable(server, senderCopy, "/Root", "table-3", "/Root/table-2");
-
-    // Wait until we capture the propose request
-    if (txProposes.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return txProposes.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 2u);
-
-    Cerr << "---- captured propose for copy tx ----" << Endl;
-
-    // Stop capturing stuff
-    captureReadSets = false;
-    captureTxProposes = false;
-
-    // Release copy tx propose and wait for plan steps (table-3, table-2 and schemeshard)
-    // It is important for copy tx to be planned *before* the read tx
-    seenPlanSteps = 0;
-    runtime.Send(txProposes[1].Release(), 0, /* via actor system */ true);
-    if (seenPlanSteps < 3) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return seenPlanSteps >= 3;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 3u);
-
-    // Release read tx propose and wait for plan steps (table-1 and table-2)
-    // Now read tx will be planned *after* the copy tx
-    seenPlanSteps = 0;
-    runtime.Send(txProposes[0].Release(), 0, /* via actor system */ true);
-    if (seenPlanSteps < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return seenPlanSteps >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 2u);
-
-    // Sleep a little so that everything stops in a settled state
-    // Bug KIKIMR-7711 would cause copy tx and read tx to depend on each other
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Release readsets, allowing the first commit to finish
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, /* via actor system */ true);
-    }
-
-    // Wait for commit to complete, it must succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderCommit);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Wait for copy table tx to complete
-    WaitTxNotification(server, senderCopy, txIdCopy);
-
-    // Wait for distributed read to complete, it must succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderRead);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-}
-
+ 
+    // Wait until we capture the propose request 
+    if (txProposes.size() < 1) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return txProposes.size() >= 1; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 1u); 
+ 
+    Cerr << "---- captured propose for data tx ----" << Endl; 
+ 
+    // Now we send a copy table request, again blocking coordinator proposal 
+    auto senderCopy = runtime.AllocateEdgeActor(); 
+    auto txIdCopy = AsyncCreateCopyTable(server, senderCopy, "/Root", "table-3", "/Root/table-2"); 
+ 
+    // Wait until we capture the propose request 
+    if (txProposes.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return txProposes.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 2u); 
+ 
+    Cerr << "---- captured propose for copy tx ----" << Endl; 
+ 
+    // Stop capturing stuff 
+    captureReadSets = false; 
+    captureTxProposes = false; 
+ 
+    // Release copy tx propose and wait for plan steps (table-3, table-2 and schemeshard) 
+    // It is important for copy tx to be planned *before* the read tx 
+    seenPlanSteps = 0; 
+    runtime.Send(txProposes[1].Release(), 0, /* via actor system */ true); 
+    if (seenPlanSteps < 3) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return seenPlanSteps >= 3; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 3u); 
+ 
+    // Release read tx propose and wait for plan steps (table-1 and table-2) 
+    // Now read tx will be planned *after* the copy tx 
+    seenPlanSteps = 0; 
+    runtime.Send(txProposes[0].Release(), 0, /* via actor system */ true); 
+    if (seenPlanSteps < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return seenPlanSteps >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 2u); 
+ 
+    // Sleep a little so that everything stops in a settled state 
+    // Bug KIKIMR-7711 would cause copy tx and read tx to depend on each other 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Release readsets, allowing the first commit to finish 
+    for (auto& ev : readSets) { 
+        runtime.Send(ev.Release(), 0, /* via actor system */ true); 
+    } 
+ 
+    // Wait for commit to complete, it must succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderCommit); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Wait for copy table tx to complete 
+    WaitTxNotification(server, senderCopy, txIdCopy); 
+ 
+    // Wait for distributed read to complete, it must succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderRead); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+} 
+ 
 Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    auto shards1 = GetTableShards(server, sender, "/Root/table-1");
-    UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
-    auto shards2 = GetTableShards(server, sender, "/Root/table-2");
-    UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 1u);
-    TVector<ui64> tablets;
-    tablets.push_back(shards1[0]);
-    tablets.push_back(shards2[0]);
-
-    // Capture and block some messages
-    bool captureTxCancel = false;
-    bool captureTxPropose = false;
-    bool captureTxProposeResult = false;
-    TVector<THolder<IEventHandle>> txCancels;
-    TVector<THolder<IEventHandle>> txProposes;
-    TVector<THolder<IEventHandle>> txProposeResults;
-    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvProposeTransaction:
-                Cerr << "---- observed EvProposeTransaction ----" << Endl;
-                if (captureTxPropose) {
+ 
+    auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u); 
+    auto shards2 = GetTableShards(server, sender, "/Root/table-2"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 1u); 
+    TVector<ui64> tablets; 
+    tablets.push_back(shards1[0]); 
+    tablets.push_back(shards2[0]); 
+ 
+    // Capture and block some messages 
+    bool captureTxCancel = false; 
+    bool captureTxPropose = false; 
+    bool captureTxProposeResult = false; 
+    TVector<THolder<IEventHandle>> txCancels; 
+    TVector<THolder<IEventHandle>> txProposes; 
+    TVector<THolder<IEventHandle>> txProposeResults; 
+    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvDataShard::EvProposeTransaction: 
+                Cerr << "---- observed EvProposeTransaction ----" << Endl; 
+                if (captureTxPropose) { 
                     txProposes.push_back(std::move(event));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            case TEvDataShard::EvProposeTransactionResult:
-                Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
-                if (captureTxProposeResult) {
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            case TEvDataShard::EvProposeTransactionResult: 
+                Cerr << "---- observed EvProposeTransactionResult ----" << Endl; 
+                if (captureTxProposeResult) { 
                     txProposeResults.push_back(std::move(event));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            case TEvDataShard::EvCancelTransactionProposal:
-                Cerr << "---- observed EvCancelTransactionProposal ----" << Endl;
-                if (captureTxCancel) {
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            case TEvDataShard::EvCancelTransactionProposal: 
+                Cerr << "---- observed EvCancelTransactionProposal ----" << Endl; 
+                if (captureTxCancel) { 
                     txCancels.push_back(std::move(event));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureMessages);
-
-    // Send a distributed read while capturing propose results
-    captureTxProposeResult = true;
-    auto senderRead1 = runtime.AllocateEdgeActor();
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureMessages); 
+ 
+    // Send a distributed read while capturing propose results 
+    captureTxProposeResult = true; 
+    auto senderRead1 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, senderRead1, MakeSimpleRequest(Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`)")));
-    if (txProposeResults.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return txProposeResults.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(txProposeResults.size(), 2u);
-    captureTxProposeResult = false;
-
-    // Remember which senders claim to be which shards
+    if (txProposeResults.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return txProposeResults.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(txProposeResults.size(), 2u); 
+    captureTxProposeResult = false; 
+ 
+    // Remember which senders claim to be which shards 
     TVector<TActorId> actors(2);
-    for (auto& event : txProposeResults) {
+    for (auto& event : txProposeResults) { 
         TActorId actor = event->Sender;
-        const auto* msg = event->Get<TEvDataShard::TEvProposeTransactionResult>();
-        ui64 shard = msg->Record.GetOrigin();
-        for (size_t i = 0; i < tablets.size(); ++i) {
-            if (tablets[i] == shard) {
-                actors[i] = actor;
-            }
-        }
-        runtime.Send(event.Release(), 0, /* via actor system */ true);
-    }
-    txProposeResults.clear();
-
-    // Wait for the first query result, it must succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderRead1);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Send a distributed read again, while blocking propose messages
-    captureTxPropose = true;
-    auto senderRead2 = runtime.AllocateEdgeActor();
+        const auto* msg = event->Get<TEvDataShard::TEvProposeTransactionResult>(); 
+        ui64 shard = msg->Record.GetOrigin(); 
+        for (size_t i = 0; i < tablets.size(); ++i) { 
+            if (tablets[i] == shard) { 
+                actors[i] = actor; 
+            } 
+        } 
+        runtime.Send(event.Release(), 0, /* via actor system */ true); 
+    } 
+    txProposeResults.clear(); 
+ 
+    // Wait for the first query result, it must succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderRead1); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Send a distributed read again, while blocking propose messages 
+    captureTxPropose = true; 
+    auto senderRead2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, senderRead2, MakeSimpleRequest(Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`)")));
-    if (txProposes.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return txProposes.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 2u);
-    captureTxPropose = false;
-
-    // Simulate propose overloaded at the second table
-    captureTxCancel = true;
-    for (auto& event : txProposes) {
-        if (event && event->GetRecipientRewrite() == actors[1]) {
-            Cerr << "---- found propose for table-2 ----" << Endl;
-            const auto* msg = event->Get<TEvDataShard::TEvProposeTransaction>();
+    if (txProposes.size() < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return txProposes.size() >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 2u); 
+    captureTxPropose = false; 
+ 
+    // Simulate propose overloaded at the second table 
+    captureTxCancel = true; 
+    for (auto& event : txProposes) { 
+        if (event && event->GetRecipientRewrite() == actors[1]) { 
+            Cerr << "---- found propose for table-2 ----" << Endl; 
+            const auto* msg = event->Get<TEvDataShard::TEvProposeTransaction>(); 
             TActorId target = msg->GetSource();
-            auto* result = new TEvDataShard::TEvProposeTransactionResult(
-                msg->GetTxKind(),
-                tablets[1],
-                msg->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED);
-            Cerr << "Sending error result from " << actors[1] << " to " << target << Endl;
-            runtime.Send(new IEventHandle(target, actors[1], result), 0, /* via actor system */ true);
-            event.Reset(); // drop this propose event
-        }
-    }
-    if (txCancels.size() < 1) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return txCancels.size() >= 1;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(txCancels.size(), 1u);
-    captureTxCancel = false;
-
-    // Now send propose and cancel messages in quick succession
-    for (auto& event : txProposes) {
-        if (event) {
-            runtime.Send(event.Release(), 0, /* via actor system */ true);
-        }
-    }
-    for (auto& event : txCancels) {
-        runtime.Send(event.Release(), 0, /* via actor system */ true);
-    }
-
-    // Wait for query to return an error
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderRead2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::OVERLOADED);
-    }
-
-    // Sleep a little so in case of a bug transaction is left in WaitForPlan state
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Split would fail otherwise :(
-    SetSplitMergePartCountLimit(server->GetRuntime(), -1);
-
-    // Start split for table-1
-    TInstant splitStart = TInstant::Now();
-    auto senderSplit = runtime.AllocateEdgeActor();
-    ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets[0], 100);
-    WaitTxNotification(server, senderSplit, txId);
-
-    // Split shouldn't take too much time to complete
-    TDuration elapsed = TInstant::Now() - splitStart;
+            auto* result = new TEvDataShard::TEvProposeTransactionResult( 
+                msg->GetTxKind(), 
+                tablets[1], 
+                msg->GetTxId(), 
+                NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED); 
+            Cerr << "Sending error result from " << actors[1] << " to " << target << Endl; 
+            runtime.Send(new IEventHandle(target, actors[1], result), 0, /* via actor system */ true); 
+            event.Reset(); // drop this propose event 
+        } 
+    } 
+    if (txCancels.size() < 1) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return txCancels.size() >= 1; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(txCancels.size(), 1u); 
+    captureTxCancel = false; 
+ 
+    // Now send propose and cancel messages in quick succession 
+    for (auto& event : txProposes) { 
+        if (event) { 
+            runtime.Send(event.Release(), 0, /* via actor system */ true); 
+        } 
+    } 
+    for (auto& event : txCancels) { 
+        runtime.Send(event.Release(), 0, /* via actor system */ true); 
+    } 
+ 
+    // Wait for query to return an error 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderRead2); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::OVERLOADED); 
+    } 
+ 
+    // Sleep a little so in case of a bug transaction is left in WaitForPlan state 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Split would fail otherwise :( 
+    SetSplitMergePartCountLimit(server->GetRuntime(), -1); 
+ 
+    // Start split for table-1 
+    TInstant splitStart = TInstant::Now(); 
+    auto senderSplit = runtime.AllocateEdgeActor(); 
+    ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets[0], 100); 
+    WaitTxNotification(server, senderSplit, txId); 
+ 
+    // Split shouldn't take too much time to complete 
+    TDuration elapsed = TInstant::Now() - splitStart; 
     UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(2, 10)),
-        "Split needed " << elapsed.ToString() << " to complete, which is too long");
-}
-
-Y_UNIT_TEST_QUAD(TestPlannedTimeoutSplit, UseMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+        "Split needed " << elapsed.ToString() << " to complete, which is too long"); 
+} 
+ 
+Y_UNIT_TEST_QUAD(TestPlannedTimeoutSplit, UseMvcc, UseNewEngine) { 
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetEnableMvcc(WithMvcc) 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    auto shards1 = GetTableShards(server, sender, "/Root/table-1");
-    UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
-    auto shards2 = GetTableShards(server, sender, "/Root/table-2");
-    UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 1u);
-
-    // Capture and block some messages
-    TVector<THolder<IEventHandle>> txProposes;
-    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvTxProxy::EvProposeTransaction: {
-                Cerr << "---- observed EvProposeTransaction ----" << Endl;
+ 
+    auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u); 
+    auto shards2 = GetTableShards(server, sender, "/Root/table-2"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 1u); 
+ 
+    // Capture and block some messages 
+    TVector<THolder<IEventHandle>> txProposes; 
+    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvTxProxy::EvProposeTransaction: { 
+                Cerr << "---- observed EvProposeTransaction ----" << Endl; 
                 txProposes.push_back(std::move(event));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureMessages);
-
-    // Send a distributed write while capturing coordinator propose
-    auto senderWrite1 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderWrite1, MakeSimpleRequest(Q_(R"(
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (101, 101);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (202, 202);
-    )")));
-    if (txProposes.size() < 1) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return txProposes.size() >= 1;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 1u);
-    runtime.SetObserverFunc(prevObserverFunc);
-
-    size_t observedSplits = 0;
-    auto observeSplits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvSplit: {
-                Cerr << "---- observed EvSplit ----" << Endl;
-                ++observedSplits;
-                break;
-            }
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    runtime.SetObserverFunc(observeSplits);
-
-    // Split would fail otherwise :(
-    SetSplitMergePartCountLimit(server->GetRuntime(), -1);
-
-    // Start split for table-1 and table-2
-    auto senderSplit = runtime.AllocateEdgeActor();
-    ui64 txId1 = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards1[0], 100);
-    ui64 txId2 = AsyncSplitTable(server, senderSplit, "/Root/table-2", shards2[0], 100);
-
-    // Wait until we observe both splits on both shards
-    if (observedSplits < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return observedSplits >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-
-    // Sleep a little so everything settles
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // We expect splits to finish successfully
-    WaitTxNotification(server, senderSplit, txId1);
-    WaitTxNotification(server, senderSplit, txId2);
-
-    // We expect split to fully succeed on proposed transaction timeout
-    auto shards1new = GetTableShards(server, sender, "/Root/table-1");
-    UNIT_ASSERT_VALUES_EQUAL(shards1new.size(), 2u);
-    auto shards2new = GetTableShards(server, sender, "/Root/table-2");
-    UNIT_ASSERT_VALUES_EQUAL(shards2new.size(), 2u);
-
-    // Unblock previously blocked coordinator propose
-    for (auto& ev : txProposes) {
-        runtime.Send(ev.Release(), 0, true);
-    }
-
-    // Wait for query to return an error
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWrite1);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE);
-    }
-}
-
-Y_UNIT_TEST_QUAD(TestPlannedHalfOverloadedSplit, UseMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+                return TTestActorRuntime::EEventAction::DROP; 
+            } 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureMessages); 
+ 
+    // Send a distributed write while capturing coordinator propose 
+    auto senderWrite1 = runtime.AllocateEdgeActor(); 
+    SendRequest(runtime, senderWrite1, MakeSimpleRequest(Q_(R"( 
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (101, 101); 
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (202, 202); 
+    )"))); 
+    if (txProposes.size() < 1) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return txProposes.size() >= 1; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 1u); 
+    runtime.SetObserverFunc(prevObserverFunc); 
+ 
+    size_t observedSplits = 0; 
+    auto observeSplits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvDataShard::EvSplit: { 
+                Cerr << "---- observed EvSplit ----" << Endl; 
+                ++observedSplits; 
+                break; 
+            } 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    runtime.SetObserverFunc(observeSplits); 
+ 
+    // Split would fail otherwise :( 
+    SetSplitMergePartCountLimit(server->GetRuntime(), -1); 
+ 
+    // Start split for table-1 and table-2 
+    auto senderSplit = runtime.AllocateEdgeActor(); 
+    ui64 txId1 = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards1[0], 100); 
+    ui64 txId2 = AsyncSplitTable(server, senderSplit, "/Root/table-2", shards2[0], 100); 
+ 
+    // Wait until we observe both splits on both shards 
+    if (observedSplits < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return observedSplits >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+ 
+    // Sleep a little so everything settles 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // We expect splits to finish successfully 
+    WaitTxNotification(server, senderSplit, txId1); 
+    WaitTxNotification(server, senderSplit, txId2); 
+ 
+    // We expect split to fully succeed on proposed transaction timeout 
+    auto shards1new = GetTableShards(server, sender, "/Root/table-1"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards1new.size(), 2u); 
+    auto shards2new = GetTableShards(server, sender, "/Root/table-2"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards2new.size(), 2u); 
+ 
+    // Unblock previously blocked coordinator propose 
+    for (auto& ev : txProposes) { 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+ 
+    // Wait for query to return an error 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWrite1); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE); 
+    } 
+} 
+ 
+Y_UNIT_TEST_QUAD(TestPlannedHalfOverloadedSplit, UseMvcc, UseNewEngine) { 
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetEnableMvcc(WithMvcc) 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    auto shards1 = GetTableShards(server, sender, "/Root/table-1");
-    UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
-    auto shards2 = GetTableShards(server, sender, "/Root/table-2");
-    UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 1u);
-    TVector<ui64> tablets;
-    tablets.push_back(shards1[0]);
-    tablets.push_back(shards2[0]);
-
-    // Capture and block some messages
-    TVector<THolder<IEventHandle>> txProposes;
-    TVector<THolder<IEventHandle>> txProposeResults;
-    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvProposeTransaction: {
-                Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
-                if (txProposes.size() == 0) {
-                    // Capture the first propose
+ 
+    auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u); 
+    auto shards2 = GetTableShards(server, sender, "/Root/table-2"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 1u); 
+    TVector<ui64> tablets; 
+    tablets.push_back(shards1[0]); 
+    tablets.push_back(shards2[0]); 
+ 
+    // Capture and block some messages 
+    TVector<THolder<IEventHandle>> txProposes; 
+    TVector<THolder<IEventHandle>> txProposeResults; 
+    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvDataShard::EvProposeTransaction: { 
+                Cerr << "---- observed EvProposeTransactionResult ----" << Endl; 
+                if (txProposes.size() == 0) { 
+                    // Capture the first propose 
                     txProposes.push_back(std::move(event));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            }
-            case TEvDataShard::EvProposeTransactionResult: {
-                Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
-                if (txProposes.size() > 0) {
-                    // Capture all propose results
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            } 
+            case TEvDataShard::EvProposeTransactionResult: { 
+                Cerr << "---- observed EvProposeTransactionResult ----" << Endl; 
+                if (txProposes.size() > 0) { 
+                    // Capture all propose results 
                     txProposeResults.push_back(std::move(event));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            }
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureMessages);
-
-    // Send a distributed write while capturing coordinator propose
-    auto senderWrite1 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderWrite1, MakeSimpleRequest(Q_(R"(
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (101, 101);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (202, 202);
-    )")));
-    if (txProposes.size() < 1 || txProposeResults.size() < 1) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return txProposes.size() >= 1 && txProposeResults.size() >= 1;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(txProposeResults.size(), 1u);
-
-    size_t observedSplits = 0;
-    auto observeSplits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvSplit: {
-                Cerr << "---- observed EvSplit ----" << Endl;
-                ++observedSplits;
-                break;
-            }
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    runtime.SetObserverFunc(observeSplits);
-
-    // Split would fail otherwise :(
-    SetSplitMergePartCountLimit(server->GetRuntime(), -1);
-
-    // Start split for table-1 and table-2
-    auto senderSplit = runtime.AllocateEdgeActor();
-    ui64 txId1 = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards1[0], 100);
-    ui64 txId2 = AsyncSplitTable(server, senderSplit, "/Root/table-2", shards2[0], 100);
-
-    // Wait until we observe both splits on both shards
-    if (observedSplits < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return observedSplits >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-
-    // Sleep a little so everything settles
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Unblock previously blocked proposes and results
-    for (auto& ev : txProposeResults) {
-        runtime.Send(ev.Release(), 0, true);
-    }
-    for (auto& ev : txProposes) {
-        runtime.Send(ev.Release(), 0, true);
-    }
-
-    // We expect splits to finish successfully
-    WaitTxNotification(server, senderSplit, txId1);
-    WaitTxNotification(server, senderSplit, txId2);
-
-    // We expect split to fully succeed on proposed transaction timeout
-    auto shards1new = GetTableShards(server, sender, "/Root/table-1");
-    UNIT_ASSERT_VALUES_EQUAL(shards1new.size(), 2u);
-    auto shards2new = GetTableShards(server, sender, "/Root/table-2");
-    UNIT_ASSERT_VALUES_EQUAL(shards2new.size(), 2u);
-
-    // Wait for query to return an error
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWrite1);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_C(
-            response.GetYdbStatus() == Ydb::StatusIds::OVERLOADED ||
-            response.GetYdbStatus() == Ydb::StatusIds::UNAVAILABLE,
-            "Status: " << response.GetYdbStatus());
-    }
-}
-
-namespace {
-
-    void AsyncReadTable(
-            Tests::TServer::TPtr server,
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            } 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureMessages); 
+ 
+    // Send a distributed write while capturing coordinator propose 
+    auto senderWrite1 = runtime.AllocateEdgeActor(); 
+    SendRequest(runtime, senderWrite1, MakeSimpleRequest(Q_(R"( 
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (101, 101); 
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (202, 202); 
+    )"))); 
+    if (txProposes.size() < 1 || txProposeResults.size() < 1) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return txProposes.size() >= 1 && txProposeResults.size() >= 1; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(txProposes.size(), 1u); 
+    UNIT_ASSERT_VALUES_EQUAL(txProposeResults.size(), 1u); 
+ 
+    size_t observedSplits = 0; 
+    auto observeSplits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvDataShard::EvSplit: { 
+                Cerr << "---- observed EvSplit ----" << Endl; 
+                ++observedSplits; 
+                break; 
+            } 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    runtime.SetObserverFunc(observeSplits); 
+ 
+    // Split would fail otherwise :( 
+    SetSplitMergePartCountLimit(server->GetRuntime(), -1); 
+ 
+    // Start split for table-1 and table-2 
+    auto senderSplit = runtime.AllocateEdgeActor(); 
+    ui64 txId1 = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards1[0], 100); 
+    ui64 txId2 = AsyncSplitTable(server, senderSplit, "/Root/table-2", shards2[0], 100); 
+ 
+    // Wait until we observe both splits on both shards 
+    if (observedSplits < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return observedSplits >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+ 
+    // Sleep a little so everything settles 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Unblock previously blocked proposes and results 
+    for (auto& ev : txProposeResults) { 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+    for (auto& ev : txProposes) { 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+ 
+    // We expect splits to finish successfully 
+    WaitTxNotification(server, senderSplit, txId1); 
+    WaitTxNotification(server, senderSplit, txId2); 
+ 
+    // We expect split to fully succeed on proposed transaction timeout 
+    auto shards1new = GetTableShards(server, sender, "/Root/table-1"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards1new.size(), 2u); 
+    auto shards2new = GetTableShards(server, sender, "/Root/table-2"); 
+    UNIT_ASSERT_VALUES_EQUAL(shards2new.size(), 2u); 
+ 
+    // Wait for query to return an error 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWrite1); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_C( 
+            response.GetYdbStatus() == Ydb::StatusIds::OVERLOADED || 
+            response.GetYdbStatus() == Ydb::StatusIds::UNAVAILABLE, 
+            "Status: " << response.GetYdbStatus()); 
+    } 
+} 
+ 
+namespace { 
+ 
+    void AsyncReadTable( 
+            Tests::TServer::TPtr server, 
             TActorId sender,
-            const TString& path)
-    {
-        auto &runtime = *server->GetRuntime();
-
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetStreamResponse(true);
-        auto &tx = *request->Record.MutableTransaction()->MutableReadTableTransaction();
-        tx.SetPath(path);
-        tx.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1);
-        tx.AddColumns("key");
-        tx.AddColumns("value");
-
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-    }
-
-}
-
-/**
- * Regression test for KIKIMR-7751, designed to crash under asan
- */
+            const TString& path) 
+    { 
+        auto &runtime = *server->GetRuntime(); 
+ 
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
+        request->Record.SetStreamResponse(true); 
+        auto &tx = *request->Record.MutableTransaction()->MutableReadTableTransaction(); 
+        tx.SetPath(path); 
+        tx.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1); 
+        tx.AddColumns("key"); 
+        tx.AddColumns("value"); 
+ 
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
+    } 
+ 
+} 
+ 
+/** 
+ * Regression test for KIKIMR-7751, designed to crash under asan 
+ */ 
 Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    // NOTE: table-1 has 2 shards so ReadTable is not immediate
-    CreateShardedTable(server, sender, "/Root", "table-1", 2);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+ 
+    InitRoot(server, sender); 
+ 
+    // NOTE: table-1 has 2 shards so ReadTable is not immediate 
+    CreateShardedTable(server, sender, "/Root", "table-1", 2); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(
-            "SELECT * FROM [/Root/table-1] "
-            "UNION ALL "
+            "SELECT * FROM [/Root/table-1] " 
+            "UNION ALL " 
             "SELECT * FROM [/Root/table-2]")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    TVector<THolder<IEventHandle>> txProposes;
-    size_t seenPlanSteps = 0;
-    bool captureReadSets = true;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvTxProcessing::EvPlanStep:
-                Cerr << "---- observed EvPlanStep ----" << Endl;
-                ++seenPlanSteps;
-                break;
-            case TEvTxProcessing::EvReadSet:
-                Cerr << "---- observed EvReadSet ----" << Endl;
-                if (captureReadSets) {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    TVector<THolder<IEventHandle>> txProposes; 
+    size_t seenPlanSteps = 0; 
+    bool captureReadSets = true; 
+    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvTxProcessing::EvPlanStep: 
+                Cerr << "---- observed EvPlanStep ----" << Endl; 
+                ++seenPlanSteps; 
+                break; 
+            case TEvTxProcessing::EvReadSet: 
+                Cerr << "---- observed EvReadSet ----" << Endl; 
+                if (captureReadSets) { 
                     readSets.push_back(std::move(event));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto senderCommit = runtime.AllocateEdgeActor();
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto senderCommit = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_(
         "UPSERT INTO [/Root/table-1] (key, value) VALUES (3, 2); "
         "UPSERT INTO [/Root/table-2] (key, value) VALUES (4, 2)")));
-
-    // Wait until we captured all readsets
+ 
+    // Wait until we captured all readsets 
     if (readSets.size() < 4) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
                 return readSets.size() >= 4;
-            });
-        runtime.DispatchEvents(options);
-    }
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
     UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 4u);
-    captureReadSets = false;
-
-    // Start reading table-1, wait for its plan step
-    seenPlanSteps = 0;
-    auto senderReadTable = runtime.AllocateEdgeActor();
-    AsyncReadTable(server, senderReadTable, "/Root/table-1");
-    if (seenPlanSteps < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return seenPlanSteps >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 2u);
-    seenPlanSteps = 0;
-
-    // Start an immediate write to table-1, it won't be able to start
-    // because it arrived after the read table and they block each other
-    auto senderWriteImm = runtime.AllocateEdgeActor();
+    captureReadSets = false; 
+ 
+    // Start reading table-1, wait for its plan step 
+    seenPlanSteps = 0; 
+    auto senderReadTable = runtime.AllocateEdgeActor(); 
+    AsyncReadTable(server, senderReadTable, "/Root/table-1"); 
+    if (seenPlanSteps < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return seenPlanSteps >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 2u); 
+    seenPlanSteps = 0; 
+ 
+    // Start an immediate write to table-1, it won't be able to start 
+    // because it arrived after the read table and they block each other 
+    auto senderWriteImm = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, senderWriteImm, MakeSimpleRequest(Q_(
         "UPSERT INTO [/Root/table-1] (key, value) VALUES (5, 3)")));
-
-    // Start a planned write to both tables, wait for its plan step too
-    auto senderWriteDist = runtime.AllocateEdgeActor();
+ 
+    // Start a planned write to both tables, wait for its plan step too 
+    auto senderWriteDist = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, senderWriteDist, MakeSimpleRequest(Q_(
-        "UPSERT INTO [/Root/table-1] (key, value) VALUES (7, 4); "
+        "UPSERT INTO [/Root/table-1] (key, value) VALUES (7, 4); " 
         "UPSERT INTO [/Root/table-2] (key, value) VALUES (8, 4)")));
-    if (seenPlanSteps < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return seenPlanSteps >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 2u);
-    seenPlanSteps = 0;
-
-    // Make sure everything is settled down
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Unblock readsets, letting everything go
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, /* via actor system */ true);
-    }
-    readSets.clear();
-
-    // Wait for commit to succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderCommit);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Wait for immediate write to succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWriteImm);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Wait for distributed write to succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWriteDist);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-}
-
-/**
- * Regression test for KIKIMR-7903
- */
+    if (seenPlanSteps < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return seenPlanSteps >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 2u); 
+    seenPlanSteps = 0; 
+ 
+    // Make sure everything is settled down 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Unblock readsets, letting everything go 
+    for (auto& ev : readSets) { 
+        runtime.Send(ev.Release(), 0, /* via actor system */ true); 
+    } 
+    readSets.clear(); 
+ 
+    // Wait for commit to succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderCommit); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Wait for immediate write to succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWriteImm); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Wait for distributed write to succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWriteDist); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+} 
+ 
+/** 
+ * Regression test for KIKIMR-7903 
+ */ 
 Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
     runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    // NOTE: table-1 has 2 shards so ReadTable is not immediate
-    CreateShardedTable(server, sender, "/Root", "table-1", 2);
-
+ 
+    InitRoot(server, sender); 
+ 
+    // NOTE: table-1 has 2 shards so ReadTable is not immediate 
+    CreateShardedTable(server, sender, "/Root", "table-1", 2); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
-
-    // Capture and block all readset messages
-    size_t seenPlanSteps = 0;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvTxProcessing::EvPlanStep:
-                Cerr << "---- observed EvPlanStep ----" << Endl;
-                ++seenPlanSteps;
-                break;
-            case TEvTxProcessing::EvStreamClearanceResponse:
-                Cerr << "---- dropped EvStreamClearanceResponse ----" << Endl;
-                return TTestActorRuntime::EEventAction::DROP;
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
-
-    // Start reading table-1, wait for its plan step
-    // Since we drop EvStreamClearanceResponse it will block forever
-    seenPlanSteps = 0;
-    auto senderReadTable = runtime.AllocateEdgeActor();
-    AsyncReadTable(server, senderReadTable, "/Root/table-1");
-    if (seenPlanSteps < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return seenPlanSteps >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 2u);
-
-    // Make sure everything is settled down
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Start an immediate write to table-1, it should be able to complete
-    auto senderWriteImm = runtime.AllocateEdgeActor();
+ 
+    // Capture and block all readset messages 
+    size_t seenPlanSteps = 0; 
+    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvTxProcessing::EvPlanStep: 
+                Cerr << "---- observed EvPlanStep ----" << Endl; 
+                ++seenPlanSteps; 
+                break; 
+            case TEvTxProcessing::EvStreamClearanceResponse: 
+                Cerr << "---- dropped EvStreamClearanceResponse ----" << Endl; 
+                return TTestActorRuntime::EEventAction::DROP; 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents); 
+ 
+    // Start reading table-1, wait for its plan step 
+    // Since we drop EvStreamClearanceResponse it will block forever 
+    seenPlanSteps = 0; 
+    auto senderReadTable = runtime.AllocateEdgeActor(); 
+    AsyncReadTable(server, senderReadTable, "/Root/table-1"); 
+    if (seenPlanSteps < 2) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle &) -> bool { 
+                return seenPlanSteps >= 2; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 2u); 
+ 
+    // Make sure everything is settled down 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Start an immediate write to table-1, it should be able to complete 
+    auto senderWriteImm = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, senderWriteImm, MakeSimpleRequest(Q_(
         "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)")));
-
-    // Wait for immediate write to succeed
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWriteImm);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-}
-
+ 
+    // Wait for immediate write to succeed 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderWriteImm); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+} 
+ 
 Y_UNIT_TEST_QUAD(TestReadTableSingleShardImmediate, WithMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-    runtime.GetAppData().AllowReadTableImmediate = true;
-
-    InitRoot(server, sender);
-
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.GetAppData().AllowReadTableImmediate = true; 
+ 
+    InitRoot(server, sender); 
+ 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
-
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
-
-    // Capture and block all readset messages
-    size_t seenPlanSteps = 0;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvTxProcessing::EvPlanStep:
-                Cerr << "---- observed EvPlanStep ----" << Endl;
-                ++seenPlanSteps;
-                break;
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
-
-    // Start reading table-1
-    seenPlanSteps = 0;
-    auto senderReadTable = runtime.AllocateEdgeActor();
-    AsyncReadTable(server, senderReadTable, "/Root/table-1");
-
-    // Wait for the first quota request
-    runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvStreamQuotaRequest>(senderReadTable);
-
-    // Since ReadTable was for a single-shard table we shouldn't see any plan steps
-    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 0u);
-}
-
+ 
+    // Capture and block all readset messages 
+    size_t seenPlanSteps = 0; 
+    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvTxProcessing::EvPlanStep: 
+                Cerr << "---- observed EvPlanStep ----" << Endl; 
+                ++seenPlanSteps; 
+                break; 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents); 
+ 
+    // Start reading table-1 
+    seenPlanSteps = 0; 
+    auto senderReadTable = runtime.AllocateEdgeActor(); 
+    AsyncReadTable(server, senderReadTable, "/Root/table-1"); 
+ 
+    // Wait for the first quota request 
+    runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvStreamQuotaRequest>(senderReadTable); 
+ 
+    // Since ReadTable was for a single-shard table we shouldn't see any plan steps 
+    UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 0u); 
+} 
+ 
 Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-
-    auto tablets = GetTableShards(server, sender, "/Root/table-1");
-
-    // We need shard to have some data (otherwise it would die too quickly)
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+ 
+    auto tablets = GetTableShards(server, sender, "/Root/table-1"); 
+ 
+    // We need shard to have some data (otherwise it would die too quickly) 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);"));
-
-    bool captureSplit = true;
-    bool captureSplitChanged = true;
-    bool capturePropose = true;
+ 
+    bool captureSplit = true; 
+    bool captureSplitChanged = true; 
+    bool capturePropose = true; 
     THashSet<TActorId> captureDelayedProposeFrom;
-    TVector<THolder<IEventHandle>> eventsSplit;
-    TVector<THolder<IEventHandle>> eventsSplitChanged;
-    TVector<THolder<IEventHandle>> eventsPropose;
-    TVector<THolder<IEventHandle>> eventsDelayedPropose;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvSplit:
-                if (captureSplit) {
-                    Cerr << "---- captured EvSplit ----" << Endl;
-                    eventsSplit.emplace_back(event.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            case TEvDataShard::EvSplitPartitioningChanged:
-                if (captureSplitChanged) {
-                    Cerr << "---- captured EvSplitPartitioningChanged ----" << Endl;
-                    eventsSplitChanged.emplace_back(event.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            case TEvDataShard::EvProposeTransaction:
-                if (capturePropose) {
-                    Cerr << "---- capture EvProposeTransaction ----" << Endl;
-                    eventsPropose.emplace_back(event.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 2 /* EvDelayedProposeTransaction */:
-                if (captureDelayedProposeFrom.contains(event->GetRecipientRewrite())) {
-                    Cerr << "---- capture EvDelayedProposeTransaction ----" << Endl;
-                    Cerr << event->GetBase()->ToString() << Endl;
-                    eventsDelayedPropose.emplace_back(event.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            default:
-                break;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
-
-    const int totalWrites = 10;
+    TVector<THolder<IEventHandle>> eventsSplit; 
+    TVector<THolder<IEventHandle>> eventsSplitChanged; 
+    TVector<THolder<IEventHandle>> eventsPropose; 
+    TVector<THolder<IEventHandle>> eventsDelayedPropose; 
+    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        switch (event->GetTypeRewrite()) { 
+            case TEvDataShard::EvSplit: 
+                if (captureSplit) { 
+                    Cerr << "---- captured EvSplit ----" << Endl; 
+                    eventsSplit.emplace_back(event.Release()); 
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            case TEvDataShard::EvSplitPartitioningChanged: 
+                if (captureSplitChanged) { 
+                    Cerr << "---- captured EvSplitPartitioningChanged ----" << Endl; 
+                    eventsSplitChanged.emplace_back(event.Release()); 
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            case TEvDataShard::EvProposeTransaction: 
+                if (capturePropose) { 
+                    Cerr << "---- capture EvProposeTransaction ----" << Endl; 
+                    eventsPropose.emplace_back(event.Release()); 
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 2 /* EvDelayedProposeTransaction */: 
+                if (captureDelayedProposeFrom.contains(event->GetRecipientRewrite())) { 
+                    Cerr << "---- capture EvDelayedProposeTransaction ----" << Endl; 
+                    Cerr << event->GetBase()->ToString() << Endl; 
+                    eventsDelayedPropose.emplace_back(event.Release()); 
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            default: 
+                break; 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents); 
+ 
+    const int totalWrites = 10; 
     TVector<TActorId> writeSenders;
-
-    // Send a lot of write requests in parallel (so there's a large propose queue)
-    for (int i = 0; i < totalWrites; ++i) {
-        auto writeSender = runtime.AllocateEdgeActor();
+ 
+    // Send a lot of write requests in parallel (so there's a large propose queue) 
+    for (int i = 0; i < totalWrites; ++i) { 
+        auto writeSender = runtime.AllocateEdgeActor(); 
         SendSQL(server, writeSender, Q_(Sprintf("UPSERT INTO `/Root/table-1` (key, value) VALUES (%d, %d);", i, i)));
-        writeSenders.push_back(writeSender);
-    }
-
-    // Split would fail otherwise :(
-    SetSplitMergePartCountLimit(server->GetRuntime(), -1);
-
-    // Start split for table-1
-    TInstant splitStart = TInstant::Now();
-    auto senderSplit = runtime.AllocateEdgeActor();
-    ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets[0], 100);
-
-    // Wait until all propose requests and split reach our shard
-    if (!(eventsSplit.size() >= 1 && eventsPropose.size() >= totalWrites)) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle&) -> bool {
-                return eventsSplit.size() >= 1 && eventsPropose.size() >= totalWrites;
-            });
-        runtime.DispatchEvents(options);
-    }
-
-    // Unblock all propose requests (so they all successfully pass state test)
-    capturePropose = false;
-    for (auto& ev : eventsPropose) {
-        Cerr << "---- Unblocking propose transaction ----" << Endl;
-        captureDelayedProposeFrom.insert(ev->GetRecipientRewrite());
-        runtime.Send(ev.Release(), 0, true);
-    }
-    eventsPropose.clear();
-
-    // Unblock split request (shard will move to SplitSrcWaitForNoTxInFlight)
-    captureSplit = false;
-    captureSplitChanged = true;
-    for (auto& ev : eventsSplit) {
-        Cerr << "---- Unblocking split ----" << Endl;
-        runtime.Send(ev.Release(), 0, true);
-    }
-    eventsSplit.clear();
-
-    // Wait until split is finished and we have a delayed propose
-    Cerr << "---- Waiting for split to finish ----" << Endl;
-    if (!(eventsSplitChanged.size() >= 1 && eventsDelayedPropose.size() >= 1)) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle&) -> bool {
-                return eventsSplitChanged.size() >= 1 && eventsDelayedPropose.size() >= 1;
-            });
-        runtime.DispatchEvents(options);
-    }
-
-    // Cause split to finish before the first delayed propose
-    captureSplitChanged = false;
-    for (auto& ev : eventsSplitChanged) {
-        Cerr << "---- Unblocking split finish ----" << Endl;
-        runtime.Send(ev.Release(), 0, true);
-    }
-    eventsSplitChanged.clear();
-
-    // Unblock delayed propose transactions
-    captureDelayedProposeFrom.clear();
-    for (auto& ev : eventsDelayedPropose) {
-        Cerr << "---- Unblocking delayed propose ----" << Endl;
-        runtime.Send(ev.Release(), 0, true);
-    }
-    eventsDelayedPropose.clear();
-
-    // Wait for split to finish at schemeshard
-    WaitTxNotification(server, senderSplit, txId);
-
-    // Split shouldn't take too much time to complete
-    TDuration elapsed = TInstant::Now() - splitStart;
+        writeSenders.push_back(writeSender); 
+    } 
+ 
+    // Split would fail otherwise :( 
+    SetSplitMergePartCountLimit(server->GetRuntime(), -1); 
+ 
+    // Start split for table-1 
+    TInstant splitStart = TInstant::Now(); 
+    auto senderSplit = runtime.AllocateEdgeActor(); 
+    ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets[0], 100); 
+ 
+    // Wait until all propose requests and split reach our shard 
+    if (!(eventsSplit.size() >= 1 && eventsPropose.size() >= totalWrites)) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle&) -> bool { 
+                return eventsSplit.size() >= 1 && eventsPropose.size() >= totalWrites; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+ 
+    // Unblock all propose requests (so they all successfully pass state test) 
+    capturePropose = false; 
+    for (auto& ev : eventsPropose) { 
+        Cerr << "---- Unblocking propose transaction ----" << Endl; 
+        captureDelayedProposeFrom.insert(ev->GetRecipientRewrite()); 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+    eventsPropose.clear(); 
+ 
+    // Unblock split request (shard will move to SplitSrcWaitForNoTxInFlight) 
+    captureSplit = false; 
+    captureSplitChanged = true; 
+    for (auto& ev : eventsSplit) { 
+        Cerr << "---- Unblocking split ----" << Endl; 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+    eventsSplit.clear(); 
+ 
+    // Wait until split is finished and we have a delayed propose 
+    Cerr << "---- Waiting for split to finish ----" << Endl; 
+    if (!(eventsSplitChanged.size() >= 1 && eventsDelayedPropose.size() >= 1)) { 
+        TDispatchOptions options; 
+        options.FinalEvents.emplace_back( 
+            [&](IEventHandle&) -> bool { 
+                return eventsSplitChanged.size() >= 1 && eventsDelayedPropose.size() >= 1; 
+            }); 
+        runtime.DispatchEvents(options); 
+    } 
+ 
+    // Cause split to finish before the first delayed propose 
+    captureSplitChanged = false; 
+    for (auto& ev : eventsSplitChanged) { 
+        Cerr << "---- Unblocking split finish ----" << Endl; 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+    eventsSplitChanged.clear(); 
+ 
+    // Unblock delayed propose transactions 
+    captureDelayedProposeFrom.clear(); 
+    for (auto& ev : eventsDelayedPropose) { 
+        Cerr << "---- Unblocking delayed propose ----" << Endl; 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+    eventsDelayedPropose.clear(); 
+ 
+    // Wait for split to finish at schemeshard 
+    WaitTxNotification(server, senderSplit, txId); 
+ 
+    // Split shouldn't take too much time to complete 
+    TDuration elapsed = TInstant::Now() - splitStart; 
     UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(5, 25)),
-        "Split needed " << elapsed.ToString() << " to complete, which is too long");
-
-    // Count transaction results
-    int successes = 0;
-    int failures = 0;
-    for (auto writeSender : writeSenders) {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(writeSender);
-        if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            ++successes;
-        } else {
-            ++failures;
-        }
-    }
-
-    // We expect all transactions to fail
-    UNIT_ASSERT_C(successes + failures == totalWrites,
-        "Unexpected "
-        << successes << " successes and "
-        << failures << " failures");
-}
-
+        "Split needed " << elapsed.ToString() << " to complete, which is too long"); 
+ 
+    // Count transaction results 
+    int successes = 0; 
+    int failures = 0; 
+    for (auto writeSender : writeSenders) { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(writeSender); 
+        if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) { 
+            ++successes; 
+        } else { 
+            ++failures; 
+        } 
+    } 
+ 
+    // We expect all transactions to fail 
+    UNIT_ASSERT_C(successes + failures == totalWrites, 
+        "Unexpected " 
+        << successes << " successes and " 
+        << failures << " failures"); 
+} 
+ 
 void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool enableMvcc = false) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
@@ -3890,101 +3890,101 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
 }
 
 Y_UNIT_TEST_NEW_ENGINE(TestSecondaryClearanceAfterShardRestartRace) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 2);
-    auto shards = GetTableShards(server, sender, "/Root/table-1");
-
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 2); 
+    auto shards = GetTableShards(server, sender, "/Root/table-1"); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);"));
-
-    auto waitFor = [&](const auto& condition, const TString& description) {
-        if (!condition()) {
-            Cerr << "... waiting for " << description << Endl;
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return condition();
-            };
-            runtime.DispatchEvents(options);
-            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-        }
-    };
-
-    // We want to intercept delivery problem notifications
-    TVector<THolder<IEventHandle>> capturedDeliveryProblem;
-    size_t seenStreamClearanceRequests = 0;
-    size_t seenStreamClearanceResponses = 0;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
-        switch (ev->GetTypeRewrite()) {
-            case TEvPipeCache::TEvDeliveryProblem::EventType: {
-                Cerr << "... intercepted TEvDeliveryProblem" << Endl;
-                capturedDeliveryProblem.emplace_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            case TEvTxProcessing::TEvStreamQuotaRelease::EventType: {
-                Cerr << "... dropped TEvStreamQuotaRelease" << Endl;
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            case TEvTxProcessing::TEvStreamClearanceRequest::EventType: {
-                Cerr << "... observed TEvStreamClearanceRequest" << Endl;
-                ++seenStreamClearanceRequests;
-                break;
-            }
-            case TEvTxProcessing::TEvStreamClearanceResponse::EventType: {
-                Cerr << "... observed TEvStreamClearanceResponse" << Endl;
-                ++seenStreamClearanceResponses;
-                break;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserver = runtime.SetObserverFunc(captureEvents);
-
-    auto state = StartReadShardedTable(server, "/Root/table-1", TRowVersion::Max(), /* pause */ true, /* ordered */ false);
-
-    waitFor([&]{ return seenStreamClearanceResponses >= 2; }, "observed TEvStreamClearanceResponse");
-
-    seenStreamClearanceRequests = 0;
-    seenStreamClearanceResponses = 0;
+ 
+    auto waitFor = [&](const auto& condition, const TString& description) { 
+        if (!condition()) { 
+            Cerr << "... waiting for " << description << Endl; 
+            TDispatchOptions options; 
+            options.CustomFinalCondition = [&]() { 
+                return condition(); 
+            }; 
+            runtime.DispatchEvents(options); 
+            UNIT_ASSERT_C(condition(), "... failed to wait for " << description); 
+        } 
+    }; 
+ 
+    // We want to intercept delivery problem notifications 
+    TVector<THolder<IEventHandle>> capturedDeliveryProblem; 
+    size_t seenStreamClearanceRequests = 0; 
+    size_t seenStreamClearanceResponses = 0; 
+    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto { 
+        switch (ev->GetTypeRewrite()) { 
+            case TEvPipeCache::TEvDeliveryProblem::EventType: { 
+                Cerr << "... intercepted TEvDeliveryProblem" << Endl; 
+                capturedDeliveryProblem.emplace_back(ev.Release()); 
+                return TTestActorRuntime::EEventAction::DROP; 
+            } 
+            case TEvTxProcessing::TEvStreamQuotaRelease::EventType: { 
+                Cerr << "... dropped TEvStreamQuotaRelease" << Endl; 
+                return TTestActorRuntime::EEventAction::DROP; 
+            } 
+            case TEvTxProcessing::TEvStreamClearanceRequest::EventType: { 
+                Cerr << "... observed TEvStreamClearanceRequest" << Endl; 
+                ++seenStreamClearanceRequests; 
+                break; 
+            } 
+            case TEvTxProcessing::TEvStreamClearanceResponse::EventType: { 
+                Cerr << "... observed TEvStreamClearanceResponse" << Endl; 
+                ++seenStreamClearanceResponses; 
+                break; 
+            } 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserver = runtime.SetObserverFunc(captureEvents); 
+ 
+    auto state = StartReadShardedTable(server, "/Root/table-1", TRowVersion::Max(), /* pause */ true, /* ordered */ false); 
+ 
+    waitFor([&]{ return seenStreamClearanceResponses >= 2; }, "observed TEvStreamClearanceResponse"); 
+ 
+    seenStreamClearanceRequests = 0; 
+    seenStreamClearanceResponses = 0; 
     RebootTablet(runtime, shards[0], sender);
-
-    waitFor([&]{ return capturedDeliveryProblem.size() >= 1; }, "intercepted TEvDeliveryProblem");
-    waitFor([&]{ return seenStreamClearanceRequests >= 1; }, "observed TEvStreamClearanceRequest");
-
-    runtime.SetObserverFunc(prevObserver);
-    for (auto& ev : capturedDeliveryProblem) {
-        runtime.Send(ev.Release(), 0, true);
-    }
-
-    ResumeReadShardedTable(server, state);
-
-    // We expect this upsert to complete successfully
-    // When there's a bug it will get stuck due to readtable before barrier
+ 
+    waitFor([&]{ return capturedDeliveryProblem.size() >= 1; }, "intercepted TEvDeliveryProblem"); 
+    waitFor([&]{ return seenStreamClearanceRequests >= 1; }, "observed TEvStreamClearanceRequest"); 
+ 
+    runtime.SetObserverFunc(prevObserver); 
+    for (auto& ev : capturedDeliveryProblem) { 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+ 
+    ResumeReadShardedTable(server, state); 
+ 
+    // We expect this upsert to complete successfully 
+    // When there's a bug it will get stuck due to readtable before barrier 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);"));
-}
-
-Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
+} 
+ 
+Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine) { 
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetEnableMvcc(WithMvcc) 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
 //    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NLog::PRI_TRACE);
 //    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 //    if (UseNewEngine) {
@@ -3992,118 +3992,118 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
 //    } else {
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 //    }
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
-
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+    auto table1shards = GetTableShards(server, sender, "/Root/table-1"); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
             SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    auto waitFor = [&](const auto& condition, const TString& description) {
-        if (!condition()) {
-            Cerr << "... waiting for " << description << Endl;
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return condition();
-            };
-            runtime.DispatchEvents(options);
-            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-        }
-    };
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    size_t delayedProposeCount = 0;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
-        switch (ev->GetTypeRewrite()) {
-            case TEvTxProcessing::TEvReadSet::EventType: {
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    auto waitFor = [&](const auto& condition, const TString& description) { 
+        if (!condition()) { 
+            Cerr << "... waiting for " << description << Endl; 
+            TDispatchOptions options; 
+            options.CustomFinalCondition = [&]() { 
+                return condition(); 
+            }; 
+            runtime.DispatchEvents(options); 
+            UNIT_ASSERT_C(condition(), "... failed to wait for " << description); 
+        } 
+    }; 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    size_t delayedProposeCount = 0; 
+    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto { 
+        switch (ev->GetTypeRewrite()) { 
+            case TEvTxProcessing::TEvReadSet::EventType: { 
                 readSets.push_back(std::move(ev));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 2 /* EvDelayedProposeTransaction */: {
-                ++delayedProposeCount;
-                break;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
+                return TTestActorRuntime::EEventAction::DROP; 
+            } 
+            case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 2 /* EvDelayedProposeTransaction */: { 
+                ++delayedProposeCount; 
+                break; 
+            } 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto sender2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Now send an upsert to table-1, it should be blocked by our in-progress tx
-    delayedProposeCount = 0;
-    auto sender3 = runtime.AllocateEdgeActor();
-    Cerr << "... sending immediate upsert" << Endl;
+ 
+    // Wait until we captured both readsets 
+    waitFor([&]{ return readSets.size() >= 2; }, "commit read sets"); 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Now send an upsert to table-1, it should be blocked by our in-progress tx 
+    delayedProposeCount = 0; 
+    auto sender3 = runtime.AllocateEdgeActor(); 
+    Cerr << "... sending immediate upsert" << Endl; 
     SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 42), (3, 51))")));
-
-    // Wait unti that propose starts to execute
-    waitFor([&]{ return delayedProposeCount >= 1; }, "immediate propose");
-    UNIT_ASSERT_VALUES_EQUAL(delayedProposeCount, 1u);
-    Cerr << "... immediate upsert is blocked" << Endl;
-
-    // Remove observer and gracefully restart the shard
-    runtime.SetObserverFunc(prevObserverFunc);
-    GracefulRestartTablet(runtime, table1shards[0], sender);
-
-    // The result of immediate upsert must be neither SUCCESS nor UNDETERMINED
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender3);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_UNEQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_UNEQUAL(response.GetYdbStatus(), Ydb::StatusIds::UNDETERMINED);
-    }
-
-    // Select key 1 and verify its value was not updated
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 42), (3, 51))"))); 
+ 
+    // Wait unti that propose starts to execute 
+    waitFor([&]{ return delayedProposeCount >= 1; }, "immediate propose"); 
+    UNIT_ASSERT_VALUES_EQUAL(delayedProposeCount, 1u); 
+    Cerr << "... immediate upsert is blocked" << Endl; 
+ 
+    // Remove observer and gracefully restart the shard 
+    runtime.SetObserverFunc(prevObserverFunc); 
+    GracefulRestartTablet(runtime, table1shards[0], sender); 
+ 
+    // The result of immediate upsert must be neither SUCCESS nor UNDETERMINED 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender3); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_UNEQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_UNEQUAL(response.GetYdbStatus(), Ydb::StatusIds::UNDETERMINED); 
+    } 
+ 
+    // Select key 1 and verify its value was not updated 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"(
             SELECT key, value FROM `/Root/table-1` WHERE key = 1 ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-}
-
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+} 
+ 
 Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
 //    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NLog::PRI_TRACE);
 //    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 //    if (UseNewEngine) {
@@ -4111,518 +4111,518 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
 //    } else {
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 //    }
-
-    InitRoot(server, sender);
-
+ 
+    InitRoot(server, sender); 
+ 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
-    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
-
+    auto table1shards = GetTableShards(server, sender, "/Root/table-1"); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1)"));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    TString txId;
-    {
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    TString txId; 
+    { 
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
             SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    auto waitFor = [&](const auto& condition, const TString& description) {
-        if (!condition()) {
-            Cerr << "... waiting for " << description << Endl;
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return condition();
-            };
-            runtime.DispatchEvents(options);
-            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-        }
-    };
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
-        switch (ev->GetTypeRewrite()) {
-            case TEvTxProcessing::TEvReadSet::EventType: {
-                Cerr << "... captured readset" << Endl;
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    auto waitFor = [&](const auto& condition, const TString& description) { 
+        if (!condition()) { 
+            Cerr << "... waiting for " << description << Endl; 
+            TDispatchOptions options; 
+            options.CustomFinalCondition = [&]() { 
+                return condition(); 
+            }; 
+            runtime.DispatchEvents(options); 
+            UNIT_ASSERT_C(condition(), "... failed to wait for " << description); 
+        } 
+    }; 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto { 
+        switch (ev->GetTypeRewrite()) { 
+            case TEvTxProcessing::TEvReadSet::EventType: { 
+                Cerr << "... captured readset" << Endl; 
                 readSets.push_back(std::move(ev));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
+                return TTestActorRuntime::EEventAction::DROP; 
+            } 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    auto sender2 = runtime.AllocateEdgeActor(); 
     SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
         UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
-
-    // Wait until we captured both readsets
-    waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Remove observer and gracefully restart the shard
-    Cerr << "... restarting tablet" << Endl;
-    runtime.SetObserverFunc(prevObserverFunc);
-    GracefulRestartTablet(runtime, table1shards[0], sender);
-
-    // The result of commit should be SUCCESS
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-
-    // Select key 3 and verify its value was updated
-    {
-        auto sender4 = runtime.AllocateEdgeActor();
+ 
+    // Wait until we captured both readsets 
+    waitFor([&]{ return readSets.size() >= 2; }, "commit read sets"); 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Remove observer and gracefully restart the shard 
+    Cerr << "... restarting tablet" << Endl; 
+    runtime.SetObserverFunc(prevObserverFunc); 
+    GracefulRestartTablet(runtime, table1shards[0], sender); 
+ 
+    // The result of commit should be SUCCESS 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
+    // Select key 3 and verify its value was updated 
+    { 
+        auto sender4 = runtime.AllocateEdgeActor(); 
         auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"(
             SELECT key, value FROM `/Root/table-1` WHERE key = 3 ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
-    }
-}
-
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }"; 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected); 
+    } 
+} 
+ 
 Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetEnableMvcc(true) 
+        .SetEnableMvccSnapshotReads(true) 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
-    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
-    auto table2shards = GetTableShards(server, sender, "/Root/table-2");
-    auto isTableShard = [&](ui64 tabletId) -> bool {
-        if (std::find(table1shards.begin(), table1shards.end(), tabletId) != table1shards.end() ||
-            std::find(table2shards.begin(), table2shards.end(), tabletId) != table2shards.end())
-        {
-            return true;
-        }
-        return false;
-    };
-
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    auto waitFor = [&](const auto& condition, const TString& description) {
-        if (!condition()) {
-            Cerr << "... waiting for " << description << Endl;
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return condition();
-            };
-            runtime.DispatchEvents(options);
-            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-        }
-    };
-
-    TVector<THolder<IEventHandle>> blockedCommits;
-    size_t seenProposeResults = 0;
-    auto blockCommits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
-        switch (ev->GetTypeRewrite()) {
-            case TEvTablet::TEvCommit::EventType: {
-                auto* msg = ev->Get<TEvTablet::TEvCommit>();
-                if (isTableShard(msg->TabletID)) {
-                    Cerr << "... blocked commit for tablet " << msg->TabletID << Endl;
+    auto table1shards = GetTableShards(server, sender, "/Root/table-1"); 
+    auto table2shards = GetTableShards(server, sender, "/Root/table-2"); 
+    auto isTableShard = [&](ui64 tabletId) -> bool { 
+        if (std::find(table1shards.begin(), table1shards.end(), tabletId) != table1shards.end() || 
+            std::find(table2shards.begin(), table2shards.end(), tabletId) != table2shards.end()) 
+        { 
+            return true; 
+        } 
+        return false; 
+    }; 
+ 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    auto waitFor = [&](const auto& condition, const TString& description) { 
+        if (!condition()) { 
+            Cerr << "... waiting for " << description << Endl; 
+            TDispatchOptions options; 
+            options.CustomFinalCondition = [&]() { 
+                return condition(); 
+            }; 
+            runtime.DispatchEvents(options); 
+            UNIT_ASSERT_C(condition(), "... failed to wait for " << description); 
+        } 
+    }; 
+ 
+    TVector<THolder<IEventHandle>> blockedCommits; 
+    size_t seenProposeResults = 0; 
+    auto blockCommits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto { 
+        switch (ev->GetTypeRewrite()) { 
+            case TEvTablet::TEvCommit::EventType: { 
+                auto* msg = ev->Get<TEvTablet::TEvCommit>(); 
+                if (isTableShard(msg->TabletID)) { 
+                    Cerr << "... blocked commit for tablet " << msg->TabletID << Endl; 
                     blockedCommits.push_back(std::move(ev));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            }
-            case TEvDataShard::TEvProposeTransactionResult::EventType: {
-                Cerr << "... observed propose transaction result" << Endl;
-                ++seenProposeResults;
-                break;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserver = runtime.SetObserverFunc(blockCommits);
-
-    auto sender1 = runtime.AllocateEdgeActor();
-    TString sessionId1 = CreateSession(runtime, sender1, "/Root");
-    auto sender2 = runtime.AllocateEdgeActor();
-    TString sessionId2 = CreateSession(runtime, sender2, "/Root");
-
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            } 
+            case TEvDataShard::TEvProposeTransactionResult::EventType: { 
+                Cerr << "... observed propose transaction result" << Endl; 
+                ++seenProposeResults; 
+                break; 
+            } 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserver = runtime.SetObserverFunc(blockCommits); 
+ 
+    auto sender1 = runtime.AllocateEdgeActor(); 
+    TString sessionId1 = CreateSession(runtime, sender1, "/Root"); 
+    auto sender2 = runtime.AllocateEdgeActor(); 
+    TString sessionId2 = CreateSession(runtime, sender2, "/Root"); 
+ 
     SendRequest(runtime, sender1, MakeBeginRequest(sessionId1, Q_(R"(
-        SELECT * FROM `/Root/table-1`
-        UNION ALL
-        SELECT * FROM `/Root/table-2`
+        SELECT * FROM `/Root/table-1` 
+        UNION ALL 
+        SELECT * FROM `/Root/table-2` 
     )"), "/Root"));
     SendRequest(runtime, sender2, MakeBeginRequest(sessionId2, Q_(R"(
-        SELECT * FROM `/Root/table-1`
-        UNION ALL
-        SELECT * FROM `/Root/table-2`
+        SELECT * FROM `/Root/table-1` 
+        UNION ALL 
+        SELECT * FROM `/Root/table-2` 
     )"), "/Root"));
-
-    waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
-
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    UNIT_ASSERT_C(seenProposeResults == 0, "Unexpected propose results observed");
-
-    // Unblock commits and wait for results
-    runtime.SetObserverFunc(prevObserver);
-    for (auto& ev : blockedCommits) {
-        runtime.Send(ev.Release(), 0, true);
-    }
-    blockedCommits.clear();
-
-    TString txId1;
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender1);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId1 = response.GetResponse().GetTxMeta().id();
-    }
-
-    TString txId2;
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId2 = response.GetResponse().GetTxMeta().id();
-    }
-
-    // Start blocking commits again and try performing new writes
-    prevObserver = runtime.SetObserverFunc(blockCommits);
+ 
+    waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits"); 
+ 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    UNIT_ASSERT_C(seenProposeResults == 0, "Unexpected propose results observed"); 
+ 
+    // Unblock commits and wait for results 
+    runtime.SetObserverFunc(prevObserver); 
+    for (auto& ev : blockedCommits) { 
+        runtime.Send(ev.Release(), 0, true); 
+    } 
+    blockedCommits.clear(); 
+ 
+    TString txId1; 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender1); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId1 = response.GetResponse().GetTxMeta().id(); 
+    } 
+ 
+    TString txId2; 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId2 = response.GetResponse().GetTxMeta().id(); 
+    } 
+ 
+    // Start blocking commits again and try performing new writes 
+    prevObserver = runtime.SetObserverFunc(blockCommits); 
     SendRequest(runtime, sender, MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)"), "/Root"));
     SendRequest(runtime, sender, MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 4)"), "/Root"));
-    waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
-
-    // Send an additional read request, it must not be blocked
+    waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits"); 
+ 
+    // Send an additional read request, it must not be blocked 
     SendRequest(runtime, sender1, MakeContinueRequest(sessionId1, txId1, Q_(R"(
-        SELECT * FROM `/Root/table-1`
-        UNION ALL
-        SELECT * FROM `/Root/table-2`
+        SELECT * FROM `/Root/table-1` 
+        UNION ALL 
+        SELECT * FROM `/Root/table-2` 
     )"), "/Root"));
-
-    {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender1);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-    }
-}
-
-Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+ 
+    { 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender1); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+    } 
+} 
+ 
+Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, UseNewEngine) { 
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetEnableMvcc(true) 
+        .SetEnableMvccSnapshotReads(true) 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
-
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    TString sessionId = CreateSession(runtime, sender);
-
-    // Start transaction by reading from both tables, we will only set locks
-    // to currently existing variables
-    TString txId;
-    {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
-            SELECT * FROM `/Root/table-1` WHERE key = 1
-            UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Perform immediate write, which would not break the above lock
+ 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    TString sessionId = CreateSession(runtime, sender); 
+ 
+    // Start transaction by reading from both tables, we will only set locks 
+    // to currently existing variables 
+    TString txId; 
+    { 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
+            SELECT * FROM `/Root/table-1` WHERE key = 1 
+            UNION ALL 
+            SELECT * FROM `/Root/table-2` WHERE key = 2)"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Perform immediate write, which would not break the above lock 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)"));
-
-    // Perform an additional read, it would mark transaction as write-broken
-    {
-        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"(
-            SELECT * FROM `/Root/table-1` WHERE key = 3
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Perform one more read, it would be in an already write-broken transaction
-    {
-        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"(
-            SELECT * FROM `/Root/table-1` WHERE key = 5
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    {
-        auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId, Q_(R"(
-            UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5)
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
-    }
-}
-
-Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLockOutOfOrder, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+ 
+    // Perform an additional read, it would mark transaction as write-broken 
+    { 
+        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"( 
+            SELECT * FROM `/Root/table-1` WHERE key = 3 
+        )"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Perform one more read, it would be in an already write-broken transaction 
+    { 
+        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"( 
+            SELECT * FROM `/Root/table-1` WHERE key = 5 
+        )"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    { 
+        auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId, Q_(R"( 
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5) 
+        )"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED); 
+    } 
+} 
+ 
+Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLockOutOfOrder, UseNewEngine) { 
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetEnableMvcc(true) 
+        .SetEnableMvccSnapshotReads(true) 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
-
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Start transaction by reading from both tables
-    TString sessionId = CreateSession(runtime, sender);
-    TString txId;
-    {
-        Cerr << "... performing the first select" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
-            SELECT * FROM `/Root/table-1` WHERE key = 1
-            UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Arrange for another distributed tx stuck at readset exchange
-    auto senderBlocker = runtime.AllocateEdgeActor();
-    TString sessionIdBlocker = CreateSession(runtime, senderBlocker);
-    TString txIdBlocker;
-    {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"(
-            SELECT * FROM `/Root/table-1`
-            UNION ALL
-            SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txIdBlocker = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    auto waitFor = [&](const auto& condition, const TString& description) {
-        if (!condition()) {
-            Cerr << "... waiting for " << description << Endl;
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return condition();
-            };
-            runtime.DispatchEvents(options);
-            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-        }
-    };
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
-        switch (ev->GetTypeRewrite()) {
-            case TEvTxProcessing::TEvReadSet::EventType: {
-                Cerr << "... captured readset" << Endl;
+ 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Start transaction by reading from both tables 
+    TString sessionId = CreateSession(runtime, sender); 
+    TString txId; 
+    { 
+        Cerr << "... performing the first select" << Endl; 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
+            SELECT * FROM `/Root/table-1` WHERE key = 1 
+            UNION ALL 
+            SELECT * FROM `/Root/table-2` WHERE key = 2)"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Arrange for another distributed tx stuck at readset exchange 
+    auto senderBlocker = runtime.AllocateEdgeActor(); 
+    TString sessionIdBlocker = CreateSession(runtime, senderBlocker); 
+    TString txIdBlocker; 
+    { 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"( 
+            SELECT * FROM `/Root/table-1` 
+            UNION ALL 
+            SELECT * FROM `/Root/table-2`)"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txIdBlocker = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    auto waitFor = [&](const auto& condition, const TString& description) { 
+        if (!condition()) { 
+            Cerr << "... waiting for " << description << Endl; 
+            TDispatchOptions options; 
+            options.CustomFinalCondition = [&]() { 
+                return condition(); 
+            }; 
+            runtime.DispatchEvents(options); 
+            UNIT_ASSERT_C(condition(), "... failed to wait for " << description); 
+        } 
+    }; 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto { 
+        switch (ev->GetTypeRewrite()) { 
+            case TEvTxProcessing::TEvReadSet::EventType: { 
+                Cerr << "... captured readset" << Endl; 
                 readSets.push_back(std::move(ev));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    SendRequest(runtime, senderBlocker, MakeCommitRequest(sessionIdBlocker, txIdBlocker, Q_(R"(
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (99, 99);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (99, 99))")));
-
-    // Wait until we captured both readsets
-    waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Restore the observer, we would no longer block new readsets
-    runtime.SetObserverFunc(prevObserverFunc);
-
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Perform immediate write, which would break the above lock
-    Cerr << "... performing an upsert" << Endl;
+                return TTestActorRuntime::EEventAction::DROP; 
+            } 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    SendRequest(runtime, senderBlocker, MakeCommitRequest(sessionIdBlocker, txIdBlocker, Q_(R"( 
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (99, 99); 
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (99, 99))"))); 
+ 
+    // Wait until we captured both readsets 
+    waitFor([&]{ return readSets.size() >= 2; }, "commit read sets"); 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Restore the observer, we would no longer block new readsets 
+    runtime.SetObserverFunc(prevObserverFunc); 
+ 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Perform immediate write, which would break the above lock 
+    Cerr << "... performing an upsert" << Endl; 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3)"));
-
-    // Perform an additional read, it would mark transaction as write-broken for the first time
-    {
-        Cerr << "... performing the second select" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"(
-            SELECT * FROM `/Root/table-1` WHERE key = 3
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    // Perform one more read, it would be in an already write-broken transaction
-    {
-        Cerr << "... performing the third select" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"(
-            SELECT * FROM `/Root/table-1` WHERE key = 5
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    {
-        Cerr << "... performing the last upsert and commit" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId, Q_(R"(
-            UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5)
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
-    }
-}
-
-Y_UNIT_TEST_TWIN(TestSnapshotReadAfterStuckRW, UseNewEngine) {
-    TPortManager pm;
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
+ 
+    // Perform an additional read, it would mark transaction as write-broken for the first time 
+    { 
+        Cerr << "... performing the second select" << Endl; 
+        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"( 
+            SELECT * FROM `/Root/table-1` WHERE key = 3 
+        )"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    // Perform one more read, it would be in an already write-broken transaction 
+    { 
+        Cerr << "... performing the third select" << Endl; 
+        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"( 
+            SELECT * FROM `/Root/table-1` WHERE key = 5 
+        )"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    { 
+        Cerr << "... performing the last upsert and commit" << Endl; 
+        auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId, Q_(R"( 
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5) 
+        )"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED); 
+    } 
+} 
+ 
+Y_UNIT_TEST_TWIN(TestSnapshotReadAfterStuckRW, UseNewEngine) { 
+    TPortManager pm; 
+    TServerSettings serverSettings(pm.GetPort(2134)); 
+    serverSettings.SetDomainName("Root") 
+        .SetEnableMvcc(true) 
+        .SetEnableMvccSnapshotReads(true) 
+        .SetUseRealThreads(false); 
+ 
+    Tests::TServer::TPtr server = new TServer(serverSettings); 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
+ 
+    InitRoot(server, sender); 
+ 
+    CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+    CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+ 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
-
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Arrange for a distributed tx stuck at readset exchange
-    auto senderBlocker = runtime.AllocateEdgeActor();
-    TString sessionIdBlocker = CreateSession(runtime, senderBlocker);
-    TString txIdBlocker;
-    {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"(
-            SELECT * FROM `/Root/table-1`
-            UNION ALL
-            SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txIdBlocker = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-
-    auto waitFor = [&](const auto& condition, const TString& description) {
-        if (!condition()) {
-            Cerr << "... waiting for " << description << Endl;
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return condition();
-            };
-            runtime.DispatchEvents(options);
-            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-        }
-    };
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
-        switch (ev->GetTypeRewrite()) {
-            case TEvTxProcessing::TEvReadSet::EventType: {
-                Cerr << "... captured readset" << Endl;
+ 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Arrange for a distributed tx stuck at readset exchange 
+    auto senderBlocker = runtime.AllocateEdgeActor(); 
+    TString sessionIdBlocker = CreateSession(runtime, senderBlocker); 
+    TString txIdBlocker; 
+    { 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"( 
+            SELECT * FROM `/Root/table-1` 
+            UNION ALL 
+            SELECT * FROM `/Root/table-2`)"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txIdBlocker = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+ 
+    auto waitFor = [&](const auto& condition, const TString& description) { 
+        if (!condition()) { 
+            Cerr << "... waiting for " << description << Endl; 
+            TDispatchOptions options; 
+            options.CustomFinalCondition = [&]() { 
+                return condition(); 
+            }; 
+            runtime.DispatchEvents(options); 
+            UNIT_ASSERT_C(condition(), "... failed to wait for " << description); 
+        } 
+    }; 
+ 
+    // Capture and block all readset messages 
+    TVector<THolder<IEventHandle>> readSets; 
+    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto { 
+        switch (ev->GetTypeRewrite()) { 
+            case TEvTxProcessing::TEvReadSet::EventType: { 
+                Cerr << "... captured readset" << Endl; 
                 readSets.push_back(THolder(ev.Release()));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    SendRequest(runtime, senderBlocker, MakeCommitRequest(sessionIdBlocker, txIdBlocker, Q_(R"(
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (99, 99);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (99, 99))")));
-
-    // Wait until we captured both readsets
-    waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Restore the observer, we would no longer block new readsets
-    runtime.SetObserverFunc(prevObserverFunc);
-
-    SimulateSleep(server, TDuration::Seconds(1));
-
-    // Start a transaction by reading from both tables
-    TString sessionId = CreateSession(runtime, sender);
-    TString txId;
-    {
-        Cerr << "... performing the first select" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
-            SELECT * FROM `/Root/table-1` WHERE key = 1
-            UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-    }
-}
-
-} // Y_UNIT_TEST_SUITE(DataShardOutOfOrder)
-
-} // namespace NKikimr
+                return TTestActorRuntime::EEventAction::DROP; 
+            } 
+        } 
+        return TTestActorRuntime::EEventAction::PROCESS; 
+    }; 
+    auto prevObserverFunc = runtime.SetObserverFunc(captureRS); 
+ 
+    // Send a commit request, it would block on readset exchange 
+    SendRequest(runtime, senderBlocker, MakeCommitRequest(sessionIdBlocker, txIdBlocker, Q_(R"( 
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (99, 99); 
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (99, 99))"))); 
+ 
+    // Wait until we captured both readsets 
+    waitFor([&]{ return readSets.size() >= 2; }, "commit read sets"); 
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u); 
+ 
+    // Restore the observer, we would no longer block new readsets 
+    runtime.SetObserverFunc(prevObserverFunc); 
+ 
+    SimulateSleep(server, TDuration::Seconds(1)); 
+ 
+    // Start a transaction by reading from both tables 
+    TString sessionId = CreateSession(runtime, sender); 
+    TString txId; 
+    { 
+        Cerr << "... performing the first select" << Endl; 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
+            SELECT * FROM `/Root/table-1` WHERE key = 1 
+            UNION ALL 
+            SELECT * FROM `/Root/table-2` WHERE key = 2)"))); 
+        auto& response = ev->Get()->Record.GetRef(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS); 
+        txId = response.GetResponse().GetTxMeta().id(); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u); 
+    } 
+} 
+ 
+} // Y_UNIT_TEST_SUITE(DataShardOutOfOrder) 
+ 
+} // namespace NKikimr 

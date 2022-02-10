@@ -162,18 +162,18 @@ def _get_request_timeout(settings):
     return settings.timeout
 
 
-class EndpointOptions(object):
-    __slots__ = ("ssl_target_name_override",)
-
-    def __init__(self, ssl_target_name_override=None):
-        self.ssl_target_name_override = ssl_target_name_override
-
-
-def _construct_channel_options(driver_config, endpoint_options=None):
+class EndpointOptions(object): 
+    __slots__ = ("ssl_target_name_override",) 
+ 
+    def __init__(self, ssl_target_name_override=None): 
+        self.ssl_target_name_override = ssl_target_name_override 
+ 
+ 
+def _construct_channel_options(driver_config, endpoint_options=None): 
     """
     Constructs gRPC channel initialization options
     :param driver_config: A driver config instance
-    :param endpoint_options: Endpoint options
+    :param endpoint_options: Endpoint options 
     :return: A channel initialization options
     """
     _max_message_size = 64 * 10 ** 6
@@ -195,14 +195,14 @@ def _construct_channel_options(driver_config, endpoint_options=None):
                 ("grpc.keepalive_permit_without_calls", 0),
             ]
         )
-    if endpoint_options is not None:
-        if endpoint_options.ssl_target_name_override:
-            _default_connect_options.append(
-                (
-                    "grpc.ssl_target_name_override",
-                    endpoint_options.ssl_target_name_override,
-                )
-            )
+    if endpoint_options is not None: 
+        if endpoint_options.ssl_target_name_override: 
+            _default_connect_options.append( 
+                ( 
+                    "grpc.ssl_target_name_override", 
+                    endpoint_options.ssl_target_name_override, 
+                ) 
+            ) 
     if driver_config.channel_options is None:
         return _default_connect_options
     channel_options = copy.deepcopy(driver_config.channel_options)
@@ -292,11 +292,11 @@ def _set_server_timeouts(request, settings, default_value):
     _set_duration(request.operation_params.cancel_after, cancel_after)
 
 
-def channel_factory(
-    endpoint, driver_config, channel_provider=None, endpoint_options=None
-):
+def channel_factory( 
+    endpoint, driver_config, channel_provider=None, endpoint_options=None 
+): 
     channel_provider = channel_provider if channel_provider is not None else grpc
-    options = _construct_channel_options(driver_config, endpoint_options)
+    options = _construct_channel_options(driver_config, endpoint_options) 
     logger.debug("Channel options: {}".format(options))
 
     if driver_config.root_certificates is None and not driver_config.secure_channel:
@@ -324,7 +324,7 @@ class Connection(object):
         "closing",
     )
 
-    def __init__(self, endpoint, driver_config=None, endpoint_options=None):
+    def __init__(self, endpoint, driver_config=None, endpoint_options=None): 
         """
         Object that wraps gRPC channel and encapsulates gRPC request execution logic
         :param endpoint: endpoint to connect (in pattern host:port), constructed by user or
@@ -333,9 +333,9 @@ class Connection(object):
         """
         global _stubs_list
         self.endpoint = endpoint
-        self._channel = channel_factory(
-            self.endpoint, driver_config, endpoint_options=endpoint_options
-        )
+        self._channel = channel_factory( 
+            self.endpoint, driver_config, endpoint_options=endpoint_options 
+        ) 
         self._driver_config = driver_config
         self._call_states = {}
         self._stub_instances = {}
@@ -456,10 +456,10 @@ class Connection(object):
             self._finish_call(rpc_state)
 
     @classmethod
-    def ready_factory(
-        cls, endpoint, driver_config, ready_timeout=10, endpoint_options=None
-    ):
-        candidate = cls(endpoint, driver_config, endpoint_options=endpoint_options)
+    def ready_factory( 
+        cls, endpoint, driver_config, ready_timeout=10, endpoint_options=None 
+    ): 
+        candidate = cls(endpoint, driver_config, endpoint_options=endpoint_options) 
         ready_future = candidate.ready_future()
         try:
             ready_future.result(timeout=ready_timeout)

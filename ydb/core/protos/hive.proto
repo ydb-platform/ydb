@@ -8,24 +8,24 @@ import "ydb/core/protos/follower_group.proto";
 package NKikimrHive;
 option java_package = "ru.yandex.kikimr.proto";
 
-enum ETabletBootMode {
+enum ETabletBootMode { 
     // Default boot mode, hive tries to keep leader tablet running
-    TABLET_BOOT_MODE_DEFAULT = 0;
-
-    // External boot mode, hive will assume it starts outside of any local service
-    TABLET_BOOT_MODE_EXTERNAL = 1;
-}
-
-enum EErrorReason {
-    // Default unspecified error reason
-    ERROR_REASON_UNKNOWN = 0;
-
-    // CreateTablet request provided a smaller number of channels than previous requests
-    ERROR_REASON_CHANNELS_CANNOT_SHRINK = 1;
+    TABLET_BOOT_MODE_DEFAULT = 0; 
+ 
+    // External boot mode, hive will assume it starts outside of any local service 
+    TABLET_BOOT_MODE_EXTERNAL = 1; 
+} 
+ 
+enum EErrorReason { 
+    // Default unspecified error reason 
+    ERROR_REASON_UNKNOWN = 0; 
+ 
+    // CreateTablet request provided a smaller number of channels than previous requests 
+    ERROR_REASON_CHANNELS_CANNOT_SHRINK = 1; 
 
     ERROR_REASON_INVALID_ARGUMENTS = 2;
-}
-
+} 
+ 
 enum ETabletVolatileState {
     TABLET_VOLATILE_STATE_UNKNOWN = 0;
     TABLET_VOLATILE_STATE_STOPPED = 1;
@@ -88,7 +88,7 @@ message TEvCreateTablet {
     optional TTabletCategory TabletCategory = 16;
     repeated TFollowerGroup FollowerGroups = 17;
     optional NKikimrSubDomains.TDomainKey ObjectDomain = 18;
-    optional ETabletBootMode TabletBootMode = 19;
+    optional ETabletBootMode TabletBootMode = 19; 
     optional uint64 ObjectId = 20;
     repeated NKikimrStoragePool.TChannelBind BindedChannels = 21;
     optional fixed64 TabletID = 22;
@@ -118,7 +118,7 @@ message TEvCreateTabletReply {
     optional uint64 OwnerIdx = 3;
     optional fixed64 TabletID = 4;
     optional fixed64 Origin = 5;
-    optional EErrorReason ErrorReason = 6;
+    optional EErrorReason ErrorReason = 6; 
     optional TForwardRequest ForwardRequest = 7;
 }
 
@@ -354,49 +354,49 @@ message TEvFillNode {
 message TEvFillNodeResult {
     optional NKikimrProto.EReplyStatus Status = 1;
 }
-
-message TEvGetTabletStorageInfo {
-    optional fixed64 TabletID = 1;
-}
-
-message TEvGetTabletStorageInfoResult {
-    optional fixed64 TabletID = 1;
-    optional NKikimrProto.EReplyStatus Status = 2;
-    optional NKikimrTabletBase.TTabletStorageInfo Info = 3;
-    optional string StatusMessage = 4;
-}
-
-message TEvGetTabletStorageInfoRegistered {
-    optional fixed64 TabletID = 1;
-}
-
-message TEvLockTabletExecution {
-    optional fixed64 TabletID = 1;
+ 
+message TEvGetTabletStorageInfo { 
+    optional fixed64 TabletID = 1; 
+} 
+ 
+message TEvGetTabletStorageInfoResult { 
+    optional fixed64 TabletID = 1; 
+    optional NKikimrProto.EReplyStatus Status = 2; 
+    optional NKikimrTabletBase.TTabletStorageInfo Info = 3; 
+    optional string StatusMessage = 4; 
+} 
+ 
+message TEvGetTabletStorageInfoRegistered { 
+    optional fixed64 TabletID = 1; 
+} 
+ 
+message TEvLockTabletExecution { 
+    optional fixed64 TabletID = 1; 
     optional NActorsProto.TActorId OwnerActor = 2;
-    optional bool Reconnect = 3;
-    optional uint64 MaxReconnectTimeout = 4; // ms
-}
-
-message TEvLockTabletExecutionLost {
-    optional fixed64 TabletID = 1;
-}
-
-message TEvLockTabletExecutionResult {
-    optional fixed64 TabletID = 1;
-    optional NKikimrProto.EReplyStatus Status = 2;
-    optional string StatusMessage = 3;
-}
-
-message TEvUnlockTabletExecution {
-    optional fixed64 TabletID = 1;
+    optional bool Reconnect = 3; 
+    optional uint64 MaxReconnectTimeout = 4; // ms 
+} 
+ 
+message TEvLockTabletExecutionLost { 
+    optional fixed64 TabletID = 1; 
+} 
+ 
+message TEvLockTabletExecutionResult { 
+    optional fixed64 TabletID = 1; 
+    optional NKikimrProto.EReplyStatus Status = 2; 
+    optional string StatusMessage = 3; 
+} 
+ 
+message TEvUnlockTabletExecution { 
+    optional fixed64 TabletID = 1; 
     optional NActorsProto.TActorId OwnerActor = 2;
-}
-
-message TEvUnlockTabletExecutionResult {
-    optional fixed64 TabletID = 1;
-    optional NKikimrProto.EReplyStatus Status = 2;
-    optional string StatusMessage = 3;
-}
+} 
+ 
+message TEvUnlockTabletExecutionResult { 
+    optional fixed64 TabletID = 1; 
+    optional NKikimrProto.EReplyStatus Status = 2; 
+    optional string StatusMessage = 3; 
+} 
 
 message TEvInvalidateStoragePools {
 }

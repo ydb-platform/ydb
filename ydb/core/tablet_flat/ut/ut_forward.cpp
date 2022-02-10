@@ -19,21 +19,21 @@ namespace {
 
         TWrap(TIntrusiveConstPtr<TFrames> frames, TIntrusiveConstPtr<TSlices> run, ui32 edge, ui64 aLo = 999, ui64 aHi = 999)
             : Large(std::move(frames))
-            , Run(std::move(run))
+            , Run(std::move(run)) 
             , Edge(edge)
             , AheadLo(aLo)
             , AheadHi(aHi)
         {
             TVector<ui32> edges(Large->Stats().Tags.size(), edge);
 
-            Cache = new NFwd::TBlobs(Large, Run, edges, true);
+            Cache = new NFwd::TBlobs(Large, Run, edges, true); 
         }
 
         TWrap(TIntrusiveConstPtr<TFrames> frames, ui32 edge, ui64 aLo = 999, ui64 aHi = 999)
-            : TWrap(std::move(frames), TSlices::All(), edge, aLo, aHi)
-        {
-        }
-
+            : TWrap(std::move(frames), TSlices::All(), edge, aLo, aHi) 
+        { 
+        } 
+ 
         ui64 AddToQueue(ui32 page, ui16) noexcept override
         {
             Pages.push_back(page);
@@ -92,7 +92,7 @@ namespace {
                     UNIT_ASSERT(false);
                 }
 
-                load.emplace_back(page, TSharedData::Copy(TString(rel.Size, 'x')));
+                load.emplace_back(page, TSharedData::Copy(TString(rel.Size, 'x'))); 
             }
 
             if (load.size() < least || load.size() >= most) {
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
         const auto blobs = new NPage::TExtBlobs(out.Make(), { });
 
-        NFwd::TSieve sieve{ blobs, nullptr, nullptr, {{ 1, 3}}};
+        NFwd::TSieve sieve{ blobs, nullptr, nullptr, {{ 1, 3}}}; 
 
         TVector<TLogoBlobID> logo;
 
@@ -226,66 +226,66 @@ Y_UNIT_TEST_SUITE(NFwd) {
         UNIT_ASSERT(logo[3] == globs[5].Logo);
     }
 
-    Y_UNIT_TEST(SieveFiltered)
-    {
+    Y_UNIT_TEST(SieveFiltered) 
+    { 
         NPage::TExtBlobsWriter out;
-
+ 
         std::array<NPageCollection::TGlobId, 6> globs = {{
-            { TLogoBlobID(1, 2, 3,  1, 10, 0), 7 },
-            { TLogoBlobID(1, 2, 3,  7, 12, 1), 7 },
-            { TLogoBlobID(1, 2, 3, 13, 14, 2), 7 },
-            { TLogoBlobID(1, 2, 3, 33, 16, 3), 4 },
-            { TLogoBlobID(1, 2, 3, 57, 18, 4), 7 },
-            { TLogoBlobID(1, 2, 3, 99, 20, 5), 7 },
-        }};
-
-        for (auto &one: globs) out.Put(one);
-
+            { TLogoBlobID(1, 2, 3,  1, 10, 0), 7 }, 
+            { TLogoBlobID(1, 2, 3,  7, 12, 1), 7 }, 
+            { TLogoBlobID(1, 2, 3, 13, 14, 2), 7 }, 
+            { TLogoBlobID(1, 2, 3, 33, 16, 3), 4 }, 
+            { TLogoBlobID(1, 2, 3, 57, 18, 4), 7 }, 
+            { TLogoBlobID(1, 2, 3, 99, 20, 5), 7 }, 
+        }}; 
+ 
+        for (auto &one: globs) out.Put(one); 
+ 
         const auto blobs = new NPage::TExtBlobs(out.Make(), { });
-
+ 
         TIntrusiveConstPtr<NPage::TFrames> frames;
 
-        {
-            NPage::TFrameWriter writer(3);
-            writer.Put(10, 1, 10);
-            writer.Put(15, 1, 12);
-            writer.Put(20, 1, 14);
-            writer.Put(25, 1, 16);
-            writer.Put(30, 1, 18);
-            writer.Put(35, 1, 20);
-            frames = new NPage::TFrames(writer.Make());
-        }
-
-        // Construct a run with [13,27] and [33,35] ranges
+        { 
+            NPage::TFrameWriter writer(3); 
+            writer.Put(10, 1, 10); 
+            writer.Put(15, 1, 12); 
+            writer.Put(20, 1, 14); 
+            writer.Put(25, 1, 16); 
+            writer.Put(30, 1, 18); 
+            writer.Put(35, 1, 20); 
+            frames = new NPage::TFrames(writer.Make()); 
+        } 
+ 
+        // Construct a run with [13,27] and [33,35] ranges 
         TIntrusivePtr<TSlices> run = new TSlices;
-        {
-            run->emplace_back(
-                TSerializedCellVec(), // key not important
-                TSerializedCellVec(), // key not important
-                13,
-                27,
-                true,
-                true);
-            run->emplace_back(
-                TSerializedCellVec(), // key not important
-                TSerializedCellVec(), // key not important
-                33,
-                35,
-                true,
-                true);
-        }
-
-        NFwd::TSieve sieve{ blobs, frames, run, {{ 1, 3}}};
-
-        TVector<TLogoBlobID> logo;
-
-        sieve.MaterializeTo(logo);
-
-        UNIT_ASSERT(logo.size() == 2);
-        UNIT_ASSERT(logo[0] == globs[3].Logo);
-        UNIT_ASSERT(logo[1] == globs[5].Logo);
-    }
-
+        { 
+            run->emplace_back( 
+                TSerializedCellVec(), // key not important 
+                TSerializedCellVec(), // key not important 
+                13, 
+                27, 
+                true, 
+                true); 
+            run->emplace_back( 
+                TSerializedCellVec(), // key not important 
+                TSerializedCellVec(), // key not important 
+                33, 
+                35, 
+                true, 
+                true); 
+        } 
+ 
+        NFwd::TSieve sieve{ blobs, frames, run, {{ 1, 3}}}; 
+ 
+        TVector<TLogoBlobID> logo; 
+ 
+        sieve.MaterializeTo(logo); 
+ 
+        UNIT_ASSERT(logo.size() == 2); 
+        UNIT_ASSERT(logo[0] == globs[3].Logo); 
+        UNIT_ASSERT(logo[1] == globs[5].Logo); 
+    } 
+ 
     Y_UNIT_TEST(Basics)
     {
         /*_ Check unorderd access over the same frame */
@@ -363,23 +363,23 @@ Y_UNIT_TEST_SUITE(NFwd) {
         UNIT_ASSERT(trace[2] == TScreen::THole(9, 10));
     }
 
-    Y_UNIT_TEST(Filtered)
-    {
+    Y_UNIT_TEST(Filtered) 
+    { 
         TIntrusivePtr<TSlices> run = new TSlices;
-        run->emplace_back(TSlice({ }, { }, 0, 15, true, false));
-        run->emplace_back(TSlice({ }, { }, 18, 22, true, true));
-        TWrap wrap(Cook(), run, Max<ui32>(), 999, 999);
-
-        wrap
-            .To(1).Get(1, false, true, true).Fill(4, 5, { 2 })
-            .To(2).Get(2, false, true, true).Fill(1, 2, { 1 })
-            .To(3).Get(9, true, false, true).Fill(0, 1, { });
-
-        const auto trace = wrap.To(4).Trace();
-
-        UNIT_ASSERT(trace.size() == 0);
-    }
-
+        run->emplace_back(TSlice({ }, { }, 0, 15, true, false)); 
+        run->emplace_back(TSlice({ }, { }, 18, 22, true, true)); 
+        TWrap wrap(Cook(), run, Max<ui32>(), 999, 999); 
+ 
+        wrap 
+            .To(1).Get(1, false, true, true).Fill(4, 5, { 2 }) 
+            .To(2).Get(2, false, true, true).Fill(1, 2, { 1 }) 
+            .To(3).Get(9, true, false, true).Fill(0, 1, { }); 
+ 
+        const auto trace = wrap.To(4).Trace(); 
+ 
+        UNIT_ASSERT(trace.size() == 0); 
+    } 
+ 
 }
 
 }

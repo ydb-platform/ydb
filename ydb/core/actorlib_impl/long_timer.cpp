@@ -8,8 +8,8 @@ namespace NActors {
 class TLongTimer : public TActor<TLongTimer> {
     const static ui64 ThresholdSec = 15;
 
-    TMonotonic StartTime;
-    TMonotonic SignalTime;
+    TMonotonic StartTime; 
+    TMonotonic SignalTime; 
     TAutoPtr<IEventHandle> Ev;
     TSchedulerCookieHolder Cookie;
 
@@ -21,7 +21,7 @@ class TLongTimer : public TActor<TLongTimer> {
         if (Cookie.Get() && !Cookie.Get()->IsArmed())
             return Die(ctx);
 
-        const TMonotonic now = ctx.Monotonic();
+        const TMonotonic now = ctx.Monotonic(); 
         if (SignalTime <= now) {
             if (!Cookie.Get() || Cookie.Detach())
                 ctx.ExecutorThread.Send(Ev);
@@ -30,7 +30,7 @@ class TLongTimer : public TActor<TLongTimer> {
 
         const TDuration delta = SignalTime - now;
         if (delta <= TDuration::Seconds(ThresholdSec)) {
-            ctx.ExecutorThread.Schedule(SignalTime, Ev, Cookie.Release());
+            ctx.ExecutorThread.Schedule(SignalTime, Ev, Cookie.Release()); 
             return Die(ctx);
         }
 
@@ -41,7 +41,7 @@ public:
         return NKikimrServices::TActivity::ACTORLIB_LONG_TIMER;
     }
 
-    TLongTimer(TMonotonic startTime, TMonotonic signalTime, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie)
+    TLongTimer(TMonotonic startTime, TMonotonic signalTime, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie) 
         : TActor(&TThis::StateFunc)
         , StartTime(startTime)
         , SignalTime(signalTime)
@@ -69,8 +69,8 @@ public:
             return TActorId();
         }
 
-        TMonotonic now = ctx.Monotonic();
-        TMonotonic signalTime = now + delta;
+        TMonotonic now = ctx.Monotonic(); 
+        TMonotonic signalTime = now + delta; 
         ui64 semirandomNumber = parentId.LocalId();
         const TActorId timerActorID = ctx.ExecutorThread.ActorSystem->Register(new TLongTimer(now, signalTime, ev, cookie), TMailboxType::HTSwap, poolId, semirandomNumber, parentId);
         ctx.ExecutorThread.Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup()));

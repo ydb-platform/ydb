@@ -213,47 +213,47 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         UNIT_ASSERT_VALUES_EQUAL(doTest("blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16));
     }
 
-    Y_UNIT_TEST(GrpcRequestProxyWithoutToken) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
-        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
-
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        auto doTest = [&](const TString& database) {
-            NGrpc::TCallMeta meta;
-            meta.Aux.push_back({YDB_DATABASE_HEADER, database});
-
-            NGrpc::TGRpcClientLow clientLow;
-            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
-
-            Ydb::StatusIds::StatusCode status;
-            grpc::StatusCode gStatus;
-
-            do {
-                auto promise = NThreading::NewPromise<void>();
-                Ydb::Table::CreateSessionRequest request;
-                NGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&status, &gStatus, promise](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
-                        UNIT_ASSERT(!grpcStatus.InternalError);
-                        gStatus = grpc::StatusCode(grpcStatus.GRpcStatusCode);
-                        auto deferred = response.operation();
-                        status = deferred.status();
-                        promise.SetValue();
-                    };
-
-                connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta);
-                promise.GetFuture().Wait();
-            } while (status == Ydb::StatusIds::UNAVAILABLE);
-            return std::make_pair(status, gStatus);
-        };
-
-        UNIT_ASSERT_EQUAL(doTest("/Root").second, grpc::StatusCode::UNAUTHENTICATED);
-        UNIT_ASSERT_EQUAL(doTest("/blabla").second, grpc::StatusCode::UNAUTHENTICATED);
-        UNIT_ASSERT_EQUAL(doTest("blabla").second, grpc::StatusCode::UNAUTHENTICATED);
-    }
-
+    Y_UNIT_TEST(GrpcRequestProxyWithoutToken) { 
+        NKikimrConfig::TAppConfig appConfig; 
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true); 
+        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig); 
+ 
+        ui16 grpc = server.GetPort(); 
+        TString location = TStringBuilder() << "localhost:" << grpc; 
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location); 
+        auto doTest = [&](const TString& database) { 
+            NGrpc::TCallMeta meta; 
+            meta.Aux.push_back({YDB_DATABASE_HEADER, database}); 
+ 
+            NGrpc::TGRpcClientLow clientLow; 
+            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig); 
+ 
+            Ydb::StatusIds::StatusCode status; 
+            grpc::StatusCode gStatus; 
+ 
+            do { 
+                auto promise = NThreading::NewPromise<void>(); 
+                Ydb::Table::CreateSessionRequest request; 
+                NGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb = 
+                    [&status, &gStatus, promise](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable { 
+                        UNIT_ASSERT(!grpcStatus.InternalError); 
+                        gStatus = grpc::StatusCode(grpcStatus.GRpcStatusCode); 
+                        auto deferred = response.operation(); 
+                        status = deferred.status(); 
+                        promise.SetValue(); 
+                    }; 
+ 
+                connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta); 
+                promise.GetFuture().Wait(); 
+            } while (status == Ydb::StatusIds::UNAVAILABLE); 
+            return std::make_pair(status, gStatus); 
+        }; 
+ 
+        UNIT_ASSERT_EQUAL(doTest("/Root").second, grpc::StatusCode::UNAUTHENTICATED); 
+        UNIT_ASSERT_EQUAL(doTest("/blabla").second, grpc::StatusCode::UNAUTHENTICATED); 
+        UNIT_ASSERT_EQUAL(doTest("blabla").second, grpc::StatusCode::UNAUTHENTICATED); 
+    } 
+ 
     Y_UNIT_TEST(BiStreamPing) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
@@ -307,51 +307,51 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         }
     }
 
-    Y_UNIT_TEST(BiStreamCancelled) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
-        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
+    Y_UNIT_TEST(BiStreamCancelled) { 
+        NKikimrConfig::TAppConfig appConfig; 
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true); 
+        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig); 
 
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        NGrpc::TCallMeta meta;
-        meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
-        {
-            using TRequest = Draft::Dummy::PingRequest;
-            using TResponse = Draft::Dummy::PingResponse;
-            using TProcessor = typename NGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
-            NGrpc::TGRpcClientLow clientLow(/* numWorkerThreads = */ 0);
-            auto connection = clientLow.CreateGRpcServiceConnection<Draft::Dummy::DummyService>(clientConfig);
-
-            auto promise = NThreading::NewPromise<NGrpc::TGrpcStatus>();
-            auto lowCallback = [promise]
-                (NGrpc::TGrpcStatus grpcStatus, TProcessor /*processor*/) mutable {
-                    promise.SetValue(grpcStatus);
-                };
-
-            // Use context that is already cancelled
-            auto context = clientLow.CreateContext();
-            context->Cancel();
-
-            // Start a new call using the cancelled context as a provider
-            connection->DoStreamRequest<TRequest, TResponse>(
-                std::move(lowCallback),
-                &Draft::Dummy::DummyService::Stub::AsyncBiStreamPing,
-                std::move(meta),
-                context.get());
-
-            // Add worker thread after the call was started and cancelled
-            clientLow.AddWorkerThreadForTest();
-
-            // Note: it's unlikely but possible the call succeeds
-            auto status = promise.GetFuture().ExtractValueSync();
-            if (status.Ok()) {
-                Cerr << "WARNING: unable to cause start/cancel race" << Endl;
-            }
-        }
-    }
-
+        ui16 grpc = server.GetPort(); 
+        TString location = TStringBuilder() << "localhost:" << grpc; 
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location); 
+        NGrpc::TCallMeta meta; 
+        meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"}); 
+        { 
+            using TRequest = Draft::Dummy::PingRequest; 
+            using TResponse = Draft::Dummy::PingResponse; 
+            using TProcessor = typename NGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr; 
+            NGrpc::TGRpcClientLow clientLow(/* numWorkerThreads = */ 0); 
+            auto connection = clientLow.CreateGRpcServiceConnection<Draft::Dummy::DummyService>(clientConfig); 
+ 
+            auto promise = NThreading::NewPromise<NGrpc::TGrpcStatus>(); 
+            auto lowCallback = [promise] 
+                (NGrpc::TGrpcStatus grpcStatus, TProcessor /*processor*/) mutable { 
+                    promise.SetValue(grpcStatus); 
+                }; 
+ 
+            // Use context that is already cancelled 
+            auto context = clientLow.CreateContext(); 
+            context->Cancel(); 
+ 
+            // Start a new call using the cancelled context as a provider 
+            connection->DoStreamRequest<TRequest, TResponse>( 
+                std::move(lowCallback), 
+                &Draft::Dummy::DummyService::Stub::AsyncBiStreamPing, 
+                std::move(meta), 
+                context.get()); 
+ 
+            // Add worker thread after the call was started and cancelled 
+            clientLow.AddWorkerThreadForTest(); 
+ 
+            // Note: it's unlikely but possible the call succeeds 
+            auto status = promise.GetFuture().ExtractValueSync(); 
+            if (status.Ok()) { 
+                Cerr << "WARNING: unable to cause start/cancel race" << Endl; 
+            } 
+        } 
+    } 
+ 
     Y_UNIT_TEST(MultipleSimpleRequests) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -4173,7 +4173,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
 
     Y_UNIT_TEST(OverwriteStoragePolicy) {
         TKikimrWithGrpcAndRootSchema server;
-        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiKeepInMemory(true);
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiKeepInMemory(true); 
         InitConfigs(server);
 
         {
@@ -4214,8 +4214,8 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
-            profile.mutable_storage_policy()->mutable_syslog()->set_media("ssd");
-            profile.mutable_storage_policy()->mutable_data()->set_media("ssd");
+            profile.mutable_storage_policy()->mutable_syslog()->set_media("ssd"); 
+            profile.mutable_storage_policy()->mutable_data()->set_media("ssd"); 
             profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
             CreateTable(server, "/Root/ydb_ut_tenant/table-3", profile);
 
@@ -4240,8 +4240,8 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_storage_policy()->set_preset_name("storage2");
-            profile.mutable_storage_policy()->mutable_log()->set_media("hdd");
-            profile.mutable_storage_policy()->mutable_external()->set_media("hdd");
+            profile.mutable_storage_policy()->mutable_log()->set_media("hdd"); 
+            profile.mutable_storage_policy()->mutable_external()->set_media("hdd"); 
             profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::DISABLED);
             CreateTable(server, "/Root/ydb_ut_tenant/table-4", profile);
 
@@ -4266,8 +4266,8 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             Ydb::Table::TableProfile profile;
             profile.set_preset_name("profile1");
             profile.mutable_storage_policy()->set_preset_name("default");
-            profile.mutable_storage_policy()->mutable_syslog()->set_media("ssd");
-            profile.mutable_storage_policy()->mutable_log()->set_media("ssd");
+            profile.mutable_storage_policy()->mutable_syslog()->set_media("ssd"); 
+            profile.mutable_storage_policy()->mutable_log()->set_media("ssd"); 
             profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
             CreateTable(server, "/Root/ydb_ut_tenant/table-5", profile);
 

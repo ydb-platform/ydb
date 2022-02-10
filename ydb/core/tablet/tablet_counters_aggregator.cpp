@@ -819,11 +819,11 @@ private:
                     // percentile counters
                     FullSizePercentile = counters->Percentile().Size();
                     for (ui32 i = 0; i < FullSizePercentile; ++i) {
-                        if (!counters->PercentileCounterName(i)) {
+                        if (!counters->PercentileCounterName(i)) { 
                             DeprecatedPercentile.insert(i);
-                            continue;
-                        }
-
+                            continue; 
+                        } 
+ 
                         // old style
                         PercentileCounters.push_back(TVector<NMonitoring::TDynamicCounters::TCounterPtr>());
                         auto counterRBeginIter = PercentileCounters.rbegin();
@@ -863,10 +863,10 @@ private:
                     FullSizeSimple = counters->Simple().Size();
                     for (ui32 i = 0; i < FullSizeSimple; ++i) {
                         const char* name = counters->SimpleCounterName(i);
-                        if (!name) {
+                        if (!name) { 
                             DeprecatedSimple.insert(i);
-                            continue;
-                        }
+                            continue; 
+                        } 
                         if (DoAggregateSimpleCounters) {
                             auto itHistogramAggregate = histogramAggregates.find(name);
                             if (itHistogramAggregate != histogramAggregates.end()) {
@@ -884,10 +884,10 @@ private:
                     FullSizeCumulative = counters->Cumulative().Size();
                     for (ui32 i = 0; i < FullSizeCumulative; ++i) {
                         const char* name = counters->CumulativeCounterName(i);
-                        if (!name) {
+                        if (!name) { 
                             DeprecatedCumulative.insert(i);
-                            continue;
-                        }
+                            continue; 
+                        } 
                         if (DoAggregateCumulativeCounters) {
                             auto itHistogramAggregate = histogramAggregates.find(name);
                             if (itHistogramAggregate != histogramAggregates.end()) {
@@ -919,55 +919,55 @@ private:
                 }
 
                 // simple counters
-                ui32 nextSimpleOffset = 0;
+                ui32 nextSimpleOffset = 0; 
                 for (ui32 i = 0; i < FullSizeSimple; ++i) {
-                    if (!counters->SimpleCounterName(i)) {
-                        continue;
-                    }
-                    const ui32 offset = nextSimpleOffset++;
+                    if (!counters->SimpleCounterName(i)) { 
+                        continue; 
+                    } 
+                    const ui32 offset = nextSimpleOffset++; 
                     const ui64 value = counters->Simple()[i].Get();
                     if (DoAggregateSimpleCounters) {
-                        AggregatedSimpleCounters.SetValue(tabletID, offset, value, tabletType);
+                        AggregatedSimpleCounters.SetValue(tabletID, offset, value, tabletType); 
                     } else {
-                        Y_VERIFY(offset < SimpleCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-                        *SimpleCounters[offset] = value;
+                        Y_VERIFY(offset < SimpleCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType)); 
+                        *SimpleCounters[offset] = value; 
                     }
                 }
 
                 // cumulative counters
-                ui32 nextCumulativeOffset = 0;
+                ui32 nextCumulativeOffset = 0; 
                 for (ui32 i = 0; i < FullSizeCumulative; ++i) {
-                    if (!counters->CumulativeCounterName(i)) {
-                        continue;
-                    }
-                    const ui32 offset = nextCumulativeOffset++;
+                    if (!counters->CumulativeCounterName(i)) { 
+                        continue; 
+                    } 
+                    const ui32 offset = nextCumulativeOffset++; 
                     const ui64 valueDiff = counters->Cumulative()[i].Get();
                     if (DoAggregateCumulativeCounters) {
                         if (diff) {
                             const ui64 diffValue = valueDiff * 1000000 / diff.MicroSeconds(); // differentiate value to per second rate
-                            AggregatedCumulativeCounters.SetValue(tabletID, offset, diffValue, tabletType);
+                            AggregatedCumulativeCounters.SetValue(tabletID, offset, diffValue, tabletType); 
                         }
                     }
-                    Y_VERIFY(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-                    *CumulativeCounters[offset] += valueDiff;
+                    Y_VERIFY(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType)); 
+                    *CumulativeCounters[offset] += valueDiff; 
                 }
 
                 // percentile counters
-                ui32 nextPercentileOffset = 0;
+                ui32 nextPercentileOffset = 0; 
                 for (ui32 i = 0; i < FullSizePercentile; ++i) {
-                    if (!counters->PercentileCounterName(i)) {
+                    if (!counters->PercentileCounterName(i)) { 
+                        continue; 
+                    } 
+
+                    const ui32 offset = nextPercentileOffset++; 
+                    Y_VERIFY(offset < PercentileCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType)); 
+ 
+                    auto &pcx = PercentileCounters[offset]; 
+                    if (pcx.empty()) { 
                         continue;
                     }
 
-                    const ui32 offset = nextPercentileOffset++;
-                    Y_VERIFY(offset < PercentileCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-
-                    auto &pcx = PercentileCounters[offset];
-                    if (pcx.empty()) {
-                        continue;
-                    }
-
-                    auto&& percentileCounter = counters->Percentile()[i];
+                    auto&& percentileCounter = counters->Percentile()[i]; 
                     auto rangeCount = percentileCounter.GetRangeCount();
                     Y_VERIFY(rangeCount <= pcx.size(),
                         "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));

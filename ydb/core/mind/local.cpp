@@ -434,7 +434,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                         "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet follower tablet " << tabletId << " promoted to leader");
                     return;
                 }
-                ctx.Send(it->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
+                ctx.Send(it->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop)); 
                 OnlineTablets.erase(it);
             }
         }
@@ -477,12 +477,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto onlineTabletIt = OnlineTablets.find(tabletId);
         if (onlineTabletIt != OnlineTablets.end()) {
             // Provide/check generation here
-            ctx.Send(onlineTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
+            ctx.Send(onlineTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop)); 
         } else {
             auto inbootTabletIt = InbootTablets.find(tabletId);
             if (inbootTabletIt != InbootTablets.end()) {
                 // Provide/check generation here
-                ctx.Send(inbootTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
+                ctx.Send(inbootTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop)); 
             }
         }
     }
@@ -525,18 +525,18 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     it->second.ResourceValues.AddGroupWriteThroughput()->CopyFrom(v);
                 }
             }
-            if (metrics.GroupReadIopsSize() > 0) {
-                it->second.ResourceValues.ClearGroupReadIops();
-                for (const auto& v : metrics.GetGroupReadIops()) {
-                    it->second.ResourceValues.AddGroupReadIops()->CopyFrom(v);
-                }
-            }
-            if (metrics.GroupWriteIopsSize() > 0) {
-                it->second.ResourceValues.ClearGroupWriteIops();
-                for (const auto& v : metrics.GetGroupWriteIops()) {
-                    it->second.ResourceValues.AddGroupWriteIops()->CopyFrom(v);
-                }
-            }
+            if (metrics.GroupReadIopsSize() > 0) { 
+                it->second.ResourceValues.ClearGroupReadIops(); 
+                for (const auto& v : metrics.GetGroupReadIops()) { 
+                    it->second.ResourceValues.AddGroupReadIops()->CopyFrom(v); 
+                } 
+            } 
+            if (metrics.GroupWriteIopsSize() > 0) { 
+                it->second.ResourceValues.ClearGroupWriteIops(); 
+                for (const auto& v : metrics.GetGroupWriteIops()) { 
+                    it->second.ResourceValues.AddGroupWriteIops()->CopyFrom(v); 
+                } 
+            } 
             auto after = it->second.ResourceValues.ByteSize();
             if (after == 0 && before == 0) {
                 return;

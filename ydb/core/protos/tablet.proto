@@ -36,7 +36,7 @@ message TTabletTypes {
         BlockStorePartition = 26;
         TenantSlotBroker = 27;
         Console = 28;
-        Kesus = 29;
+        Kesus = 29; 
         BlockStorePartition2 = 30;
         BlockStoreDiskRegistry = 31;
         SysViewProcessor = 32;
@@ -44,7 +44,7 @@ message TTabletTypes {
         OlapShard = 34;
         ColumnShard = 35;
         TestShard = 36;
-        SequenceShard = 37;
+        SequenceShard = 37; 
         ReplicationController = 38;
 
         // when adding a new tablet type and keeping parse compatibility with the old version
@@ -52,7 +52,7 @@ message TTabletTypes {
         // the end of reserved list
         Reserved39 = 39;
         Reserved40 = 40;
-        Reserved41 = 41;
+        Reserved41 = 41; 
         Reserved42 = 42;
 
         UserTypeStart = 255;
@@ -203,12 +203,12 @@ message TThroughputRecord {
     optional uint64 Throughput = 3;
 }
 
-message TIopsRecord {
-    optional uint32 GroupID = 1;
-    optional uint32 Channel = 2; // actually uint8
-    optional uint64 Iops = 3;
-}
-
+message TIopsRecord { 
+    optional uint32 GroupID = 1; 
+    optional uint32 Channel = 2; // actually uint8 
+    optional uint64 Iops = 3; 
+} 
+ 
 message TMetrics {
     optional uint64 CPU = 1;
     optional uint64 Memory = 2;
@@ -219,22 +219,22 @@ message TMetrics {
     repeated TThroughputRecord GroupWriteThroughput = 7;
     optional uint64 ReadThroughput = 8;
     optional uint64 WriteThroughput = 9;
-    repeated TIopsRecord GroupReadIops = 10;
-    repeated TIopsRecord GroupWriteIops = 11;
-    optional uint64 ReadIops = 12;
-    optional uint64 WriteIops = 13;
+    repeated TIopsRecord GroupReadIops = 10; 
+    repeated TIopsRecord GroupWriteIops = 11; 
+    optional uint64 ReadIops = 12; 
+    optional uint64 WriteIops = 13; 
 }
-
-message TEvTabletStop {
-    enum EReason {
-        ReasonUnknown = 0;
-        ReasonStop = 1; // tablet is requested to gracefully stop
-        ReasonDemoted = 2; // a newer tablet instance is detected
-        ReasonIsolated = 3; // isolated from state storage
-        ReasonStorageBlocked = 4; // storage blocked by another instance
-        ReasonStorageFailure = 5; // storage failure (must shutdown as soon as possible)
-    }
-
-    optional uint64 TabletID = 1;
-    optional EReason Reason = 2;
-}
+ 
+message TEvTabletStop { 
+    enum EReason { 
+        ReasonUnknown = 0; 
+        ReasonStop = 1; // tablet is requested to gracefully stop 
+        ReasonDemoted = 2; // a newer tablet instance is detected 
+        ReasonIsolated = 3; // isolated from state storage 
+        ReasonStorageBlocked = 4; // storage blocked by another instance 
+        ReasonStorageFailure = 5; // storage failure (must shutdown as soon as possible) 
+    } 
+ 
+    optional uint64 TabletID = 1; 
+    optional EReason Reason = 2; 
+} 

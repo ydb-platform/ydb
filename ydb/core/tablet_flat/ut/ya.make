@@ -22,25 +22,25 @@ SRCS(
     flat_executor_ut.cpp
     flat_executor_database_ut.cpp
     flat_executor_gclogic_ut.cpp
-    flat_range_cache_ut.cpp
-    flat_row_versions_ut.cpp
-    flat_sausagecache_ut.cpp
+    flat_range_cache_ut.cpp 
+    flat_row_versions_ut.cpp 
+    flat_sausagecache_ut.cpp 
     flat_table_part_ut.cpp
     flat_test_db.h
     flat_test_db.cpp
     flat_test_db_helpers.h
-    shared_handle_ut.cpp
+    shared_handle_ut.cpp 
     ut_self.cpp
     ut_iterator.cpp
     ut_memtable.cpp
     ut_sausage.cpp
     ut_comp_gen.cpp
-    ut_comp_shard.cpp
+    ut_comp_shard.cpp 
     ut_compaction.cpp
-    ut_compaction_multi.cpp
+    ut_compaction_multi.cpp 
     ut_charge.cpp
     ut_part.cpp
-    ut_part_multi.cpp
+    ut_part_multi.cpp 
     ut_proto.cpp
     ut_pages.cpp
     ut_redo.cpp
@@ -49,9 +49,9 @@ SRCS(
     ut_forward.cpp
     ut_screen.cpp
     ut_bloom.cpp
-    ut_slice.cpp
-    ut_slice_loader.cpp
-    ut_versions.cpp
+    ut_slice.cpp 
+    ut_slice_loader.cpp 
+    ut_versions.cpp 
 )
 
 RESOURCE(

@@ -43,7 +43,7 @@ namespace NActors {
         , Scheduler(setup->Scheduler)
         , InterconnectCount((ui32)setup->Interconnect.ProxyActors.size())
         , CurrentTimestamp(0)
-        , CurrentMonotonic(0)
+        , CurrentMonotonic(0) 
         , CurrentIDCounter(RandomNumber<ui64>())
         , SystemSetup(setup.Release())
         , DefSelfID(NodeId, "actorsystem")
@@ -69,15 +69,15 @@ namespace NActors {
 #endif
 
         TActorId recipient = ev->GetRecipientRewrite();
-        const ui32 recpNodeId = recipient.NodeId();
+        const ui32 recpNodeId = recipient.NodeId(); 
 
         if (recpNodeId != NodeId && recpNodeId != 0) {
             // if recipient is not local one - rewrite with forward instruction
             Y_VERIFY_DEBUG(!ev->HasEvent() || ev->GetBase()->IsSerializable());
-            Y_VERIFY(ev->Recipient == recipient,
-                "Event rewrite from %s to %s would be lost via interconnect",
-                ev->Recipient.ToString().c_str(),
-                recipient.ToString().c_str());
+            Y_VERIFY(ev->Recipient == recipient, 
+                "Event rewrite from %s to %s would be lost via interconnect", 
+                ev->Recipient.ToString().c_str(), 
+                recipient.ToString().c_str()); 
             recipient = InterconnectProxy(recpNodeId);
             ev->Rewrite(TEvInterconnect::EvForward, recipient);
         }
@@ -119,20 +119,20 @@ namespace NActors {
     }
 
     void TActorSystem::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
-        Schedule(deadline - Timestamp(), ev, cookie);
+        Schedule(deadline - Timestamp(), ev, cookie); 
     }
 
-    void TActorSystem::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
-        const auto current = Monotonic();
-        if (deadline < current)
-            deadline = current;
-
-        TTicketLock::TGuard guard(&ScheduleLock);
-        ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
-    }
-
+    void TActorSystem::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const { 
+        const auto current = Monotonic(); 
+        if (deadline < current) 
+            deadline = current; 
+ 
+        TTicketLock::TGuard guard(&ScheduleLock); 
+        ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie); 
+    } 
+ 
     void TActorSystem::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
-        const auto deadline = Monotonic() + delta;
+        const auto deadline = Monotonic() + delta; 
 
         TTicketLock::TGuard guard(&ScheduleLock);
         ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
@@ -211,7 +211,7 @@ namespace NActors {
         TVector<NSchedulerQueue::TReader*> scheduleReaders;
         scheduleReaders.push_back(&ScheduleQueue->Reader);
         CpuManager->PrepareStart(scheduleReaders, this);
-        Scheduler->Prepare(this, &CurrentTimestamp, &CurrentMonotonic);
+        Scheduler->Prepare(this, &CurrentTimestamp, &CurrentMonotonic); 
         Scheduler->PrepareSchedules(&scheduleReaders.front(), (ui32)scheduleReaders.size());
 
         // setup interconnect proxies
@@ -242,9 +242,9 @@ namespace NActors {
         // ok, setup complete, we could destroy setup config
         SystemSetup.Destroy();
 
-        Scheduler->PrepareStart();
+        Scheduler->PrepareStart(); 
         CpuManager->Start();
-        Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
+        Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic)); 
         Scheduler->Start();
     }
 

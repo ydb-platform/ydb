@@ -54,33 +54,33 @@ enum class EAttribute {
     VOLUME_SPACE_LIMIT_SSD,
     EXTRA_PATH_SYMBOLS_ALLOWED, // deprecated
     VOLUME_SPACE_LIMIT_SSD_NONREPL,
-    DOCUMENT_API_VERSION,
+    DOCUMENT_API_VERSION, 
     VOLUME_SPACE_LIMIT_SSD_SYSTEM,
 };
 
 struct TVolumeSpace {
-    ui64 Raw = 0;
-    ui64 SSD = 0;
-    ui64 HDD = 0;
+    ui64 Raw = 0; 
+    ui64 SSD = 0; 
+    ui64 HDD = 0; 
     ui64 SSDNonrepl = 0;
     ui64 SSDSystem = 0;
-};
-
-struct TVolumeSpaceLimits {
-    ui64 Allocated = 0;
+}; 
+ 
+struct TVolumeSpaceLimits { 
+    ui64 Allocated = 0; 
     ui64 Limit = Max<ui64>();
 };
 
-enum class EUserAttributesOp {
-    InitRoot,
-    MkDir,
-    AlterUserAttrs,
-    CreateTable,
-    CreateSubDomain,
-    CreateExtSubDomain,
-    SyncUpdateTenants,
-};
-
+enum class EUserAttributesOp { 
+    InitRoot, 
+    MkDir, 
+    AlterUserAttrs, 
+    CreateTable, 
+    CreateSubDomain, 
+    CreateExtSubDomain, 
+    SyncUpdateTenants, 
+}; 
+ 
 struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
     using TPtr = TIntrusivePtr<TUserAttributes>;
     using TAttrs = TMap<TString, TString>;
@@ -113,7 +113,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD_NONREPL);
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD_SYSTEM);
                 HANDLE_ATTR(EXTRA_PATH_SYMBOLS_ALLOWED);
-                HANDLE_ATTR(DOCUMENT_API_VERSION);
+                HANDLE_ATTR(DOCUMENT_API_VERSION); 
             #undef HANDLE_ATTR
             return EAttribute::UNKNOWN;
         }
@@ -122,26 +122,26 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
     }
 
     bool ApplyPatch(EUserAttributesOp op, const NKikimrSchemeOp::TAlterUserAttributes& patch, TString& errStr) {
-        return ApplyPatch(op, patch.GetUserAttributes(), errStr);
+        return ApplyPatch(op, patch.GetUserAttributes(), errStr); 
     }
 
     template <class TContainer>
-    bool ApplyPatch(EUserAttributesOp op, const TContainer& patch, TString& errStr) {
+    bool ApplyPatch(EUserAttributesOp op, const TContainer& patch, TString& errStr) { 
         for (auto& item: patch) {
             const auto& name = item.GetKey();
 
             if (item.HasValue()) {
                 const auto& value = item.GetValue();
-                if (!CheckAttribute(op, name, value, errStr)) {
+                if (!CheckAttribute(op, name, value, errStr)) { 
                     return false;
                 }
 
                 Attrs[name] = value;
             } else {
-                if (!CheckAttributeRemove(op, name, errStr)) {
-                    return false;
-                }
-
+                if (!CheckAttributeRemove(op, name, errStr)) { 
+                    return false; 
+                } 
+ 
                 Attrs.erase(name);
             }
         }
@@ -178,12 +178,12 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
         return true;
     }
 
-    static bool CheckAttribute(EUserAttributesOp op, const TString& name, const TString& value, TString& errStr) {
-        if (op == EUserAttributesOp::SyncUpdateTenants) {
-            // Migration, must never fail
-            return true;
-        }
-
+    static bool CheckAttribute(EUserAttributesOp op, const TString& name, const TString& value, TString& errStr) { 
+        if (op == EUserAttributesOp::SyncUpdateTenants) { 
+            // Migration, must never fail 
+            return true; 
+        } 
+ 
         if (name.size() > TUserAttributesLimits::MaxNameLen) {
             errStr = Sprintf("UserArttibutes: name too long, name# '%s' value# '%s'"
                              , name.c_str(), value.c_str());
@@ -210,47 +210,47 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
                 return CheckAttributeUint64(name, value, errStr);
             case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
                 return CheckAttributeStringWithWeakCheck(name, value, errStr);
-            case EAttribute::DOCUMENT_API_VERSION:
-                if (op != EUserAttributesOp::CreateTable) {
-                    errStr = Sprintf("UserAttributes: attribute '%s' can only be set during CreateTable", name.c_str());
-                    return false;
-                }
-                return CheckAttributeUint64(name, value, errStr, /* minValue = */ 1);
+            case EAttribute::DOCUMENT_API_VERSION: 
+                if (op != EUserAttributesOp::CreateTable) { 
+                    errStr = Sprintf("UserAttributes: attribute '%s' can only be set during CreateTable", name.c_str()); 
+                    return false; 
+                } 
+                return CheckAttributeUint64(name, value, errStr, /* minValue = */ 1); 
         }
 
         Y_UNREACHABLE();
     }
 
-    static bool CheckAttributeRemove(EUserAttributesOp op, const TString& name, TString& errStr) {
-        if (op == EUserAttributesOp::SyncUpdateTenants) {
-            // Migration, must never fail
-            return true;
-        }
-
-        switch (ParseName(name)) {
-            case EAttribute::USER:
-                return true;
-            case EAttribute::UNKNOWN:
-                errStr = Sprintf("UserAttributes: unsupported attribute '%s'", name.c_str());
-                return false;
-            case EAttribute::VOLUME_SPACE_LIMIT:
-            case EAttribute::VOLUME_SPACE_LIMIT_HDD:
-            case EAttribute::VOLUME_SPACE_LIMIT_SSD:
-            case EAttribute::VOLUME_SPACE_LIMIT_SSD_NONREPL:
+    static bool CheckAttributeRemove(EUserAttributesOp op, const TString& name, TString& errStr) { 
+        if (op == EUserAttributesOp::SyncUpdateTenants) { 
+            // Migration, must never fail 
+            return true; 
+        } 
+ 
+        switch (ParseName(name)) { 
+            case EAttribute::USER: 
+                return true; 
+            case EAttribute::UNKNOWN: 
+                errStr = Sprintf("UserAttributes: unsupported attribute '%s'", name.c_str()); 
+                return false; 
+            case EAttribute::VOLUME_SPACE_LIMIT: 
+            case EAttribute::VOLUME_SPACE_LIMIT_HDD: 
+            case EAttribute::VOLUME_SPACE_LIMIT_SSD: 
+            case EAttribute::VOLUME_SPACE_LIMIT_SSD_NONREPL: 
             case EAttribute::VOLUME_SPACE_LIMIT_SSD_SYSTEM:
-            case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
-                return true;
-            case EAttribute::DOCUMENT_API_VERSION:
-                if (op != EUserAttributesOp::CreateTable) {
-                    errStr = Sprintf("UserAttributes: attribute '%s' can only be set during CreateTable", name.c_str());
-                    return false;
-                }
-                return true;
-        }
-
-        Y_UNREACHABLE();
-    }
-
+            case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED: 
+                return true; 
+            case EAttribute::DOCUMENT_API_VERSION: 
+                if (op != EUserAttributesOp::CreateTable) { 
+                    errStr = Sprintf("UserAttributes: attribute '%s' can only be set during CreateTable", name.c_str()); 
+                    return false; 
+                } 
+                return true; 
+        } 
+ 
+        Y_UNREACHABLE(); 
+    } 
+ 
     static bool CheckAttributeStringWithWeakCheck(const TString& name, const TString& value, TString& errStr) {
         if (!IsValidPathName_WeakCheck(value)) {
             errStr = Sprintf("UserArttibutes: attribute '%s' has invalid value '%s', forbidden symbols are found",
@@ -260,23 +260,23 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
         return true;
     }
 
-    static bool CheckAttributeUint64(const TString& name, const TString& value, TString& errStr, ui64 minValue = 0, ui64 maxValue = Max<ui64>()) {
-        ui64 parsed;
-        if (!TryFromString(value, parsed)) {
+    static bool CheckAttributeUint64(const TString& name, const TString& value, TString& errStr, ui64 minValue = 0, ui64 maxValue = Max<ui64>()) { 
+        ui64 parsed; 
+        if (!TryFromString(value, parsed)) { 
             errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s'",
                 name.c_str(), value.c_str());
              return false;
         }
-        if (parsed < minValue) {
-            errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s' < %" PRIu64,
-                name.c_str(), value.c_str(), minValue);
-            return false;
-        }
-        if (parsed > maxValue) {
-            errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s' > %" PRIu64,
-                name.c_str(), value.c_str(), maxValue);
-            return false;
-        }
+        if (parsed < minValue) { 
+            errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s' < %" PRIu64, 
+                name.c_str(), value.c_str(), minValue); 
+            return false; 
+        } 
+        if (parsed > maxValue) { 
+            errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s' > %" PRIu64, 
+                name.c_str(), value.c_str(), maxValue); 
+            return false; 
+        } 
         return true;
     }
 
@@ -326,17 +326,17 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
 
     TString ExtraPathSymbolsAllowed; // it's better to move it in TSubDomainInfo like SchemeLimits
 
-    TVolumeSpaceLimits VolumeSpaceRaw;
-    TVolumeSpaceLimits VolumeSpaceSSD;
-    TVolumeSpaceLimits VolumeSpaceHDD;
+    TVolumeSpaceLimits VolumeSpaceRaw; 
+    TVolumeSpaceLimits VolumeSpaceSSD; 
+    TVolumeSpaceLimits VolumeSpaceHDD; 
     TVolumeSpaceLimits VolumeSpaceSSDNonrepl;
     TVolumeSpaceLimits VolumeSpaceSSDSystem;
-    ui64 DocumentApiVersion = 0;
+    ui64 DocumentApiVersion = 0; 
 
-    // Number of references to this path element in the database
-    size_t DbRefCount = 0;
-    size_t AllChildrenCount = 0;
-
+    // Number of references to this path element in the database 
+    size_t DbRefCount = 0; 
+    size_t AllChildrenCount = 0; 
+ 
 private:
     ui64 AliveChildrenCount = 0;
     ui64 ShardsInsideCount = 0;
@@ -444,31 +444,31 @@ public:
         return PathType == EPathType::EPathTypeKesus;
     }
 
-    bool IsOlapStore() const {
+    bool IsOlapStore() const { 
         return PathType == EPathType::EPathTypeColumnStore;
-    }
-
-    bool IsOlapTable() const {
+    } 
+ 
+    bool IsOlapTable() const { 
         return PathType == EPathType::EPathTypeColumnTable;
-    }
-
-    bool IsSequence() const {
-        return PathType == EPathType::EPathTypeSequence;
-    }
-
+    } 
+ 
+    bool IsSequence() const { 
+        return PathType == EPathType::EPathTypeSequence; 
+    } 
+ 
     bool IsReplication() const {
         return PathType == EPathType::EPathTypeReplication;
     }
 
     bool IsContainer() const {
-        return PathType == EPathType::EPathTypeDir || PathType == EPathType::EPathTypeSubDomain
+        return PathType == EPathType::EPathTypeDir || PathType == EPathType::EPathTypeSubDomain 
             || PathType == EPathType::EPathTypeColumnStore;
     }
 
-    bool IsLikeDirectory() const {
-        return IsDirectory() || IsDomainRoot() || IsOlapStore();
-    }
-
+    bool IsLikeDirectory() const { 
+        return IsDirectory() || IsDomainRoot() || IsOlapStore(); 
+    } 
+ 
     bool HasActiveChanges() const {
         // there are old clusters where Root node has CreateTxId == 0
         return (!IsRoot() && !CreateTxId) || (PathState != EPathState::EPathStateNoChanges);
@@ -527,15 +527,15 @@ public:
         return true;
     }
 
-    bool RemoveChild(const TString& name, TPathId pathId) {
-        auto it = Children.find(name);
-        if (it != Children.end() && it->second == pathId) {
-            Children.erase(it);
-            return true;
-        }
-        return false;
-    }
-
+    bool RemoveChild(const TString& name, TPathId pathId) { 
+        auto it = Children.find(name); 
+        if (it != Children.end() && it->second == pathId) { 
+            Children.erase(it); 
+            return true; 
+        } 
+        return false; 
+    } 
+ 
     TPathId* FindChild(const TString& name) {
         return Children.FindPtr(name);
     }
@@ -556,8 +556,8 @@ public:
     }
 
     void ApplySpecialAttributes() {
-        VolumeSpaceRaw.Limit = Max<ui64>();
-        VolumeSpaceSSD.Limit = Max<ui64>();
+        VolumeSpaceRaw.Limit = Max<ui64>(); 
+        VolumeSpaceSSD.Limit = Max<ui64>(); 
         VolumeSpaceHDD.Limit = Max<ui64>();
         VolumeSpaceSSDNonrepl.Limit = Max<ui64>();
         VolumeSpaceSSDSystem.Limit = Max<ui64>();
@@ -565,13 +565,13 @@ public:
         for (const auto& item : UserAttrs->Attrs) {
             switch (TUserAttributes::ParseName(item.first)) {
                 case EAttribute::VOLUME_SPACE_LIMIT:
-                    HandleAttributeValue(item.second, VolumeSpaceRaw.Limit);
+                    HandleAttributeValue(item.second, VolumeSpaceRaw.Limit); 
                     break;
                 case EAttribute::VOLUME_SPACE_LIMIT_SSD:
                     HandleAttributeValue(item.second, VolumeSpaceSSD.Limit);
                     break;
-                case EAttribute::VOLUME_SPACE_LIMIT_HDD:
-                    HandleAttributeValue(item.second, VolumeSpaceHDD.Limit);
+                case EAttribute::VOLUME_SPACE_LIMIT_HDD: 
+                    HandleAttributeValue(item.second, VolumeSpaceHDD.Limit); 
                     break;
                 case EAttribute::VOLUME_SPACE_LIMIT_SSD_NONREPL:
                     HandleAttributeValue(item.second, VolumeSpaceSSDNonrepl.Limit);
@@ -582,9 +582,9 @@ public:
                 case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
                     HandleAttributeValue(item.second, ExtraPathSymbolsAllowed);
                     break;
-                case EAttribute::DOCUMENT_API_VERSION:
-                    HandleAttributeValue(item.second, DocumentApiVersion);
-                    break;
+                case EAttribute::DOCUMENT_API_VERSION: 
+                    HandleAttributeValue(item.second, DocumentApiVersion); 
+                    break; 
                 default:
                     break;
             }
@@ -602,77 +602,77 @@ public:
         }
     }
 
-    void ChangeVolumeSpaceBegin(TVolumeSpace newSpace, TVolumeSpace oldSpace) {
-        auto update = [](TVolumeSpaceLimits& limits, ui64 newValue, ui64 oldValue) {
-            if (newValue > oldValue) {
-                // Volume space increase is handled at tx begin
-                limits.Allocated += newValue - oldValue;
-            }
-        };
-        update(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw);
-        update(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD);
-        update(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD);
+    void ChangeVolumeSpaceBegin(TVolumeSpace newSpace, TVolumeSpace oldSpace) { 
+        auto update = [](TVolumeSpaceLimits& limits, ui64 newValue, ui64 oldValue) { 
+            if (newValue > oldValue) { 
+                // Volume space increase is handled at tx begin 
+                limits.Allocated += newValue - oldValue; 
+            } 
+        }; 
+        update(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw); 
+        update(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD); 
+        update(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD); 
         update(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl);
         update(VolumeSpaceSSDSystem, newSpace.SSDSystem, oldSpace.SSDSystem);
     }
 
-    void ChangeVolumeSpaceCommit(TVolumeSpace newSpace, TVolumeSpace oldSpace) {
-        auto update = [](TVolumeSpaceLimits& limits, ui64 newValue, ui64 oldValue) {
-            if (newValue < oldValue) {
-                // Volume space decrease is handled at tx commit
-                ui64 diff = oldValue - newValue;
-                Y_VERIFY(limits.Allocated >= diff);
-                limits.Allocated -= diff;
-            }
-        };
-        update(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw);
-        update(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD);
-        update(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD);
+    void ChangeVolumeSpaceCommit(TVolumeSpace newSpace, TVolumeSpace oldSpace) { 
+        auto update = [](TVolumeSpaceLimits& limits, ui64 newValue, ui64 oldValue) { 
+            if (newValue < oldValue) { 
+                // Volume space decrease is handled at tx commit 
+                ui64 diff = oldValue - newValue; 
+                Y_VERIFY(limits.Allocated >= diff); 
+                limits.Allocated -= diff; 
+            } 
+        }; 
+        update(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw); 
+        update(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD); 
+        update(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD); 
         update(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl);
         update(VolumeSpaceSSDSystem, newSpace.SSDSystem, oldSpace.SSDSystem);
-    }
+    } 
 
-    bool CheckVolumeSpaceChange(TVolumeSpace newSpace, TVolumeSpace oldSpace, TString& errStr) {
-        auto check = [&errStr](const TVolumeSpaceLimits& limits, ui64 newValue, ui64 oldValue, const char* suffix) -> bool {
-            if (newValue > oldValue) {
-                ui64 newAllocated = limits.Allocated + newValue - oldValue;
-                if (newAllocated > limits.Limit) {
-                    errStr = TStringBuilder()
-                        << "New volume space is over a limit" << suffix
-                        << ": " << newAllocated << " > " << limits.Limit;
-                    return false;
-                }
+    bool CheckVolumeSpaceChange(TVolumeSpace newSpace, TVolumeSpace oldSpace, TString& errStr) { 
+        auto check = [&errStr](const TVolumeSpaceLimits& limits, ui64 newValue, ui64 oldValue, const char* suffix) -> bool { 
+            if (newValue > oldValue) { 
+                ui64 newAllocated = limits.Allocated + newValue - oldValue; 
+                if (newAllocated > limits.Limit) { 
+                    errStr = TStringBuilder() 
+                        << "New volume space is over a limit" << suffix 
+                        << ": " << newAllocated << " > " << limits.Limit; 
+                    return false; 
+                } 
             }
-            return true;
-        };
-        return (check(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw, "") &&
-                check(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD, " (ssd)") &&
+            return true; 
+        }; 
+        return (check(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw, "") && 
+                check(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD, " (ssd)") && 
                 check(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD, " (hdd)") &&
                 check(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl, " (ssd_nonrepl)") &&
                 check(VolumeSpaceSSDSystem, newSpace.SSDSystem, oldSpace.SSDSystem, " (ssd_system)"));
     }
 
-    bool HasRuntimeAttrs() const {
-        return (VolumeSpaceRaw.Allocated > 0 ||
-                VolumeSpaceSSD.Allocated > 0 ||
+    bool HasRuntimeAttrs() const { 
+        return (VolumeSpaceRaw.Allocated > 0 || 
+                VolumeSpaceSSD.Allocated > 0 || 
                 VolumeSpaceHDD.Allocated > 0 ||
                 VolumeSpaceSSDNonrepl.Allocated > 0 ||
                 VolumeSpaceSSDSystem.Allocated > 0);
     }
 
-    void SerializeRuntimeAttrs(
+    void SerializeRuntimeAttrs( 
             google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs) const
-    {
-        auto process = [userAttrs](const TVolumeSpaceLimits& limits, const char* name) {
-            if (limits.Allocated > 0) {
-                auto* attr = userAttrs->Add();
-                attr->SetKey(name);
-                attr->SetValue(TStringBuilder() << limits.Allocated);
+    { 
+        auto process = [userAttrs](const TVolumeSpaceLimits& limits, const char* name) { 
+            if (limits.Allocated > 0) { 
+                auto* attr = userAttrs->Add(); 
+                attr->SetKey(name); 
+                attr->SetValue(TStringBuilder() << limits.Allocated); 
             }
-        };
-        process(VolumeSpaceRaw, "__volume_space_allocated");
-        process(VolumeSpaceSSD, "__volume_space_allocated_ssd");
-        process(VolumeSpaceHDD, "__volume_space_allocated_hdd");
+        }; 
+        process(VolumeSpaceRaw, "__volume_space_allocated"); 
+        process(VolumeSpaceSSD, "__volume_space_allocated_ssd"); 
+        process(VolumeSpaceHDD, "__volume_space_allocated_hdd"); 
         process(VolumeSpaceSSDNonrepl, "__volume_space_allocated_ssd_nonrepl");
         process(VolumeSpaceSSDSystem, "__volume_space_allocated_ssd_system");
     }

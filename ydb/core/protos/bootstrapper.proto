@@ -13,8 +13,8 @@ message TEvWatchResult {
         FREE = 1;
         OWNER = 2;
         WAITFOR = 3;
-        UNDELIVERED = 4;
-        DISCONNECTED = 5;
+        UNDELIVERED = 4; 
+        DISCONNECTED = 5; 
     }
 
     optional uint64 TabletID = 1;

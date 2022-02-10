@@ -4,7 +4,7 @@
 #include "event_pb.h"
 
 #include <library/cpp/actors/protos/actors.pb.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 
 namespace NActors {
     struct TEvents {
@@ -161,9 +161,9 @@ namespace NActors {
         private:
             static TString MakeData(ui32 sourceType, ui32 reason) {
                 TString s = TString::Uninitialized(sizeof(ui32) + sizeof(ui32));
-                char *p = s.Detach();
-                WriteUnaligned<ui32>(p + 0, sourceType);
-                WriteUnaligned<ui32>(p + 4, reason);
+                char *p = s.Detach(); 
+                WriteUnaligned<ui32>(p + 0, sourceType); 
+                WriteUnaligned<ui32>(p + 4, reason); 
                 return s;
             }
         };

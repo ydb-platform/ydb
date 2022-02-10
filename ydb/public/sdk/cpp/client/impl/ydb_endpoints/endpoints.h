@@ -13,26 +13,26 @@ namespace NYdb {
 struct TEndpointRecord {
     TStringType Endpoint;
     i32 Priority;
-    TStringType SslTargetNameOverride;
+    TStringType SslTargetNameOverride; 
 
-    TEndpointRecord()
-        : Endpoint()
-        , Priority(0)
-        , SslTargetNameOverride()
-    {
-    }
-
-    TEndpointRecord(TStringType endpoint, i32 priority, TStringType sslTargetNameOverride = TStringType())
+    TEndpointRecord() 
+        : Endpoint() 
+        , Priority(0) 
+        , SslTargetNameOverride() 
+    { 
+    } 
+ 
+    TEndpointRecord(TStringType endpoint, i32 priority, TStringType sslTargetNameOverride = TStringType()) 
         : Endpoint(std::move(endpoint))
         , Priority(priority)
-        , SslTargetNameOverride(std::move(sslTargetNameOverride))
+        , SslTargetNameOverride(std::move(sslTargetNameOverride)) 
     {
     }
 
-    explicit operator bool() const {
-        return !Endpoint.empty();
-    }
-
+    explicit operator bool() const { 
+        return !Endpoint.empty(); 
+    } 
+ 
     bool operator<(const TEndpointRecord& rhs) const {
         return Priority < rhs.Priority;
     }
@@ -56,7 +56,7 @@ public:
     void SetStatCollector(const NSdkStats::TStatCollector::TEndpointElectorStatCollector& endpointStatCollector);
 
     // Returns prefered (if presents) or best endpoint
-    TEndpointRecord GetEndpoint(const TStringType& preferredEndpoint) const;
+    TEndpointRecord GetEndpoint(const TStringType& preferredEndpoint) const; 
 
     // Move endpoint to the end
     void PessimizeEndpoint(const TStringType& endpoint);
@@ -74,17 +74,17 @@ public:
 
     class TObjRegistry;
 private:
-    using TTaggedObjRegistry = std::unordered_map<const void*, std::shared_ptr<TObjRegistry>>;
-
-    struct TKnownEndpoint {
-        TEndpointRecord Record;
-        TTaggedObjRegistry TaggedObjs;
-    };
-
-private:
+    using TTaggedObjRegistry = std::unordered_map<const void*, std::shared_ptr<TObjRegistry>>; 
+ 
+    struct TKnownEndpoint { 
+        TEndpointRecord Record; 
+        TTaggedObjRegistry TaggedObjs; 
+    }; 
+ 
+private: 
     mutable std::shared_mutex Mutex_;
     std::vector<TEndpointRecord> Records_;
-    std::unordered_map<TStringType, TKnownEndpoint> KnownEndpoints_;
+    std::unordered_map<TStringType, TKnownEndpoint> KnownEndpoints_; 
     i32 BestK_ = -1;
     std::atomic_int PessimizationRatio_ = 0;
     NSdkStats::TAtomicCounter<NMonitoring::TIntGauge> EndpointCountGauge_;

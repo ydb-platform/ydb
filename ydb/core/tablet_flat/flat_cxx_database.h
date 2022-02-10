@@ -53,10 +53,10 @@ public:
         : TRawTypeValue(&value, sizeof(value), type)
     {}
 
-    TTypeValue(const double& value, NScheme::TTypeId type = NScheme::NTypeIds::Double)
-        : TRawTypeValue(&value, sizeof(value), type)
-    {}
-
+    TTypeValue(const double& value, NScheme::TTypeId type = NScheme::NTypeIds::Double) 
+        : TRawTypeValue(&value, sizeof(value), type) 
+    {} 
+ 
     template <typename ElementType>
     TTypeValue(const TVector<ElementType> &value, NScheme::TTypeId type = NScheme::NTypeIds::String)
         : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
@@ -148,16 +148,16 @@ public:
         return value;
     }
 
-    operator double() const {
-        Y_VERIFY(Type() == NScheme::NTypeIds::Double && Size() == sizeof(double), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        double value = ReadUnaligned<double>(reinterpret_cast<const double*>(Data()));
-        return value;
-    }
-
+    operator double() const { 
+        Y_VERIFY(Type() == NScheme::NTypeIds::Double && Size() == sizeof(double), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
+        double value = ReadUnaligned<double>(reinterpret_cast<const double*>(Data())); 
+        return value; 
+    } 
+ 
     operator TActorId() const {
-        Y_VERIFY((Type() == NScheme::NTypeIds::ActorId
-               || Type() == NScheme::NTypeIds::String
-               || Type() == NScheme::NTypeIds::String2m
+        Y_VERIFY((Type() == NScheme::NTypeIds::ActorId 
+               || Type() == NScheme::NTypeIds::String 
+               || Type() == NScheme::NTypeIds::String2m 
                || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         return *reinterpret_cast<const TActorId*>(Data());
     }
@@ -626,10 +626,10 @@ enum class EMaterializationMode {
 struct Schema {
     template <typename T>
     struct Precharger {
-        static bool Precharge(
-            TToughDb&, ui32,
-            NTable::TRawVals, NTable::TRawVals,
-            NTable::TTagsRef, NTable::EDirection);
+        static bool Precharge( 
+            TToughDb&, ui32, 
+            NTable::TRawVals, NTable::TRawVals, 
+            NTable::TTagsRef, NTable::EDirection); 
     };
 
     struct NoAutoPrecharge {};
@@ -722,22 +722,22 @@ struct Schema {
         template <typename... ColumnsTypes>
         struct Columns<TableColumns<ColumnsTypes...>> : Columns<ColumnsTypes...> {};
 
-        template <typename IteratorType>
-        using ReverseIteratorType = typename IteratorType::TReverseType;
-
+        template <typename IteratorType> 
+        using ReverseIteratorType = typename IteratorType::TReverseType; 
+ 
         template <typename, typename> class KeyOperations;
-        template <typename, typename> class AnyKeyOperations;
-        template <typename, typename, typename> class KeyPrefixOperations;
-        template <typename, typename, typename> class GreaterOrEqualKeyOperations;
-        template <typename, typename, typename> class LessOrEqualKeyOperations;
-        template <typename, typename, typename, typename> class RangeKeyOperations;
+        template <typename, typename> class AnyKeyOperations; 
+        template <typename, typename, typename> class KeyPrefixOperations; 
+        template <typename, typename, typename> class GreaterOrEqualKeyOperations; 
+        template <typename, typename, typename> class LessOrEqualKeyOperations; 
+        template <typename, typename, typename, typename> class RangeKeyOperations; 
 
-        template <typename IteratorType, typename TableType, typename... KeyColumns>
+        template <typename IteratorType, typename TableType, typename... KeyColumns> 
         class TableSelector {
         protected:
             using KeyColumnsType = std::tuple<KeyColumns...>;
             using KeyValuesType = std::tuple<typename KeyColumns::Type...>;
-            using ReverseSelector = TableSelector<ReverseIteratorType<IteratorType>, TableType, KeyColumns...>;
+            using ReverseSelector = TableSelector<ReverseIteratorType<IteratorType>, TableType, KeyColumns...>; 
             TToughDb* Database;
 
         public:
@@ -768,30 +768,30 @@ struct Schema {
 
             template <typename... Keys>
             auto Range(Keys... keyValues) {
-                return KeyPrefixOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...);
+                return KeyPrefixOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...); 
             }
 
             template <typename... Keys>
             auto Prefix(Keys... keyValues) {
-                return KeyPrefixOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...);
+                return KeyPrefixOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...); 
             }
 
             auto Range() {
-                return AnyKeyOperations<IteratorType, TableType>(*Database);
+                return AnyKeyOperations<IteratorType, TableType>(*Database); 
             }
 
             auto All() {
-                return AnyKeyOperations<IteratorType, TableType>(*Database);
+                return AnyKeyOperations<IteratorType, TableType>(*Database); 
             }
 
             template <typename... Keys>
             auto GreaterOrEqual(Keys... keyValues) {
-                return GreaterOrEqualKeyOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...);
+                return GreaterOrEqualKeyOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...); 
             }
 
             template <typename... Keys>
             auto LessOrEqual(Keys... keyValues) {
-                return LessOrEqualKeyOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...);
+                return LessOrEqualKeyOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...); 
             }
 
             template <typename... ColumnTypes>
@@ -811,10 +811,10 @@ struct Schema {
             auto Precharge() {
                 return All().Precharge();
             }
-
-            auto Reverse() const {
-                return ReverseSelector(*Database);
-            }
+ 
+            auto Reverse() const { 
+                return ReverseSelector(*Database); 
+            } 
         };
 
         template <typename... KeyColumnsTypes>
@@ -844,7 +844,7 @@ struct Schema {
             }
 
             template <typename TableType>
-            using Selector = TableSelector<NTable::TTableIt, TableType, KeyColumnsTypes...>;
+            using Selector = TableSelector<NTable::TTableIt, TableType, KeyColumnsTypes...>; 
             using KeyColumnsType = std::tuple<KeyColumnsTypes...>;
             using KeyValuesType = typename TableColumns<KeyColumnsTypes...>::TupleType;
             using RealKeyValuesType = typename TableColumns<KeyColumnsTypes...>::RealTupleType;
@@ -961,10 +961,10 @@ struct Schema {
             Operations(Operations&&) = default;
             Operations& operator =(Operations&&) = default;
 
-            template <typename IteratorType, typename DeriveType>
+            template <typename IteratorType, typename DeriveType> 
             class KeyIterator {
             public:
-                KeyIterator(THolder<IteratorType>&& it)
+                KeyIterator(THolder<IteratorType>&& it) 
                     : Iterator(std::move(it))
                 {}
 
@@ -981,7 +981,7 @@ struct Schema {
                 }
 
                 bool IsValid() const {
-                    return Iterator->Last() == NTable::EReady::Data;
+                    return Iterator->Last() == NTable::EReady::Data; 
                 }
 
                 bool IsOk() const {
@@ -989,7 +989,7 @@ struct Schema {
                 }
 
                 bool Next() {
-                    while (Iterator->Next(NTable::ENext::Data) == NTable::EReady::Data && IsDeleted()) { }
+                    while (Iterator->Next(NTable::ENext::Data) == NTable::EReady::Data && IsDeleted()) { } 
                     return IsReady();
                 }
 
@@ -1001,33 +1001,33 @@ struct Schema {
                     return Iterator->GetKey();
                 }
 
-                typename NTable::TIteratorStats* Stats() const {
-                    return Iterator ? &Iterator->Stats : nullptr;
-                }
-
+                typename NTable::TIteratorStats* Stats() const { 
+                    return Iterator ? &Iterator->Stats : nullptr; 
+                } 
+ 
             private:
-                bool IsDeleted() const {
-                    Y_VERIFY_DEBUG(
+                bool IsDeleted() const { 
+                    Y_VERIFY_DEBUG( 
                         Iterator->Row().GetRowState() != NTable::ERowOp::Erase,
-                        "Unexpected deleted row returned from iterator");
-                    return false;
-                }
-
-                const DeriveType* AsDerived() const noexcept {
-                    return static_cast<const DeriveType*>(this);
-                }
-
-            private:
-                THolder<IteratorType> Iterator;
+                        "Unexpected deleted row returned from iterator"); 
+                    return false; 
+                } 
+ 
+                const DeriveType* AsDerived() const noexcept { 
+                    return static_cast<const DeriveType*>(this); 
+                } 
+ 
+            private: 
+                THolder<IteratorType> Iterator; 
             };
 
-            template <typename IteratorType, typename TableType>
-            class AnyKeyIterator
-                : public KeyIterator<IteratorType, AnyKeyIterator<IteratorType, TableType>>
-            {
+            template <typename IteratorType, typename TableType> 
+            class AnyKeyIterator 
+                : public KeyIterator<IteratorType, AnyKeyIterator<IteratorType, TableType>> 
+            { 
             public:
                 using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
-                using Iterator = KeyIterator<IteratorType, AnyKeyIterator<IteratorType, TableType>>;
+                using Iterator = KeyIterator<IteratorType, AnyKeyIterator<IteratorType, TableType>>; 
 
                 AnyKeyIterator(TToughDb& database, NTable::TTagsRef columns)
                     : Iterator(MakeIterator(database, columns))
@@ -1038,31 +1038,31 @@ struct Schema {
                 AnyKeyIterator(AnyKeyIterator&&) = default;
                 AnyKeyIterator& operator =(AnyKeyIterator&&) = default;
 
-                static THolder<IteratorType> MakeIterator(
-                        TToughDb& database, NTable::TTagsRef columns)
-                {
-                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, {}, {}, columns, IteratorType::Direction)) {
+                static THolder<IteratorType> MakeIterator( 
+                        TToughDb& database, NTable::TTagsRef columns) 
+                { 
+                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, {}, {}, columns, IteratorType::Direction)) { 
                         return nullptr;
                     }
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, NTable::TKeyRange{ }, columns).Release());
                 }
 
                 static bool Precharge(TToughDb& database, NTable::TTagsRef columns) {
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, {}, {}, columns, IteratorType::Direction);
+                    return Precharger<AutoPrecharge>::Precharge(database, TableId, {}, {}, columns, IteratorType::Direction); 
                 }
             };
 
-            template <typename, typename, typename>
+            template <typename, typename, typename> 
             class EqualPartialKeyIterator;
 
-            template <typename IteratorType, typename TableType, typename... KeyValuesTypes>
-            class EqualPartialKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>
-                : public KeyIterator<IteratorType, EqualPartialKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>>
-            {
+            template <typename IteratorType, typename TableType, typename... KeyValuesTypes> 
+            class EqualPartialKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>> 
+                : public KeyIterator<IteratorType, EqualPartialKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>> 
+            { 
             public:
                 using KeyValuesType = std::tuple<KeyValuesTypes...>;
                 using KeyColumnsType = typename first_n_of<sizeof...(KeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type;
-                using Iterator = KeyIterator<IteratorType, EqualPartialKeyIterator<IteratorType, TableType, KeyValuesType>>;
+                using Iterator = KeyIterator<IteratorType, EqualPartialKeyIterator<IteratorType, TableType, KeyValuesType>>; 
                 static constexpr auto FullKeySize = std::tuple_size<typename TableType::TKey::KeyColumnsType>::value;
 
                 EqualPartialKeyIterator(TToughDb& database, const KeyValuesType& key, NTable::TTagsRef columns)
@@ -1073,46 +1073,46 @@ struct Schema {
 
                 EqualPartialKeyIterator(const EqualPartialKeyIterator&) = delete;
 
-                EqualPartialKeyIterator(EqualPartialKeyIterator&& iterator) = default;
-                EqualPartialKeyIterator& operator =(EqualPartialKeyIterator&& iterator) = default;
+                EqualPartialKeyIterator(EqualPartialKeyIterator&& iterator) = default; 
+                EqualPartialKeyIterator& operator =(EqualPartialKeyIterator&& iterator) = default; 
 
-                static THolder<IteratorType> MakeIterator(
-                        TToughDb& database,
-                        const KeyValuesType& keyValues,
-                        NTable::TTagsRef columns)
-                {
-                    TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues);
-                    TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues);
-                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction)) {
+                static THolder<IteratorType> MakeIterator( 
+                        TToughDb& database, 
+                        const KeyValuesType& keyValues, 
+                        NTable::TTagsRef columns) 
+                { 
+                    TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues); 
+                    TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues); 
+                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction)) { 
                         return nullptr;
                     }
-                    NTable::TKeyRange range;
-                    range.MinKey = minKey;
-                    range.MinInclusive = true;
-                    range.MaxKey = maxKey;
-                    range.MaxInclusive = true;
+                    NTable::TKeyRange range; 
+                    range.MinKey = minKey; 
+                    range.MinInclusive = true; 
+                    range.MaxKey = maxKey; 
+                    range.MaxInclusive = true; 
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
                 static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
-                    TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues);
-                    TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction);
+                    TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues); 
+                    TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues); 
+                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction); 
                 }
             };
 
-            template <typename, typename, typename>
+            template <typename, typename, typename> 
             class GreaterOrEqualKeyIterator;
 
-            template <typename IteratorType, typename TableType, typename... KeyValuesTypes>
-            class GreaterOrEqualKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>
-                : public KeyIterator<IteratorType, GreaterOrEqualKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>>
-            {
+            template <typename IteratorType, typename TableType, typename... KeyValuesTypes> 
+            class GreaterOrEqualKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>> 
+                : public KeyIterator<IteratorType, GreaterOrEqualKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>> 
+            { 
             public:
                 using KeyValuesType = std::tuple<KeyValuesTypes...>;
                 using KeyColumnsType = typename first_n_of<sizeof...(KeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type;
-                using Iterator = KeyIterator<IteratorType, GreaterOrEqualKeyIterator<IteratorType, TableType, KeyValuesType>>;
-
+                using Iterator = KeyIterator<IteratorType, GreaterOrEqualKeyIterator<IteratorType, TableType, KeyValuesType>>; 
+ 
                 static constexpr auto FullKeySize = std::tuple_size<typename TableType::TKey::KeyColumnsType>::value;
 
                 GreaterOrEqualKeyIterator(TToughDb& database, const KeyValuesType& key, NTable::TTagsRef columns)
@@ -1124,40 +1124,40 @@ struct Schema {
                 GreaterOrEqualKeyIterator(GreaterOrEqualKeyIterator&&) = default;
                 GreaterOrEqualKeyIterator& operator =(GreaterOrEqualKeyIterator&&) = default;
 
-                static THolder<IteratorType> MakeIterator(
-                        TToughDb& database,
-                        const KeyValuesType& keyValues,
-                        NTable::TTagsRef columns)
-                {
-                    TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues);
-                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, minKey, {}, columns, IteratorType::Direction)) {
+                static THolder<IteratorType> MakeIterator( 
+                        TToughDb& database, 
+                        const KeyValuesType& keyValues, 
+                        NTable::TTagsRef columns) 
+                { 
+                    TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues); 
+                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, minKey, {}, columns, IteratorType::Direction)) { 
                         return nullptr;
                     }
-                    NTable::TKeyRange range;
-                    range.MinKey = minKey;
-                    range.MinInclusive = true;
-                    range.MaxKey = { };
-                    range.MaxInclusive = true;
+                    NTable::TKeyRange range; 
+                    range.MinKey = minKey; 
+                    range.MinInclusive = true; 
+                    range.MaxKey = { }; 
+                    range.MaxInclusive = true; 
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
                 static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
-                    TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, {}, columns, IteratorType::Direction);
+                    TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues); 
+                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, {}, columns, IteratorType::Direction); 
                 }
             };
 
-            template <typename, typename, typename>
+            template <typename, typename, typename> 
             class LessOrEqualKeyIterator;
 
-            template <typename IteratorType, typename TableType, typename... KeyValuesTypes>
-            class LessOrEqualKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>
-                : public KeyIterator<IteratorType, LessOrEqualKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>>
-            {
+            template <typename IteratorType, typename TableType, typename... KeyValuesTypes> 
+            class LessOrEqualKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>> 
+                : public KeyIterator<IteratorType, LessOrEqualKeyIterator<IteratorType, TableType, std::tuple<KeyValuesTypes...>>> 
+            { 
             public:
                 using KeyValuesType = std::tuple<KeyValuesTypes...>;
                 using KeyColumnsType = typename first_n_of<sizeof...(KeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type;
-                using Iterator = KeyIterator<IteratorType, LessOrEqualKeyIterator<IteratorType, TableType, KeyValuesType>>;
+                using Iterator = KeyIterator<IteratorType, LessOrEqualKeyIterator<IteratorType, TableType, KeyValuesType>>; 
 
                 LessOrEqualKeyIterator(TToughDb& database, const KeyValuesType& key, NTable::TTagsRef columns)
                     : Iterator(MakeIterator(database, key, columns))
@@ -1167,99 +1167,99 @@ struct Schema {
 
                 LessOrEqualKeyIterator(const LessOrEqualKeyIterator&) = delete;
 
-                LessOrEqualKeyIterator(LessOrEqualKeyIterator&& iterator) = default;
-                LessOrEqualKeyIterator& operator =(LessOrEqualKeyIterator&& iterator) = default;
+                LessOrEqualKeyIterator(LessOrEqualKeyIterator&& iterator) = default; 
+                LessOrEqualKeyIterator& operator =(LessOrEqualKeyIterator&& iterator) = default; 
 
-                static THolder<IteratorType> MakeIterator(
-                        TToughDb& database,
-                        const KeyValuesType& keyValues,
-                        NTable::TTagsRef columns)
-                {
-                    TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues);
-                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, {}, maxKey, columns, IteratorType::Direction)) {
+                static THolder<IteratorType> MakeIterator( 
+                        TToughDb& database, 
+                        const KeyValuesType& keyValues, 
+                        NTable::TTagsRef columns) 
+                { 
+                    TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues); 
+                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, {}, maxKey, columns, IteratorType::Direction)) { 
                         return nullptr;
                     }
-                    NTable::TKeyRange range;
-                    range.MinKey = { };
-                    range.MinInclusive = true;
-                    range.MaxKey = maxKey;
-                    range.MaxInclusive = true;
+                    NTable::TKeyRange range; 
+                    range.MinKey = { }; 
+                    range.MinInclusive = true; 
+                    range.MaxKey = maxKey; 
+                    range.MaxInclusive = true; 
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
                 static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
-                    TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, {}, maxKey, columns, IteratorType::Direction);
+                    TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues); 
+                    return Precharger<AutoPrecharge>::Precharge(database, TableId, {}, maxKey, columns, IteratorType::Direction); 
                 }
             };
 
-            template <typename, typename, typename, typename>
+            template <typename, typename, typename, typename> 
             class RangeKeyIterator;
 
-            template <typename IteratorType, typename TableType, typename... MinKeyValuesTypes, typename... MaxKeyValuesTypes>
-            class RangeKeyIterator<IteratorType, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>
-                : public KeyIterator<IteratorType, RangeKeyIterator<IteratorType, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>>
-            {
+            template <typename IteratorType, typename TableType, typename... MinKeyValuesTypes, typename... MaxKeyValuesTypes> 
+            class RangeKeyIterator<IteratorType, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>> 
+                : public KeyIterator<IteratorType, RangeKeyIterator<IteratorType, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>> 
+            { 
             public:
-                using MinKeyValuesType = std::tuple<MinKeyValuesTypes...>;
-                using MinKeyColumnsType = typename first_n_of<sizeof...(MinKeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type;
-                using MaxKeyValuesType = std::tuple<MaxKeyValuesTypes...>;
-                using MaxKeyColumnsType = typename first_n_of<sizeof...(MaxKeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type;
-                using Iterator = KeyIterator<IteratorType, RangeKeyIterator<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>>;
+                using MinKeyValuesType = std::tuple<MinKeyValuesTypes...>; 
+                using MinKeyColumnsType = typename first_n_of<sizeof...(MinKeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type; 
+                using MaxKeyValuesType = std::tuple<MaxKeyValuesTypes...>; 
+                using MaxKeyColumnsType = typename first_n_of<sizeof...(MaxKeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type; 
+                using Iterator = KeyIterator<IteratorType, RangeKeyIterator<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>>; 
 
                 static constexpr auto FullKeySize = std::tuple_size<typename TableType::TKey::KeyColumnsType>::value;
 
                 RangeKeyIterator(TToughDb& database,
-                                 const MinKeyValuesType& minKey,
-                                 const MaxKeyValuesType& maxKey,
+                                 const MinKeyValuesType& minKey, 
+                                 const MaxKeyValuesType& maxKey, 
                                  NTable::TTagsRef columns)
-                    : Iterator(MakeIterator(database, minKey, maxKey, columns))
+                    : Iterator(MakeIterator(database, minKey, maxKey, columns)) 
                 {
                     Iterator::Init();
                 }
 
                 RangeKeyIterator(const RangeKeyIterator&) = delete;
 
-                RangeKeyIterator(RangeKeyIterator&& iterator) = default;
-                RangeKeyIterator& operator =(RangeKeyIterator&& iterator) = default;
+                RangeKeyIterator(RangeKeyIterator&& iterator) = default; 
+                RangeKeyIterator& operator =(RangeKeyIterator&& iterator) = default; 
 
-                static THolder<IteratorType> MakeIterator(
+                static THolder<IteratorType> MakeIterator( 
                         TToughDb& database,
-                        const MinKeyValuesType& minKeyValues,
-                        const MaxKeyValuesType& maxKeyValues,
-                        NTable::TTagsRef columns)
-                {
-                    TTupleToRawTypeValueFixedSize<MinKeyValuesType, MinKeyColumnsType, FullKeySize> minKey(minKeyValues);
-                    TTupleToRawTypeValue<MaxKeyValuesType, MaxKeyColumnsType> maxKey(maxKeyValues);
-                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction)) {
+                        const MinKeyValuesType& minKeyValues, 
+                        const MaxKeyValuesType& maxKeyValues, 
+                        NTable::TTagsRef columns) 
+                { 
+                    TTupleToRawTypeValueFixedSize<MinKeyValuesType, MinKeyColumnsType, FullKeySize> minKey(minKeyValues); 
+                    TTupleToRawTypeValue<MaxKeyValuesType, MaxKeyColumnsType> maxKey(maxKeyValues); 
+                    if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction)) { 
                         return nullptr;
                     }
-                    NTable::TKeyRange range;
-                    range.MinKey = minKey;
-                    range.MinInclusive = true;
-                    range.MaxKey = maxKey;
-                    range.MaxInclusive = true;
+                    NTable::TKeyRange range; 
+                    range.MinKey = minKey; 
+                    range.MinInclusive = true; 
+                    range.MaxKey = maxKey; 
+                    range.MaxInclusive = true; 
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
                 static bool Precharge(TToughDb& database,
-                                      const MinKeyValuesType& minKeyValues,
-                                      const MaxKeyValuesType& maxKeyValues,
-                                      NTable::TTagsRef columns)
-                {
-                    TTupleToRawTypeValueFixedSize<MinKeyValuesType, MinKeyColumnsType, FullKeySize> minKey(minKeyValues);
-                    TTupleToRawTypeValue<MaxKeyValuesType, MaxKeyColumnsType> maxKey(maxKeyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction);
+                                      const MinKeyValuesType& minKeyValues, 
+                                      const MaxKeyValuesType& maxKeyValues, 
+                                      NTable::TTagsRef columns) 
+                { 
+                    TTupleToRawTypeValueFixedSize<MinKeyValuesType, MinKeyColumnsType, FullKeySize> minKey(minKeyValues); 
+                    TTupleToRawTypeValue<MaxKeyValuesType, MaxKeyColumnsType> maxKey(maxKeyValues); 
+                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction); 
                 }
             };
 
             template <typename TableType, typename KeyValuesType>
-            class EqualKeyIterator
-                : public KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>
-            {
+            class EqualKeyIterator 
+                : public KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>> 
+            { 
             public:
                 using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
-                using Iterator = KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>;
+                using Iterator = KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>; 
 
                 EqualKeyIterator(TToughDb& database, const KeyValuesType& key, NTable::TTagsRef columns)
                     : Iterator(MakeIterator(database, key, columns))
@@ -1269,8 +1269,8 @@ struct Schema {
 
                 EqualKeyIterator(const EqualKeyIterator&) = delete;
 
-                EqualKeyIterator(EqualKeyIterator&& iterator) = default;
-                EqualKeyIterator& operator =(EqualKeyIterator&& iterator) = default;
+                EqualKeyIterator(EqualKeyIterator&& iterator) = default; 
+                EqualKeyIterator& operator =(EqualKeyIterator&& iterator) = default; 
 
                 static THolder<NTable::TTableIt> MakeIterator(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> key(keyValues);
@@ -1279,7 +1279,7 @@ struct Schema {
 
                 static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> key(keyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, key, key, columns, NTable::TTableIt::Direction);
+                    return Precharger<AutoPrecharge>::Precharge(database, TableId, key, key, columns, NTable::TTableIt::Direction); 
                 }
             };
 
@@ -1381,10 +1381,10 @@ struct Schema {
                     return typename ColumnType::Type();
                 }
 
-                NTable::TIteratorStats* Stats() const {
-                    return Iterator.Stats();
-                }
-
+                NTable::TIteratorStats* Stats() const { 
+                    return Iterator.Stats(); 
+                } 
+ 
             protected:
                 template <typename ColumnType>
                 static constexpr size_t GetIndex() {
@@ -1406,17 +1406,17 @@ struct Schema {
             };
         };
 
-        template <typename IteratorType, typename TableType>
+        template <typename IteratorType, typename TableType> 
         class AnyKeyOperations: public Operations {
         public:
             using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
 
             template <typename KeyIterator, typename... Columns>
             using Rowset = typename Operations::template Rowset<KeyIterator, Columns...>;
-            using Iterator = typename Operations::template AnyKeyIterator<IteratorType, TableType>;
+            using Iterator = typename Operations::template AnyKeyIterator<IteratorType, TableType>; 
 
-            using ReverseOperations = AnyKeyOperations<ReverseIteratorType<IteratorType>, TableType>;
-
+            using ReverseOperations = AnyKeyOperations<ReverseIteratorType<IteratorType>, TableType>; 
+ 
         protected:
             TToughDb* Database;
 
@@ -1445,24 +1445,24 @@ struct Schema {
             bool Precharge() {
                 return Iterator::Precharge(*Database, Columns<typename TableType::TColumns>::GetColumnIds());
             }
-
-            auto Reverse() const {
-                return ReverseOperations(*Database);
-            }
+ 
+            auto Reverse() const { 
+                return ReverseOperations(*Database); 
+            } 
         };
 
-        template <typename IteratorType, typename TableType, typename... KeyValuesTypes>
-        class KeyPrefixOperations<IteratorType, TableType, std::tuple<KeyValuesTypes...>>: public Operations {
+        template <typename IteratorType, typename TableType, typename... KeyValuesTypes> 
+        class KeyPrefixOperations<IteratorType, TableType, std::tuple<KeyValuesTypes...>>: public Operations { 
         public:
             using KeyColumnsType = typename first_n_of<sizeof...(KeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type;
             using KeyValuesType = typename first_n_of<sizeof...(KeyValuesTypes), typename TableType::TKey::RealKeyValuesType>::type;
 
             template <typename KeyIterator, typename... Columns>
             using Rowset = typename Operations::template Rowset<KeyIterator, Columns...>;
-            using Iterator = typename Operations::template EqualPartialKeyIterator<IteratorType, TableType, KeyValuesType>;
+            using Iterator = typename Operations::template EqualPartialKeyIterator<IteratorType, TableType, KeyValuesType>; 
 
-            using ReverseOperations = KeyPrefixOperations<ReverseIteratorType<IteratorType>, TableType, std::tuple<KeyValuesTypes...>>;
-
+            using ReverseOperations = KeyPrefixOperations<ReverseIteratorType<IteratorType>, TableType, std::tuple<KeyValuesTypes...>>; 
+ 
         protected:
             TToughDb* Database;
             KeyValuesType KeyValues;
@@ -1473,16 +1473,16 @@ struct Schema {
                 , KeyValues(keyValues...)
             {}
 
-            explicit KeyPrefixOperations(const ReverseOperations& rhs)
-                : Database(rhs.Database)
-                , KeyValues(rhs.KeyValues)
-            { }
-
-            explicit KeyPrefixOperations(ReverseOperations&& rhs)
-                : Database(rhs.Database)
-                , KeyValues(std::move(rhs.KeyValues))
-            { }
-
+            explicit KeyPrefixOperations(const ReverseOperations& rhs) 
+                : Database(rhs.Database) 
+                , KeyValues(rhs.KeyValues) 
+            { } 
+ 
+            explicit KeyPrefixOperations(ReverseOperations&& rhs) 
+                : Database(rhs.Database) 
+                , KeyValues(std::move(rhs.KeyValues)) 
+            { } 
+ 
             KeyPrefixOperations(KeyPrefixOperations&&) = default;
             KeyPrefixOperations& operator =(KeyPrefixOperations&&) = default;
 
@@ -1503,28 +1503,28 @@ struct Schema {
             bool Precharge() {
                 return Iterator::Precharge(*Database, KeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
             }
-
-            auto Reverse() const & {
-                return ReverseOperations(*this);
-            }
-
-            auto Reverse() && {
-                return ReverseOperations(std::move(*this));
-            }
+ 
+            auto Reverse() const & { 
+                return ReverseOperations(*this); 
+            } 
+ 
+            auto Reverse() && { 
+                return ReverseOperations(std::move(*this)); 
+            } 
         };
 
-        template <typename IteratorType, typename TableType, typename... KeyValuesTypes>
-        class GreaterOrEqualKeyOperations<IteratorType, TableType, std::tuple<KeyValuesTypes...>>: public Operations {
+        template <typename IteratorType, typename TableType, typename... KeyValuesTypes> 
+        class GreaterOrEqualKeyOperations<IteratorType, TableType, std::tuple<KeyValuesTypes...>>: public Operations { 
         public:
             using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
             using KeyValuesType = typename first_n_of<sizeof...(KeyValuesTypes), typename TableType::TKey::RealKeyValuesType>::type;
 
             template <typename KeyIterator, typename... Columns>
             using Rowset = typename Operations::template Rowset<KeyIterator, Columns...>;
-            using Iterator = typename Operations::template GreaterOrEqualKeyIterator<IteratorType, TableType, KeyValuesType>;
+            using Iterator = typename Operations::template GreaterOrEqualKeyIterator<IteratorType, TableType, KeyValuesType>; 
 
-            using ReverseOperations = GreaterOrEqualKeyOperations<ReverseIteratorType<IteratorType>, TableType, std::tuple<KeyValuesTypes...>>;
-
+            using ReverseOperations = GreaterOrEqualKeyOperations<ReverseIteratorType<IteratorType>, TableType, std::tuple<KeyValuesTypes...>>; 
+ 
         protected:
             TToughDb* Database;
             KeyValuesType KeyValues;
@@ -1535,24 +1535,24 @@ struct Schema {
                 , KeyValues(keyValues...)
             {}
 
-            explicit GreaterOrEqualKeyOperations(const ReverseOperations& rhs)
-                : Database(rhs.Database)
-                , KeyValues(rhs.KeyValues)
-            { }
-
-            explicit GreaterOrEqualKeyOperations(ReverseOperations&& rhs)
-                : Database(rhs.Database)
-                , KeyValues(std::move(rhs.KeyValues))
-            { }
-
+            explicit GreaterOrEqualKeyOperations(const ReverseOperations& rhs) 
+                : Database(rhs.Database) 
+                , KeyValues(rhs.KeyValues) 
+            { } 
+ 
+            explicit GreaterOrEqualKeyOperations(ReverseOperations&& rhs) 
+                : Database(rhs.Database) 
+                , KeyValues(std::move(rhs.KeyValues)) 
+            { } 
+ 
             GreaterOrEqualKeyOperations(GreaterOrEqualKeyOperations&&) = default;
             GreaterOrEqualKeyOperations& operator =(GreaterOrEqualKeyOperations&&) = default;
 
             template <typename... Keys>
             auto LessOrEqual(Keys... keyValues) {
-                using MinKeyValuesType = KeyValuesType;
-                using MaxKeyValuesType = typename first_n_of<sizeof...(Keys), typename TableType::TKey::KeyValuesType>::type;
-                return RangeKeyOperations<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>(*Database, KeyValues, keyValues...);
+                using MinKeyValuesType = KeyValuesType; 
+                using MaxKeyValuesType = typename first_n_of<sizeof...(Keys), typename TableType::TKey::KeyValuesType>::type; 
+                return RangeKeyOperations<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>(*Database, KeyValues, keyValues...); 
             }
 
             template <typename... ColumnTypes>
@@ -1572,28 +1572,28 @@ struct Schema {
             bool Precharge() {
                 return Iterator::Precharge(*Database, KeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
             }
-
-            auto Reverse() const & {
-                return ReverseOperations(*this);
-            }
-
-            auto Reverse() && {
-                return ReverseOperations(std::move(*this));
-            }
+ 
+            auto Reverse() const & { 
+                return ReverseOperations(*this); 
+            } 
+ 
+            auto Reverse() && { 
+                return ReverseOperations(std::move(*this)); 
+            } 
         };
 
-        template <typename IteratorType, typename TableType, typename... KeyValuesTypes>
-        class LessOrEqualKeyOperations<IteratorType, TableType, std::tuple<KeyValuesTypes...>>: public Operations {
+        template <typename IteratorType, typename TableType, typename... KeyValuesTypes> 
+        class LessOrEqualKeyOperations<IteratorType, TableType, std::tuple<KeyValuesTypes...>>: public Operations { 
         public:
             using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
             using KeyValuesType = typename first_n_of<sizeof...(KeyValuesTypes), typename TableType::TKey::RealKeyValuesType>::type;
 
             template <typename KeyIterator, typename... Columns>
             using Rowset = typename Operations::template Rowset<KeyIterator, Columns...>;
-            using Iterator = typename Operations::template LessOrEqualKeyIterator<IteratorType, TableType, KeyValuesType>;
+            using Iterator = typename Operations::template LessOrEqualKeyIterator<IteratorType, TableType, KeyValuesType>; 
 
-            using ReverseOperations = LessOrEqualKeyOperations<ReverseIteratorType<IteratorType>, TableType, std::tuple<KeyValuesTypes...>>;
-
+            using ReverseOperations = LessOrEqualKeyOperations<ReverseIteratorType<IteratorType>, TableType, std::tuple<KeyValuesTypes...>>; 
+ 
         protected:
             TToughDb* Database;
             KeyValuesType KeyValues;
@@ -1604,26 +1604,26 @@ struct Schema {
                 , KeyValues(keyValues...)
             {}
 
-            explicit LessOrEqualKeyOperations(const ReverseOperations& rhs)
-                : Database(rhs.Database)
-                , KeyValues(rhs.KeyValues)
-            { }
-
-            explicit LessOrEqualKeyOperations(ReverseOperations&& rhs)
-                : Database(rhs.Database)
-                , KeyValues(std::move(rhs.KeyValues))
-            { }
-
+            explicit LessOrEqualKeyOperations(const ReverseOperations& rhs) 
+                : Database(rhs.Database) 
+                , KeyValues(rhs.KeyValues) 
+            { } 
+ 
+            explicit LessOrEqualKeyOperations(ReverseOperations&& rhs) 
+                : Database(rhs.Database) 
+                , KeyValues(std::move(rhs.KeyValues)) 
+            { } 
+ 
             LessOrEqualKeyOperations(LessOrEqualKeyOperations&&) = default;
             LessOrEqualKeyOperations& operator =(LessOrEqualKeyOperations&&) = default;
 
-            template <typename... Keys>
-            auto GreaterOrEqual(Keys... keyValues) {
-                using MinKeyValuesType = typename first_n_of<sizeof...(Keys), typename TableType::TKey::KeyValuesType>::type;
-                using MaxKeyValuesType = KeyValuesType;
-                return RangeKeyOperations<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>(*Database, keyValues..., KeyValues);
-            }
-
+            template <typename... Keys> 
+            auto GreaterOrEqual(Keys... keyValues) { 
+                using MinKeyValuesType = typename first_n_of<sizeof...(Keys), typename TableType::TKey::KeyValuesType>::type; 
+                using MaxKeyValuesType = KeyValuesType; 
+                return RangeKeyOperations<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>(*Database, keyValues..., KeyValues); 
+            } 
+ 
             template <typename... ColumnTypes>
             auto Select() {
                 return Rowset<TableType, Iterator, ColumnTypes...>(*Database, KeyValues, Columns<ColumnTypes...>::GetColumnIds());
@@ -1641,87 +1641,87 @@ struct Schema {
             bool Precharge() {
                 return Iterator::Precharge(*Database, KeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
             }
-
-            auto Reverse() const & {
-                return ReverseOperations(*this);
-            }
-
-            auto Reverse() && {
-                return ReverseOperations(std::move(*this));
-            }
+ 
+            auto Reverse() const & { 
+                return ReverseOperations(*this); 
+            } 
+ 
+            auto Reverse() && { 
+                return ReverseOperations(std::move(*this)); 
+            } 
         };
 
-        template <typename IteratorType, typename TableType, typename... MinKeyValuesTypes, typename... MaxKeyValuesTypes>
-        class RangeKeyOperations<IteratorType, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>: public Operations {
+        template <typename IteratorType, typename TableType, typename... MinKeyValuesTypes, typename... MaxKeyValuesTypes> 
+        class RangeKeyOperations<IteratorType, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>: public Operations { 
         public:
             using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
-            using MinKeyValuesType = typename first_n_of<sizeof...(MinKeyValuesTypes), typename TableType::TKey::RealKeyValuesType>::type;
-            using MaxKeyValuesType = typename first_n_of<sizeof...(MaxKeyValuesTypes), typename TableType::TKey::RealKeyValuesType>::type;
+            using MinKeyValuesType = typename first_n_of<sizeof...(MinKeyValuesTypes), typename TableType::TKey::RealKeyValuesType>::type; 
+            using MaxKeyValuesType = typename first_n_of<sizeof...(MaxKeyValuesTypes), typename TableType::TKey::RealKeyValuesType>::type; 
 
             template <typename KeyIterator, typename... Columns>
             using Rowset = typename Operations::template Rowset<KeyIterator, Columns...>;
-            using Iterator = typename Operations::template RangeKeyIterator<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>;
+            using Iterator = typename Operations::template RangeKeyIterator<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>; 
 
-            using ReverseOperations = RangeKeyOperations<ReverseIteratorType<IteratorType>, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>;
-
+            using ReverseOperations = RangeKeyOperations<ReverseIteratorType<IteratorType>, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>; 
+ 
         protected:
             TToughDb* Database;
-            MinKeyValuesType MinKeyValues;
-            MaxKeyValuesType MaxKeyValues;
+            MinKeyValuesType MinKeyValues; 
+            MaxKeyValuesType MaxKeyValues; 
 
         public:
-            RangeKeyOperations(TToughDb& database, const MinKeyValuesType& minKeyValues, MaxKeyValuesTypes... maxKeyValues)
+            RangeKeyOperations(TToughDb& database, const MinKeyValuesType& minKeyValues, MaxKeyValuesTypes... maxKeyValues) 
                 : Database(&database)
-                , MinKeyValues(minKeyValues)
-                , MaxKeyValues(maxKeyValues...)
+                , MinKeyValues(minKeyValues) 
+                , MaxKeyValues(maxKeyValues...) 
             {}
 
-            RangeKeyOperations(TToughDb& database, MinKeyValuesTypes... minKeyValues, const MaxKeyValuesType& maxKeyValues)
-                : Database(&database)
-                , MinKeyValues(minKeyValues...)
-                , MaxKeyValues(maxKeyValues)
-            {}
-
-            explicit RangeKeyOperations(const ReverseOperations& rhs)
-                : Database(rhs.Database)
-                , MinKeyValues(rhs.MinKeyValues)
-                , MaxKeyValues(rhs.MaxKeyValues)
-            { }
-
-            explicit RangeKeyOperations(ReverseOperations&& rhs)
-                : Database(rhs.Database)
-                , MinKeyValues(std::move(rhs.MinKeyValues))
-                , MaxKeyValues(std::move(rhs.MaxKeyValues))
-            { }
-
+            RangeKeyOperations(TToughDb& database, MinKeyValuesTypes... minKeyValues, const MaxKeyValuesType& maxKeyValues) 
+                : Database(&database) 
+                , MinKeyValues(minKeyValues...) 
+                , MaxKeyValues(maxKeyValues) 
+            {} 
+ 
+            explicit RangeKeyOperations(const ReverseOperations& rhs) 
+                : Database(rhs.Database) 
+                , MinKeyValues(rhs.MinKeyValues) 
+                , MaxKeyValues(rhs.MaxKeyValues) 
+            { } 
+ 
+            explicit RangeKeyOperations(ReverseOperations&& rhs) 
+                : Database(rhs.Database) 
+                , MinKeyValues(std::move(rhs.MinKeyValues)) 
+                , MaxKeyValues(std::move(rhs.MaxKeyValues)) 
+            { } 
+ 
             RangeKeyOperations(RangeKeyOperations&&) = default;
             RangeKeyOperations& operator =(RangeKeyOperations&&) = default;
 
             template <typename... ColumnTypes>
             auto Select() {
-                return Rowset<TableType, Iterator, ColumnTypes...>(*Database, MinKeyValues, MaxKeyValues, Columns<ColumnTypes...>::GetColumnIds());
+                return Rowset<TableType, Iterator, ColumnTypes...>(*Database, MinKeyValues, MaxKeyValues, Columns<ColumnTypes...>::GetColumnIds()); 
             }
 
             auto Select() {
-                return Rowset<TableType, Iterator, typename TableType::TColumns>(*Database, MinKeyValues, MaxKeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
+                return Rowset<TableType, Iterator, typename TableType::TColumns>(*Database, MinKeyValues, MaxKeyValues, Columns<typename TableType::TColumns>::GetColumnIds()); 
             }
 
             template <typename... ColumnTypes>
             bool Precharge() {
-                return Iterator::Precharge(*Database, MinKeyValues, MaxKeyValues, Columns<ColumnTypes...>::GetColumnIds());
+                return Iterator::Precharge(*Database, MinKeyValues, MaxKeyValues, Columns<ColumnTypes...>::GetColumnIds()); 
             }
 
             bool Precharge() {
-                return Iterator::Precharge(*Database, MinKeyValues, MaxKeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
+                return Iterator::Precharge(*Database, MinKeyValues, MaxKeyValues, Columns<typename TableType::TColumns>::GetColumnIds()); 
             }
-
-            auto Reverse() const & {
-                return ReverseOperations(*this);
-            }
-
-            auto Reverse() && {
-                return ReverseOperations(std::move(*this));
-            }
+ 
+            auto Reverse() const & { 
+                return ReverseOperations(*this); 
+            } 
+ 
+            auto Reverse() && { 
+                return ReverseOperations(std::move(*this)); 
+            } 
         };
 
         template <typename TableType, typename... KeyValuesTypes>
@@ -1917,20 +1917,20 @@ struct Schema {
 };
 
 template <>
-inline bool Schema::Precharger<Schema::AutoPrecharge>::Precharge(
-        TToughDb& database, ui32 table,
-        NTable::TRawVals minKey, NTable::TRawVals maxKey,
-        NTable::TTagsRef columns, NTable::EDirection direction)
-{
-    return database.Precharge(table, minKey, maxKey, columns, 0, -1, -1, direction);
+inline bool Schema::Precharger<Schema::AutoPrecharge>::Precharge( 
+        TToughDb& database, ui32 table, 
+        NTable::TRawVals minKey, NTable::TRawVals maxKey, 
+        NTable::TTagsRef columns, NTable::EDirection direction) 
+{ 
+    return database.Precharge(table, minKey, maxKey, columns, 0, -1, -1, direction); 
 }
 
 template <>
-inline bool Schema::Precharger<Schema::NoAutoPrecharge>::Precharge(
-        TToughDb&, ui32,
-        NTable::TRawVals, NTable::TRawVals,
-        NTable::TTagsRef, NTable::EDirection)
-{
+inline bool Schema::Precharger<Schema::NoAutoPrecharge>::Precharge( 
+        TToughDb&, ui32, 
+        NTable::TRawVals, NTable::TRawVals, 
+        NTable::TTagsRef, NTable::EDirection) 
+{ 
     return true;
 }
 

@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NPageCollection {
 
-TMeta::TMeta(TSharedData raw, ui32 group)
+TMeta::TMeta(TSharedData raw, ui32 group) 
     : Raw(std::move(raw))
     , Group(group)
 {
@@ -52,11 +52,11 @@ TBorder TMeta::Bounds(ui32 begin, ui32 end) const noexcept
 
 TInfo TMeta::Page(ui32 page) const noexcept
 {
-    Y_VERIFY(page < Header->Pages,
-            "Requested page %" PRIu32 " out of %" PRIu32 " total pages",
-            page, Header->Pages);
-
-    return { GetPageSize(page), Extra[page].Type };
+    Y_VERIFY(page < Header->Pages, 
+            "Requested page %" PRIu32 " out of %" PRIu32 " total pages", 
+            page, Header->Pages); 
+ 
+    return { GetPageSize(page), Extra[page].Type }; 
 }
 
 ui32 TMeta::GetPageType(ui32 pageId) const noexcept
@@ -71,7 +71,7 @@ ui32 TMeta::GetPageChecksum(ui32 pageId) const noexcept
     return Extra[pageId].Crc32;
 }
 
-ui64 TMeta::GetPageSize(ui32 pageId) const noexcept
+ui64 TMeta::GetPageSize(ui32 pageId) const noexcept 
 {
     Y_VERIFY_DEBUG(pageId < Header->Pages);
 

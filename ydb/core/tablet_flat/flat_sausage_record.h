@@ -2,7 +2,7 @@
 
 #include "flat_sausage_layout.h"
 #include "flat_util_binary.h"
-#include "util_basics.h"
+#include "util_basics.h" 
 
 #include <util/generic/array_ref.h>
 #include <util/system/sanitizers.h>
@@ -42,17 +42,17 @@ namespace NPageCollection {
         }
 
         void PushInplace(ui32 page, TArrayRef<const char> body)
+        { 
+            Y_VERIFY(Index && page == Index.size() - 1); 
+ 
+            Inbound.append(body.data(), body.size()); 
+            Index.back().Inplace = Inbound.size(); 
+        } 
+ 
+        TSharedData Finish() 
         {
-            Y_VERIFY(Index && page == Index.size() - 1);
-
-            Inbound.append(body.data(), body.size());
-            Index.back().Inplace = Inbound.size();
-        }
-
-        TSharedData Finish()
-        {
-            TSharedData raw = TSharedData::Uninitialized(Bytes());
-            char* ptr = raw.mutable_begin();
+            TSharedData raw = TSharedData::Uninitialized(Bytes()); 
+            char* ptr = raw.mutable_begin(); 
 
             {
                 NPageCollection::THeader hdr;
@@ -61,31 +61,31 @@ namespace NPageCollection {
                 hdr.Blobs = Blobs.size();
                 hdr.Pages = Index.size();
 
-                ::memcpy(ptr, &hdr, sizeof(hdr));
-                ptr += sizeof(hdr);
+                ::memcpy(ptr, &hdr, sizeof(hdr)); 
+                ptr += sizeof(hdr); 
             }
 
-            Add(ptr, Blobs), Add(ptr, Index), Add(ptr, Extra);
+            Add(ptr, Blobs), Add(ptr, Index), Add(ptr, Extra); 
 
-            ::memcpy(ptr, Inbound.data(), Inbound.size());
-            ptr += Inbound.size();
+            ::memcpy(ptr, Inbound.data(), Inbound.size()); 
+            ptr += Inbound.size(); 
 
             {
-                const ui32 crc = Checksum(raw.Slice(0, ptr - raw.begin()));
+                const ui32 crc = Checksum(raw.Slice(0, ptr - raw.begin())); 
 
-                ::memcpy(ptr, &crc, sizeof(crc));
-                ptr += sizeof(crc);
+                ::memcpy(ptr, &crc, sizeof(crc)); 
+                ptr += sizeof(crc); 
             }
 
-            Y_VERIFY(ptr == raw.mutable_end());
+            Y_VERIFY(ptr == raw.mutable_end()); 
             NSan::CheckMemIsInitialized(raw.data(), raw.size());
 
-            Blobs.clear();
-            Index.clear();
-            Extra.clear();
-            Offset = 0;
-            Inbound = { };
-
+            Blobs.clear(); 
+            Index.clear(); 
+            Extra.clear(); 
+            Offset = 0; 
+            Inbound = { }; 
+ 
             return raw;
         }
 
@@ -96,14 +96,14 @@ namespace NPageCollection {
                 + NUtil::NBin::SizeOf(Blobs, Index, Extra);
         }
 
-    private:
+    private: 
         template<typename TVal>
-        static inline void Add(char* &ptr, const TVector<TVal> &vec)
+        static inline void Add(char* &ptr, const TVector<TVal> &vec) 
         {
             const auto bytes = NUtil::NBin::SizeOf(vec);
 
-            ::memcpy(ptr, vec.data(), bytes);
-            ptr += bytes;
+            ::memcpy(ptr, vec.data(), bytes); 
+            ptr += bytes; 
         }
 
     public:

@@ -14,8 +14,8 @@ namespace NMiniKQL {
         TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalMKQL::TPtr&) override;
         TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalSchemeTx::TPtr&) override;
         TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr &ev) override;
-
-        virtual TRowVersion GetWriteVersion(const TTableId& tableId) const;
+ 
+        virtual TRowVersion GetWriteVersion(const TTableId& tableId) const; 
         virtual TRowVersion GetReadVersion(const TTableId& tableId) const;
         virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const;
     };

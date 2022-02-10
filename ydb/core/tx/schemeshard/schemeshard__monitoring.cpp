@@ -73,8 +73,8 @@ struct TCgi {
     static const TParam FixAccessDatabaseInheritanceDryRun;
     static const TParam Page;
     static const TParam BuildIndexId;
-    static const TParam UpdateCoordinatorsConfig;
-    static const TParam UpdateCoordinatorsConfigDryRun;
+    static const TParam UpdateCoordinatorsConfig; 
+    static const TParam UpdateCoordinatorsConfigDryRun; 
 
     struct TPages {
         static constexpr TStringBuf MainPage = "Main";
@@ -109,124 +109,124 @@ const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinato
 const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun");
 
 
-class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
-public:
-    struct TItem {
-        TPathId PathId;
-        TString PathString;
-        NKikimrSubDomains::TProcessingParams Params;
-    };
-
-    using TCallback = std::function<void(const TString&, const TActorContext&)>;
-
-public:
-    TUpdateCoordinatorsConfigActor(TVector<TItem> items, TCallback callback, bool dryRun)
-        : Items(std::move(items))
-        , Callback(std::move(callback))
-        , DryRun(dryRun)
-    { }
-
-public:
-    void Bootstrap(const TActorContext& ctx) {
-        if (Items.empty()) {
-            Finish(ctx);
-            return;
-        }
-
-        ctx.Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest(), IEventHandle::FlagTrackDelivery);
-        Become(&TThis::StateWork);
-    }
-
-    void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Log << "One or more services is unavailable" << Endl;
-        Finish(ctx);
-    }
-
-    void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev, const TActorContext& ctx) {
-        Services = ev->Get()->Services;
-
-        for (const auto& item : Items) {
-            for (ui64 coordinator : item.Params.GetCoordinators()) {
-                if (DryRun) {
-                    Log << item.PathString << " (" << coordinator << ") UPDATE SKIPPED (DRY RUN)" << Endl;
-                    continue;
-                }
-                bool inserted = InFlight.emplace(coordinator, &item).second;
-                if (inserted) {
+class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> { 
+public: 
+    struct TItem { 
+        TPathId PathId; 
+        TString PathString; 
+        NKikimrSubDomains::TProcessingParams Params; 
+    }; 
+ 
+    using TCallback = std::function<void(const TString&, const TActorContext&)>; 
+ 
+public: 
+    TUpdateCoordinatorsConfigActor(TVector<TItem> items, TCallback callback, bool dryRun) 
+        : Items(std::move(items)) 
+        , Callback(std::move(callback)) 
+        , DryRun(dryRun) 
+    { } 
+ 
+public: 
+    void Bootstrap(const TActorContext& ctx) { 
+        if (Items.empty()) { 
+            Finish(ctx); 
+            return; 
+        } 
+ 
+        ctx.Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest(), IEventHandle::FlagTrackDelivery); 
+        Become(&TThis::StateWork); 
+    } 
+ 
+    void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) { 
+        Y_UNUSED(ev); 
+        Log << "One or more services is unavailable" << Endl; 
+        Finish(ctx); 
+    } 
+ 
+    void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev, const TActorContext& ctx) { 
+        Services = ev->Get()->Services; 
+ 
+        for (const auto& item : Items) { 
+            for (ui64 coordinator : item.Params.GetCoordinators()) { 
+                if (DryRun) { 
+                    Log << item.PathString << " (" << coordinator << ") UPDATE SKIPPED (DRY RUN)" << Endl; 
+                    continue; 
+                } 
+                bool inserted = InFlight.emplace(coordinator, &item).second; 
+                if (inserted) { 
                     ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                            new TEvSubDomain::TEvConfigure(item.Params),
-                            coordinator, true),
-                        IEventHandle::FlagTrackDelivery);
-                }
-            }
-        }
-
-        if (!InFlight) {
-            Finish(ctx);
-        }
-    }
-
-    void Handle(TEvSubDomain::TEvConfigureStatus::TPtr& ev, const TActorContext& ctx) {
-        auto status = ev->Get()->Record.GetStatus();
-        ui64 tabletId = ev->Get()->Record.GetOnTabletId();
-        auto it = InFlight.find(tabletId);
-        if (it == InFlight.end()) {
-            return; // already processed
-        }
-
-        const auto* item = it->second;
-        Log << item->PathString << " (" << tabletId << ") " << NKikimrTx::TEvSubDomainConfigurationAck::EStatus_Name(status) << Endl;
-        InFlight.erase(it);
-
-        if (!InFlight) {
-            Finish(ctx);
-        }
-    }
-
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
-        ui64 tabletId = ev->Get()->TabletId;
-        auto it = InFlight.find(tabletId);
-        if (it == InFlight.end()) {
-            return; // already processed
-        }
-
-        const auto* item = it->second;
-        Log << item->PathString << " (" << tabletId << ") DELIVERY PROBLEM" << Endl;
-        InFlight.erase(it);
-
-        if (!InFlight) {
-            Finish(ctx);
-        }
-    }
-
-    void Finish(const TActorContext& ctx) {
+                            new TEvSubDomain::TEvConfigure(item.Params), 
+                            coordinator, true), 
+                        IEventHandle::FlagTrackDelivery); 
+                } 
+            } 
+        } 
+ 
+        if (!InFlight) { 
+            Finish(ctx); 
+        } 
+    } 
+ 
+    void Handle(TEvSubDomain::TEvConfigureStatus::TPtr& ev, const TActorContext& ctx) { 
+        auto status = ev->Get()->Record.GetStatus(); 
+        ui64 tabletId = ev->Get()->Record.GetOnTabletId(); 
+        auto it = InFlight.find(tabletId); 
+        if (it == InFlight.end()) { 
+            return; // already processed 
+        } 
+ 
+        const auto* item = it->second; 
+        Log << item->PathString << " (" << tabletId << ") " << NKikimrTx::TEvSubDomainConfigurationAck::EStatus_Name(status) << Endl; 
+        InFlight.erase(it); 
+ 
+        if (!InFlight) { 
+            Finish(ctx); 
+        } 
+    } 
+ 
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) { 
+        ui64 tabletId = ev->Get()->TabletId; 
+        auto it = InFlight.find(tabletId); 
+        if (it == InFlight.end()) { 
+            return; // already processed 
+        } 
+ 
+        const auto* item = it->second; 
+        Log << item->PathString << " (" << tabletId << ") DELIVERY PROBLEM" << Endl; 
+        InFlight.erase(it); 
+ 
+        if (!InFlight) { 
+            Finish(ctx); 
+        } 
+    } 
+ 
+    void Finish(const TActorContext& ctx) { 
         if (Services.LeaderPipeCache) {
             ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-        }
-        Callback(Log, ctx);
-        Die(ctx);
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvUndelivered, Handle);
-            HFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
-            HFunc(TEvSubDomain::TEvConfigureStatus, Handle);
-            HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-        }
-    }
-
-private:
-    TVector<TItem> Items;
-    TCallback Callback;
-    bool DryRun;
-
-    TStringBuilder Log;
-    NTxProxy::TTxProxyServices Services;
-    THashMap<ui64, const TItem*> InFlight;
-};
-
+        } 
+        Callback(Log, ctx); 
+        Die(ctx); 
+    } 
+ 
+    STFUNC(StateWork) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvents::TEvUndelivered, Handle); 
+            HFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle); 
+            HFunc(TEvSubDomain::TEvConfigureStatus, Handle); 
+            HFunc(TEvPipeCache::TEvDeliveryProblem, Handle); 
+        } 
+    } 
+ 
+private: 
+    TVector<TItem> Items; 
+    TCallback Callback; 
+    bool DryRun; 
+ 
+    TStringBuilder Log; 
+    NTxProxy::TTxProxyServices Services; 
+    THashMap<ui64, const TItem*> InFlight; 
+}; 
+ 
 struct TSchemeShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
     TStringStream Answer;
@@ -441,57 +441,57 @@ private:
             return;
         }
 
-        if (cgi.Has(TCgi::UpdateCoordinatorsConfig)) {
-            TString rawDryRunStr = cgi.Get(TCgi::UpdateCoordinatorsConfigDryRun);
-            auto valueDryRun = FromStringWithDefault<ui64>(rawDryRunStr, ui64(1));
-
-            TStringBuilder debug;
-            debug << "Triggered UpdateCoordinatorsConfig, dryRun = " << valueDryRun;
-
-            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        if (cgi.Has(TCgi::UpdateCoordinatorsConfig)) { 
+            TString rawDryRunStr = cgi.Get(TCgi::UpdateCoordinatorsConfigDryRun); 
+            auto valueDryRun = FromStringWithDefault<ui64>(rawDryRunStr, ui64(1)); 
+ 
+            TStringBuilder debug; 
+            debug << "Triggered UpdateCoordinatorsConfig, dryRun = " << valueDryRun; 
+ 
+            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
                         "TSchemeShard::TTxMonitoring AdminRequest " << debug);
-            str << "<pre>";
-            str << debug << Endl;
-
-            TVector<TUpdateCoordinatorsConfigActor::TItem> items;
-            for (const auto& kv : Self->SubDomains) {
-                auto pathId = kv.first;
-                auto path = TPath::Init(pathId, Self);
-                auto pathString = path.PathString();
-                const auto& subDomain = kv.second;
-                if (subDomain->GetAlter()) {
-                    str << "Skipping " << pathString << ": active alter found" << Endl;
-                    continue;
-                }
-                if (path.Base()->IsRoot()) {
-                    str << "Skipping " << pathString << ": not updating root" << Endl;
-                    continue;
-                }
-                auto params = subDomain->GetProcessingParams();
-                if (params.GetVersion() <= 0) {
-                    str << "Skipping " << pathString << ": processing params version is " << params.GetVersion() << Endl;
-                    continue;
-                }
-                auto& item = items.emplace_back();
-                item.PathId = pathId;
-                item.PathString = pathString;
-                item.Params = std::move(params);
-            }
-
-            str << "</pre>";
-            OutputAdminPage(str);
-
-            auto callback = [sender = Ev->Sender, str = std::move(str)] (const TString& log, const TActorContext& ctx) mutable {
-                str << "<pre>" << log << "</pre>";
-
-                ctx.Send(sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
-            };
-            str.clear();
-
-            ctx.Register(new TUpdateCoordinatorsConfigActor(std::move(items), std::move(callback), valueDryRun));
-            return;
-        }
-
+            str << "<pre>"; 
+            str << debug << Endl; 
+ 
+            TVector<TUpdateCoordinatorsConfigActor::TItem> items; 
+            for (const auto& kv : Self->SubDomains) { 
+                auto pathId = kv.first; 
+                auto path = TPath::Init(pathId, Self); 
+                auto pathString = path.PathString(); 
+                const auto& subDomain = kv.second; 
+                if (subDomain->GetAlter()) { 
+                    str << "Skipping " << pathString << ": active alter found" << Endl; 
+                    continue; 
+                } 
+                if (path.Base()->IsRoot()) { 
+                    str << "Skipping " << pathString << ": not updating root" << Endl; 
+                    continue; 
+                } 
+                auto params = subDomain->GetProcessingParams(); 
+                if (params.GetVersion() <= 0) { 
+                    str << "Skipping " << pathString << ": processing params version is " << params.GetVersion() << Endl; 
+                    continue; 
+                } 
+                auto& item = items.emplace_back(); 
+                item.PathId = pathId; 
+                item.PathString = pathString; 
+                item.Params = std::move(params); 
+            } 
+ 
+            str << "</pre>"; 
+            OutputAdminPage(str); 
+ 
+            auto callback = [sender = Ev->Sender, str = std::move(str)] (const TString& log, const TActorContext& ctx) mutable { 
+                str << "<pre>" << log << "</pre>"; 
+ 
+                ctx.Send(sender, new NMon::TEvRemoteHttpInfoRes(str.Str())); 
+            }; 
+            str.clear(); 
+ 
+            ctx.Register(new TUpdateCoordinatorsConfigActor(std::move(items), std::move(callback), valueDryRun)); 
+            return; 
+        } 
+ 
         OutputAdminPage(str);
     }
 
@@ -516,7 +516,7 @@ private:
             str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Run\"/>" << Endl;
             str << "</form>" << Endl;
         }
-        {
+        { 
             str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\">" << Endl;
             str << "<legend> Make all Access Database rights no inheritable at all datatabase: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
@@ -527,15 +527,15 @@ private:
             str << "</form>" << Endl;
         }
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\">" << Endl;
-            str << "<legend> Send configuration update to all coordinators: </legend>";
-            str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
-            str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
-            str << TCgi::UpdateCoordinatorsConfig.AsHiddenInput("1");
-            str << TCgi::UpdateCoordinatorsConfigDryRun.AsInput(1);
-            str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Run\"/>" << Endl;
-            str << "</form>" << Endl;
-        }
+            str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\">" << Endl; 
+            str << "<legend> Send configuration update to all coordinators: </legend>"; 
+            str << TCgi::TabletID.AsHiddenInput(Self->TabletID()); 
+            str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest); 
+            str << TCgi::UpdateCoordinatorsConfig.AsHiddenInput("1"); 
+            str << TCgi::UpdateCoordinatorsConfigDryRun.AsInput(1); 
+            str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Run\"/>" << Endl; 
+            str << "</form>" << Endl; 
+        } 
     }
 
     void OutputMainPage(TStringStream& str) const {

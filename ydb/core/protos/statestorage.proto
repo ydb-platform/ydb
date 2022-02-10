@@ -124,9 +124,9 @@ message TEndpointBoardEntry {
 
     optional string DataCenter = 6;
     optional uint32 NodeId = 7;
-
-    repeated string AddressesV4 = 8;
-    repeated string AddressesV6 = 9;
-    optional string TargetNameOverride = 10;
+ 
+    repeated string AddressesV4 = 8; 
+    repeated string AddressesV6 = 9; 
+    optional string TargetNameOverride = 10; 
 };
 

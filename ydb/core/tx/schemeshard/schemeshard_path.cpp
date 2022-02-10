@@ -283,89 +283,89 @@ const TPath::TChecker& TPath::TChecker::NotUnderTheSameOperation(TTxId txId, TPa
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::NoOlapStore(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (!Path.FindOlapStore()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "there is another olap store in the given path";
-
-    return *this;
-}
-
-const TPath::TChecker& TPath::TChecker::HasOlapStore(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.FindOlapStore()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "no olap store found anywhere in the given path";
-
-    return *this;
-}
-
-const TPath::TChecker& TPath::TChecker::IsOlapStore(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.Base()->IsOlapStore()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path is not an olap store"
-            << ", pathId: " <<  Path.Base()->PathId
+const TPath::TChecker& TPath::TChecker::NoOlapStore(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (!Path.FindOlapStore()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "there is another olap store in the given path"; 
+ 
+    return *this; 
+} 
+ 
+const TPath::TChecker& TPath::TChecker::HasOlapStore(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (Path.FindOlapStore()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "no olap store found anywhere in the given path"; 
+ 
+    return *this; 
+} 
+ 
+const TPath::TChecker& TPath::TChecker::IsOlapStore(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (Path.Base()->IsOlapStore()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path is not an olap store" 
+            << ", pathId: " <<  Path.Base()->PathId 
             << ", path type: " << NKikimrSchemeOp::EPathType_Name(Path.Base()->PathType);
-    return *this;
-}
-
-const TPath::TChecker& TPath::TChecker::IsOlapTable(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.Base()->IsOlapTable()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path is not an olap table"
-            << ", pathId: " <<  Path.Base()->PathId
+    return *this; 
+} 
+ 
+const TPath::TChecker& TPath::TChecker::IsOlapTable(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (Path.Base()->IsOlapTable()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path is not an olap table" 
+            << ", pathId: " <<  Path.Base()->PathId 
             << ", path type: " << NKikimrSchemeOp::EPathType_Name(Path.Base()->PathType);
-    return *this;
-}
-
-const TPath::TChecker& TPath::TChecker::IsSequence(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.Base()->IsSequence()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path is not a sequence"
-            << ", pathId: " <<  Path.Base()->PathId
+    return *this; 
+} 
+ 
+const TPath::TChecker& TPath::TChecker::IsSequence(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (Path.Base()->IsSequence()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path is not a sequence" 
+            << ", pathId: " <<  Path.Base()->PathId 
             << ", path type: " << NKikimrSchemeOp::EPathType_Name(Path.Base()->PathType);
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 const TPath::TChecker& TPath::TChecker::IsReplication(TPath::TChecker::EStatus status) const {
     if (Failed) {
         return *this;
@@ -650,7 +650,7 @@ const TPath::TChecker& TPath::TChecker::IsLikeDirectory(TPath::TChecker::EStatus
         return *this;
     }
 
-    if (Path.Base()->IsLikeDirectory()) {
+    if (Path.Base()->IsLikeDirectory()) { 
         return *this;
     }
 
@@ -1307,12 +1307,12 @@ TPathElement::TPtr TPath::Base() const {
     return Elements.back();
 }
 
-TPathElement* TPath::operator->() const {
-    Y_VERIFY_S(IsResolved(), "not resolved path " << PathString());
-
-    return Elements.back().Get();
-}
-
+TPathElement* TPath::operator->() const { 
+    Y_VERIFY_S(IsResolved(), "not resolved path " << PathString()); 
+ 
+    return Elements.back().Get(); 
+} 
+ 
 bool TPath::IsDeleted() const {
     Y_VERIFY(IsResolved());
 
@@ -1423,40 +1423,40 @@ bool TPath::IsUnderMoving() const {
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateMoving;
 }
 
-TPath& TPath::RiseUntilOlapStore() {
-    size_t end = Elements.size();
-    while (end > 0) {
-        auto& current = Elements[end-1];
-        if (current->IsOlapStore()) {
-            break;
-        }
-        --end;
-    }
-    Elements.resize(end);
-    NameParts.resize(end);
-    return *this;
-}
-
-TPath TPath::FindOlapStore() const {
-    TPath result = *this;
-    result.RiseUntilOlapStore();
-    return result;
-}
-
+TPath& TPath::RiseUntilOlapStore() { 
+    size_t end = Elements.size(); 
+    while (end > 0) { 
+        auto& current = Elements[end-1]; 
+        if (current->IsOlapStore()) { 
+            break; 
+        } 
+        --end; 
+    } 
+    Elements.resize(end); 
+    NameParts.resize(end); 
+    return *this; 
+} 
+ 
+TPath TPath::FindOlapStore() const { 
+    TPath result = *this; 
+    result.RiseUntilOlapStore(); 
+    return result; 
+} 
+ 
 bool TPath::IsCommonSensePath() const {
     Y_VERIFY(IsResolved());
 
     auto item = ++Elements.rbegin(); //do not check the Base
     for (; item != Elements.rend(); ++item) {
-        // Directories and domain roots are always ok as intermediaries
-        bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();
-        // Temporarily olap stores are treated like directories
-        ok = ok || (*item)->IsOlapStore();
-        if (!ok) {
+        // Directories and domain roots are always ok as intermediaries 
+        bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot(); 
+        // Temporarily olap stores are treated like directories 
+        ok = ok || (*item)->IsOlapStore(); 
+        if (!ok) { 
             return false;
         }
     }
-
+ 
     return true;
 }
 
@@ -1566,12 +1566,12 @@ bool TPath::IsCdcStream() const {
     return Base()->IsCdcStream();
 }
 
-bool TPath::IsSequence() const {
-    Y_VERIFY(IsResolved());
-
-    return Base()->IsSequence();
-}
-
+bool TPath::IsSequence() const { 
+    Y_VERIFY(IsResolved()); 
+ 
+    return Base()->IsSequence(); 
+} 
+ 
 bool TPath::IsReplication() const {
     Y_VERIFY(IsResolved());
 
@@ -1756,8 +1756,8 @@ EAttachChildResult TPath::MaterializeImpl(const TString& owner, const TPathId& n
 
     auto attachResult = SS->AttachChild(newPath);
 
-    Base()->DbRefCount++;
-    Base()->AllChildrenCount++;
+    Base()->DbRefCount++; 
+    Base()->AllChildrenCount++; 
 
     Y_VERIFY_S(!SS->PathsById.contains(newPathId), "There's another path with PathId: " << newPathId);
     SS->PathsById[newPathId] = newPath;

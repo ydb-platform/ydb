@@ -32,8 +32,8 @@ using TGroupThroughputValue = TDecayingAverageWithSum;
 using TTabletThroughputValue = std::unordered_map<std::pair<TChannel, TGroupId>, TGroupThroughputValue>;
 using TTabletThroughputRawValue = std::unordered_map<std::pair<TChannel, TGroupId>, ui64>; // TStackYHash ?
 using TGroupIopsValue = TDecayingAverageWithSum;
-using TTabletIopsValue = std::unordered_map<std::pair<TChannel, TGroupId>, TGroupIopsValue>;
-using TTabletIopsRawValue = std::unordered_map<std::pair<TChannel, TGroupId>, ui64>;
+using TTabletIopsValue = std::unordered_map<std::pair<TChannel, TGroupId>, TGroupIopsValue>; 
+using TTabletIopsRawValue = std::unordered_map<std::pair<TChannel, TGroupId>, ui64>; 
 
 constexpr TTimeBase<TInstant>::TValue DurationPer15Seconds = DurationPerSecond * 15;
 
@@ -46,8 +46,8 @@ public:
     TGaugeValue<ui64> StorageUser;
     TTabletThroughputValue ReadThroughput;
     TTabletThroughputValue WriteThroughput;
-    TTabletIopsValue ReadIops;
-    TTabletIopsValue WriteIops;
+    TTabletIopsValue ReadIops; 
+    TTabletIopsValue WriteIops; 
 
     void Fill(NKikimrTabletBase::TMetrics& metrics) const;
 };
@@ -64,7 +64,7 @@ protected:
     static constexpr ui64 SignificantChangeNetwork = 1 << 20/* 1Mb */;
     static constexpr ui64 SignificantChangeThroughput = 1 << 20/* 1Mb */;
     static constexpr ui64 SignificantChangeStorage = 100 << 20/* 100Mb */;
-    static constexpr ui64 SignificantChangeIops = 10 /* 10 iops? */;
+    static constexpr ui64 SignificantChangeIops = 10 /* 10 iops? */; 
 
     const ui64 TabletId;
     const ui32 FollowerId;
@@ -73,11 +73,11 @@ protected:
     ui32 LevelMemory = 0;
     ui32 LevelNetwork = 0;
     ui32 LevelStorage = 0;
-    ui32 LevelIops = 0;
+    ui32 LevelIops = 0; 
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadThroughput;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteThroughput;
-    THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadIops;
-    THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteIops;
+    THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadIops; 
+    THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteIops; 
     TInstant LastUpdate;
 };
 

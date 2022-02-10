@@ -95,7 +95,7 @@ namespace NActors {
 
         class TProxyMockActor : public TActor<TProxyMockActor> {
             class TSessionMockActor : public TActor<TSessionMockActor> {
-                std::map<TActorId, ui64> Subscribers;
+                std::map<TActorId, ui64> Subscribers; 
                 TProxyMockActor* const Proxy;
                 std::deque<std::unique_ptr<IEventHandle>> Queue;
 
@@ -113,8 +113,8 @@ namespace NActors {
                     for (auto&& ev : std::exchange(Queue, {})) {
                         TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected));
                     }
-                    for (const auto& kv : Subscribers) {
-                        Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
+                    for (const auto& kv : Subscribers) { 
+                        Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second); 
                     }
                     Y_VERIFY(Proxy->Session == this);
                     Proxy->Session = nullptr;
@@ -123,7 +123,7 @@ namespace NActors {
 
                 void HandleForward(TAutoPtr<IEventHandle> ev) {
                     if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
-                        Subscribe(ev->Sender, ev->Cookie);
+                        Subscribe(ev->Sender, ev->Cookie); 
                     }
                     if (Queue.empty()) {
                         TActivationContext::Send(new IEventHandle(EvRam, 0, SelfId(), {}, {}, 0));
@@ -140,11 +140,11 @@ namespace NActors {
                 }
 
                 void Handle(TEvInterconnect::TEvConnectNode::TPtr ev) {
-                    Subscribe(ev->Sender, ev->Cookie);
+                    Subscribe(ev->Sender, ev->Cookie); 
                 }
 
                 void Handle(TEvents::TEvSubscribe::TPtr ev) {
-                    Subscribe(ev->Sender, ev->Cookie);
+                    Subscribe(ev->Sender, ev->Cookie); 
                 }
 
                 void Handle(TEvents::TEvUnsubscribe::TPtr ev) {
@@ -165,9 +165,9 @@ namespace NActors {
                 )
 
             private:
-                void Subscribe(const TActorId& actorId, ui64 cookie) {
-                    Subscribers[actorId] = cookie;
-                    Send(actorId, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, cookie);
+                void Subscribe(const TActorId& actorId, ui64 cookie) { 
+                    Subscribers[actorId] = cookie; 
+                    Send(actorId, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, cookie); 
                 }
             };
 

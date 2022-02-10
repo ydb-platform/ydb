@@ -42,8 +42,8 @@ struct TSchemaOperation {
         ETypeBackup = 3,
         ETypeCopy = 4,
         EType_DEPRECATED_05 = 5,
-        ETypeCreatePersistentSnapshot = 6,
-        ETypeDropPersistentSnapshot = 7,
+        ETypeCreatePersistentSnapshot = 6, 
+        ETypeDropPersistentSnapshot = 7, 
         ETypeInitiateBuildIndex = 8,
         ETypeFinalizeBuildIndex = 9,
         ETypeDropIndexNotice = 10,
@@ -97,8 +97,8 @@ struct TSchemaOperation {
     bool IsBackup() const { return Type == ETypeBackup; }
     bool IsRestore() const { return Type == ETypeRestore; }
     bool IsCopy() const { return Type == ETypeCopy; }
-    bool IsCreatePersistentSnapshot() const { return Type == ETypeCreatePersistentSnapshot; }
-    bool IsDropPersistentSnapshot() const { return Type == ETypeDropPersistentSnapshot; }
+    bool IsCreatePersistentSnapshot() const { return Type == ETypeCreatePersistentSnapshot; } 
+    bool IsDropPersistentSnapshot() const { return Type == ETypeDropPersistentSnapshot; } 
     bool IsInitiateBuildIndex() const { return Type == ETypeInitiateBuildIndex; }
     bool IsFinalizeBuildIndex() const { return Type == ETypeFinalizeBuildIndex; }
     bool IsDropIndexNotice() const { return Type == ETypeDropIndexNotice; }
@@ -173,9 +173,9 @@ public:
     bool CanCancel();
     bool CheckCancelled();
 
-    void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
+    void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); } 
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
-
+ 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
 
     TActorId Source() const { return Source_; }
@@ -204,8 +204,8 @@ public:
     TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); }
     const NKikimrTxDataShard::TReadTableTransaction &GetReadTableTransaction() const { return Tx.GetReadTableTransaction(); }
 
-    ui32 ExtractKeys(bool allowErrors);
-    bool ReValidateKeys();
+    ui32 ExtractKeys(bool allowErrors); 
+    bool ReValidateKeys(); 
     ETxOrder CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const;
 
     ui64 GetTxSize() const { return TxSize; }
@@ -217,7 +217,7 @@ public:
     void ReleaseTxData();
     bool IsTxDataReleased() const { return IsReleased; }
 
-    bool IsTxInfoLoaded() const { return TxInfo().Loaded; }
+    bool IsTxInfoLoaded() const { return TxInfo().Loaded; } 
 
     bool IsTxReadOnly() const { return IsReadOnly; }
 
@@ -249,12 +249,12 @@ private:
     void ComputeDeadline();
 };
 
-enum class ERestoreDataStatus {
-    Ok,
-    Restart,
-    Error,
-};
-
+enum class ERestoreDataStatus { 
+    Ok, 
+    Restart, 
+    Error, 
+}; 
+ 
 ///
 class TDistributedEraseTx {
 public:
@@ -287,21 +287,21 @@ private:
 }; // TDistributedEraseTx
 
 ///
-class TCommitWritesTx {
-public:
-    using TPtr = THolder<TCommitWritesTx>;
-    using TProto = NKikimrTxDataShard::TCommitWritesTransaction;
-
-public:
-    bool TryParse(const TString& serialized);
-
-    const TProto& GetBody() const { return Body; }
-
-private:
-    TProto Body;
-};
-
-///
+class TCommitWritesTx { 
+public: 
+    using TPtr = THolder<TCommitWritesTx>; 
+    using TProto = NKikimrTxDataShard::TCommitWritesTransaction; 
+ 
+public: 
+    bool TryParse(const TString& serialized); 
+ 
+    const TProto& GetBody() const { return Body; } 
+ 
+private: 
+    TProto Body; 
+}; 
+ 
+/// 
 class TActiveTransaction : public TOperation {
 public:
     enum EArtifactFlags {
@@ -317,7 +317,7 @@ public:
         , TxCacheUsage(0)
         , ReleasedTxDataSize(0)
         , SchemeShardId(0)
-        , SubDomainPathId(0)
+        , SubDomainPathId(0) 
         , SchemeTxType(TSchemaOperation::ETypeUnknown)
         , ScanSnapshotId(0)
         , ScanTask(0)
@@ -361,8 +361,8 @@ public:
 
     ui64 GetSchemeShardId() const { return SchemeShardId; }
     void SetSchemeShardId(ui64 id) { SchemeShardId = id; }
-    ui64 GetSubDomainPathId() const { return SubDomainPathId; }
-    void SetSubDomainPathId(ui64 pathId) { SubDomainPathId = pathId; }
+    ui64 GetSubDomainPathId() const { return SubDomainPathId; } 
+    void SetSubDomainPathId(ui64 pathId) { SubDomainPathId = pathId; } 
 
     const NKikimrSubDomains::TProcessingParams &GetProcessingParams() const
     {
@@ -380,7 +380,7 @@ public:
         TOperation::Deactivate();
     }
 
-    const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
+    const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; } 
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
                                        const TActorContext &ctx);
@@ -395,13 +395,13 @@ public:
     void ClearSchemeTx() { SchemeTx = nullptr; }
     TSchemaOperation::EType GetSchemeTxType() const { return SchemeTxType; }
 
-    const NKikimrTxDataShard::TSnapshotTransaction& GetSnapshotTx() const {
-        Y_VERIFY_DEBUG(SnapshotTx);
-        return *SnapshotTx;
-    }
-    bool BuildSnapshotTx();
-    void ClearSnapshotTx() { SnapshotTx = nullptr; }
-
+    const NKikimrTxDataShard::TSnapshotTransaction& GetSnapshotTx() const { 
+        Y_VERIFY_DEBUG(SnapshotTx); 
+        return *SnapshotTx; 
+    } 
+    bool BuildSnapshotTx(); 
+    void ClearSnapshotTx() { SnapshotTx = nullptr; } 
+ 
     const TDistributedEraseTx::TPtr& GetDistributedEraseTx() const {
         Y_VERIFY_DEBUG(DistributedEraseTx);
         return DistributedEraseTx;
@@ -409,27 +409,27 @@ public:
     bool BuildDistributedEraseTx();
     void ClearDistributedEraseTx() { DistributedEraseTx = nullptr; }
 
-    const TCommitWritesTx::TPtr& GetCommitWritesTx() const {
-        Y_VERIFY_DEBUG(CommitWritesTx);
-        return CommitWritesTx;
-    }
-    bool BuildCommitWritesTx();
-    void ClearCommitWritesTx() { CommitWritesTx = nullptr; }
-
+    const TCommitWritesTx::TPtr& GetCommitWritesTx() const { 
+        Y_VERIFY_DEBUG(CommitWritesTx); 
+        return CommitWritesTx; 
+    } 
+    bool BuildCommitWritesTx(); 
+    void ClearCommitWritesTx() { CommitWritesTx = nullptr; } 
+ 
     // out-of-order stuff
 
     ui32 ExtractKeys() {
         if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
-            return DataTx->ExtractKeys(false);
+            return DataTx->ExtractKeys(false); 
         return 0;
     }
 
-    bool ReValidateKeys() {
+    bool ReValidateKeys() { 
         if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
-            return DataTx->ReValidateKeys();
-        return true;
-    }
-
+            return DataTx->ReValidateKeys(); 
+        return true; 
+    } 
+ 
     void MarkAsUsingSnapshot() {
         SetUsingSnapshotFlag();
     }
@@ -479,7 +479,7 @@ public:
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
     ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx);
-    void FinalizeDataTxPlan();
+    void FinalizeDataTxPlan(); 
 
     // TOperation iface.
     void BuildExecutionPlan(bool loaded) override;
@@ -487,11 +487,11 @@ public:
     const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const override
     {
         if (DataTx) {
-            Y_VERIFY(DataTx->TxInfo().Loaded);
+            Y_VERIFY(DataTx->TxInfo().Loaded); 
             return DataTx->TxInfo();
         }
-        Y_VERIFY_DEBUG(IsSchemeTx() || IsSnapshotTx() || IsDistributedEraseTx() || IsCommitWritesTx(),
-            "Unexpected access to invalidated keys: non-scheme tx %" PRIu64, GetTxId());
+        Y_VERIFY_DEBUG(IsSchemeTx() || IsSnapshotTx() || IsDistributedEraseTx() || IsCommitWritesTx(), 
+            "Unexpected access to invalidated keys: non-scheme tx %" PRIu64, GetTxId()); 
         // For scheme tx global reader and writer flags should
         // result in all required dependencies.
         return TOperation::GetKeysInfo();
@@ -529,10 +529,10 @@ public:
     void SetScanActor(TActorId aid) { ScanActor = aid; }
     TActorId GetScanActor() const { return ScanActor; }
 
-    ui64 IncrementPageFaultCount() {
-        return ++PageFaultCount;
-    }
-
+    ui64 IncrementPageFaultCount() { 
+        return ++PageFaultCount; 
+    } 
+ 
 private:
     void TrackMemory() const;
     void UntrackMemory() const;
@@ -540,9 +540,9 @@ private:
 private:
     TValidatedDataTx::TPtr DataTx;
     THolder<NKikimrTxDataShard::TFlatSchemeTransaction> SchemeTx;
-    THolder<NKikimrTxDataShard::TSnapshotTransaction> SnapshotTx;
+    THolder<NKikimrTxDataShard::TSnapshotTransaction> SnapshotTx; 
     TDistributedEraseTx::TPtr DistributedEraseTx;
-    TCommitWritesTx::TPtr CommitWritesTx;
+    TCommitWritesTx::TPtr CommitWritesTx; 
     TString TxBody;
 
     // TODO: move to persistent part of operation's flags
@@ -550,7 +550,7 @@ private:
     ui64 TxCacheUsage;
     ui64 ReleasedTxDataSize;
     ui64 SchemeShardId;
-    ui64 SubDomainPathId;
+    ui64 SubDomainPathId; 
     NKikimrSubDomains::TProcessingParams ProcessingParams;
     TSchemaOperation::EType SchemeTxType;
     ui64 ScanSnapshotId;
@@ -558,7 +558,7 @@ private:
     TActorId AsyncJobActor;
     TActorId StreamSink;
     TActorId ScanActor;
-    ui64 PageFaultCount = 0;
+    ui64 PageFaultCount = 0; 
 };
 
 inline IOutputStream& operator << (IOutputStream& out, const TActiveTransaction& tx) {

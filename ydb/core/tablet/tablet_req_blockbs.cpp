@@ -14,8 +14,8 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
     const ui32 Generation;
     ui32 ErrorCount;
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) {
-        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason));
+    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) { 
+        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason)); 
         PassAway();
     }
 
@@ -27,7 +27,7 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr&) {
-        return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable");
+        return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable"); 
     }
 
     void Handle(TEvBlobStorage::TEvBlockResult::TPtr &ev) {
@@ -40,11 +40,11 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
         case NKikimrProto::RACE:
         case NKikimrProto::NO_GROUP:
             // The request will never succeed
-            return ReplyAndDie(msg->Status, msg->ErrorReason);
+            return ReplyAndDie(msg->Status, msg->ErrorReason); 
         default:
             ++ErrorCount;
             if (ErrorCount >= MAX_ATTEMPTS) {
-                return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
+                return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason); 
             }
             return SendRequest();
         }
@@ -95,8 +95,8 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
         TActor::PassAway();
     }
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) {
-        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, Info->TabletID, reason));
+    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) { 
+        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, Info->TabletID, reason)); 
         PassAway();
     }
 
@@ -112,7 +112,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
                 return ReplyAndDie(NKikimrProto::OK);
             break;
         default:
-            return ReplyAndDie(msg->Status, msg->ErrorReason);
+            return ReplyAndDie(msg->Status, msg->ErrorReason); 
         }
     }
 public:

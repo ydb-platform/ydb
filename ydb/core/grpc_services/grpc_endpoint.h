@@ -11,10 +11,10 @@ struct TGrpcEndpointDescription : public TThrRefBase {
     ui32 Port = 0;
     bool Ssl = false;
 
-    TVector<TString> AddressesV4;
-    TVector<TString> AddressesV6;
-    TString TargetNameOverride;
-
+    TVector<TString> AddressesV4; 
+    TVector<TString> AddressesV6; 
+    TString TargetNameOverride; 
+ 
     TVector<TString> ServedServices;
     TVector<TString> ServedDatabases;
 };

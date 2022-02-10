@@ -265,12 +265,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         }
 
         auto commitResult = tx->Commit().ExtractValueSync();
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        if (kikimr.IsUsingSnapshotReads()) { 
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString()); 
+        } else { 
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString()); 
+            UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED)); 
+        } 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(EmptyTxOnCommit) {

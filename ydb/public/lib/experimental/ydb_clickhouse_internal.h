@@ -35,10 +35,10 @@ private:
 using TAsyncScanResult = NThreading::TFuture<TScanResult>;
 
 
-struct TScanSettings : public TOperationRequestSettings<TScanSettings> {
-    FLUENT_SETTING(TString, SnapshotId);
+struct TScanSettings : public TOperationRequestSettings<TScanSettings> { 
+    FLUENT_SETTING(TString, SnapshotId); 
     FLUENT_SETTING(TString, Endpoint);
-};
+}; 
 
 class TScanClient {
     class TImpl;
@@ -68,8 +68,8 @@ public:
     TScanIterator(const TDriver& driver, const TString &database, const TString& token, const TString& path, const TVector<TString>& columns,
                          const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
                          ui64 maxRowsInRequest, ui64 maxBytesInRequest,
-                         const TString& keyFrom = TString(), const TString& keyTo = TString(),
-                         const TScanSettings& settings = TScanSettings());
+                         const TString& keyFrom = TString(), const TString& keyTo = TString(), 
+                         const TScanSettings& settings = TScanSettings()); 
     TString GetBlocks();
 
 private:
@@ -82,7 +82,7 @@ private:
     const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
     const ui64 MaxRows;
     const ui64 MaxBytes;
-    const TScanSettings Settings;
+    const TScanSettings Settings; 
     TScanClient Connection;
 
     TDeque<TString> Blocks;
@@ -134,107 +134,107 @@ private:
     std::unique_ptr<TResultImpl> ResultImpl;
 };
 
-template<class TProtoResult>
-class TProtoResultWrapper : public TStatus {
-    friend class TMetaClient;
+template<class TProtoResult> 
+class TProtoResultWrapper : public TStatus { 
+    friend class TMetaClient; 
 
-private:
-    TProtoResultWrapper(
-            TStatus&& status,
-            std::unique_ptr<TProtoResult> result)
-        : TStatus(std::move(status))
-        , Result(std::move(result))
-    { }
-
-public:
-    const TProtoResult& GetResult() const {
-        Y_VERIFY(Result, "Uninitialized result");
-        return *Result;
-    }
-
-private:
-    std::unique_ptr<TProtoResult> Result;
-};
-
-using TCreateSnapshotResult = TProtoResultWrapper<Ydb::ClickhouseInternal::CreateSnapshotResult>;
-using TRefreshSnapshotResult = TProtoResultWrapper<Ydb::ClickhouseInternal::RefreshSnapshotResult>;
-using TDiscardSnapshotResult = TProtoResultWrapper<Ydb::ClickhouseInternal::DiscardSnapshotResult>;
-
-/**
- * Internal class that manages snapshot lifecycle (automatic refresh and discard)
- */
-class TSnapshotHandleLifecycle;
-
-/**
- * Handle to an existing snapshot
- *
- * Snapshot is automatically discarded when the last reference is dropped
- */
-class TSnapshotHandle {
-    friend class TSnapshotHandleLifecycle;
-
-    class TImpl;
-
-public:
-    TSnapshotHandle() = default;
-    ~TSnapshotHandle();
-
-    explicit operator bool() const {
-        return IsAlive();
-    }
-
-    TString GetSnapshotId() const;
-
-    bool IsAlive() const;
-
-private:
-    explicit TSnapshotHandle(TSnapshotHandleLifecycle* lifecycle);
-
-private:
-    std::shared_ptr<TImpl> Impl_;
-};
-
-class TCreateSnapshotHandleResult : public TStatus {
-    friend class TSnapshotHandleLifecycle;
-
-private:
-    TCreateSnapshotHandleResult(TStatus&& status, TSnapshotHandle handle)
-        : TStatus(std::move(status))
-        , Handle(std::move(handle))
-    { }
-
-public:
-    const TSnapshotHandle& GetResult() const {
-        CheckStatusOk("TCreateSnapshotHandleResult::GetResult");
-        return Handle;
-    }
-
-    TSnapshotHandle&& ExtractResult() {
-        CheckStatusOk("TCreateSnapshotHandleResult::ExtractResult");
-        return std::move(Handle);
-    }
-
-private:
-    TSnapshotHandle Handle;
-};
-
+private: 
+    TProtoResultWrapper( 
+            TStatus&& status, 
+            std::unique_ptr<TProtoResult> result) 
+        : TStatus(std::move(status)) 
+        , Result(std::move(result)) 
+    { } 
+ 
+public: 
+    const TProtoResult& GetResult() const { 
+        Y_VERIFY(Result, "Uninitialized result"); 
+        return *Result; 
+    } 
+ 
+private: 
+    std::unique_ptr<TProtoResult> Result; 
+}; 
+ 
+using TCreateSnapshotResult = TProtoResultWrapper<Ydb::ClickhouseInternal::CreateSnapshotResult>; 
+using TRefreshSnapshotResult = TProtoResultWrapper<Ydb::ClickhouseInternal::RefreshSnapshotResult>; 
+using TDiscardSnapshotResult = TProtoResultWrapper<Ydb::ClickhouseInternal::DiscardSnapshotResult>; 
+ 
+/** 
+ * Internal class that manages snapshot lifecycle (automatic refresh and discard) 
+ */ 
+class TSnapshotHandleLifecycle; 
+ 
+/** 
+ * Handle to an existing snapshot 
+ * 
+ * Snapshot is automatically discarded when the last reference is dropped 
+ */ 
+class TSnapshotHandle { 
+    friend class TSnapshotHandleLifecycle; 
+ 
+    class TImpl; 
+ 
+public: 
+    TSnapshotHandle() = default; 
+    ~TSnapshotHandle(); 
+ 
+    explicit operator bool() const { 
+        return IsAlive(); 
+    } 
+ 
+    TString GetSnapshotId() const; 
+ 
+    bool IsAlive() const; 
+ 
+private: 
+    explicit TSnapshotHandle(TSnapshotHandleLifecycle* lifecycle); 
+ 
+private: 
+    std::shared_ptr<TImpl> Impl_; 
+}; 
+ 
+class TCreateSnapshotHandleResult : public TStatus { 
+    friend class TSnapshotHandleLifecycle; 
+ 
+private: 
+    TCreateSnapshotHandleResult(TStatus&& status, TSnapshotHandle handle) 
+        : TStatus(std::move(status)) 
+        , Handle(std::move(handle)) 
+    { } 
+ 
+public: 
+    const TSnapshotHandle& GetResult() const { 
+        CheckStatusOk("TCreateSnapshotHandleResult::GetResult"); 
+        return Handle; 
+    } 
+ 
+    TSnapshotHandle&& ExtractResult() { 
+        CheckStatusOk("TCreateSnapshotHandleResult::ExtractResult"); 
+        return std::move(Handle); 
+    } 
+ 
+private: 
+    TSnapshotHandle Handle; 
+}; 
+ 
 using TAsyncGetShardLocationsResult = NThreading::TFuture<TGetShardLocationsResult>;
 using TAsyncDescribeTableResult = NThreading::TFuture<TDescribeTableResult>;
-using TAsyncCreateSnapshotResult = NThreading::TFuture<TCreateSnapshotResult>;
-using TAsyncRefreshSnapshotResult = NThreading::TFuture<TRefreshSnapshotResult>;
-using TAsyncDiscardSnapshotResult = NThreading::TFuture<TDiscardSnapshotResult>;
-using TAsyncCreateSnapshotHandleResult = NThreading::TFuture<TCreateSnapshotHandleResult>;
+using TAsyncCreateSnapshotResult = NThreading::TFuture<TCreateSnapshotResult>; 
+using TAsyncRefreshSnapshotResult = NThreading::TFuture<TRefreshSnapshotResult>; 
+using TAsyncDiscardSnapshotResult = NThreading::TFuture<TDiscardSnapshotResult>; 
+using TAsyncCreateSnapshotHandleResult = NThreading::TFuture<TCreateSnapshotHandleResult>; 
 
 
 struct TGetShardLocationsSettings : public TOperationRequestSettings<TGetShardLocationsSettings> {};
 
-struct TSnapshotSettings : public TOperationRequestSettings<TSnapshotSettings> {
-    FLUENT_SETTING_FLAG(IgnoreSystemViews);
-};
-
+struct TSnapshotSettings : public TOperationRequestSettings<TSnapshotSettings> { 
+    FLUENT_SETTING_FLAG(IgnoreSystemViews); 
+}; 
+ 
 class TMetaClient {
-    friend class TSnapshotHandleLifecycle;
-
+    friend class TSnapshotHandleLifecycle; 
+ 
     class TImpl;
 
 public:
@@ -249,24 +249,24 @@ public:
             bool includePartitionsInfo,
             const TGetShardLocationsSettings& settings = TGetShardLocationsSettings());
 
-    TAsyncCreateSnapshotResult CreateSnapshot(
-            const TVector<TString>& tables,
-            const TSnapshotSettings& settings = TSnapshotSettings());
-
-    TAsyncRefreshSnapshotResult RefreshSnapshot(
-            const TVector<TString>& tables,
-            const TString& snapshotId,
-            const TSnapshotSettings& settings = TSnapshotSettings());
-
-    TAsyncDiscardSnapshotResult DiscardSnapshot(
-            const TVector<TString>& tables,
-            const TString& snapshotId,
-            const TSnapshotSettings& settings = TSnapshotSettings());
-
-    TAsyncCreateSnapshotHandleResult CreateSnapshotHandle(
-            const TVector<TString>& tables,
-            const TSnapshotSettings& settings = TSnapshotSettings());
-
+    TAsyncCreateSnapshotResult CreateSnapshot( 
+            const TVector<TString>& tables, 
+            const TSnapshotSettings& settings = TSnapshotSettings()); 
+ 
+    TAsyncRefreshSnapshotResult RefreshSnapshot( 
+            const TVector<TString>& tables, 
+            const TString& snapshotId, 
+            const TSnapshotSettings& settings = TSnapshotSettings()); 
+ 
+    TAsyncDiscardSnapshotResult DiscardSnapshot( 
+            const TVector<TString>& tables, 
+            const TString& snapshotId, 
+            const TSnapshotSettings& settings = TSnapshotSettings()); 
+ 
+    TAsyncCreateSnapshotHandleResult CreateSnapshotHandle( 
+            const TVector<TString>& tables, 
+            const TSnapshotSettings& settings = TSnapshotSettings()); 
+ 
 private:
     std::shared_ptr<TImpl> Impl_;
 };

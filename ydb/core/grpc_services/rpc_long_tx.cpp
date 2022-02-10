@@ -94,11 +94,11 @@ THashMap<ui64, TString> SplitData(const TString& data, const NKikimrSchemeOp::TC
 
 namespace NGRpcService {
 
-using namespace NLongTxService;
+using namespace NLongTxService; 
 
 class TLongTxBeginRPC : public TActorBootstrapped<TLongTxBeginRPC> {
     using TBase = TActorBootstrapped<TLongTxBeginRPC>;
-
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -107,63 +107,63 @@ public:
     explicit TLongTxBeginRPC(TAutoPtr<TEvLongTxBeginRequest> request)
         : TBase()
         , Request(request.Release())
-        , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
+        , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()))) 
     {}
 
-    void Bootstrap() {
+    void Bootstrap() { 
         const auto* req = Request->GetProtoRequest();
 
-        NKikimrLongTxService::TEvBeginTx::EMode mode = {};
-        switch (req->tx_type()) {
-            case Ydb::LongTx::BeginTransactionRequest::READ:
-                mode = NKikimrLongTxService::TEvBeginTx::MODE_READ_ONLY;
-                break;
-            case Ydb::LongTx::BeginTransactionRequest::WRITE:
-                mode = NKikimrLongTxService::TEvBeginTx::MODE_WRITE_ONLY;
-                break;
-            default:
-                // TODO: report error
-                break;
+        NKikimrLongTxService::TEvBeginTx::EMode mode = {}; 
+        switch (req->tx_type()) { 
+            case Ydb::LongTx::BeginTransactionRequest::READ: 
+                mode = NKikimrLongTxService::TEvBeginTx::MODE_READ_ONLY; 
+                break; 
+            case Ydb::LongTx::BeginTransactionRequest::WRITE: 
+                mode = NKikimrLongTxService::TEvBeginTx::MODE_WRITE_ONLY; 
+                break; 
+            default: 
+                // TODO: report error 
+                break; 
         }
-
-        Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvBeginTx(DatabaseName, mode));
-        Become(&TThis::StateWork);
+ 
+        Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvBeginTx(DatabaseName, mode)); 
+        Become(&TThis::StateWork); 
     }
 
-private:
-    STFUNC(StateWork) {
-        Y_UNUSED(ctx);
+private: 
+    STFUNC(StateWork) { 
+        Y_UNUSED(ctx); 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvLongTxService::TEvBeginTxResult, Handle);
+            hFunc(TEvLongTxService::TEvBeginTxResult, Handle); 
         }
     }
 
-    void Handle(TEvLongTxService::TEvBeginTxResult::TPtr& ev) {
-        const auto* msg = ev->Get();
+    void Handle(TEvLongTxService::TEvBeginTxResult::TPtr& ev) { 
+        const auto* msg = ev->Get(); 
 
-        if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
-            if (issues) {
-                Request->RaiseIssues(std::move(issues));
-            }
-            Request->ReplyWithYdbStatus(msg->Record.GetStatus());
-            return PassAway();
-        }
+        if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) { 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(msg->Record.GetIssues(), issues); 
+            if (issues) { 
+                Request->RaiseIssues(std::move(issues)); 
+            } 
+            Request->ReplyWithYdbStatus(msg->Record.GetStatus()); 
+            return PassAway(); 
+        } 
 
-        Ydb::LongTx::BeginTransactionResult result;
-        result.set_tx_id(msg->GetLongTxId().ToString());
-        ReplySuccess(result);
-    }
+        Ydb::LongTx::BeginTransactionResult result; 
+        result.set_tx_id(msg->GetLongTxId().ToString()); 
+        ReplySuccess(result); 
+    } 
 
-    void ReplySuccess(const Ydb::LongTx::BeginTransactionResult& result) {
+    void ReplySuccess(const Ydb::LongTx::BeginTransactionResult& result) { 
         Request->SendResult(result, Ydb::StatusIds::SUCCESS);
-        PassAway();
+        PassAway(); 
     }
 
-private:
-    std::unique_ptr<TEvLongTxBeginRequest> Request;
-    TString DatabaseName;
+private: 
+    std::unique_ptr<TEvLongTxBeginRequest> Request; 
+    TString DatabaseName; 
 };
 
 //
@@ -179,63 +179,63 @@ public:
         : TBase()
         , Request(request.Release())
     {
-    }
-
-    void Bootstrap() {
+    } 
+ 
+    void Bootstrap() { 
         const auto* req = Request->GetProtoRequest();
 
-        TString errMsg;
-        if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
-            return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg);
-        }
+        TString errMsg; 
+        if (!LongTxId.ParseString(req->tx_id(), &errMsg)) { 
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg); 
+        } 
 
-        Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvCommitTx(LongTxId));
-        Become(&TThis::StateWork);
+        Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvCommitTx(LongTxId)); 
+        Become(&TThis::StateWork); 
     }
 
 private:
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvLongTxService::TEvCommitTxResult, Handle);
+            hFunc(TEvLongTxService::TEvCommitTxResult, Handle); 
         }
     }
 
-    void Handle(TEvLongTxService::TEvCommitTxResult::TPtr& ev) {
-        const auto* msg = ev->Get();
+    void Handle(TEvLongTxService::TEvCommitTxResult::TPtr& ev) { 
+        const auto* msg = ev->Get(); 
 
-        if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
-            if (issues) {
-                Request->RaiseIssues(std::move(issues));
-            }
-            Request->ReplyWithYdbStatus(msg->Record.GetStatus());
-            return PassAway();
+        if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) { 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(msg->Record.GetIssues(), issues); 
+            if (issues) { 
+                Request->RaiseIssues(std::move(issues)); 
+            } 
+            Request->ReplyWithYdbStatus(msg->Record.GetStatus()); 
+            return PassAway(); 
         }
 
-        Ydb::LongTx::CommitTransactionResult result;
-        const auto* req = Request->GetProtoRequest();
-        result.set_tx_id(req->tx_id());
-        ReplySuccess(result);
+        Ydb::LongTx::CommitTransactionResult result; 
+        const auto* req = Request->GetProtoRequest(); 
+        result.set_tx_id(req->tx_id()); 
+        ReplySuccess(result); 
     }
 
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) { 
         if (!message.empty()) {
             Request->RaiseIssue(NYql::TIssue(message));
         }
         Request->ReplyWithYdbStatus(status);
-        PassAway();
+        PassAway(); 
     }
 
-    void ReplySuccess(const Ydb::LongTx::CommitTransactionResult& result) {
-        Request->SendResult(result, Ydb::StatusIds::SUCCESS);
-        PassAway();
+    void ReplySuccess(const Ydb::LongTx::CommitTransactionResult& result) { 
+        Request->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        PassAway(); 
     }
 
-private:
-    std::unique_ptr<TEvLongTxCommitRequest> Request;
-    TLongTxId LongTxId;
+private: 
+    std::unique_ptr<TEvLongTxCommitRequest> Request; 
+    TLongTxId LongTxId; 
 };
 
 //
@@ -251,63 +251,63 @@ public:
         : TBase()
         , Request(request.Release())
     {
-    }
-
-    void Bootstrap() {
+    } 
+ 
+    void Bootstrap() { 
         const auto* req = Request->GetProtoRequest();
 
-        TString errMsg;
-        if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
-            return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg);
-        }
+        TString errMsg; 
+        if (!LongTxId.ParseString(req->tx_id(), &errMsg)) { 
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg); 
+        } 
 
-        Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvRollbackTx(LongTxId));
-        Become(&TThis::StateWork);
+        Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvRollbackTx(LongTxId)); 
+        Become(&TThis::StateWork); 
     }
 
 private:
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvLongTxService::TEvRollbackTxResult, Handle);
+            hFunc(TEvLongTxService::TEvRollbackTxResult, Handle); 
         }
     }
 
-    void Handle(TEvLongTxService::TEvRollbackTxResult::TPtr& ev) {
-        const auto* msg = ev->Get();
+    void Handle(TEvLongTxService::TEvRollbackTxResult::TPtr& ev) { 
+        const auto* msg = ev->Get(); 
 
-        if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
-            if (issues) {
-                Request->RaiseIssues(std::move(issues));
-            }
-            Request->ReplyWithYdbStatus(msg->Record.GetStatus());
-            return PassAway();
+        if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) { 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(msg->Record.GetIssues(), issues); 
+            if (issues) { 
+                Request->RaiseIssues(std::move(issues)); 
+            } 
+            Request->ReplyWithYdbStatus(msg->Record.GetStatus()); 
+            return PassAway(); 
         }
 
-        Ydb::LongTx::RollbackTransactionResult result;
-        const auto* req = Request->GetProtoRequest();
-        result.set_tx_id(req->tx_id());
-        ReplySuccess(result);
+        Ydb::LongTx::RollbackTransactionResult result; 
+        const auto* req = Request->GetProtoRequest(); 
+        result.set_tx_id(req->tx_id()); 
+        ReplySuccess(result); 
     }
 
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) { 
         if (!message.empty()) {
             Request->RaiseIssue(NYql::TIssue(message));
         }
         Request->ReplyWithYdbStatus(status);
-        PassAway();
+        PassAway(); 
     }
 
-    void ReplySuccess(const Ydb::LongTx::RollbackTransactionResult& result) {
-        Request->SendResult(result, Ydb::StatusIds::SUCCESS);
-        PassAway();
+    void ReplySuccess(const Ydb::LongTx::RollbackTransactionResult& result) { 
+        Request->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        PassAway(); 
     }
 
-private:
-    std::unique_ptr<TEvLongTxRollbackRequest> Request;
-    TLongTxId LongTxId;
+private: 
+    std::unique_ptr<TEvLongTxRollbackRequest> Request; 
+    TLongTxId LongTxId; 
 };
 
 // Common logic of LongTx Write that takes care of splitting the data according to the sharding scheme,
@@ -333,13 +333,13 @@ public:
     {
         if (token) {
             UserToken.emplace(token);
-        }
-    }
+        } 
+    } 
 
-    void PassAway() override {
+    void PassAway() override { 
         this->Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-        TBase::PassAway();
-    }
+        TBase::PassAway(); 
+    } 
 
 protected:
     void SetLongTxId(const TLongTxId& longTxId) {
@@ -347,37 +347,37 @@ protected:
     }
 
     void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate* resp) {
-        if (resp->ErrorCount > 0) {
-            // TODO: map to a correct error
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
-        }
-
-        auto& entry = resp->ResultSet[0];
-
-        if (UserToken && entry.SecurityObject) {
-            const ui32 access = NACLib::UpdateRow;
-            if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
+        if (resp->ErrorCount > 0) { 
+            // TODO: map to a correct error 
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query"); 
+        } 
+ 
+        auto& entry = resp->ResultSet[0]; 
+ 
+        if (UserToken && entry.SecurityObject) { 
+            const ui32 access = NACLib::UpdateRow; 
+            if (!entry.SecurityObject->CheckAccess(access, *UserToken)) { 
                 RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, TStringBuilder()
-                    << "User has no permission to perform writes to this table"
-                    << " user: " << UserToken->GetUserSID()
-                    << " path: " << Path));
-                return ReplyError(Ydb::StatusIds::UNAUTHORIZED);
-            }
-        }
-
-        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindOlapTable) {
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an olap table");
-        }
-
+                    << "User has no permission to perform writes to this table" 
+                    << " user: " << UserToken->GetUserSID() 
+                    << " path: " << Path)); 
+                return ReplyError(Ydb::StatusIds::UNAUTHORIZED); 
+            } 
+        } 
+ 
+        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindOlapTable) { 
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an olap table"); 
+        } 
+ 
         if (!entry.OlapTableInfo || !entry.OlapTableInfo->Description.HasSharding()
             || !entry.OlapTableInfo->Description.HasSchema()) {
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Olap table expected");
         }
-
+ 
         const auto& description = entry.OlapTableInfo->Description;
         const auto& schema = description.GetSchema();
         const auto& sharding = description.GetSharding();
-
+ 
         if (sharding.ColumnShardsSize() == 0) {
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "No shards to write to");
         }
@@ -408,19 +408,19 @@ protected:
         }
 
         this->Become(&TThis::StateWrite);
-    }
-
+    } 
+ 
 private:
     void SendWriteRequest(ui64 shardId, ui64 tableId, const TString& dedupId, const TString& data) {
         WaitShards.insert(shardId);
         SendToTablet(shardId, MakeHolder<TEvColumnShard::TEvWrite>(this->SelfId(), LongTxId, tableId, dedupId, data));
     }
 
-    STFUNC(StateWrite) {
-        Y_UNUSED(ctx);
+    STFUNC(StateWrite) { 
+        Y_UNUSED(ctx); 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvColumnShard::TEvWriteResult, Handle);
-            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(TEvColumnShard::TEvWriteResult, Handle); 
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle); 
         }
     }
 
@@ -455,17 +455,17 @@ private:
         }
     }
 
-    void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev) {
-        const auto* msg = ev->Get();
+    void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev) { 
+        const auto* msg = ev->Get(); 
         ui64 shardId = msg->Record.GetOrigin();
         Y_VERIFY(WaitShards.count(shardId) || ShardsWrites.count(shardId));
-
-        auto status = msg->Record.GetStatus();
-        if (status != NKikimrTxColumnShard::SUCCESS) {
+ 
+        auto status = msg->Record.GetStatus(); 
+        if (status != NKikimrTxColumnShard::SUCCESS) { 
             auto ydbStatus = ConvertToYdbStatus(status);
             return ReplyError(ydbStatus, "Write error");
-        }
-
+        } 
+ 
         if (!WaitShards.count(shardId)) {
             return;
         }
@@ -475,21 +475,21 @@ private:
         if (WaitShards.empty()) {
             SendAttachWrite();
         }
-    }
+    } 
+ 
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) { 
+        const auto* msg = ev->Get(); 
 
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        const auto* msg = ev->Get();
-
-        if (msg->NotDelivered) {
-            return ReplyError(Ydb::StatusIds::UNAVAILABLE, "Shard unavailable");
-        } else {
-            return ReplyError(Ydb::StatusIds::UNDETERMINED, "Shard unavailable");
+        if (msg->NotDelivered) { 
+            return ReplyError(Ydb::StatusIds::UNAVAILABLE, "Shard unavailable"); 
+        } else { 
+            return ReplyError(Ydb::StatusIds::UNDETERMINED, "Shard unavailable"); 
         }
-    }
+    } 
 
-private:
-    void SendAttachWrite() {
-        auto req = MakeHolder<TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
+private: 
+    void SendAttachWrite() { 
+        auto req = MakeHolder<TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId); 
         for (auto& [shardId, writeId] : ShardsWrites) {
             req->AddWrite(shardId, writeId);
         }
@@ -498,26 +498,26 @@ private:
     }
 
 
-    STFUNC(StateAttachWrite) {
-        Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvLongTxService::TEvAttachColumnShardWritesResult, Handle);
-        }
-    }
-
-    void Handle(TEvLongTxService::TEvAttachColumnShardWritesResult::TPtr& ev) {
-        const auto* msg = ev->Get();
-
-        if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
+    STFUNC(StateAttachWrite) { 
+        Y_UNUSED(ctx); 
+        switch (ev->GetTypeRewrite()) { 
+            hFunc(TEvLongTxService::TEvAttachColumnShardWritesResult, Handle); 
+        } 
+    } 
+ 
+    void Handle(TEvLongTxService::TEvAttachColumnShardWritesResult::TPtr& ev) { 
+        const auto* msg = ev->Get(); 
+ 
+        if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) { 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(msg->Record.GetIssues(), issues); 
             for (auto& issue : issues) {
                 RaiseIssue(issue);
-            }
+            } 
             ReplyError(msg->Record.GetStatus());
-            return PassAway();
-        }
-
+            return PassAway(); 
+        } 
+ 
         ReplySuccess();
     }
 
@@ -575,7 +575,7 @@ public:
 
     void Bootstrap() {
         const auto* req = GetProtoRequest();
-
+ 
         TString errMsg;
         TLongTxId longTxId;
         if (!longTxId.ParseString(req->tx_id(), &errMsg)) {
@@ -588,8 +588,8 @@ public:
         }
 
         SendNavigateRequest();
-    }
-
+    } 
+ 
     void SendNavigateRequest() {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = this->DatabaseName;
@@ -612,7 +612,7 @@ public:
         ProceedWithSchema(resp);
     }
 
-private:
+private: 
     const TEvLongTxWriteRequest::TRequest* GetProtoRequest() const {
         return TEvLongTxWriteRequest::GetProtoRequest(Request);
     }
@@ -631,7 +631,7 @@ protected:
             Request->RaiseIssue(NYql::TIssue(message));
         }
         Request->ReplyWithYdbStatus(status);
-        PassAway();
+        PassAway(); 
     }
 
     void ReplySuccess() override {
@@ -640,13 +640,13 @@ protected:
         result.set_path(Path);
         result.set_dedup_id(DedupId);
 
-        Request->SendResult(result, Ydb::StatusIds::SUCCESS);
-        PassAway();
+        Request->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        PassAway(); 
     }
 
-private:
+private: 
     std::unique_ptr<IRequestOpCtx> Request;
-    TActorId SchemeCache;
+    TActorId SchemeCache; 
 };
 
 
@@ -730,10 +730,10 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
 
 class TLongTxReadRPC : public TActorBootstrapped<TLongTxReadRPC> {
     using TBase = TActorBootstrapped<TLongTxReadRPC>;
-
-private:
-    static const constexpr ui64 MaxRetriesPerShard = 10;
-
+ 
+private: 
+    static const constexpr ui64 MaxRetriesPerShard = 10; 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -742,130 +742,130 @@ public:
     explicit TLongTxReadRPC(TAutoPtr<TEvLongTxReadRequest> request)
         : TBase()
         , Request(request.Release())
-        , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
-        , SchemeCache(MakeSchemeCacheID())
+        , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()))) 
+        , SchemeCache(MakeSchemeCacheID()) 
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
         , TableId(0)
         , OutChunkNumber(0)
     {
-    }
-
-    void Bootstrap() {
+    } 
+ 
+    void Bootstrap() { 
         const auto* req = Request->GetProtoRequest();
 
-        if (const TString& internalToken = Request->GetInternalToken()) {
-            UserToken.emplace(internalToken);
-        }
+        if (const TString& internalToken = Request->GetInternalToken()) { 
+            UserToken.emplace(internalToken); 
+        } 
+ 
+        TString errMsg; 
+        if (!LongTxId.ParseString(req->tx_id(), &errMsg)) { 
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg); 
+        } 
 
-        TString errMsg;
-        if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
-            return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg);
-        }
+        Path = req->path(); 
+        SendNavigateRequest(); 
+    } 
 
-        Path = req->path();
-        SendNavigateRequest();
-    }
-
-    void PassAway() override {
+    void PassAway() override { 
         Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-        TBase::PassAway();
-    }
+        TBase::PassAway(); 
+    } 
 
-private:
-    void SendNavigateRequest() {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = this->DatabaseName;
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = ::NKikimr::SplitPath(Path);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
-        Become(&TThis::StateNavigate);
-    }
-
-    STFUNC(StateNavigate) {
-        Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+private: 
+    void SendNavigateRequest() { 
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(); 
+        request->DatabaseName = this->DatabaseName; 
+        auto& entry = request->ResultSet.emplace_back(); 
+        entry.Path = ::NKikimr::SplitPath(Path); 
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath; 
+        Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())); 
+        Become(&TThis::StateNavigate); 
+    } 
+ 
+    STFUNC(StateNavigate) { 
+        Y_UNUSED(ctx); 
+        switch (ev->GetTypeRewrite()) { 
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle); 
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
-
-        if (resp->ErrorCount > 0) {
-            // TODO: map to a correct error
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
-        }
-
-        auto& entry = resp->ResultSet[0];
-
-        if (UserToken && entry.SecurityObject) {
-            const ui32 access = NACLib::SelectRow;
-            if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, TStringBuilder()
-                    << "User has no permission to perform reads from this table"
-                    << " user: " << UserToken->GetUserSID()
-                    << " path: " << Path));
-                return ReplyError(Ydb::StatusIds::UNAUTHORIZED);
-            }
-        }
-
-        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindOlapTable) {
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an olap table");
-        }
-
-        Y_VERIFY(entry.OlapTableInfo);
-        Y_VERIFY(entry.OlapTableInfo->Description.HasSharding());
-        const auto& sharding = entry.OlapTableInfo->Description.GetSharding();
-
-        TableId = entry.TableId.PathId.LocalPathId;
-        for (ui64 shardId : sharding.GetColumnShards()) {
-            ShardChunks[shardId] = {};
-        }
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) { 
+        NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get(); 
+ 
+        if (resp->ErrorCount > 0) { 
+            // TODO: map to a correct error 
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query"); 
+        } 
+ 
+        auto& entry = resp->ResultSet[0]; 
+ 
+        if (UserToken && entry.SecurityObject) { 
+            const ui32 access = NACLib::SelectRow; 
+            if (!entry.SecurityObject->CheckAccess(access, *UserToken)) { 
+                Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, TStringBuilder() 
+                    << "User has no permission to perform reads from this table" 
+                    << " user: " << UserToken->GetUserSID() 
+                    << " path: " << Path)); 
+                return ReplyError(Ydb::StatusIds::UNAUTHORIZED); 
+            } 
+        } 
+ 
+        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindOlapTable) { 
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an olap table"); 
+        } 
+ 
+        Y_VERIFY(entry.OlapTableInfo); 
+        Y_VERIFY(entry.OlapTableInfo->Description.HasSharding()); 
+        const auto& sharding = entry.OlapTableInfo->Description.GetSharding(); 
+ 
+        TableId = entry.TableId.PathId.LocalPathId; 
+        for (ui64 shardId : sharding.GetColumnShards()) { 
+            ShardChunks[shardId] = {}; 
+        } 
         for (ui64 shardId : sharding.GetAdditionalColumnShards()) {
             ShardChunks[shardId] = {};
         }
-
+ 
         if (ShardChunks.empty()) {
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "No shards to read");
         }
 
-        SendReadRequests();
-    }
-
-private:
-    void SendReadRequests() {
+        SendReadRequests(); 
+    } 
+ 
+private: 
+    void SendReadRequests() { 
         for (auto& [shard, chunk] : ShardChunks) {
             Y_UNUSED(chunk);
-            SendRequest(shard);
+            SendRequest(shard); 
         }
-        Become(&TThis::StateWork);
+        Become(&TThis::StateWork); 
     }
 
-    void SendRequest(ui64 shard) {
-        Y_VERIFY(shard != 0);
-        Waits.insert(shard);
-        SendToTablet(shard, MakeRequest());
+    void SendRequest(ui64 shard) { 
+        Y_VERIFY(shard != 0); 
+        Waits.insert(shard); 
+        SendToTablet(shard, MakeRequest()); 
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvUndelivered, Handle);
-            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            hFunc(TEvColumnShard::TEvReadResult, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle); 
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle); 
+            hFunc(TEvColumnShard::TEvReadResult, Handle); 
         }
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) { 
         Y_UNUSED(ev);
-        ReplyError(Ydb::StatusIds::INTERNAL_ERROR,
+        ReplyError(Ydb::StatusIds::INTERNAL_ERROR, 
                    "Internal error: node pipe cache is not available, check cluster configuration");
     }
 
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) { 
         ui64 shard = ev->Get()->TabletId;
-        if (!Waits.contains(shard)) {
+        if (!Waits.contains(shard)) { 
             return;
         }
 
@@ -875,24 +875,24 @@ private:
 
         ui64 retries = ++ShardRetries[shard];
         if (retries > MaxRetriesPerShard) {
-            return ReplyError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %lu", shard));
+            return ReplyError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %lu", shard)); 
         }
 
-        SendRequest(shard);
+        SendRequest(shard); 
     }
 
-    void Handle(TEvColumnShard::TEvReadResult::TPtr& ev) {
+    void Handle(TEvColumnShard::TEvReadResult::TPtr& ev) { 
         const auto& record = Proto(ev->Get());
         ui64 shard = record.GetOrigin();
         ui64 chunk = record.GetBatch();
         bool finished = record.GetFinished();
 
         { // Filter duplicates and allow messages reorder
-            if (!ShardChunks.contains(shard)) {
-                return ReplyError(Ydb::StatusIds::GENERIC_ERROR, "Response from unexpected shard");
+            if (!ShardChunks.contains(shard)) { 
+                return ReplyError(Ydb::StatusIds::GENERIC_ERROR, "Response from unexpected shard"); 
             }
 
-            if (!Waits.contains(shard) || ShardChunks[shard].contains(chunk)) {
+            if (!Waits.contains(shard) || ShardChunks[shard].contains(chunk)) { 
                 return;
             }
 
@@ -911,65 +911,65 @@ private:
         ui32 status = record.GetStatus();
         if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
             auto result = MakeResult(OutChunkNumber, Waits.empty());
-            if (record.HasData()) {
-                result->mutable_data()->set_data(record.GetData());
-            }
+            if (record.HasData()) { 
+                result->mutable_data()->set_data(record.GetData()); 
+            } 
             ++OutChunkNumber;
-            return ReplySuccess(*result);
+            return ReplySuccess(*result); 
         }
 
-        return ReplyError(Ydb::StatusIds::GENERIC_ERROR, "");
+        return ReplyError(Ydb::StatusIds::GENERIC_ERROR, ""); 
     }
 
-    THolder<TEvColumnShard::TEvRead> MakeRequest() const {
-        return MakeHolder<TEvColumnShard::TEvRead>(
-            SelfId(), 0, LongTxId.Snapshot.Step, LongTxId.Snapshot.TxId, TableId);
+    THolder<TEvColumnShard::TEvRead> MakeRequest() const { 
+        return MakeHolder<TEvColumnShard::TEvRead>( 
+            SelfId(), 0, LongTxId.Snapshot.Step, LongTxId.Snapshot.TxId, TableId); 
     }
 
     Ydb::LongTx::ReadResult* MakeResult(ui64 outChunk, bool finished) const {
         auto result = TEvLongTxReadRequest::AllocateResult<Ydb::LongTx::ReadResult>(Request);
 
         const auto* req = Request->GetProtoRequest();
-        result->set_tx_id(req->tx_id());
+        result->set_tx_id(req->tx_id()); 
         result->set_path(req->path());
         result->set_chunk(outChunk);
         result->set_finished(finished);
         return result;
     }
-
-private:
-    void SendToTablet(ui64 tabletId, THolder<IEventBase> event) {
+ 
+private: 
+    void SendToTablet(ui64 tabletId, THolder<IEventBase> event) { 
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, true),
-                IEventHandle::FlagTrackDelivery);
-    }
-
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) {
-        if (!message.empty()) {
-            Request->RaiseIssue(NYql::TIssue(message));
-        }
-        Request->ReplyWithYdbStatus(status);
-        PassAway();
-    }
-
-    void ReplySuccess(const Ydb::LongTx::ReadResult& result) {
-        Request->SendResult(result, Ydb::StatusIds::SUCCESS);
-        PassAway();
-    }
-
-private:
-    std::unique_ptr<TEvLongTxReadRequest> Request;
-    TString DatabaseName;
-    TActorId SchemeCache;
+                IEventHandle::FlagTrackDelivery); 
+    } 
+ 
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) { 
+        if (!message.empty()) { 
+            Request->RaiseIssue(NYql::TIssue(message)); 
+        } 
+        Request->ReplyWithYdbStatus(status); 
+        PassAway(); 
+    } 
+ 
+    void ReplySuccess(const Ydb::LongTx::ReadResult& result) { 
+        Request->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        PassAway(); 
+    } 
+ 
+private: 
+    std::unique_ptr<TEvLongTxReadRequest> Request; 
+    TString DatabaseName; 
+    TActorId SchemeCache; 
     TActorId LeaderPipeCache;
-    std::optional<NACLib::TUserToken> UserToken;
-    TLongTxId LongTxId;
-    TString Path;
-    ui64 TableId;
-    THashMap<ui64, THashSet<ui32>> ShardChunks;
-    THashMap<ui64, ui32> ShardChunkCounts;
+    std::optional<NACLib::TUserToken> UserToken; 
+    TLongTxId LongTxId; 
+    TString Path; 
+    ui64 TableId; 
+    THashMap<ui64, THashSet<ui32>> ShardChunks; 
+    THashMap<ui64, ui32> ShardChunkCounts; 
     THashMap<ui64, ui32> ShardRetries;
-    THashSet<ui64> Waits;
-    ui64 OutChunkNumber;
+    THashSet<ui64> Waits; 
+    ui64 OutChunkNumber; 
 };
 
 //

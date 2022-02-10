@@ -78,96 +78,96 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )", {NKikimrScheme::StatusInvalidParameter});
     }
 
-    Y_UNIT_TEST(ShadowDataEdgeCases) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+    Y_UNIT_TEST(ShadowDataEdgeCases) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         // Allow manipulating shadow data using normal schemeshard operations
         runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "IndexTable"
-              Columns { Name: "index"   Type: "Uint32" }
-              Columns { Name: "key"     Type: "Uint32" }
-              KeyColumnNames: ["index", "key"]
-              PartitionConfig {
-                  CompactionPolicy {
-                      KeepEraseMarkers: true
-                  }
-                  ShadowData: true
-              }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "CopyTable"
-              CopyFromTable: "/MyRoot/IndexTable"
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "IndexTable" 
+              Columns { Name: "index"   Type: "Uint32" } 
+              Columns { Name: "key"     Type: "Uint32" } 
+              KeyColumnNames: ["index", "key"] 
+              PartitionConfig { 
+                  CompactionPolicy { 
+                      KeepEraseMarkers: true 
+                  } 
+                  ShadowData: true 
+              } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "CopyTable" 
+              CopyFromTable: "/MyRoot/IndexTable" 
         )", {NKikimrScheme::StatusPreconditionFailed});
-
-        // This is basically a no-op alter, not filtered at the moment
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "IndexTable"
-              PartitionConfig {
-                  ShadowData: true
-              }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        // This removes shadow data, should be allowed
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "IndexTable"
-              PartitionConfig {
-                  ShadowData: false
-              }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        // Shadow data cannot be re-enabled
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "IndexTable"
-              PartitionConfig {
-                  ShadowData: true
-              }
+ 
+        // This is basically a no-op alter, not filtered at the moment 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "IndexTable" 
+              PartitionConfig { 
+                  ShadowData: true 
+              } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // This removes shadow data, should be allowed 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "IndexTable" 
+              PartitionConfig { 
+                  ShadowData: false 
+              } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Shadow data cannot be re-enabled 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "IndexTable" 
+              PartitionConfig { 
+                  ShadowData: true 
+              } 
         )", {NKikimrScheme::StatusInvalidParameter});
-
-        // This is basically a no-op alter, not filtered at the moment
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "IndexTable"
-              PartitionConfig {
-                  ShadowData: false
-              }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        // Copy should work after shadow data is disabled
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "CopyTable1"
-              CopyFromTable: "/MyRoot/IndexTable"
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        // Should we prohibit creation of shadow data in a copy?
-        // Technically it's safe, even if not backwards compatible.
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "CopyTable2"
-              CopyFromTable: "/MyRoot/IndexTable"
-              PartitionConfig {
-                  ShadowData: true
-              }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        // This should remove shadow data correctly
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "CopyTable2"
-              PartitionConfig {
-                  ShadowData: false
-              }
-        )");
-        env.TestWaitNotification(runtime, txId);
-    }
-
+ 
+        // This is basically a no-op alter, not filtered at the moment 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "IndexTable" 
+              PartitionConfig { 
+                  ShadowData: false 
+              } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Copy should work after shadow data is disabled 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "CopyTable1" 
+              CopyFromTable: "/MyRoot/IndexTable" 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Should we prohibit creation of shadow data in a copy? 
+        // Technically it's safe, even if not backwards compatible. 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "CopyTable2" 
+              CopyFromTable: "/MyRoot/IndexTable" 
+              PartitionConfig { 
+                  ShadowData: true 
+              } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // This should remove shadow data correctly 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+              Name: "CopyTable2" 
+              PartitionConfig { 
+                  ShadowData: false 
+              } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+    } 
+ 
 
     Y_UNIT_TEST(BaseCase) {
         TTestBasicRuntime runtime;
@@ -320,23 +320,23 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                            {NLs::PathExist,
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(7)});
-
-        // Test that index build succeeds on recreated columns
-
-        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-              Name: "Table"
-              DropColumns { Name: "index" }
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-              Name: "Table"
-              Columns { Name: "index"   Type: "Uint32" }
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        TestBuilIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", {"index"});
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+ 
+        // Test that index build succeeds on recreated columns 
+ 
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"( 
+              Name: "Table" 
+              DropColumns { Name: "index" } 
+        )"); 
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard); 
+ 
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"( 
+              Name: "Table" 
+              Columns { Name: "index"   Type: "Uint32" } 
+        )"); 
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard); 
+ 
+        TestBuilIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", {"index"}); 
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard); 
 
         // CommonDB
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",

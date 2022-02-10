@@ -77,17 +77,17 @@ public:
         case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
             return NKikimrViewer::EObjectType::SubDomain;
         case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
-            return NKikimrViewer::EObjectType::BlockStoreVolume;
+            return NKikimrViewer::EObjectType::BlockStoreVolume; 
         case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
             return NKikimrViewer::EObjectType::FileStore;
         case NKikimrSchemeOp::EPathType::EPathTypeKesus:
-            return NKikimrViewer::EObjectType::Kesus;
+            return NKikimrViewer::EObjectType::Kesus; 
         case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
             return NKikimrViewer::EObjectType::SolomonVolume;
         case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
             return NKikimrViewer::EObjectType::CdcStream;
         case NKikimrSchemeOp::EPathType::EPathTypeSequence:
-            return NKikimrViewer::EObjectType::Sequence;
+            return NKikimrViewer::EObjectType::Sequence; 
         case NKikimrSchemeOp::EPathType::EPathTypeReplication:
             return NKikimrViewer::EObjectType::Replication;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:

@@ -42,10 +42,10 @@ namespace NTable {
         }
 
         bool operator!=(ERowOp rop) const noexcept
-        {
-            return Rop != rop;
-        }
-
+        { 
+            return Rop != rop; 
+        } 
+ 
         ERowOp GetRowState() const {
             return Rop;
         }
@@ -53,40 +53,40 @@ namespace NTable {
         bool Touch(ERowOp op) noexcept
         {
             Y_VERIFY(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
-                "Sequence for row state is already finalized");
-
-            switch (op) {
+                "Sequence for row state is already finalized"); 
+ 
+            switch (op) { 
                 case ERowOp::Upsert:
                 case ERowOp::Reset:
-                    Rop = op;
-                    return Left_ > 0; /* process current row when needed */
+                    Rop = op; 
+                    return Left_ > 0; /* process current row when needed */ 
                 case ERowOp::Erase:
                     Rop = (Rop == ERowOp::Absent ? ERowOp::Erase : ERowOp::Reset);
-                    return false; /* current row shouldn't be processed */
-                default:
-                    Y_FAIL("Unexpected row rolling operation code: %" PRIu8, ui8(op));
+                    return false; /* current row shouldn't be processed */ 
+                default: 
+                    Y_FAIL("Unexpected row rolling operation code: %" PRIu8, ui8(op)); 
             }
         }
 
         void Set(TPos on, TCellOp code, const TCell &cell) noexcept
         {
             Y_VERIFY(State[on] == ECellOp::Empty, "Updating cell that already has a value assigned");
-
+ 
             if (Y_UNLIKELY(code == ECellOp::Empty)) {
-                // Source column is not set, nothing to update
-                // N.B. doesn't really happen in practice
-                return;
-            }
-
-            Y_VERIFY(Left_ > 0, "Cells update counter is out of sync");
-            --Left_;
-
+                // Source column is not set, nothing to update 
+                // N.B. doesn't really happen in practice 
+                return; 
+            } 
+ 
+            Y_VERIFY(Left_ > 0, "Cells update counter is out of sync"); 
+            --Left_; 
+ 
             if (Y_UNLIKELY(code == ECellOp::Reset)) {
-                // Setting cell to a schema default value
-                // N.B. doesn't really happen in practice
+                // Setting cell to a schema default value 
+                // N.B. doesn't really happen in practice 
                 State[on] = code;
             } else if (code != ECellOp::Null || code != ELargeObj::Inline) {
-                State[on] = code;
+                State[on] = code; 
                 Cells[on] = cell;
 
                 /* Required but not materialized external blobs are stored as
@@ -101,25 +101,25 @@ namespace NTable {
             }
         }
 
-        void Merge(const TRowState& other) noexcept {
+        void Merge(const TRowState& other) noexcept { 
             Y_VERIFY(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
-                "Sequence for row state is already finalized");
-
+                "Sequence for row state is already finalized"); 
+ 
             if (Y_UNLIKELY(other.Rop == ERowOp::Absent)) {
-                return;
-            }
-
-            if (Touch(other.Rop)) {
-                Y_VERIFY_DEBUG(State.size() == other.State.size());
-                for (TPos i = 0; i < other.State.size(); ++i) {
+                return; 
+            } 
+ 
+            if (Touch(other.Rop)) { 
+                Y_VERIFY_DEBUG(State.size() == other.State.size()); 
+                for (TPos i = 0; i < other.State.size(); ++i) { 
                     if (State[i] != ECellOp::Empty || other.State[i] == ECellOp::Empty) {
-                        continue;
-                    }
-                    Set(i, other.State[i], other.Cells[i]);
-                }
-            }
-        }
-
+                        continue; 
+                    } 
+                    Set(i, other.State[i], other.Cells[i]); 
+                } 
+            } 
+        } 
+ 
         TArrayRef<const TCell> operator*() const noexcept
         {
             return Cells;

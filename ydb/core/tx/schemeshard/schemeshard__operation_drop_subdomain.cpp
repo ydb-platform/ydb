@@ -209,10 +209,10 @@ public:
                                                    << ", path: " << path.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (path.IsResolved() && path.Base()->IsSubDomainRoot() && path.Base()->PlannedToDrop()) {
+                if (path.IsResolved() && path.Base()->IsSubDomainRoot() && path.Base()->PlannedToDrop()) { 
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
-                }
+                } 
                 return result;
             }
         }

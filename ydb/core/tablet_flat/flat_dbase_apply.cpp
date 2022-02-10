@@ -86,27 +86,27 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         changes = (std::exchange(Scheme.Redo.Annex, annex) != annex);
 
     } else if (action == TAlterRecord::SetTable) {
-        if (delta.HasByKeyFilter()) {
-            bool enabled = delta.GetByKeyFilter();
-            changes |= (std::exchange(Table(table)->ByKeyFilter, enabled) != enabled);
-        }
+        if (delta.HasByKeyFilter()) { 
+            bool enabled = delta.GetByKeyFilter(); 
+            changes |= (std::exchange(Table(table)->ByKeyFilter, enabled) != enabled); 
+        } 
 
-        if (delta.HasEraseCacheEnabled()) {
-            bool enabled = delta.GetEraseCacheEnabled();
-            changes |= (std::exchange(Table(table)->EraseCacheEnabled, enabled) != enabled);
-            if (enabled) {
-                ui32 minRows = delta.GetEraseCacheMinRows();
-                ui32 maxBytes = delta.GetEraseCacheMaxBytes();
-                changes |= (std::exchange(Table(table)->EraseCacheMinRows, minRows) != minRows);
-                changes |= (std::exchange(Table(table)->EraseCacheMaxBytes, maxBytes) != maxBytes);
-            }
-        }
+        if (delta.HasEraseCacheEnabled()) { 
+            bool enabled = delta.GetEraseCacheEnabled(); 
+            changes |= (std::exchange(Table(table)->EraseCacheEnabled, enabled) != enabled); 
+            if (enabled) { 
+                ui32 minRows = delta.GetEraseCacheMinRows(); 
+                ui32 maxBytes = delta.GetEraseCacheMaxBytes(); 
+                changes |= (std::exchange(Table(table)->EraseCacheMinRows, minRows) != minRows); 
+                changes |= (std::exchange(Table(table)->EraseCacheMaxBytes, maxBytes) != maxBytes); 
+            } 
+        } 
 
-        if (delta.HasColdBorrow()) {
-            bool enabled = delta.GetColdBorrow();
-            changes |= (std::exchange(Table(table)->ColdBorrow, enabled) != enabled);
-        }
-
+        if (delta.HasColdBorrow()) { 
+            bool enabled = delta.GetColdBorrow(); 
+            changes |= (std::exchange(Table(table)->ColdBorrow, enabled) != enabled); 
+        } 
+ 
     } else if (action == TAlterRecord::UpdateExecutorInfo) {
         if (delta.HasExecutorCacheSize())
             changes |= SetExecutorCacheSize(delta.GetExecutorCacheSize());

@@ -1,17 +1,17 @@
 #pragma once
-
+ 
 #include "flat_sausage_misc.h"
 #include "flat_sausage_layout.h"
 #include "flat_sausage_solid.h"
 
 #include <ydb/core/base/shared_data.h>
-
+ 
 namespace NKikimr {
 namespace NPageCollection {
 
     class TMeta {
     public:
-        TMeta(TSharedData blob, ui32 group);
+        TMeta(TSharedData blob, ui32 group); 
         ~TMeta();
 
         ui32 TotalPages() const { return Header->Pages; }
@@ -38,7 +38,7 @@ namespace NPageCollection {
         TInfo Page(ui32 page) const noexcept;
         ui32 GetPageType(ui32 pageId) const noexcept;
         ui32 GetPageChecksum(ui32 pageId) const noexcept;
-        ui64 GetPageSize(ui32 pageId) const noexcept;
+        ui64 GetPageSize(ui32 pageId) const noexcept; 
         TStringBuf GetPageInplaceData(ui32 pageId) const noexcept;
 
     public:

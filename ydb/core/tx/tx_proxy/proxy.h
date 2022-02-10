@@ -23,15 +23,15 @@ namespace NMiniKQL {
     struct TKeyDescription;
 }
 
-namespace NTxProxy {
-    struct TTxProxyServices {
+namespace NTxProxy { 
+    struct TTxProxyServices { 
         TActorId Proxy;
         TActorId SchemeCache;
         TActorId LeaderPipeCache;
         TActorId FollowerPipeCache;
-    };
-}
-
+    }; 
+} 
+ 
 struct TEvTxUserProxy {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_USERPROXY), // reply would be with generic TEvTxProxy::TEvProposeTransactionStatus
@@ -47,9 +47,9 @@ struct TEvTxUserProxy {
 
         EvProposeKqpTransaction,
 
-        EvAllocateTxId,
-        EvAllocateTxIdResult,
-
+        EvAllocateTxId, 
+        EvAllocateTxIdResult, 
+ 
         // deprecated
         EvExportRequest = EvProposeTransaction + 2 * 512,
         EvExportResponse,
@@ -59,8 +59,8 @@ struct TEvTxUserProxy {
         EvGetProxyServicesRequest,
         EvGetProxyServicesResponse,
 
-        EvResolveTablesResponse,
-
+        EvResolveTablesResponse, 
+ 
         EvEnd
     };
 
@@ -102,39 +102,39 @@ struct TEvTxUserProxy {
                 return (tx.HasMiniKQLTransaction() && tx.GetMiniKQLTransaction().HasProgram())
                         || tx.HasReadTableTransaction();
         }
-
-        bool HasSnapshotProposal() const {
-            const auto& tx = Record.GetTransaction();
-            return (tx.HasCreateVolatileSnapshot() ||
-                    tx.HasRefreshVolatileSnapshot() ||
-                    tx.HasDiscardVolatileSnapshot());
-        }
-
-        bool HasCommitWritesProposal() const {
-            const auto& tx = Record.GetTransaction();
-            return tx.HasCommitWrites();
-        }
-
-        bool NeedTxId() const {
-            if (HasSchemeProposal() || HasMakeProposal()) {
-                return true;
-            }
-
-            if (HasSnapshotProposal()) {
-                const auto& tx = Record.GetTransaction();
-                if (tx.HasRefreshVolatileSnapshot() || tx.HasDiscardVolatileSnapshot()) {
-                    return false;
-                }
-
-                return true;
-            }
-
-            if (HasCommitWritesProposal()) {
-                return true;
-            }
-
-            return false;
-        }
+ 
+        bool HasSnapshotProposal() const { 
+            const auto& tx = Record.GetTransaction(); 
+            return (tx.HasCreateVolatileSnapshot() || 
+                    tx.HasRefreshVolatileSnapshot() || 
+                    tx.HasDiscardVolatileSnapshot()); 
+        } 
+ 
+        bool HasCommitWritesProposal() const { 
+            const auto& tx = Record.GetTransaction(); 
+            return tx.HasCommitWrites(); 
+        } 
+ 
+        bool NeedTxId() const { 
+            if (HasSchemeProposal() || HasMakeProposal()) { 
+                return true; 
+            } 
+ 
+            if (HasSnapshotProposal()) { 
+                const auto& tx = Record.GetTransaction(); 
+                if (tx.HasRefreshVolatileSnapshot() || tx.HasDiscardVolatileSnapshot()) { 
+                    return false; 
+                } 
+ 
+                return true; 
+            } 
+ 
+            if (HasCommitWritesProposal()) { 
+                return true; 
+            } 
+ 
+            return false; 
+        } 
     };
 
     struct TEvNavigate : public TEventPB<TEvNavigate, NKikimrTxUserProxy::TEvNavigate, EvNavigate> {
@@ -178,25 +178,25 @@ struct TEvTxUserProxy {
             : ExecuterId(executerId) {}
     };
 
-    struct TEvAllocateTxId : public TEventLocal<TEvAllocateTxId, EvAllocateTxId> {
-        // empty
-    };
-
-    struct TEvAllocateTxIdResult : public TEventLocal<TEvAllocateTxIdResult, EvAllocateTxIdResult> {
-        const ui64 TxId;
-        const NTxProxy::TTxProxyServices Services;
-        const TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
-
-        TEvAllocateTxIdResult(
-                ui64 txId,
-                const NTxProxy::TTxProxyServices& services,
-                const TIntrusivePtr<NTxProxy::TTxProxyMon>& txProxyMon)
-            : TxId(txId)
-            , Services(services)
-            , TxProxyMon(txProxyMon)
-        { }
-    };
-
+    struct TEvAllocateTxId : public TEventLocal<TEvAllocateTxId, EvAllocateTxId> { 
+        // empty 
+    }; 
+ 
+    struct TEvAllocateTxIdResult : public TEventLocal<TEvAllocateTxIdResult, EvAllocateTxIdResult> { 
+        const ui64 TxId; 
+        const NTxProxy::TTxProxyServices Services; 
+        const TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon; 
+ 
+        TEvAllocateTxIdResult( 
+                ui64 txId, 
+                const NTxProxy::TTxProxyServices& services, 
+                const TIntrusivePtr<NTxProxy::TTxProxyMon>& txProxyMon) 
+            : TxId(txId) 
+            , Services(services) 
+            , TxProxyMon(txProxyMon) 
+        { } 
+    }; 
+ 
     struct TEvGetProxyServicesRequest : public TEventLocal<TEvGetProxyServicesRequest, EvGetProxyServicesRequest> {
         // empty
     };
@@ -280,7 +280,7 @@ namespace NTxProxy {
             , PerShardIncomingReadSetSizeLimit(209715200, 0, 5368709120)
             , DefaultTimeoutMs(600000, 0, 3600000)
             , MaxShardCount(10000, 0, 1000000)
-            , MaxReadSetCount(1000000, 0, 100000000)
+            , MaxReadSetCount(1000000, 0, 100000000) 
         {}
 
         void Reqister(const TActorContext &ctx) {
@@ -306,8 +306,8 @@ namespace NTxProxy {
     IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon, const TRequestControls& requestControls);
     IActor* CreateTxProxyFlatSchemeReq(const TTxProxyServices &services, const ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
     IActor* CreateTxProxyDescribeFlatSchemeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
-    IActor* CreateTxProxySnapshotReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
-    IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
+    IActor* CreateTxProxySnapshotReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon); 
+    IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon); 
 }
 
 IActor* CreateTxProxy(const TVector<ui64> &allocators);

@@ -4,8 +4,8 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 
-#include <atomic>
-
+#include <atomic> 
+ 
 namespace NKikimr {
 namespace NTable {
 namespace NMem {
@@ -37,53 +37,53 @@ namespace NMem {
         }
 
         const TColumnUpdate* Ops() const noexcept
-        {
+        { 
             return reinterpret_cast<const TColumnUpdate*>(this + 1);
-        }
-
+        } 
+ 
         TArrayRef<const TColumnUpdate> operator*() const noexcept
         {
-            return { Ops(), Items };
+            return { Ops(), Items }; 
         }
 
-        const TUpdate *Next;
-        TRowVersion RowVersion;
-        ui16 Items;
+        const TUpdate *Next; 
+        TRowVersion RowVersion; 
+        ui16 Items; 
         ERowOp Rop;
     };
 
-    struct TTreeKey {
-        explicit TTreeKey(const TCell* keyCells)
-            : KeyCells(keyCells)
-        { }
+    struct TTreeKey { 
+        explicit TTreeKey(const TCell* keyCells) 
+            : KeyCells(keyCells) 
+        { } 
 
-        const TCell* KeyCells;
-    };
-
-    struct TTreeValue {
-        explicit TTreeValue(const TUpdate* chain)
-            : Chain(chain)
-        { }
-
-        void Push(TUpdate* update) {
-            const TUpdate* next = GetFirst();
-            while (next && update->RowVersion <= next->RowVersion) {
-                // Collapse row versions that are no longer reachable
-                next = next->Next;
-            }
-            update->Next = next;
-            Chain = update;
+        const TCell* KeyCells; 
+    }; 
+ 
+    struct TTreeValue { 
+        explicit TTreeValue(const TUpdate* chain) 
+            : Chain(chain) 
+        { } 
+ 
+        void Push(TUpdate* update) { 
+            const TUpdate* next = GetFirst(); 
+            while (next && update->RowVersion <= next->RowVersion) { 
+                // Collapse row versions that are no longer reachable 
+                next = next->Next; 
+            } 
+            update->Next = next; 
+            Chain = update; 
         }
 
-        const TUpdate* GetFirst() const {
-            return Chain;
-        }
-
-        const TUpdate* Chain;
+        const TUpdate* GetFirst() const { 
+            return Chain; 
+        } 
+ 
+        const TUpdate* Chain; 
     };
 
     static_assert(sizeof(TColumnUpdate) == 16, "TColumnUpdate must be 16 bytes");
-    static_assert(sizeof(TUpdate) == 32, "TUpdate must be 32 bytes");
+    static_assert(sizeof(TUpdate) == 32, "TUpdate must be 32 bytes"); 
 }
 }
 }

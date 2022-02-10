@@ -53,14 +53,14 @@ namespace NPageCollection {
             if (size <= Block) {
                 refs.push_back({ largeGlobId.Lead, std::move(body) });
             } else {
-                ui32 off = 0;
-                for (auto blobId : largeGlobId.Blobs()) {
-                    const ui32 chunk = Min(Block, size - off);
-                    Y_VERIFY_DEBUG(chunk == blobId.BlobSize());
-                    refs.push_back({ blobId, body.substr(off, chunk) });
+                ui32 off = 0; 
+                for (auto blobId : largeGlobId.Blobs()) { 
+                    const ui32 chunk = Min(Block, size - off); 
+                    Y_VERIFY_DEBUG(chunk == blobId.BlobSize()); 
+                    refs.push_back({ blobId, body.substr(off, chunk) }); 
                     off += chunk;
                 }
-                Y_VERIFY_DEBUG(off == largeGlobId.Bytes);
+                Y_VERIFY_DEBUG(off == largeGlobId.Bytes); 
             }
 
             return largeGlobId;

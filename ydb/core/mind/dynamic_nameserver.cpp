@@ -18,7 +18,7 @@ static void ResetInterconnectProxyConfig(ui32 nodeId, const TActorContext &ctx)
 void TDynamicNodeResolverBase::Bootstrap(const TActorContext &ctx)
 {
     auto dinfo = AppData(ctx)->DomainsInfo;
-    auto domain = NodeIdToDomain(NodeId, *dinfo);
+    auto domain = NodeIdToDomain(NodeId, *dinfo); 
 
     if (!dinfo->Domains.contains(domain)) {
         ReplyWithErrorAndDie(ctx);
@@ -175,14 +175,14 @@ void TDynamicNameserver::RequestEpochUpdate(ui32 domain,
 
 void TDynamicNameserver::ResolveStaticNode(ui32 nodeId, TActorId sender, TInstant deadline, const TActorContext &ctx)
 {
-    auto it = StaticConfig->StaticNodeTable.find(nodeId);
+    auto it = StaticConfig->StaticNodeTable.find(nodeId); 
 
-    if (it == StaticConfig->StaticNodeTable.end()) {
-        auto reply = new TEvLocalNodeInfo;
-        reply->NodeId = nodeId;
-        ctx.Send(sender, reply);
-        return;
-    }
+    if (it == StaticConfig->StaticNodeTable.end()) { 
+        auto reply = new TEvLocalNodeInfo; 
+        reply->NodeId = nodeId; 
+        ctx.Send(sender, reply); 
+        return; 
+    } 
 
     RegisterWithSameMailbox(CreateResolveActor(it->second.ResolveHost, it->second.Port, nodeId, it->second.Address, sender, SelfId(), deadline));
 }
@@ -192,19 +192,19 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
                                             TInstant deadline,
                                             const TActorContext &ctx)
 {
-    ui32 domain = NodeIdToDomain(nodeId, *AppData(ctx)->DomainsInfo);
-    auto it = DynamicConfigs[domain]->DynamicNodes.find(nodeId);
+    ui32 domain = NodeIdToDomain(nodeId, *AppData(ctx)->DomainsInfo); 
+    auto it = DynamicConfigs[domain]->DynamicNodes.find(nodeId); 
 
-    if (it != DynamicConfigs[domain]->DynamicNodes.end()
-        && it->second.Expire > ctx.Now())
-    {
+    if (it != DynamicConfigs[domain]->DynamicNodes.end() 
+        && it->second.Expire > ctx.Now()) 
+    { 
         RegisterWithSameMailbox(CreateResolveActor(it->second.ResolveHost, it->second.Port, nodeId, it->second.Address, ev->Sender, SelfId(), deadline));
-    } else if (DynamicConfigs[domain]->ExpiredNodes.contains(nodeId)
-                && ctx.Now() < DynamicConfigs[domain]->Epoch.End) {
-        auto reply = new TEvLocalNodeInfo;
-        reply->NodeId = nodeId;
-        ctx.Send(ev->Sender, reply);
-    } else {
+    } else if (DynamicConfigs[domain]->ExpiredNodes.contains(nodeId) 
+                && ctx.Now() < DynamicConfigs[domain]->Epoch.End) { 
+        auto reply = new TEvLocalNodeInfo; 
+        reply->NodeId = nodeId; 
+        ctx.Send(ev->Sender, reply); 
+    } else { 
         ctx.RegisterWithSameMailbox(new TDynamicNodeResolver(SelfId(), nodeId, DynamicConfigs[domain], ev, deadline));
     }
 }
@@ -325,10 +325,10 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,
         ResolveDynamicNode(nodeId, ev.Release(), deadline, ctx);
 }
 
-void TDynamicNameserver::Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ctx);
+void TDynamicNameserver::Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx) { 
+    Y_UNUSED(ctx); 
 
-    const TEvResolveAddress* request = ev->Get();
+    const TEvResolveAddress* request = ev->Get(); 
 
     RegisterWithSameMailbox(CreateResolveActor(request->Address, request->Port, ev->Sender, SelfId(), TInstant::Max()));
 }
@@ -367,7 +367,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
                                                          it->second.Port, it->second.Location);
         ctx.Send(ev->Sender, reply.Release());
     } else {
-        ui32 domain = NodeIdToDomain(nodeId, *AppData(ctx)->DomainsInfo);
+        ui32 domain = NodeIdToDomain(nodeId, *AppData(ctx)->DomainsInfo); 
         auto it = DynamicConfigs[domain]->DynamicNodes.find(nodeId);
         if (it != DynamicConfigs[domain]->DynamicNodes.end() && it->second.Expire > ctx.Now()) {
             reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
@@ -434,8 +434,8 @@ IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setu
 }
 
 IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup,
-        const NKikimrNodeBroker::TNodeInfo &node, const TDomainsInfo &domains, ui32 poolId) {
-    return new TDynamicNameserver(setup, node, domains, poolId);
+        const NKikimrNodeBroker::TNodeInfo &node, const TDomainsInfo &domains, ui32 poolId) { 
+    return new TDynamicNameserver(setup, node, domains, poolId); 
 }
 
 } // NNodeBroker

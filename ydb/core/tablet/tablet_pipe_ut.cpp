@@ -82,8 +82,8 @@ namespace NKikimr {
                 HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 HFunc(TEvents::TEvPong, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
-            default:
-                HandleDefaultEvents(ev, ctx);
+            default: 
+                HandleDefaultEvents(ev, ctx); 
             }
         }
 
@@ -240,8 +240,8 @@ namespace NKikimr {
                 HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvConsumerTablet::TEvReject, Handle);
                 HFunc(TEvPrivate::TEvGetServerPipeInfo, Handle);
-            default:
-                HandleDefaultEvents(ev, ctx);
+            default: 
+                HandleDefaultEvents(ev, ctx); 
             }
         }
 
@@ -359,8 +359,8 @@ namespace NKikimr {
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvents::TEvPing, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
-            default:
-                HandleDefaultEvents(ev, ctx);
+            default: 
+                HandleDefaultEvents(ev, ctx); 
             }
         }
 
@@ -1036,128 +1036,128 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
             runtime.DispatchEvents(options);
         }
     }
-
-    Y_UNIT_TEST(TestRewriteSameNode) {
-        TTestBasicRuntime runtime(2);
-        SetupTabletServices(runtime);
-
+ 
+    Y_UNIT_TEST(TestRewriteSameNode) { 
+        TTestBasicRuntime runtime(2); 
+        SetupTabletServices(runtime); 
+ 
         TActorId edge1 = runtime.AllocateEdgeActor(0);
         TActorId edge2 = runtime.AllocateEdgeActor(1);
-
-        // Make an event that is from edge1 to edge2, but rewritten for edge1
-        auto event = new IEventHandle(edge2, edge1, new TEvents::TEvWakeup());
-        event->Rewrite(TEvents::TSystem::Wakeup, edge1);
-
-        // We send this event from node 1, which should be delivered to edge1
-        runtime.Send(event, 0, /* viaActorSystem */ true);
-
-        TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
-        UNIT_ASSERT(handle);
-        UNIT_ASSERT_C(handle->Recipient == edge2, "Event recipient " << handle->Recipient << " != " << edge2);
-        UNIT_ASSERT_C(handle->GetRecipientRewrite() == edge1, "Event rewrite recipient " << handle->GetRecipientRewrite() << " != " << edge1);
-    }
-
-    class TEchoTablet : public TActor<TEchoTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
-    public:
-        TEchoTablet(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
-            , TTabletExecutedFlat(info, tablet, nullptr)
-        {
-        }
-
-    private:
-        void OnActivateExecutor(const TActorContext& ctx) override {
-            Y_UNUSED(ctx);
-            Become(&TThis::StateWork);
-        }
-
-        STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
-        }
-
-        STFUNC(StateWork) {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-                IgnoreFunc(TEvTabletPipe::TEvServerConnected);
-                IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
-                HFunc(TEvents::TEvPing, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
-            default:
-                HandleDefaultEvents(ev, ctx);
-            }
-        }
-
-        void SendViaSession(const TActorId &sessionId, const TActorContext &ctx, const TActorId &recipient, TAutoPtr<IEventBase> msg, ui32 flags = 0, ui64 cookie = 0) {
-            TAutoPtr<IEventHandle> ev = new IEventHandle(recipient, ctx.SelfID, msg.Release(), flags, cookie);
-
-            if (sessionId) {
-                ev->Rewrite(TEvInterconnect::EvForward, sessionId);
-            }
-
-            ctx.ExecutorThread.Send(ev);
-        }
-
-        void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) {
-            UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID);
-
-            if (ev->Sender.NodeId() != ctx.SelfID.NodeId()) {
-                UNIT_ASSERT(ev->InterconnectSession);
-            } else {
-                UNIT_ASSERT(!ev->InterconnectSession);
-            }
-
-            SendViaSession(ev->InterconnectSession, ctx, ev->Sender, new TEvents::TEvPong());
-        }
-
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-        }
-
-        void OnDetach(const TActorContext &ctx) override {
-            Cout << "Tablet dead\n";
-            return Die(ctx);
-        }
-
-        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-            Cout << "Tablet dead\n";
-            Y_UNUSED(ev);
-            return Die(ctx);
-        }
-    };
-
-    Y_UNIT_TEST(TestInterconnectSession) {
-        TTestBasicRuntime runtime(2);
-        SetupTabletServices(runtime);
-        runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
-
-        TActorId sender1 = runtime.AllocateEdgeActor(0);
-        TActorId sender2 = runtime.AllocateEdgeActor(1);
-
+ 
+        // Make an event that is from edge1 to edge2, but rewritten for edge1 
+        auto event = new IEventHandle(edge2, edge1, new TEvents::TEvWakeup()); 
+        event->Rewrite(TEvents::TSystem::Wakeup, edge1); 
+ 
+        // We send this event from node 1, which should be delivered to edge1 
+        runtime.Send(event, 0, /* viaActorSystem */ true); 
+ 
+        TAutoPtr<IEventHandle> handle; 
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle); 
+        UNIT_ASSERT(handle); 
+        UNIT_ASSERT_C(handle->Recipient == edge2, "Event recipient " << handle->Recipient << " != " << edge2); 
+        UNIT_ASSERT_C(handle->GetRecipientRewrite() == edge1, "Event rewrite recipient " << handle->GetRecipientRewrite() << " != " << edge1); 
+    } 
+ 
+    class TEchoTablet : public TActor<TEchoTablet>, public NTabletFlatExecutor::TTabletExecutedFlat { 
+    public: 
+        TEchoTablet(const TActorId &tablet, TTabletStorageInfo *info) 
+            : TActor(&TThis::StateInit) 
+            , TTabletExecutedFlat(info, tablet, nullptr) 
+        { 
+        } 
+ 
+    private: 
+        void OnActivateExecutor(const TActorContext& ctx) override { 
+            Y_UNUSED(ctx); 
+            Become(&TThis::StateWork); 
+        } 
+ 
+        STFUNC(StateInit) { 
+            StateInitImpl(ev, ctx); 
+        } 
+ 
+        STFUNC(StateWork) { 
+            switch (ev->GetTypeRewrite()) { 
+                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
+                IgnoreFunc(TEvTabletPipe::TEvServerConnected); 
+                IgnoreFunc(TEvTabletPipe::TEvServerDisconnected); 
+                HFunc(TEvents::TEvPing, Handle); 
+                HFunc(TEvents::TEvPoisonPill, Handle); 
+            default: 
+                HandleDefaultEvents(ev, ctx); 
+            } 
+        } 
+ 
+        void SendViaSession(const TActorId &sessionId, const TActorContext &ctx, const TActorId &recipient, TAutoPtr<IEventBase> msg, ui32 flags = 0, ui64 cookie = 0) { 
+            TAutoPtr<IEventHandle> ev = new IEventHandle(recipient, ctx.SelfID, msg.Release(), flags, cookie); 
+ 
+            if (sessionId) { 
+                ev->Rewrite(TEvInterconnect::EvForward, sessionId); 
+            } 
+ 
+            ctx.ExecutorThread.Send(ev); 
+        } 
+ 
+        void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) { 
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID); 
+ 
+            if (ev->Sender.NodeId() != ctx.SelfID.NodeId()) { 
+                UNIT_ASSERT(ev->InterconnectSession); 
+            } else { 
+                UNIT_ASSERT(!ev->InterconnectSession); 
+            } 
+ 
+            SendViaSession(ev->InterconnectSession, ctx, ev->Sender, new TEvents::TEvPong()); 
+        } 
+ 
+        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
+            Y_UNUSED(ev); 
+            ctx.Send(Tablet(), new TEvents::TEvPoisonPill); 
+        } 
+ 
+        void OnDetach(const TActorContext &ctx) override { 
+            Cout << "Tablet dead\n"; 
+            return Die(ctx); 
+        } 
+ 
+        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override { 
+            Cout << "Tablet dead\n"; 
+            Y_UNUSED(ev); 
+            return Die(ctx); 
+        } 
+    }; 
+ 
+    Y_UNIT_TEST(TestInterconnectSession) { 
+        TTestBasicRuntime runtime(2); 
+        SetupTabletServices(runtime); 
+        runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG); 
+ 
+        TActorId sender1 = runtime.AllocateEdgeActor(0); 
+        TActorId sender2 = runtime.AllocateEdgeActor(1); 
+ 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TEchoTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
-            runtime.DispatchEvents(options);
-        }
-
-        TAutoPtr<IEventHandle> handle;
-
+            return new TEchoTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
+        TAutoPtr<IEventHandle> handle; 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvents::TEvPing(), /* node index */ 0);
-        runtime.GrabEdgeEvent<TEvents::TEvPong>(handle);
-        UNIT_ASSERT(handle);
-        UNIT_ASSERT_C(handle->Recipient == sender1, "Event recipient " << handle->Recipient << " != " << sender1);
-
+        runtime.GrabEdgeEvent<TEvents::TEvPong>(handle); 
+        UNIT_ASSERT(handle); 
+        UNIT_ASSERT_C(handle->Recipient == sender1, "Event recipient " << handle->Recipient << " != " << sender1); 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender2, new TEvents::TEvPing(), /* node index */ 1);
-        runtime.GrabEdgeEvent<TEvents::TEvPong>(handle);
-        UNIT_ASSERT(handle);
-        UNIT_ASSERT_C(handle->Recipient == sender2, "Event recipient " << handle->Recipient << " != " << sender2);
-    }
-
+        runtime.GrabEdgeEvent<TEvents::TEvPong>(handle); 
+        UNIT_ASSERT(handle); 
+        UNIT_ASSERT_C(handle->Recipient == sender2, "Event recipient " << handle->Recipient << " != " << sender2); 
+    } 
+ 
 }
 
 }

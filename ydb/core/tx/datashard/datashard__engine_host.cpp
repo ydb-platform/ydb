@@ -292,16 +292,16 @@ public:
         , Now(now)
     {}
 
-    void SetWriteVersion(TRowVersion writeVersion) {
-        WriteVersion = writeVersion;
-    }
-
-    TRowVersion GetWriteVersion(const TTableId& tableId) const override {
-        Y_UNUSED(tableId);
-        Y_VERIFY(!WriteVersion.IsMax(), "Cannot perform writes without WriteVersion set");
-        return WriteVersion;
-    }
-
+    void SetWriteVersion(TRowVersion writeVersion) { 
+        WriteVersion = writeVersion; 
+    } 
+ 
+    TRowVersion GetWriteVersion(const TTableId& tableId) const override { 
+        Y_UNUSED(tableId); 
+        Y_VERIFY(!WriteVersion.IsMax(), "Cannot perform writes without WriteVersion set"); 
+        return WriteVersion; 
+    } 
+ 
     void SetReadVersion(TRowVersion readVersion) {
         ReadVersion = readVersion;
     }
@@ -374,7 +374,7 @@ public:
 
     NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds,  TListLiteral* skipNullKeys, TStructType* returnType,
-        const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
+        const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse, 
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override
     {
         Y_VERIFY(!TSysTables::IsSystemTable(tableId), "SelectRange no system table is not supported");
@@ -462,7 +462,7 @@ public:
         }
 
         // Check row against range
-        const TUserTable& info = *iter->second;
+        const TUserTable& info = *iter->second; 
         return (ComparePointAndRange(row, info.GetTableRange(), info.KeyColumnTypes, info.KeyColumnTypes) == 0);
     }
 
@@ -501,7 +501,7 @@ private:
     const ui64& LockTxId;
     bool IsImmediateTx = false;
     TInstant Now;
-    TRowVersion WriteVersion = TRowVersion::Max();
+    TRowVersion WriteVersion = TRowVersion::Max(); 
     TRowVersion ReadVersion = TRowVersion::Min();
     mutable THashMap<TTableId, THolder<IChangeCollector>> ChangeCollectors;
 };
@@ -591,7 +591,7 @@ void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<ui32>& colu
     Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ false));
     // Info.Keys.back().IsResultPart = not a lock key? // TODO: KIKIMR-11134
     ++Info.ReadsCount;
-    Info.Loaded = true;
+    Info.Loaded = true; 
 }
 
 void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range,
@@ -639,13 +639,13 @@ TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
     return outSizes;
 }
 
-void TEngineBay::SetWriteVersion(TRowVersion writeVersion) {
-    Y_VERIFY(EngineHost);
-
+void TEngineBay::SetWriteVersion(TRowVersion writeVersion) { 
+    Y_VERIFY(EngineHost); 
+ 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->SetWriteVersion(writeVersion);
-}
-
+    host->SetWriteVersion(writeVersion); 
+} 
+ 
 void TEngineBay::SetReadVersion(TRowVersion readVersion) {
     Y_VERIFY(EngineHost);
 

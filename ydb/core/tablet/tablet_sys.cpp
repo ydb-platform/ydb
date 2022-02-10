@@ -26,16 +26,16 @@
 
 namespace NKikimr {
 
-namespace {
-
-    static constexpr size_t MaxStepsInFlight = 10000;
-    static constexpr size_t MaxBytesInFlight = 256 * 1024 * 1024;
-
+namespace { 
+ 
+    static constexpr size_t MaxStepsInFlight = 10000; 
+    static constexpr size_t MaxBytesInFlight = 256 * 1024 * 1024; 
+ 
     static constexpr TDuration OfflineFollowerWaitFirst = TDuration::Seconds(4);
     static constexpr TDuration OfflineFollowerWaitRetry = TDuration::Seconds(15);
-
-}
-
+ 
+} 
+ 
 ui64 TTablet::StateStorageGroup() const {
     return StateStorageGroupFromTabletID(Info->TabletID);
 }
@@ -343,7 +343,7 @@ void TTablet::HandleFollowerRetry(TEvTabletBase::TEvFollowerRetry::TPtr &ev) {
 void TTablet::HandleByFollower(TEvTabletBase::TEvTryBuildFollowerGraph::TPtr &ev) {
     Y_UNUSED(ev);
 
-    BLOG_TRACE("Follower starting to rebuild history");
+    BLOG_TRACE("Follower starting to rebuild history"); 
     Y_VERIFY_DEBUG(!RebuildGraphRequest);
     RebuildGraphRequest = Register(CreateTabletReqRebuildHistoryGraph(SelfId(), Info.Get(), 0, nullptr, ++FollowerInfo.RebuildGraphCookie));
 
@@ -352,13 +352,13 @@ void TTablet::HandleByFollower(TEvTabletBase::TEvTryBuildFollowerGraph::TPtr &ev
 
 void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
     if (ev->Sender != RebuildGraphRequest || ev->Cookie != FollowerInfo.RebuildGraphCookie || UserTablet) {
-        BLOG_D("Outdated TEvRebuildGraphResult ignored");
+        BLOG_D("Outdated TEvRebuildGraphResult ignored"); 
         return;
-    }
+    } 
 
     RebuildGraphRequest = TActorId(); // check consistency??
     TEvTabletBase::TEvRebuildGraphResult *msg = ev->Get();
-    BLOG_TRACE("Follower received rebuild history result Status# " << msg->Status);
+    BLOG_TRACE("Follower received rebuild history result Status# " << msg->Status); 
 
     switch (msg->Status) {
     case NKikimrProto::OK:
@@ -399,18 +399,18 @@ void TTablet::HandleByFollower(TEvents::TEvUndelivered::TPtr &ev) {
         NextFollowerAttempt();
         RetryFollowerBootstrapOrWait();
         return;
-    }
+    } 
 
-    if (ev->Sender == UserTablet && ev->Get()->SourceType == TEvTablet::TEvTabletStop::EventType) {
-        return HandleStopped();
-    }
+    if (ev->Sender == UserTablet && ev->Get()->SourceType == TEvTablet::TEvTabletStop::EventType) { 
+        return HandleStopped(); 
+    } 
 }
 
 void TTablet::HandleByFollower(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     if (ev->Get()->NodeId != FollowerInfo.KnownLeaderID.NodeId())
         return;
 
-    BLOG_TRACE("Follower got TEvNodeDisconnected NodeId# " << ev->Get()->NodeId);
+    BLOG_TRACE("Follower got TEvNodeDisconnected NodeId# " << ev->Get()->NodeId); 
     NextFollowerAttempt();
     RetryFollowerBootstrapOrWait();
 }
@@ -420,7 +420,7 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerDisconnect::TPtr &ev) {
     if (ev->Sender != FollowerInfo.KnownLeaderID)
         return;
 
-    BLOG_TRACE("Follower got TEvFollowerDisconnect Sender# " << ev->Sender);
+    BLOG_TRACE("Follower got TEvFollowerDisconnect Sender# " << ev->Sender); 
     NextFollowerAttempt();
     RetryFollowerBootstrapOrWait();
 }
@@ -476,12 +476,12 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
             Info = TabletStorageInfoFromProto(record.GetTabletStorageInfo());
         }
 
-        // Drop currently running graph rebuild request
-        if (RebuildGraphRequest) {
-            Send(RebuildGraphRequest, new TEvents::TEvPoisonPill());
+        // Drop currently running graph rebuild request 
+        if (RebuildGraphRequest) { 
+            Send(RebuildGraphRequest, new TEvents::TEvPoisonPill()); 
             RebuildGraphRequest = TActorId();
-        }
-
+        } 
+ 
         if (!UserTablet) {
             UserTablet = SetupInfo->Apply(Info.Get(), SelfId());
             Send(Launcher, new TEvTablet::TEvRestored(TabletID(), StateStorageInfo.KnownGeneration, UserTablet, true));
@@ -595,7 +595,7 @@ TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnection
             shouldEraseEntry = !followerInfo.PresentInList;
             followerInfo.SyncState = EFollowerSyncState::Ignore;
             BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to Ignore state, shouldEraseEntry# " << shouldEraseEntry);
-        } else {
+        } else { 
             BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " kept in NeedSync state");
         }
         break;
@@ -643,11 +643,11 @@ void TTablet::HandleByLeader(TEvents::TEvUndelivered::TPtr &ev) {
     if (followerIt != LeaderInfo.end()) {
         HandleFollowerConnectionProblem(followerIt);
         return;
-    }
+    } 
 
-    if (ev->Sender == UserTablet && ev->Get()->SourceType == TEvTablet::TEvTabletStop::EventType) {
-        return HandleStopped();
-    }
+    if (ev->Sender == UserTablet && ev->Get()->SourceType == TEvTablet::TEvTabletStop::EventType) { 
+        return HandleStopped(); 
+    } 
 }
 
 void TTablet::HandleByLeader(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
@@ -729,7 +729,7 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerAttach::TPtr &ev) {
         if (LeaderInfo.empty()) {
             // Consider sending follower updates starting with the next commit
             Graph.MinFollowerUpdate = Graph.NextEntry;
-        }
+        } 
         auto followerItPair = LeaderInfo.insert(decltype(LeaderInfo)::value_type(ev->Sender, TLeaderInfo(EFollowerSyncState::Pending)));
         Y_VERIFY(followerItPair.second);
 
@@ -871,7 +871,7 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
                 if (LeaderInfo.empty()) {
                     // Consider sending follower updates starting with the next commit
                     Graph.MinFollowerUpdate = Graph.NextEntry;
-                }
+                } 
                 auto itPair = LeaderInfo.insert(decltype(LeaderInfo)::value_type(xpair.first, TLeaderInfo(EFollowerSyncState::NeedSync)));
                 // some followers could be already present by active TEvFollowerAttach
                 if (itPair.second)
@@ -963,9 +963,9 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
         Send(UserTablet,
                  new TEvTablet::TEvBoot(TabletID(), StateStorageInfo.KnownGeneration,
                                         graph.Get(), Launcher, Info, ResourceProfiles,
-                                        TxCacheQuota,
-                                        std::move(msg->GroupReadBytes),
-                                        std::move(msg->GroupReadOps)));
+                                        TxCacheQuota, 
+                                        std::move(msg->GroupReadBytes), 
+                                        std::move(msg->GroupReadOps))); 
         return;
     default:
         {
@@ -1080,27 +1080,27 @@ void TTablet::Handle(TEvTablet::TEvAux::TPtr &ev) {
 }
 
 void TTablet::Handle(TEvTablet::TEvCommit::TPtr &ev) {
-    if (Graph.StepsInFlight >= MaxStepsInFlight || Graph.BytesInFlight >= MaxBytesInFlight) {
-        // Delay commit handling until inflight goes down
-        Graph.DelayCommitQueue.push_back(std::move(ev));
-        return;
-    }
-
-    Y_VERIFY(Graph.DelayCommitQueue.empty());
-    HandleNext(ev);
-}
-
-bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
+    if (Graph.StepsInFlight >= MaxStepsInFlight || Graph.BytesInFlight >= MaxBytesInFlight) { 
+        // Delay commit handling until inflight goes down 
+        Graph.DelayCommitQueue.push_back(std::move(ev)); 
+        return; 
+    } 
+ 
+    Y_VERIFY(Graph.DelayCommitQueue.empty()); 
+    HandleNext(ev); 
+} 
+ 
+bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) { 
     TEvTablet::TEvCommit *msg = ev->Get();
 
     std::unique_ptr<NKikimrTabletBase::TTabletLogEntry> x(new NKikimrTabletBase::TTabletLogEntry());
 
     TLogEntry *entry = msg->PreCommited ? FindLogEntry(*msg, *x) : MakeLogEntry(*msg, x.get());
 
-    if (entry == nullptr) {
-        CancelTablet(TEvTablet::TEvTabletDead::ReasonInconsistentCommit);
-        return false;
-    }
+    if (entry == nullptr) { 
+        CancelTablet(TEvTablet::TEvTabletDead::ReasonInconsistentCommit); 
+        return false; 
+    } 
 
     entry->Source = ev->Sender;
     entry->SourceCookie = ev->Cookie;
@@ -1164,26 +1164,26 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
     if (saveFollowerUpdate && msg->FollowerAux)
         entry->FollowerUpdate->AuxPayload = msg->FollowerAux;
 
-    entry->ByteSize = x->ByteSizeLong();
-    for (const auto& ref : msg->References) {
-        entry->ByteSize += ref.Buffer.size();
-    }
-
-    if (Y_UNLIKELY(BlobStorageStatus != NKikimrProto::OK)) {
-        // Ignore commits that happen after we detect blobstorage problems
-        return true;
-    }
-
+    entry->ByteSize = x->ByteSizeLong(); 
+    for (const auto& ref : msg->References) { 
+        entry->ByteSize += ref.Buffer.size(); 
+    } 
+ 
+    if (Y_UNLIKELY(BlobStorageStatus != NKikimrProto::OK)) { 
+        // Ignore commits that happen after we detect blobstorage problems 
+        return true; 
+    } 
+ 
     const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, entry->Step, 0, 0, 0);
 
     entry->StateStorageConfirmed = true; // todo: do real query against state-storage (optionally?)
     entry->Task = Register(
         CreateTabletReqWriteLog(SelfId(), logid, x.release(), msg->References, msg->CommitTactic, Info.Get())
     );
-
-    Graph.StepsInFlight += 1;
-    Graph.BytesInFlight += entry->ByteSize;
-    return true;
+ 
+    Graph.StepsInFlight += 1; 
+    Graph.BytesInFlight += entry->ByteSize; 
+    return true; 
 }
 
 void TTablet::CheckEntry(TGraph::TIndex::iterator it) {
@@ -1211,17 +1211,17 @@ void TTablet::CheckEntry(TGraph::TIndex::iterator it) {
             entry->Commited = true;
             entry->CommitedMoment = TActivationContext::Now();
             Send(entry->Source,
-                new TEvTablet::TEvCommitResult(
-                    NKikimrProto::OK,
-                    TabletID(),
-                    StateStorageInfo.KnownGeneration,
-                    step,
-                    entry->ConfirmedOnSend,
+                new TEvTablet::TEvCommitResult( 
+                    NKikimrProto::OK, 
+                    TabletID(), 
+                    StateStorageInfo.KnownGeneration, 
+                    step, 
+                    entry->ConfirmedOnSend, 
                     std::move(entry->YellowMoveChannels),
                     std::move(entry->YellowStopChannels),
-                    std::move(entry->GroupWrittenBytes),
-                    std::move(entry->GroupWrittenOps)),
-                0, entry->SourceCookie);
+                    std::move(entry->GroupWrittenBytes), 
+                    std::move(entry->GroupWrittenOps)), 
+                0, entry->SourceCookie); 
 
             const auto &dependent = entry->Dependent;
             entry = nullptr;
@@ -1248,40 +1248,40 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     Y_VERIFY(GcInFly > 0);
     --GcInFly;
 
-    TEvBlobStorage::TEvCollectGarbageResult *msg = ev->Get();
-
-    switch (msg->Status) {
+    TEvBlobStorage::TEvCollectGarbageResult *msg = ev->Get(); 
+ 
+    switch (msg->Status) { 
     case NKikimrProto::RACE:
     case NKikimrProto::BLOCKED:
     case NKikimrProto::NO_GROUP:
-        // We want to stop after current graph is committed
-        if (BlobStorageStatus == NKikimrProto::OK) {
-            BlobStorageStatus = msg->Status;
-            BlobStorageErrorStep = Graph.NextEntry;
-            BlobStorageErrorReason = std::move(msg->ErrorReason);
-        }
-        break;
-    case NKikimrProto::OK:
-    default: // silently ignore unrecognized errors (assume temporary)
-        if (GcInFly == 0 && GcNextStep != 0) {
-            GcLogChannel(std::exchange(GcNextStep, 0));
-        }
+        // We want to stop after current graph is committed 
+        if (BlobStorageStatus == NKikimrProto::OK) { 
+            BlobStorageStatus = msg->Status; 
+            BlobStorageErrorStep = Graph.NextEntry; 
+            BlobStorageErrorReason = std::move(msg->ErrorReason); 
+        } 
+        break; 
+    case NKikimrProto::OK: 
+    default: // silently ignore unrecognized errors (assume temporary) 
+        if (GcInFly == 0 && GcNextStep != 0) { 
+            GcLogChannel(std::exchange(GcNextStep, 0)); 
+        } 
         return;
     }
-
-    CheckBlobStorageError();
+ 
+    CheckBlobStorageError(); 
 }
 
 void TTablet::GcLogChannel(ui32 step) {
     const ui64 tabletid = TabletID();
     const ui32 gen = StateStorageInfo.KnownGeneration;
 
-    if (GcInFly != 0 || Graph.SyncCommit.SyncStep != 0 && Graph.SyncCommit.SyncStep <= step) {
-        if (GcInFlyStep < step) {
-            BLOG_D("GcCollect 0 channel postponed, tablet:gen:step => " << gen << ":" << step);
-            GcNextStep = step;
-            return;
-        }
+    if (GcInFly != 0 || Graph.SyncCommit.SyncStep != 0 && Graph.SyncCommit.SyncStep <= step) { 
+        if (GcInFlyStep < step) { 
+            BLOG_D("GcCollect 0 channel postponed, tablet:gen:step => " << gen << ":" << step); 
+            GcNextStep = step; 
+            return; 
+        } 
         BLOG_D("GcCollect 0 channel skipped, tablet:gen:step => " << gen << ":" << step);
         return;
     }
@@ -1318,8 +1318,8 @@ void TTablet::GcLogChannel(ui32 step) {
                 )
             );
     }
-    GcInFlyStep = step;
-    GcNextStep = 0;
+    GcInFlyStep = step; 
+    GcNextStep = 0; 
 }
 
 void TTablet::SpreadFollowerAuxUpdate(const TString& auxUpdate) {
@@ -1342,7 +1342,7 @@ void TTablet::SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower,
     ++info.StreamCounter;
 }
 
-bool TTablet::ProgressCommitQueue() {
+bool TTablet::ProgressCommitQueue() { 
     const ui64 tabletId = TabletID();
     while (!Graph.Queue.empty()) {
         TLogEntry *entry = Graph.Queue.front().get();
@@ -1366,13 +1366,13 @@ bool TTablet::ProgressCommitQueue() {
         Graph.Queue.pop_front();
     }
 
-    if (CheckBlobStorageError()) {
-        return false;
-    }
-
+    if (CheckBlobStorageError()) { 
+        return false; 
+    } 
+ 
     ProgressFollowerQueue();
     TryFinishFollowerSync();
-    return true;
+    return true; 
 }
 
 void TTablet::ProgressFollowerQueue() {
@@ -1390,11 +1390,11 @@ void TTablet::ProgressFollowerQueue() {
         for (auto &xpair : LeaderInfo) {
             if (step < Graph.MinFollowerUpdate) {
                 // We cannot be sure follower updates before LeaderInfo became
-                // non-empty are contiguous and without any holes. We need
-                // to ignore them, as if they didn't exist.
-                break;
-            }
-
+                // non-empty are contiguous and without any holes. We need 
+                // to ignore them, as if they didn't exist. 
+                break; 
+            } 
+ 
             TLeaderInfo &followerInfo = xpair.second;
 
             if (!needWaitForFollowerGcAck) {
@@ -1460,12 +1460,12 @@ void TTablet::ProgressFollowerQueue() {
 
     if (Graph.PostponedFollowerUpdates && Graph.Queue.empty() && Graph.SyncCommit.SyncStep == 0) {
         Graph.SyncCommit.SyncStep = Graph.NextEntry - 1;
-        if (GcInFly) {
-            // Since we always confirm the last commit it should be impossible
-            // to ever try to commit inside a garbage collected range.
-            Y_VERIFY_DEBUG(GcInFlyStep < Graph.SyncCommit.SyncStep);
-            Y_VERIFY_DEBUG(GcNextStep < Graph.SyncCommit.SyncStep);
-        }
+        if (GcInFly) { 
+            // Since we always confirm the last commit it should be impossible 
+            // to ever try to commit inside a garbage collected range. 
+            Y_VERIFY_DEBUG(GcInFlyStep < Graph.SyncCommit.SyncStep); 
+            Y_VERIFY_DEBUG(GcNextStep < Graph.SyncCommit.SyncStep); 
+        } 
 
         TLogoBlobID entryId(TabletID(), StateStorageInfo.KnownGeneration, Graph.SyncCommit.SyncStep, 0, 0, 1);
         THolder<NKikimrTabletBase::TTabletLogEntry> entry(new NKikimrTabletBase::TTabletLogEntry());
@@ -1486,11 +1486,11 @@ void TTablet::ProgressFollowerQueue() {
 }
 
 void TTablet::Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
-    if (PipeConnectAcceptor->IsStopped()) {
+    if (PipeConnectAcceptor->IsStopped()) { 
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
-    } else if (PipeConnectAcceptor->IsActive()) {
+    } else if (PipeConnectAcceptor->IsActive()) { 
         PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader);
-    } else {
+    } else { 
         PipeConnectAcceptor->Enqueue(ev, SelfId());
     }
 }
@@ -1500,17 +1500,17 @@ void TTablet::Handle(TEvTabletPipe::TEvServerDestroyed::TPtr& ev) {
 }
 
 void TTablet::HandleQueued(TEvTabletPipe::TEvConnect::TPtr& ev) {
-    if (PipeConnectAcceptor->IsStopped()) {
-        // FIXME: do we really need it?
+    if (PipeConnectAcceptor->IsStopped()) { 
+        // FIXME: do we really need it? 
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
-    } else {
-        PipeConnectAcceptor->Enqueue(ev, SelfId());
-    }
+    } else { 
+        PipeConnectAcceptor->Enqueue(ev, SelfId()); 
+    } 
 }
 
 void TTablet::HandleByFollower(TEvTabletPipe::TEvConnect::TPtr &ev) {
     Y_VERIFY_DEBUG(!Leader);
-    if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
+    if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) { 
         PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, false);
     } else {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, false);
@@ -1520,7 +1520,7 @@ void TTablet::HandleByFollower(TEvTabletPipe::TEvConnect::TPtr &ev) {
 void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
     TEvTabletBase::TEvWriteLogResult *msg = ev->Get();
     const NKikimrProto::EReplyStatus status = msg->Status;
-    const TLogoBlobID &logid = msg->EntryId;
+    const TLogoBlobID &logid = msg->EntryId; 
 
     // todo: channel reconfiguration
     switch (status) {
@@ -1542,8 +1542,8 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
             entry->GroupWrittenOps = std::move(msg->GroupWrittenOps);
 
             Graph.ConfirmedCommited = Max(Graph.ConfirmedCommited, entry->ConfirmedOnSend);
-            Graph.StepsInFlight -= 1;
-            Graph.BytesInFlight -= entry->ByteSize;
+            Graph.StepsInFlight -= 1; 
+            Graph.BytesInFlight -= entry->ByteSize; 
 
             CheckEntry(indexIt);
         } else {
@@ -1551,178 +1551,178 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
 
             Graph.ConfirmedCommited = Max(Graph.ConfirmedCommited, step);
             Graph.SyncCommit.SyncStep = 0;
-            if (GcInFly == 0 && GcNextStep != 0) {
-                GcLogChannel(std::exchange(GcNextStep, 0));
-            }
+            if (GcInFly == 0 && GcNextStep != 0) { 
+                GcLogChannel(std::exchange(GcNextStep, 0)); 
+            } 
         }
 
-        if (!ProgressCommitQueue()) {
-            return; // we died
-        }
-
-        // Send more commits if possible
-        while (!Graph.DelayCommitQueue.empty() &&
-            Graph.StepsInFlight < MaxStepsInFlight &&
-            Graph.BytesInFlight < MaxBytesInFlight)
-        {
-            auto &nextEv = Graph.DelayCommitQueue.front();
-            if (!HandleNext(nextEv)) {
-                return; // we died
-            }
-            Graph.DelayCommitQueue.pop_front();
-        }
-
+        if (!ProgressCommitQueue()) { 
+            return; // we died 
+        } 
+ 
+        // Send more commits if possible 
+        while (!Graph.DelayCommitQueue.empty() && 
+            Graph.StepsInFlight < MaxStepsInFlight && 
+            Graph.BytesInFlight < MaxBytesInFlight) 
+        { 
+            auto &nextEv = Graph.DelayCommitQueue.front(); 
+            if (!HandleNext(nextEv)) { 
+                return; // we died 
+            } 
+            Graph.DelayCommitQueue.pop_front(); 
+        } 
+ 
         return;
     }
     default:
-        break;
+        break; 
     }
-
+ 
     if (msg->YellowMoveChannels) {
         ReassignYellowChannels(std::move(msg->YellowMoveChannels));
-    }
-
-    // Non-zero cookie causes us to fail on the next step
-    const ui32 errorStep = logid.Step() + (logid.Cookie() ? 1 : 0);
-    if (BlobStorageStatus == NKikimrProto::OK || errorStep < BlobStorageErrorStep) {
-        BlobStorageStatus = status;
-        BlobStorageErrorStep = errorStep;
-        BlobStorageErrorReason = std::move(msg->ErrorReason);
-    }
-
-    CheckBlobStorageError();
+    } 
+ 
+    // Non-zero cookie causes us to fail on the next step 
+    const ui32 errorStep = logid.Step() + (logid.Cookie() ? 1 : 0); 
+    if (BlobStorageStatus == NKikimrProto::OK || errorStep < BlobStorageErrorStep) { 
+        BlobStorageStatus = status; 
+        BlobStorageErrorStep = errorStep; 
+        BlobStorageErrorReason = std::move(msg->ErrorReason); 
+    } 
+ 
+    CheckBlobStorageError(); 
 }
 
-void TTablet::HandleFeatures(TEvTablet::TEvFeatures::TPtr &ev) {
-    SupportedFeatures = ev->Get()->Features;
-}
-
-void TTablet::HandleStop(TEvTablet::TEvTabletStop::TPtr &ev) {
-    BLOG_D("Received TEvTabletStop from " << ev->Sender << ", reason = " << ev->Get()->GetReason());
-    StopTablet(ev->Get()->GetReason(), TEvTablet::TEvTabletDead::ReasonPill);
-}
-
-void TTablet::HandleStopped() {
-    if (DelayedCancelTablet) {
-        return CancelTablet(DelayedCancelTablet->Reason, DelayedCancelTablet->Details);
-    } else {
-        return CancelTablet(TEvTablet::TEvTabletDead::ReasonPill);
-    }
-}
-
+void TTablet::HandleFeatures(TEvTablet::TEvFeatures::TPtr &ev) { 
+    SupportedFeatures = ev->Get()->Features; 
+} 
+ 
+void TTablet::HandleStop(TEvTablet::TEvTabletStop::TPtr &ev) { 
+    BLOG_D("Received TEvTabletStop from " << ev->Sender << ", reason = " << ev->Get()->GetReason()); 
+    StopTablet(ev->Get()->GetReason(), TEvTablet::TEvTabletDead::ReasonPill); 
+} 
+ 
+void TTablet::HandleStopped() { 
+    if (DelayedCancelTablet) { 
+        return CancelTablet(DelayedCancelTablet->Reason, DelayedCancelTablet->Details); 
+    } else { 
+        return CancelTablet(TEvTablet::TEvTabletDead::ReasonPill); 
+    } 
+} 
+ 
 void TTablet::HandlePoisonPill() {
     return CancelTablet(TEvTablet::TEvTabletDead::ReasonPill);
 }
 
 void TTablet::HandleDemoted() {
-    StopTablet(TEvTablet::TEvTabletStop::ReasonDemoted, TEvTablet::TEvTabletDead::ReasonDemotedByStateStorage);
+    StopTablet(TEvTablet::TEvTabletStop::ReasonDemoted, TEvTablet::TEvTabletDead::ReasonDemotedByStateStorage); 
 }
 
 void TTablet::Handle(TEvTablet::TEvDemoted::TPtr &ev) {
-    const auto deadReason =
+    const auto deadReason = 
         ev->Get()->ByIsolation ? TEvTablet::TEvTabletDead::ReasonIsolated
             : TEvTablet::TEvTabletDead::ReasonDemotedByStateStorage;
-    const auto stopReason = ev->Get()->ByIsolation
-            ? TEvTablet::TEvTabletStop::ReasonIsolated
-            : TEvTablet::TEvTabletStop::ReasonDemoted;
-    StopTablet(stopReason, deadReason);
+    const auto stopReason = ev->Get()->ByIsolation 
+            ? TEvTablet::TEvTabletStop::ReasonIsolated 
+            : TEvTablet::TEvTabletStop::ReasonDemoted; 
+    StopTablet(stopReason, deadReason); 
 }
 
-bool TTablet::CheckBlobStorageError() {
-    if (Y_LIKELY(BlobStorageStatus == NKikimrProto::OK)) {
-        return false;
-    }
-
-    if (!Graph.Queue.empty()) {
-        // Check if the head entry is still waiting to be committed
+bool TTablet::CheckBlobStorageError() { 
+    if (Y_LIKELY(BlobStorageStatus == NKikimrProto::OK)) { 
+        return false; 
+    } 
+ 
+    if (!Graph.Queue.empty()) { 
+        // Check if the head entry is still waiting to be committed 
         TLogEntry *entry = Graph.Queue.front().get();
-        if (entry->Step < BlobStorageErrorStep && entry->Task) {
-            // Commit still inflight, wait for result
-            return false;
-        }
-    }
-
-    if (std::exchange(BlobStorageErrorReported, true)) {
-        // Error has already been reported
-        return false;
-    }
-
-    switch (BlobStorageStatus) {
-        case NKikimrProto::RACE:
-        case NKikimrProto::BLOCKED:
-        case NKikimrProto::NO_GROUP:
-            return StopTablet(
-                TEvTablet::TEvTabletStop::ReasonStorageBlocked,
-                TEvTablet::TEvTabletDead::ReasonDemotedByBlobStorage,
-                BlobStorageErrorReason);
-
-        default:
-            return StopTablet(
-                TEvTablet::TEvTabletStop::ReasonStorageFailure,
-                TEvTablet::TEvTabletDead::ReasonBSError,
-                BlobStorageErrorReason);
-    }
-}
-
-bool TTablet::StopTablet(
-        TEvTablet::TEvTabletStop::EReason stopReason,
-        TEvTablet::TEvTabletDead::EReason deadReason,
-        const TString &deadDetails)
-{
-    if (UserTablet && (SupportedFeatures & TEvTablet::TEvFeatures::GracefulStop)) {
-        if (!PipeConnectAcceptor->IsStopped()) {
-            PipeConnectAcceptor->Stop(SelfId());
-
-            if (StateStorageGuardian) {
-                Send(StateStorageGuardian, new TEvents::TEvPoisonPill());
-                StateStorageGuardian = { };
-            }
-
+        if (entry->Step < BlobStorageErrorStep && entry->Task) { 
+            // Commit still inflight, wait for result 
+            return false; 
+        } 
+    } 
+ 
+    if (std::exchange(BlobStorageErrorReported, true)) { 
+        // Error has already been reported 
+        return false; 
+    } 
+ 
+    switch (BlobStorageStatus) { 
+        case NKikimrProto::RACE: 
+        case NKikimrProto::BLOCKED: 
+        case NKikimrProto::NO_GROUP: 
+            return StopTablet( 
+                TEvTablet::TEvTabletStop::ReasonStorageBlocked, 
+                TEvTablet::TEvTabletDead::ReasonDemotedByBlobStorage, 
+                BlobStorageErrorReason); 
+ 
+        default: 
+            return StopTablet( 
+                TEvTablet::TEvTabletStop::ReasonStorageFailure, 
+                TEvTablet::TEvTabletDead::ReasonBSError, 
+                BlobStorageErrorReason); 
+    } 
+} 
+ 
+bool TTablet::StopTablet( 
+        TEvTablet::TEvTabletStop::EReason stopReason, 
+        TEvTablet::TEvTabletDead::EReason deadReason, 
+        const TString &deadDetails) 
+{ 
+    if (UserTablet && (SupportedFeatures & TEvTablet::TEvFeatures::GracefulStop)) { 
+        if (!PipeConnectAcceptor->IsStopped()) { 
+            PipeConnectAcceptor->Stop(SelfId()); 
+ 
+            if (StateStorageGuardian) { 
+                Send(StateStorageGuardian, new TEvents::TEvPoisonPill()); 
+                StateStorageGuardian = { }; 
+            } 
+ 
             if (FollowerStStGuardian) {
                 Send(FollowerStStGuardian, new TEvents::TEvPoisonPill());
                 FollowerStStGuardian = { };
-            }
-        }
-
-        if (!DelayedCancelTablet) {
-            DelayedCancelTablet.ConstructInPlace(deadReason, deadDetails);
-        }
-
-        Send(UserTablet, new TEvTablet::TEvTabletStop(TabletID(), stopReason), IEventHandle::FlagTrackDelivery);
-        return false;
-    }
-
-    CancelTablet(deadReason, deadDetails);
-    return true;
-}
-
+            } 
+        } 
+ 
+        if (!DelayedCancelTablet) { 
+            DelayedCancelTablet.ConstructInPlace(deadReason, deadDetails); 
+        } 
+ 
+        Send(UserTablet, new TEvTablet::TEvTabletStop(TabletID(), stopReason), IEventHandle::FlagTrackDelivery); 
+        return false; 
+    } 
+ 
+    CancelTablet(deadReason, deadDetails); 
+    return true; 
+} 
+ 
 void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
     if (yellowMoveChannels.empty() || !Info->HiveId) {
-        return;
-    }
-
+        return; 
+    } 
+ 
     auto yellowMoveChannelsString = [&]() -> TString {
-        TStringBuilder out;
+        TStringBuilder out; 
         for (size_t i = 0; i < yellowMoveChannels.size(); ++i) {
-            if (i) {
-                out << ", ";
-            }
+            if (i) { 
+                out << ", "; 
+            } 
             out << yellowMoveChannels[i];
-        }
-        return std::move(out);
-    };
-
-    BLOG_I(
-        " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
+        } 
+        return std::move(out); 
+    }; 
+ 
+    BLOG_I( 
+        " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType) 
         << ", YellowMoveChannels: " << yellowMoveChannelsString());
-
-    Send(MakePipePeNodeCacheID(false),
-        new TEvPipeCache::TEvForward(
+ 
+    Send(MakePipePeNodeCacheID(false), 
+        new TEvPipeCache::TEvForward( 
             new TEvHive::TEvReassignTabletSpace(Info->TabletID, std::move(yellowMoveChannels)),
-            Info->HiveId,
-            /* subscribe */ false));
-}
-
+            Info->HiveId, 
+            /* subscribe */ false)); 
+} 
+ 
 void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TString &details) {
     BLOG_ERROR(
         " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
@@ -1831,8 +1831,8 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , FollowerId(followerId)
     , DiscoveredLastBlocked(Max<ui32>())
     , GcInFly(0)
-    , GcInFlyStep(0)
-    , GcNextStep(0)
+    , GcInFlyStep(0) 
+    , GcNextStep(0) 
     , ResourceProfiles(profiles)
     , TxCacheQuota(txCacheQuota)
 {

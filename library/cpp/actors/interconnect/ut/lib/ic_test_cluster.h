@@ -25,7 +25,7 @@ private:
     THashMap<ui32, THolder<TNode>> Nodes;
     TList<TTrafficInterrupter> interrupters;
     NActors::TChannelsConfig ChannelsConfig;
-    TPortManager PortManager;
+    TPortManager PortManager; 
 
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
@@ -38,7 +38,7 @@ public:
         THashMap<ui32, THashMap<ui32, ui16>> specificNodePortMap;
 
         for (ui32 i = 1; i <= NumNodes; ++i) {
-            nodeToPortMap.emplace(i, PortManager.GetPort());
+            nodeToPortMap.emplace(i, PortManager.GetPort()); 
         }
 
         if (tiSettings) {
@@ -48,7 +48,7 @@ public:
             for (auto& item : nodeToPortMap) {
                 nodeId = item.first;
                 listenPort = item.second;
-                forwardPort = PortManager.GetPort();
+                forwardPort = PortManager.GetPort(); 
 
                 specificNodePortMap[nodeId] = nodeToPortMap;
                 specificNodePortMap[nodeId].at(nodeId) = forwardPort;

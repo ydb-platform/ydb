@@ -53,22 +53,22 @@ public:
         }
 
         const TUserTable& tableInfo = *Self->TableInfos[tableId];
-        if (tableInfo.IsBackup) {
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cannot read from a backup table");
-            return true;
-        }
-
+        if (tableInfo.IsBackup) { 
+            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cannot read from a backup table"); 
+            return true; 
+        } 
+ 
         const ui32 localTableId = tableInfo.LocalTid;
 
         TVector<TRawTypeValue> key;
-        TVector<TRawTypeValue> endKey;
+        TVector<TRawTypeValue> endKey; 
 
         // TODO: check prefix column count against key column count
         const TSerializedCellVec prefixColumns(Ev->Get()->Record.GetSerializedKeyPrefix());
         for (ui32 ki = 0; ki < prefixColumns.GetCells().size(); ++ki) {
             // TODO: check prefix column type
             key.emplace_back(prefixColumns.GetCells()[ki].Data(), prefixColumns.GetCells()[ki].Size(), tableInfo.KeyColumnTypes[ki]);
-            endKey.emplace_back(prefixColumns.GetCells()[ki].Data(), prefixColumns.GetCells()[ki].Size(), tableInfo.KeyColumnTypes[ki]);
+            endKey.emplace_back(prefixColumns.GetCells()[ki].Data(), prefixColumns.GetCells()[ki].Size(), tableInfo.KeyColumnTypes[ki]); 
         }
         const ui32 pathColPos = prefixColumns.GetCells().size();
 
@@ -111,31 +111,31 @@ public:
         }
 
         const TString pathEndPrefix = NextPrefix(pathPrefix);
-        if (pathEndPrefix) {
-            endKey.emplace_back(pathEndPrefix.data(), pathEndPrefix.size(), NScheme::NTypeIds::Utf8);
-        }
-
+        if (pathEndPrefix) { 
+            endKey.emplace_back(pathEndPrefix.data(), pathEndPrefix.size(), NScheme::NTypeIds::Utf8); 
+        } 
+ 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: start at key ("
             << JoinVectorIntoString(key, " ") << "), end at key (" << JoinVectorIntoString(endKey, " ") << ")"
             << " restarted: " << RestartCount-1 << " last path: \"" << LastPath << "\""
             << " contents: " << Result->Record.ContentsRowsSize()
             << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
 
-        Result->Record.SetMoreRows(!IsKeyInRange(endKey, tableInfo));
-
-        if (!maxKeys) {
-            // Nothing to return, don't bother searching
-            return true;
-        }
-
+        Result->Record.SetMoreRows(!IsKeyInRange(endKey, tableInfo)); 
+ 
+        if (!maxKeys) { 
+            // Nothing to return, don't bother searching 
+            return true; 
+        } 
+ 
         // Select path column and all user-requested columns
         const TVector<ui32> columnsToReturn(Ev->Get()->Record.GetColumnsToReturn().begin(), Ev->Get()->Record.GetColumnsToReturn().end());
 
-        NTable::TKeyRange keyRange;
-        keyRange.MinKey = key;
-        keyRange.MinInclusive = suffixColumns.GetCells().empty();
-        keyRange.MaxKey = endKey;
-        keyRange.MaxInclusive = false;
+        NTable::TKeyRange keyRange; 
+        keyRange.MinKey = key; 
+        keyRange.MinInclusive = suffixColumns.GetCells().empty(); 
+        keyRange.MaxKey = endKey; 
+        keyRange.MaxInclusive = false; 
 
         if (LastPath) {
             // Don't include the last key in case of restart
@@ -150,15 +150,15 @@ public:
 
             // Check all columns that prefix columns are in the current key are equal to the specified values
             Y_VERIFY(currentKey.Cells().size() > prefixColumns.GetCells().size());
-            Y_VERIFY_DEBUG(
-                0 == CompareTypedCellVectors(
+            Y_VERIFY_DEBUG( 
+                0 == CompareTypedCellVectors( 
                         prefixColumns.GetCells().data(),
                         currentKey.Cells().data(),
                         currentKey.Types,
-                        prefixColumns.GetCells().size()),
-                "Unexpected out of range key returned from iterator");
+                        prefixColumns.GetCells().size()), 
+                "Unexpected out of range key returned from iterator"); 
 
-            Y_VERIFY(currentKey.Types[pathColPos] == NScheme::NTypeIds::Utf8);
+            Y_VERIFY(currentKey.Types[pathColPos] == NScheme::NTypeIds::Utf8); 
             const TCell& pathCell = currentKey.Cells()[pathColPos];
             TString path = TString((const char*)pathCell.Data(), pathCell.Size());
 
@@ -170,9 +170,9 @@ public:
                 continue;
             }
 
-            // Check that path begins with the specified prefix
-            Y_VERIFY_DEBUG(path.StartsWith(pathPrefix),
-                "Unexpected out of range key returned from iterator");
+            // Check that path begins with the specified prefix 
+            Y_VERIFY_DEBUG(path.StartsWith(pathPrefix), 
+                "Unexpected out of range key returned from iterator"); 
 
             bool isLeafPath = true;
             if (!pathSeparator.empty()) {
@@ -207,25 +207,25 @@ public:
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;
                     Result->Record.AddCommonPrefixesRows(TSerializedCellVec::Serialize({TCell(path.data(), path.size())}));
-                    if (++foundKeys >= maxKeys)
-                        break;
+                    if (++foundKeys >= maxKeys) 
+                        break; 
                 }
 
-                TString lookup = NextPrefix(path);
-                if (!lookup) {
-                    // May only happen if path is equal to separator, which consists of only '\xff'
-                    // This would imply separator is not a valid UTF-8 string, but in any case no
-                    // other path exists after the current prefix.
-                    break;
-                }
+                TString lookup = NextPrefix(path); 
+                if (!lookup) { 
+                    // May only happen if path is equal to separator, which consists of only '\xff' 
+                    // This would imply separator is not a valid UTF-8 string, but in any case no 
+                    // other path exists after the current prefix. 
+                    break; 
+                } 
 
-                // Skip to the next key after path+separator
+                // Skip to the next key after path+separator 
                 key.resize(prefixColumns.GetCells().size());
                 key.emplace_back(lookup.data(), lookup.size(), NScheme::NTypeIds::Utf8);
-
-                if (!iter->SkipTo(key, /* inclusive = */ true)) {
-                    return false;
-                }
+ 
+                if (!iter->SkipTo(key, /* inclusive = */ true)) { 
+                    return false; 
+                } 
             }
         }
 
@@ -248,41 +248,41 @@ private:
         Result->Record.SetStatus(status);
         Result->Record.SetErrorDescription(descr);
     }
-
-    static bool IsKeyInRange(TArrayRef<const TRawTypeValue> key, const TUserTable& tableInfo) {
-        if (!key) {
-            return false;
-        }
-        auto range = tableInfo.GetTableRange();
-        size_t prefixSize = Min(key.size(), range.To.size());
-        for (size_t pos = 0; pos < prefixSize; ++pos) {
-            if (int cmp = CompareTypedCells(TCell(&key[pos]), range.To[pos], tableInfo.KeyColumnTypes[pos])) {
-                return cmp < 0;
-            }
-        }
-        if (key.size() != range.To.size()) {
-            return key.size() > range.To.size();
-        }
-        return range.InclusiveTo;
-    }
-
-    /**
-     * Given a prefix p will return the first prefix p' that is
-     * lexicographically after all strings that have prefix p.
-     * Will return an empty string if prefix p' does not exist.
-     */
-    static TString NextPrefix(TString p) {
-        while (p) {
-            if (char next = (char)(((unsigned char)p.back()) + 1)) {
-                p.back() = next;
-                break;
-            } else {
-                p.pop_back(); // overflow, move to the next character
-            }
-        }
-
-        return p;
-    }
+ 
+    static bool IsKeyInRange(TArrayRef<const TRawTypeValue> key, const TUserTable& tableInfo) { 
+        if (!key) { 
+            return false; 
+        } 
+        auto range = tableInfo.GetTableRange(); 
+        size_t prefixSize = Min(key.size(), range.To.size()); 
+        for (size_t pos = 0; pos < prefixSize; ++pos) { 
+            if (int cmp = CompareTypedCells(TCell(&key[pos]), range.To[pos], tableInfo.KeyColumnTypes[pos])) { 
+                return cmp < 0; 
+            } 
+        } 
+        if (key.size() != range.To.size()) { 
+            return key.size() > range.To.size(); 
+        } 
+        return range.InclusiveTo; 
+    } 
+ 
+    /** 
+     * Given a prefix p will return the first prefix p' that is 
+     * lexicographically after all strings that have prefix p. 
+     * Will return an empty string if prefix p' does not exist. 
+     */ 
+    static TString NextPrefix(TString p) { 
+        while (p) { 
+            if (char next = (char)(((unsigned char)p.back()) + 1)) { 
+                p.back() = next; 
+                break; 
+            } else { 
+                p.pop_back(); // overflow, move to the next character 
+            } 
+        } 
+ 
+        return p; 
+    } 
 };
 
 void TDataShard::Handle(TEvDataShard::TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx) {

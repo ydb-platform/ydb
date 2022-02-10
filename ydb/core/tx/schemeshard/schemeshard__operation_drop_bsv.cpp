@@ -99,14 +99,14 @@ public:
 
         TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(pathId);
 
-        auto volumeSpace = volume->GetVolumeSpace();
-        auto domainDir = context.SS->PathsById.at(context.SS->ResolveDomainId(path));
-        domainDir->ChangeVolumeSpaceCommit({ }, volumeSpace);
-
-        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
-            context.SS->PersistRemoveBlockStoreVolume(db, pathId);
-        }
-
+        auto volumeSpace = volume->GetVolumeSpace(); 
+        auto domainDir = context.SS->PathsById.at(context.SS->ResolveDomainId(path)); 
+        domainDir->ChangeVolumeSpaceCommit({ }, volumeSpace); 
+ 
+        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) { 
+            context.SS->PersistRemoveBlockStoreVolume(db, pathId); 
+        } 
+ 
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
@@ -234,10 +234,10 @@ public:
                                                    << ", path: " << path.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (path.IsResolved() && path.Base()->IsBlockStoreVolume() && path.Base()->PlannedToDrop()) {
+                if (path.IsResolved() && path.Base()->IsBlockStoreVolume() && path.Base()->PlannedToDrop()) { 
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
-                }
+                } 
                 return result;
             }
         }

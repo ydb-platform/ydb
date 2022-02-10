@@ -34,11 +34,11 @@ enum ETxTypes {
     TXTYPE_BEGIN_OLAP_TX = 3                                [(TxTypeOpts) = {Name: "TxBeginOlapTx"}];
     TXTYPE_COMMIT_OLAP_TX = 4                               [(TxTypeOpts) = {Name: "TxCommitOlapTx"}];
     TXTYPE_PROPOSE = 5                                      [(TxTypeOpts) = {Name: "TxPropose"}];
-    TXTYPE_PLANSTEP = 6                                     [(TxTypeOpts) = {Name: "TxPlanStep"}];
-    TXTYPE_NOTIFY_TX_COMPLETION = 7                         [(TxTypeOpts) = {Name: "TxNotifyTxCompletion"}];
-    TXTYPE_COMMIT_UPDATE_LAST_TXID = 8                      [(TxTypeOpts) = {Name: "TxCommitUpdateLastTxId"}];
-    TXTYPE_COMMIT_UPDATE_PREPARED = 9                       [(TxTypeOpts) = {Name: "TxCommitUpdatePrepared"}];
-    TXTYPE_COMMIT_FINISHED = 10                             [(TxTypeOpts) = {Name: "TxCommitFinished"}];
-    TXTYPE_ATTACH_TX_COLUMN_SHARDS = 11                     [(TxTypeOpts) = {Name: "TxAttachTxColumnShards"}];
-    TXTYPE_PROPOSE_CANCEL = 12                              [(TxTypeOpts) = {Name: "TxProposeCancel"}];
+    TXTYPE_PLANSTEP = 6                                     [(TxTypeOpts) = {Name: "TxPlanStep"}]; 
+    TXTYPE_NOTIFY_TX_COMPLETION = 7                         [(TxTypeOpts) = {Name: "TxNotifyTxCompletion"}]; 
+    TXTYPE_COMMIT_UPDATE_LAST_TXID = 8                      [(TxTypeOpts) = {Name: "TxCommitUpdateLastTxId"}]; 
+    TXTYPE_COMMIT_UPDATE_PREPARED = 9                       [(TxTypeOpts) = {Name: "TxCommitUpdatePrepared"}]; 
+    TXTYPE_COMMIT_FINISHED = 10                             [(TxTypeOpts) = {Name: "TxCommitFinished"}]; 
+    TXTYPE_ATTACH_TX_COLUMN_SHARDS = 11                     [(TxTypeOpts) = {Name: "TxAttachTxColumnShards"}]; 
+    TXTYPE_PROPOSE_CANCEL = 12                              [(TxTypeOpts) = {Name: "TxProposeCancel"}]; 
 }

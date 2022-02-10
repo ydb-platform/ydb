@@ -31,8 +31,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::BlockStoreVolume;
     case ::Ydb::Scheme::Entry::COORDINATION_NODE:
         return ESchemeEntryType::CoordinationNode;
-    case ::Ydb::Scheme::Entry::SEQUENCE:
-        return ESchemeEntryType::Sequence;
+    case ::Ydb::Scheme::Entry::SEQUENCE: 
+        return ESchemeEntryType::Sequence; 
     case ::Ydb::Scheme::Entry::REPLICATION:
         return ESchemeEntryType::Replication;
     default:

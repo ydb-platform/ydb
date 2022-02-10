@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
-#include <library/cpp/actors/dnsresolver/dnsresolver.h>
+#include <library/cpp/actors/dnsresolver/dnsresolver.h> 
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
 #include <util/generic/xrange.h>
@@ -28,7 +28,7 @@ namespace NActors {
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             const ui16 port = 12001 + nodeIndex;
             table->StaticNodeTable[FirstNodeId + nodeIndex] =
-                std::pair<TString, ui32>("::1", UseRealInterconnect ? GetPortManager().GetPort(port) : port);
+                std::pair<TString, ui32>("::1", UseRealInterconnect ? GetPortManager().GetPort(port) : port); 
 
             NActorsInterconnect::TNodeLocation proto;
             proto.SetDataCenter(ToString(nodeIndex % DataCenterCount + 1));
@@ -40,7 +40,7 @@ namespace NActors {
                 : TNodeLocation(proto);
         }
 
-        const TActorId dnsId = NDnsResolver::MakeDnsResolverActorId();
+        const TActorId dnsId = NDnsResolver::MakeDnsResolverActorId(); 
         const TActorId namesId = GetNameserviceActorId();
         for (auto num : xrange(GetNodeCount())) {
             auto* node = GetRawNode(num);
@@ -48,10 +48,10 @@ namespace NActors {
             node->Poller.Reset(new NInterconnect::TPollerThreads);
             node->Poller->Start();
 
-            AddLocalService(dnsId,
-                TActorSetupCmd(NDnsResolver::CreateOnDemandDnsResolver(),
-                               TMailboxType::Simple, 0), num);
-
+            AddLocalService(dnsId, 
+                TActorSetupCmd(NDnsResolver::CreateOnDemandDnsResolver(), 
+                               TMailboxType::Simple, 0), num); 
+ 
             AddLocalService(namesId,
                 TActorSetupCmd(NKikimr::NNodeBroker::CreateDynamicNameserver(table),
                                TMailboxType::Simple, 0), num);

@@ -98,10 +98,10 @@ public:
             context.OnComplete.DeleteShard(shard.Idx);
         }
 
-        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
-            context.SS->PersistRemoveKesusInfo(db, pathId);
-        }
-
+        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) { 
+            context.SS->PersistRemoveKesusInfo(db, pathId); 
+        } 
+ 
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
@@ -229,10 +229,10 @@ public:
                                                    << ", path: " << path.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (path.IsResolved() && path.Base()->IsKesus() && path.Base()->PlannedToDrop()) {
+                if (path.IsResolved() && path.Base()->IsKesus() && path.Base()->PlannedToDrop()) { 
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
-                }
+                } 
                 return result;
             }
         }
@@ -253,7 +253,7 @@ public:
         TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(path.Base()->PathId);
         Y_VERIFY(kesus);
 
-        {
+        { 
             auto shardIdx = kesus->KesusShardIdx;
             txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos.at(shardIdx).TabletType, txState.State);
 

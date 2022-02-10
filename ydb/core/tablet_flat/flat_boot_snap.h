@@ -38,7 +38,7 @@ namespace NBoot {
             GrabSnapFromDeps();
 
             if (!Snap) {
-                ProcessDeps(), Env->Finish(this);
+                ProcessDeps(), Env->Finish(this); 
             } else if (Snap->LargeGlobId.Lead.Step() == 0) {
                 Y_Fail("Invalid TLogoBlobID of snaphot: " << Snap->LargeGlobId.Lead);
             } else if (Snap->Body) {
@@ -64,7 +64,7 @@ namespace NBoot {
                 Decode(snap, body);
             }
 
-            ProcessSnap(snap), ProcessDeps(), Env->Finish(this);
+            ProcessSnap(snap), ProcessDeps(), Env->Finish(this); 
         }
 
         void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
@@ -101,26 +101,26 @@ namespace NBoot {
             ReadAlterLog();
             ReadRedoSnap();
 
-            if (Logic->Result().Comp) {
-                for (const auto &one : Proto.GetCompactionStates()) {
-                    Back->Switches.emplace_back().Init(one);
-                }
-            }
-
-            for (const auto &one : Proto.GetRowVersionStates()) {
-                Back->Switches.emplace_back().Init(one);
-            }
-
+            if (Logic->Result().Comp) { 
+                for (const auto &one : Proto.GetCompactionStates()) { 
+                    Back->Switches.emplace_back().Init(one); 
+                } 
+            } 
+ 
+            for (const auto &one : Proto.GetRowVersionStates()) { 
+                Back->Switches.emplace_back().Init(one); 
+            } 
+ 
             for (const auto &one : Proto.GetDbParts()) {
                 Back->Switches.emplace_back();
                 Back->Switches.back().Init(one);
             }
 
-            for (const auto &one : Proto.GetTxStatusParts()) {
-                Back->Switches.emplace_back();
-                Back->Switches.back().Init(one);
-            }
-
+            for (const auto &one : Proto.GetTxStatusParts()) { 
+                Back->Switches.emplace_back(); 
+                Back->Switches.back().Init(one); 
+            } 
+ 
             for (const auto &x : Proto.GetTableSnapshoted())
                 Back->SetTableEdge(x);
 
@@ -231,7 +231,7 @@ namespace NBoot {
                     waste->Keep = Proto.GetWaste().GetKeep();
                     waste->Drop = Proto.GetWaste().GetDrop();
                 } else {
-                    /* Old snapshot without step pollution accounting,
+                    /* Old snapshot without step pollution accounting, 
                         promote start age to the current snapshot since
                         waste, produced until current state, is known. */
 

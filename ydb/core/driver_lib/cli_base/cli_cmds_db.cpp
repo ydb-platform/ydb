@@ -266,8 +266,8 @@ public:
             type = "<column table>";
             break;
         case NKikimrSchemeOp::EPathTypeSequence:
-            type = "<sequence>";
-            break;
+            type = "<sequence>"; 
+            break; 
         case NKikimrSchemeOp::EPathTypeReplication:
             type = "<replication>";
             break;
@@ -481,8 +481,8 @@ public:
             type = "<column table>";
             break;
         case NKikimrSchemeOp::EPathTypeSequence:
-            type = "<sequence>";
-            break;
+            type = "<sequence>"; 
+            break; 
         case NKikimrSchemeOp::EPathTypeReplication:
             type = "<replication>";
             break;

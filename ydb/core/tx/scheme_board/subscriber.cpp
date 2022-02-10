@@ -436,7 +436,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
-        CurrentSyncRequest = ev->Cookie;
+        CurrentSyncRequest = ev->Cookie; 
         this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
     }
 
@@ -445,12 +445,12 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
-        if (ev->Sender != ReplicaSubscriber || ev->Cookie != CurrentSyncRequest) {
+        if (ev->Sender != ReplicaSubscriber || ev->Cookie != CurrentSyncRequest) { 
             return;
         }
 
         this->Send(Parent, ev->Release().Release(), 0, ev->Cookie);
-        CurrentSyncRequest = 0;
+        CurrentSyncRequest = 0; 
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
@@ -479,11 +479,11 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             return;
         }
 
-        if (CurrentSyncRequest) {
-            this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest);
-            CurrentSyncRequest = 0;
-        }
-
+        if (CurrentSyncRequest) { 
+            this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest); 
+            CurrentSyncRequest = 0; 
+        } 
+ 
         ReplicaSubscriber = TActorId();
         this->Send(Parent, new TSchemeBoardEvents::TEvNotifyBuilder(Path, true));
         this->Become(&TDerived::StateSleep, Delay, new TEvents::TEvWakeup());
@@ -525,7 +525,7 @@ public:
         , Path(path)
         , DomainOwnerId(domainOwnerId)
         , Delay(DefaultDelay)
-        , CurrentSyncRequest(0)
+        , CurrentSyncRequest(0) 
     {
     }
 
@@ -571,8 +571,8 @@ private:
     TActorId ReplicaSubscriber;
     TDuration Delay;
 
-    ui64 CurrentSyncRequest;
-
+    ui64 CurrentSyncRequest; 
+ 
     static constexpr TDuration DefaultDelay = TDuration::MilliSeconds(10);
     static constexpr TDuration MaxDelay = TDuration::Seconds(5);
 

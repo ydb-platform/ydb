@@ -290,10 +290,10 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
     MKQL_ENSURE(AS_TYPE(TDataType, options.ItemsLimit)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "ItemsLimit must be ui64");
     MKQL_ENSURE(AS_TYPE(TDataType, options.BytesLimit)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "BytesLimit must be ui64");
 
-    if (options.Reverse) {
-        MKQL_ENSURE(AS_TYPE(TDataType, options.Reverse)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Reverse must be bool");
-    }
-
+    if (options.Reverse) { 
+        MKQL_ENSURE(AS_TYPE(TDataType, options.Reverse)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Reverse must be bool"); 
+    } 
+ 
     MKQL_ENSURE(options.FromColumns.size() > 0, "Expected at least one key component in the 'from' section of the range");
     const ui32 maxKeyColumnsCount = ::Max<ui32>(options.FromColumns.size(), options.ToColumns.size());
     MKQL_ENSURE(keyTypes.size() == maxKeyColumnsCount, "Mismatch of key types count");
@@ -364,8 +364,8 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
         AtLeastOneFlagSet(options.ForbidNullArgsTo)) {
         builder.Add(forbidNullArgsFrom);
         builder.Add(forbidNullArgsTo);
-    }
-
+    } 
+ 
     return TRuntimeNode(builder.Build(), false);
 }
 

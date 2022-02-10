@@ -2,7 +2,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_common.h"
-#include "rpc_kh_snapshots.h"
+#include "rpc_kh_snapshots.h" 
 #include "resolve_local_db_table.h"
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -66,8 +66,8 @@ private:
     ui64 SysViewMaxBytes;
     ui64 SysViewRowsReceived;
 
-    TKikhouseSnapshotId SnapshotId;
-
+    TKikhouseSnapshotId SnapshotId; 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -91,12 +91,12 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        if (const auto& snapshotId = Request->GetProtoRequest()->snapshot_id()) {
-            if (!SnapshotId.Parse(snapshotId)) {
-                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid snapshot id specified", ctx);
-            }
-        }
-
+        if (const auto& snapshotId = Request->GetProtoRequest()->snapshot_id()) { 
+            if (!SnapshotId.Parse(snapshotId)) { 
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid snapshot id specified", ctx); 
+            } 
+        } 
+ 
         ResolveTable(Request->GetProtoRequest()->Gettable(), ctx);
     }
 
@@ -230,13 +230,13 @@ private:
     }
 
     void ScanSystemView(const NActors::TActorContext& ctx) {
-        if (SnapshotId) {
-            Request->RaiseIssue(
-                MakeIssue(
-                    NKikimrIssues::TIssuesIds::WARNING,
-                    "Snapshots are ignored when scanning system views"));
-        }
-
+        if (SnapshotId) { 
+            Request->RaiseIssue( 
+                MakeIssue( 
+                    NKikimrIssues::TIssuesIds::WARNING, 
+                    "Snapshots are ignored when scanning system views")); 
+        } 
+ 
         if (auto maxRows = Request->GetProtoRequest()->max_rows(); maxRows && maxRows <= 100)
             SysViewMaxRows = maxRows;
 
@@ -548,7 +548,7 @@ private:
         // We are going to set all columns
         TVector<TKeyDesc::TColumnOp> columns;
         for (const auto& ci : entry.Columns) {
-            TKeyDesc::TColumnOp op = { ci.second.Id, TKeyDesc::EColumnOperation::Set, ci.second.PType, 0, 0 };
+            TKeyDesc::TColumnOp op = { ci.second.Id, TKeyDesc::EColumnOperation::Set, ci.second.PType, 0, 0 }; 
             columns.push_back(op);
         }
 
@@ -562,7 +562,7 @@ private:
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
 
-        request->ResultSet.emplace_back(std::move(KeyRange));
+        request->ResultSet.emplace_back(std::move(KeyRange)); 
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         ctx.Send(SchemeCache, resolveReq.Release());
@@ -588,10 +588,10 @@ private:
         }
 
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
-        Y_VERIFY(msg->Request->ResultSet.size() == 1);
-        KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription);
+        Y_VERIFY(msg->Request->ResultSet.size() == 1); 
+        KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription); 
 
-        if (msg->Request->ErrorCount > 0) {
+        if (msg->Request->ErrorCount > 0) { 
             return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Sprintf("Unknown table '%s'", Request->GetProtoRequest()->Gettable().data()), ctx);
         }
 
@@ -624,10 +624,10 @@ private:
         ev->Record.SetFromKeyInclusive(MinKeyInclusive);
         ev->Record.SetMaxRows(Request->GetProtoRequest()->max_rows());
         ev->Record.SetMaxBytes(Request->GetProtoRequest()->max_bytes());
-        if (SnapshotId) {
-            ev->Record.SetSnapshotStep(SnapshotId.Step);
-            ev->Record.SetSnapshotTxId(SnapshotId.TxId);
-        }
+        if (SnapshotId) { 
+            ev->Record.SetSnapshotStep(SnapshotId.Step); 
+            ev->Record.SetSnapshotTxId(SnapshotId.TxId); 
+        } 
 
         ui64 shardId = KeyRange->Partitions[0].ShardId;
 
@@ -687,9 +687,9 @@ private:
             case NKikimrTxDataShard::TError::SCHEME_ERROR:
                 status = Ydb::StatusIds::SCHEME_ERROR;
                 break;
-            case NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST:
-                status = Ydb::StatusIds::NOT_FOUND;
-                break;
+            case NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST: 
+                status = Ydb::StatusIds::NOT_FOUND; 
+                break; 
             }
 
             ReplyWithError(status, shardResponse.GetErrorDescription(), ctx);

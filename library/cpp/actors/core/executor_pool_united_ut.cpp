@@ -58,8 +58,8 @@ public:
             if (GetCounter() == 0) {
                 break;
             }
-
-            Sleep(TDuration::MilliSeconds(1));
+ 
+            Sleep(TDuration::MilliSeconds(1)); 
         }
     }
 
@@ -78,8 +78,8 @@ private:
     void Handle(TEvMsg::TPtr &ev) {
         Y_UNUSED(ev);
         Action();
-        TAtomicBase count = AtomicDecrement(Counter);
-        Y_VERIFY(count != Max<TAtomicBase>());
+        TAtomicBase count = AtomicDecrement(Counter); 
+        Y_VERIFY(count != Max<TAtomicBase>()); 
         if (count) {
             Send(Receiver, new TEvMsg());
         }
@@ -149,9 +149,9 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
 
         while (actor->GetCounter()) {
             auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter());
-
-            Sleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter()); 
+ 
+            Sleep(TDuration::MilliSeconds(1)); 
         }
 
         TVector<TExecutorThreadStats> stats;
@@ -212,11 +212,11 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
                 left += actor->GetCounter();
             }
             if (left == 0) {
-                break;
-            }
+                break; 
+            } 
             auto now = TInstant::Now();
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "left " << left);
-            Sleep(TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(1)); 
         }
 
         for (size_t pool = 0; pool < pools; pool++) {
@@ -311,11 +311,11 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
                 left += actor->GetCounter();
             }
             if (left == 0) {
-                break;
-            }
+                break; 
+            } 
             auto now = TInstant::Now();
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(15), "left " << left);
-            Sleep(TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(1)); 
         }
 
         for (size_t pool = 0; pool < pools; pool++) {

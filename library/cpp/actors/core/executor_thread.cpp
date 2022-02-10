@@ -76,11 +76,11 @@ namespace NActors {
         Ctx.Executor->Schedule(deadline, ev, cookie, Ctx.WorkerId);
     }
 
-    void TExecutorThread::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
-        ++CurrentActorScheduledEventsCounter;
+    void TExecutorThread::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) { 
+        ++CurrentActorScheduledEventsCounter; 
         Ctx.Executor->Schedule(deadline, ev, cookie, Ctx.WorkerId);
-    }
-
+    } 
+ 
     void TExecutorThread::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         ++CurrentActorScheduledEventsCounter;
         Ctx.Executor->Schedule(delta, ev, cookie, Ctx.WorkerId);
@@ -145,7 +145,7 @@ namespace NActors {
                 NHPTimer::STime hpnow;
                 recipient = ev->GetRecipientRewrite();
                 if (actor = mailbox->FindActor(recipient.LocalId())) {
-                    TActorContext ctx(*mailbox, *this, hpprev, recipient);
+                    TActorContext ctx(*mailbox, *this, hpprev, recipient); 
                     TlsActivationContext = &ctx;
 
 #ifdef USE_ACTOR_CALLSTACK

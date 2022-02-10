@@ -516,7 +516,7 @@ private:
                 }
             }
             TArrayRef<const TCell> ref(cells);
-            batch->Rows.emplace_back(TOwnedCellVec::Make(ref));
+            batch->Rows.emplace_back(TOwnedCellVec::Make(ref)); 
             cells.clear();
         }
 

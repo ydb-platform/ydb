@@ -24,8 +24,8 @@ struct TGRpcClientConfig {
     ui64 MemQuota = 0;
     std::unordered_map<TString, TString> StringChannelParams;
     std::unordered_map<TString, int> IntChannelParams;
-    TString LoadBalancingPolicy = { };
-    TString SslTargetNameOverride = { };
+    TString LoadBalancingPolicy = { }; 
+    TString SslTargetNameOverride = { }; 
 
     TGRpcClientConfig() = default;
     TGRpcClientConfig(const TGRpcClientConfig&) = default;
@@ -68,12 +68,12 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     if (mutator) {
         args.SetSocketMutator(mutator);
     }
-    if (!config.LoadBalancingPolicy.empty()) {
-        args.SetLoadBalancingPolicyName(config.LoadBalancingPolicy);
-    }
-    if (!config.SslTargetNameOverride.empty()) {
-        args.SetSslTargetNameOverride(config.SslTargetNameOverride);
-    }
+    if (!config.LoadBalancingPolicy.empty()) { 
+        args.SetLoadBalancingPolicyName(config.LoadBalancingPolicy); 
+    } 
+    if (!config.SslTargetNameOverride.empty()) { 
+        args.SetSslTargetNameOverride(config.SslTargetNameOverride); 
+    } 
     if (config.EnableSsl || config.SslCaCert) {
         return grpc::CreateCustomChannel(config.Locator, grpc::SslCredentials(grpc::SslCredentialsOptions{config.SslCaCert, "", ""}), args);
     } else {

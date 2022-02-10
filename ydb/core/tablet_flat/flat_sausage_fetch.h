@@ -3,7 +3,7 @@
 #include "flat_sausage_gut.h"
 
 #include <ydb/core/base/shared_data.h>
-
+ 
 namespace NKikimr {
 namespace NPageCollection {
 
@@ -34,7 +34,7 @@ namespace NPageCollection {
 
         TLoadedPage(ui32 page, TSharedData data)
             : PageId(page)
-            , Data(std::move(data))
+            , Data(std::move(data)) 
         {
 
         }
@@ -45,7 +45,7 @@ namespace NPageCollection {
         }
 
         ui32 PageId = Max<ui32>();
-        TSharedData Data;
+        TSharedData Data; 
     };
 
 }

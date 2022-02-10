@@ -111,7 +111,7 @@ public:
         return RowIt->first;
     }
 
-    EReady Next(ENext mode) override
+    EReady Next(ENext mode) override 
     {
         /* Should position to the first row on first Next() to conform db
             iterator API, but iterator is already positioned to first row
@@ -122,7 +122,7 @@ public:
             if (!std::exchange(First, false))
                 ++RowIt;
 
-            if (!(mode == ENext::Data && IsValid() && RowIt->second.IsDeleted))
+            if (!(mode == ENext::Data && IsValid() && RowIt->second.IsDeleted)) 
                 break;
         }
 

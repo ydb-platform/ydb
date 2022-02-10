@@ -39,7 +39,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableAsyncIndexes, std::nullopt);
         OPTION(std::optional<bool>, EnableNotNullColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableSchemeTransactionsAtSchemeShard, std::nullopt);
-        OPTION(std::optional<bool>, EnableOlapSchemaOperations, std::nullopt);
+        OPTION(std::optional<bool>, EnableOlapSchemaOperations, std::nullopt); 
         OPTION(std::optional<bool>, EnableProtoSourceIdInfo, std::nullopt);
         OPTION(std::optional<bool>, EnableBackgroundCompaction, std::nullopt);
         OPTION(THashSet<TString>, SystemBackupSIDs, {});
@@ -91,12 +91,12 @@ namespace NSchemeShardUT_Private {
         void TestWaitTabletDeletion(TTestActorRuntime& runtime, TSet<ui64> tabletIds);
         void TestWaitTabletDeletion(TTestActorRuntime& runtime, ui64 tabletId);
 
-        void TestWaitShardDeletion(TTestActorRuntime& runtime, TSet<ui64> localIds);
-        void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<ui64> localIds);
-        void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<TShardIdx> shardIds);
-
-        void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
-
+        void TestWaitShardDeletion(TTestActorRuntime& runtime, TSet<ui64> localIds); 
+        void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<ui64> localIds); 
+        void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<TShardIdx> shardIds); 
+ 
+        void SimulateSleep(TTestActorRuntime& runtime, TDuration duration); 
+ 
         TEvSchemeShard::TEvInitRootShardResult::EStatus InitRoot(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes = {}, const TString& owner = {});
         void InitRootStoragePools(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, ui64 domainUid);
 

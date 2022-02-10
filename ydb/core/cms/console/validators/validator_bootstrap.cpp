@@ -12,8 +12,8 @@ namespace NConsole {
 TBootstrapConfigValidator::TBootstrapConfigValidator()
     : IConfigValidator("bootstrap",
                        { (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
-                         (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem,
-                         (ui32)NKikimrConsole::TConfigItem::ResourceBrokerConfigItem, })
+                         (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem, 
+                         (ui32)NKikimrConsole::TConfigItem::ResourceBrokerConfigItem, }) 
 {
 }
 
@@ -42,9 +42,9 @@ bool TBootstrapConfigValidator::CheckConfig(const NKikimrConfig::TAppConfig &old
     if (!CheckResourceBrokerConfig(newConfig, issues))
         return false;
 
-    if (!CheckResourceBrokerOverrides(newConfig, issues))
-        return false;
-
+    if (!CheckResourceBrokerOverrides(newConfig, issues)) 
+        return false; 
+ 
     if (newConfig.GetBootstrapConfig().HasCompactionBroker()) {
         AddError(issues, "deprecated compaction broker config is used");
         return false;
@@ -190,90 +190,90 @@ bool TBootstrapConfigValidator::CheckResourceBrokerConfig(const NKikimrConfig::T
     return true;
 }
 
-bool TBootstrapConfigValidator::CheckResourceBrokerOverrides(
-        const NKikimrConfig::TAppConfig &config,
-        TVector<Ydb::Issue::IssueMessage> &issues) const
-{
-    if (!config.HasResourceBrokerConfig())
-        return true;
-
-    auto defaultConfig = NResourceBroker::MakeDefaultConfig();
-    const auto &overrides = config.GetResourceBrokerConfig();
-
-    THashSet<TString> defaultQueues;
-    for (const auto &queue : defaultConfig.GetQueues()) {
-        defaultQueues.insert(queue.GetName());
-    }
-
-    THashSet<TString> queues;
-    for (const auto &queue : overrides.GetQueues()) {
-        if (!queue.GetName()) {
-            AddError(issues, "queue with empty name is not allowed");
-            return false;
-        }
-        if (queues.contains(queue.GetName())) {
-            AddError(issues, Sprintf("multiple queues with '%s' name",
-                                     queue.GetName().data()));
-            return false;
-        }
-        if (!defaultQueues.contains(queue.GetName())) {
-            if (!queue.GetWeight()) {
-                AddError(issues, Sprintf("queue '%s' should have non-zero weight",
-                                        queue.GetName().data()));
-                return false;
-            }
-            if (IsUnlimitedResource(queue.GetLimit())) {
-                AddWarning(issues, Sprintf("unlimited resources for queue '%s'",
-                                        queue.GetName().data()));
-            }
-        }
-        queues.insert(queue.GetName());
-    }
-
-    THashSet<TString> defaultTasks;
-    for (const auto &task : defaultConfig.GetTasks()) {
-        defaultTasks.insert(task.GetName());
-    }
-
-    THashSet<TString> tasks;
-    for (auto &task : overrides.GetTasks()) {
-        if (!task.GetName()) {
-            AddError(issues, "task with empty name is not allowed");
-            return false;
-        }
-        if (tasks.contains(task.GetName())) {
-            AddError(issues, Sprintf("multiple tasks with '%s' name",
-                                     task.GetName().data()));
-            return false;
-        }
-        if (!defaultQueues.contains(task.GetQueueName()) && !queues.contains(task.GetQueueName())) {
-            AddError(issues, Sprintf("task '%s' uses unknown queue '%s'",
-                                     task.GetName().data(), task.GetQueueName().data()));
-            return false;
-        }
-        if (!defaultTasks.contains(task.GetName())) {
-            if (!task.GetDefaultDuration()) {
-                AddError(issues, Sprintf("task '%s' should have non-zero default duration",
-                                        task.GetName().data()));
-                return false;
-            }
-        }
-        tasks.insert(task.GetName());
-    }
-
-    return true;
-}
-
+bool TBootstrapConfigValidator::CheckResourceBrokerOverrides( 
+        const NKikimrConfig::TAppConfig &config, 
+        TVector<Ydb::Issue::IssueMessage> &issues) const 
+{ 
+    if (!config.HasResourceBrokerConfig()) 
+        return true; 
+ 
+    auto defaultConfig = NResourceBroker::MakeDefaultConfig(); 
+    const auto &overrides = config.GetResourceBrokerConfig(); 
+ 
+    THashSet<TString> defaultQueues; 
+    for (const auto &queue : defaultConfig.GetQueues()) { 
+        defaultQueues.insert(queue.GetName()); 
+    } 
+ 
+    THashSet<TString> queues; 
+    for (const auto &queue : overrides.GetQueues()) { 
+        if (!queue.GetName()) { 
+            AddError(issues, "queue with empty name is not allowed"); 
+            return false; 
+        } 
+        if (queues.contains(queue.GetName())) { 
+            AddError(issues, Sprintf("multiple queues with '%s' name", 
+                                     queue.GetName().data())); 
+            return false; 
+        } 
+        if (!defaultQueues.contains(queue.GetName())) { 
+            if (!queue.GetWeight()) { 
+                AddError(issues, Sprintf("queue '%s' should have non-zero weight", 
+                                        queue.GetName().data())); 
+                return false; 
+            } 
+            if (IsUnlimitedResource(queue.GetLimit())) { 
+                AddWarning(issues, Sprintf("unlimited resources for queue '%s'", 
+                                        queue.GetName().data())); 
+            } 
+        } 
+        queues.insert(queue.GetName()); 
+    } 
+ 
+    THashSet<TString> defaultTasks; 
+    for (const auto &task : defaultConfig.GetTasks()) { 
+        defaultTasks.insert(task.GetName()); 
+    } 
+ 
+    THashSet<TString> tasks; 
+    for (auto &task : overrides.GetTasks()) { 
+        if (!task.GetName()) { 
+            AddError(issues, "task with empty name is not allowed"); 
+            return false; 
+        } 
+        if (tasks.contains(task.GetName())) { 
+            AddError(issues, Sprintf("multiple tasks with '%s' name", 
+                                     task.GetName().data())); 
+            return false; 
+        } 
+        if (!defaultQueues.contains(task.GetQueueName()) && !queues.contains(task.GetQueueName())) { 
+            AddError(issues, Sprintf("task '%s' uses unknown queue '%s'", 
+                                     task.GetName().data(), task.GetQueueName().data())); 
+            return false; 
+        } 
+        if (!defaultTasks.contains(task.GetName())) { 
+            if (!task.GetDefaultDuration()) { 
+                AddError(issues, Sprintf("task '%s' should have non-zero default duration", 
+                                        task.GetName().data())); 
+                return false; 
+            } 
+        } 
+        tasks.insert(task.GetName()); 
+    } 
+ 
+    return true; 
+} 
+ 
 bool TBootstrapConfigValidator::IsUnlimitedResource(const NKikimrResourceBroker::TResources &limit) const
 {
     for (auto res : limit.GetResource()) {
-        if (res > 0 && res < Max<ui64>())
+        if (res > 0 && res < Max<ui64>()) 
             return false;
     }
-    if (limit.HasCpu() && limit.GetCpu() < Max<ui64>())
-        return false;
-    if (limit.HasMemory() && limit.GetMemory() < Max<ui64>())
-        return false;
+    if (limit.HasCpu() && limit.GetCpu() < Max<ui64>()) 
+        return false; 
+    if (limit.HasMemory() && limit.GetMemory() < Max<ui64>()) 
+        return false; 
     return true;
 }
 

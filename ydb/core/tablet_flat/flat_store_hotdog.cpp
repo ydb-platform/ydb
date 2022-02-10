@@ -2,7 +2,7 @@
 #include "flat_store_solid.h"
 #include "flat_part_store.h"
 #include "flat_part_loader.h"
-#include "flat_part_overlay.h"
+#include "flat_part_overlay.h" 
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
@@ -21,13 +21,13 @@ void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, 
 }
 
 void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, const TIntrusiveConstPtr<TColdPart> &part, ui32 table, ui32 level)
-{
-    snap->SetTable(table);
-    snap->SetCompactionLevel(level);
-
+{ 
+    snap->SetTable(table); 
+    snap->SetCompactionLevel(level); 
+ 
     TPageCollectionProtoHelper(false, false).Do(snap->AddBundles(), part);
-}
-
+} 
+ 
 void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, const TPartComponents &pc, ui32 table, ui32 level)
 {
     snap->SetTable(table);
@@ -45,10 +45,10 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
 
     if (auto &legacy = pc.Legacy)
         bundle->SetLegacy(legacy);
-
+ 
     if (auto &opaque = pc.Opaque)
         bundle->SetOpaque(opaque);
-
+ 
     bundle->SetEpoch(pc.GetEpoch().ToProto());
 }
 
@@ -68,41 +68,41 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const NTable::TPartView &pa
 
     if (auto legacy = NTable::TOverlay{ partView.Screen, nullptr }.Encode()) {
         bundle->SetLegacy(std::move(legacy));
-    }
+    } 
 
     if (auto opaque = NTable::TOverlay{ nullptr, partView.Slices }.Encode()) {
         bundle->SetOpaque(std::move(opaque));
     }
-
-    bundle->SetEpoch(part->Epoch.ToProto());
+ 
+    bundle->SetEpoch(part->Epoch.ToProto()); 
 }
 
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const TIntrusiveConstPtr<NTable::TColdPart> &part)
-{
-    Y_VERIFY(part, "Cannot make bundle dump from empty NTable::TColdPart");
-
+{ 
+    Y_VERIFY(part, "Cannot make bundle dump from empty NTable::TColdPart"); 
+ 
     auto *partStore = dynamic_cast<const NTable::TColdPartStore*>(part.Get());
-
+ 
     Y_VERIFY(partStore, "Cannot cast TColdPart to page collection backed up part");
     Y_VERIFY(partStore->Label == partStore->LargeGlobIds[0].Lead);
-
+ 
     bundle->MutablePageCollections()->Reserve(partStore->LargeGlobIds.size());
-
+ 
     for (const auto &largeGlobId : partStore->LargeGlobIds) {
         Bundle(bundle->AddPageCollections(), largeGlobId, nullptr, { });
-    }
-
+    } 
+ 
     if (partStore->Legacy) {
         bundle->SetLegacy(partStore->Legacy);
-    }
-
+    } 
+ 
     if (partStore->Opaque) {
         bundle->SetOpaque(partStore->Opaque);
-    }
-
+    } 
+ 
     bundle->SetEpoch(partStore->Epoch.ToProto());
-}
-
+} 
+ 
 void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TInfo &cache)
 {
     TVector<NPageCollection::TLoadedPage> pages;
@@ -115,9 +115,9 @@ void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pa
 
             if (!NTable::TLoader::NeedIn(type)) {
 
-            } else if (auto* body = cache.Lookup(pageId)) {
-                pages.emplace_back(pageId, *body);
-            } else {
+            } else if (auto* body = cache.Lookup(pageId)) { 
+                pages.emplace_back(pageId, *body); 
+            } else { 
                 Y_FAIL("index and page collection pages must be kept inmemory");
             }
         }
@@ -135,14 +135,14 @@ void TPageCollectionProtoHelper::Bundle(
 {
     TLargeGlobIdProto::Put(*pageCollectionProto->MutableLargeGlobId(), largeGlobId);
 
-    if (PutMeta && pack)
+    if (PutMeta && pack) 
         pageCollectionProto->SetMeta(pack->Meta.Raw.ToString());
 
     for (auto &paged: pages) {
         auto *page = pageCollectionProto->AddPages();
 
         page->SetId(paged.PageId);
-        page->SetBody(paged.Data.ToString());
+        page->SetBody(paged.Data.ToString()); 
     }
 }
 
@@ -157,27 +157,27 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
         TVector<NPageCollection::TLoadedPage> pages;
 
         for (auto &page: pageCollection.GetPages())
-            pages.emplace_back(page.GetId(), TSharedData::Copy(page.GetBody()));
+            pages.emplace_back(page.GetId(), TSharedData::Copy(page.GetBody())); 
 
         auto& item = components.emplace_back();
         item.LargeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());
-        item.Sticky = std::move(pages);
+        item.Sticky = std::move(pages); 
         if (pageCollection.HasMeta()) {
             item.ParsePacket(TSharedData::Copy(pageCollection.GetMeta()));
-        }
+        } 
     }
 
     TString opaque = proto.HasLegacy() ? proto.GetLegacy() : TString{ };
     TString opaqueExt = proto.HasOpaque() ? proto.GetOpaque() : TString{ };
-    NTable::TEpoch epoch = proto.HasEpoch() ? NTable::TEpoch(proto.GetEpoch()) : NTable::TEpoch::Max();
+    NTable::TEpoch epoch = proto.HasEpoch() ? NTable::TEpoch(proto.GetEpoch()) : NTable::TEpoch::Max(); 
 
-    if (unsplit && !opaqueExt.empty()) {
-        TString modified = NTable::TOverlay::MaybeUnsplitSlices(opaqueExt);
-        if (!modified.empty()) {
-            opaqueExt = std::move(modified);
-        }
-    }
-
+    if (unsplit && !opaqueExt.empty()) { 
+        TString modified = NTable::TOverlay::MaybeUnsplitSlices(opaqueExt); 
+        if (!modified.empty()) { 
+            opaqueExt = std::move(modified); 
+        } 
+    } 
+ 
     return NTable::TPartComponents{ std::move(components), std::move(opaque), std::move(opaqueExt), epoch };
 }
 

@@ -666,7 +666,7 @@ private:
             return InternalError(issueCode, error);
         }
 
-        auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
+        auto keyDesc = std::move(request->ResultSet[0].KeyDescription); 
 
         if (keyDesc->Partitions.empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << ScanData->TablePath << "'";
@@ -950,7 +950,7 @@ private:
         // Avoid setting DomainOwnerId to reduce possible races with schemeshard migration
         // TODO: request->DatabaseName = ...;
         // TODO: request->UserToken = ...;
-        request->ResultSet.emplace_back(std::move(keyDesc));
+        request->ResultSet.emplace_back(std::move(keyDesc)); 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(ScanData->TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
     }

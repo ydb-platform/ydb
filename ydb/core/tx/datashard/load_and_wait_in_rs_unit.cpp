@@ -69,8 +69,8 @@ EExecutionStatus TLoadAndWaitInRSUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Continue;
     }
 
-    // We only count transactions that had to wait for incoming readsets
-    DataShard.IncCounter(COUNTER_WAIT_READSETS_LATENCY_MS, op->GetCurrentElapsedAndReset().MilliSeconds());
+    // We only count transactions that had to wait for incoming readsets 
+    DataShard.IncCounter(COUNTER_WAIT_READSETS_LATENCY_MS, op->GetCurrentElapsedAndReset().MilliSeconds()); 
     return EExecutionStatus::Executed;
 }
 

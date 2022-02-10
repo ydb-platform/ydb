@@ -41,34 +41,34 @@ namespace NBloom {
         TSmallVec<ui32> Offsets;
     };
 
-    struct THashRoot {
-        ui64 Value;
-    };
-
+    struct THashRoot { 
+        ui64 Value; 
+    }; 
+ 
     class THash {
     public:
-        explicit THash(THashRoot root)
+        explicit THash(THashRoot root) 
         {
             // https://github.com/google/leveldb/blob/master/util/bloom.cc#L54
-            Hash = root.Value;
+            Hash = root.Value; 
             Delta = (Hash >> 33) | (Hash << 31);
         }
 
-        explicit THash(TArrayRef<const char> row)
-            : THash(Root(row))
-        {
-        }
-
+        explicit THash(TArrayRef<const char> row) 
+            : THash(Root(row)) 
+        { 
+        } 
+ 
         ui64 Next() noexcept
         {
             return std::exchange(Hash, Hash + Delta);
         }
 
-        static THashRoot Root(TArrayRef<const char> row) noexcept
-        {
+        static THashRoot Root(TArrayRef<const char> row) noexcept 
+        { 
             return THashRoot{ MurmurHash<ui64>(row.data(), row.size(), 0x4b7db4c869874dd1ull) };
-        }
-
+        } 
+ 
     private:
         ui64 Hash = 0;
         ui64 Delta = 0;

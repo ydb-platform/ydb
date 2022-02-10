@@ -37,8 +37,8 @@ namespace NActors {
     }
 
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{d}
+        : TPortManager(false) 
+        , TTestActorRuntimeBase{d} 
     {
         /* How it is possible to do initilization without these components? */
         NKikimr::TAppData::RandomProvider = RandomProvider;
@@ -48,22 +48,22 @@ namespace NActors {
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
+        : TPortManager(false) 
+        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads} 
     {
         Initialize();
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount}
+        : TPortManager(false) 
+        , TTestActorRuntimeBase{nodeCount, dataCenterCount} 
     {
         Initialize();
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, bool useRealThreads)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, useRealThreads}
+        : TPortManager(false) 
+        , TTestActorRuntimeBase{nodeCount, useRealThreads} 
     {
         Initialize();
     }
@@ -95,7 +95,7 @@ namespace NActors {
             NKikimr::TAppData::TimeProvider = TimeProvider;
         }
 
-        MonPorts.clear();
+        MonPorts.clear(); 
         for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
             ui32 nodeId = FirstNodeId + nodeIndex;
             auto* node = GetNodeById(nodeId);
@@ -132,9 +132,9 @@ namespace NActors {
             nodeAppData->FeatureFlags = app0->FeatureFlags;
             nodeAppData->CompactionConfig = app0->CompactionConfig;
             nodeAppData->HiveConfig = app0->HiveConfig;
-            nodeAppData->DataShardConfig = app0->DataShardConfig;
+            nodeAppData->DataShardConfig = app0->DataShardConfig; 
             nodeAppData->MeteringConfig = app0->MeteringConfig;
-            nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
+            nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot; 
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
@@ -142,8 +142,8 @@ namespace NActors {
                 nodeAppData->KeyConfig.CopyFrom(app0->KeyConfig);
             }
 
-            if (NeedMonitoring && !SingleSysEnv) {
-                ui16 port = GetPortManager().GetPort();
+            if (NeedMonitoring && !SingleSysEnv) { 
+                ui16 port = GetPortManager().GetPort(); 
                 node->Mon.Reset(new NActors::TMon({
                     .Port = port,
                     .Threads = 10,
@@ -155,7 +155,7 @@ namespace NActors {
                 node->Mon->RegisterActorPage(actorsMonPage, "profiler", "Profiler", false, node->ActorSystem.Get(), MakeProfilerID(FirstNodeId + nodeIndex));
                 const NActors::TActorId loggerActorId = NActors::TActorId(FirstNodeId + nodeIndex, "logger");
                 node->Mon->RegisterActorPage(actorsMonPage, "logger", "Logger", false, node->ActorSystem.Get(), loggerActorId);
-                MonPorts.push_back(port);
+                MonPorts.push_back(port); 
             }
 
             node->ActorSystem->Start();
@@ -165,11 +165,11 @@ namespace NActors {
         }
     }
 
-    ui16 TTestActorRuntime::GetMonPort(ui32 nodeIndex) const {
-        Y_VERIFY(nodeIndex < MonPorts.size(), "Unknown MonPort for nodeIndex = %" PRIu32, nodeIndex);
-        return MonPorts[nodeIndex];
-    }
-
+    ui16 TTestActorRuntime::GetMonPort(ui32 nodeIndex) const { 
+        Y_VERIFY(nodeIndex < MonPorts.size(), "Unknown MonPort for nodeIndex = %" PRIu32, nodeIndex); 
+        return MonPorts[nodeIndex]; 
+    } 
+ 
     void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup) {
         setup.MaxActivityType = GetActivityTypeCount();
     }

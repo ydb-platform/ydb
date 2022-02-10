@@ -45,7 +45,7 @@
     action(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT)   \
     action(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult,  NSchemeShard::TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT)  \
     action(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
-\
+\ 
     action(NReplication::TEvController::TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
     action(NReplication::TEvController::TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \
 \
@@ -184,7 +184,7 @@ public:
     #undef DefaultHandleReply
 };
 
-ISubOperationBase::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response);
+ISubOperationBase::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response); 
 ISubOperationBase::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message);
 
 ISubOperationBase::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx);
@@ -202,7 +202,7 @@ ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState
 ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = { });
+ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = { }); 
 ISubOperationBase::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperationBase::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx);
@@ -268,18 +268,18 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
 
 ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, TTxState::ETxState state); 
+ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState state); 
 
-ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, TTxState::ETxState state);
-
+ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, TTxState::ETxState state); 
+ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, TTxState::ETxState state); 
+ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, TTxState::ETxState state); 
+ 
 ISubOperationBase::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state);
 
@@ -388,12 +388,12 @@ ISubOperationBase::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState stat
 
 ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, TTxState::ETxState state);
-
-ISubOperationBase::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state);
-
+ 
+ISubOperationBase::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state); 
+ISubOperationBase::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state); 
+ 
 ISubOperationBase::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);
 ISubOperationBase::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx);

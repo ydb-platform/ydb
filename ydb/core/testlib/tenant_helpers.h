@@ -87,7 +87,7 @@ struct TCreateTenantRequest {
     TSlotsCont Slots;
     // Serverless
     TString SharedDbPath;
-    ui32 PlanResolution = 0;
+    ui32 PlanResolution = 0; 
 
     TCreateTenantRequest() = delete;
 
@@ -122,16 +122,16 @@ struct TCreateTenantRequest {
         return *this;
     }
 
-    TSelf& WithSlots(const TString& type, const TString& zone, ui64 count) {
-        if (Type == EType::Unspecified) {
-            Type = EType::Common;
-        }
-
-        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared);
-        Slots.push_back({type, zone, count});
-        return *this;
-    }
-
+    TSelf& WithSlots(const TString& type, const TString& zone, ui64 count) { 
+        if (Type == EType::Unspecified) { 
+            Type = EType::Common; 
+        } 
+ 
+        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared); 
+        Slots.push_back({type, zone, count}); 
+        return *this; 
+    } 
+ 
     TSelf& WithSharedDbPath(const TString& path) {
         if (Type == EType::Unspecified) {
             Type = EType::Serverless;
@@ -141,11 +141,11 @@ struct TCreateTenantRequest {
         SharedDbPath = path;
         return *this;
     }
-
-    TSelf& WithPlanResolution(ui32 planResolution) {
-        PlanResolution = planResolution;
-        return *this;
-    }
+ 
+    TSelf& WithPlanResolution(ui32 planResolution) { 
+        PlanResolution = planResolution; 
+        return *this; 
+    } 
 };
 
 inline void CheckCreateTenant(TTenantTestRuntime &runtime,
@@ -186,10 +186,10 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
         event->Record.MutableRequest()->mutable_serverless_resources()->set_shared_database_path(request.SharedDbPath);
     }
 
-    if (request.PlanResolution) {
-        event->Record.MutableRequest()->mutable_options()->set_plan_resolution(request.PlanResolution);
-    }
-
+    if (request.PlanResolution) { 
+        event->Record.MutableRequest()->mutable_options()->set_plan_resolution(request.PlanResolution); 
+    } 
+ 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
     auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvCreateTenantResponse>(handle);
@@ -294,7 +294,7 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
         UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
     } else {
         TString id = operation.id();
-        for (;;) {
+        for (;;) { 
             auto check = new NConsole::TEvConsole::TEvGetOperationRequest;
             check->Record.MutableRequest()->set_id(id);
             runtime.SendToConsole(check);
@@ -302,11 +302,11 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
             auto &checkOperation = checkReply->Record.GetResponse().operation();
             if (checkOperation.ready()) {
                 UNIT_ASSERT_VALUES_EQUAL(checkOperation.status(), code);
-                break;
+                break; 
             }
-
-            TDispatchOptions options;
-            runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
+ 
+            TDispatchOptions options; 
+            runtime.DispatchEvents(options, TDuration::MilliSeconds(100)); 
         }
     }
 }
@@ -318,34 +318,34 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
     CheckRemoveTenant(runtime, path, "", code);
 }
 
-inline void WaitTenantStatus(TTenantTestRuntime &runtime,
-                             const TString &path,
-                             TVector<Ydb::Cms::GetDatabaseStatusResult::State> expected)
-{
-    for (;;) {
-        auto *req = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
-        req->Record.MutableRequest()->set_path(path);
-        runtime.SendToConsole(req);
-
-        auto ev = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(runtime.Sender);
-        auto &operation = ev->Get()->Record.GetResponse().operation();
-        UNIT_ASSERT_C(operation.status() == Ydb::StatusIds::SUCCESS,
-                "Unexpected status " << operation.status() << " for tenant " << path);
-
-        Ydb::Cms::GetDatabaseStatusResult result;
-        UNIT_ASSERT_C(operation.result().UnpackTo(&result),
-                "Failed to unpack status result for tenant " << path);
-
-        if (std::find(expected.begin(), expected.end(), result.state()) != expected.end())
-            break;
-
-        TDispatchOptions options;
-        runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
-    }
-}
-
-inline void WaitTenantRunning(TTenantTestRuntime &runtime, const TString &path) {
-    WaitTenantStatus(runtime, path, { Ydb::Cms::GetDatabaseStatusResult::RUNNING });
-}
-
+inline void WaitTenantStatus(TTenantTestRuntime &runtime, 
+                             const TString &path, 
+                             TVector<Ydb::Cms::GetDatabaseStatusResult::State> expected) 
+{ 
+    for (;;) { 
+        auto *req = new NConsole::TEvConsole::TEvGetTenantStatusRequest; 
+        req->Record.MutableRequest()->set_path(path); 
+        runtime.SendToConsole(req); 
+ 
+        auto ev = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(runtime.Sender); 
+        auto &operation = ev->Get()->Record.GetResponse().operation(); 
+        UNIT_ASSERT_C(operation.status() == Ydb::StatusIds::SUCCESS, 
+                "Unexpected status " << operation.status() << " for tenant " << path); 
+ 
+        Ydb::Cms::GetDatabaseStatusResult result; 
+        UNIT_ASSERT_C(operation.result().UnpackTo(&result), 
+                "Failed to unpack status result for tenant " << path); 
+ 
+        if (std::find(expected.begin(), expected.end(), result.state()) != expected.end()) 
+            break; 
+ 
+        TDispatchOptions options; 
+        runtime.DispatchEvents(options, TDuration::MilliSeconds(100)); 
+    } 
+} 
+ 
+inline void WaitTenantRunning(TTenantTestRuntime &runtime, const TString &path) { 
+    WaitTenantStatus(runtime, path, { Ydb::Cms::GetDatabaseStatusResult::RUNNING }); 
+} 
+ 
 } // namespace NKikimr

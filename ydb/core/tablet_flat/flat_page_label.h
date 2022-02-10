@@ -1,10 +1,10 @@
 #pragma once
 
 #include "flat_page_iface.h"
-#include "util_basics.h"
+#include "util_basics.h" 
 
 #include <ydb/core/base/shared_data.h>
-
+ 
 #include <util/generic/array_ref.h>
 #include <util/system/unaligned_mem.h>
 
@@ -16,9 +16,9 @@ namespace NPage {
         EPage Type;
         ui16 Format;
         TSize Size;
-
-        void Init(EPage type, ui16 format, ui64 size) noexcept;
-        void SetSize(ui64 size) noexcept;
+ 
+        void Init(EPage type, ui16 format, ui64 size) noexcept; 
+        void SetSize(ui64 size) noexcept; 
     };
 
     static_assert(sizeof(TLabel) == 8, "Invalid page TLabel unit");

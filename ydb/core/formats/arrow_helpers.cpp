@@ -247,73 +247,73 @@ std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
     return *schema;
 }
 
-namespace {
-    class TFixedStringOutputStream final : public arrow::io::OutputStream {
-    public:
-        TFixedStringOutputStream(TString* out)
-            : Out(out)
-            , Position(0)
-        { }
+namespace { 
+    class TFixedStringOutputStream final : public arrow::io::OutputStream { 
+    public: 
+        TFixedStringOutputStream(TString* out) 
+            : Out(out) 
+            , Position(0) 
+        { } 
 
-        arrow::Status Close() override {
-            Out = nullptr;
-            return arrow::Status::OK();
+        arrow::Status Close() override { 
+            Out = nullptr; 
+            return arrow::Status::OK(); 
+        } 
+
+        bool closed() const override { 
+            return Out == nullptr; 
+        } 
+
+        arrow::Result<int64_t> Tell() const override { 
+            return Position; 
         }
-
-        bool closed() const override {
-            return Out == nullptr;
-        }
-
-        arrow::Result<int64_t> Tell() const override {
-            return Position;
-        }
-
-        arrow::Status Write(const void* data, int64_t nbytes) override {
-            if (Y_LIKELY(nbytes > 0)) {
-                Y_VERIFY(Out && Out->size() - Position >= ui64(nbytes));
-                char* dst = &(*Out)[Position];
-                ::memcpy(dst, data, nbytes);
-                Position += nbytes;
-            }
-
-            return arrow::Status::OK();
-        }
-
-        size_t GetPosition() const {
-            return Position;
-        }
-
-    private:
-        TString* Out;
-        size_t Position;
-    };
+ 
+        arrow::Status Write(const void* data, int64_t nbytes) override { 
+            if (Y_LIKELY(nbytes > 0)) { 
+                Y_VERIFY(Out && Out->size() - Position >= ui64(nbytes)); 
+                char* dst = &(*Out)[Position]; 
+                ::memcpy(dst, data, nbytes); 
+                Position += nbytes; 
+            } 
+ 
+            return arrow::Status::OK(); 
+        } 
+ 
+        size_t GetPosition() const { 
+            return Position; 
+        } 
+ 
+    private: 
+        TString* Out; 
+        size_t Position; 
+    }; 
 }
 
 TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options) {
-    arrow::ipc::IpcPayload payload;
-    auto status = arrow::ipc::GetRecordBatchPayload(*batch, options, &payload);
-    Y_VERIFY_OK(status);
-
-    int32_t metadata_length = 0;
-    arrow::io::MockOutputStream mock;
-    status = arrow::ipc::WriteIpcPayload(payload, options, &mock, &metadata_length);
-    Y_VERIFY_OK(status);
-
-    TString str;
-    str.resize(mock.GetExtentBytesWritten());
-
-    TFixedStringOutputStream out(&str);
-    status = arrow::ipc::WriteIpcPayload(payload, options, &out, &metadata_length);
-    Y_VERIFY_OK(status);
-    Y_VERIFY(out.GetPosition() == str.size());
-
-    return str;
+    arrow::ipc::IpcPayload payload; 
+    auto status = arrow::ipc::GetRecordBatchPayload(*batch, options, &payload); 
+    Y_VERIFY_OK(status); 
+ 
+    int32_t metadata_length = 0; 
+    arrow::io::MockOutputStream mock; 
+    status = arrow::ipc::WriteIpcPayload(payload, options, &mock, &metadata_length); 
+    Y_VERIFY_OK(status); 
+ 
+    TString str; 
+    str.resize(mock.GetExtentBytesWritten()); 
+ 
+    TFixedStringOutputStream out(&str); 
+    status = arrow::ipc::WriteIpcPayload(payload, options, &out, &metadata_length); 
+    Y_VERIFY_OK(status); 
+    Y_VERIFY(out.GetPosition() == str.size()); 
+ 
+    return str; 
 }
 
 TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch) {
     auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
     writeOptions.use_threads = false;
-    return SerializeBatch(batch, writeOptions);
+    return SerializeBatch(batch, writeOptions); 
 }
 
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema) {

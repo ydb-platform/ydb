@@ -3,7 +3,7 @@ RECURSE_FOR_TESTS(ut)
 RECURSE(
     log_backend
     core
-    dnsresolver
+    dnsresolver 
     examples
     memory_log
     helpers

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sys_tables.h"
-#include "range_treap.h"
+#include "range_treap.h" 
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
@@ -11,28 +11,28 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 
-#include <util/system/valgrind.h>
-#include <util/system/sanitizers.h>
-
+#include <util/system/valgrind.h> 
+#include <util/system/sanitizers.h> 
+ 
 namespace NKikimr {
 namespace NDataShard {
 
-struct TUserTable;
-
+struct TUserTable; 
+ 
 class TLocksDataShard {
 public:
-    TLocksDataShard(TTabletCountersBase* const &tabletCounters)
+    TLocksDataShard(TTabletCountersBase* const &tabletCounters) 
         : TabletCounters(tabletCounters)
     {
     }
-
+ 
     virtual ~TLocksDataShard() = default;
 
-    virtual void IncCounter(ECumulativeCounters counter,
+    virtual void IncCounter(ECumulativeCounters counter, 
                             ui64 num = 1) const = 0;
-    virtual void IncCounter(EPercentileCounters counter,
+    virtual void IncCounter(EPercentileCounters counter, 
                             ui64 num) const = 0;
-    virtual void IncCounter(EPercentileCounters counter,
+    virtual void IncCounter(EPercentileCounters counter, 
                             const TDuration& latency) const = 0;
 
     virtual ui64 TabletID() const = 0;
@@ -48,24 +48,24 @@ class TLocksDataShardAdapter : public TLocksDataShard
 {
 public:
     TLocksDataShardAdapter(const T *self)
-        : TLocksDataShard(self->TabletCounters)
+        : TLocksDataShard(self->TabletCounters) 
         , Self(self)
     {
     }
 
-    void IncCounter(ECumulativeCounters counter,
+    void IncCounter(ECumulativeCounters counter, 
                     ui64 num = 1) const override
     {
         return Self->IncCounter(counter, num);
     }
 
-    void IncCounter(EPercentileCounters counter,
+    void IncCounter(EPercentileCounters counter, 
                     ui64 num) const override
     {
         return Self->IncCounter(counter, num);
     }
 
-    void IncCounter(EPercentileCounters counter,
+    void IncCounter(EPercentileCounters counter, 
                     const TDuration& latency) const override
     {
         return Self->IncCounter(counter, latency);
@@ -95,30 +95,30 @@ private:
     const T *Self;
 };
 
-class TLockInfo;
+class TLockInfo; 
 class TTableLocks;
-class TLockLocker;
+class TLockLocker; 
 
 ///
-struct TPointKey {
-    TIntrusivePtr<TTableLocks> Table;
-    TOwnedCellVec Key;
+struct TPointKey { 
+    TIntrusivePtr<TTableLocks> Table; 
+    TOwnedCellVec Key; 
 
-    TOwnedTableRange ToOwnedTableRange() const {
-        return TOwnedTableRange(Key);
+    TOwnedTableRange ToOwnedTableRange() const { 
+        return TOwnedTableRange(Key); 
     }
 };
 
 ///
-struct TRangeKey {
-    TIntrusivePtr<TTableLocks> Table;
-    TOwnedCellVec From;
-    TOwnedCellVec To;
-    bool InclusiveFrom;
-    bool InclusiveTo;
+struct TRangeKey { 
+    TIntrusivePtr<TTableLocks> Table; 
+    TOwnedCellVec From; 
+    TOwnedCellVec To; 
+    bool InclusiveFrom; 
+    bool InclusiveTo; 
 
-    TOwnedTableRange ToOwnedTableRange() const {
-        return TOwnedTableRange(From, InclusiveFrom, To, InclusiveTo);
+    TOwnedTableRange ToOwnedTableRange() const { 
+        return TOwnedTableRange(From, InclusiveFrom, To, InclusiveTo); 
     }
 };
 
@@ -137,9 +137,9 @@ struct TVersionedLockId {
 
 /// Aggregates shard, point and range locks
 class TLockInfo : public TSimpleRefCount<TLockInfo> {
-    friend class TTableLocks;
-    friend class TLockLocker;
-
+    friend class TTableLocks; 
+    friend class TLockLocker; 
+ 
 public:
     using TPtr = TIntrusivePtr<TLockInfo>;
 
@@ -149,36 +149,36 @@ public:
     ui64 GetCounter(const TRowVersion& at = TRowVersion::Max()) const { return !BreakVersion || at < *BreakVersion ? Counter : Max<ui64>(); }
     bool IsBroken(const TRowVersion& at = TRowVersion::Max()) const { return GetCounter(at) == Max<ui64>(); }
 
-    size_t NumPoints() const { return Points.size(); }
-    size_t NumRanges() const { return Ranges.size(); }
+    size_t NumPoints() const { return Points.size(); } 
+    size_t NumRanges() const { return Ranges.size(); } 
     bool IsShardLock() const { return ShardLock; }
     //ui64 MemorySize() const { return 1; } // TODO
 
-    bool MayHavePointsAndRanges() const { return !ShardLock && (!BreakVersion || *BreakVersion); }
-
+    bool MayHavePointsAndRanges() const { return !ShardLock && (!BreakVersion || *BreakVersion); } 
+ 
     ui64 GetLockId() const { return LockId; }
 
     TInstant GetCreationTime() const { return CreationTime; }
-    const THashSet<TPathId>& GetAffectedTables() const { return AffectedTables; }
+    const THashSet<TPathId>& GetAffectedTables() const { return AffectedTables; } 
 
-    const TVector<TPointKey>& GetPoints() const { return Points; }
-    const TVector<TRangeKey>& GetRanges() const { return Ranges; }
-
+    const TVector<TPointKey>& GetPoints() const { return Points; } 
+    const TVector<TRangeKey>& GetRanges() const { return Ranges; } 
+ 
 private:
-    void AddShardLock(const THashSet<TPathId>& affectedTables);
-    bool AddPoint(const TPointKey& point);
-    bool AddRange(const TRangeKey& range);
+    void AddShardLock(const THashSet<TPathId>& affectedTables); 
+    bool AddPoint(const TPointKey& point); 
+    bool AddRange(const TRangeKey& range); 
     void SetBroken(const TRowVersion& at);
-
-private:
+ 
+private: 
     TLockLocker * Locker;
     ui64 LockId;
     ui64 Counter;
-    TInstant CreationTime;
-    THashSet<TPathId> AffectedTables;
-    TVector<TPointKey> Points;
+    TInstant CreationTime; 
+    THashSet<TPathId> AffectedTables; 
+    TVector<TPointKey> Points; 
     TVector<TRangeKey> Ranges;
-    bool ShardLock = false;
+    bool ShardLock = false; 
 
     std::optional<TRowVersion> BreakVersion;
 };
@@ -190,20 +190,20 @@ public:
 
     static constexpr ui32 SavedKeys = 64;
 
-    TTableLocks(const TPathId& tableId)
+    TTableLocks(const TPathId& tableId) 
         : TableId(tableId)
     {}
 
-    TPathId GetTableId() const { return TableId; }
+    TPathId GetTableId() const { return TableId; } 
 
-    void AddPointLock(const TPointKey& point, const TLockInfo::TPtr& lock);
-    void AddRangeLock(const TRangeKey& range, const TLockInfo::TPtr& lock);
-    void RemoveLock(const TLockInfo::TPtr& lock);
+    void AddPointLock(const TPointKey& point, const TLockInfo::TPtr& lock); 
+    void AddRangeLock(const TRangeKey& range, const TLockInfo::TPtr& lock); 
+    void RemoveLock(const TLockInfo::TPtr& lock); 
     void BreakLocks(TConstArrayRef<TCell> key, const TRowVersion& at);
-    void BreakAllLocks(const TRowVersion& at);
+    void BreakAllLocks(const TRowVersion& at); 
 
-    ui64 NumKeyColumns() const {
-        return KeyColumnTypes.size();
+    ui64 NumKeyColumns() const { 
+        return KeyColumnTypes.size(); 
     }
 
     NScheme::TTypeId GetKeyColumnType(ui32 pos) const {
@@ -213,23 +213,23 @@ public:
 
     void UpdateKeyColumnsTypes(const TVector<NScheme::TTypeId>& keyTypes) {
         Y_VERIFY(KeyColumnTypes.size() <= keyTypes.size());
-        if (KeyColumnTypes.size() < keyTypes.size()) {
+        if (KeyColumnTypes.size() < keyTypes.size()) { 
             KeyColumnTypes = keyTypes;
-            Ranges.SetKeyTypes(keyTypes);
-        }
+            Ranges.SetKeyTypes(keyTypes); 
+        } 
     }
 
-    bool HasLocks() const { return Ranges.Size() > 0; }
-    ui64 RangeCount() const { return Ranges.Size(); }
+    bool HasLocks() const { return Ranges.Size() > 0; } 
+    ui64 RangeCount() const { return Ranges.Size(); } 
 
     void Clear() {
-        Ranges.Clear();
+        Ranges.Clear(); 
     }
 
 private:
-    const TPathId TableId;
+    const TPathId TableId; 
     TVector<NScheme::TTypeId> KeyColumnTypes;
-    TRangeTreap<TLockInfo*> Ranges;
+    TRangeTreap<TLockInfo*> Ranges; 
 };
 
 /// Owns and manages locks
@@ -239,15 +239,15 @@ public:
     class TLockLimiter {
     public:
         static constexpr ui32 TimeLimitMSec() { return 5 * 60 * 1000; }
-        static constexpr ui64 LockLimit() {
-            // Valgrind and sanitizers are too slow
-            // Some tests cannot exhaust default limit in under 5 minutes
-            return NValgrind::PlainOrUnderValgrind(
-                NSan::PlainOrUnderSanitizer(
-                    16 * 1024,
-                    1024),
-                1024);
-        }
+        static constexpr ui64 LockLimit() { 
+            // Valgrind and sanitizers are too slow 
+            // Some tests cannot exhaust default limit in under 5 minutes 
+            return NValgrind::PlainOrUnderValgrind( 
+                NSan::PlainOrUnderSanitizer( 
+                    16 * 1024, 
+                    1024), 
+                1024); 
+        } 
 
         TLockLimiter(TLockLocker * parent)
             : Parent(parent)
@@ -280,7 +280,7 @@ public:
         Tables.clear();
     }
 
-    TLockInfo::TPtr AddShardLock(ui64 lockTxId, const THashSet<TPathId>& affectedTables, const TRowVersion& at);
+    TLockInfo::TPtr AddShardLock(ui64 lockTxId, const THashSet<TPathId>& affectedTables, const TRowVersion& at); 
     TLockInfo::TPtr AddPointLock(ui64 lockTxId, const TPointKey& key, const TRowVersion& at);
     TLockInfo::TPtr AddRangeLock(ui64 lockTxId, const TRangeKey& key, const TRowVersion& at);
     TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at) const;
@@ -290,38 +290,38 @@ public:
 
     void BreakShardLocks(const TRowVersion& at);
     void BreakLocks(const TPointKey& point, const TRowVersion& at);
-    void BreakAllLocks(const TPathId& pathId, const TRowVersion& at);
+    void BreakAllLocks(const TPathId& pathId, const TRowVersion& at); 
     void BreakLock(ui64 lockTxId, const TRowVersion& at);
-    void RemoveLock(ui64 lockTxId);
+    void RemoveLock(ui64 lockTxId); 
 
-    bool TableHasLocks(const TTableId& tableId) const {
-        auto it = Tables.find(tableId.PathId);
+    bool TableHasLocks(const TTableId& tableId) const { 
+        auto it = Tables.find(tableId.PathId); 
         if (it == Tables.end())
             return false;
         return it->second->HasLocks();
     }
 
-    TPointKey MakePoint(const TTableId& tableId, TConstArrayRef<TCell> point) const {
-        return TPointKey{
-            GetTableLocks(tableId),
-            TOwnedCellVec(point),
-        };
+    TPointKey MakePoint(const TTableId& tableId, TConstArrayRef<TCell> point) const { 
+        return TPointKey{ 
+            GetTableLocks(tableId), 
+            TOwnedCellVec(point), 
+        }; 
     }
 
-    TRangeKey MakeRange(const TTableId& tableId, const TTableRange& range) const {
-        Y_VERIFY(!range.Point);
-        return TRangeKey{
-            GetTableLocks(tableId),
-            TOwnedCellVec(range.From),
-            TOwnedCellVec(range.To),
-            range.InclusiveFrom,
-            range.InclusiveTo,
-        };
+    TRangeKey MakeRange(const TTableId& tableId, const TTableRange& range) const { 
+        Y_VERIFY(!range.Point); 
+        return TRangeKey{ 
+            GetTableLocks(tableId), 
+            TOwnedCellVec(range.From), 
+            TOwnedCellVec(range.To), 
+            range.InclusiveFrom, 
+            range.InclusiveTo, 
+        }; 
     }
 
-    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo);
+    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo); 
     void RemoveSchema(const TPathId& tableId);
-    bool ForceShardLock(const THashSet<TPathId>& rangeTables) const;
+    bool ForceShardLock(const THashSet<TPathId>& rangeTables) const; 
 
     // optimisation: set to remove broken lock at next Remove()
     void ScheduleLockCleanup(ui64 lockId, const TRowVersion& at);
@@ -331,23 +331,23 @@ public:
 private:
     THolder<TLocksDataShard> Self;
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
-    THashMap<TPathId, TTableLocks::TPtr> Tables;
+    THashMap<TPathId, TTableLocks::TPtr> Tables; 
     THashSet<ui64> ShardLocks;
     TVector<ui64> BrokenLocks; // LockIds of broken locks (optimisation)
-    TVector<ui64> CleanupPending; // LockIds of broken locks with pending cleanup
+    TVector<ui64> CleanupPending; // LockIds of broken locks with pending cleanup 
     TPriorityQueue<TVersionedLockId> BrokenCandidates;
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
     TLockLimiter Limiter;
     ui64 Counter;
 
     TTableLocks::TPtr GetTableLocks(const TTableId& table) const {
-        auto it = Tables.find(table.PathId);
+        auto it = Tables.find(table.PathId); 
         Y_VERIFY(it != Tables.end());
         return it->second;
     }
 
-    void RemoveBrokenRanges();
-
+    void RemoveBrokenRanges(); 
+ 
     TLockInfo::TPtr GetOrAddLock(ui64 lockId);
     void RemoveOneLock(ui64 lockId);
     void RemoveBrokenLocks();
@@ -359,12 +359,12 @@ struct TLocksUpdate {
     TVector<TPointKey> PointLocks;
     TVector<TRangeKey> RangeLocks;
     TVector<TPointKey> PointBreaks;
-    THashSet<TPathId> AllBreaks;
+    THashSet<TPathId> AllBreaks; 
     TVector<ui64> Erases;
     bool ShardLock = false;
     bool ShardBreak = false;
-    THashSet<TPathId> AffectedTables;
-    THashSet<TPathId> RangeTables;
+    THashSet<TPathId> AffectedTables; 
+    THashSet<TPathId> RangeTables; 
 
     TRowVersion CheckVersion = TRowVersion::Max();
     TRowVersion BreakVersion = TRowVersion::Min();
@@ -377,7 +377,7 @@ struct TLocksUpdate {
         ShardBreak = false;
         PointLocks.clear();
         PointBreaks.clear();
-        AllBreaks.clear();
+        AllBreaks.clear(); 
         Erases.clear();
     }
 
@@ -387,14 +387,14 @@ struct TLocksUpdate {
 
     void SetLock(const TTableId& tableId, const TRangeKey& range, ui64 lockId) {
         Y_VERIFY(LockTxId == lockId);
-        AffectedTables.insert(tableId.PathId);
-        RangeTables.insert(tableId.PathId);
+        AffectedTables.insert(tableId.PathId); 
+        RangeTables.insert(tableId.PathId); 
         RangeLocks.push_back(range);
     }
 
     void SetLock(const TTableId& tableId, const TPointKey& key, ui64 lockId) {
         Y_VERIFY(LockTxId == lockId);
-        AffectedTables.insert(tableId.PathId);
+        AffectedTables.insert(tableId.PathId); 
         PointLocks.push_back(key);
     }
 
@@ -402,10 +402,10 @@ struct TLocksUpdate {
         PointBreaks.push_back(key);
     }
 
-    void BreakAllLocks(const TTableId& tableId) {
-        AllBreaks.insert(tableId.PathId);
-    }
-
+    void BreakAllLocks(const TTableId& tableId) { 
+        AllBreaks.insert(tableId.PathId); 
+    } 
+ 
     void BreakShardLock() {
         ShardBreak = true;
     }
@@ -456,7 +456,7 @@ public:
         return Update->LockTxId;
     }
 
-    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
+    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) { 
         Locker.UpdateSchema(tableId, tableInfo);
     }
 
@@ -465,13 +465,13 @@ public:
     }
 
     TVector<TLock> ApplyLocks();
-    ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
+    ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const; 
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
     void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId);
     void SetLock(const TTableId& tableId, const TTableRange& range, ui64 lockTxId);
     void BreakLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
-    void BreakAllLocks(const TTableId& tableId);
+    void BreakAllLocks(const TTableId& tableId); 
     void BreakSetLocks(ui64 lockTxId);
     bool IsMyKey(const TArrayRef<const TCell>& key) const;
 
@@ -480,8 +480,8 @@ public:
 
     TLockInfo::TPtr GetRawLock(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const {
         return Locker.GetLock(lockTxId, at);
-    }
-
+    } 
+ 
     bool IsBroken(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const {
         TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, at);
         if (txLock)
@@ -496,8 +496,8 @@ private:
     TLocksCache *AccessLog;
     TLocksCache *Cache;
 
-    TLock MakeLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const;
-    TLock MakeAndLogLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const;
+    TLock MakeLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const; 
+    TLock MakeAndLogLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const; 
 
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;
@@ -508,4 +508,4 @@ private:
 };
 
 } // namespace NDataShard
-} // namespace NKikimr
+} // namespace NKikimr 

@@ -7,12 +7,12 @@ namespace NKikimr {
 namespace NFlatTxCoordinator {
 
 struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
-    ui64 Version = 0;
+    ui64 Version = 0; 
     TVector<TTabletId> Mediators;
-    TVector<TTabletId> Coordinators;
+    TVector<TTabletId> Coordinators; 
     ui64 PlanResolution;
-    ui64 LastPlanned = 0;
-    ui64 LastAcquired = 0;
+    ui64 LastPlanned = 0; 
+    ui64 LastAcquired = 0; 
 
     TTxInit(TSelf *coordinator)
         : TBase(coordinator)
@@ -23,15 +23,15 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
-        bool ready = true;
-        ready &= LoadDomainConfiguration(db);
-        ready &= LoadLastPlanned(db);
-        ready &= LoadLastAcquired(db);
-
-        return ready;
-    }
-
-    bool LoadDomainConfiguration(NIceDb::TNiceDb &db) {
+        bool ready = true; 
+        ready &= LoadDomainConfiguration(db); 
+        ready &= LoadLastPlanned(db); 
+        ready &= LoadLastAcquired(db); 
+ 
+        return ready; 
+    } 
+ 
+    bool LoadDomainConfiguration(NIceDb::TNiceDb &db) { 
         auto rowset = db.Table<Schema::DomainConfiguration>().Range().Select();
 
         if (!rowset.IsReady())
@@ -45,14 +45,14 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
             if (ver >= Version) {
                 Version = ver;
                 Mediators.swap(mediators);
-                Coordinators.clear();
+                Coordinators.clear(); 
                 PlanResolution = resolution;
-                if (rowset.HaveValue<Schema::DomainConfiguration::Config>()) {
-                    TProtoBox<NKikimrSubDomains::TProcessingParams> config(rowset.GetValue<Schema::DomainConfiguration::Config>());
-                    for (ui64 coordinator : config.GetCoordinators()) {
-                        Coordinators.push_back(coordinator);
-                    }
-                }
+                if (rowset.HaveValue<Schema::DomainConfiguration::Config>()) { 
+                    TProtoBox<NKikimrSubDomains::TProcessingParams> config(rowset.GetValue<Schema::DomainConfiguration::Config>()); 
+                    for (ui64 coordinator : config.GetCoordinators()) { 
+                        Coordinators.push_back(coordinator); 
+                    } 
+                } 
             }
 
             if (!rowset.Next())
@@ -62,30 +62,30 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    bool LoadLastPlanned(NIceDb::TNiceDb &db) {
-        auto rowset = db.Table<Schema::State>().Key(Schema::State::KeyLastPlanned).Select<Schema::State::StateValue>();
-
-        if (!rowset.IsReady())
-            return false;
-
-        if (rowset.IsValid())
-            LastPlanned = rowset.GetValue<Schema::State::StateValue>();
-
-        return true;
-    }
-
-    bool LoadLastAcquired(NIceDb::TNiceDb &db) {
-        auto rowset = db.Table<Schema::State>().Key(Schema::State::AcquireReadStepLast).Select<Schema::State::StateValue>();
-
-        if (!rowset.IsReady())
-            return false;
-
-        if (rowset.IsValid())
-            LastAcquired = rowset.GetValue<Schema::State::StateValue>();
-
-        return true;
-    }
-
+    bool LoadLastPlanned(NIceDb::TNiceDb &db) { 
+        auto rowset = db.Table<Schema::State>().Key(Schema::State::KeyLastPlanned).Select<Schema::State::StateValue>(); 
+ 
+        if (!rowset.IsReady()) 
+            return false; 
+ 
+        if (rowset.IsValid()) 
+            LastPlanned = rowset.GetValue<Schema::State::StateValue>(); 
+ 
+        return true; 
+    } 
+ 
+    bool LoadLastAcquired(NIceDb::TNiceDb &db) { 
+        auto rowset = db.Table<Schema::State>().Key(Schema::State::AcquireReadStepLast).Select<Schema::State::StateValue>(); 
+ 
+        if (!rowset.IsReady()) 
+            return false; 
+ 
+        if (rowset.IsValid()) 
+            LastAcquired = rowset.GetValue<Schema::State::StateValue>(); 
+ 
+        return true; 
+    } 
+ 
     bool IsTabletInStaticDomain(const TAppData *appdata) {
         const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
         Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);
@@ -101,17 +101,17 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     }
 
     void Complete(const TActorContext &ctx) override {
-        Self->VolatileState.LastPlanned = LastPlanned;
-        Self->VolatileState.LastSentStep = LastPlanned;
-        Self->VolatileState.LastAcquired = LastAcquired;
-
+        Self->VolatileState.LastPlanned = LastPlanned; 
+        Self->VolatileState.LastSentStep = LastPlanned; 
+        Self->VolatileState.LastAcquired = LastAcquired; 
+ 
         if (Mediators.size()) {
             LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
                  "tablet# " << Self->TabletID() <<
                  " CreateTxInit Complete");
             Self->Config.MediatorsVersion = Version;
             Self->Config.Mediators = new TMediators(std::move(Mediators));
-            Self->Config.Coordinators = Coordinators;
+            Self->Config.Coordinators = Coordinators; 
             Self->Config.Resolution = PlanResolution;
             Self->Execute(Self->CreateTxRestoreTransactions(), ctx);
             return;

@@ -433,7 +433,7 @@ public:
 
         NIceDb::TNiceDb db(context.Txc.DB);
 
-        context.SS->PersistRemoveTable(db, txState->TargetPathId, context.Ctx);
+        context.SS->PersistRemoveTable(db, txState->TargetPathId, context.Ctx); 
 
         context.OnComplete.DoneOperation(OperationId);
         return true;

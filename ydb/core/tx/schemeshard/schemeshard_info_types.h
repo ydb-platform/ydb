@@ -66,22 +66,22 @@ struct TSplitSettings {
     }
 };
 
-
-struct TBindingsRoomsChange {
-    TChannelsBindings ChannelsBindings;
+ 
+struct TBindingsRoomsChange { 
+    TChannelsBindings ChannelsBindings; 
     NKikimrSchemeOp::TPartitionConfig PerShardConfig;
-    bool ChannelsBindingsUpdated = false;
-};
-
+    bool ChannelsBindingsUpdated = false; 
+}; 
+ 
 using TChannelsMapping = TVector<TString>; // channel idx -> storage pool name
 
-/**
- * Maps original channels bindings to possible updates
- */
+/** 
+ * Maps original channels bindings to possible updates 
+ */ 
 using TBindingsRoomsChanges = TMap<TChannelsMapping, TBindingsRoomsChange>;
-
+ 
 TChannelsMapping GetPoolsMapping(const TChannelsBindings& bindings);
-
+ 
 struct TTableShardInfo {
     TShardIdx ShardIdx = InvalidShardIdx;
     TString EndOfRange;
@@ -174,8 +174,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     struct TColumn : public NTable::TColumn {
         ui64 CreateVersion;
         ui64 DeleteVersion;
-        ETableColumnDefaultKind DefaultKind = ETableColumnDefaultKind::None;
-        TString DefaultValue;
+        ETableColumnDefaultKind DefaultKind = ETableColumnDefaultKind::None; 
+        TString DefaultValue; 
         bool NotNull = false;
 
         TColumn(const TString& name, ui32 id, NScheme::TTypeId type)
@@ -236,17 +236,17 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ui64 Storage = 0;
         ui64 ReadThroughput = 0;
         ui64 WriteThroughput = 0;
-        ui64 ReadIops = 0;
-        ui64 WriteIops = 0;
+        ui64 ReadIops = 0; 
+        ui64 WriteIops = 0; 
 
         THashSet<TTabletId> PartOwners;
         ui64 PartCount = 0;
         ui64 SearchHeight = 0;
         ui32 ShardState = NKikimrTxDataShard::Unknown;
 
-        // True when PartOwners has parts from other tablets
-        bool HasBorrowed = false;
-
+        // True when PartOwners has parts from other tablets 
+        bool HasBorrowed = false; 
+ 
         // Tablet actor started at
         TInstant StartTime;
 
@@ -328,18 +328,18 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         }
 
         const NKikimrSchemeOp::TTableDescription& TableDescription() const {
-            if (IsFullPartitionConfig()) {
-                return *TableDescriptionFull;
-            }
-            return TableDescriptionDiff;
-        }
+            if (IsFullPartitionConfig()) { 
+                return *TableDescriptionFull; 
+            } 
+            return TableDescriptionDiff; 
+        } 
         NKikimrSchemeOp::TTableDescription& TableDescription() {
-            if (IsFullPartitionConfig()) {
-                return *TableDescriptionFull;
-            }
-            return TableDescriptionDiff;
-        }
-
+            if (IsFullPartitionConfig()) { 
+                return *TableDescriptionFull; 
+            } 
+            return TableDescriptionDiff; 
+        } 
+ 
         const NKikimrSchemeOp::TPartitionConfig& PartitionConfigDiff() const { return TableDescriptionDiff.GetPartitionConfig(); }
         NKikimrSchemeOp::TPartitionConfig& PartitionConfigDiff() { return *TableDescriptionDiff.MutablePartitionConfig(); }
 
@@ -347,10 +347,10 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         NKikimrSchemeOp::TPartitionConfig& PartitionConfigFull() { return *TableDescriptionFull->MutablePartitionConfig(); }
 
         const NKikimrSchemeOp::TPartitionConfig& PartitionConfigCompatible() const {
-            return TableDescription().GetPartitionConfig();
+            return TableDescription().GetPartitionConfig(); 
         }
         NKikimrSchemeOp::TPartitionConfig& PartitionConfigCompatible() {
-            return *TableDescription().MutablePartitionConfig();
+            return *TableDescription().MutablePartitionConfig(); 
         }
     };
 
@@ -375,7 +375,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TString PreSerializedPathDescription;
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
-
+ 
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
@@ -477,15 +477,15 @@ public:
     TVector<ui32> FillDescription(TPathElement::TPtr pathInfo);
 
     void SetRoom(const TStorageRoom& room) {
-        // WARNING: this is legacy support code
-        // StorageRooms from per-table partition config are only used for
-        // tablets that don't have per-shard patches. During migration we
-        // expect to only ever create single-room shards, which cannot have
-        // their storage config altered, so per-table and per-shard rooms
-        // cannot diverge. These settings will eventually become dead weight,
-        // only useful for ancient shards, after which may remove this code.
+        // WARNING: this is legacy support code 
+        // StorageRooms from per-table partition config are only used for 
+        // tablets that don't have per-shard patches. During migration we 
+        // expect to only ever create single-room shards, which cannot have 
+        // their storage config altered, so per-table and per-shard rooms 
+        // cannot diverge. These settings will eventually become dead weight, 
+        // only useful for ancient shards, after which may remove this code. 
         Y_VERIFY(room.GetId() == 0);
-        auto rooms = MutablePartitionConfig().MutableStorageRooms();
+        auto rooms = MutablePartitionConfig().MutableStorageRooms(); 
         rooms->Clear();
         rooms->Add()->CopyFrom(room);
     }
@@ -683,133 +683,133 @@ public:
         CondEraseSchedule.push(it);
         InFlightCondErase.erase(shardIdx);
     }
-
-    bool IsUsingSequence(const TString& name) {
-        for (const auto& pr : Columns) {
-            if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
-                pr.second.DefaultValue == name)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
+ 
+    bool IsUsingSequence(const TString& name) { 
+        for (const auto& pr : Columns) { 
+            if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence && 
+                pr.second.DefaultValue == name) 
+            { 
+                return true; 
+            } 
+        } 
+        return false; 
+    } 
 };
 
-struct TOlapSchema {
-    struct TColumn {
-        ui32 Id = Max<ui32>();
-        TString Name;
-        NScheme::TTypeId TypeId = 0;
-        ui32 KeyOrder = Max<ui32>();
-        // TODO: per-column ACL?
-
-        bool IsKeyColumn() const { return KeyOrder != Max<ui32>(); }
-    };
-
-    using TColumns = THashMap<ui32, TColumn>;
-    using TColumnsByName = THashMap<TString, ui32>;
-
-    TColumns Columns;
-    TColumnsByName ColumnsByName;
-    TVector<ui32> KeyColumnIds;
+struct TOlapSchema { 
+    struct TColumn { 
+        ui32 Id = Max<ui32>(); 
+        TString Name; 
+        NScheme::TTypeId TypeId = 0; 
+        ui32 KeyOrder = Max<ui32>(); 
+        // TODO: per-column ACL? 
+ 
+        bool IsKeyColumn() const { return KeyOrder != Max<ui32>(); } 
+    }; 
+ 
+    using TColumns = THashMap<ui32, TColumn>; 
+    using TColumnsByName = THashMap<TString, ui32>; 
+ 
+    TColumns Columns; 
+    TColumnsByName ColumnsByName; 
+    TVector<ui32> KeyColumnIds; 
     THashSet<TString> Tiers; // TODO: hash map with tier config
     NKikimrSchemeOp::EColumnTableEngine Engine = NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES;
-    ui32 NextColumnId = 1;
-    ui64 Version = 1;
-
-    const TColumn* FindColumnByName(const TString& name) const noexcept {
-        auto it = ColumnsByName.find(name);
-        if (it != ColumnsByName.end()) {
-            return &Columns.at(it->second);
-        }
-        return nullptr;
-    }
-
-    TColumn* FindColumnByName(const TString& name) noexcept {
-        auto it = ColumnsByName.find(name);
-        if (it != ColumnsByName.end()) {
-            return &Columns.at(it->second);
-        }
-        return nullptr;
-    }
-};
-
-struct TOlapStoreSchemaPreset : public TOlapSchema {
-    ui32 Id;
-    TString Name;
-
-    // Preset index in the olap store description
-    size_t ProtoIndex = -1;
-};
-
-struct TOlapTtlSettings {
-    // TODO: add parsed settings
-    ui64 Version = 1;
-};
+    ui32 NextColumnId = 1; 
+    ui64 Version = 1; 
+ 
+    const TColumn* FindColumnByName(const TString& name) const noexcept { 
+        auto it = ColumnsByName.find(name); 
+        if (it != ColumnsByName.end()) { 
+            return &Columns.at(it->second); 
+        } 
+        return nullptr; 
+    } 
+ 
+    TColumn* FindColumnByName(const TString& name) noexcept { 
+        auto it = ColumnsByName.find(name); 
+        if (it != ColumnsByName.end()) { 
+            return &Columns.at(it->second); 
+        } 
+        return nullptr; 
+    } 
+}; 
+ 
+struct TOlapStoreSchemaPreset : public TOlapSchema { 
+    ui32 Id; 
+    TString Name; 
+ 
+    // Preset index in the olap store description 
+    size_t ProtoIndex = -1; 
+}; 
+ 
+struct TOlapTtlSettings { 
+    // TODO: add parsed settings 
+    ui64 Version = 1; 
+}; 
 #if 0
-struct TOlapStoreTtlSettingsPreset : public TOlapTtlSettings {
-    ui32 Id;
-    TString Name;
-
-    // Preset index in the olap store description
-    size_t ProtoIndex = -1;
-};
+struct TOlapStoreTtlSettingsPreset : public TOlapTtlSettings { 
+    ui32 Id; 
+    TString Name; 
+ 
+    // Preset index in the olap store description 
+    size_t ProtoIndex = -1; 
+}; 
 #endif
 struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     using TPtr = TIntrusivePtr<TOlapStoreInfo>;
 
-    ui64 AlterVersion = 0;
-    TPtr AlterData;
-
+    ui64 AlterVersion = 0; 
+    TPtr AlterData; 
+ 
     NKikimrSchemeOp::TColumnStoreDescription Description;
     NKikimrSchemeOp::TColumnStoreSharding Sharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnStore> AlterBody;
-
+ 
     TVector<TShardIdx> ColumnShards;
-
-    THashMap<ui32, TOlapStoreSchemaPreset> SchemaPresets;
+ 
+    THashMap<ui32, TOlapStoreSchemaPreset> SchemaPresets; 
     //THashMap<ui32, TOlapStoreTtlSettingsPreset> TtlSettingsPresets;
-    THashMap<TString, ui32> SchemaPresetByName;
-    THashMap<TString, ui32> TtlSettingsPresetByName;
-
-    THashSet<TPathId> OlapTables;
-    THashSet<TPathId> OlapTablesUnderOperation;
-
-    TOlapStoreInfo() = default;
+    THashMap<TString, ui32> SchemaPresetByName; 
+    THashMap<TString, ui32> TtlSettingsPresetByName; 
+ 
+    THashSet<TPathId> OlapTables; 
+    THashSet<TPathId> OlapTablesUnderOperation; 
+ 
+    TOlapStoreInfo() = default; 
     TOlapStoreInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnStoreDescription&& description,
             NKikimrSchemeOp::TColumnStoreSharding&& sharding,
             TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
 };
 
-struct TOlapTableInfo : TSimpleRefCount<TOlapTableInfo> {
-    using TPtr = TIntrusivePtr<TOlapTableInfo>;
-
-    ui64 AlterVersion = 0;
-    TPtr AlterData;
-
+struct TOlapTableInfo : TSimpleRefCount<TOlapTableInfo> { 
+    using TPtr = TIntrusivePtr<TOlapTableInfo>; 
+ 
+    ui64 AlterVersion = 0; 
+    TPtr AlterData; 
+ 
     NKikimrSchemeOp::TColumnTableDescription Description;
     NKikimrSchemeOp::TColumnTableSharding Sharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
-
-    // Path id of the olap store
-    TPathId OlapStorePathId;
-
-    // Current list of column shards
-    TVector<ui64> ColumnShards;
-
-    TOlapTableInfo() = default;
+ 
+    // Path id of the olap store 
+    TPathId OlapStorePathId; 
+ 
+    // Current list of column shards 
+    TVector<ui64> ColumnShards; 
+ 
+    TOlapTableInfo() = default; 
     TOlapTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
             NKikimrSchemeOp::TColumnTableSharding&& sharding,
             TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
-
-    void SetOlapStorePathId(const TPathId& pathId) {
-        OlapStorePathId = pathId;
+ 
+    void SetOlapStorePathId(const TPathId& pathId) { 
+        OlapStorePathId = pathId; 
         Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId);
         Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
-    }
-};
-
+    } 
+}; 
+ 
 struct TPQShardInfo : TSimpleRefCount<TPQShardInfo> {
     using TPtr = TIntrusivePtr<TPQShardInfo>;
     using TKeySchema = TVector<NScheme::TTypeId>;
@@ -856,39 +856,39 @@ struct TShardInfo {
     TShardInfo() = default;
     TShardInfo(const TShardInfo& other) = default;
 
-    TShardInfo&& WithTabletID(TTabletId tabletId) && {
-        TabletID = tabletId;
-        return std::move(*this);
-    }
-
-    TShardInfo WithTabletID(TTabletId tabletId) const & {
-        TShardInfo copy = *this;
-        copy.TabletID = tabletId;
-        return copy;
-    }
-
-    TShardInfo&& WithTabletType(TTabletTypes::EType tabletType) && {
-        TabletType = tabletType;
-        return std::move(*this);
-    }
-
-    TShardInfo WithTabletType(TTabletTypes::EType tabletType) const & {
-        TShardInfo copy = *this;
-        copy.TabletType = tabletType;
-        return copy;
-    }
-
-    TShardInfo&& WithBindedChannels(TChannelsBindings bindedChannels) && {
-        BindedChannels = std::move(bindedChannels);
-        return std::move(*this);
-    }
-
-    TShardInfo WithBindedChannels(TChannelsBindings bindedChannels) const & {
-        TShardInfo copy = *this;
-        copy.BindedChannels = std::move(bindedChannels);
-        return copy;
-    }
-
+    TShardInfo&& WithTabletID(TTabletId tabletId) && { 
+        TabletID = tabletId; 
+        return std::move(*this); 
+    } 
+ 
+    TShardInfo WithTabletID(TTabletId tabletId) const & { 
+        TShardInfo copy = *this; 
+        copy.TabletID = tabletId; 
+        return copy; 
+    } 
+ 
+    TShardInfo&& WithTabletType(TTabletTypes::EType tabletType) && { 
+        TabletType = tabletType; 
+        return std::move(*this); 
+    } 
+ 
+    TShardInfo WithTabletType(TTabletTypes::EType tabletType) const & { 
+        TShardInfo copy = *this; 
+        copy.TabletType = tabletType; 
+        return copy; 
+    } 
+ 
+    TShardInfo&& WithBindedChannels(TChannelsBindings bindedChannels) && { 
+        BindedChannels = std::move(bindedChannels); 
+        return std::move(*this); 
+    } 
+ 
+    TShardInfo WithBindedChannels(TChannelsBindings bindedChannels) const & { 
+        TShardInfo copy = *this; 
+        copy.BindedChannels = std::move(bindedChannels); 
+        return copy; 
+    } 
+ 
     static TShardInfo RtmrPartitionInfo(TTxId txId, TPathId pathId) {
          return TShardInfo(txId, pathId, ETabletType::RTMRPartition);
     }
@@ -936,10 +936,10 @@ struct TShardInfo {
     static TShardInfo ColumnShardInfo(TTxId txId, TPathId pathId) {
          return TShardInfo(txId, pathId, ETabletType::ColumnShard);
     }
-
-    static TShardInfo SequenceShardInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::SequenceShard);
-    }
+ 
+    static TShardInfo SequenceShardInfo(TTxId txId, TPathId pathId) { 
+        return TShardInfo(txId, pathId, ETabletType::SequenceShard); 
+    } 
 
     static TShardInfo ReplicationControllerInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::ReplicationController);
@@ -1110,26 +1110,26 @@ struct TSolomonVolumeInfo: TSimpleRefCount<TSolomonVolumeInfo> {
     }
 };
 
-
+ 
 using TSchemeQuota = TCountedLeakyBucket;
-
-struct TSchemeQuotas : public TVector<TSchemeQuota> {
-    mutable size_t LastKnownSize = 0;
-};
-
+ 
+struct TSchemeQuotas : public TVector<TSchemeQuota> { 
+    mutable size_t LastKnownSize = 0; 
+}; 
+ 
 struct IQuotaCounters {
     virtual void ChangeStreamShardsCount(i64 delta) = 0;
     virtual void ChangeStreamShardsQuota(i64 delta) = 0;
     virtual void ChangeStreamReservedStorageQuota(i64 delta) = 0;
     virtual void ChangeStreamReservedStorageCount(i64 delta) = 0;
-    virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
-    virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
-    virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
-    virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
-    virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
-    virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
-};
-
+    virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0; 
+    virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0; 
+    virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0; 
+    virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0; 
+    virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0; 
+    virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0; 
+}; 
+ 
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     using TPtr = TIntrusivePtr<TSubDomainInfo>;
     using TConstPtr = TIntrusiveConstPtr<TSubDomainInfo>;
@@ -1142,15 +1142,15 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         } Tables;
     };
 
-    struct TDiskSpaceQuotas {
-        ui64 HardQuota;
-        ui64 SoftQuota;
-
-        explicit operator bool() const {
-            return HardQuota || SoftQuota;
-        }
-    };
-
+    struct TDiskSpaceQuotas { 
+        ui64 HardQuota; 
+        ui64 SoftQuota; 
+ 
+        explicit operator bool() const { 
+            return HardQuota || SoftQuota; 
+        } 
+    }; 
+ 
     TSubDomainInfo() = default;
     explicit TSubDomainInfo(ui64 version, const TPathId& resourcesDomainId)
     {
@@ -1342,28 +1342,28 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         AlterData->SetPathsInside(GetPathsInside());
         AlterData->InternalShards.swap(InternalShards);
         AlterData->Initialize(allShards);
-
-        AlterData->SchemeQuotas = SchemeQuotas;
-        if (isExternal) {
-            AlterData->RemoveSchemeQuotas();
-        } else if (!AlterData->DeclaredSchemeQuotas && DeclaredSchemeQuotas) {
-            AlterData->DeclaredSchemeQuotas = DeclaredSchemeQuotas;
-        } else {
-            AlterData->RegenerateSchemeQuotas(now);
-        }
-
-        if (!AlterData->DatabaseQuotas && DatabaseQuotas && !isExternal) {
-            AlterData->DatabaseQuotas = DatabaseQuotas;
-        }
-
-        AlterData->DomainStateVersion = DomainStateVersion;
-        AlterData->DiskQuotaExceeded = DiskQuotaExceeded;
-
-        // Update DiskSpaceUsage and recheck quotas (which may have changed by an alter)
-        AlterData->DiskSpaceUsage = DiskSpaceUsage;
-        AlterData->CheckDiskSpaceQuotas(counters);
-
-        CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas());
+ 
+        AlterData->SchemeQuotas = SchemeQuotas; 
+        if (isExternal) { 
+            AlterData->RemoveSchemeQuotas(); 
+        } else if (!AlterData->DeclaredSchemeQuotas && DeclaredSchemeQuotas) { 
+            AlterData->DeclaredSchemeQuotas = DeclaredSchemeQuotas; 
+        } else { 
+            AlterData->RegenerateSchemeQuotas(now); 
+        } 
+ 
+        if (!AlterData->DatabaseQuotas && DatabaseQuotas && !isExternal) { 
+            AlterData->DatabaseQuotas = DatabaseQuotas; 
+        } 
+ 
+        AlterData->DomainStateVersion = DomainStateVersion; 
+        AlterData->DiskQuotaExceeded = DiskQuotaExceeded; 
+ 
+        // Update DiskSpaceUsage and recheck quotas (which may have changed by an alter) 
+        AlterData->DiskSpaceUsage = DiskSpaceUsage; 
+        AlterData->CheckDiskSpaceQuotas(counters); 
+ 
+        CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas()); 
         CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota());
         CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota());
 
@@ -1391,41 +1391,41 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TDuration::Seconds(DatabaseQuotas->ttl_min_run_internal_seconds());
     }
 
-    TDiskSpaceQuotas GetDiskSpaceQuotas() const {
-        ui64 hardQuota = DatabaseQuotas ? DatabaseQuotas->data_size_hard_quota() : 0;
-        ui64 softQuota = DatabaseQuotas ? DatabaseQuotas->data_size_soft_quota() : 0;
-
-        if (hardQuota || softQuota) {
-            if (!softQuota) {
-                softQuota = hardQuota;
-            } else if (!hardQuota) {
-                hardQuota = softQuota;
-            }
-        }
-
-        return TDiskSpaceQuotas{ hardQuota, softQuota };
-    }
-
+    TDiskSpaceQuotas GetDiskSpaceQuotas() const { 
+        ui64 hardQuota = DatabaseQuotas ? DatabaseQuotas->data_size_hard_quota() : 0; 
+        ui64 softQuota = DatabaseQuotas ? DatabaseQuotas->data_size_soft_quota() : 0; 
+ 
+        if (hardQuota || softQuota) { 
+            if (!softQuota) { 
+                softQuota = hardQuota; 
+            } else if (!hardQuota) { 
+                hardQuota = softQuota; 
+            } 
+        } 
+ 
+        return TDiskSpaceQuotas{ hardQuota, softQuota }; 
+    } 
+ 
     static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
-        if (quotas.HardQuota != 0) {
-            counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
-        }
-        if (quotas.SoftQuota != 0) {
-            counters->ChangeDiskSpaceSoftQuotaBytes(quotas.SoftQuota);
-        }
-    }
-
+        if (quotas.HardQuota != 0) { 
+            counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota); 
+        } 
+        if (quotas.SoftQuota != 0) { 
+            counters->ChangeDiskSpaceSoftQuotaBytes(quotas.SoftQuota); 
+        } 
+    } 
+ 
     static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
-        i64 hardDelta = i64(next.HardQuota) - i64(prev.HardQuota);
-        if (hardDelta != 0) {
-            counters->ChangeDiskSpaceHardQuotaBytes(hardDelta);
-        }
-        i64 softDelta = i64(next.SoftQuota) - i64(prev.SoftQuota);
-        if (softDelta != 0) {
-            counters->ChangeDiskSpaceSoftQuotaBytes(softDelta);
-        }
-    }
-
+        i64 hardDelta = i64(next.HardQuota) - i64(prev.HardQuota); 
+        if (hardDelta != 0) { 
+            counters->ChangeDiskSpaceHardQuotaBytes(hardDelta); 
+        } 
+        i64 softDelta = i64(next.SoftQuota) - i64(prev.SoftQuota); 
+        if (softDelta != 0) { 
+            counters->ChangeDiskSpaceSoftQuotaBytes(softDelta); 
+        } 
+    } 
+ 
     static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
         counters->ChangeStreamShardsQuota(delta);
     }
@@ -1443,47 +1443,47 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
 
-    /**
-     * Checks current disk usage against disk quotas
-     *
-     * Returns true when DiskQuotaExceeded value has changed and needs to be
-     * persisted and pushed to scheme board.
-     */
+    /** 
+     * Checks current disk usage against disk quotas 
+     * 
+     * Returns true when DiskQuotaExceeded value has changed and needs to be 
+     * persisted and pushed to scheme board. 
+     */ 
     bool CheckDiskSpaceQuotas(IQuotaCounters* counters) {
-        auto quotas = GetDiskSpaceQuotas();
-        if (!quotas) {
-            if (DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(-1);
-                DiskQuotaExceeded = false;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        if (DiskSpaceUsage.Tables.TotalSize > quotas.HardQuota) {
-            if (!DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(+1);
-                DiskQuotaExceeded = true;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        if (DiskSpaceUsage.Tables.TotalSize < quotas.SoftQuota) {
-            if (DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(-1);
-                DiskQuotaExceeded = false;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        return false;
-    }
-
+        auto quotas = GetDiskSpaceQuotas(); 
+        if (!quotas) { 
+            if (DiskQuotaExceeded) { 
+                counters->ChangeDiskSpaceQuotaExceeded(-1); 
+                DiskQuotaExceeded = false; 
+                ++DomainStateVersion; 
+                return true; 
+            } 
+            return false; 
+        } 
+ 
+        if (DiskSpaceUsage.Tables.TotalSize > quotas.HardQuota) { 
+            if (!DiskQuotaExceeded) { 
+                counters->ChangeDiskSpaceQuotaExceeded(+1); 
+                DiskQuotaExceeded = true; 
+                ++DomainStateVersion; 
+                return true; 
+            } 
+            return false; 
+        } 
+ 
+        if (DiskSpaceUsage.Tables.TotalSize < quotas.SoftQuota) { 
+            if (DiskQuotaExceeded) { 
+                counters->ChangeDiskSpaceQuotaExceeded(-1); 
+                DiskQuotaExceeded = false; 
+                ++DomainStateVersion; 
+                return true; 
+            } 
+            return false; 
+        } 
+ 
+        return false; 
+    } 
+ 
     const TStoragePools& GetStoragePools() const {
         return StoragePools ;
     }
@@ -1533,20 +1533,20 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         InternalShards.erase(it);
     }
 
-    const THashSet<TShardIdx>& GetSequenceShards() const {
-        return SequenceShards;
-    }
-
-    void AddSequenceShard(const TShardIdx& shardIdx) {
-        SequenceShards.insert(shardIdx);
-    }
-
-    void RemoveSequenceShard(const TShardIdx& shardIdx) {
-        auto it = SequenceShards.find(shardIdx);
-        Y_VERIFY_S(it != SequenceShards.end(), "shardIdx: " << shardIdx);
-        SequenceShards.erase(it);
-    }
-
+    const THashSet<TShardIdx>& GetSequenceShards() const { 
+        return SequenceShards; 
+    } 
+ 
+    void AddSequenceShard(const TShardIdx& shardIdx) { 
+        SequenceShards.insert(shardIdx); 
+    } 
+ 
+    void RemoveSequenceShard(const TShardIdx& shardIdx) { 
+        auto it = SequenceShards.find(shardIdx); 
+        Y_VERIFY_S(it != SequenceShards.end(), "shardIdx: " << shardIdx); 
+        SequenceShards.erase(it); 
+    } 
+ 
     const THashSet<TShardIdx>& GetReplicationControllers() const {
         return ReplicationControllers;
     }
@@ -1630,128 +1630,128 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TTableInfo::TPartitionStats& newAggr, const TTableInfo::TPartitionStats& oldAggr = TTableInfo::TPartitionStats()) {
         DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
-        counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);
-
+        counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize); 
+ 
         DiskSpaceUsage.Tables.IndexSize += (newAggr.IndexSize - oldAggr.IndexSize);
-        counters->ChangeDiskSpaceTablesIndexBytes(newAggr.IndexSize - oldAggr.IndexSize);
-
-        i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+        counters->ChangeDiskSpaceTablesIndexBytes(newAggr.IndexSize - oldAggr.IndexSize); 
+ 
+        i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize; 
         DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
-        i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-        counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
+        i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize; 
+        counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes); 
     }
 
     const TDiskSpaceUsage& GetDiskSpaceUsage() const {
         return DiskSpaceUsage;
     }
 
-    const TMaybe<NKikimrSubDomains::TSchemeQuotas>& GetDeclaredSchemeQuotas() const {
-        return DeclaredSchemeQuotas;
-    }
-
-    void SetDeclaredSchemeQuotas(const NKikimrSubDomains::TSchemeQuotas& declaredSchemeQuotas) {
-        DeclaredSchemeQuotas.ConstructInPlace(declaredSchemeQuotas);
-    }
-
-    const TMaybe<Ydb::Cms::DatabaseQuotas>& GetDatabaseQuotas() const {
-        return DatabaseQuotas;
-    }
-
-    void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas) {
-        DatabaseQuotas.ConstructInPlace(databaseQuotas);
-    }
-
+    const TMaybe<NKikimrSubDomains::TSchemeQuotas>& GetDeclaredSchemeQuotas() const { 
+        return DeclaredSchemeQuotas; 
+    } 
+ 
+    void SetDeclaredSchemeQuotas(const NKikimrSubDomains::TSchemeQuotas& declaredSchemeQuotas) { 
+        DeclaredSchemeQuotas.ConstructInPlace(declaredSchemeQuotas); 
+    } 
+ 
+    const TMaybe<Ydb::Cms::DatabaseQuotas>& GetDatabaseQuotas() const { 
+        return DatabaseQuotas; 
+    } 
+ 
+    void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas) { 
+        DatabaseQuotas.ConstructInPlace(databaseQuotas); 
+    } 
+ 
     void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas, IQuotaCounters* counters) {
-        auto prev = GetDiskSpaceQuotas();
+        auto prev = GetDiskSpaceQuotas(); 
         auto prevs = GetStreamShardsQuota();
         auto prevrs = GetStreamReservedStorageQuota();
-        DatabaseQuotas.ConstructInPlace(databaseQuotas);
-        auto next = GetDiskSpaceQuotas();
+        DatabaseQuotas.ConstructInPlace(databaseQuotas); 
+        auto next = GetDiskSpaceQuotas(); 
         auto nexts = GetStreamShardsQuota();
         auto nextrs = GetStreamReservedStorageQuota();
-        CountDiskSpaceQuotas(counters, prev, next);
+        CountDiskSpaceQuotas(counters, prev, next); 
         CountStreamShardsQuota(counters, prevs, nexts);
         CountStreamReservedStorageQuota(counters, prevrs, nextrs);
-    }
-
-    void ApplyDeclaredSchemeQuotas(const NKikimrSubDomains::TSchemeQuotas& declaredSchemeQuotas, TInstant now) {
-        // Check if there was no change in declared quotas
-        if (DeclaredSchemeQuotas) {
-            TString prev, next;
-            Y_VERIFY(DeclaredSchemeQuotas->SerializeToString(&prev));
-            Y_VERIFY(declaredSchemeQuotas.SerializeToString(&next));
-            if (prev == next) {
-                return; // there was no change in quotas
-            }
-        }
-
-        // Make a local copy of these quotas and regenerate
-        DeclaredSchemeQuotas.ConstructInPlace(declaredSchemeQuotas);
-        RegenerateSchemeQuotas(now);
-    }
-
-    const TSchemeQuotas& GetSchemeQuotas() const {
-        return SchemeQuotas;
-    }
-
-    void AddSchemeQuota(const TSchemeQuota& quota) {
-        SchemeQuotas.emplace_back(quota);
-    }
-
-    void AddSchemeQuota(double bucketSize, TDuration bucketDuration, TInstant now) {
-        AddSchemeQuota(TSchemeQuota(bucketSize, bucketDuration, now));
-    }
-
-    void RemoveSchemeQuotas() {
-        SchemeQuotas.LastKnownSize = Max(SchemeQuotas.LastKnownSize, SchemeQuotas.size());
-        SchemeQuotas.clear();
-    }
-
-    void RegenerateSchemeQuotas(TInstant now) {
-        RemoveSchemeQuotas();
-        if (DeclaredSchemeQuotas) {
-            for (const auto& declaredQuota : DeclaredSchemeQuotas->GetSchemeQuotas()) {
-                double bucketSize = declaredQuota.GetBucketSize();
-                TDuration bucketDuration = TDuration::Seconds(declaredQuota.GetBucketSeconds());
-                SchemeQuotas.emplace_back(bucketSize, bucketDuration, now);
-            }
-        }
-    }
-
-    bool TryConsumeSchemeQuota(TInstant now) {
-        bool ok = true;
-        for (auto& quota : SchemeQuotas) {
-            quota.Update(now);
+    } 
+ 
+    void ApplyDeclaredSchemeQuotas(const NKikimrSubDomains::TSchemeQuotas& declaredSchemeQuotas, TInstant now) { 
+        // Check if there was no change in declared quotas 
+        if (DeclaredSchemeQuotas) { 
+            TString prev, next; 
+            Y_VERIFY(DeclaredSchemeQuotas->SerializeToString(&prev)); 
+            Y_VERIFY(declaredSchemeQuotas.SerializeToString(&next)); 
+            if (prev == next) { 
+                return; // there was no change in quotas 
+            } 
+        } 
+ 
+        // Make a local copy of these quotas and regenerate 
+        DeclaredSchemeQuotas.ConstructInPlace(declaredSchemeQuotas); 
+        RegenerateSchemeQuotas(now); 
+    } 
+ 
+    const TSchemeQuotas& GetSchemeQuotas() const { 
+        return SchemeQuotas; 
+    } 
+ 
+    void AddSchemeQuota(const TSchemeQuota& quota) { 
+        SchemeQuotas.emplace_back(quota); 
+    } 
+ 
+    void AddSchemeQuota(double bucketSize, TDuration bucketDuration, TInstant now) { 
+        AddSchemeQuota(TSchemeQuota(bucketSize, bucketDuration, now)); 
+    } 
+ 
+    void RemoveSchemeQuotas() { 
+        SchemeQuotas.LastKnownSize = Max(SchemeQuotas.LastKnownSize, SchemeQuotas.size()); 
+        SchemeQuotas.clear(); 
+    } 
+ 
+    void RegenerateSchemeQuotas(TInstant now) { 
+        RemoveSchemeQuotas(); 
+        if (DeclaredSchemeQuotas) { 
+            for (const auto& declaredQuota : DeclaredSchemeQuotas->GetSchemeQuotas()) { 
+                double bucketSize = declaredQuota.GetBucketSize(); 
+                TDuration bucketDuration = TDuration::Seconds(declaredQuota.GetBucketSeconds()); 
+                SchemeQuotas.emplace_back(bucketSize, bucketDuration, now); 
+            } 
+        } 
+    } 
+ 
+    bool TryConsumeSchemeQuota(TInstant now) { 
+        bool ok = true; 
+        for (auto& quota : SchemeQuotas) { 
+            quota.Update(now); 
             ok &= quota.CanPush(1.0);
-        }
+        } 
 
-        if (!ok) {
-            return false;
-        }
+        if (!ok) { 
+            return false; 
+        } 
 
-        for (auto& quota : SchemeQuotas) {
+        for (auto& quota : SchemeQuotas) { 
             quota.Push(now, 1.0);
-        }
+        } 
 
-        return true;
-    }
-
-    ui64 GetDomainStateVersion() const {
-        return DomainStateVersion;
-    }
-
-    void SetDomainStateVersion(ui64 version) {
-        DomainStateVersion = version;
-    }
-
-    bool GetDiskQuotaExceeded() const {
-        return DiskQuotaExceeded;
-    }
-
-    void SetDiskQuotaExceeded(bool value) {
-        DiskQuotaExceeded = value;
-    }
-
+        return true; 
+    } 
+ 
+    ui64 GetDomainStateVersion() const { 
+        return DomainStateVersion; 
+    } 
+ 
+    void SetDomainStateVersion(ui64 version) { 
+        DomainStateVersion = version; 
+    } 
+ 
+    bool GetDiskQuotaExceeded() const { 
+        return DiskQuotaExceeded; 
+    } 
+ 
+    void SetDiskQuotaExceeded(bool value) { 
+        DiskQuotaExceeded = value; 
+    } 
+ 
     bool HasSecurityState() const {
         return SecurityState.PublicKeysSize() > 0;
     }
@@ -1780,23 +1780,23 @@ private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
     TCoordinators::TPtr CoordinatorSelector;
-    TMaybe<NKikimrSubDomains::TSchemeQuotas> DeclaredSchemeQuotas;
-    TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
-    ui64 DomainStateVersion = 0;
-    bool DiskQuotaExceeded = false;
+    TMaybe<NKikimrSubDomains::TSchemeQuotas> DeclaredSchemeQuotas; 
+    TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas; 
+    ui64 DomainStateVersion = 0; 
+    bool DiskQuotaExceeded = false; 
 
     TVector<TShardIdx> PrivateShards;
     TStoragePools StoragePools;
     TPtr AlterData;
 
     TSchemeLimits SchemeLimits;
-    TSchemeQuotas SchemeQuotas;
+    TSchemeQuotas SchemeQuotas; 
 
     ui64 PathsInsideCount = 0;
     TDiskSpaceUsage DiskSpaceUsage;
 
     THashSet<TShardIdx> InternalShards;
-    THashSet<TShardIdx> SequenceShards;
+    THashSet<TShardIdx> SequenceShards; 
     THashSet<TShardIdx> ReplicationControllers;
 
     ui64 PQPartitionsInsideCount = 0;
@@ -1940,46 +1940,46 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
         return TabletCache.Tablets;
     }
 
-    TVolumeSpace GetVolumeSpace() const {
+    TVolumeSpace GetVolumeSpace() const { 
         ui64 blockSize = VolumeConfig.GetBlockSize();
-        ui64 blockCount = 0;
+        ui64 blockCount = 0; 
         for (const auto& partition: VolumeConfig.GetPartitions()) {
             blockCount += partition.GetBlockCount();
         }
-
-        TVolumeSpace space;
-        space.Raw += blockCount * blockSize;
-        switch (VolumeConfig.GetStorageMediaKind()) {
-            case 1: // STORAGE_MEDIA_SSD
+ 
+        TVolumeSpace space; 
+        space.Raw += blockCount * blockSize; 
+        switch (VolumeConfig.GetStorageMediaKind()) { 
+            case 1: // STORAGE_MEDIA_SSD 
                 if (VolumeConfig.GetIsSystem()) {
                     space.SSDSystem += blockCount * blockSize; // merged blobs
                 } else {
                     space.SSD += blockCount * blockSize; // merged blobs
                     space.SSD += (blockCount / 8) * blockSize; // mixed blobs
                 }
-                break;
-            case 2: // STORAGE_MEDIA_HYBRID
-                space.HDD += blockCount * blockSize; // merged blobs
-                space.SSD += (blockCount / 8) * blockSize; // mixed blobs
-                break;
-            case 3: // STORAGE_MEDIA_HDD
-                space.HDD += blockCount * blockSize; // merged blobs
-                space.SSD += (blockCount / 8) * blockSize; // mixed blobs
-                break;
+                break; 
+            case 2: // STORAGE_MEDIA_HYBRID 
+                space.HDD += blockCount * blockSize; // merged blobs 
+                space.SSD += (blockCount / 8) * blockSize; // mixed blobs 
+                break; 
+            case 3: // STORAGE_MEDIA_HDD 
+                space.HDD += blockCount * blockSize; // merged blobs 
+                space.SSD += (blockCount / 8) * blockSize; // mixed blobs 
+                break; 
             case 4: // STORAGE_MEDIA_SSD_NONREPLICATED
                 space.SSDNonrepl += blockCount * blockSize; // blocks are stored directly
                 break;
-        }
-
+        } 
+ 
         if (AlterData) {
-            auto altSpace = AlterData->GetVolumeSpace();
-            space.Raw = Max(space.Raw, altSpace.Raw);
-            space.SSD = Max(space.SSD, altSpace.SSD);
-            space.HDD = Max(space.HDD, altSpace.HDD);
+            auto altSpace = AlterData->GetVolumeSpace(); 
+            space.Raw = Max(space.Raw, altSpace.Raw); 
+            space.SSD = Max(space.SSD, altSpace.SSD); 
+            space.HDD = Max(space.HDD, altSpace.HDD); 
             space.SSDNonrepl = Max(space.SSDNonrepl, altSpace.SSDNonrepl);
             space.SSDSystem = Max(space.SSDSystem, altSpace.SSDSystem);
         }
-
+ 
         return space;
     }
 };
@@ -2139,36 +2139,36 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     TCdcStreamInfo::TPtr AlterData = nullptr;
 };
 
-struct TSequenceInfo : public TSimpleRefCount<TSequenceInfo> {
-    using TPtr = TIntrusivePtr<TSequenceInfo>;
-
-    explicit TSequenceInfo(ui64 alterVersion)
-        : AlterVersion(alterVersion)
-    { }
-
-    TSequenceInfo(
-        ui64 alterVersion,
+struct TSequenceInfo : public TSimpleRefCount<TSequenceInfo> { 
+    using TPtr = TIntrusivePtr<TSequenceInfo>; 
+ 
+    explicit TSequenceInfo(ui64 alterVersion) 
+        : AlterVersion(alterVersion) 
+    { } 
+ 
+    TSequenceInfo( 
+        ui64 alterVersion, 
         NKikimrSchemeOp::TSequenceDescription&& description,
         NKikimrSchemeOp::TSequenceSharding&& sharding);
-
-    TPtr CreateNextVersion() {
-        Y_VERIFY(AlterData == nullptr);
-        TPtr result = new TSequenceInfo(*this);
-        ++result->AlterVersion;
-        this->AlterData = result;
-        return result;
-    }
-
+ 
+    TPtr CreateNextVersion() { 
+        Y_VERIFY(AlterData == nullptr); 
+        TPtr result = new TSequenceInfo(*this); 
+        ++result->AlterVersion; 
+        this->AlterData = result; 
+        return result; 
+    } 
+ 
     static bool ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& p, TString& err);
-
-    ui64 AlterVersion = 0;
-    TSequenceInfo::TPtr AlterData = nullptr;
+ 
+    ui64 AlterVersion = 0; 
+    TSequenceInfo::TPtr AlterData = nullptr; 
     NKikimrSchemeOp::TSequenceDescription Description;
     NKikimrSchemeOp::TSequenceSharding Sharding;
-
-    ui64 SequenceShard = 0;
-};
-
+ 
+    ui64 SequenceShard = 0; 
+}; 
+ 
 struct TReplicationInfo : public TSimpleRefCount<TReplicationInfo> {
     using TPtr = TIntrusivePtr<TReplicationInfo>;
 

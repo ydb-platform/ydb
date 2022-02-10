@@ -3,7 +3,7 @@
 #include "flat_table_misc.h"
 #include "flat_part_store.h"
 #include "flat_store_hotdog.h"
-#include "flat_store_solid.h"
+#include "flat_store_solid.h" 
 #include "flat_sausagecache.h"
 #include "tablet_flat_executor.h"
 #include "flat_executor_snapshot.h"
@@ -16,56 +16,56 @@ namespace NTabletFlatExecutor {
 
     struct TPageCollectionReadEnv : public NTable::IPages {
         TPageCollectionReadEnv(TPrivatePageCache& cache)
-            : Cache(cache)
-        { }
-
+            : Cache(cache) 
+        { } 
+ 
     protected: /* NTable::IPages, page collection backend implementation */
         TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
-        {
+        { 
             return NTable::MemTableRefLookup(memTable, ref, tag);
-        }
-
+        } 
+ 
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
-        {
+        { 
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
-
+ 
             return { true, Lookup(partStore->Locate(lob, ref), ref) };
-        }
-
-        const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override
-        {
+        } 
+ 
+        const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override 
+        { 
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
-
+ 
             return Lookup(partStore->PageCollections.at(groupId.Index).Get(), page);
-        }
-
-    private:
+        } 
+ 
+    private: 
         const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId id) noexcept
-        {
-            if (auto *page = Cache.Lookup(id, info)) {
-                if (Touches[info].insert(id).second) {
-                    ++CacheHits;
-                }
-                return page;
-            } else {
-                if (ToLoad[info].insert(id).second) {
-                    ++CacheMisses;
-                }
-                return nullptr;
-            }
-        }
-
-    public:
+        { 
+            if (auto *page = Cache.Lookup(id, info)) { 
+                if (Touches[info].insert(id).second) { 
+                    ++CacheHits; 
+                } 
+                return page; 
+            } else { 
+                if (ToLoad[info].insert(id).second) { 
+                    ++CacheMisses; 
+                } 
+                return nullptr; 
+            } 
+        } 
+ 
+    public: 
         TPrivatePageCache& Cache;
-
+ 
         /*_ Page collection cache pages load trace */
-
+ 
         THashMap<TPrivatePageCache::TInfo*, THashSet<ui32>> Touches;
         THashMap<TPrivatePageCache::TInfo*, THashSet<ui32>> ToLoad;
-        size_t CacheHits = 0;
-        size_t CacheMisses = 0;
-    };
-
+        size_t CacheHits = 0; 
+        size_t CacheMisses = 0; 
+    }; 
+ 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
         using TLogoId = TLogoBlobID;
 
@@ -96,26 +96,26 @@ namespace NTabletFlatExecutor {
             NTable::TPartComponents PartComponents;
         };
 
-        struct TLoanTxStatus {
-            TLoanTxStatus(ui32 sourceTableId, ui32 localTableId, ui64 lender,
-                          const NPageCollection::TLargeGlobId& dataId, NTable::TEpoch epoch,
-                          const TString& data)
-                : SourceTableId(sourceTableId)
-                , LocalTableId(localTableId)
-                , Lender(lender)
-                , DataId(dataId)
-                , Epoch(epoch)
-                , Data(data)
-            {}
-
-            const ui32 SourceTableId;
-            const ui32 LocalTableId;
-            const ui64 Lender;
-            const NPageCollection::TLargeGlobId DataId;
-            const NTable::TEpoch Epoch;
-            const TString Data;
-        };
-
+        struct TLoanTxStatus { 
+            TLoanTxStatus(ui32 sourceTableId, ui32 localTableId, ui64 lender, 
+                          const NPageCollection::TLargeGlobId& dataId, NTable::TEpoch epoch, 
+                          const TString& data) 
+                : SourceTableId(sourceTableId) 
+                , LocalTableId(localTableId) 
+                , Lender(lender) 
+                , DataId(dataId) 
+                , Epoch(epoch) 
+                , Data(data) 
+            {} 
+ 
+            const ui32 SourceTableId; 
+            const ui32 LocalTableId; 
+            const ui64 Lender; 
+            const NPageCollection::TLargeGlobId DataId; 
+            const NTable::TEpoch Epoch; 
+            const TString Data; 
+        }; 
+ 
         struct TSnapshot {
             TVector<TIntrusivePtr<TTableSnapshotContext>> Context;
         };
@@ -128,7 +128,7 @@ namespace NTabletFlatExecutor {
                 DropSnap
                 || MakeSnap
                 || LoanBundle
-                || LoanTxStatus
+                || LoanTxStatus 
                 || BorrowUpdates
                 || LoanConfirmation;
         }
@@ -149,11 +149,11 @@ namespace NTabletFlatExecutor {
             DropSnap.Reset(new TBorrowSnap{ snap });
         }
 
-        void MoveSnapshot(const TTableSnapshotContext &snap, ui32 src, ui32 dst) override
-        {
-            snap.Impl->Moved(src, dst);
-        }
-
+        void MoveSnapshot(const TTableSnapshotContext &snap, ui32 src, ui32 dst) override 
+        { 
+            snap.Impl->Moved(src, dst); 
+        } 
+ 
         void ClearSnapshot(const TTableSnapshotContext &snap) override
         {
             snap.Impl->Clear();
@@ -173,14 +173,14 @@ namespace NTabletFlatExecutor {
                 LoanBundle.emplace_back(new TLoanBundle(source, tableId, lender,
                         TPageCollectionProtoHelper::MakePageCollectionComponents(part.GetBundle(), /* unsplit */ true)));
             }
-
-            for (auto &part : proto.GetTxStatusParts()) {
-                LoanTxStatus.emplace_back(new TLoanTxStatus(
-                    source, tableId, lender,
-                    TLargeGlobIdProto::Get(part.GetDataId()),
-                    NTable::TEpoch(part.GetEpoch()),
-                    part.GetData()));
-            }
+ 
+            for (auto &part : proto.GetTxStatusParts()) { 
+                LoanTxStatus.emplace_back(new TLoanTxStatus( 
+                    source, tableId, lender, 
+                    TLargeGlobIdProto::Get(part.GetDataId()), 
+                    NTable::TEpoch(part.GetEpoch()), 
+                    part.GetData())); 
+            } 
         }
 
         void CleanupLoan(const TLogoId &bundle, ui64 from) override
@@ -203,8 +203,8 @@ namespace NTabletFlatExecutor {
 
         THolder<TBorrowSnap> DropSnap;
         THashMap<TLogoId, TBorrowUpdate> BorrowUpdates;
-        TVector<THolder<TLoanBundle>> LoanBundle;
-        TVector<THolder<TLoanTxStatus>> LoanTxStatus;
+        TVector<THolder<TLoanBundle>> LoanBundle; 
+        TVector<THolder<TLoanTxStatus>> LoanTxStatus; 
         THashMap<TLogoId, TLoanConfirmation> LoanConfirmation;
     };
 

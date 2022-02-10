@@ -105,9 +105,9 @@ void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* sectionName,
         }
         DIV_CLASS("row") {
             for (ui32 i = 0, e = counters.Size(); i < e; ++i) {
-                if (counterNames[i]) {
-                    DIV_CLASS(counterClass) {counters[i].OutputHtml(os, counterNames[i]);}
-                }
+                if (counterNames[i]) { 
+                    DIV_CLASS(counterClass) {counters[i].OutputHtml(os, counterNames[i]);} 
+                } 
             }
         }
     }
@@ -116,28 +116,28 @@ void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* sectionName,
 void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const {
     if (HasCounters()) {
         for (ui32 idx = 0; idx < SimpleCounters.Size(); ++idx) {
-            if (SimpleCounterName(idx)) {
-                auto& counter = *op.AddSimpleCounters();
-                counter.SetName(SimpleCounterName(idx));
-                counter.SetValue(SimpleCounters[idx].Get());
-            }
+            if (SimpleCounterName(idx)) { 
+                auto& counter = *op.AddSimpleCounters(); 
+                counter.SetName(SimpleCounterName(idx)); 
+                counter.SetValue(SimpleCounters[idx].Get()); 
+            } 
         }
         for (ui32 idx = 0; idx < CumulativeCounters.Size(); ++idx) {
-            if (CumulativeCounterName(idx)) {
-                auto& counter = *op.AddCumulativeCounters();
-                counter.SetName(CumulativeCounterName(idx));
-                counter.SetValue(CumulativeCounters[idx].Get());
-            }
+            if (CumulativeCounterName(idx)) { 
+                auto& counter = *op.AddCumulativeCounters(); 
+                counter.SetName(CumulativeCounterName(idx)); 
+                counter.SetValue(CumulativeCounters[idx].Get()); 
+            } 
         }
         for (ui32 idx = 0; idx < PercentileCounters.Size(); ++idx) {
-            if (PercentileCounterName(idx)) {
-                auto& counter = *op.AddPercentileCounters();
-                counter.SetName(PercentileCounterName(idx));
-                const auto& percentileCounter = PercentileCounters[idx];
-                for (ui32 idxRange = 0; idxRange < percentileCounter.GetRangeCount(); ++idxRange) {
-                    counter.AddRanges(percentileCounter.GetRangeName(idxRange));
-                    counter.AddValues(percentileCounter.GetRangeValue(idxRange));
-                }
+            if (PercentileCounterName(idx)) { 
+                auto& counter = *op.AddPercentileCounters(); 
+                counter.SetName(PercentileCounterName(idx)); 
+                const auto& percentileCounter = PercentileCounters[idx]; 
+                for (ui32 idxRange = 0; idxRange < percentileCounter.GetRangeCount(); ++idxRange) { 
+                    counter.AddRanges(percentileCounter.GetRangeName(idxRange)); 
+                    counter.AddValues(percentileCounter.GetRangeValue(idxRange)); 
+                } 
             }
         }
     }
@@ -186,10 +186,10 @@ void TTabletLabeledCountersBase::OutputHtml(IOutputStream &os) const {
         }
         DIV_CLASS("row") {
             for (ui32 i = 0, e = Counters.Size(); i < e; ++i) {
-                if (MetaInfo[i]) {
-                    DIV_CLASS("col-md-3") {Counters[i].OutputHtml(os, MetaInfo[i]);}
-                    DIV_CLASS("col-md-3") {Ids[i].OutputHtml(os, "id");}
-                }
+                if (MetaInfo[i]) { 
+                    DIV_CLASS("col-md-3") {Counters[i].OutputHtml(os, MetaInfo[i]);} 
+                    DIV_CLASS("col-md-3") {Ids[i].OutputHtml(os, "id");} 
+                } 
             }
         }
     }

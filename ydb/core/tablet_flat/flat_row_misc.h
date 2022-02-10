@@ -12,22 +12,22 @@ namespace NFmt {
 
     struct TCells {
         using TReg = NScheme::TTypeRegistry;
-        using TCellsRef = TArrayRef<const TCell>;
-        using TTypesRef = TArrayRef<const NScheme::TTypeId>;
+        using TCellsRef = TArrayRef<const TCell>; 
+        using TTypesRef = TArrayRef<const NScheme::TTypeId>; 
 
-        TCells(TCellsRef cells, const NTable::TRemap &remap, const TReg *reg)
+        TCells(TCellsRef cells, const NTable::TRemap &remap, const TReg *reg) 
             : TCells(cells, remap.Types(), reg)
         {
 
         }
 
-        TCells(TCellsRef cells, const NTable::TNulls &nulls, const TReg *reg)
+        TCells(TCellsRef cells, const NTable::TNulls &nulls, const TReg *reg) 
             : TCells(cells, nulls.Types, reg)
         {
 
         }
 
-        TCells(TCellsRef cells, TTypesRef types, const TReg *reg)
+        TCells(TCellsRef cells, TTypesRef types, const TReg *reg) 
             : Cells(cells)
             , Types(types)
             , Registry(reg)
@@ -43,8 +43,8 @@ namespace NFmt {
         }
 
     private:
-        const TCellsRef Cells;
-        const TTypesRef Types;
+        const TCellsRef Cells; 
+        const TTypesRef Types; 
         const TReg *Registry = nullptr;
     };
 

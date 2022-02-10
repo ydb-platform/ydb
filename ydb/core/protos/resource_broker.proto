@@ -9,9 +9,9 @@ enum EResourceType {
 message TResources {
     // Index is EResourceType.
     repeated uint64 Resource = 1;
-    // New style settings
-    optional uint64 Cpu = 2;
-    optional uint64 Memory = 3;
+    // New style settings 
+    optional uint64 Cpu = 2; 
+    optional uint64 Memory = 3; 
 };
 
 message TQueueConfig {

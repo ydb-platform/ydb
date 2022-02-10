@@ -689,25 +689,25 @@ public:
         }
 
         TIssue issue("Failed to acquire snapshot");
-        switch (handle.Status) {
-            case NKikimrIssues::TStatusIds::SCHEME_ERROR:
-                issue.SetCode(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, NYql::TSeverityIds::S_ERROR);
-                break;
-            case NKikimrIssues::TStatusIds::TIMEOUT:
-                issue.SetCode(NYql::TIssuesIds::KIKIMR_TIMEOUT, NYql::TSeverityIds::S_ERROR);
-                break;
-            case NKikimrIssues::TStatusIds::OVERLOADED:
-                issue.SetCode(NYql::TIssuesIds::KIKIMR_OVERLOADED, NYql::TSeverityIds::S_ERROR);
-                break;
-            default:
-                // Snapshot is acquired before reads or writes, so we can return UNAVAILABLE here
-                issue.SetCode(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, NYql::TSeverityIds::S_ERROR);
-                break;
-        }
-
+        switch (handle.Status) { 
+            case NKikimrIssues::TStatusIds::SCHEME_ERROR: 
+                issue.SetCode(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, NYql::TSeverityIds::S_ERROR); 
+                break; 
+            case NKikimrIssues::TStatusIds::TIMEOUT: 
+                issue.SetCode(NYql::TIssuesIds::KIKIMR_TIMEOUT, NYql::TSeverityIds::S_ERROR); 
+                break; 
+            case NKikimrIssues::TStatusIds::OVERLOADED: 
+                issue.SetCode(NYql::TIssuesIds::KIKIMR_OVERLOADED, NYql::TSeverityIds::S_ERROR); 
+                break; 
+            default: 
+                // Snapshot is acquired before reads or writes, so we can return UNAVAILABLE here 
+                issue.SetCode(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, NYql::TSeverityIds::S_ERROR); 
+                break; 
+        } 
+ 
         for (const auto& subIssue: handle.Issues()) {
             issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
-        }
+        } 
         ctx.AddError(issue);
         return TStatus::Error;
     }
@@ -729,53 +729,53 @@ private:
         if (!settings.GetCommitTx())
             return true;
 
-        size_t readPhases = 0;
-        bool hasEffects = false;
-
+        size_t readPhases = 0; 
+        bool hasEffects = false; 
+ 
         if (NewEngine) {
             YQL_ENSURE(TransformCtx->PhysicalQuery);
             auto &query = *TransformCtx->PhysicalQuery;
-
-            for (const auto &tx : query.GetTransactions()) {
-                switch (tx.GetType()) {
-                    case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                        // ignore pure computations
-                        break;
-
-                    default:
-                        ++readPhases;
-                        break;
-                }
-
-                if (tx.GetHasEffects()) {
-                    hasEffects = true;
-                }
-            }
-        } else {
-            YQL_ENSURE(TransformCtx->PreparedKql);
-
-            auto &kql = *TransformCtx->PreparedKql;
-
-            readPhases += kql.GetMkqls().size();
-            hasEffects = !kql.GetEffects().empty();
+ 
+            for (const auto &tx : query.GetTransactions()) { 
+                switch (tx.GetType()) { 
+                    case NKqpProto::TKqpPhyTx::TYPE_COMPUTE: 
+                        // ignore pure computations 
+                        break; 
+ 
+                    default: 
+                        ++readPhases; 
+                        break; 
+                } 
+ 
+                if (tx.GetHasEffects()) { 
+                    hasEffects = true; 
+                } 
+            } 
+        } else { 
+            YQL_ENSURE(TransformCtx->PreparedKql); 
+ 
+            auto &kql = *TransformCtx->PreparedKql; 
+ 
+            readPhases += kql.GetMkqls().size(); 
+            hasEffects = !kql.GetEffects().empty(); 
         }
 
-        // We don't want snapshot when there are effects at the moment,
-        // because it hurts performance when there are multiple single-shard
-        // reads and a single distributed commit. Taking snapshot costs
-        // similar to an additional distributed transaction, and it's very
-        // hard to predict when that happens, causing performance
-        // degradation.
-        if (hasEffects) {
-            return false;
-        }
-
-        // We need snapshot when there are multiple table read phases, most
-        // likely it involves multiple tables and we would have to use a
-        // distributed commit otherwise. Taking snapshot helps as avoid TLI
-        // for read-only transactions, and costs less than a final distributed
-        // commit.
-        return readPhases > 1;
+        // We don't want snapshot when there are effects at the moment, 
+        // because it hurts performance when there are multiple single-shard 
+        // reads and a single distributed commit. Taking snapshot costs 
+        // similar to an additional distributed transaction, and it's very 
+        // hard to predict when that happens, causing performance 
+        // degradation. 
+        if (hasEffects) { 
+            return false; 
+        } 
+ 
+        // We need snapshot when there are multiple table read phases, most 
+        // likely it involves multiple tables and we would have to use a 
+        // distributed commit otherwise. Taking snapshot helps as avoid TLI 
+        // for read-only transactions, and costs less than a final distributed 
+        // commit. 
+        return readPhases > 1; 
     }
 
 private:

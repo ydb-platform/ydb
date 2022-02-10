@@ -63,9 +63,9 @@ struct TEvTablet {
 
         EvTabletDead = EvBoot + 1024,
         EvFollowerUpdateState, // notifications to guardian
-        EvFeatures, // from user tablet to sys tablet, notify on supported features
-        EvTabletStop, // from local to sys tablet, from sys tablet to user tablet
-        EvTabletStopped, // from user tablet to sys tablet, ready to die now
+        EvFeatures, // from user tablet to sys tablet, notify on supported features 
+        EvTabletStop, // from local to sys tablet, from sys tablet to user tablet 
+        EvTabletStopped, // from user tablet to sys tablet, ready to die now 
 
         EvReadLocalBase = EvBoot + 1536,
         EvReadLocalBaseResult,
@@ -188,7 +188,7 @@ struct TEvTablet {
         TSharedQuotaPtr TxCacheQuota;
 
         NMetrics::TTabletThroughputRawValue GroupReadBytes;
-        NMetrics::TTabletIopsRawValue GroupReadOps;
+        NMetrics::TTabletIopsRawValue GroupReadOps; 
 
         TEvBoot(
                 ui64 tabletId,
@@ -198,8 +198,8 @@ struct TEvTablet {
                 TIntrusivePtr<TTabletStorageInfo> info,
                 TResourceProfilesPtr profiles = nullptr,
                 TSharedQuotaPtr txCacheQuota = nullptr,
-                NMetrics::TTabletThroughputRawValue&& read = NMetrics::TTabletThroughputRawValue(),
-                NMetrics::TTabletIopsRawValue&& readOps = NMetrics::TTabletIopsRawValue())
+                NMetrics::TTabletThroughputRawValue&& read = NMetrics::TTabletThroughputRawValue(), 
+                NMetrics::TTabletIopsRawValue&& readOps = NMetrics::TTabletIopsRawValue()) 
             : TabletID(tabletId)
             , Generation(generation)
             , DependencyGraph(dependencyGraph)
@@ -208,7 +208,7 @@ struct TEvTablet {
             , ResourceProfiles(profiles)
             , TxCacheQuota(txCacheQuota)
             , GroupReadBytes(std::move(read))
-            , GroupReadOps(std::move(readOps))
+            , GroupReadOps(std::move(readOps)) 
         {}
     };
 
@@ -317,31 +317,31 @@ struct TEvTablet {
         const ui64 TabletID;
         const ui32 Generation;
         const ui32 Step;
-        const ui32 ConfirmedOnSend;
+        const ui32 ConfirmedOnSend; 
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
-        NMetrics::TTabletIopsRawValue GroupWrittenOps;
+        NMetrics::TTabletIopsRawValue GroupWrittenOps; 
 
-        TEvCommitResult(
-                NKikimrProto::EReplyStatus status,
-                ui64 tabletId,
-                ui32 gen,
-                ui32 step,
-                ui32 confirmedOnSend,
+        TEvCommitResult( 
+                NKikimrProto::EReplyStatus status, 
+                ui64 tabletId, 
+                ui32 gen, 
+                ui32 step, 
+                ui32 confirmedOnSend, 
                 TVector<ui32>&& yellowMoveChannels,
                 TVector<ui32>&& yellowStopChannels,
-                NMetrics::TTabletThroughputRawValue&& written,
-                NMetrics::TTabletIopsRawValue&& writtenOps)
+                NMetrics::TTabletThroughputRawValue&& written, 
+                NMetrics::TTabletIopsRawValue&& writtenOps) 
             : Status(status)
             , TabletID(tabletId)
             , Generation(gen)
             , Step(step)
-            , ConfirmedOnSend(confirmedOnSend)
+            , ConfirmedOnSend(confirmedOnSend) 
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
             , GroupWrittenBytes(std::move(written))
-            , GroupWrittenOps(std::move(writtenOps))
+            , GroupWrittenOps(std::move(writtenOps)) 
         {}
     };
 
@@ -739,47 +739,47 @@ struct TEvTablet {
             : ResourceProfiles(profiles)
         {}
     };
-
-    struct TEvFeatures : TEventLocal<TEvFeatures, EvFeatures> {
-        enum EFeatureFlags : ui32 {
-            None = 0,
-            GracefulStop = 1,
-        };
-
-        const ui32 Features;
-
-        explicit TEvFeatures(ui32 features)
-            : Features(features)
-        { }
-    };
-
-    struct TEvTabletStop : TEventPB<TEvTabletStop, NKikimrTabletBase::TEvTabletStop, EvTabletStop> {
-        using EReason = NKikimrTabletBase::TEvTabletStop::EReason;
-
-#define DEFINE_TABLET_STOP_REASON(name) static constexpr EReason name = NKikimrTabletBase::TEvTabletStop::name
-        DEFINE_TABLET_STOP_REASON(ReasonUnknown);
-        DEFINE_TABLET_STOP_REASON(ReasonStop);
-        DEFINE_TABLET_STOP_REASON(ReasonDemoted);
-        DEFINE_TABLET_STOP_REASON(ReasonIsolated);
-        DEFINE_TABLET_STOP_REASON(ReasonStorageBlocked);
-        DEFINE_TABLET_STOP_REASON(ReasonStorageFailure);
-#undef DEFINE_TABLET_STOP_REASON
-
-        TEvTabletStop() = default;
-
-        explicit TEvTabletStop(ui64 tabletId, EReason reason) {
-            Record.SetTabletID(tabletId);
-            Record.SetReason(reason);
-        }
-
-        ui64 GetTabletID() const { return Record.GetTabletID(); }
-        EReason GetReason() const { return Record.GetReason(); }
-    };
-
-    struct TEvTabletStopped : TEventLocal<TEvTabletStopped, EvTabletStopped> {};
+ 
+    struct TEvFeatures : TEventLocal<TEvFeatures, EvFeatures> { 
+        enum EFeatureFlags : ui32 { 
+            None = 0, 
+            GracefulStop = 1, 
+        }; 
+ 
+        const ui32 Features; 
+ 
+        explicit TEvFeatures(ui32 features) 
+            : Features(features) 
+        { } 
+    }; 
+ 
+    struct TEvTabletStop : TEventPB<TEvTabletStop, NKikimrTabletBase::TEvTabletStop, EvTabletStop> { 
+        using EReason = NKikimrTabletBase::TEvTabletStop::EReason; 
+ 
+#define DEFINE_TABLET_STOP_REASON(name) static constexpr EReason name = NKikimrTabletBase::TEvTabletStop::name 
+        DEFINE_TABLET_STOP_REASON(ReasonUnknown); 
+        DEFINE_TABLET_STOP_REASON(ReasonStop); 
+        DEFINE_TABLET_STOP_REASON(ReasonDemoted); 
+        DEFINE_TABLET_STOP_REASON(ReasonIsolated); 
+        DEFINE_TABLET_STOP_REASON(ReasonStorageBlocked); 
+        DEFINE_TABLET_STOP_REASON(ReasonStorageFailure); 
+#undef DEFINE_TABLET_STOP_REASON 
+ 
+        TEvTabletStop() = default; 
+ 
+        explicit TEvTabletStop(ui64 tabletId, EReason reason) { 
+            Record.SetTabletID(tabletId); 
+            Record.SetReason(reason); 
+        } 
+ 
+        ui64 GetTabletID() const { return Record.GetTabletID(); } 
+        EReason GetReason() const { return Record.GetReason(); } 
+    }; 
+ 
+    struct TEvTabletStopped : TEventLocal<TEvTabletStopped, EvTabletStopped> {}; 
 };
 
-IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId = 0, ui32 maxGeneration = Max<ui32>());
+IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId = 0, ui32 maxGeneration = Max<ui32>()); 
 IActor* CreateTabletDSChecker(const TActorId &replyTo, TTabletStorageInfo *info);
 IActor* CreateTabletReqReset(const TActorId &replyTo, const TIntrusivePtr<TTabletStorageInfo> &tabletStorageInfo, ui32 knownGeneration = 0);
 

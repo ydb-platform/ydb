@@ -4,7 +4,7 @@
 #include "datashard.h"
 #include "datashard_locks.h"
 #include "datashard_outreadset.h"
-#include "datashard_snapshots.h"
+#include "datashard_snapshots.h" 
 #include "change_exchange.h"
 #include "execution_unit_kind.h"
 
@@ -14,8 +14,8 @@
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 #include <ydb/core/tx/tx_processing.h>
 
-#include <library/cpp/containers/flat_hash/flat_hash.h>
-
+#include <library/cpp/containers/flat_hash/flat_hash.h> 
+ 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
@@ -34,11 +34,11 @@ enum class ETxOrder {
     Any,
 };
 
-enum class EMvccTxMode {
-    ReadOnly,
-    ReadWrite,
-};
-
+enum class EMvccTxMode { 
+    ReadOnly, 
+    ReadWrite, 
+}; 
+ 
 struct TStepOrder {
     ui64 Step;
     ui64 TxId;
@@ -76,22 +76,22 @@ struct TStepOrder {
     }
 
     std::pair<ui64, ui64> ToPair() const { return std::pair<ui64, ui64>(Step, TxId); }
-
-    TString ToString() const {
-        return TStringBuilder() << Step << ':' << TxId;
-    }
+ 
+    TString ToString() const { 
+        return TStringBuilder() << Step << ':' << TxId; 
+    } 
 };
 
-struct TOperationKey {
-    ui64 TableId;
-    TOwnedTableRange Key;
-
-    TOperationKey(ui64 tableId, TOwnedTableRange key)
-        : TableId(tableId)
-        , Key(std::move(key))
-    { }
-};
-
+struct TOperationKey { 
+    ui64 TableId; 
+    TOwnedTableRange Key; 
+ 
+    TOperationKey(ui64 tableId, TOwnedTableRange key) 
+        : TableId(tableId) 
+        , Key(std::move(key)) 
+    { } 
+}; 
+ 
 enum class EOperationKind : ui32 {
     Unknown = 0,
 
@@ -99,9 +99,9 @@ enum class EOperationKind : ui32 {
     DataTx = NKikimrTxDataShard::ETransactionKind::TX_KIND_DATA,
     SchemeTx = NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME,
     ReadTable = NKikimrTxDataShard::ETransactionKind::TX_KIND_SCAN,
-    Snapshot = NKikimrTxDataShard::ETransactionKind::TX_KIND_SNAPSHOT,
+    Snapshot = NKikimrTxDataShard::ETransactionKind::TX_KIND_SNAPSHOT, 
     DistributedErase = NKikimrTxDataShard::ETransactionKind::TX_KIND_DISTRIBUTED_ERASE,
-    CommitWrites = NKikimrTxDataShard::ETransactionKind::TX_KIND_COMMIT_WRITES,
+    CommitWrites = NKikimrTxDataShard::ETransactionKind::TX_KIND_COMMIT_WRITES, 
 
     // Values [100, inf) are used for internal kinds.
     DirectTx = 101,
@@ -116,16 +116,16 @@ public:
         , Step(0)
         , MinStep(0)
         , MaxStep(0)
-        , TieBreakerIndex(0)
+        , TieBreakerIndex(0) 
     {
     }
 
     TBasicOpInfo(ui64 txId,
                  EOperationKind kind,
-                 ui64 flags,
+                 ui64 flags, 
                  ui64 maxStep,
-                 TInstant receivedAt,
-                 ui64 tieBreakerIndex)
+                 TInstant receivedAt, 
+                 ui64 tieBreakerIndex) 
         : Kind(kind)
         , Flags(flags)
         , TxId(txId)
@@ -133,7 +133,7 @@ public:
         , ReceivedAt(receivedAt)
         , MinStep(0)
         , MaxStep(maxStep)
-        , TieBreakerIndex(tieBreakerIndex)
+        , TieBreakerIndex(tieBreakerIndex) 
     {
     }
 
@@ -152,9 +152,9 @@ public:
     bool IsDirectTx() const { return Kind == EOperationKind::DirectTx; }
     bool IsSchemeTx() const { return Kind == EOperationKind::SchemeTx; }
     bool IsReadTable() const { return Kind == EOperationKind::ReadTable; }
-    bool IsSnapshotTx() const { return Kind == EOperationKind::Snapshot; }
+    bool IsSnapshotTx() const { return Kind == EOperationKind::Snapshot; } 
     bool IsDistributedEraseTx() const { return Kind == EOperationKind::DistributedErase; }
-    bool IsCommitWritesTx() const { return Kind == EOperationKind::CommitWrites; }
+    bool IsCommitWritesTx() const { return Kind == EOperationKind::CommitWrites; } 
     bool Exists() const { return Kind != EOperationKind::Unknown; }
 
     /////////////////////////////
@@ -201,16 +201,16 @@ public:
     void ResetInProgressFlag() { ResetFlag(TTxFlags::InProgress); }
 
     bool IsInProgress() const { return HasInProgressFlag(); }
-    void IncrementInProgress() {
-        if (0 == InProgressCount++) {
-            SetInProgressFlag();
-        }
-    }
-    void DecrementInProgress() {
-        if (0 == --InProgressCount) {
-            ResetInProgressFlag();
-        }
-    }
+    void IncrementInProgress() { 
+        if (0 == InProgressCount++) { 
+            SetInProgressFlag(); 
+        } 
+    } 
+    void DecrementInProgress() { 
+        if (0 == --InProgressCount) { 
+            ResetInProgressFlag(); 
+        } 
+    } 
 
     bool HasCompletedFlag() const { return HasFlag(TTxFlags::Completed); }
     void SetCompletedFlag(bool val = true) { SetFlag(TTxFlags::Completed, val); }
@@ -325,12 +325,12 @@ public:
     void ResetWaitingForSnapshotFlag() { ResetFlag(TTxFlags::WaitingForSnapshot); }
     bool IsWaitingForSnapshot() const { return HasWaitingForSnapshotFlag(); }
 
-    bool HasResultSentFlag() const { return HasFlag(TTxFlags::ResultSent); }
-    void SetResultSentFlag(bool val = true) { SetFlag(TTxFlags::ResultSent, val); }
-
-    bool HasStoredFlag() const { return HasFlag(TTxFlags::Stored); }
-    void SetStoredFlag(bool val = true) { SetFlag(TTxFlags::Stored, val); }
-
+    bool HasResultSentFlag() const { return HasFlag(TTxFlags::ResultSent); } 
+    void SetResultSentFlag(bool val = true) { SetFlag(TTxFlags::ResultSent, val); } 
+ 
+    bool HasStoredFlag() const { return HasFlag(TTxFlags::Stored); } 
+    void SetStoredFlag(bool val = true) { SetFlag(TTxFlags::Stored, val); } 
+ 
     bool HasWaitCompletionFlag() const { return HasFlag(TTxFlags::WaitCompletion); }
     void SetWaitCompletionFlag(bool val = true) { SetFlag(TTxFlags::WaitCompletion, val); }
 
@@ -350,29 +350,29 @@ public:
     ui64 GetMaxStep() const { return MaxStep; }
     void SetMaxStep(ui64 step) { MaxStep = step; }
 
-    ui64 GetTieBreakerIndex() const { return TieBreakerIndex; }
-
+    ui64 GetTieBreakerIndex() const { return TieBreakerIndex; } 
+ 
     TInstant GetReceivedAt() const { return ReceivedAt; }
 
-    bool HasAcquiredSnapshotKey() const { return HasFlag(TTxFlags::AcquiredSnapshotReference); }
-    const TSnapshotKey& GetAcquiredSnapshotKey() const { return AcquiredSnapshotKey; }
-
-    void SetAcquiredSnapshotKey(const TSnapshotKey& key) {
-        AcquiredSnapshotKey = key;
-        SetFlag(TTxFlags::AcquiredSnapshotReference);
-    }
-
-    void ResetAcquiredSnapshotKey() {
-        ResetFlag(TTxFlags::AcquiredSnapshotReference);
-    }
-
-    bool IsMvccSnapshotRead() { return !MvccSnapshot.IsMax(); }
-    const TRowVersion& GetMvccSnapshot() const { return MvccSnapshot; }
-    bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable; }
-    void SetMvccSnapshot(const TRowVersion& snapshot, bool isRepeatable = true) {
-        MvccSnapshot = snapshot;
-        MvccSnapshotRepeatable = isRepeatable;
-    }
+    bool HasAcquiredSnapshotKey() const { return HasFlag(TTxFlags::AcquiredSnapshotReference); } 
+    const TSnapshotKey& GetAcquiredSnapshotKey() const { return AcquiredSnapshotKey; } 
+ 
+    void SetAcquiredSnapshotKey(const TSnapshotKey& key) { 
+        AcquiredSnapshotKey = key; 
+        SetFlag(TTxFlags::AcquiredSnapshotReference); 
+    } 
+ 
+    void ResetAcquiredSnapshotKey() { 
+        ResetFlag(TTxFlags::AcquiredSnapshotReference); 
+    } 
+ 
+    bool IsMvccSnapshotRead() { return !MvccSnapshot.IsMax(); } 
+    const TRowVersion& GetMvccSnapshot() const { return MvccSnapshot; } 
+    bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable; } 
+    void SetMvccSnapshot(const TRowVersion& snapshot, bool isRepeatable = true) { 
+        MvccSnapshot = snapshot; 
+        MvccSnapshotRepeatable = isRepeatable; 
+    } 
 
     ///////////////////////////////////
     //     DEBUG AND MONITORING      //
@@ -389,12 +389,12 @@ protected:
 
     ui64 MinStep;
     ui64 MaxStep;
-    ui64 TieBreakerIndex;
-    ui64 InProgressCount = 0;
-
-    TSnapshotKey AcquiredSnapshotKey;
-    TRowVersion MvccSnapshot = TRowVersion::Max();
-    bool MvccSnapshotRepeatable = false;
+    ui64 TieBreakerIndex; 
+    ui64 InProgressCount = 0; 
+ 
+    TSnapshotKey AcquiredSnapshotKey; 
+    TRowVersion MvccSnapshot = TRowVersion::Max(); 
+    bool MvccSnapshotRepeatable = false; 
 };
 
 struct TRSData {
@@ -467,19 +467,19 @@ struct TExecutionProfile {
     THashMap<EExecutionUnitKind, TUnitProfile> UnitProfiles;
 };
 
-class TOperationAllListItem : public TIntrusiveListItem<TOperationAllListItem> {};
-class TOperationGlobalListItem : public TIntrusiveListItem<TOperationGlobalListItem> {};
-class TOperationDelayedReadListItem : public TIntrusiveListItem<TOperationDelayedReadListItem> {};
-class TOperationDelayedWriteListItem : public TIntrusiveListItem<TOperationDelayedWriteListItem> {};
-
-class TOperation
-    : public TBasicOpInfo
-    , public TThrRefBase
-    , public TOperationAllListItem
-    , public TOperationGlobalListItem
-    , public TOperationDelayedReadListItem
-    , public TOperationDelayedWriteListItem
-{
+class TOperationAllListItem : public TIntrusiveListItem<TOperationAllListItem> {}; 
+class TOperationGlobalListItem : public TIntrusiveListItem<TOperationGlobalListItem> {}; 
+class TOperationDelayedReadListItem : public TIntrusiveListItem<TOperationDelayedReadListItem> {}; 
+class TOperationDelayedWriteListItem : public TIntrusiveListItem<TOperationDelayedWriteListItem> {}; 
+ 
+class TOperation 
+    : public TBasicOpInfo 
+    , public TThrRefBase 
+    , public TOperationAllListItem 
+    , public TOperationGlobalListItem 
+    , public TOperationDelayedReadListItem 
+    , public TOperationDelayedWriteListItem 
+{ 
 public:
     enum EDepFlag {
         // Two operations might use the same key(s) and
@@ -514,35 +514,35 @@ public:
     ui64 GetCookie() const { return Cookie; }
     void SetCookie(ui64 cookie) { Cookie = cookie; }
 
-public:
-    static TOperation* From(TOperationAllListItem* item) { return static_cast<TOperation*>(item); }
-    static TOperation* From(TOperationGlobalListItem* item) { return static_cast<TOperation*>(item); }
-    static TOperation* From(TOperationDelayedReadListItem* item) { return static_cast<TOperation*>(item); }
-    static TOperation* From(TOperationDelayedWriteListItem* item) { return static_cast<TOperation*>(item); }
-
-    static TOperation* From(TOperationAllListItem& item) { return static_cast<TOperation*>(&item); }
-    static TOperation* From(TOperationGlobalListItem& item) { return static_cast<TOperation*>(&item); }
-    static TOperation* From(TOperationDelayedReadListItem& item) { return static_cast<TOperation*>(&item); }
-    static TOperation* From(TOperationDelayedWriteListItem& item) { return static_cast<TOperation*>(&item); }
-
-public:
-    TDuration GetTotalElapsed() const {
-        return TDuration::Seconds(TotalTimer.Passed());
-    }
-
-    void ResetCurrentTimer() {
-        CurrentTimer.Reset();
-    }
-
-    TDuration GetCurrentElapsed() const {
-        return TDuration::Seconds(CurrentTimer.Passed());
-    }
-
-    TDuration GetCurrentElapsedAndReset() {
-        return TDuration::Seconds(CurrentTimer.PassedReset());
-    }
-
-public:
+public: 
+    static TOperation* From(TOperationAllListItem* item) { return static_cast<TOperation*>(item); } 
+    static TOperation* From(TOperationGlobalListItem* item) { return static_cast<TOperation*>(item); } 
+    static TOperation* From(TOperationDelayedReadListItem* item) { return static_cast<TOperation*>(item); } 
+    static TOperation* From(TOperationDelayedWriteListItem* item) { return static_cast<TOperation*>(item); } 
+ 
+    static TOperation* From(TOperationAllListItem& item) { return static_cast<TOperation*>(&item); } 
+    static TOperation* From(TOperationGlobalListItem& item) { return static_cast<TOperation*>(&item); } 
+    static TOperation* From(TOperationDelayedReadListItem& item) { return static_cast<TOperation*>(&item); } 
+    static TOperation* From(TOperationDelayedWriteListItem& item) { return static_cast<TOperation*>(&item); } 
+ 
+public: 
+    TDuration GetTotalElapsed() const { 
+        return TDuration::Seconds(TotalTimer.Passed()); 
+    } 
+ 
+    void ResetCurrentTimer() { 
+        CurrentTimer.Reset(); 
+    } 
+ 
+    TDuration GetCurrentElapsed() const { 
+        return TDuration::Seconds(CurrentTimer.Passed()); 
+    } 
+ 
+    TDuration GetCurrentElapsedAndReset() { 
+        return TDuration::Seconds(CurrentTimer.PassedReset()); 
+    } 
+ 
+public: 
     ////////////////////////////////////////
     //             INPUT DATA             //
     ////////////////////////////////////////
@@ -607,62 +607,62 @@ public:
 
     TVector<TOutputOpData::TChangeRecord> &ChangeRecords() { return OutputDataRef().ChangeRecords; }
 
-    const NFH::TFlatHashSet<ui64> &GetAffectedLocks() const { return AffectedLocks; }
-    void AddAffectedLock(ui64 lockTxId) { AffectedLocks.insert(lockTxId); }
-
+    const NFH::TFlatHashSet<ui64> &GetAffectedLocks() const { return AffectedLocks; } 
+    void AddAffectedLock(ui64 lockTxId) { AffectedLocks.insert(lockTxId); } 
+ 
     ////////////////////////////////////////
-    //       DELAYED IMMEDIATE KEYS       //
+    //       DELAYED IMMEDIATE KEYS       // 
     ////////////////////////////////////////
-    void SetDelayedKnownReads(const TVector<TOperationKey>& reads) {
-        DelayedKnownReads.insert(DelayedKnownReads.end(), reads.begin(), reads.end());
+    void SetDelayedKnownReads(const TVector<TOperationKey>& reads) { 
+        DelayedKnownReads.insert(DelayedKnownReads.end(), reads.begin(), reads.end()); 
     }
-
-    void SetDelayedKnownWrites(const TVector<TOperationKey>& writes) {
-        DelayedKnownWrites.insert(DelayedKnownWrites.end(), writes.begin(), writes.end());
+ 
+    void SetDelayedKnownWrites(const TVector<TOperationKey>& writes) { 
+        DelayedKnownWrites.insert(DelayedKnownWrites.end(), writes.begin(), writes.end()); 
     }
-
-    TVector<TOperationKey> RemoveDelayedKnownReads() {
-        return std::move(DelayedKnownReads);
-    }
-
-    TVector<TOperationKey> RemoveDelayedKnownWrites() {
-        return std::move(DelayedKnownWrites);
-    }
-
-    ////////////////////////////////////////
-    //            DEPENDENCIES            //
-    ////////////////////////////////////////
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetDependents() const { return Dependents; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetDependencies() const { return Dependencies; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetSpecialDependents() const { return SpecialDependents; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetSpecialDependencies() const { return SpecialDependencies; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetPlannedConflicts() const { return PlannedConflicts; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetImmediateConflicts() const { return ImmediateConflicts; }
-
-    void AddDependency(const TOperation::TPtr &op);
-    void AddSpecialDependency(const TOperation::TPtr &op);
-    void AddImmediateConflict(const TOperation::TPtr &op);
-    void PromoteImmediateConflicts();
-    void PromoteImmediateWriteConflicts();
-
-    void ClearDependents();
+ 
+    TVector<TOperationKey> RemoveDelayedKnownReads() { 
+        return std::move(DelayedKnownReads); 
+    } 
+ 
+    TVector<TOperationKey> RemoveDelayedKnownWrites() { 
+        return std::move(DelayedKnownWrites); 
+    } 
+ 
+    //////////////////////////////////////// 
+    //            DEPENDENCIES            // 
+    //////////////////////////////////////// 
+    const NFH::TFlatHashSet<TOperation::TPtr> &GetDependents() const { return Dependents; } 
+    const NFH::TFlatHashSet<TOperation::TPtr> &GetDependencies() const { return Dependencies; } 
+    const NFH::TFlatHashSet<TOperation::TPtr> &GetSpecialDependents() const { return SpecialDependents; } 
+    const NFH::TFlatHashSet<TOperation::TPtr> &GetSpecialDependencies() const { return SpecialDependencies; } 
+    const NFH::TFlatHashSet<TOperation::TPtr> &GetPlannedConflicts() const { return PlannedConflicts; } 
+    const NFH::TFlatHashSet<TOperation::TPtr> &GetImmediateConflicts() const { return ImmediateConflicts; } 
+ 
+    void AddDependency(const TOperation::TPtr &op); 
+    void AddSpecialDependency(const TOperation::TPtr &op); 
+    void AddImmediateConflict(const TOperation::TPtr &op); 
+    void PromoteImmediateConflicts(); 
+    void PromoteImmediateWriteConflicts(); 
+ 
+    void ClearDependents(); 
     void ClearDependencies();
-    void ClearPlannedConflicts();
-    void ClearImmediateConflicts();
-    void ClearSpecialDependents();
-    void ClearSpecialDependencies();
+    void ClearPlannedConflicts(); 
+    void ClearImmediateConflicts(); 
+    void ClearSpecialDependents(); 
+    void ClearSpecialDependencies(); 
 
-    TString DumpDependencies() const;
-
-    /**
-     * Returns true if operation has some runtime conflicts and cannot execute
-     *
-     * For example this may return true for immediate mutating operations after
-     * conflicting planned operations create outgoing readsets, but before
-     * main transaction body has completed.
-     */
-    bool HasRuntimeConflicts() const noexcept;
-
+    TString DumpDependencies() const; 
+ 
+    /** 
+     * Returns true if operation has some runtime conflicts and cannot execute 
+     * 
+     * For example this may return true for immediate mutating operations after 
+     * conflicting planned operations create outgoing readsets, but before 
+     * main transaction body has completed. 
+     */ 
+    bool HasRuntimeConflicts() const noexcept; 
+ 
     virtual const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const
     {
         return EmptyKeysInfo;
@@ -706,9 +706,9 @@ public:
     // data not required any more keeping data required for monitoring.
     virtual void Deactivate() { ClearInputData(); }
 
-    // Mark operation as aborted
-    void Abort();
-
+    // Mark operation as aborted 
+    void Abort(); 
+ 
     // Mark operation as aborted and replace the rest of
     // operation's execution plan with specified unit.
     void Abort(EExecutionUnitKind unit);
@@ -761,9 +761,9 @@ protected:
                EOperationKind kind,
                ui32 flags,
                ui64 maxStep,
-               TInstant receivedAt,
-               ui64 tieBreakerIndex)
-        : TOperation(TBasicOpInfo(txId, kind, flags, maxStep, receivedAt, tieBreakerIndex))
+               TInstant receivedAt, 
+               ui64 tieBreakerIndex) 
+        : TOperation(TBasicOpInfo(txId, kind, flags, maxStep, receivedAt, tieBreakerIndex)) 
     {
     }
 
@@ -796,32 +796,32 @@ protected:
     TActorId Target;
 
 private:
-    THPTimer TotalTimer;
-    THPTimer CurrentTimer;
+    THPTimer TotalTimer; 
+    THPTimer CurrentTimer; 
     THolder<TInputOpData> InputData;
     THolder<TOutputOpData> OutputData;
     ui64 Cookie;
-    // A set of locks affected by this operation
-    NFH::TFlatHashSet<ui64> AffectedLocks;
-    // Delayed read/write keys for immediate transactions
-    TVector<TOperationKey> DelayedKnownReads;
-    TVector<TOperationKey> DelayedKnownWrites;
-    // Bidirectional links between dependent transactions
-    NFH::TFlatHashSet<TOperation::TPtr> Dependents;
-    NFH::TFlatHashSet<TOperation::TPtr> Dependencies;
-    NFH::TFlatHashSet<TOperation::TPtr> SpecialDependents;
-    NFH::TFlatHashSet<TOperation::TPtr> SpecialDependencies;
-    NFH::TFlatHashSet<TOperation::TPtr> PlannedConflicts;
-    NFH::TFlatHashSet<TOperation::TPtr> ImmediateConflicts;
+    // A set of locks affected by this operation 
+    NFH::TFlatHashSet<ui64> AffectedLocks; 
+    // Delayed read/write keys for immediate transactions 
+    TVector<TOperationKey> DelayedKnownReads; 
+    TVector<TOperationKey> DelayedKnownWrites; 
+    // Bidirectional links between dependent transactions 
+    NFH::TFlatHashSet<TOperation::TPtr> Dependents; 
+    NFH::TFlatHashSet<TOperation::TPtr> Dependencies; 
+    NFH::TFlatHashSet<TOperation::TPtr> SpecialDependents; 
+    NFH::TFlatHashSet<TOperation::TPtr> SpecialDependencies; 
+    NFH::TFlatHashSet<TOperation::TPtr> PlannedConflicts; 
+    NFH::TFlatHashSet<TOperation::TPtr> ImmediateConflicts; 
     TVector<EExecutionUnitKind> ExecutionPlan;
     // Index of current execution unit.
     size_t CurrentUnit;
     TExecutionProfile ExecutionProfile;
 
     static NMiniKQL::IEngineFlat::TValidationInfo EmptyKeysInfo;
-
-public:
-    std::optional<TRowVersion> MvccReadWriteVersion;
+ 
+public: 
+    std::optional<TRowVersion> MvccReadWriteVersion; 
 };
 
 inline IOutputStream &operator <<(IOutputStream &out,

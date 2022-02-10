@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util_basics.h"
+#include "util_basics.h" 
 #include "flat_scan_lead.h"
 #include "flat_row_eggs.h"
 #include "flat_row_scheme.h"
@@ -10,13 +10,13 @@ namespace NTable {
     class TRowState;
     class TSpent;
 
-    /*_ IScan, the generic scan interface. Scan life cycle starts with
-        invocation of Prepare(..) method after which it has to progress
+    /*_ IScan, the generic scan interface. Scan life cycle starts with 
+        invocation of Prepare(..) method after which it has to progress 
         with IDriver::Touch(..).
 
         Once rows iterator invalidated Seek(..) method is called getting
         next position for seeking followed by a series of Feed(..)
-        with rows. Thus the next call after Prepare(..) is always Seek(, 0).
+        with rows. Thus the next call after Prepare(..) is always Seek(, 0). 
 
         If Seek call succeeded and return EScan::Feed, then Feed called to pass
         data to reader. When range supplied by Seek completed then Exhausted method is
@@ -25,24 +25,24 @@ namespace NTable {
         Feed method may return EScan::Reset indicating that current range is
         completed and next one should be set up in Seek method.
 
-        IScan may express its desire of futher IDriver env behaviour
-        with EScan codes where applicable.
+        IScan may express its desire of futher IDriver env behaviour 
+        with EScan codes where applicable. 
 
-        At the end IDriver calls Finish() once requesting a product. After
-        this IScan is left on its own and impl. have to take care of all
+        At the end IDriver calls Finish() once requesting a product. After 
+        this IScan is left on its own and impl. have to take care of all 
         owned resources and self object in particular. It is allowed for
         IScan to return self as an IDestructable product.
 
         Limitations and caveats:
 
-            1. Usage of IDriver object is not valid in contexts of any call
-               of IScan iface including the initial Prepare(..).
+            1. Usage of IDriver object is not valid in contexts of any call 
+               of IScan iface including the initial Prepare(..). 
 
-            2. IScan has to maintain its own functional state until Finish(..)
-               is called.
+            2. IScan has to maintain its own functional state until Finish(..) 
+               is called. 
 
-            3. Host env may stop progress with Finish(..) not triggered by
-               IScan desires. In that case IScan may continue to work alone
+            3. Host env may stop progress with Finish(..) not triggered by 
+               IScan desires. In that case IScan may continue to work alone 
                taking care of owned resources.
 
             4. Seek(..) will progress to Feed(..) on next wake if ::Sleep
@@ -50,12 +50,12 @@ namespace NTable {
                 from Seek(..). Otherwise Seek(..) will be recalled with the
                 same state later.
 
-            5. All IScan calls may be spread over time with undefined
-                delays ruled by IDriver host environment. Thus IScan should
-                not rely on any particular delays.
+            5. All IScan calls may be spread over time with undefined 
+                delays ruled by IDriver host environment. Thus IScan should 
+                not rely on any particular delays. 
 
-            6. It is unspecified by this inteface how IDriver activity has
-                to be synchronized with IScan, left to host env design.
+            6. It is unspecified by this inteface how IDriver activity has 
+                to be synchronized with IScan, left to host env design. 
      */
 
     enum class EScan {
@@ -117,43 +117,43 @@ namespace NTable {
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept = 0;
         virtual TAutoPtr<IDestructable> Finish(EAbort) noexcept = 0;
         virtual void Describe(IOutputStream&) const noexcept = 0;
-
-        /**
-         * Called on page faults during iteration
-         *
-         * The default is to return EScan::Feed, to keep trying to fetch data
-         * until the next row is available or iteration is exhausted.
-         */
-        virtual EScan PageFault() noexcept {
-            return EScan::Feed;
-        }
-
-        /**
-         * Called when iteration is exhausted
-         *
-         * The default is to return EScan::Reset, causing another Seek for
-         * compatibility and making it possible to iterate multiple times.
-         */
-        virtual EScan Exhausted() noexcept {
-            return EScan::Reset;
-        }
+ 
+        /** 
+         * Called on page faults during iteration 
+         * 
+         * The default is to return EScan::Feed, to keep trying to fetch data 
+         * until the next row is available or iteration is exhausted. 
+         */ 
+        virtual EScan PageFault() noexcept { 
+            return EScan::Feed; 
+        } 
+ 
+        /** 
+         * Called when iteration is exhausted 
+         * 
+         * The default is to return EScan::Reset, causing another Seek for 
+         * compatibility and making it possible to iterate multiple times. 
+         */ 
+        virtual EScan Exhausted() noexcept { 
+            return EScan::Reset; 
+        } 
     };
 
-
-    class IVersionScan : public IScan {
-    private:
-        EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept override final {
-            Y_FAIL("Unexpected unversioned call");
-        }
-
-    public:
-        virtual EScan BeginKey(TArrayRef<const TCell>) noexcept = 0;
-        virtual EScan BeginDeltas() noexcept = 0;
-        virtual EScan Feed(const TRow&, ui64) noexcept = 0;
-        virtual EScan EndDeltas() noexcept = 0;
-        virtual EScan Feed(const TRow&, TRowVersion&) noexcept = 0;
-        virtual EScan EndKey() noexcept = 0;
-    };
-
+ 
+    class IVersionScan : public IScan { 
+    private: 
+        EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept override final { 
+            Y_FAIL("Unexpected unversioned call"); 
+        } 
+ 
+    public: 
+        virtual EScan BeginKey(TArrayRef<const TCell>) noexcept = 0; 
+        virtual EScan BeginDeltas() noexcept = 0; 
+        virtual EScan Feed(const TRow&, ui64) noexcept = 0; 
+        virtual EScan EndDeltas() noexcept = 0; 
+        virtual EScan Feed(const TRow&, TRowVersion&) noexcept = 0; 
+        virtual EScan EndKey() noexcept = 0; 
+    }; 
+ 
 }
 }

@@ -29,7 +29,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         if (Self->State == TShardState::Ready) {
-            Self->SrcAckSplitTo.insert(Ev->Sender);
+            Self->SrcAckSplitTo.insert(Ev->Sender); 
             Self->SrcSplitOpId = opId;
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
 
@@ -43,20 +43,20 @@ public:
 
             Self->State = TShardState::SplitSrcWaitForNoTxInFlight;
             Self->PersistSys(db, Schema::Sys_State, Self->State);
-
-            // Wake up immediate ops, so they abort as soon as possible
-            for (const auto& kv : Self->Pipeline.GetImmediateOps()) {
-                const auto& op = kv.second;
-                Self->Pipeline.AddCandidateOp(op);
-                Self->PlanQueue.Progress(ctx);
-            }
+ 
+            // Wake up immediate ops, so they abort as soon as possible 
+            for (const auto& kv : Self->Pipeline.GetImmediateOps()) { 
+                const auto& op = kv.second; 
+                Self->Pipeline.AddCandidateOp(op); 
+                Self->PlanQueue.Progress(ctx); 
+            } 
         } else {
             // Check that this is the same split request
             Y_VERIFY(opId == Self->SrcSplitOpId,
                 "Datashard %" PRIu64 " got unexpected split request opId %" PRIu64 " while already executing split request opId %" PRIu64,
                 Self->TabletID(), opId, Self->SrcSplitOpId);
 
-            Self->SrcAckSplitTo.insert(Ev->Sender);
+            Self->SrcAckSplitTo.insert(Ev->Sender); 
 
             // Already waiting?
             if (Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
@@ -83,9 +83,9 @@ public:
         if (SplitAlreadyFinished) {
             // Send the Ack
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << Self->SrcSplitOpId);
-                ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID()));
-            }
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << Self->SrcSplitOpId); 
+                ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID())); 
+            } 
         } else {
             Self->CheckSplitCanStart(ctx);
         }
@@ -93,14 +93,14 @@ public:
 };
 
 void TDataShard::CheckSplitCanStart(const TActorContext& ctx) {
-    if (State == TShardState::SplitSrcWaitForNoTxInFlight) {
-        ui64 txInFly = TxInFly();
-        ui64 immediateTxInFly = ImmediateInFly();
-        SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly);
-        SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);
-        if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps()) {
-            Execute(CreateTxStartSplit(), ctx);
-        }
+    if (State == TShardState::SplitSrcWaitForNoTxInFlight) { 
+        ui64 txInFly = TxInFly(); 
+        ui64 immediateTxInFly = ImmediateInFly(); 
+        SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly); 
+        SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly); 
+        if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps()) { 
+            Execute(CreateTxStartSplit(), ctx); 
+        } 
     }
 }
 
@@ -168,13 +168,13 @@ public:
 
         for (const auto& ti : Self->TableInfos) {
             tablesToSnapshot.push_back(ti.second->LocalTid);
-            if (ti.second->ShadowTid) {
-                tablesToSnapshot.push_back(ti.second->ShadowTid);
-            }
+            if (ti.second->ShadowTid) { 
+                tablesToSnapshot.push_back(ti.second->ShadowTid); 
+            } 
         }
 
         TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;
-        if (Self->IsMvccEnabled()) {
+        if (Self->IsMvccEnabled()) { 
             snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot),
                                                     Self->GetSnapshotManager().GetCompleteEdge(),
                                                     Self->GetSnapshotManager().GetIncompleteEdge(),
@@ -230,13 +230,13 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        ui64 sourceOffsetsBytes = 0;
-        for (const auto& kv : Self->ReplicatedTables) {
-            for (const auto& kvSource : kv.second.SourceById) {
-                sourceOffsetsBytes += kvSource.second.StatBytes;
-            }
-        }
-
+        ui64 sourceOffsetsBytes = 0; 
+        for (const auto& kv : Self->ReplicatedTables) { 
+            for (const auto& kvSource : kv.second.SourceById) { 
+                sourceOffsetsBytes += kvSource.second.StatBytes; 
+            } 
+        } 
+ 
         bool needToReadPages = false;
         ui64 totalSnapshotSize = 0;
         // Build snapshot data of all tables for each destination shard
@@ -310,13 +310,13 @@ public:
             }
 
             if (!needToReadPages) {
-                // Send version at which data is not protected by persistent snapshots
+                // Send version at which data is not protected by persistent snapshots 
                 if (auto minVersion = Self->GetSnapshotManager().GetMinWriteVersion()) {
-                    snapshot->SetMinWriteVersionStep(minVersion.Step);
-                    snapshot->SetMinWriteVersionTxId(minVersion.TxId);
-                }
-
-                if (Self->IsMvccEnabled()) {
+                    snapshot->SetMinWriteVersionStep(minVersion.Step); 
+                    snapshot->SetMinWriteVersionTxId(minVersion.TxId); 
+                } 
+ 
+                if (Self->IsMvccEnabled()) { 
                     snapshot->SetMvccLowWatermarkStep(SnapContext->LowWatermark.Step);
                     snapshot->SetMvccLowWatermarkTxId(SnapContext->LowWatermark.TxId);
                     snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step);
@@ -325,22 +325,22 @@ public:
                     snapshot->SetMvccIncompleteEdgeTxId(SnapContext->IncompleteEdge.TxId);
                 }
 
-                // Send info about existing persistent snapshots
-                for (const auto& kv : Self->GetSnapshotManager().GetSnapshots()) {
-                    if (kv.second.HasFlags(TSnapshot::FlagRemoved)) {
-                        // Ignore removed snapshots
-                        continue;
-                    }
-                    auto* proto = snapshot->AddPersistentSnapshots();
-                    proto->SetOwnerId(kv.first.OwnerId);
-                    proto->SetPathId(kv.first.PathId);
-                    proto->SetStep(kv.first.Step);
-                    proto->SetTxId(kv.first.TxId);
-                    proto->SetName(kv.second.Name);
-                    proto->SetFlags(kv.second.Flags);
-                    proto->SetTimeoutMs(kv.second.Timeout.MilliSeconds());
-                }
-
+                // Send info about existing persistent snapshots 
+                for (const auto& kv : Self->GetSnapshotManager().GetSnapshots()) { 
+                    if (kv.second.HasFlags(TSnapshot::FlagRemoved)) { 
+                        // Ignore removed snapshots 
+                        continue; 
+                    } 
+                    auto* proto = snapshot->AddPersistentSnapshots(); 
+                    proto->SetOwnerId(kv.first.OwnerId); 
+                    proto->SetPathId(kv.first.PathId); 
+                    proto->SetStep(kv.first.Step); 
+                    proto->SetTxId(kv.first.TxId); 
+                    proto->SetName(kv.second.Name); 
+                    proto->SetFlags(kv.second.Flags); 
+                    proto->SetTimeoutMs(kv.second.Timeout.MilliSeconds()); 
+                } 
+ 
                 if (Self->ChangesQueue || tableInfo.HasCdcStreams()) {
                     snapshot->SetWaitForActivation(true);
                     Self->ChangeSenderActivator.AddDst(dstTablet);
@@ -351,10 +351,10 @@ public:
                     }
                 }
 
-                if (sourceOffsetsBytes > 0) {
-                    snapshot->SetReplicationSourceOffsetsBytes(sourceOffsetsBytes);
-                }
-
+                if (sourceOffsetsBytes > 0) { 
+                    snapshot->SetReplicationSourceOffsetsBytes(sourceOffsetsBytes); 
+                } 
+ 
                 // Persist snapshot data so that it can be sent if this datashard restarts
                 TString snapshotMeta;
                 Y_PROTOBUF_SUPPRESS_NODISCARD snapshot->SerializeToString(&snapshotMeta);

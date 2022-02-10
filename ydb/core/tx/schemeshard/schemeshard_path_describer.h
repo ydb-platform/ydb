@@ -24,7 +24,7 @@ class TPathDescriber {
     void DescribeDir(const TPath& path);
     void DescribeTable(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl);
-    void DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl);
+    void DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl); 
     void DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeRtmrVolume(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeTableIndex(const TPath& path);
@@ -40,7 +40,7 @@ class TPathDescriber {
     void DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeFileStore(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeKesus(TPathId pathId, TPathElement::TPtr pathEl);
-    void DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl);
+    void DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl); 
     void DescribeReplication(TPathId pathId, TPathElement::TPtr pathEl);
 
 public:

@@ -88,7 +88,7 @@ namespace {
 
     void TDump::Index(const TPart &part, ui32 depth) noexcept
     {
-        Key.reserve(part.Scheme->Groups[0].KeyTypes.size());
+        Key.reserve(part.Scheme->Groups[0].KeyTypes.size()); 
 
         auto *label = part.Index.Label();
 
@@ -100,10 +100,10 @@ namespace {
             << " " << items << " rec" << Endl
             << " |  Page     Row    Bytes  (";
 
-        for (auto off : xrange(part.Scheme->Groups[0].KeyTypes.size())) {
+        for (auto off : xrange(part.Scheme->Groups[0].KeyTypes.size())) { 
             Out << (off ? ", " : "");
 
-            TName(part.Scheme->Groups[0].KeyTypes[off]);
+            TName(part.Scheme->Groups[0].KeyTypes[off]); 
         }
 
         Out << ")" << Endl;
@@ -121,7 +121,7 @@ namespace {
                 break;
             }
 
-            for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
+            for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx) 
                 Key.push_back(iter->Cell(info));
 
             Out
@@ -142,7 +142,7 @@ namespace {
 
     void TDump::DataPage(const TPart &part, ui32 page) noexcept
     {
-        // TODO: need to join with other column groups
+        // TODO: need to join with other column groups 
         auto data = NPage::TDataPage(Env->TryGetPage(&part, page));
 
         if (auto *label = data.Label()) {
@@ -160,7 +160,7 @@ namespace {
 
         for (auto iter = data->Begin(); iter; ++iter) {
             Key.clear();
-            for (const auto &info: part.Scheme->Groups[0].ColsKeyData)
+            for (const auto &info: part.Scheme->Groups[0].ColsKeyData) 
                 Key.push_back(iter->Cell(info));
 
             Out << " | ERowOp " << int(iter->GetRop()) << ": ";
@@ -169,7 +169,7 @@ namespace {
 
             bool first = true;
 
-            for (const auto &info : part.Scheme->Groups[0].Columns) {
+            for (const auto &info : part.Scheme->Groups[0].Columns) { 
                 if (info.IsKey())
                     continue;
 
@@ -239,7 +239,7 @@ namespace {
         for (auto off : xrange(Key.size())) {
             TString str;
 
-            DbgPrintValue(str, Key[off], scheme.Groups[0].KeyTypes[off]);
+            DbgPrintValue(str, Key[off], scheme.Groups[0].KeyTypes[off]); 
 
             Out << (off ? ", " : "") << str;
         }

@@ -18,7 +18,7 @@ struct TSetupSysLocks {
         update.Clear();
         update.LockTxId = op->LockTxId();
 
-        if (self.IsMvccEnabled()) {
+        if (self.IsMvccEnabled()) { 
             auto [readVersion, writeVersion] = self.GetReadWriteVersions(op.Get());
 
             // check whether the current operation is a part of an out-of-order Tx

@@ -19,19 +19,19 @@ namespace NTable {
 namespace NTest {
 
     class TPartStore : public NTable::TPart {
-    protected:
+    protected: 
         TPartStore(const TPartStore& src, NTable::TEpoch epoch)
-            : TPart(src, epoch)
-            , Store(src.Store)
-            , Slices(src.Slices)
-        { }
-
+            : TPart(src, epoch) 
+            , Store(src.Store) 
+            , Slices(src.Slices) 
+        { } 
+ 
     public:
         TPartStore(TIntrusiveConstPtr<TStore> store, TLogoBlobID label, TEgg egg, TStat stat,
                     TIntrusiveConstPtr<TSlices> slices)
             : TPart(label, egg, stat)
             , Store(std::move(store))
-            , Slices(std::move(slices))
+            , Slices(std::move(slices)) 
         {
 
         }
@@ -41,21 +41,21 @@ namespace NTest {
             return Store->PageCollectionBytes(0);
         }
 
-        ui64 BackingSize() const override
-        {
+        ui64 BackingSize() const override 
+        { 
             return Store->PageCollectionBytes(0) + Store->PageCollectionBytes(Store->GetOuterRoom());
-        }
-
-        ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
-        {
-            return Store->GetPage(groupId.Index, id)->size();
-        }
-
+        } 
+ 
+        ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override 
+        { 
+            return Store->GetPage(groupId.Index, id)->size(); 
+        } 
+ 
         TIntrusiveConstPtr<NTable::TPart> CloneWithEpoch(NTable::TEpoch epoch) const override
-        {
+        { 
             return new TPartStore(*this, epoch);
-        }
-
+        } 
+ 
         const TIntrusiveConstPtr<TStore> Store;
         const TIntrusiveConstPtr<TSlices> Slices;
     };
@@ -70,7 +70,7 @@ namespace NTest {
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
-
+ 
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
                 Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
@@ -79,16 +79,16 @@ namespace NTest {
                 ? partStore->Store->GetExternRoom()
                 : partStore->Store->GetOuterRoom();
 
-            return { true, Get(part, room, ref) };
+            return { true, Get(part, room, ref) }; 
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override 
         {
-            return Get(part, groupId.Index, ref);
+            return Get(part, groupId.Index, ref); 
         }
 
-    private:
-        const TSharedData* Get(const TPart *part, ui32 room, ui32 ref) const
+    private: 
+        const TSharedData* Get(const TPart *part, ui32 room, ui32 ref) const 
         {
             Y_VERIFY(ref != Max<ui32>(), "Got invalid page reference");
 
@@ -101,7 +101,7 @@ namespace NTest {
         {
             return Parts.at(num);
         }
-
+ 
         const TIntrusiveConstPtr<TPartStore>& Lone() const noexcept
         {
             Y_VERIFY(Parts.size() == 1, "Need egg with one part inside");
@@ -116,7 +116,7 @@ namespace NTest {
 
         TPartView ToPartView() const noexcept
         {
-            return { Lone(), nullptr, Lone()->Slices };
+            return { Lone(), nullptr, Lone()->Slices }; 
         }
 
         TAutoPtr<TWritten> Written;

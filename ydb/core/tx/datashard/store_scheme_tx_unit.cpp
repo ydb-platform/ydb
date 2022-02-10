@@ -39,7 +39,7 @@ bool TStoreSchemeTxUnit::IsReadyToExecute(TOperation::TPtr) const
 
 EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
-                                             const TActorContext &ctx)
+                                             const TActorContext &ctx) 
 {
     Y_VERIFY(op->IsSchemeTx());
     Y_VERIFY(!op->IsAborted() && !op->IsInterrupted());
@@ -55,14 +55,14 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
                  "Got scheme transaction from unknown SchemeShard %" PRIu64, ssTabletId);
     }
 
-    if (ui64 subDomainPathId = tx->GetSubDomainPathId()) {
-        DataShard.PersistSubDomainPathId(ssTabletId, subDomainPathId, txc);
-        DataShard.StopFindSubDomainPathId();
-        DataShard.StartWatchingSubDomainPathId();
-    } else {
-        DataShard.StartFindSubDomainPathId();
-    }
-
+    if (ui64 subDomainPathId = tx->GetSubDomainPathId()) { 
+        DataShard.PersistSubDomainPathId(ssTabletId, subDomainPathId, txc); 
+        DataShard.StopFindSubDomainPathId(); 
+        DataShard.StartWatchingSubDomainPathId(); 
+    } else { 
+        DataShard.StartFindSubDomainPathId(); 
+    } 
+ 
     if (DataShard.GetPathOwnerId() == INVALID_TABLET_ID) {
         if (tx->GetSchemeTx().HasCreateTable() && tx->GetSchemeTx().GetCreateTable().HasPathId()) { // message from new SS
             ui64 ownerPathId = tx->GetSchemeTx().GetCreateTable().GetPathId().GetOwnerId();
@@ -81,18 +81,18 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
                              0, op->IsReadOnly(), false, TString(), 0, 0);
     Pipeline.ProposeSchemeTx(schemeOp, txc);
 
-    Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
+    Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx); 
     tx->ClearTxBody();
     // TODO: make cache for scheme tx similar to data tx.
     tx->ClearSchemeTx();
 
-    return EExecutionStatus::DelayCompleteNoMoreRestarts;
+    return EExecutionStatus::DelayCompleteNoMoreRestarts; 
 }
 
-void TStoreSchemeTxUnit::Complete(TOperation::TPtr op,
-                                  const TActorContext &ctx)
+void TStoreSchemeTxUnit::Complete(TOperation::TPtr op, 
+                                  const TActorContext &ctx) 
 {
-    Pipeline.ProposeComplete(op, ctx);
+    Pipeline.ProposeComplete(op, ctx); 
 }
 
 THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard,

@@ -889,15 +889,15 @@ static void* SlowLFAlloc(int nSizeIdx, int blockSize, EDefrag defrag) {
     IncrementCounter(CT_SLOW_ALLOC_CNT, 1);
 
     TLFLockHolder ls;
-    for (;;) {
-        bool locked = ls.TryLock(&LFGlobalLock);
+    for (;;) { 
+        bool locked = ls.TryLock(&LFGlobalLock); 
         void* res = LFAllocFromCurrentChunk(nSizeIdx, blockSize, 1);
         if (res) {
             return res; // might happen when other thread allocated new current chunk
         }
-        if (locked) {
-            break;
-        }
+        if (locked) { 
+            break; 
+        } 
     }
     for (;;) {
         uintptr_t nChunk;

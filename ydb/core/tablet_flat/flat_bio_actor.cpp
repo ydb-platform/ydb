@@ -63,11 +63,11 @@ void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> o
 
     PagesToBlobsConverter = new TPagesToBlobsConverter(*Origin->PageCollection, Origin->Pages);
 
-    BlockStates.reserve(Origin->Pages.size());
+    BlockStates.reserve(Origin->Pages.size()); 
 
     for (auto page: Origin->Pages) {
-        ui64 size = Origin->PageCollection->Page(page).Size;
-        BlockStates.emplace_back(size);
+        ui64 size = Origin->PageCollection->Page(page).Size; 
+        BlockStates.emplace_back(size); 
     }
 
     Dispatch();
@@ -77,27 +77,27 @@ void TBlockIO::Dispatch() noexcept
 {
     const auto ctx = TActivationContext::ActorContextFor(SelfId());
 
-    NKikimrBlobStorage::EGetHandleClass klass;
+    NKikimrBlobStorage::EGetHandleClass klass; 
     switch (Priority) {
         case NBlockIO::EPriority::None:
         case NBlockIO::EPriority::Fast:
-            klass = NKikimrBlobStorage::FastRead;
-            break;
+            klass = NKikimrBlobStorage::FastRead; 
+            break; 
         case NBlockIO::EPriority::Bulk:
         case NBlockIO::EPriority::Bkgr: /* FIXME: switch to LowRead in the future */
-            klass = NKikimrBlobStorage::AsyncRead;
-            break;
+            klass = NKikimrBlobStorage::AsyncRead; 
+            break; 
         case NBlockIO::EPriority::Low:
-            klass = NKikimrBlobStorage::LowRead;
-            break;
-    }
+            klass = NKikimrBlobStorage::LowRead; 
+            break; 
+    } 
 
     while (auto more = PagesToBlobsConverter->Grow(NBlockIO::BlockSize)) {
         auto group = NPageCollection::TLargeGlobId::InvalidGroup;
 
         TArrayHolder<TEvGet::TQuery> query(new TEvGet::TQuery[+more]);
 
-        ui32 lastBlob = Max<ui32>();
+        ui32 lastBlob = Max<ui32>(); 
         for (const auto on : xrange(+more)) {
             auto &brick = PagesToBlobsConverter->Queue[more.From + on];
             auto glob = Origin->PageCollection->Glob(brick.Blob);
@@ -112,12 +112,12 @@ void TBlockIO::Dispatch() noexcept
             {
                 auto skey = std::make_pair(query[on].Id.Channel(), group);
 
-                GroupBytes[skey] += query[on].Size;
-                if (lastBlob != brick.Blob) {
-                    lastBlob = brick.Blob;
-                    GroupOps[skey] += 1;
-                    TotalOps++;
-                }
+                GroupBytes[skey] += query[on].Size; 
+                if (lastBlob != brick.Blob) { 
+                    lastBlob = brick.Blob; 
+                    GroupOps[skey] += 1; 
+                    TotalOps++; 
+                } 
             }
         }
 
@@ -132,7 +132,7 @@ void TBlockIO::Dispatch() noexcept
         logl
             << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " cooked flow "
             << PagesToBlobsConverter->OnHold << "b " << PagesToBlobsConverter->Tail << "p" << " " << PagesToBlobsConverter->Queue.size()
-            << " bricks in " << Pending << " reads, " << BlockStates.size() <<  "p req";
+            << " bricks in " << Pending << " reads, " << BlockStates.size() <<  "p req"; 
     }
 
     Y_VERIFY(PagesToBlobsConverter->Complete(), "NPageCollection::TPagesToBlobsConverter cooked incomplete loads");
@@ -159,22 +159,22 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
 
         const auto &brick = PagesToBlobsConverter->Queue[base + (&piece - &items[0])];
 
-        auto& state = BlockStates.at(brick.Slot);
-        Y_VERIFY(state.Data.size() - state.Offset >= piece.Buffer.size());
-        ::memcpy(
-            state.Data.mutable_data() + state.Offset,
-            piece.Buffer.data(),
-            piece.Buffer.size());
-        state.Offset += piece.Buffer.size();
+        auto& state = BlockStates.at(brick.Slot); 
+        Y_VERIFY(state.Data.size() - state.Offset >= piece.Buffer.size()); 
+        ::memcpy( 
+            state.Data.mutable_data() + state.Offset, 
+            piece.Buffer.data(), 
+            piece.Buffer.size()); 
+        state.Offset += piece.Buffer.size(); 
     }
 
     if (--Pending > 0)
         return;
 
-    size_t index = 0;
-    for (ui32 pageId : Origin->Pages) {
-        auto& state = BlockStates.at(index++);
-        Y_VERIFY(state.Offset == state.Data.size());
+    size_t index = 0; 
+    for (ui32 pageId : Origin->Pages) { 
+        auto& state = BlockStates.at(index++); 
+        Y_VERIFY(state.Offset == state.Data.size()); 
         if (Origin->PageCollection->Verify(pageId, state.Data)) {
             continue;
         } else if (auto logl = Logger->Log(ELnLev::Crit)) {
@@ -182,7 +182,7 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
 
             logl
                 << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " verify failed"
-                << ", page " << pageId << " " << state.Data.size() << "b"
+                << ", page " << pageId << " " << state.Data.size() << "b" 
                 << " spans over {";
 
             for (auto one: xrange(bnd.Lo.Blob, bnd.Up.Blob + 1)) {
@@ -206,18 +206,18 @@ void TBlockIO::Terminate(EStatus code) noexcept
         logl
             << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " end, status " << code
             << ", cookie {req " << Origin->Cookie << " ev " << Cookie << "}"
-            << ", " << BlockStates.size() << " pages";
+            << ", " << BlockStates.size() << " pages"; 
     }
 
     auto *ev = new TEvData(std::move(Origin->PageCollection), Origin->Cookie, code);
 
     if (code == NKikimrProto::OK) {
-        size_t index = 0;
-        ev->Blocks.reserve(Origin->Pages.size());
-        for (ui32 pageId : Origin->Pages) {
-            auto& state = BlockStates.at(index++);
-            ev->Blocks.emplace_back(pageId, std::move(state.Data));
-        }
+        size_t index = 0; 
+        ev->Blocks.reserve(Origin->Pages.size()); 
+        for (ui32 pageId : Origin->Pages) { 
+            auto& state = BlockStates.at(index++); 
+            ev->Blocks.emplace_back(pageId, std::move(state.Data)); 
+        } 
     }
 
     if (Service)

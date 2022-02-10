@@ -8,16 +8,16 @@ class TTxStartTablet : public TTransactionBase<THive> {
     TFullTabletId TabletId;
     TActorId Local;
     ui64 Cookie;
-    bool External;
+    bool External; 
     ui32 KnownGeneration = -1;
-
+ 
 public:
     TTxStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external, THive *hive)
         : TBase(hive)
         , TabletId(tabletId)
         , Local(local)
         , Cookie(cookie)
-        , External(external)
+        , External(external) 
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_START_TABLET; }
@@ -96,18 +96,18 @@ public:
             }
         }
         if (External) {
-            // Always send some reply for external start requests
+            // Always send some reply for external start requests 
             BLOG_W("THive::TTxStartTablet::Complete, Aborting external boot of " << TabletId.first << "." << TabletId.second);
-            ctx.Send(Local,
-                     new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR),
-                     0,
-                     Cookie);
-        }
+            ctx.Send(Local, 
+                     new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 
+                     0, 
+                     Cookie); 
+        } 
     }
 };
 
 ITransaction* THive::CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external) {
-    return new TTxStartTablet(tabletId, local, cookie, external, this);
+    return new TTxStartTablet(tabletId, local, cookie, external, this); 
 }
 
 } // NHive

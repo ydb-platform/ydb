@@ -28,8 +28,8 @@ RECURSE_FOR_TESTS(
     ut_rtmr
     ut_rtmr_reboots
     ut_ru_calculator
-    ut_sequence
-    ut_sequence_reboots
+    ut_sequence 
+    ut_sequence_reboots 
     ut_serverless
     ut_split_merge
     ut_split_merge_reboots
@@ -53,8 +53,8 @@ IF (KIKIMR_ALLOW_SHARDED_COMPACTION)
     CFLAGS(
         -DKIKIMR_ALLOW_SHARDED_COMPACTION=1
     )
-ENDIF()
-
+ENDIF() 
+ 
 SRCS(
     defs.h
     schemeshard.h
@@ -64,7 +64,7 @@ SRCS(
     schemeshard__conditional_erase.cpp
     schemeshard__describe_scheme.cpp
     schemeshard__delete_tablet_reply.cpp
-    schemeshard__find_subdomain_path_id.cpp
+    schemeshard__find_subdomain_path_id.cpp 
     schemeshard__fix_bad_paths.cpp
     schemeshard__init.cpp
     schemeshard__init_populator.cpp
@@ -87,8 +87,8 @@ SRCS(
     schemeshard__operation_alter_index.cpp
     schemeshard__operation_alter_kesus.cpp
     schemeshard__operation_alter_login.cpp
-    schemeshard__operation_alter_olap_store.cpp
-    schemeshard__operation_alter_olap_table.cpp
+    schemeshard__operation_alter_olap_store.cpp 
+    schemeshard__operation_alter_olap_table.cpp 
     schemeshard__operation_alter_pq.cpp
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
@@ -109,12 +109,12 @@ SRCS(
     schemeshard__operation_create_kesus.cpp
     schemeshard__operation_create_lock.cpp
     schemeshard__operation_create_olap_store.cpp
-    schemeshard__operation_create_olap_table.cpp
+    schemeshard__operation_create_olap_table.cpp 
     schemeshard__operation_create_pq.cpp
     schemeshard__operation_create_replication.cpp
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_rtmr.cpp
-    schemeshard__operation_create_sequence.cpp
+    schemeshard__operation_create_sequence.cpp 
     schemeshard__operation_create_solomon.cpp
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_table.cpp
@@ -124,11 +124,11 @@ SRCS(
     schemeshard__operation_drop_indexed_table.cpp
     schemeshard__operation_drop_kesus.cpp
     schemeshard__operation_drop_lock.cpp
-    schemeshard__operation_drop_olap_store.cpp
-    schemeshard__operation_drop_olap_table.cpp
+    schemeshard__operation_drop_olap_store.cpp 
+    schemeshard__operation_drop_olap_table.cpp 
     schemeshard__operation_drop_pq.cpp
     schemeshard__operation_drop_replication.cpp
-    schemeshard__operation_drop_sequence.cpp
+    schemeshard__operation_drop_sequence.cpp 
     schemeshard__operation_drop_solomon.cpp
     schemeshard__operation_drop_subdomain.cpp
     schemeshard__operation_drop_table.cpp

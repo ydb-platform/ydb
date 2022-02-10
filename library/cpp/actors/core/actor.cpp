@@ -37,10 +37,10 @@ namespace NActors {
         TlsActivationContext->ExecutorThread.Schedule(deadline, ev, cookie);
     }
 
-    void TActivationContext::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
-        TlsActivationContext->ExecutorThread.Schedule(deadline, ev, cookie);
-    }
-
+    void TActivationContext::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) { 
+        TlsActivationContext->ExecutorThread.Schedule(deadline, ev, cookie); 
+    } 
+ 
     void TActivationContext::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         TlsActivationContext->ExecutorThread.Schedule(delta, ev, cookie);
     }
@@ -87,14 +87,14 @@ namespace NActors {
         return TlsActivationContext->ExecutorThread.ActorSystem;
     }
 
-    i64 TActivationContext::GetCurrentEventTicks() {
+    i64 TActivationContext::GetCurrentEventTicks() { 
         return GetCycleCountFast() - TlsActivationContext->EventStart;
-    }
-
-    double TActivationContext::GetCurrentEventTicksAsSeconds() {
-        return NHPTimer::GetSeconds(GetCurrentEventTicks());
-    }
-
+    } 
+ 
+    double TActivationContext::GetCurrentEventTicksAsSeconds() { 
+        return NHPTimer::GetSeconds(GetCurrentEventTicks()); 
+    } 
+ 
     TActorId TActorContext::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const {
         return ExecutorThread.RegisterActor(actor, mailboxType, poolId, SelfID);
     }
@@ -107,10 +107,10 @@ namespace NActors {
         ExecutorThread.Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie);
     }
 
-    void TActorContext::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
-        ExecutorThread.Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie);
-    }
-
+    void TActorContext::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const { 
+        ExecutorThread.Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie); 
+    } 
+ 
     void TActorContext::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const {
         ExecutorThread.Schedule(delta, new IEventHandle(SelfID, TActorId(), ev), cookie);
     }
@@ -119,10 +119,10 @@ namespace NActors {
         TlsActivationContext->ExecutorThread.Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 
-    void IActor::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
-        TlsActivationContext->ExecutorThread.Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
-    }
-
+    void IActor::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const noexcept { 
+        TlsActivationContext->ExecutorThread.Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie); 
+    } 
+ 
     void IActor::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
         TlsActivationContext->ExecutorThread.Schedule(delta, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
@@ -131,10 +131,10 @@ namespace NActors {
         return TlsActivationContext->ExecutorThread.ActorSystem->Timestamp();
     }
 
-    TMonotonic TActivationContext::Monotonic() {
-        return TlsActivationContext->ExecutorThread.ActorSystem->Monotonic();
-    }
-
+    TMonotonic TActivationContext::Monotonic() { 
+        return TlsActivationContext->ExecutorThread.ActorSystem->Monotonic(); 
+    } 
+ 
     TInstant TActorContext::Now() const {
         return ExecutorThread.ActorSystem->Timestamp();
     }

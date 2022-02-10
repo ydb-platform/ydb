@@ -76,7 +76,7 @@ public:
 
     TPersQueueGroupInfo::TPtr ParseParams(
             TOperationContext& context,
-            NKikimrPQ::TPQTabletConfig* tabletConfig,
+            NKikimrPQ::TPQTabletConfig* tabletConfig, 
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
@@ -105,34 +105,34 @@ public:
             params->MaxPartsPerTablet = maxPartsPerTablet;
         }
         if (alter.HasPQTabletConfig()) {
-            NKikimrPQ::TPQTabletConfig alterConfig = alter.GetPQTabletConfig();
+            NKikimrPQ::TPQTabletConfig alterConfig = alter.GetPQTabletConfig(); 
             alterConfig.ClearPartitionIds();
-            alterConfig.ClearPartitions();
+            alterConfig.ClearPartitions(); 
 
-            if (!CheckPersQueueConfig(alterConfig, false, &errStr)) {
+            if (!CheckPersQueueConfig(alterConfig, false, &errStr)) { 
                 return nullptr;
             }
 
-            if (alterConfig.GetPartitionConfig().ExplicitChannelProfilesSize() > 0) {
-                // Validate explicit channel profiles alter attempt
-                const auto& ecps = alterConfig.GetPartitionConfig().GetExplicitChannelProfiles();
-                if (ecps.size() < 3 || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) {
-                    auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
-                                        ecps.size(),
-                                        NHive::MAX_TABLET_CHANNELS);
-                    return nullptr;
-                }
-                if (ecps.size() < tabletConfig->GetPartitionConfig().GetExplicitChannelProfiles().size()) {
-                    auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be at least %lu (current config)",
-                                        ecps.size(),
-                                        tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize());
-                    return nullptr;
-                }
-            } else if (tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize() > 0) {
-                // Make sure alter config has correct explicit channel profiles
-                alterConfig.MutablePartitionConfig()->MutableExplicitChannelProfiles()->Swap(
-                    tabletConfig->MutablePartitionConfig()->MutableExplicitChannelProfiles());
-            }
+            if (alterConfig.GetPartitionConfig().ExplicitChannelProfilesSize() > 0) { 
+                // Validate explicit channel profiles alter attempt 
+                const auto& ecps = alterConfig.GetPartitionConfig().GetExplicitChannelProfiles(); 
+                if (ecps.size() < 3 || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) { 
+                    auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]", 
+                                        ecps.size(), 
+                                        NHive::MAX_TABLET_CHANNELS); 
+                    return nullptr; 
+                } 
+                if (ecps.size() < tabletConfig->GetPartitionConfig().GetExplicitChannelProfiles().size()) { 
+                    auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be at least %lu (current config)", 
+                                        ecps.size(), 
+                                        tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize()); 
+                    return nullptr; 
+                } 
+            } else if (tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize() > 0) { 
+                // Make sure alter config has correct explicit channel profiles 
+                alterConfig.MutablePartitionConfig()->MutableExplicitChannelProfiles()->Swap( 
+                    tabletConfig->MutablePartitionConfig()->MutableExplicitChannelProfiles()); 
+            } 
 
             if (alterConfig.PartitionKeySchemaSize()) {
                 errStr = "Cannot change key schema";
@@ -157,7 +157,7 @@ public:
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
-            alterConfig.Swap(tabletConfig);
+            alterConfig.Swap(tabletConfig); 
         }
         if (alter.PartitionsToDeleteSize()) {
             errStr = Sprintf("deletion of partitions is not supported yet");
@@ -196,8 +196,8 @@ public:
             const TPath& path,
             TPersQueueGroupInfo::TPtr pqGroup,
             ui64 shardsToCreate,
-            const TChannelsBindings& rbChannelsBinding,
-            const TChannelsBindings& pqChannelsBinding,
+            const TChannelsBindings& rbChannelsBinding, 
+            const TChannelsBindings& pqChannelsBinding, 
             TOperationContext& context)
     {
         TPathElement::TPtr item = path.Base();
@@ -209,7 +209,7 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterPQGroup, item->PathId);
         txState.State = TTxState::CreateParts;
 
-        bool needMoreShards = ApplySharding(operationId.GetTxId(), item->PathId, pqGroup, txState, rbChannelsBinding, pqChannelsBinding, context);
+        bool needMoreShards = ApplySharding(operationId.GetTxId(), item->PathId, pqGroup, txState, rbChannelsBinding, pqChannelsBinding, context); 
         if (needMoreShards) {
             context.SS->PersistUpdateNextShardIdx(db);
         }
@@ -229,16 +229,16 @@ public:
             if (shard.Operation == TTxState::CreateParts) {
                 TShardInfo& shardInfo = context.SS->ShardInfos[shard.Idx];
                 context.SS->PersistShardMapping(db, shard.Idx, shardInfo.TabletID, item->PathId, operationId.GetTxId(), shard.TabletType);
-                switch (shard.TabletType) {
-                    case ETabletType::PersQueueReadBalancer:
-                        context.SS->PersistChannelsBinding(db, shard.Idx, rbChannelsBinding);
+                switch (shard.TabletType) { 
+                    case ETabletType::PersQueueReadBalancer: 
+                        context.SS->PersistChannelsBinding(db, shard.Idx, rbChannelsBinding); 
                         context.SS->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Add(1);
-                        break;
-                    default:
-                        context.SS->PersistChannelsBinding(db, shard.Idx, pqChannelsBinding);
+                        break; 
+                    default: 
+                        context.SS->PersistChannelsBinding(db, shard.Idx, pqChannelsBinding); 
                         context.SS->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(1);
-                        break;
-                }
+                        break; 
+                } 
                 if (!shardInfo.TabletID) {
                     ++checkShardsToCreate;
                 }
@@ -276,12 +276,12 @@ public:
             const TPathId& pathId,
             TPersQueueGroupInfo::TPtr pqGroup,
             TTxState& txState,
-            const TChannelsBindings& rbBindedChannels,
-            const TChannelsBindings& pqBindedChannels,
+            const TChannelsBindings& rbBindedChannels, 
+            const TChannelsBindings& pqBindedChannels, 
             TOperationContext& context)
     {
         TShardInfo defaultShardInfo = TShardInfo::PersQShardInfo(txId, pathId);
-        defaultShardInfo.BindedChannels = pqBindedChannels;
+        defaultShardInfo.BindedChannels = pqBindedChannels; 
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "AlterPQGroup txid# " << txId
@@ -329,7 +329,7 @@ public:
             const auto idx = context.SS->NextShardIdx(startShardIdx, i);
             txState.Shards.emplace_back(idx, ETabletType::PersQueue, TTxState::CreateParts);
 
-            context.SS->RegisterShardInfo(idx, defaultShardInfo);
+            context.SS->RegisterShardInfo(idx, defaultShardInfo); 
             pqGroup->Shards[idx] = new TPQShardInfo();
         }
 
@@ -337,10 +337,10 @@ public:
             const auto idx = context.SS->NextShardIdx(startShardIdx, pqShardsToCreate);
             pqGroup->BalancerShardIdx = idx;
             txState.Shards.emplace_back(idx, ETabletType::PersQueueReadBalancer, TTxState::CreateParts);
-            context.SS->RegisterShardInfo(idx,
-                defaultShardInfo
-                    .WithTabletType(ETabletType::PersQueueReadBalancer)
-                    .WithBindedChannels(rbBindedChannels));
+            context.SS->RegisterShardInfo(idx, 
+                defaultShardInfo 
+                    .WithTabletType(ETabletType::PersQueueReadBalancer) 
+                    .WithBindedChannels(rbBindedChannels)); 
         } else {
             auto shardIdx = pqGroup->BalancerShardIdx;
             txState.Shards.emplace_back(shardIdx, ETabletType::PersQueueReadBalancer, TTxState::ConfigureParts);
@@ -446,19 +446,19 @@ public:
         }
 
         NKikimrPQ::TPQTabletConfig tabletConfig, newTabletConfig;
-        if (!pqGroup->TabletConfig.empty()) {
-            bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, pqGroup->TabletConfig);
-            Y_VERIFY(parseOk, "Previously serialized pq tablet config cannot be parsed");
-        }
+        if (!pqGroup->TabletConfig.empty()) { 
+            bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, pqGroup->TabletConfig); 
+            Y_VERIFY(parseOk, "Previously serialized pq tablet config cannot be parsed"); 
+        } 
         newTabletConfig = tabletConfig;
-
+ 
 
         TPersQueueGroupInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
-        if (!alterData) {
+        if (!alterData) { 
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result;
-        }
-
+            return result; 
+        } 
+ 
         // do not change if not set
         if (!alterData->TotalGroupCount) {
             alterData->TotalGroupCount = pqGroup->TotalGroupCount;
@@ -566,10 +566,10 @@ public:
             return result;
         }
 
-        // This profile id is only used for pq read balancer tablet when
-        // explicit channel profiles are specified. Read balancer tablet is
-        // a tablet with local db which doesn't use extra channels in any way.
-        const ui32 tabletProfileId = 0;
+        // This profile id is only used for pq read balancer tablet when 
+        // explicit channel profiles are specified. Read balancer tablet is 
+        // a tablet with local db which doesn't use extra channels in any way. 
+        const ui32 tabletProfileId = 0; 
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, path.DomainId(), tabletChannelsBinding)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -577,37 +577,37 @@ public:
             return result;
         }
 
-        // This channel bindings are for PersQueue shards. They either use
-        // explicit channel profiles, or reuse channel profile above.
+        // This channel bindings are for PersQueue shards. They either use 
+        // explicit channel profiles, or reuse channel profile above. 
         const auto& partConfig = newTabletConfig.GetPartitionConfig();
-        TChannelsBindings pqChannelsBinding;
-        if (partConfig.ExplicitChannelProfilesSize() > 0) {
-            // N.B. no validation necessary at this step
-            const auto& ecps = partConfig.GetExplicitChannelProfiles();
-
-            TVector<TStringBuf> partitionPoolKinds;
-            partitionPoolKinds.reserve(ecps.size());
-            for (const auto& ecp : ecps) {
-                partitionPoolKinds.push_back(ecp.GetPoolKind());
-            }
-
-            const auto resolved = context.SS->ResolveChannelsByPoolKinds(
-                partitionPoolKinds,
-                path.DomainId(),
-                pqChannelsBinding);
-            if (!resolved) {
+        TChannelsBindings pqChannelsBinding; 
+        if (partConfig.ExplicitChannelProfilesSize() > 0) { 
+            // N.B. no validation necessary at this step 
+            const auto& ecps = partConfig.GetExplicitChannelProfiles(); 
+ 
+            TVector<TStringBuf> partitionPoolKinds; 
+            partitionPoolKinds.reserve(ecps.size()); 
+            for (const auto& ecp : ecps) { 
+                partitionPoolKinds.push_back(ecp.GetPoolKind()); 
+            } 
+ 
+            const auto resolved = context.SS->ResolveChannelsByPoolKinds( 
+                partitionPoolKinds, 
+                path.DomainId(), 
+                pqChannelsBinding); 
+            if (!resolved) { 
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
-                return result;
-            }
-
-            context.SS->SetPqChannelsParams(ecps, pqChannelsBinding);
-        } else {
-            pqChannelsBinding = tabletChannelsBinding;
-        }
-
+                                "Unable to construct channel binding for PersQueue with the storage pool"); 
+                return result; 
+            } 
+ 
+            context.SS->SetPqChannelsParams(ecps, pqChannelsBinding); 
+        } else { 
+            pqChannelsBinding = tabletChannelsBinding; 
+        } 
+ 
         pqGroup->PrepareAlter(alterData);
-        const TTxState& txState = PrepareChanges(OperationId, path, pqGroup, shardsToCreate, tabletChannelsBinding, pqChannelsBinding, context);
+        const TTxState& txState = PrepareChanges(OperationId, path, pqGroup, shardsToCreate, tabletChannelsBinding, pqChannelsBinding, context); 
 
         context.OnComplete.ActivateTx(OperationId);
         context.SS->ClearDescribePathCaches(path.Base());

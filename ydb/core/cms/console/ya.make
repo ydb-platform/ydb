@@ -41,7 +41,7 @@ SRCS(
     console__remove_tenant_done.cpp
     console__remove_tenant_failed.cpp
     console__replace_config_subscriptions.cpp
-    console__revert_pool_state.cpp
+    console__revert_pool_state.cpp 
     console__scheme.h
     console__set_config.cpp
     console__toggle_config_validator.cpp
@@ -60,12 +60,12 @@ SRCS(
     modifications_validator.cpp
     modifications_validator.h
     net_classifier_updater.cpp
-    shared_cache_configurator.cpp
-    shared_cache_configurator.h
+    shared_cache_configurator.cpp 
+    shared_cache_configurator.h 
     tx_processor.cpp
     tx_processor.h
-    util.cpp
-    util.h
+    util.cpp 
+    util.h 
 )
 
 PEERDIR(

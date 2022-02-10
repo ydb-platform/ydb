@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             "Unexpected " << eggs.Parts.size() << " results");
 
         auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TRowScheme> scheme) {
-            TPartIndexIterator idxIter(part, scheme->Keys);
+            TPartIndexIterator idxIter(part, scheme->Keys); 
 
             while (idxIter.IsValid()) {
                 TDbTupleRef key = idxIter.GetCurrentKey();
@@ -132,9 +132,9 @@ Y_UNIT_TEST_SUITE(TLegacy) {
                 idxIter.Next();
             }
 
-            rowCount += idxIter.GetRowCountDelta();
-            size += idxIter.GetDataSizeDelta();
-
+            rowCount += idxIter.GetRowCountDelta(); 
+            size += idxIter.GetDataSizeDelta(); 
+ 
             return {rowCount, size};
         };
 
@@ -148,71 +148,71 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         const ui64 ROWS_PER_PAGE = 169;     // emperical
         const ui64 REAL_PAGE_SIZE = 4076;   // also emperical
-        ui64 expectedRowCount = X2 + 1;
-        ui64 expectedTotalSize = 0;
-        ui64 expectedPageCount = (expectedRowCount + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE;
-        for (ui32 pageId = 0; pageId < expectedPageCount; ++pageId) {
-            expectedTotalSize += eggs.At(0)->GetPageSize(pageId, {});
-        }
+        ui64 expectedRowCount = X2 + 1; 
+        ui64 expectedTotalSize = 0; 
+        ui64 expectedPageCount = (expectedRowCount + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE; 
+        for (ui32 pageId = 0; pageId < expectedPageCount; ++pageId) { 
+            expectedTotalSize += eggs.At(0)->GetPageSize(pageId, {}); 
+        } 
 
         dbgOut << "Hide none" << Endl;
         {
             TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(true)});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
             UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount, "RowCount doesn't match");
-            UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize, "DataSize doesn't match");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize, "DataSize doesn't match"); 
         }
 
         dbgOut << "Hide 2 pages" << Endl;
         {
             TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(0,150), TScreen::THole(550, 10000)});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount - 400, "RowCount doesn't match");
-            UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize - REAL_PAGE_SIZE*2, "DataSize doesn't match");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount - 400, "RowCount doesn't match"); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize - REAL_PAGE_SIZE*2, "DataSize doesn't match"); 
         }
 
-        dbgOut << "Hide all except 3 pages" << Endl;
+        dbgOut << "Hide all except 3 pages" << Endl; 
         {
             TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(150, 400)});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.first, 250, "RowCount doesn't match");
-            UNIT_ASSERT_VALUES_EQUAL_C(res.second, REAL_PAGE_SIZE*3, "DataSize doesn't match");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.first, 250, "RowCount doesn't match"); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.second, REAL_PAGE_SIZE*3, "DataSize doesn't match"); 
         }
 
         dbgOut << "Hide 2 rows in one page - we just ignore this" << Endl;
         {
             TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(0,150), TScreen::THole(152, 10000)});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount - 2, "RowCount doesn't match");
-            UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize, "DataSize doesn't match");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount - 2, "RowCount doesn't match"); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize, "DataSize doesn't match"); 
         }
 
-        dbgOut << "Hide 4 pages in 3 different ranges" << Endl;
+        dbgOut << "Hide 4 pages in 3 different ranges" << Endl; 
         {
             TIntrusiveConstPtr<TScreen> screen = new TScreen({
                 TScreen::THole(400, 600),
-                TScreen::THole(850, 950),
+                TScreen::THole(850, 950), 
                 TScreen::THole(1200, 10000)
                 });
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount - 400 - 250 - 250, "RowCount doesn't match");
-            UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize - REAL_PAGE_SIZE*4, "DataSize doesn't match");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount - 400 - 250 - 250, "RowCount doesn't match"); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize - REAL_PAGE_SIZE*4, "DataSize doesn't match"); 
         }
 
         dbgOut << "Attach outer pages to index with screen" << Endl;
         {
             auto frames = CookFrames();
 
-            // This screen takes two pages, one of them has 4 small blobs, 1800 total bytes
+            // This screen takes two pages, one of them has 4 small blobs, 1800 total bytes 
             TIntrusiveConstPtr<TScreen> screen = new TScreen({
                 TScreen::THole(169, 338),
                 TScreen::THole(845, 1014)
             });
 
             auto res0 = fnIterate(eggs.At(0), nullptr, eggs.Scheme, frames);
-            UNIT_ASSERT_VALUES_EQUAL_C(res0.second, expectedTotalSize + 3600, "DataSize doesn't match without a screen");
+            UNIT_ASSERT_VALUES_EQUAL_C(res0.second, expectedTotalSize + 3600, "DataSize doesn't match without a screen"); 
             auto res1 = fnIterate(eggs.At(0), screen, eggs.Scheme, frames);
-            UNIT_ASSERT_VALUES_EQUAL_C(res1.second, REAL_PAGE_SIZE*2 + 1800, "DataSize doesn't match with a screen");
+            UNIT_ASSERT_VALUES_EQUAL_C(res1.second, REAL_PAGE_SIZE*2 + 1800, "DataSize doesn't match with a screen"); 
         }
     }
 

@@ -8,7 +8,7 @@ namespace NKikimr {
     namespace NIncrHuge {
         using TIncrHugeBlobId = ui64;
 
-#pragma pack(push,1)
+#pragma pack(push,1) 
         // Huge blob metadata -- universal nontransparent structure that is stored along with blob's data and returned
         // on read/init requests.
         union TBlobMetadata {
@@ -48,8 +48,8 @@ namespace NKikimr {
             friend bool operator !=(const TChunkSerNum& x, const TChunkSerNum& y) { return x.Value != y.Value; }
             friend bool operator <(const TChunkSerNum& x, const TChunkSerNum& y) { return x.Value < y.Value; }
         };
-#pragma pack(pop)
-
+#pragma pack(pop) 
+ 
     } // NIncrHuge
 } // NKikimr
 

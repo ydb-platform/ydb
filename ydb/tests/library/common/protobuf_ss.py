@@ -99,7 +99,7 @@ class CreatePath(AbstractProtobufBuilder):
 class RegisterTenant(AbstractProtobufBuilder):
     class Options(object):
         def __init__(self):
-            self.__plan_resolution = 10
+            self.__plan_resolution = 10 
             self.__time_cast_buckets = 2
             self.__coordinators = 1
             self.__mediators = 1

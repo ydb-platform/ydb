@@ -7,38 +7,38 @@
 namespace NKikimr {
 
 struct TEvSharedPageCache {
-    enum EEv {
-        EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR) + 1536,
-
-        EvConfigure = EvBegin + 0,
-    };
-
-    struct TEvConfigure
-        : public TEventPB<TEvConfigure, NKikimrSharedCache::TSharedCacheConfig, EvConfigure>
-    {
-        TEvConfigure() = default;
-    };
-};
-
+    enum EEv { 
+        EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR) + 1536, 
+ 
+        EvConfigure = EvBegin + 0, 
+    }; 
+ 
+    struct TEvConfigure 
+        : public TEventPB<TEvConfigure, NKikimrSharedCache::TSharedCacheConfig, EvConfigure> 
+    { 
+        TEvConfigure() = default; 
+    }; 
+}; 
+ 
 struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters> {
-    using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
-
-    const TCounterPtr ActivePages;
-    const TCounterPtr ActiveBytes;
-    const TCounterPtr PassivePages;
-    const TCounterPtr PassiveBytes;
-    const TCounterPtr RequestedPages;
-    const TCounterPtr RequestedBytes;
-    const TCounterPtr CacheHitPages;
-    const TCounterPtr CacheHitBytes;
-    const TCounterPtr CacheMissPages;
-    const TCounterPtr CacheMissBytes;
-    const TCounterPtr LoadInFlyPages;
-    const TCounterPtr LoadInFlyBytes;
-
+    using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr; 
+ 
+    const TCounterPtr ActivePages; 
+    const TCounterPtr ActiveBytes; 
+    const TCounterPtr PassivePages; 
+    const TCounterPtr PassiveBytes; 
+    const TCounterPtr RequestedPages; 
+    const TCounterPtr RequestedBytes; 
+    const TCounterPtr CacheHitPages; 
+    const TCounterPtr CacheHitBytes; 
+    const TCounterPtr CacheMissPages; 
+    const TCounterPtr CacheMissBytes; 
+    const TCounterPtr LoadInFlyPages; 
+    const TCounterPtr LoadInFlyBytes; 
+ 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters> &group);
-};
-
+}; 
+ 
 struct TSharedPageCacheConfig final : public TAtomicRefCount<TSharedPageCacheConfig> {
     TIntrusivePtr<TCacheCacheConfig> CacheConfig;
     ui64 TotalScanQueueInFlyLimit = 512 * 1024 * 1024;

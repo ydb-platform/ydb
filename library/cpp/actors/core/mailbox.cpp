@@ -529,7 +529,7 @@ namespace NActors {
                 Y_FAIL();
         }
 
-        AtomicStore(Lines + lineIndex, header);
+        AtomicStore(Lines + lineIndex, header); 
 
         ui32 ret = lineIndexMask | 1;
 

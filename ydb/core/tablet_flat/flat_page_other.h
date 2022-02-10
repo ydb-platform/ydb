@@ -13,8 +13,8 @@ namespace NTable {
 namespace NPage {
 
     class TFrameWriter {
-        using THeader = TFrames::THeader;
-        using TEntry = TFrames::TEntry;
+        using THeader = TFrames::THeader; 
+        using TEntry = TFrames::TEntry; 
 
         struct TFresh {
             ui16 Tag;
@@ -47,48 +47,48 @@ namespace NPage {
             Cook.emplace_back(TFresh{ tag, bytes });
         }
 
-        void FlushRow() noexcept
+        void FlushRow() noexcept 
+        { 
+            Flush(); 
+        } 
+ 
+        TSharedData Make() noexcept 
         {
             Flush();
+
+            return Array ? MakeAnyway() : TSharedData{ }; 
         }
 
-        TSharedData Make() noexcept
-        {
-            Flush();
-
-            return Array ? MakeAnyway() : TSharedData{ };
-        }
-
-        ui64 EstimateBytesUsed(size_t extraItems) const noexcept
-        {
-            if (size_t items = Array.size() + Cook.size() + extraItems) {
+        ui64 EstimateBytesUsed(size_t extraItems) const noexcept 
+        { 
+            if (size_t items = Array.size() + Cook.size() + extraItems) { 
                 return sizeof(NPage::TLabel) + sizeof(THeader)
-                        + NUtil::NBin::SizeOf(Tags)
-                        + sizeof(TEntry) * items;
-            }
-
-            return 0;
-        }
-
-        void Reset() noexcept
-        {
-            Last = Max<TRowId>();
-            Rows = 0;
-            Size = 0;
-            std::fill(Tags.begin(), Tags.end(), 0);
-            Array.clear();
-            Cook.clear();
-        }
-
+                        + NUtil::NBin::SizeOf(Tags) 
+                        + sizeof(TEntry) * items; 
+            } 
+ 
+            return 0; 
+        } 
+ 
+        void Reset() noexcept 
+        { 
+            Last = Max<TRowId>(); 
+            Rows = 0; 
+            Size = 0; 
+            std::fill(Tags.begin(), Tags.end(), 0); 
+            Array.clear(); 
+            Cook.clear(); 
+        } 
+ 
     private:
-        TSharedData MakeAnyway() noexcept
+        TSharedData MakeAnyway() noexcept 
         {
             auto size = sizeof(NPage::TLabel) + sizeof(THeader)
                             + NUtil::NBin::SizeOf(Tags, Array);
 
-            TSharedData buf = TSharedData::Uninitialized(size);
+            TSharedData buf = TSharedData::Uninitialized(size); 
 
-            NUtil::NBin::TPut out(buf.mutable_begin());
+            NUtil::NBin::TPut out(buf.mutable_begin()); 
 
             if (auto *hdr = out.Skip<NPage::TLabel>()) {
                 hdr->Type = EPage::Frames;
@@ -107,9 +107,9 @@ namespace NPage {
 
             out.Put(Tags).Put(Array);
 
-            Y_VERIFY(*out == buf.mutable_end());
+            Y_VERIFY(*out == buf.mutable_end()); 
             Y_VERIFY(buf.size() % alignof(TEntry) == 0);
-            NSan::CheckMemIsInitialized(buf.data(), buf.size());
+            NSan::CheckMemIsInitialized(buf.data(), buf.size()); 
 
             return buf;
         }
@@ -139,7 +139,7 @@ namespace NPage {
     class TExtBlobsWriter {
         using THeader = TExtBlobs::THeader;
         using TEntry = TExtBlobs::TEntry;
-
+ 
     public:
         ui32 Put(const NPageCollection::TGlobId &glob) noexcept
         {
@@ -148,9 +148,9 @@ namespace NPage {
             return Globs.size() - 1;
         }
 
-        TSharedData Make(bool force = false) const noexcept
+        TSharedData Make(bool force = false) const noexcept 
         {
-            return (Globs  || force) ? MakeAnyway() : TSharedData{ };
+            return (Globs  || force) ? MakeAnyway() : TSharedData{ }; 
         }
 
         ui32 Size() const noexcept
@@ -158,35 +158,35 @@ namespace NPage {
             return Globs.size();
         }
 
-        ui64 EstimateBytesUsed(size_t extraItems) const noexcept
-        {
-            if (size_t items = Globs.size() + extraItems) {
+        ui64 EstimateBytesUsed(size_t extraItems) const noexcept 
+        { 
+            if (size_t items = Globs.size() + extraItems) { 
                 return sizeof(NPage::TLabel) + sizeof(THeader)
-                        + sizeof(TEntry) * items;
-            }
-
-            return 0;
-        }
-
-        void Reset() noexcept
-        {
-            Globs.clear();
-        }
-
+                        + sizeof(TEntry) * items; 
+            } 
+ 
+            return 0; 
+        } 
+ 
+        void Reset() noexcept 
+        { 
+            Globs.clear(); 
+        } 
+ 
     private:
-        TSharedData MakeAnyway() const noexcept
+        TSharedData MakeAnyway() const noexcept 
         {
             auto size = sizeof(NPage::TLabel) + sizeof(THeader)
                             + NUtil::NBin::SizeOf(Globs);
 
-            TSharedData buf = TSharedData::Uninitialized(size);
+            TSharedData buf = TSharedData::Uninitialized(size); 
 
-            NUtil::NBin::TPut out(buf.mutable_begin());
+            NUtil::NBin::TPut out(buf.mutable_begin()); 
 
             if (auto *hdr = out.Skip<NPage::TLabel>()) {
                 hdr->Type = EPage::Globs;
                 hdr->Format = 1;
-                hdr->Size = size < Max<ui32>() ? ui32(size) : Max<ui32>();
+                hdr->Size = size < Max<ui32>() ? ui32(size) : Max<ui32>(); 
             }
 
             if (auto *post = out.Skip<THeader>()) {
@@ -198,16 +198,16 @@ namespace NPage {
 
             out.Put(Globs);
 
-            Y_VERIFY(*out == buf.mutable_end());
+            Y_VERIFY(*out == buf.mutable_end()); 
             Y_VERIFY(buf.size() % alignof(TEntry) == 0);
-            NSan::CheckMemIsInitialized(buf.data(), buf.size());
+            NSan::CheckMemIsInitialized(buf.data(), buf.size()); 
 
             return buf;
         }
 
     private:
         ui64 Bytes = 0;
-        TVector<TEntry> Globs;
+        TVector<TEntry> Globs; 
     };
 
 }

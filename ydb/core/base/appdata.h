@@ -96,12 +96,12 @@ struct TAppData {
         TTabletTypes::EType Dummy;
         TTabletTypes::EType Coordinator;
         TTabletTypes::EType Mediator;
-        TTabletTypes::EType Kesus;
+        TTabletTypes::EType Kesus; 
         TTabletTypes::EType Hive;
         TTabletTypes::EType SysViewProcessor;
         TTabletTypes::EType ColumnShard;
         TTabletTypes::EType TestShard;
-        TTabletTypes::EType SequenceShard;
+        TTabletTypes::EType SequenceShard; 
         TTabletTypes::EType ReplicationController;
 
         TDefaultTabletTypes();
@@ -143,14 +143,14 @@ struct TAppData {
     NKikimrProto::TKeyConfig PDiskKeyConfig;
     TFeatureFlags FeatureFlags;
     NKikimrConfig::THiveConfig HiveConfig;
-    NKikimrConfig::TDataShardConfig DataShardConfig;
+    NKikimrConfig::TDataShardConfig DataShardConfig; 
     NKikimrConfig::TMeteringConfig MeteringConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
     bool AllowShadowDataInSchemeShardForTests = false;
-    bool EnableMvccSnapshotWithLegacyDomainRoot = false;
+    bool EnableMvccSnapshotWithLegacyDomainRoot = false; 
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers;
@@ -159,16 +159,16 @@ struct TAppData {
     TProgramShouldContinue * const KikimrShouldContinue;
     bool EnableIntrospection = true;
 
-    // Used to allow column families for testing
-    bool AllowColumnFamiliesForTest = false;
+    // Used to allow column families for testing 
+    bool AllowColumnFamiliesForTest = false; 
     bool AllowPrivateTableDescribeForTest = false;
-
-    // Used to allow immediate ReadTable in tests
-    bool AllowReadTableImmediate = false;
-
-    // Used to disable object deletion in schemeshard for cleanup tests
-    bool DisableSchemeShardCleanupOnDropForTest = false;
-
+ 
+    // Used to allow immediate ReadTable in tests 
+    bool AllowReadTableImmediate = false; 
+ 
+    // Used to disable object deletion in schemeshard for cleanup tests 
+    bool DisableSchemeShardCleanupOnDropForTest = false; 
+ 
     TKikimrScopeId LocalScopeId;
 
     TAppData(

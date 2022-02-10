@@ -1,7 +1,7 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
 #include "http.h"
-#include "util.h"
+#include "util.h" 
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -71,7 +71,7 @@ public:
     void OpenPipe(const TActorContext &ctx)
     {
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = FastConnectRetryPolicy();
+        pipeConfig.RetryPolicy = FastConnectRetryPolicy(); 
         auto tid = MakeBSControllerID(Domain->DefaultStateStorageGroup);
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig);
         BSControllerPipe = ctx.ExecutorThread.RegisterActor(pipe);
@@ -489,28 +489,28 @@ public:
         }
 
         for (auto &pr : (SharedTenant ? SharedTenant->StoragePools : Tenant->StoragePools)) {
-            // N.B. only provide schemeshard with pools that have at least one allocated group
-            if (pr.second->State != TTenantsManager::TStoragePool::NOT_ALLOCATED &&
-                pr.second->AllocatedNumGroups > 0)
-            {
+            // N.B. only provide schemeshard with pools that have at least one allocated group 
+            if (pr.second->State != TTenantsManager::TStoragePool::NOT_ALLOCATED && 
+                pr.second->AllocatedNumGroups > 0) 
+            { 
                 auto &pool = *subdomain.AddStoragePools();
                 pool.SetName(pr.second->Config.GetName());
                 pool.SetKind(pr.second->Kind);
             }
         }
-
-        if (Tenant->SchemaOperationQuotas) {
-            auto* dstQuotas = subdomain.MutableDeclaredSchemeQuotas();
-            for (const auto& bucket : Tenant->SchemaOperationQuotas->leaky_bucket_quotas()) {
-                auto* dst = dstQuotas->AddSchemeQuotas();
-                dst->SetBucketSize(bucket.bucket_size());
-                dst->SetBucketSeconds(bucket.bucket_seconds());
-            }
-        }
-
-        if (Tenant->DatabaseQuotas) {
-            subdomain.MutableDatabaseQuotas()->CopyFrom(*Tenant->DatabaseQuotas);
-        }
+ 
+        if (Tenant->SchemaOperationQuotas) { 
+            auto* dstQuotas = subdomain.MutableDeclaredSchemeQuotas(); 
+            for (const auto& bucket : Tenant->SchemaOperationQuotas->leaky_bucket_quotas()) { 
+                auto* dst = dstQuotas->AddSchemeQuotas(); 
+                dst->SetBucketSize(bucket.bucket_size()); 
+                dst->SetBucketSeconds(bucket.bucket_seconds()); 
+            } 
+        } 
+ 
+        if (Tenant->DatabaseQuotas) { 
+            subdomain.MutableDatabaseQuotas()->CopyFrom(*Tenant->DatabaseQuotas); 
+        } 
     }
 
     void AlterUserAttribute(const TActorContext &ctx) {
@@ -681,7 +681,7 @@ public:
     {
         Y_VERIFY(TabletId);
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = FastConnectRetryPolicy();
+        pipeConfig.RetryPolicy = FastConnectRetryPolicy(); 
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TabletId, pipeConfig);
         Pipe = ctx.ExecutorThread.RegisterActor(pipe);
     }
@@ -1434,7 +1434,7 @@ void TTenantsManager::RemoveTenant(TTenant::TPtr tenant)
     removed.Path = tenant->Path;
     removed.TxId = tenant->TxId;
     removed.ErrorCode = tenant->ErrorCode;
-    removed.CreateIdempotencyKey = tenant->CreateIdempotencyKey;
+    removed.CreateIdempotencyKey = tenant->CreateIdempotencyKey; 
     removed.Issue = tenant->Issue;
     removed.Code = Ydb::StatusIds::SUCCESS;
     RemovedTenants[tenant->Path] = removed;
@@ -1446,7 +1446,7 @@ void TTenantsManager::RemoveTenantFailed(TTenant::TPtr tenant,
     TRemovedTenant removed;
     removed.Path = tenant->Path;
     removed.ErrorCode = tenant->ErrorCode;
-    removed.CreateIdempotencyKey = tenant->CreateIdempotencyKey;
+    removed.CreateIdempotencyKey = tenant->CreateIdempotencyKey; 
     removed.TxId = tenant->TxId;
     removed.Issue = tenant->Issue;
     removed.Code = code;
@@ -1692,17 +1692,17 @@ bool TTenantsManager::CheckAccess(const TString &token,
     return false;
 }
 
-Ydb::TOperationId TTenantsManager::MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action)
-{
-    Ydb::TOperationId id;
-    id.SetKind(Ydb::TOperationId::CMS_REQUEST);
-    AddOptionalValue(id, "tenant", path);
-    AddOptionalValue(id, "cmstid", ToString(Self.TabletID()));
-    AddOptionalValue(id, "txid", ToString(txId));
-    AddOptionalValue(id, "action", ToString((ui32)action));
-    return id;
-}
-
+Ydb::TOperationId TTenantsManager::MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action) 
+{ 
+    Ydb::TOperationId id; 
+    id.SetKind(Ydb::TOperationId::CMS_REQUEST); 
+    AddOptionalValue(id, "tenant", path); 
+    AddOptionalValue(id, "cmstid", ToString(Self.TabletID())); 
+    AddOptionalValue(id, "txid", ToString(txId)); 
+    AddOptionalValue(id, "action", ToString((ui32)action)); 
+    return id; 
+} 
+ 
 Ydb::TOperationId TTenantsManager::MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action)
 {
     Ydb::TOperationId id;
@@ -1729,7 +1729,7 @@ TTenantsManager::TStoragePool::TPtr TTenantsManager::MakeStoragePool(TTenant::TP
 void TTenantsManager::OpenTenantSlotBrokerPipe(const TActorContext &ctx)
 {
     NTabletPipe::TClientConfig pipeConfig;
-    pipeConfig.RetryPolicy = FastConnectRetryPolicy();
+    pipeConfig.RetryPolicy = FastConnectRetryPolicy(); 
     auto aid = MakeTenantSlotBrokerID(Domain->DefaultStateStorageGroup);
     auto pipe = NTabletPipe::CreateClient(ctx.SelfID, aid, pipeConfig);
     TenantSlotBrokerPipe = ctx.ExecutorThread.RegisterActor(pipe);
@@ -1846,9 +1846,9 @@ void TTenantsManager::RetryResourcesRequests(const TActorContext &ctx)
 void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status)
 {
     status.set_path(tenant->Path);
-    if (tenant->IsRunning() && tenant->SubdomainVersion != tenant->ConfirmedSubdomain)
-        status.set_state(Ydb::Cms::GetDatabaseStatusResult::CONFIGURING);
-    else if (tenant->IsRunning())
+    if (tenant->IsRunning() && tenant->SubdomainVersion != tenant->ConfirmedSubdomain) 
+        status.set_state(Ydb::Cms::GetDatabaseStatusResult::CONFIGURING); 
+    else if (tenant->IsRunning()) 
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
     else if (tenant->IsConfiguring())
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES);
@@ -1895,14 +1895,14 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
     }
 
     status.set_generation(tenant->Generation);
-
-    if (tenant->SchemaOperationQuotas) {
-        status.mutable_schema_operation_quotas()->CopyFrom(*tenant->SchemaOperationQuotas);
-    }
-
-    if (tenant->DatabaseQuotas) {
-        status.mutable_database_quotas()->CopyFrom(*tenant->DatabaseQuotas);
-    }
+ 
+    if (tenant->SchemaOperationQuotas) { 
+        status.mutable_schema_operation_quotas()->CopyFrom(*tenant->SchemaOperationQuotas); 
+    } 
+ 
+    if (tenant->DatabaseQuotas) { 
+        status.mutable_database_quotas()->CopyFrom(*tenant->DatabaseQuotas); 
+    } 
 }
 
 void TTenantsManager::FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status,
@@ -2270,8 +2270,8 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSubDomain>(tenant->IsExternalSubdomain),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalHive>(tenant->IsExternalHive),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSysViewProcessor>(tenant->IsExternalSysViewProcessor),
-                NIceDb::TUpdate<Schema::Tenants::AreResourcesShared>(tenant->AreResourcesShared),
-                NIceDb::TUpdate<Schema::Tenants::CreateIdempotencyKey>(tenant->CreateIdempotencyKey));
+                NIceDb::TUpdate<Schema::Tenants::AreResourcesShared>(tenant->AreResourcesShared), 
+                NIceDb::TUpdate<Schema::Tenants::CreateIdempotencyKey>(tenant->CreateIdempotencyKey)); 
 
     if (tenant->SharedDomainId) {
         db.Table<Schema::Tenants>().Key(tenant->Path)
@@ -2279,20 +2279,20 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                     NIceDb::TUpdate<Schema::Tenants::SharedDomainPathId>(tenant->SharedDomainId.LocalPathId));
     }
 
-    if (tenant->SchemaOperationQuotas) {
-        TString serialized;
-        Y_VERIFY(tenant->SchemaOperationQuotas->SerializeToString(&serialized));
-        db.Table<Schema::Tenants>().Key(tenant->Path)
-            .Update(NIceDb::TUpdate<Schema::Tenants::SchemaOperationQuotas>(serialized));
-    }
-
-    if (tenant->DatabaseQuotas) {
-        TString serialized;
-        Y_VERIFY(tenant->DatabaseQuotas->SerializeToString(&serialized));
-        db.Table<Schema::Tenants>().Key(tenant->Path)
-            .Update(NIceDb::TUpdate<Schema::Tenants::DatabaseQuotas>(serialized));
-    }
-
+    if (tenant->SchemaOperationQuotas) { 
+        TString serialized; 
+        Y_VERIFY(tenant->SchemaOperationQuotas->SerializeToString(&serialized)); 
+        db.Table<Schema::Tenants>().Key(tenant->Path) 
+            .Update(NIceDb::TUpdate<Schema::Tenants::SchemaOperationQuotas>(serialized)); 
+    } 
+ 
+    if (tenant->DatabaseQuotas) { 
+        TString serialized; 
+        Y_VERIFY(tenant->DatabaseQuotas->SerializeToString(&serialized)); 
+        db.Table<Schema::Tenants>().Key(tenant->Path) 
+            .Update(NIceDb::TUpdate<Schema::Tenants::DatabaseQuotas>(serialized)); 
+    } 
+ 
     for (auto &pr : tenant->StoragePools) {
         auto &pool = *pr.second;
 
@@ -2395,24 +2395,24 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         tenant->IsExternalSysViewProcessor = isExternalSysViewProcessor;
         tenant->AreResourcesShared = areResourcesShared;
 
-        if (tenantRowset.HaveValue<Schema::Tenants::SchemaOperationQuotas>()) {
-            auto& deserialized = tenant->SchemaOperationQuotas.ConstructInPlace();
-            Y_VERIFY(ParseFromStringNoSizeLimit(deserialized, tenantRowset.GetValue<Schema::Tenants::SchemaOperationQuotas>()));
-        }
-
-        if (tenantRowset.HaveValue<Schema::Tenants::DatabaseQuotas>()) {
-            auto& deserialized = tenant->DatabaseQuotas.ConstructInPlace();
-            Y_VERIFY(ParseFromStringNoSizeLimit(deserialized, tenantRowset.GetValue<Schema::Tenants::DatabaseQuotas>()));
-        }
-
-        if (tenantRowset.HaveValue<Schema::Tenants::CreateIdempotencyKey>()) {
-            tenant->CreateIdempotencyKey = tenantRowset.GetValue<Schema::Tenants::CreateIdempotencyKey>();
-        }
-
-        if (tenantRowset.HaveValue<Schema::Tenants::AlterIdempotencyKey>()) {
-            tenant->AlterIdempotencyKey = tenantRowset.GetValue<Schema::Tenants::AlterIdempotencyKey>();
-        }
-
+        if (tenantRowset.HaveValue<Schema::Tenants::SchemaOperationQuotas>()) { 
+            auto& deserialized = tenant->SchemaOperationQuotas.ConstructInPlace(); 
+            Y_VERIFY(ParseFromStringNoSizeLimit(deserialized, tenantRowset.GetValue<Schema::Tenants::SchemaOperationQuotas>())); 
+        } 
+ 
+        if (tenantRowset.HaveValue<Schema::Tenants::DatabaseQuotas>()) { 
+            auto& deserialized = tenant->DatabaseQuotas.ConstructInPlace(); 
+            Y_VERIFY(ParseFromStringNoSizeLimit(deserialized, tenantRowset.GetValue<Schema::Tenants::DatabaseQuotas>())); 
+        } 
+ 
+        if (tenantRowset.HaveValue<Schema::Tenants::CreateIdempotencyKey>()) { 
+            tenant->CreateIdempotencyKey = tenantRowset.GetValue<Schema::Tenants::CreateIdempotencyKey>(); 
+        } 
+ 
+        if (tenantRowset.HaveValue<Schema::Tenants::AlterIdempotencyKey>()) { 
+            tenant->AlterIdempotencyKey = tenantRowset.GetValue<Schema::Tenants::AlterIdempotencyKey>(); 
+        } 
+ 
         AddTenant(tenant);
 
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Loaded tenant " << path);
@@ -2438,7 +2438,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         tenant.Issue = removedRowset.GetValue<Schema::RemovedTenants::Issue>();
         tenant.Code = static_cast<Ydb::StatusIds::StatusCode>(removedRowset.GetValueOrDefault<Schema::RemovedTenants::Code>(Ydb::StatusIds::SUCCESS));
         tenant.ErrorCode = static_cast<Ydb::StatusIds::StatusCode>(removedRowset.GetValueOrDefault<Schema::RemovedTenants::ErrorCode>(0));
-        tenant.CreateIdempotencyKey = removedRowset.GetValueOrDefault<Schema::RemovedTenants::CreateIdempotencyKey>(TString());
+        tenant.CreateIdempotencyKey = removedRowset.GetValueOrDefault<Schema::RemovedTenants::CreateIdempotencyKey>(TString()); 
 
         RemovedTenants[tenant.Path] = tenant;
 
@@ -2745,24 +2745,24 @@ void TTenantsManager::DbUpdateRemovedTenant(TTenant::TPtr tenant,
         .Update<Schema::RemovedTenants::TxId>(tenant->TxId)
         .Update<Schema::RemovedTenants::Issue>(tenant->Issue)
         .Update<Schema::RemovedTenants::Code>(code)
-        .Update<Schema::RemovedTenants::ErrorCode>(tenant->ErrorCode)
-        .Update<Schema::RemovedTenants::CreateIdempotencyKey>(tenant->CreateIdempotencyKey);
+        .Update<Schema::RemovedTenants::ErrorCode>(tenant->ErrorCode) 
+        .Update<Schema::RemovedTenants::CreateIdempotencyKey>(tenant->CreateIdempotencyKey); 
 }
 
-void TTenantsManager::DbUpdateTenantAlterIdempotencyKey(TTenant::TPtr tenant,
-                                                        const TString &idempotencyKey,
-                                                        TTransactionContext &txc,
-                                                        const TActorContext &ctx)
-{
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                "Update alter idempotency key for " << tenant->Path
-                << " alterIdempotencyKey=" << idempotencyKey);
-
-    NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::Tenants>().Key(tenant->Path)
-        .Update<Schema::Tenants::AlterIdempotencyKey>(idempotencyKey);
-}
-
+void TTenantsManager::DbUpdateTenantAlterIdempotencyKey(TTenant::TPtr tenant, 
+                                                        const TString &idempotencyKey, 
+                                                        TTransactionContext &txc, 
+                                                        const TActorContext &ctx) 
+{ 
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, 
+                "Update alter idempotency key for " << tenant->Path 
+                << " alterIdempotencyKey=" << idempotencyKey); 
+ 
+    NIceDb::TNiceDb db(txc.DB); 
+    db.Table<Schema::Tenants>().Key(tenant->Path) 
+        .Update<Schema::Tenants::AlterIdempotencyKey>(idempotencyKey); 
+} 
+ 
 void TTenantsManager::DbUpdateTenantUserAttributes(TTenant::TPtr tenant,
                                                    const NKikimrSchemeOp::TAlterUserAttributes &attributes,
                                                    TTransactionContext &txc,
@@ -2855,40 +2855,40 @@ void TTenantsManager::DbUpdateSubdomainVersion(TTenant::TPtr tenant,
         .Update(NIceDb::TUpdate<Schema::Tenants::SubdomainVersion>(version));
 }
 
-void TTenantsManager::DbUpdateSchemaOperationQuotas(TTenant::TPtr tenant,
-                                                    const Ydb::Cms::SchemaOperationQuotas &quotas,
-                                                    TTransactionContext &txc,
-                                                    const TActorContext &ctx)
-{
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                "Update schema operation quotas for " << tenant->Path
-                << " quotas = " << quotas.DebugString());
-
-    TString serialized;
-    Y_VERIFY(quotas.SerializeToString(&serialized));
-
-    NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::Tenants>().Key(tenant->Path)
-        .Update(NIceDb::TUpdate<Schema::Tenants::SchemaOperationQuotas>(serialized));
-}
-
-void TTenantsManager::DbUpdateDatabaseQuotas(TTenant::TPtr tenant,
-                                             const Ydb::Cms::DatabaseQuotas &quotas,
-                                             TTransactionContext &txc,
-                                             const TActorContext &ctx)
-{
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                "Update database quotas for " << tenant->Path
-                << " quotas = " << quotas.DebugString());
-
-    TString serialized;
-    Y_VERIFY(quotas.SerializeToString(&serialized));
-
-    NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::Tenants>().Key(tenant->Path)
-        .Update(NIceDb::TUpdate<Schema::Tenants::DatabaseQuotas>(serialized));
-}
-
+void TTenantsManager::DbUpdateSchemaOperationQuotas(TTenant::TPtr tenant, 
+                                                    const Ydb::Cms::SchemaOperationQuotas &quotas, 
+                                                    TTransactionContext &txc, 
+                                                    const TActorContext &ctx) 
+{ 
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, 
+                "Update schema operation quotas for " << tenant->Path 
+                << " quotas = " << quotas.DebugString()); 
+ 
+    TString serialized; 
+    Y_VERIFY(quotas.SerializeToString(&serialized)); 
+ 
+    NIceDb::TNiceDb db(txc.DB); 
+    db.Table<Schema::Tenants>().Key(tenant->Path) 
+        .Update(NIceDb::TUpdate<Schema::Tenants::SchemaOperationQuotas>(serialized)); 
+} 
+ 
+void TTenantsManager::DbUpdateDatabaseQuotas(TTenant::TPtr tenant, 
+                                             const Ydb::Cms::DatabaseQuotas &quotas, 
+                                             TTransactionContext &txc, 
+                                             const TActorContext &ctx) 
+{ 
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, 
+                "Update database quotas for " << tenant->Path 
+                << " quotas = " << quotas.DebugString()); 
+ 
+    TString serialized; 
+    Y_VERIFY(quotas.SerializeToString(&serialized)); 
+ 
+    NIceDb::TNiceDb db(txc.DB); 
+    db.Table<Schema::Tenants>().Key(tenant->Path) 
+        .Update(NIceDb::TUpdate<Schema::Tenants::DatabaseQuotas>(serialized)); 
+} 
+ 
 void TTenantsManager::Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_ALTER_REQUESTS);
@@ -3095,8 +3095,8 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolAllocated::TPtr &ev, const TActo
     auto pool = ev->Get()->Pool;
     Y_VERIFY(pool->State != TStoragePool::ALLOCATED);
 
-    pool->GroupFitErrors = 0;
-
+    pool->GroupFitErrors = 0; 
+ 
     TxProcessor->ProcessTx(CreateTxUpdatePoolState(tenant, pool, ev->Sender,
                                                    TStoragePool::ALLOCATED),
                            ctx);
@@ -3123,13 +3123,13 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorCo
         Counters.Inc(COUNTER_REMOVE_POOL_FAILED);
 
         pool->Worker = TActorId();
-        pool->GroupFitErrors = 0;
+        pool->GroupFitErrors = 0; 
         ctx.Schedule(TDuration::Seconds(10),
                      new TEvPrivate::TEvRetryAllocateResources(tenant->Path));
     } else if (tenant->IsCreating()) {
         Counters.Inc(COUNTER_ALLOC_POOL_FAILED);
         pool->Worker = TActorId();
-        pool->GroupFitErrors = 0;
+        pool->GroupFitErrors = 0; 
         tenant->Issue = issue;
         TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::REMOVING_POOLS), ctx);
     } else {
@@ -3137,16 +3137,16 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorCo
                    "Couldn't update storage pool " << pool->Config.GetName()
                    << " for tenant " << tenant->Path << ": " << issue);
 
-        if (issue.Contains("Group fit error")) {
-            if (++pool->GroupFitErrors >= 10) {
-                pool->GroupFitErrors = 0;
-                TxProcessor->ProcessTx(CreateTxRevertPoolState(tenant, pool, ev->Sender), ctx);
-                return;
-            }
-        } else {
-            pool->GroupFitErrors = 0;
-        }
-
+        if (issue.Contains("Group fit error")) { 
+            if (++pool->GroupFitErrors >= 10) { 
+                pool->GroupFitErrors = 0; 
+                TxProcessor->ProcessTx(CreateTxRevertPoolState(tenant, pool, ev->Sender), ctx); 
+                return; 
+            } 
+        } else { 
+            pool->GroupFitErrors = 0; 
+        } 
+ 
         Counters.Inc(COUNTER_ALLOC_POOL_FAILED);
         pool->Worker = TActorId();
         ctx.Schedule(TDuration::Seconds(10),

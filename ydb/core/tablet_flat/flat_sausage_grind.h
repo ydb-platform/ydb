@@ -45,17 +45,17 @@ namespace NPageCollection {
             for (auto &one: row) {
                 auto &place = Slots[one.Channel];
 
-                Y_VERIFY(one.Channel != Max<ui8>(),
-                    "Channel cannot be set to Max<ui8>() value");
-
-                if (place != Max<ui8>()) {
-                    /* Channel already associated with a group */
-                    Y_VERIFY(Group[place] == one.Group,
-                        "Channel assigned to different groups");
-                    continue;
+                Y_VERIFY(one.Channel != Max<ui8>(), 
+                    "Channel cannot be set to Max<ui8>() value"); 
+ 
+                if (place != Max<ui8>()) { 
+                    /* Channel already associated with a group */ 
+                    Y_VERIFY(Group[place] == one.Group, 
+                        "Channel assigned to different groups"); 
+                    continue; 
                 }
 
-                place = Group.size();
+                place = Group.size(); 
                 Group.emplace_back(one.Group);
             }
 
@@ -109,7 +109,7 @@ namespace NPageCollection {
         {
             auto slot = Slots[channel];
 
-            Y_VERIFY(slot != Max<ui8>(), "Requested unknown channel");
+            Y_VERIFY(slot != Max<ui8>(), "Requested unknown channel"); 
 
             return slot;
         }

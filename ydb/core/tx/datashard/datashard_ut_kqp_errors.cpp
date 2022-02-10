@@ -34,7 +34,7 @@ bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::functio
 
 class TFixture : public NUnitTest::TBaseFixture {
 public:
-    void SetUp(NUnitTest::TTestContext&) override {
+    void SetUp(NUnitTest::TTestContext&) override { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -72,10 +72,10 @@ public:
         Client = Runtime->AllocateEdgeActor();
     }
 
-    void TearDown(NUnitTest::TTestContext&) override {
-        Server.Reset();
-    }
-
+    void TearDown(NUnitTest::TTestContext&) override { 
+        Server.Reset(); 
+    } 
+ 
     Tests::TServer::TPtr Server;
     TTestActorRuntime* Runtime;
     TActorId Client;

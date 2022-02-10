@@ -51,7 +51,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     if (! IsAccepted) {
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
             "Ignore old txIds [" << JoinStrings(txIds.begin(), txIds.end(), ", ")
-            << "] for step " << step << " outdated step " << Self->Pipeline.OutdatedCleanupStep()
+            << "] for step " << step << " outdated step " << Self->Pipeline.OutdatedCleanupStep() 
             << " at tablet " << Self->TabletID());
         Self->IncCounter(COUNTER_PLAN_STEP_IGNORED);
         return true;

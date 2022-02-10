@@ -29,52 +29,52 @@ namespace NTabletFlatExecutor {
     XX(DB_OUTER_ITEMS, "DbOuterItems") \
     XX(DB_DATA_BYTES, "DbDataBytes") \
     XX(DB_PARTS_COUNT, "DbPartsCount") \
-    XX(DB_UNIQUE_DATA_BYTES, "DbUniqueDataBytes") \
-    XX(DB_UNIQUE_PARTS_COUNT, "DbUniquePartsCount") \
-    XX(DB_UNIQUE_ROWS_ERASE, "DbUniqueRowsErase") \
-    XX(DB_UNIQUE_ROWS_TOTAL, "DbUniqueRowsTotal") \
-    XX(DB_UNIQUE_PLAIN_BYTES, "DbUniquePlainBytes") \
-    XX(DB_UNIQUE_CODED_BYTES, "DbUniqueCodedBytes") \
+    XX(DB_UNIQUE_DATA_BYTES, "DbUniqueDataBytes") \ 
+    XX(DB_UNIQUE_PARTS_COUNT, "DbUniquePartsCount") \ 
+    XX(DB_UNIQUE_ROWS_ERASE, "DbUniqueRowsErase") \ 
+    XX(DB_UNIQUE_ROWS_TOTAL, "DbUniqueRowsTotal") \ 
+    XX(DB_UNIQUE_PLAIN_BYTES, "DbUniquePlainBytes") \ 
+    XX(DB_UNIQUE_CODED_BYTES, "DbUniqueCodedBytes") \ 
     XX(DB_UNIQUE_ELOBS_BYTES, "DbUniqueELargeObjsBytes") \
     XX(DB_UNIQUE_ELOBS_ITEMS, "DbUniqueELargeObjsItems") \
-    XX(DB_UNIQUE_OUTER_BYTES, "DbUniqueOuterBytes") \
-    XX(DB_UNIQUE_OUTER_ITEMS, "DbUniqueOuterItems") \
-    XX(DB_UNIQUE_KEEP_BYTES, "DbUniqueKeepBytes") \
-    XX(GC_BLOBS_UNCOMMITTED, "GcBlobsUncommitted") \
-    XX(GC_BLOBS_CREATED, "GcBlobsCreated") \
-    XX(GC_BLOBS_DELETED, "GcBlobsDeleted") \
-    XX(GC_BARRIERS_ACTIVE, "GcBarriersActive") \
+    XX(DB_UNIQUE_OUTER_BYTES, "DbUniqueOuterBytes") \ 
+    XX(DB_UNIQUE_OUTER_ITEMS, "DbUniqueOuterItems") \ 
+    XX(DB_UNIQUE_KEEP_BYTES, "DbUniqueKeepBytes") \ 
+    XX(GC_BLOBS_UNCOMMITTED, "GcBlobsUncommitted") \ 
+    XX(GC_BLOBS_CREATED, "GcBlobsCreated") \ 
+    XX(GC_BLOBS_DELETED, "GcBlobsDeleted") \ 
+    XX(GC_BARRIERS_ACTIVE, "GcBarriersActive") \ 
     XX(CACHE_FRESH_SIZE, "CacheFreshSize") \
     XX(CACHE_STAGING_SIZE, "CacheStagingSize") \
     XX(CACHE_WARM_SIZE, "CacheMemTableSize") \
     XX(CACHE_PINNED_SET, "CachePinned") \
     XX(CACHE_PINNED_LOAD, "CachePinnedLoad") \
-    XX(CACHE_TOTAL_COLLECTIONS, "CacheTotalCollections") \
-    XX(CACHE_TOTAL_SHARED_BODY, "CacheTotalSharedBody") \
-    XX(CACHE_TOTAL_PINNED_BODY, "CacheTotalPinnedBody") \
-    XX(CACHE_TOTAL_EXCLUSIVE, "CacheTotalExclusive") \
-    XX(CACHE_TOTAL_SHARED_PENDING, "CacheTotalSharedPending") \
-    XX(CACHE_TOTAL_STICKY, "CacheTotalSticky") \
+    XX(CACHE_TOTAL_COLLECTIONS, "CacheTotalCollections") \ 
+    XX(CACHE_TOTAL_SHARED_BODY, "CacheTotalSharedBody") \ 
+    XX(CACHE_TOTAL_PINNED_BODY, "CacheTotalPinnedBody") \ 
+    XX(CACHE_TOTAL_EXCLUSIVE, "CacheTotalExclusive") \ 
+    XX(CACHE_TOTAL_SHARED_PENDING, "CacheTotalSharedPending") \ 
+    XX(CACHE_TOTAL_STICKY, "CacheTotalSticky") \ 
     XX(USED_TABLET_MEMORY, "UsedTabletMemory") \
     XX(USED_TABLET_TX_MEMORY, "UsedTabletTxMemory") \
     XX(USED_DYNAMIC_TX_MEMORY, "UsedDynamicTxMemory") \
     XX(CONSUMED_STORAGE, "ConsumedStorage") \
     XX(CONSUMED_MEMORY, "ConsumedMemory") \
-    XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
+    XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \ 
 
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \
     XX(LOG_COMMITS, "LogCommits") \
     XX(LOG_WRITTEN, "LogWritten") \
     XX(LOG_EMBEDDED, "LogEmbedded" ) \
     XX(LOG_REDO_WRITTEN, "LogRedoWritten") \
-    XX(TABLET_BYTES_WRITTEN, "TabletBytesWritten") \
-    XX(TABLET_BLOBS_WRITTEN, "TabletBlobsWritten") \
-    XX(TABLET_BYTES_READ, "TabletBytesRead") \
-    XX(TABLET_BLOBS_READ, "TabletBlobsRead") \
+    XX(TABLET_BYTES_WRITTEN, "TabletBytesWritten") \ 
+    XX(TABLET_BLOBS_WRITTEN, "TabletBlobsWritten") \ 
+    XX(TABLET_BYTES_READ, "TabletBytesRead") \ 
+    XX(TABLET_BLOBS_READ, "TabletBlobsRead") \ 
     XX(COMP_BYTES_WRITTEN, "CompactionBytesWritten") \
-    XX(COMP_BLOBS_WRITTEN, "CompactionBlobsWritten") \
+    XX(COMP_BLOBS_WRITTEN, "CompactionBlobsWritten") \ 
     XX(COMP_BYTES_READ, "CompactionBytesRead") \
-    XX(COMP_BLOBS_READ, "CompactionBlobsRead") \
+    XX(COMP_BLOBS_READ, "CompactionBlobsRead") \ 
     XX(DB_ANNEX_ITEMS_GROW, "DbAnnexItemsGrow") \
     XX(DB_ELOBS_ITEMS_GROW, "DbELargeObjsItemsGrow") \
     XX(DB_ELOBS_ITEMS_GONE, "DbELargeObjsItemsGone") \
@@ -106,11 +106,11 @@ namespace NTabletFlatExecutor {
     XX(GC_KEEPSET, "GcKeepFlagsSet") \
     XX(GC_NOTKEEPSET, "GcNotKeepFlagsSet") \
     XX(CONSUMED_CPU, "ConsumedCPU") \
-    XX(COMPACTION_READ_POSTPONED, "CompactionReadPostponed") \
-    XX(COMPACTION_READ_CACHE_HITS, "CompactionReadCacheHits") \
-    XX(COMPACTION_READ_CACHE_MISSES, "CompactionReadCacheMisses") \
-    XX(COMPACTION_READ_LOAD_BYTES, "CompactionReadLoadBytes") \
-    XX(COMPACTION_READ_LOAD_PAGES, "CompactionReadLoadPages") \
+    XX(COMPACTION_READ_POSTPONED, "CompactionReadPostponed") \ 
+    XX(COMPACTION_READ_CACHE_HITS, "CompactionReadCacheHits") \ 
+    XX(COMPACTION_READ_CACHE_MISSES, "CompactionReadCacheMisses") \ 
+    XX(COMPACTION_READ_LOAD_BYTES, "CompactionReadLoadBytes") \ 
+    XX(COMPACTION_READ_LOAD_PAGES, "CompactionReadLoadPages") \ 
 
 #define FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(XX) \
     XX(TX_PERCENTILE_LATENCY_RO, "TxRoLatency") \

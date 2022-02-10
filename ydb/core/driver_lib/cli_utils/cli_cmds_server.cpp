@@ -74,12 +74,12 @@ protected:
     ui32 Body;
     ui32 GRpcPort;
     ui32 GRpcsPort;
-    TString GRpcPublicHost;
-    ui32 GRpcPublicPort;
-    ui32 GRpcsPublicPort;
-    TVector<TString> GRpcPublicAddressesV4;
-    TVector<TString> GRpcPublicAddressesV6;
-    TString GRpcPublicTargetNameOverride;
+    TString GRpcPublicHost; 
+    ui32 GRpcPublicPort; 
+    ui32 GRpcsPublicPort; 
+    TVector<TString> GRpcPublicAddressesV4; 
+    TVector<TString> GRpcPublicAddressesV6; 
+    TString GRpcPublicTargetNameOverride; 
     TString PathToCert;
     TString PathToPKey;
     TString PathToCA;
@@ -121,12 +121,12 @@ protected:
         Body = 0;
         GRpcPort = 0;
         GRpcsPort = 0;
-        GRpcPublicHost = "";
-        GRpcPublicPort = 0;
-        GRpcsPublicPort = 0;
-        GRpcPublicAddressesV4.clear();
-        GRpcPublicAddressesV6.clear();
-        GRpcPublicTargetNameOverride = "";
+        GRpcPublicHost = ""; 
+        GRpcPublicPort = 0; 
+        GRpcsPublicPort = 0; 
+        GRpcPublicAddressesV4.clear(); 
+        GRpcPublicAddressesV6.clear(); 
+        GRpcPublicTargetNameOverride = ""; 
 
         config.Opts->AddLongOption("cluster-name", "which cluster this node belongs to")
             .DefaultValue("unknown").OptionalArgument("STR").StoreResult(&ClusterName);
@@ -199,12 +199,12 @@ protected:
         config.Opts->AddLongOption("tenant-pool-file", "Tenant Pool service config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
         config.Opts->AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
-        config.Opts->AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
-        config.Opts->AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
-        config.Opts->AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
-        config.Opts->AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
-        config.Opts->AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
-        config.Opts->AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
+        config.Opts->AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost); 
+        config.Opts->AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort); 
+        config.Opts->AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort); 
+        config.Opts->AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4); 
+        config.Opts->AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6); 
+        config.Opts->AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride); 
         config.Opts->AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
@@ -223,7 +223,7 @@ protected:
         config.Opts->AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH");
-        config.Opts->AddLongOption("rb-file", "File with resource broker customizations").OptionalArgument("PATH");
+        config.Opts->AddLongOption("rb-file", "File with resource broker customizations").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("metering-file", "File with metering config").OptionalArgument("PATH");
         config.Opts->AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
                 .OptionalArgument("PATH").DefaultValue(RestartsCountFile).StoreResult(&RestartsCountFile);
@@ -430,7 +430,7 @@ protected:
         OPTION("pdisk-key-file", PDiskKeyConfig);
         OPTION("sqs-file", SqsConfig);
         OPTION("feature-flags-file", FeatureFlags);
-        OPTION("rb-file", ResourceBrokerConfig);
+        OPTION("rb-file", ResourceBrokerConfig); 
         OPTION("metering-file", MeteringConfig);
         OPTION("kqp-file", KQPConfig);
         OPTION("incrhuge-file", IncrHugeConfig);
@@ -536,27 +536,27 @@ protected:
             conf.SetStartGRpcProxy(true);
             conf.SetSslPort(GRpcsPort);
         }
-        if (GRpcPublicHost) {
-            auto& conf = *AppConfig.MutableGRpcConfig();
-            conf.SetPublicHost(GRpcPublicHost);
-        }
-        if (GRpcPublicPort) {
-            auto& conf = *AppConfig.MutableGRpcConfig();
-            conf.SetPublicPort(GRpcPublicPort);
-        }
-        if (GRpcsPublicPort) {
-            auto& conf = *AppConfig.MutableGRpcConfig();
-            conf.SetPublicSslPort(GRpcsPublicPort);
-        }
-        for (const auto& addr : GRpcPublicAddressesV4) {
-            AppConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);
-        }
-        for (const auto& addr : GRpcPublicAddressesV6) {
-            AppConfig.MutableGRpcConfig()->AddPublicAddressesV6(addr);
-        }
-        if (GRpcPublicTargetNameOverride) {
-            AppConfig.MutableGRpcConfig()->SetPublicTargetNameOverride(GRpcPublicTargetNameOverride);
-        }
+        if (GRpcPublicHost) { 
+            auto& conf = *AppConfig.MutableGRpcConfig(); 
+            conf.SetPublicHost(GRpcPublicHost); 
+        } 
+        if (GRpcPublicPort) { 
+            auto& conf = *AppConfig.MutableGRpcConfig(); 
+            conf.SetPublicPort(GRpcPublicPort); 
+        } 
+        if (GRpcsPublicPort) { 
+            auto& conf = *AppConfig.MutableGRpcConfig(); 
+            conf.SetPublicSslPort(GRpcsPublicPort); 
+        } 
+        for (const auto& addr : GRpcPublicAddressesV4) { 
+            AppConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr); 
+        } 
+        for (const auto& addr : GRpcPublicAddressesV6) { 
+            AppConfig.MutableGRpcConfig()->AddPublicAddressesV6(addr); 
+        } 
+        if (GRpcPublicTargetNameOverride) { 
+            AppConfig.MutableGRpcConfig()->SetPublicTargetNameOverride(GRpcPublicTargetNameOverride); 
+        } 
         if (config.ParseResult->Has("node-type"))
             AppConfig.MutableTenantPoolConfig()->SetNodeType(NodeType);
 
@@ -817,8 +817,8 @@ protected:
     }
 
     bool GetCachedConfig(NKikimrConfig::TAppConfig &appConfig) {
-        Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "GetCachedConfig called with a cms config cache file set");
-
+        Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "GetCachedConfig called with a cms config cache file set"); 
+ 
         try {
             auto cacheFile = TFileInput(RunConfig.PathToConfigCacheFile);
             if (!google::protobuf::TextFormat::ParseFromString(cacheFile.ReadAll(), &appConfig))
@@ -845,7 +845,7 @@ protected:
         if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
             if (!NodeId)
                 ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
-
+ 
             if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
                 LoadCachedConfigsForStaticNode();
             return;
@@ -993,8 +993,8 @@ protected:
     }
 
     bool SaveConfigForNodeToCache(const NKikimrConfig::TAppConfig &appConfig) {
-        Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "SaveConfigForNodeToCache called without a cms config cache file set");
-
+        Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "SaveConfigForNodeToCache called without a cms config cache file set"); 
+ 
         // Ensure "atomicity" by writing to temp file and renaming it
         const TString pathToTempFile = RunConfig.PathToConfigCacheFile + ".tmp";
         TString proto;
@@ -1039,12 +1039,12 @@ protected:
 
         auto appConfig = result.GetConfig();
 
-        if (RunConfig.PathToConfigCacheFile) {
-            Cout << "Saving config to cache file " << RunConfig.PathToConfigCacheFile << Endl;
-            if (!SaveConfigForNodeToCache(appConfig)) {
-                Cout << "Failed to save config to cache file" << Endl;
-            }
-        }
+        if (RunConfig.PathToConfigCacheFile) { 
+            Cout << "Saving config to cache file " << RunConfig.PathToConfigCacheFile << Endl; 
+            if (!SaveConfigForNodeToCache(appConfig)) { 
+                Cout << "Failed to save config to cache file" << Endl; 
+            } 
+        } 
 
         ApplyConfigForNode(appConfig);
 
@@ -1099,7 +1099,7 @@ private:
     NClient::TKikimr GetKikimr(const TString& addr) {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
         NGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
-        grpcConfig.LoadBalancingPolicy = "round_robin";
+        grpcConfig.LoadBalancingPolicy = "round_robin"; 
         if (endpoint.EnableSsl.Defined()) {
             grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
             if (PathToCA) {

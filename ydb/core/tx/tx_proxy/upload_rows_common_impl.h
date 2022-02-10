@@ -148,9 +148,9 @@ protected:
     TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
 
-    bool WriteToTableShadow = false;
+    bool WriteToTableShadow = false; 
     bool AllowWriteToPrivateTable = false;
-
+ 
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;
 
@@ -189,11 +189,11 @@ protected:
         return ResolveNamesResult.Get();
     }
 
-    const TKeyDesc* GetKeyRange() const {
-        Y_VERIFY(ResolvePartitionsResult->ResultSet.size() == 1);
-        return ResolvePartitionsResult->ResultSet[0].KeyDescription.Get();
-    }
-
+    const TKeyDesc* GetKeyRange() const { 
+        Y_VERIFY(ResolvePartitionsResult->ResultSet.size() == 1); 
+        return ResolvePartitionsResult->ResultSet[0].KeyDescription.Get(); 
+    } 
+ 
     std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
                                                     TString& errorMessage)
     {
@@ -773,16 +773,16 @@ private:
         // We are going to set all columns
         TVector<TKeyDesc::TColumnOp> columns;
         for (const auto& ci : entry.Columns) {
-            TKeyDesc::TColumnOp op = { ci.second.Id, TKeyDesc::EColumnOperation::Set, ci.second.PType, 0, 0 };
+            TKeyDesc::TColumnOp op = { ci.second.Id, TKeyDesc::EColumnOperation::Set, ci.second.PType, 0, 0 }; 
             columns.push_back(op);
         }
 
         TTableRange range(MinKey.GetCells(), true, MaxKey.GetCells(), true, false);
-        auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Update, KeyColumnTypes, columns);
+        auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Update, KeyColumnTypes, columns); 
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
 
-        request->ResultSet.emplace_back(std::move(keyRange));
+        request->ResultSet.emplace_back(std::move(keyRange)); 
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         ctx.Send(SchemeCache, resolveReq.Release());
@@ -829,21 +829,21 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: " << getShardsString(GetKeyRange()->Partitions));
+        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: " << getShardsString(GetKeyRange()->Partitions)); 
 
         MakeShardRequests(ctx);
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
-        const auto* keyRange = GetKeyRange();
+        const auto* keyRange = GetKeyRange(); 
 
-        Y_VERIFY(!keyRange->Partitions.empty());
-
+        Y_VERIFY(!keyRange->Partitions.empty()); 
+ 
         // Group rows by shard id
-        TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->Partitions.size());
+        TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->Partitions.size()); 
         for (const auto& keyValue : GetRows()) {
             // Find partition for the key
-            auto it = std::lower_bound(keyRange->Partitions.begin(), keyRange->Partitions.end(), keyValue.first.GetCells(),
+            auto it = std::lower_bound(keyRange->Partitions.begin(), keyRange->Partitions.end(), keyValue.first.GetCells(), 
                 [this](const auto &partition, const auto& key) {
                     const auto& range = *partition.Range;
                     const int cmp = CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
@@ -852,7 +852,7 @@ private:
                     return (cmp < 0);
                 });
 
-            size_t shardIdx = it - keyRange->Partitions.begin();
+            size_t shardIdx = it - keyRange->Partitions.begin(); 
 
             TEvDataShard::TEvUploadRowsRequest* ev = shardRequests[shardIdx].get();
             if (!ev) {
@@ -860,16 +860,16 @@ private:
                 ev = shardRequests[shardIdx].get();
                 ev->Record.SetCancelDeadlineMs(Deadline.MilliSeconds());
 
-                ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
+                ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId); 
                 for (const auto& fd : KeyColumnPositions) {
                     ev->Record.MutableRowScheme()->AddKeyColumnIds(fd.ColId);
                 }
                 for (const auto& fd : ValueColumnPositions) {
                     ev->Record.MutableRowScheme()->AddValueColumnIds(fd.ColId);
                 }
-                if (WriteToTableShadow) {
-                    ev->Record.SetWriteToTableShadow(true);
-                }
+                if (WriteToTableShadow) { 
+                    ev->Record.SetWriteToTableShadow(true); 
+                } 
             }
 
             auto* row = ev->Record.AddRows();
@@ -882,7 +882,7 @@ private:
             if (!shardRequests[idx])
                 continue;
 
-            TTabletId shardId = keyRange->Partitions[idx].ShardId;
+            TTabletId shardId = keyRange->Partitions[idx].ShardId; 
 
             LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to shards " << shardId);
 
@@ -907,7 +907,7 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId())); 
 
         SetError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
@@ -942,12 +942,12 @@ private:
 
             switch (shardResponse.GetStatus()) {
             case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
-                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId())); 
                 status = Ydb::StatusIds::OVERLOADED;
                 break;
-            case NKikimrTxDataShard::TError::OUT_OF_SPACE:
-                status = Ydb::StatusIds::UNAVAILABLE;
-                break;
+            case NKikimrTxDataShard::TError::OUT_OF_SPACE: 
+                status = Ydb::StatusIds::UNAVAILABLE; 
+                break; 
             case NKikimrTxDataShard::TError::SCHEME_ERROR:
                 status = Ydb::StatusIds::SCHEME_ERROR;
                 break;

@@ -147,13 +147,13 @@ namespace NKikimr {
         {}
 
         void TMemView::TTreeWithLog::RollUp(bool gcOnlySynced){
-            Y_VERIFY_DEBUG(!Shared());
-            for (const auto &x : Log) {
+            Y_VERIFY_DEBUG(!Shared()); 
+            for (const auto &x : Log) { 
                 Tree->Update(gcOnlySynced, x.first, x.second);
-            }
-            Log.clear();
-        }
-
+            } 
+            Log.clear(); 
+        } 
+ 
         void TMemView::TTreeWithLog::Update(
                 bool gcOnlySynced,
                 const TKeyBarrier &key,
@@ -171,10 +171,10 @@ namespace NKikimr {
             return Tree.use_count() > 1;
         }
 
-        bool TMemView::TTreeWithLog::NeedRollUp() const {
-            return !Log.empty();
-        }
-
+        bool TMemView::TTreeWithLog::NeedRollUp() const { 
+            return !Log.empty(); 
+        } 
+ 
         TMemViewSnap TMemView::TTreeWithLog::GetSnapshot() const {
             return TMemViewSnap(Tree);
         }
@@ -196,15 +196,15 @@ namespace NKikimr {
             }
         }
 
-        TMemViewSnap TMemView::GetSnapshot() {
-            if (Active->NeedRollUp()) {
+        TMemViewSnap TMemView::GetSnapshot() { 
+            if (Active->NeedRollUp()) { 
                 if (Active->Shared() && !Passive->Shared()) {
                     Active.swap(Passive);
-                }
-                if (!Active->Shared()) {
+                } 
+                if (!Active->Shared()) { 
                     Active->RollUp(GCOnlySynced);
-                }
-            }
+                } 
+            } 
             return Active->GetSnapshot();
         }
 

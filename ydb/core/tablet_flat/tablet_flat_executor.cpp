@@ -32,11 +32,11 @@ namespace NFlatExecutorSetup {
         Y_UNUSED(ctx);
     }
 
-    bool ITablet::ReassignChannelsEnabled() const {
-        // By default channels are reassigned automatically
-        return true;
-    }
-
+    bool ITablet::ReassignChannelsEnabled() const { 
+        // By default channels are reassigned automatically 
+        return true; 
+    } 
+ 
     void ITablet::UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID) {
         if (info)
             TabletInfo = info;

@@ -58,11 +58,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
             {NLs::UserAttrsEqual({{"AttrA1", "ValA1"}}), NLs::PathVersionEqual(4)});
-
-        TestUserAttrs(runtime, txId++, "", "MyRoot", AlterUserAttrs({{"AttrRoot", "ValRoot"}}));
-        env.TestWaitNotification(runtime, txId-1);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+ 
+        TestUserAttrs(runtime, txId++, "", "MyRoot", AlterUserAttrs({{"AttrRoot", "ValRoot"}})); 
+        env.TestWaitNotification(runtime, txId-1); 
+ 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), 
             {NLs::UserAttrsEqual({{"AttrRoot", "ValRoot"}})});
     }
 
@@ -218,21 +218,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         TestRmDir(runtime, txId++, "/MyRoot", "DirB", {NKikimrScheme::StatusPreconditionFailed}, {dirAVer, dirBVer, dirBBVer});
     }
 
-    Y_UNIT_TEST(SpecialAttributes) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TUserAttrs dirAAttrs{{"__reserved_attribute", "Val1"}};
+    Y_UNIT_TEST(SpecialAttributes) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TUserAttrs dirAAttrs{{"__reserved_attribute", "Val1"}}; 
         TestMkDir(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs(dirAAttrs));
-
-        TUserAttrs dirBAttrs{{"__volume_space_limit", "not a number"}};
+ 
+        TUserAttrs dirBAttrs{{"__volume_space_limit", "not a number"}}; 
         TestMkDir(runtime, txId++, "/MyRoot", "DirB", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs(dirBAttrs));
-
-        TUserAttrs dirCAttrs{{"__volume_space_limit", "4096"}};
+ 
+        TUserAttrs dirCAttrs{{"__volume_space_limit", "4096"}}; 
         TestMkDir(runtime, txId++, "/MyRoot", "DirC", {NKikimrScheme::StatusAccepted}, AlterUserAttrs(dirCAttrs));
 
         TUserAttrs dirDAttrs{{"__extra_path_symbols_allowed", "./_"}};
         TestMkDir(runtime, txId++, "/MyRoot", "DirD", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs(dirDAttrs));
-    }
+    } 
 }

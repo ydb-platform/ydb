@@ -190,18 +190,18 @@ private:
 
     void ClearState();
 
-    ui32 NodeIdStep() const {
-        return SingleDomainAlloc ? 1 : (1 << DOMAIN_BITS);
-    }
-
-    ui32 NodeIdDomain(ui32 nodeId) const {
-        return SingleDomainAlloc ? DomainId : (nodeId & DOMAIN_MASK);
-    }
-
-    ui32 RewriteNodeId(ui32 nodeId) const {
-        return SingleDomainAlloc ? nodeId : ((nodeId & ~DOMAIN_MASK) | DomainId);
-    }
-
+    ui32 NodeIdStep() const { 
+        return SingleDomainAlloc ? 1 : (1 << DOMAIN_BITS); 
+    } 
+ 
+    ui32 NodeIdDomain(ui32 nodeId) const { 
+        return SingleDomainAlloc ? DomainId : (nodeId & DOMAIN_MASK); 
+    } 
+ 
+    ui32 RewriteNodeId(ui32 nodeId) const { 
+        return SingleDomainAlloc ? nodeId : ((nodeId & ~DOMAIN_MASK) | DomainId); 
+    } 
+ 
     // Internal state modifiers. Don't affect DB.
     void AddNode(const TNodeInfo &info);
     void RemoveNode(ui32 nodeId);
@@ -291,8 +291,8 @@ private:
     // All registered dynamic nodes.
     THashMap<ui32, TNodeInfo> Nodes;
     THashMap<ui32, TNodeInfo> ExpiredNodes;
-    // Maps <Host/Addr:Port> to NodeID.
-    THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
+    // Maps <Host/Addr:Port> to NodeID. 
+    THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts; 
     // Bitmap with free Node IDs (with no lower 5 bits).
     TDynBitMap FreeIds;
     // Epoch info.
@@ -313,9 +313,9 @@ private:
     TSchedulerCookieHolder EpochTimerCookieHolder;
     TString EpochCache;
 
-    bool SingleDomain = false;
-    bool SingleDomainAlloc = false;
-
+    bool SingleDomain = false; 
+    bool SingleDomainAlloc = false; 
+ 
 public:
     TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)

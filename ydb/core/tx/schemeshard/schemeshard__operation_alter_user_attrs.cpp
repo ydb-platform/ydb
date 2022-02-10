@@ -72,9 +72,9 @@ public:
         TString errStr;
 
         TUserAttributes::TPtr alterData = path.Base()->UserAttrs->CreateNextVersion();
-        if (!alterData->ApplyPatch(EUserAttributesOp::AlterUserAttrs, userAttrsPatch, errStr) ||
-            !alterData->CheckLimits(errStr))
-        {
+        if (!alterData->ApplyPatch(EUserAttributesOp::AlterUserAttrs, userAttrsPatch, errStr) || 
+            !alterData->CheckLimits(errStr)) 
+        { 
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }

@@ -20,7 +20,7 @@ ENDIF()
 SRCS(
     ydb_bulk_upsert_ut.cpp
     ydb_bulk_upsert_olap_ut.cpp
-    ydb_coordination_ut.cpp
+    ydb_coordination_ut.cpp 
     ydb_index_table_ut.cpp
     ydb_import_ut.cpp
     ydb_ut.cpp

@@ -65,7 +65,7 @@ public:
             return false;
         }
 
-        auto idx = context.SS->MustGetShardIdx(tabletId);
+        auto idx = context.SS->MustGetShardIdx(tabletId); 
         txState->ShardsInProgress.erase(idx);
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
@@ -507,10 +507,10 @@ TTxState& TCreateFileStore::PrepareChanges(
 
     TTxState& txState = context.SS->CreateTx(operationId, TTxState::TxCreateFileStore, pathId);
 
-    auto shardIdx = context.SS->RegisterShardInfo(
-        TShardInfo::FileStoreInfo(operationId.GetTxId(), pathId)
-            .WithBindedChannels(tabletChannels));
-    context.SS->TabletCounters->Simple()[COUNTER_FILESTORE_SHARD_COUNT].Add(1);
+    auto shardIdx = context.SS->RegisterShardInfo( 
+        TShardInfo::FileStoreInfo(operationId.GetTxId(), pathId) 
+            .WithBindedChannels(tabletChannels)); 
+    context.SS->TabletCounters->Simple()[COUNTER_FILESTORE_SHARD_COUNT].Add(1); 
     txState.Shards.emplace_back(shardIdx, ETabletType::FileStore, TTxState::CreateParts);
     fs->IndexShardIdx = shardIdx;
 
@@ -530,7 +530,7 @@ TTxState& TCreateFileStore::PrepareChanges(
 
     context.SS->FileStoreInfos[pathId] = fs;
     context.SS->PersistFileStoreInfo(db, pathId, fs);
-    context.SS->IncrementPathDbRefCount(pathId);
+    context.SS->IncrementPathDbRefCount(pathId); 
 
     context.SS->PersistTxState(db, operationId);
     context.SS->PersistUpdateNextPathId(db);

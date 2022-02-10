@@ -41,8 +41,8 @@ class TMessageBusServerSchemeRequest : public TMessageBusSecureRequest<TMessageB
 
         if (result.HasPathCreateTxId()) {
             response->Record.MutableFlatTxId()->SetTxId(result.GetPathCreateTxId());
-        } else if (result.HasPathDropTxId()) {
-            response->Record.MutableFlatTxId()->SetTxId(result.GetPathDropTxId());
+        } else if (result.HasPathDropTxId()) { 
+            response->Record.MutableFlatTxId()->SetTxId(result.GetPathDropTxId()); 
         } else if (result.HasTxId()) {
             response->Record.MutableFlatTxId()->SetTxId(result.GetTxId());
         }

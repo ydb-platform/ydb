@@ -217,9 +217,9 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     case TTabletTypes::TestShard:
         createFunc = &NTestShard::CreateTestShard;
         break;
-    case TTabletTypes::SequenceShard:
-        createFunc = &NSequenceShard::CreateSequenceShard;
-        break;
+    case TTabletTypes::SequenceShard: 
+        createFunc = &NSequenceShard::CreateSequenceShard; 
+        break; 
     case TTabletTypes::ReplicationController:
         createFunc = &NReplication::CreateController;
         break;

@@ -571,13 +571,13 @@ public:
         PersQueueGroup,
         SubDomain,
         RtmrVolume,
-        BlockStoreVolume,
-        Kesus,
+        BlockStoreVolume, 
+        Kesus, 
         SolomonVolume,
         FileStore,
         OlapStore,
-        OlapTable,
-        Sequence,
+        OlapTable, 
+        Sequence, 
         Replication,
     };
 

@@ -55,17 +55,17 @@ public:
     // Debug print of current state into specified stream.
     void OutputState(IOutputStream &os, const TString &prefix) const;
 
-    // Returns the mask of required resources
-    ui64 GetRequiredResourcesMask() const {
-        ui64 mask = 0;
-        for (size_t i = 0; i < RESOURCE_COUNT; ++i) {
-            if (RequiredResources[i]) {
-                mask |= ui64(1) << i;
-            }
-        }
-        return mask;
-    }
-
+    // Returns the mask of required resources 
+    ui64 GetRequiredResourcesMask() const { 
+        ui64 mask = 0; 
+        for (size_t i = 0; i < RESOURCE_COUNT; ++i) { 
+            if (RequiredResources[i]) { 
+                mask |= ui64(1) << i; 
+            } 
+        } 
+        return mask; 
+    } 
+ 
 public:
     // Actor which submitted task.
     TActorId Client;

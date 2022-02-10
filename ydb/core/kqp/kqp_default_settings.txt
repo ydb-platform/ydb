@@ -89,11 +89,11 @@ DefaultSettings {
 }
 
 DefaultSettings {
-    Name: "_AllowReverseRange"
-    Value: "true"
-}
-
-DefaultSettings {
+    Name: "_AllowReverseRange" 
+    Value: "true" 
+} 
+ 
+DefaultSettings { 
     Name: "CommitSafety"
     Value: "Safe"
 }

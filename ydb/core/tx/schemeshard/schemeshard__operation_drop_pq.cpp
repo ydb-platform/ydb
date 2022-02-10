@@ -45,7 +45,7 @@ public:
         Y_VERIFY(record.GetActualState() == NKikimrPQ::EDropped);
 
         auto tabletId = TTabletId(record.GetTabletId());
-        auto idx = context.SS->MustGetShardIdx(tabletId);
+        auto idx = context.SS->MustGetShardIdx(tabletId); 
 
         if (!txState->ShardsInProgress.contains(idx)) {
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -228,10 +228,10 @@ public:
 
         parentDir->DecAliveChildren();
 
-        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
-            context.SS->PersistRemovePersQueueGroup(db, pathId);
-        }
-
+        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) { 
+            context.SS->PersistRemovePersQueueGroup(db, pathId); 
+        } 
+ 
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
@@ -409,10 +409,10 @@ public:
                                                    << ", path: " << path.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (path.IsResolved() && path.Base()->IsPQGroup() && path.Base()->PlannedToDrop()) {
+                if (path.IsResolved() && path.Base()->IsPQGroup() && path.Base()->PlannedToDrop()) { 
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
-                }
+                } 
                 return result;
             }
         }

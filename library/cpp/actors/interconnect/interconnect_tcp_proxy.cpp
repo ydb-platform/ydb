@@ -43,7 +43,7 @@ namespace NActors {
         PassAwayTimestamp = TActivationContext::Now() + TDuration::Seconds(15);
 
         LOG_INFO_IC("ICP01", "ready to work");
-    }
+    } 
 
     void TInterconnectProxyTCP::Registered(TActorSystem* sys, const TActorId& owner) {
         if (!DynamicPtr) {
@@ -53,7 +53,7 @@ namespace NActors {
         if (const auto& mon = Common->RegisterMonPage) {
             TString path = Sprintf("peer%04" PRIu32, PeerNodeId);
             TString title = Sprintf("Peer #%04" PRIu32, PeerNodeId);
-            mon(path, title, sys, SelfId());
+            mon(path, title, sys, SelfId()); 
         }
     }
 
@@ -508,14 +508,14 @@ namespace NActors {
         switch (ev->GetTypeRewrite()) {
             case TEvInterconnect::EvForward:
                 if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
-                    Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie);
+                    Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie); 
                 }
                 TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected));
                 break;
 
             case TEvInterconnect::TEvConnectNode::EventType:
             case TEvents::TEvSubscribe::EventType:
-                Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie);
+                Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie); 
                 break;
 
             case TEvents::TEvUnsubscribe::EventType:

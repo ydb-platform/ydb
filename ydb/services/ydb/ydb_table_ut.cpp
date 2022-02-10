@@ -1814,19 +1814,19 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         }
     }
 
-    enum class EReadTableMultiShardMode {
-        Normal,
-        UseSnapshot,
-    };
-
-    void TestReadTableMultiShard(EReadTableMultiShardMode mode) {
+    enum class EReadTableMultiShardMode { 
+        Normal, 
+        UseSnapshot, 
+    }; 
+ 
+    void TestReadTableMultiShard(EReadTableMultiShardMode mode) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE); 
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -1877,14 +1877,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .From(TKeyBound::Inclusive(valueFrom.Build()))
                 .To(TKeyBound::Inclusive(valueTo.Build()));
 
-        switch (mode) {
-            case EReadTableMultiShardMode::Normal:
-                break;
-            case EReadTableMultiShardMode::UseSnapshot:
-                readTableSettings.UseSnapshot(true);
-                break;
-        }
-
+        switch (mode) { 
+            case EReadTableMultiShardMode::Normal: 
+                break; 
+            case EReadTableMultiShardMode::UseSnapshot: 
+                readTableSettings.UseSnapshot(true); 
+                break; 
+        } 
+ 
         auto it = session.ReadTable("Root/Test", readTableSettings).ExtractValueSync();
 
         struct TRows {
@@ -1928,14 +1928,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_EXCEPTION(it.ReadNext().GetValueSync().EOS(), NYdb::TContractViolation);
     }
 
-    Y_UNIT_TEST(TestReadTableMultiShard) {
-        TestReadTableMultiShard(EReadTableMultiShardMode::Normal);
-    }
-
-    Y_UNIT_TEST(TestReadTableMultiShardUseSnapshot) {
-        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot);
-    }
-
+    Y_UNIT_TEST(TestReadTableMultiShard) { 
+        TestReadTableMultiShard(EReadTableMultiShardMode::Normal); 
+    } 
+ 
+    Y_UNIT_TEST(TestReadTableMultiShardUseSnapshot) { 
+        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot); 
+    } 
+ 
     void TestReadTableMultiShardWithDescribe(bool rowLimit) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -3134,7 +3134,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             }
         }
     }
-
+ 
     Y_UNIT_TEST(RenameTables) {
         TKikimrWithGrpcAndRootSchemaNoSystemViews server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
@@ -3301,536 +3301,536 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     }
 
 
-    namespace {
-
-        TStoragePools CreatePoolsForTenant(TClient& client, const TDomainsInfo::TDomain::TStoragePoolKinds& pool_types, const TString& tenant)
-        {
-            TStoragePools result;
-            for (auto& poolType: pool_types) {
-                auto& poolKind = poolType.first;
-                result.emplace_back(client.CreateStoragePool(poolKind, tenant), poolKind);
-            }
-            return result;
-        }
-
-        NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclarationSetting(const TString& name)
-        {
-            NKikimrSubDomains::TSubDomainSettings subdomain;
-            subdomain.SetName(name);
-            return subdomain;
-        }
-
-        NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString& name, const TStoragePools& pools = {})
-        {
-            NKikimrSubDomains::TSubDomainSettings subdomain;
-            subdomain.SetName(name);
-            subdomain.SetCoordinators(1);
-            subdomain.SetMediators(1);
-            subdomain.SetPlanResolution(10);
-            subdomain.SetTimeCastBucketsPerMediator(2);
-            for (auto& pool: pools) {
-                *subdomain.AddStoragePools() = pool;
-            }
-            return subdomain;
-        }
-
-        enum class EDefaultTableProfile {
-            Enabled,
-            Disabled,
-        };
-
-        void InitSubDomain(
-                TKikimrWithGrpcAndRootSchema& server,
-                EDefaultTableProfile defaultTableProfile = EDefaultTableProfile::Enabled)
-        {
-            TClient client(*server.ServerSettings);
-
-            {
-                TString tenant_name = "ydb_ut_tenant";
-                TString tenant = Sprintf("/Root/%s", tenant_name.c_str());
-
-                TStoragePools tenant_pools = CreatePoolsForTenant(client, server.ServerSettings->StoragePoolTypes, tenant_name);
-
-                UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                        client.CreateSubdomain("/Root", GetSubDomainDeclarationSetting(tenant_name)));
-                UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                        client.AlterSubdomain("/Root", GetSubDomainDefaultSetting(tenant_name, tenant_pools), TDuration::MilliSeconds(500)));
-
-                server.Tenants_->Run(tenant);
-            }
-
-            if (defaultTableProfile == EDefaultTableProfile::Enabled) {
-                TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest());
-                auto &item = *request->Record.MutableConfigureRequest()->AddActions()
-                    ->MutableAddConfigItem()->MutableConfigItem();
-                item.SetKind((ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem);
-                auto &profiles = *item.MutableConfig()->MutableTableProfilesConfig();
-                {
-                    auto& policy = *profiles.AddStoragePolicies();
-                    policy.SetName("default");
-                    auto& family = *policy.AddColumnFamilies();
-                    family.SetId(0);
-                    family.MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind("ssd");
-                    family.MutableStorageConfig()->MutableLog()->SetPreferredPoolKind("ssd");
-                    family.MutableStorageConfig()->MutableData()->SetPreferredPoolKind("ssd");
-                }
-                {
-                    auto& profile = *profiles.AddTableProfiles();
-                    profile.SetName("default");
-                    profile.SetStoragePolicy("default");
-                }
-                TAutoPtr<NBus::TBusMessage> reply;
-                NBus::EMessageStatus msgStatus = client.SyncCall(request, reply);
-                UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-                auto resp = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
-                UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-            }
-        }
-
-        class TPrintableIssues {
-        public:
-            TPrintableIssues(const NYql::TIssues& issues)
-                : Issues(issues)
-            { }
-
-            friend IOutputStream& operator<<(IOutputStream& out, const TPrintableIssues& v) {
-                v.Issues.PrintTo(out);
-                return out;
-            }
-
-        private:
-            const NYql::TIssues& Issues;
-        };
-
-    }
-
-    Y_UNIT_TEST(SimpleColumnFamilies) {
-        TKikimrWithGrpcAndRootSchema server;
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
-        InitSubDomain(server);
-
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(connection);
-
-        auto sessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
-        auto session = sessionResult.GetSession();
-
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt");
-            tableBuilder.SetPrimaryKeyColumn("Key");
-
-            auto result = session.CreateTable("/Root/ydb_ut_tenant/Table-1", tableBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-1").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
-        }
-
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumn("Key");
-
-            auto result = session.CreateTable("/Root/ydb_ut_tenant/Table-2", tableBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-2").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-        }
-
-        {
-            auto alterSettings = TAlterTableSettings()
-                .AlterColumnFamily("Value", "alt");
-
-            auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-2", alterSettings).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-2").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
-        }
-
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt");
-            tableBuilder.SetPrimaryKeyColumn("Key");
-
-            auto tableSettings = TCreateTableSettings()
-                .StoragePolicy(TStoragePolicy()
-                    .AppendColumnFamilies(TColumnFamilyPolicy()
-                        .Name("alt")
-                        .Compressed(true)));
-
-            auto result = session.CreateTable("/Root/ydb_ut_tenant/Table-3", tableBuilder.Build(), tableSettings).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-3").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
-        }
-
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumn("Key");
-
-            auto result = session.CreateTable("/Root/ydb_ut_tenant/Table-4", tableBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-4").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-        }
-
-        {
-            auto alterSettings = TAlterTableSettings()
-                .AlterColumnFamily("Value", "alt")
-                .BeginAddColumnFamily("alt")
-                    .SetCompression(EColumnFamilyCompression::None)
-                .EndAddColumnFamily();
-
-            auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-4", alterSettings).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-4").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression(), EColumnFamilyCompression::None);
-        }
-
-        {
-            auto alterSettings = TAlterTableSettings()
-                .BeginAlterColumnFamily("alt")
-                    .SetCompression(EColumnFamilyCompression::LZ4)
-                .EndAlterColumnFamily();
-
-            auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-4", alterSettings).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-4").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression(), EColumnFamilyCompression::LZ4);
-        }
-
-        for (int tableIdx = 1; tableIdx <= 4; ++tableIdx) {
-            TString query = Sprintf(R"___(
-                DECLARE $Key AS Uint32;
-                DECLARE $Value AS Utf8;
-                UPSERT INTO [Root/ydb_ut_tenant/Table-%d] (Key, Value) VALUES
-                    ($Key, $Value);
-            )___", tableIdx);
-
-            for (ui32 key = 0; key < 1000; ++key) {
-                auto paramsBuilder = client.GetParamsBuilder();
-                auto params = paramsBuilder
-                    .AddParam("$Key")
-                        .Uint32(key)
-                        .Build()
-                    .AddParam("$Value")
-                        .Utf8("test")
-                        .Build()
-                    .Build();
-                auto result = session
-                    .ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW())
-                        .CommitTx(), std::move(params))
-                    .ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                    "Table " << tableIdx << " Key " << key
-                    << " Status: " << result.GetStatus()
-                    << " Issues: " << TPrintableIssues(result.GetIssues()));
-            }
-        }
-    }
-
-    Y_UNIT_TEST(ColumnFamiliesWithStorageAndIndex) {
-        TKikimrWithGrpcAndRootSchema server;
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
-        InitSubDomain(server);
-
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(connection);
-
-        auto sessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
-        auto session = sessionResult.GetSession();
-
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt");
-            tableBuilder.SetPrimaryKeyColumn("Key");
-            tableBuilder.AddSecondaryIndex("MyIndex", "Value");
-
-            auto tableSettings = TCreateTableSettings()
-                .StoragePolicy(TStoragePolicy()
-                    .AppendColumnFamilies(TColumnFamilyPolicy()
-                        .Name("alt")
-                        .Data("hdd")
-                        .Compressed(true)));
-
-            auto result = session.CreateTable(
-                    "/Root/ydb_ut_tenant/Table-1",
-                    tableBuilder.Build(),
-                    tableSettings)
-                .ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-    }
-
-    Y_UNIT_TEST(ColumnFamiliesDescriptionWithStorageAndIndex) {
-        TKikimrWithGrpcAndRootSchema server;
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
-        InitSubDomain(server);
-
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(connection);
-
-        auto sessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
-        auto session = sessionResult.GetSession();
-
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt")
-                .BeginColumnFamily("alt")
-                    .SetData("hdd")
-                    .SetCompression(EColumnFamilyCompression::LZ4)
-                .EndColumnFamily();
-            tableBuilder.SetPrimaryKeyColumn("Key");
-            tableBuilder.AddSecondaryIndex("MyIndex", "Value");
-
-            auto result = session.CreateTable(
-                    "/Root/ydb_ut_tenant/Table-1",
-                    tableBuilder.Build())
-                .ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-1").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetData(), "hdd");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression(), EColumnFamilyCompression::LZ4);
-        }
-    }
-
-    Y_UNIT_TEST(ColumnFamiliesExternalBlobsWithoutDefaultProfile) {
-        TKikimrWithGrpcAndRootSchema server;
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
-        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiExternalBlobs(true);
-        InitSubDomain(server, EDefaultTableProfile::Disabled);
-
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(connection);
-
-        auto sessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
-        auto session = sessionResult.GetSession();
-
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt")
-                .BeginStorageSettings()
-                    .SetTabletCommitLog0("ssd")
-                    .SetTabletCommitLog1("ssd")
-                    .SetExternal("hdd")
-                    .SetStoreExternalBlobs(true)
-                .EndStorageSettings()
-                .BeginColumnFamily("default")
-                    .SetData("ssd")
-                .EndColumnFamily()
-                .BeginColumnFamily("alt")
-                    .SetData("hdd")
-                    .SetCompression(EColumnFamilyCompression::LZ4)
-                .EndColumnFamily();
-            tableBuilder.SetPrimaryKeyColumn("Key");
-
-            auto result = session.CreateTable(
-                    "/Root/ydb_ut_tenant/Table-1",
-                    tableBuilder.Build())
-                .ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues()));
-        }
-
-        {
-            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-1").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
-                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
-            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
-            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& settings = res.GetTableDescription().GetStorageSettings();
-            UNIT_ASSERT_VALUES_EQUAL(settings.GetExternal(), "hdd");
-            UNIT_ASSERT_VALUES_EQUAL(settings.GetStoreExternalBlobs(), true);
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_EQUAL(families.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
-            UNIT_ASSERT_VALUES_EQUAL(families[0].GetData(), "ssd");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetData(), "hdd");
-            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression(), EColumnFamilyCompression::LZ4);
-        }
-    }
-
+    namespace { 
+ 
+        TStoragePools CreatePoolsForTenant(TClient& client, const TDomainsInfo::TDomain::TStoragePoolKinds& pool_types, const TString& tenant) 
+        { 
+            TStoragePools result; 
+            for (auto& poolType: pool_types) { 
+                auto& poolKind = poolType.first; 
+                result.emplace_back(client.CreateStoragePool(poolKind, tenant), poolKind); 
+            } 
+            return result; 
+        } 
+ 
+        NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclarationSetting(const TString& name) 
+        { 
+            NKikimrSubDomains::TSubDomainSettings subdomain; 
+            subdomain.SetName(name); 
+            return subdomain; 
+        } 
+ 
+        NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString& name, const TStoragePools& pools = {}) 
+        { 
+            NKikimrSubDomains::TSubDomainSettings subdomain; 
+            subdomain.SetName(name); 
+            subdomain.SetCoordinators(1); 
+            subdomain.SetMediators(1); 
+            subdomain.SetPlanResolution(10); 
+            subdomain.SetTimeCastBucketsPerMediator(2); 
+            for (auto& pool: pools) { 
+                *subdomain.AddStoragePools() = pool; 
+            } 
+            return subdomain; 
+        } 
+ 
+        enum class EDefaultTableProfile { 
+            Enabled, 
+            Disabled, 
+        }; 
+ 
+        void InitSubDomain( 
+                TKikimrWithGrpcAndRootSchema& server, 
+                EDefaultTableProfile defaultTableProfile = EDefaultTableProfile::Enabled) 
+        { 
+            TClient client(*server.ServerSettings); 
+ 
+            { 
+                TString tenant_name = "ydb_ut_tenant"; 
+                TString tenant = Sprintf("/Root/%s", tenant_name.c_str()); 
+ 
+                TStoragePools tenant_pools = CreatePoolsForTenant(client, server.ServerSettings->StoragePoolTypes, tenant_name); 
+ 
+                UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, 
+                                        client.CreateSubdomain("/Root", GetSubDomainDeclarationSetting(tenant_name))); 
+                UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS, 
+                                        client.AlterSubdomain("/Root", GetSubDomainDefaultSetting(tenant_name, tenant_pools), TDuration::MilliSeconds(500))); 
+ 
+                server.Tenants_->Run(tenant); 
+            } 
+ 
+            if (defaultTableProfile == EDefaultTableProfile::Enabled) { 
+                TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest()); 
+                auto &item = *request->Record.MutableConfigureRequest()->AddActions() 
+                    ->MutableAddConfigItem()->MutableConfigItem(); 
+                item.SetKind((ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem); 
+                auto &profiles = *item.MutableConfig()->MutableTableProfilesConfig(); 
+                { 
+                    auto& policy = *profiles.AddStoragePolicies(); 
+                    policy.SetName("default"); 
+                    auto& family = *policy.AddColumnFamilies(); 
+                    family.SetId(0); 
+                    family.MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind("ssd"); 
+                    family.MutableStorageConfig()->MutableLog()->SetPreferredPoolKind("ssd"); 
+                    family.MutableStorageConfig()->MutableData()->SetPreferredPoolKind("ssd"); 
+                } 
+                { 
+                    auto& profile = *profiles.AddTableProfiles(); 
+                    profile.SetName("default"); 
+                    profile.SetStoragePolicy("default"); 
+                } 
+                TAutoPtr<NBus::TBusMessage> reply; 
+                NBus::EMessageStatus msgStatus = client.SyncCall(request, reply); 
+                UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+                auto resp = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record; 
+                UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS); 
+            } 
+        } 
+ 
+        class TPrintableIssues { 
+        public: 
+            TPrintableIssues(const NYql::TIssues& issues) 
+                : Issues(issues) 
+            { } 
+ 
+            friend IOutputStream& operator<<(IOutputStream& out, const TPrintableIssues& v) { 
+                v.Issues.PrintTo(out); 
+                return out; 
+            } 
+ 
+        private: 
+            const NYql::TIssues& Issues; 
+        }; 
+ 
+    } 
+ 
+    Y_UNIT_TEST(SimpleColumnFamilies) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE); 
+        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true; 
+        InitSubDomain(server); 
+ 
+        auto connection = NYdb::TDriver( 
+            TDriverConfig() 
+                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(connection); 
+ 
+        auto sessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
+        auto session = sessionResult.GetSession(); 
+ 
+        { 
+            auto tableBuilder = client.GetTableBuilder(); 
+            tableBuilder 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt"); 
+            tableBuilder.SetPrimaryKeyColumn("Key"); 
+ 
+            auto result = session.CreateTable("/Root/ydb_ut_tenant/Table-1", tableBuilder.Build()).ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-1").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt"); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt"); 
+        } 
+ 
+        { 
+            auto tableBuilder = client.GetTableBuilder(); 
+            tableBuilder 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8); 
+            tableBuilder.SetPrimaryKeyColumn("Key"); 
+ 
+            auto result = session.CreateTable("/Root/ydb_ut_tenant/Table-2", tableBuilder.Build()).ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-2").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, ""); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+        } 
+ 
+        { 
+            auto alterSettings = TAlterTableSettings() 
+                .AlterColumnFamily("Value", "alt"); 
+ 
+            auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-2", alterSettings).ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-2").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt"); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt"); 
+        } 
+ 
+        { 
+            auto tableBuilder = client.GetTableBuilder(); 
+            tableBuilder 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt"); 
+            tableBuilder.SetPrimaryKeyColumn("Key"); 
+ 
+            auto tableSettings = TCreateTableSettings() 
+                .StoragePolicy(TStoragePolicy() 
+                    .AppendColumnFamilies(TColumnFamilyPolicy() 
+                        .Name("alt") 
+                        .Compressed(true))); 
+ 
+            auto result = session.CreateTable("/Root/ydb_ut_tenant/Table-3", tableBuilder.Build(), tableSettings).ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-3").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt"); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt"); 
+        } 
+ 
+        { 
+            auto tableBuilder = client.GetTableBuilder(); 
+            tableBuilder 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8); 
+            tableBuilder.SetPrimaryKeyColumn("Key"); 
+ 
+            auto result = session.CreateTable("/Root/ydb_ut_tenant/Table-4", tableBuilder.Build()).ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-4").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, ""); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+        } 
+ 
+        { 
+            auto alterSettings = TAlterTableSettings() 
+                .AlterColumnFamily("Value", "alt") 
+                .BeginAddColumnFamily("alt") 
+                    .SetCompression(EColumnFamilyCompression::None) 
+                .EndAddColumnFamily(); 
+ 
+            auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-4", alterSettings).ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-4").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt"); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression(), EColumnFamilyCompression::None); 
+        } 
+ 
+        { 
+            auto alterSettings = TAlterTableSettings() 
+                .BeginAlterColumnFamily("alt") 
+                    .SetCompression(EColumnFamilyCompression::LZ4) 
+                .EndAlterColumnFamily(); 
+ 
+            auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-4", alterSettings).ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-4").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt"); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression(), EColumnFamilyCompression::LZ4); 
+        } 
+ 
+        for (int tableIdx = 1; tableIdx <= 4; ++tableIdx) { 
+            TString query = Sprintf(R"___( 
+                DECLARE $Key AS Uint32; 
+                DECLARE $Value AS Utf8; 
+                UPSERT INTO [Root/ydb_ut_tenant/Table-%d] (Key, Value) VALUES 
+                    ($Key, $Value); 
+            )___", tableIdx); 
+ 
+            for (ui32 key = 0; key < 1000; ++key) { 
+                auto paramsBuilder = client.GetParamsBuilder(); 
+                auto params = paramsBuilder 
+                    .AddParam("$Key") 
+                        .Uint32(key) 
+                        .Build() 
+                    .AddParam("$Value") 
+                        .Utf8("test") 
+                        .Build() 
+                    .Build(); 
+                auto result = session 
+                    .ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()) 
+                        .CommitTx(), std::move(params)) 
+                    .ExtractValueSync(); 
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                    "Table " << tableIdx << " Key " << key 
+                    << " Status: " << result.GetStatus() 
+                    << " Issues: " << TPrintableIssues(result.GetIssues())); 
+            } 
+        } 
+    } 
+
+    Y_UNIT_TEST(ColumnFamiliesWithStorageAndIndex) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE); 
+        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true; 
+        InitSubDomain(server); 
+ 
+        auto connection = NYdb::TDriver( 
+            TDriverConfig() 
+                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(connection); 
+ 
+        auto sessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
+        auto session = sessionResult.GetSession(); 
+ 
+        { 
+            auto tableBuilder = client.GetTableBuilder(); 
+            tableBuilder 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt"); 
+            tableBuilder.SetPrimaryKeyColumn("Key"); 
+            tableBuilder.AddSecondaryIndex("MyIndex", "Value"); 
+ 
+            auto tableSettings = TCreateTableSettings() 
+                .StoragePolicy(TStoragePolicy() 
+                    .AppendColumnFamilies(TColumnFamilyPolicy() 
+                        .Name("alt") 
+                        .Data("hdd") 
+                        .Compressed(true))); 
+ 
+            auto result = session.CreateTable( 
+                    "/Root/ydb_ut_tenant/Table-1", 
+                    tableBuilder.Build(), 
+                    tableSettings) 
+                .ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+    } 
+
+    Y_UNIT_TEST(ColumnFamiliesDescriptionWithStorageAndIndex) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE); 
+        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true; 
+        InitSubDomain(server); 
+ 
+        auto connection = NYdb::TDriver( 
+            TDriverConfig() 
+                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(connection); 
+ 
+        auto sessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
+        auto session = sessionResult.GetSession(); 
+ 
+        { 
+            auto tableBuilder = client.GetTableBuilder(); 
+            tableBuilder 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt") 
+                .BeginColumnFamily("alt") 
+                    .SetData("hdd") 
+                    .SetCompression(EColumnFamilyCompression::LZ4) 
+                .EndColumnFamily(); 
+            tableBuilder.SetPrimaryKeyColumn("Key"); 
+            tableBuilder.AddSecondaryIndex("MyIndex", "Value"); 
+ 
+            auto result = session.CreateTable( 
+                    "/Root/ydb_ut_tenant/Table-1", 
+                    tableBuilder.Build()) 
+                .ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-1").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt"); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetData(), "hdd"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression(), EColumnFamilyCompression::LZ4); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(ColumnFamiliesExternalBlobsWithoutDefaultProfile) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE); 
+        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true; 
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiExternalBlobs(true); 
+        InitSubDomain(server, EDefaultTableProfile::Disabled); 
+ 
+        auto connection = NYdb::TDriver( 
+            TDriverConfig() 
+                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(connection); 
+ 
+        auto sessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
+        auto session = sessionResult.GetSession(); 
+ 
+        { 
+            auto tableBuilder = client.GetTableBuilder(); 
+            tableBuilder 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8, "alt") 
+                .BeginStorageSettings() 
+                    .SetTabletCommitLog0("ssd") 
+                    .SetTabletCommitLog1("ssd") 
+                    .SetExternal("hdd") 
+                    .SetStoreExternalBlobs(true) 
+                .EndStorageSettings() 
+                .BeginColumnFamily("default") 
+                    .SetData("ssd") 
+                .EndColumnFamily() 
+                .BeginColumnFamily("alt") 
+                    .SetData("hdd") 
+                    .SetCompression(EColumnFamilyCompression::LZ4) 
+                .EndColumnFamily(); 
+            tableBuilder.SetPrimaryKeyColumn("Key"); 
+ 
+            auto result = session.CreateTable( 
+                    "/Root/ydb_ut_tenant/Table-1", 
+                    tableBuilder.Build()) 
+                .ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << result.GetStatus() << " Issues: " << TPrintableIssues(result.GetIssues())); 
+        } 
+ 
+        { 
+            auto res = session.DescribeTable("Root/ydb_ut_tenant/Table-1").ExtractValueSync(); 
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, 
+                "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues())); 
+            auto columns = res.GetTableDescription().GetTableColumns(); 
+            UNIT_ASSERT_EQUAL(columns.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, ""); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value"); 
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt"); 
+            const auto& settings = res.GetTableDescription().GetStorageSettings(); 
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetExternal(), "hdd"); 
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetStoreExternalBlobs(), true); 
+            const auto& families = res.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_EQUAL(families.size(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetData(), "ssd"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetData(), "hdd"); 
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression(), EColumnFamilyCompression::LZ4); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestDescribeTableWithShardStats) {
         TKikimrWithGrpcAndRootSchema server;
 

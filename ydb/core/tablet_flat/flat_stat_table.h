@@ -15,62 +15,62 @@ class TStatsIterator {
 public:
     explicit TStatsIterator(TIntrusiveConstPtr<TKeyNulls> keyColumns)
         : KeyColumns(keyColumns)
-        , Heap(TIterKeyGreater{ this })
+        , Heap(TIterKeyGreater{ this }) 
     {}
 
     void Add(THolder<TScreenedPartIndexIterator> pi) {
         Iterators.PushBack(std::move(pi));
         TScreenedPartIndexIterator* it = Iterators.back();
         if (it->IsValid()) {
-            NextRowCount += it->GetRowCountDelta();
-            NextDataSize += it->GetDataSizeDelta();
+            NextRowCount += it->GetRowCountDelta(); 
+            NextDataSize += it->GetDataSizeDelta(); 
             Heap.push(it);
         }
     }
 
     bool IsValid() const {
-        return !Heap.empty() || CurrentKeyValid;
+        return !Heap.empty() || CurrentKeyValid; 
     }
 
     void Next() {
-        ui64 lastRowCount = RowCount;
-        ui64 lastDataSize = DataSize;
+        ui64 lastRowCount = RowCount; 
+        ui64 lastDataSize = DataSize; 
         Y_VERIFY(IsValid());
 
-        while (!Heap.empty()) {
-            RowCount = NextRowCount;
-            DataSize = NextDataSize;
-            TScreenedPartIndexIterator* it = Heap.top();
+        while (!Heap.empty()) { 
+            RowCount = NextRowCount; 
+            DataSize = NextDataSize; 
+            TScreenedPartIndexIterator* it = Heap.top(); 
             Heap.pop();
-            TDbTupleRef key = it->GetCurrentKey();
-            TString serialized = TSerializedCellVec::Serialize({key.Columns, key.ColumnCount});
-            CurrentKey = TSerializedCellVec(serialized);
-            CurrentKeyValid = true;
-            TDbTupleRef currentKeyTuple(KeyColumns->BasicTypes().data(), CurrentKey.GetCells().data(), CurrentKey.GetCells().size());
+            TDbTupleRef key = it->GetCurrentKey(); 
+            TString serialized = TSerializedCellVec::Serialize({key.Columns, key.ColumnCount}); 
+            CurrentKey = TSerializedCellVec(serialized); 
+            CurrentKeyValid = true; 
+            TDbTupleRef currentKeyTuple(KeyColumns->BasicTypes().data(), CurrentKey.GetCells().data(), CurrentKey.GetCells().size()); 
 
             if (MoveIterator(it))
                 Heap.push(it);
-
-            while (!Heap.empty() && CompareKeys(currentKeyTuple, Heap.top()->GetCurrentKey()) == 0) {
-                it = Heap.top();
-                Heap.pop();
-
-                if (MoveIterator(it))
-                    Heap.push(it);
-            }
-
-            if (RowCount != lastRowCount && DataSize != lastDataSize) {
-                return;
-            }
+ 
+            while (!Heap.empty() && CompareKeys(currentKeyTuple, Heap.top()->GetCurrentKey()) == 0) { 
+                it = Heap.top(); 
+                Heap.pop(); 
+ 
+                if (MoveIterator(it)) 
+                    Heap.push(it); 
+            } 
+ 
+            if (RowCount != lastRowCount && DataSize != lastDataSize) { 
+                return; 
+            } 
         }
-
-        RowCount = NextRowCount;
-        DataSize = NextDataSize;
-        CurrentKeyValid = false;
+ 
+        RowCount = NextRowCount; 
+        DataSize = NextDataSize; 
+        CurrentKeyValid = false; 
     }
 
     TDbTupleRef GetCurrentKey() const {
-        return TDbTupleRef(KeyColumns->BasicTypes().data(), CurrentKey.GetCells().data(), CurrentKey.GetCells().size());
+        return TDbTupleRef(KeyColumns->BasicTypes().data(), CurrentKey.GetCells().data(), CurrentKey.GetCells().size()); 
     }
 
     ui64 GetCurrentRowCount() const {
@@ -82,24 +82,24 @@ public:
     }
 
 private:
-    int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const noexcept {
-        return ComparePartKeys(a.Cells(), b.Cells(), *KeyColumns);
+    int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const noexcept { 
+        return ComparePartKeys(a.Cells(), b.Cells(), *KeyColumns); 
     }
 
     struct TIterKeyGreater {
-        const TStatsIterator* Self;
-
+        const TStatsIterator* Self; 
+ 
         bool operator ()(const TScreenedPartIndexIterator* a, const TScreenedPartIndexIterator* b) const {
-            return Self->CompareKeys(a->GetCurrentKey(), b->GetCurrentKey()) > 0;
+            return Self->CompareKeys(a->GetCurrentKey(), b->GetCurrentKey()) > 0; 
         }
     };
 
     bool MoveIterator(TScreenedPartIndexIterator* it) {
-        it->Next();
+        it->Next(); 
         NextRowCount += it->GetRowCountDelta();
         NextDataSize += it->GetDataSizeDelta();
 
-        return it->IsValid();
+        return it->IsValid(); 
     }
 
     TIntrusiveConstPtr<TKeyNulls> KeyColumns;
@@ -110,7 +110,7 @@ private:
     ui64 DataSize = 0;
     ui64 NextRowCount = 0;
     ui64 NextDataSize = 0;
-    bool CurrentKeyValid = false;
+    bool CurrentKeyValid = false; 
 };
 
 struct TBucket {

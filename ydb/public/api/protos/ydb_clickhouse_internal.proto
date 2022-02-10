@@ -21,8 +21,8 @@ message ScanRequest {
 
     uint64 max_rows = 8;
     uint64 max_bytes = 9;
-
-    string snapshot_id = 10;
+ 
+    string snapshot_id = 10; 
 }
 
 message ScanResponse {
@@ -81,51 +81,51 @@ message DescribeTableResult {
 message DescribeTableResponse {
     Ydb.Operations.Operation operation = 1;
 }
-
-message CreateSnapshotRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    repeated string path = 2;
-    bool ignore_system_views = 3;
-}
-
-message CreateSnapshotResult {
-    string snapshot_id = 1;
-    uint64 timeout_ms = 2;
-}
-
-message CreateSnapshotResponse {
-    Ydb.Operations.Operation operation = 1;
-}
-
-message RefreshSnapshotRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    repeated string path = 2;
-    string snapshot_id = 3;
-    bool ignore_system_views = 4;
-}
-
-message RefreshSnapshotResult {
-    string snapshot_id = 1;
-}
-
-message RefreshSnapshotResponse {
-    Ydb.Operations.Operation operation = 1;
-}
-
-message DiscardSnapshotRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    repeated string path = 2;
-    string snapshot_id = 3;
-    bool ignore_system_views = 4;
-}
-
-message DiscardSnapshotResult {
-    string snapshot_id = 1;
-}
-
-message DiscardSnapshotResponse {
-    Ydb.Operations.Operation operation = 1;
-}
+ 
+message CreateSnapshotRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+ 
+    repeated string path = 2; 
+    bool ignore_system_views = 3; 
+} 
+ 
+message CreateSnapshotResult { 
+    string snapshot_id = 1; 
+    uint64 timeout_ms = 2; 
+} 
+ 
+message CreateSnapshotResponse { 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+message RefreshSnapshotRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+ 
+    repeated string path = 2; 
+    string snapshot_id = 3; 
+    bool ignore_system_views = 4; 
+} 
+ 
+message RefreshSnapshotResult { 
+    string snapshot_id = 1; 
+} 
+ 
+message RefreshSnapshotResponse { 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+message DiscardSnapshotRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+ 
+    repeated string path = 2; 
+    string snapshot_id = 3; 
+    bool ignore_system_views = 4; 
+} 
+ 
+message DiscardSnapshotResult { 
+    string snapshot_id = 1; 
+} 
+ 
+message DiscardSnapshotResponse { 
+    Ydb.Operations.Operation operation = 1; 
+} 

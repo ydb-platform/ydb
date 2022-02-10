@@ -9,50 +9,50 @@ namespace NPage {
     using TSize = ui32;
     using TPageId = ui32;
 
-    /**
-     * A type-safe column group identifier
-     */
-    struct TGroupId {
-        ui32 Index : 31;
-        ui32 Historic : 1;
-
-        TGroupId() noexcept
-            : Index(0)
-            , Historic(0)
-        { }
-
-        explicit TGroupId(ui32 index, bool historic = false) noexcept
-            : Index(index)
-            , Historic(historic)
-        { }
-
-        ui32 Raw() const noexcept {
-            return (Historic << 31) | Index;
-        }
-
-        bool IsMain() const noexcept {
-            return Index == 0 && Historic == 0;
-        }
-
-        bool IsHistoric() const noexcept {
-            return Historic;
-        }
-
-        bool operator<(TGroupId rhs) const noexcept { return Raw() < rhs.Raw(); }
-        bool operator>(TGroupId rhs) const noexcept { return Raw() > rhs.Raw(); }
-        bool operator<=(TGroupId rhs) const noexcept { return Raw() <= rhs.Raw(); }
-        bool operator>=(TGroupId rhs) const noexcept { return Raw() >= rhs.Raw(); }
-        bool operator==(TGroupId rhs) const noexcept { return Raw() == rhs.Raw(); }
-        bool operator!=(TGroupId rhs) const noexcept { return Raw() != rhs.Raw(); }
-
-        /**
-         * Used by the default THash implementation
-         */
-        explicit operator size_t() const noexcept {
-            return Historic * 31 + Index;
-        }
-    };
-
+    /** 
+     * A type-safe column group identifier 
+     */ 
+    struct TGroupId { 
+        ui32 Index : 31; 
+        ui32 Historic : 1; 
+ 
+        TGroupId() noexcept 
+            : Index(0) 
+            , Historic(0) 
+        { } 
+ 
+        explicit TGroupId(ui32 index, bool historic = false) noexcept 
+            : Index(index) 
+            , Historic(historic) 
+        { } 
+ 
+        ui32 Raw() const noexcept { 
+            return (Historic << 31) | Index; 
+        } 
+ 
+        bool IsMain() const noexcept { 
+            return Index == 0 && Historic == 0; 
+        } 
+ 
+        bool IsHistoric() const noexcept { 
+            return Historic; 
+        } 
+ 
+        bool operator<(TGroupId rhs) const noexcept { return Raw() < rhs.Raw(); } 
+        bool operator>(TGroupId rhs) const noexcept { return Raw() > rhs.Raw(); } 
+        bool operator<=(TGroupId rhs) const noexcept { return Raw() <= rhs.Raw(); } 
+        bool operator>=(TGroupId rhs) const noexcept { return Raw() >= rhs.Raw(); } 
+        bool operator==(TGroupId rhs) const noexcept { return Raw() == rhs.Raw(); } 
+        bool operator!=(TGroupId rhs) const noexcept { return Raw() != rhs.Raw(); } 
+ 
+        /** 
+         * Used by the default THash implementation 
+         */ 
+        explicit operator size_t() const noexcept { 
+            return Historic * 31 + Index; 
+        } 
+    }; 
+ 
     enum class EPage : ui16 {
         Undef = 0,
         Scheme = 2,
@@ -63,9 +63,9 @@ namespace NPage {
         Schem2 = 7, /* New version of EPage::Scheme with TLabel     */
         Opaque = 8, /* User defined content, cell value as blob     */
         Bloom = 9,  /* Bloom filter for some app. defined cells set */
-        GarbageStats = 10, /* Stats on garbage in historic data */
-        TxIdStats = 11, /* Stats for uncommitted TxIds at compaction time */
-        TxStatus = 12, /* Status of committed/removed transactions */
+        GarbageStats = 10, /* Stats on garbage in historic data */ 
+        TxIdStats = 11, /* Stats for uncommitted TxIds at compaction time */ 
+        TxStatus = 12, /* Status of committed/removed transactions */ 
     };
 
     enum class ECodec : ui8 {

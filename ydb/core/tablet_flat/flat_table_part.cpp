@@ -1,7 +1,7 @@
 #include "flat_page_label.h"
 #include "flat_part_iface.h"
 #include "flat_table_part.h"
-#include "util_basics.h"
+#include "util_basics.h" 
 
 #include <ydb/core/util/pb.h>
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
@@ -13,20 +13,20 @@ namespace NTable {
 
 TPartScheme::TPartScheme(TArrayRef<const TColInfo> cols)
 {
-    ui32 maxGroup = 0;
-    for (auto& col : cols) {
-        maxGroup = Max(maxGroup, col.Group);
-    }
+    ui32 maxGroup = 0; 
+    for (auto& col : cols) { 
+        maxGroup = Max(maxGroup, col.Group); 
+    } 
 
-    ui32 pos = 0;
-    Groups.resize(size_t(maxGroup) + 1);
-    for (auto& col : cols) {
-        Groups[col.Group].Columns.push_back(col);
-        Groups[col.Group].Columns.back().Pos = pos++;
-    }
-
+    ui32 pos = 0; 
+    Groups.resize(size_t(maxGroup) + 1); 
+    for (auto& col : cols) { 
+        Groups[col.Group].Columns.push_back(col); 
+        Groups[col.Group].Columns.back().Pos = pos++; 
+    } 
+ 
     FillKeySlots();
-    FillHistoricSlots();
+    FillHistoricSlots(); 
 }
 
 TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bool labeled)
@@ -36,8 +36,8 @@ TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bo
 
         auto got = NPage::THello().Read(raw, NPage::EPage::Schem2);
 
-        // Version 1 may have non-zero group columns
-        Y_VERIFY(got.Version == 0 || got.Version == 1, "Unknown EPage::Schem2 version");
+        // Version 1 may have non-zero group columns 
+        Y_VERIFY(got.Version == 0 || got.Version == 1, "Unknown EPage::Schem2 version"); 
 
         raw = got.Page;
     }
@@ -54,7 +54,7 @@ TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bo
         cols.back().Tag = one.GetTag();
         cols.back().TypeId = one.GetType();
         cols.back().Pos = cols.size() - 1;
-        cols.back().Group = one.GetGroup();
+        cols.back().Group = one.GetGroup(); 
 
         if (one.HasKey())
             cols.back().Key = one.GetKey();
@@ -76,100 +76,100 @@ TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bo
 
 void TPartScheme::FillKeySlots()
 {
-    for (auto& group : Groups) {
-        InitGroup(group);
+    for (auto& group : Groups) { 
+        InitGroup(group); 
 
-        for (const auto& col : group.Columns) {
-            AllColumns.push_back(col);
-        }
-    }
-
-    auto byPos = NTable::TColInfo::TByPos();
-
-    std::sort(AllColumns.begin(), AllColumns.end(), byPos);
-
-    for (auto& col : AllColumns) {
+        for (const auto& col : group.Columns) { 
+            AllColumns.push_back(col); 
+        } 
+    } 
+ 
+    auto byPos = NTable::TColInfo::TByPos(); 
+ 
+    std::sort(AllColumns.begin(), AllColumns.end(), byPos); 
+ 
+    for (auto& col : AllColumns) { 
         Tag2DataInfo[col.Tag] = &col;
-    }
-}
+    } 
+} 
 
-void TPartScheme::FillHistoricSlots()
-{
-    // Synthetic (rowid, step, txid) key used during history searches
-    TStackVec<NScheme::TTypeIdOrder, 3> types;
-    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Ascending);
-    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Descending);
-    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Descending);
-    TStackVec<TCell, 3> defs;
-    defs.resize(3);
-    HistoryKeys = TKeyNulls::Make(types, defs);
-
-    // Synthetic (rowid, step, txid) key for the lead group of historic data
-    // Note that Tag/Pos are left unspecified, they should never be used
-    for (ui32 keyIdx = 0; keyIdx < HistoryKeys->Types.size(); ++keyIdx) {
-        auto& col = HistoryGroup.Columns.emplace_back();
-        col.Key = keyIdx;
-        col.TypeId = HistoryKeys->Types[keyIdx].GetTypeId();
-    }
-
-    // All non-key columns go after synthetic key
-    for (auto& col : Groups[0].Columns) {
-        if (!col.IsKey()) {
-            HistoryGroup.Columns.push_back(col);
-        }
-    }
-
-    InitGroup(HistoryGroup);
-
-    // The lead group of historic data has a different layout
-    HistoryColumns = AllColumns;
-    for (const auto& col : HistoryGroup.Columns) {
-        if (!col.IsKey()) {
-            HistoryColumns[col.Pos] = col;
-        }
-    }
-
-    // Remove incorrect key columns from history
-    for (auto& col : HistoryColumns) {
+void TPartScheme::FillHistoricSlots() 
+{ 
+    // Synthetic (rowid, step, txid) key used during history searches 
+    TStackVec<NScheme::TTypeIdOrder, 3> types; 
+    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Ascending); 
+    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Descending); 
+    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Descending); 
+    TStackVec<TCell, 3> defs; 
+    defs.resize(3); 
+    HistoryKeys = TKeyNulls::Make(types, defs); 
+ 
+    // Synthetic (rowid, step, txid) key for the lead group of historic data 
+    // Note that Tag/Pos are left unspecified, they should never be used 
+    for (ui32 keyIdx = 0; keyIdx < HistoryKeys->Types.size(); ++keyIdx) { 
+        auto& col = HistoryGroup.Columns.emplace_back(); 
+        col.Key = keyIdx; 
+        col.TypeId = HistoryKeys->Types[keyIdx].GetTypeId(); 
+    } 
+ 
+    // All non-key columns go after synthetic key 
+    for (auto& col : Groups[0].Columns) { 
+        if (!col.IsKey()) { 
+            HistoryGroup.Columns.push_back(col); 
+        } 
+    } 
+ 
+    InitGroup(HistoryGroup); 
+ 
+    // The lead group of historic data has a different layout 
+    HistoryColumns = AllColumns; 
+    for (const auto& col : HistoryGroup.Columns) { 
+        if (!col.IsKey()) { 
+            HistoryColumns[col.Pos] = col; 
+        } 
+    } 
+ 
+    // Remove incorrect key columns from history 
+    for (auto& col : HistoryColumns) { 
         if (col.IsKey()) {
-            col = { };
-        }
-    }
-}
-
-void TPartScheme::InitGroup(TGroupInfo& group)
-{
-    using namespace NPage;
-
+            col = { }; 
+        } 
+    } 
+} 
+ 
+void TPartScheme::InitGroup(TGroupInfo& group) 
+{ 
+    using namespace NPage; 
+ 
     group.FixedSize = InitInfo(group.Columns, TPgSizeOf<TDataPage::TItem>::Value);
-
-    for (auto& col : group.Columns) {
-        if (col.IsKey()) {
-            Y_VERIFY(col.Group == 0, "Key columns must be in the main column group");
-
-            group.ColsKeyData.push_back(col);
+ 
+    for (auto& col : group.Columns) { 
+        if (col.IsKey()) { 
+            Y_VERIFY(col.Group == 0, "Key columns must be in the main column group"); 
+ 
+            group.ColsKeyData.push_back(col); 
         }
     }
 
-    if (group.ColsKeyData) {
-        auto byKey = NTable::TColInfo::TByKey();
+    if (group.ColsKeyData) { 
+        auto byKey = NTable::TColInfo::TByKey(); 
 
-        std::sort(group.ColsKeyData.begin(), group.ColsKeyData.end(), byKey);
+        std::sort(group.ColsKeyData.begin(), group.ColsKeyData.end(), byKey); 
 
-        for (auto& col : group.ColsKeyData) {
-            group.KeyTypes.push_back(col.TypeId);
-        }
+        for (auto& col : group.ColsKeyData) { 
+            group.KeyTypes.push_back(col.TypeId); 
+        } 
 
-        group.ColsKeyIdx = group.ColsKeyData;
-        group.IdxRecFixedSize = InitInfo(group.ColsKeyIdx, TPgSizeOf<TIndex::TItem>::Value);
-    } else {
-        group.IdxRecFixedSize = 0;
-    }
+        group.ColsKeyIdx = group.ColsKeyData; 
+        group.IdxRecFixedSize = InitInfo(group.ColsKeyIdx, TPgSizeOf<TIndex::TItem>::Value); 
+    } else { 
+        group.IdxRecFixedSize = 0; 
+    } 
 }
 
 size_t TPartScheme::InitInfo(TVector<TColumn>& cols, TPgSize headerSize)
 {
-    size_t offset = 0;
+    size_t offset = 0; 
 
     for (auto &col: cols) {
         const ui32 fixed = NScheme::GetFixedSize(col.TypeId);
@@ -184,25 +184,25 @@ size_t TPartScheme::InitInfo(TVector<TColumn>& cols, TPgSize headerSize)
     return offset;
 }
 
-TSharedData TPartScheme::Serialize() const
+TSharedData TPartScheme::Serialize() const 
 {
     NProto::TPartScheme proto;
 
-    for (const auto& col : AllColumns) {
+    for (const auto& col : AllColumns) { 
         auto* pb = proto.AddColumns();
-        pb->SetTag(col.Tag);
-        pb->SetType(col.TypeId);
-        pb->SetGroup(col.Group);
+        pb->SetTag(col.Tag); 
+        pb->SetType(col.TypeId); 
+        pb->SetGroup(col.Group); 
 
-        if (col.IsKey()) {
-            pb->SetKey(col.Key);
-        }
+        if (col.IsKey()) { 
+            pb->SetKey(col.Key); 
+        } 
     }
 
     TStringStream ss;
     proto.SerializeToArcadiaStream(&ss);
 
-    return NPage::THello::Wrap(ss.Str(), EPage::Schem2, Groups.size() > 1 ? 1 : 0);
+    return NPage::THello::Wrap(ss.Str(), EPage::Schem2, Groups.size() > 1 ? 1 : 0); 
 }
 
 }}

@@ -62,7 +62,7 @@ namespace NTest {
                 << " rows, " << Heap->Used() << "b}";
         }
 
-        const TRow* SnapBy(const TRow &row, bool next, bool hole) const noexcept
+        const TRow* SnapBy(const TRow &row, bool next, bool hole) const noexcept 
         {
             auto it = Model->Base(row);
 
@@ -70,10 +70,10 @@ namespace NTest {
                 Y_FAIL("Last saved TMass row slot is out of store range");
             } else if (next) {
                 return it >= Saved.Size() ? nullptr : &Saved[it];
-            } else if (hole) {
-                return it == 0 ? nullptr : &Saved[it - 1];
+            } else if (hole) { 
+                return it == 0 ? nullptr : &Saved[it - 1]; 
             } else {
-                return it <= 1 ? nullptr : &Saved[it - 2];
+                return it <= 1 ? nullptr : &Saved[it - 2]; 
             }
         }
 

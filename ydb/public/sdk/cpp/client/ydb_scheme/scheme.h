@@ -27,8 +27,8 @@ enum class ESchemeEntryType : i32 {
     SubDomain = 4,
     RtmrVolume = 5,
     BlockStoreVolume = 6,
-    CoordinationNode = 7,
-    Sequence = 15,
+    CoordinationNode = 7, 
+    Sequence = 15, 
     Replication = 16,
 };
 

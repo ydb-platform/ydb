@@ -3,7 +3,7 @@
 #include "flat_boot_blobs.h"
 #include "flat_boot_back.h"
 #include "flat_boot_stages.h"
-#include "flat_exec_commit_mgr.h"
+#include "flat_exec_commit_mgr.h" 
 #include "flat_bio_actor.h"
 #include "flat_bio_events.h"
 #include "flat_sausage_chop.h"
@@ -11,7 +11,7 @@
 #include "logic_snap_main.h"
 #include "util_fmt_logger.h"
 #include "util_fmt_basic.h"
-#include "shared_sausagecache.h"
+#include "shared_sausagecache.h" 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/pb.h>
@@ -36,13 +36,13 @@ TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, TTabletS
     , GroupResolveCachedGeneration(Max<ui32>())
     , GroupResolveCachedGroup(Max<ui32>())
 {
-    LoadBlobQueue.Config.MaxBytesInFly = maxBytesInFly;
+    LoadBlobQueue.Config.MaxBytesInFly = maxBytesInFly; 
 }
 
 TExecutorBootLogic::~TExecutorBootLogic()
 {
-    LoadBlobQueue.Clear();
-
+    LoadBlobQueue.Clear(); 
+ 
     Loads.clear();
     EntriesToLoad.clear();
 
@@ -58,10 +58,10 @@ void TExecutorBootLogic::Describe(IOutputStream &out) const noexcept
 
 TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
         TEvTablet::TEvFBoot::TPtr &ev,
-        TExecutorCaches &&caches)
+        TExecutorCaches &&caches) 
 {
     TEvTablet::TEvFBoot *msg = ev->Get();
-    PrepareEnv(true, msg->Generation, std::move(caches));
+    PrepareEnv(true, msg->Generation, std::move(caches)); 
 
     if (msg->DependencyGraph) {
         Steps->Spawn<NBoot::TStages>(std::move(msg->DependencyGraph), nullptr);
@@ -101,9 +101,9 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
 
 TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
         TEvTablet::TEvBoot::TPtr &ev,
-        TExecutorCaches &&caches)
+        TExecutorCaches &&caches) 
 {
-    PrepareEnv(false, ev->Get()->Generation, std::move(caches));
+    PrepareEnv(false, ev->Get()->Generation, std::move(caches)); 
 
     Steps->Spawn<NBoot::TStages>(std::move(ev->Get()->DependencyGraph), nullptr);
     Steps->Execute();
@@ -111,22 +111,22 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
     return CheckCompletion();
 }
 
-void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches caches) noexcept
+void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches caches) noexcept 
 {
     BootStartTime = TAppData::TimeProvider->Now();
 
     auto *sys = TlsActivationContext->ExecutorThread.ActorSystem;
     auto *logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_FLATBOOT);
 
-    LoadBlobQueue.Config.TabletID = Info->TabletID;
-    LoadBlobQueue.Config.Generation = gen;
+    LoadBlobQueue.Config.TabletID = Info->TabletID; 
+    LoadBlobQueue.Config.Generation = gen; 
     LoadBlobQueue.Config.Follower = follower;
-    LoadBlobQueue.Config.NoDataCounter = GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true);
-
+    LoadBlobQueue.Config.NoDataCounter = GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true); 
+ 
     State_ = new NBoot::TBack(follower, Info->TabletID, gen);
     State().Scheme = new NTable::TScheme;
-    State().PageCaches = std::move(caches.PageCaches);
-    State().TxStatusCaches = std::move(caches.TxStatusCaches);
+    State().PageCaches = std::move(caches.PageCaches); 
+    State().TxStatusCaches = std::move(caches.TxStatusCaches); 
 
     Steps = new NBoot::TRoot(this, State_.Get(), logger);
 
@@ -162,10 +162,10 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
 
     Y_VERIFY(group != NPageCollection::TLargeGlobId::InvalidGroup, "Got TLargeGlobId without BS group");
 
-    for (const auto &blobId : entry->Blobs()) {
-        EntriesToLoad[blobId] = entry;
-        LoadBlobQueue.Enqueue(blobId, group, this);
-    }
+    for (const auto &blobId : entry->Blobs()) { 
+        EntriesToLoad[blobId] = entry; 
+        LoadBlobQueue.Enqueue(blobId, group, this); 
+    } 
 }
 
 NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
@@ -173,15 +173,15 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
 
     Y_VERIFY(success, "IPageCollection queued twice for loading");
 
-    Ops->Send(
+    Ops->Send( 
         MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
-            req,
-            SelfId),
+            req, 
+            SelfId), 
         0, (ui64)EPageCollectionRequest::BootLogic);
 
-    return NBoot::TSpawned(true);
+    return NBoot::TSpawned(true); 
 }
 
 ui32 TExecutorBootLogic::GetBSGroupFor(const TLogoBlobID &logo) const {
@@ -201,10 +201,10 @@ ui32 TExecutorBootLogic::GetBSGroupID(ui32 channel, ui32 generation) {
 
 TExecutorBootLogic::EOpResult TExecutorBootLogic::CheckCompletion()
 {
-    if (LoadBlobQueue.SendRequests(SelfId))
-        return OpResultContinue;
+    if (LoadBlobQueue.SendRequests(SelfId)) 
+        return OpResultContinue; 
 
-    Y_VERIFY(EntriesToLoad.empty());
+    Y_VERIFY(EntriesToLoad.empty()); 
 
     if (Steps && !Steps->Alone())
         return OpResultContinue;
@@ -233,29 +233,29 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveRestored(TEvTablet::TEv
     return CheckCompletion();
 }
 
-void TExecutorBootLogic::OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) {
-    Y_UNUSED(cookie);
+void TExecutorBootLogic::OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) { 
+    Y_UNUSED(cookie); 
 
-    auto it = EntriesToLoad.find(id);
+    auto it = EntriesToLoad.find(id); 
 
-    Y_VERIFY(it != EntriesToLoad.end(),
-        "OnBlobLoaded with unexpected blob id %s", id.ToString().c_str());
+    Y_VERIFY(it != EntriesToLoad.end(), 
+        "OnBlobLoaded with unexpected blob id %s", id.ToString().c_str()); 
 
-    auto entry = std::move(it->second);
+    auto entry = std::move(it->second); 
 
-    EntriesToLoad.erase(it);
+    EntriesToLoad.erase(it); 
 
-    entry->Feed(id, std::move(body));
-    entry.Reset();
+    entry->Feed(id, std::move(body)); 
+    entry.Reset(); 
 
-    Steps->Execute();
-}
+    Steps->Execute(); 
+} 
 
-TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandle &ev)
-{
-    if (auto *msg = ev.CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
-        if (!LoadBlobQueue.ProcessResult(msg))
-            return OpResultBroken;
+TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandle &ev) 
+{ 
+    if (auto *msg = ev.CastAsLocal<TEvBlobStorage::TEvGetResult>()) { 
+        if (!LoadBlobQueue.ProcessResult(msg)) 
+            return OpResultBroken; 
 
     } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
         if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic)
@@ -265,18 +265,18 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
         if (it == Loads.end()) // could receive outdated results
             return OpResultUnhandled;
 
-        // Remove step from loads first (so HandleBio may request more pages)
-        auto step = std::move(it->second);
-        Loads.erase(it);
-
+        // Remove step from loads first (so HandleBio may request more pages) 
+        auto step = std::move(it->second); 
+        Loads.erase(it); 
+ 
         if (msg->Status == NKikimrProto::NODATA) {
             GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true)->Inc();
         }
 
-        if (!step->HandleBio(*msg))
+        if (!step->HandleBio(*msg)) 
             return OpResultBroken;
 
-        step.Drop();
+        step.Drop(); 
         Steps->Execute();
     } else {
         return OpResultUnhandled;
@@ -299,15 +299,15 @@ void TExecutorBootLogic::FollowersSyncComplete() {
     Result().GcLogic->FollowersSyncComplete(true);
 }
 
-TExecutorCaches TExecutorBootLogic::DetachCaches() {
+TExecutorCaches TExecutorBootLogic::DetachCaches() { 
     if (Result_) {
-        for (auto &x : Result().PageCaches)
-            State().PageCaches[x->Id] = x;
+        for (auto &x : Result().PageCaches) 
+            State().PageCaches[x->Id] = x; 
     }
-    return TExecutorCaches{
-        .PageCaches = std::move(State().PageCaches),
-        .TxStatusCaches = std::move(State().TxStatusCaches),
-    };
+    return TExecutorCaches{ 
+        .PageCaches = std::move(State().PageCaches), 
+        .TxStatusCaches = std::move(State().TxStatusCaches), 
+    }; 
 }
 
 }}

@@ -10,16 +10,16 @@ logger = logging.getLogger(__name__)
 
 
 class EndpointInfo(object):
-    __slots__ = (
-        "address",
-        "endpoint",
-        "location",
-        "port",
-        "ssl",
-        "ipv4_addrs",
-        "ipv6_addrs",
-        "ssl_target_name_override",
-    )
+    __slots__ = ( 
+        "address", 
+        "endpoint", 
+        "location", 
+        "port", 
+        "ssl", 
+        "ipv4_addrs", 
+        "ipv6_addrs", 
+        "ssl_target_name_override", 
+    ) 
 
     def __init__(self, endpoint_info):
         self.address = endpoint_info.address
@@ -27,30 +27,30 @@ class EndpointInfo(object):
         self.location = endpoint_info.location
         self.port = endpoint_info.port
         self.ssl = endpoint_info.ssl
-        self.ipv4_addrs = tuple(endpoint_info.ip_v4)
-        self.ipv6_addrs = tuple(endpoint_info.ip_v6)
-        self.ssl_target_name_override = endpoint_info.ssl_target_name_override
+        self.ipv4_addrs = tuple(endpoint_info.ip_v4) 
+        self.ipv6_addrs = tuple(endpoint_info.ip_v6) 
+        self.ssl_target_name_override = endpoint_info.ssl_target_name_override 
 
-    def endpoints_with_options(self):
-        if self.ssl:
-            if self.ssl_target_name_override:
-                endpoint_options = conn_impl.EndpointOptions(
-                    self.ssl_target_name_override
-                )
-            elif self.ipv6_addrs or self.ipv4_addrs:
-                endpoint_options = conn_impl.EndpointOptions(self.address)
-            else:
-                endpoint_options = None
-        else:
-            endpoint_options = None
-        if self.ipv6_addrs or self.ipv4_addrs:
-            for ipv6addr in self.ipv6_addrs:
-                yield ("ipv6:[%s]:%s" % (ipv6addr, self.port), endpoint_options)
-            for ipv4addr in self.ipv4_addrs:
-                yield ("ipv4:%s:%s" % (ipv4addr, self.port), endpoint_options)
-        else:
-            yield (self.endpoint, endpoint_options)
-
+    def endpoints_with_options(self): 
+        if self.ssl: 
+            if self.ssl_target_name_override: 
+                endpoint_options = conn_impl.EndpointOptions( 
+                    self.ssl_target_name_override 
+                ) 
+            elif self.ipv6_addrs or self.ipv4_addrs: 
+                endpoint_options = conn_impl.EndpointOptions(self.address) 
+            else: 
+                endpoint_options = None 
+        else: 
+            endpoint_options = None 
+        if self.ipv6_addrs or self.ipv4_addrs: 
+            for ipv6addr in self.ipv6_addrs: 
+                yield ("ipv6:[%s]:%s" % (ipv6addr, self.port), endpoint_options) 
+            for ipv4addr in self.ipv4_addrs: 
+                yield ("ipv4:%s:%s" % (ipv4addr, self.port), endpoint_options) 
+        else: 
+            yield (self.endpoint, endpoint_options) 
+ 
     def __str__(self):
         return "<Endpoint %s, location %s, ssl: %s>" % (
             self.endpoint,

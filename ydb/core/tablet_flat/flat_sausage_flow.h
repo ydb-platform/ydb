@@ -66,7 +66,7 @@ namespace NPageCollection {
                 if (OnHold + bound.Bytes > limit && from < Queue.size())
                     break;
 
-                ui64 bucket = bound.Bytes; /* total bounded data size */
+                ui64 bucket = bound.Bytes; /* total bounded data size */ 
 
                 for (ui32 it = bound.Lo.Blob; it <= bound.Up.Blob; it++) {
                     (std::exchange(Blob, it) != it) && (Glob = PageCollection.Glob(it));
@@ -84,8 +84,8 @@ namespace NPageCollection {
                     }
 
                     ui32 skip = it > bound.Lo.Blob ? 0 : bound.Lo.Skip;
-                    ui32 left = Glob.Logo.BlobSize() - skip;
-                    ui32 chunk = bucket <= left ? bucket : left;
+                    ui32 left = Glob.Logo.BlobSize() - skip; 
+                    ui32 chunk = bucket <= left ? bucket : left; 
 
                     Queue.emplace_back(TReadPortion{ Tail, chunk, it, skip });
 

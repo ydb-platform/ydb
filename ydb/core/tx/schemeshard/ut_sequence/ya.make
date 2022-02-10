@@ -1,35 +1,35 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
+ 
+OWNER(g:kikimr) 
+ 
+FORK_SUBTESTS() 
 
-OWNER(g:kikimr)
-
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(2)
-
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
-
-PEERDIR(
+SPLIT_FACTOR(2) 
+ 
+IF (SANITIZER_TYPE OR WITH_VALGRIND) 
+    TIMEOUT(3600) 
+    SIZE(LARGE) 
+    TAG(ya:fat) 
+ELSE() 
+    TIMEOUT(600) 
+    SIZE(MEDIUM) 
+ENDIF() 
+ 
+PEERDIR( 
     library/cpp/getopt
-    library/cpp/regex/pcre
-    library/cpp/svnversion
+    library/cpp/regex/pcre 
+    library/cpp/svnversion 
     ydb/core/testlib
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/schemeshard/ut_helpers
     ydb/library/yql/public/udf/service/exception_policy
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
-
-SRCS(
-    ut_sequence.cpp
-)
-
-END()
+ 
+SRCS( 
+    ut_sequence.cpp 
+) 
+ 
+END() 

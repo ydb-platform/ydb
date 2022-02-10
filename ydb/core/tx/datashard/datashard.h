@@ -26,7 +26,7 @@ namespace NDataShard {
     using TShardState = NKikimrTxDataShard::EDatashardState;
 
     struct TTxFlags {
-        enum Flags : ui64 {
+        enum Flags : ui64 { 
             ////////////////////////////
             // Public operation flags //
             ////////////////////////////
@@ -102,16 +102,16 @@ namespace NDataShard {
             WaitingForScan = 1ULL << 36,
             // Operation is waiting for snapshot
             WaitingForSnapshot = 1ULL << 37,
-            // Operation is blocking conflicting immediate ops until it completes
-            BlockingImmediateOps = 1ULL << 38,
-            // Operation is blocking conflicting immediate writes until it completes
-            BlockingImmediateWrites = 1ULL << 39,
-            // Operation has acquired a reference to persistent snapshot
-            AcquiredSnapshotReference = 1ULL << 40,
-            // Operation's final result has already been sent
-            ResultSent = 1ULL << 41,
-            // Operation is confirmed to be stored in shard's local database
-            Stored = 1ULL << 42,
+            // Operation is blocking conflicting immediate ops until it completes 
+            BlockingImmediateOps = 1ULL << 38, 
+            // Operation is blocking conflicting immediate writes until it completes 
+            BlockingImmediateWrites = 1ULL << 39, 
+            // Operation has acquired a reference to persistent snapshot 
+            AcquiredSnapshotReference = 1ULL << 40, 
+            // Operation's final result has already been sent 
+            ResultSent = 1ULL << 41, 
+            // Operation is confirmed to be stored in shard's local database 
+            Stored = 1ULL << 42, 
             // Operation is waiting for async job to finish
             WaitingForAsyncJob = 1ULL << 43,
             // Operation must complete before results sending
@@ -122,12 +122,12 @@ namespace NDataShard {
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader
                 | GlobalWriter | KqpDataTransaction | KqpScanTransaction
-                | BlockingImmediateOps | BlockingImmediateWrites,
+                | BlockingImmediateOps | BlockingImmediateWrites, 
         };
     };
 
-    // Old datashard uses Uint32 column type for flags in local database.
-    static_assert(TTxFlags::PreservedPrivateFlagsMask <= Max<ui64>());
+    // Old datashard uses Uint32 column type for flags in local database. 
+    static_assert(TTxFlags::PreservedPrivateFlagsMask <= Max<ui64>()); 
     static_assert(TTxFlags::PublicFlagsMask <= Max<ui32>());
 
     // NOTE: this switch should be modified only in tests !!!
@@ -158,13 +158,13 @@ namespace NDataShard {
         explicit TSchemeOpSeqNo(const NKikimrTxDataShard::TSchemeOpSeqNo& pb)
             : TMessageSeqNo(pb.GetGeneration(), pb.GetRound())
         {}
-
-        TSchemeOpSeqNo& operator++() {
-            if (0 == ++Round) {
-                ++Generation;
-            }
-            return *this;
-        }
+ 
+        TSchemeOpSeqNo& operator++() { 
+            if (0 == ++Round) { 
+                ++Generation; 
+            } 
+            return *this; 
+        } 
     };
 
 }
@@ -179,17 +179,17 @@ struct TEvDataShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_DATASHARD),
         EvCancelTransactionProposal,
-        EvApplyReplicationChanges,
-        EvGetReplicationSourceOffsets,
+        EvApplyReplicationChanges, 
+        EvGetReplicationSourceOffsets, 
 
         EvProposeTransactionResult = EvProposeTransaction + 1 * 512,
-        EvProposeTransactionRestart,
-        EvProposeTransactionAttach,
-        EvProposeTransactionAttachResult,
-        EvApplyReplicationChangesResult,
-        EvReplicationSourceOffsets,
-        EvReplicationSourceOffsetsAck,
-        EvReplicationSourceOffsetsCancel,
+        EvProposeTransactionRestart, 
+        EvProposeTransactionAttach, 
+        EvProposeTransactionAttachResult, 
+        EvApplyReplicationChangesResult, 
+        EvReplicationSourceOffsets, 
+        EvReplicationSourceOffsetsAck, 
+        EvReplicationSourceOffsetsCancel, 
 
         EvInitDataShard = EvProposeTransaction + 4 * 512,
         EvGetShardState,
@@ -253,10 +253,10 @@ struct TEvDataShard {
         EvGetDataHistogramRequest,
         EvGetDataHistogramResponse,
         EvCancelFillIndex_DEPRECATED,
-        EvRefreshVolatileSnapshotRequest,
-        EvRefreshVolatileSnapshotResponse,
-        EvDiscardVolatileSnapshotRequest,
-        EvDiscardVolatileSnapshotResponse,
+        EvRefreshVolatileSnapshotRequest, 
+        EvRefreshVolatileSnapshotResponse, 
+        EvDiscardVolatileSnapshotRequest, 
+        EvDiscardVolatileSnapshotResponse, 
 
         EvGetS3Upload,
         EvStoreS3UploadId,
@@ -281,14 +281,14 @@ struct TEvDataShard {
 
         EvChangeS3UploadStatus,
 
-        EvGetRemovedRowVersions, /* for tests */
-        EvGetRemovedRowVersionsResult, /* for tests */
-
+        EvGetRemovedRowVersions, /* for tests */ 
+        EvGetRemovedRowVersionsResult, /* for tests */ 
+ 
         EvCompactTable,
         EvCompactTableResult,
 
-        EvCompactBorrowed, /* +60 */
-
+        EvCompactBorrowed, /* +60 */ 
+ 
         EvGetCompactTableStats,       /* for tests */
         EvGetCompactTableStatsResult, /* for tests */
 
@@ -440,15 +440,15 @@ struct TEvDataShard {
             Record.MutableProcessingParams()->CopyFrom(processingParams);
         }
 
-        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, ui64 subDomainPathId, const TActorId& source, ui64 txId,
+        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, ui64 subDomainPathId, const TActorId& source, ui64 txId, 
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
-            : TEvProposeTransaction(txKind, ssId, source, txId, txBody, processingParams, flags)
-        {
-            if (subDomainPathId) {
-                Record.SetSubDomainPathId(subDomainPathId);
-            }
-        }
-
+            : TEvProposeTransaction(txKind, ssId, source, txId, txBody, processingParams, flags) 
+        { 
+            if (subDomainPathId) { 
+                Record.SetSubDomainPathId(subDomainPathId); 
+            } 
+        } 
+ 
         NKikimrTxDataShard::ETransactionKind GetTxKind() const {
             return Record.GetTxKind();
         }
@@ -497,7 +497,7 @@ struct TEvDataShard {
         bool IsPrepared() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED; }
         bool IsComplete() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE; }
         bool IsTryLater() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER; }
-        bool IsExecError() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR; }
+        bool IsExecError() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR; } 
         bool IsError() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::ERROR; }
         bool IsBadRequest() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST; }
 
@@ -514,13 +514,13 @@ struct TEvDataShard {
             Record.MutableDomainCoordinators()->CopyFrom(params.GetCoordinators());
         }
 
-        void SetSchemeTxDuplicate(bool sameTxId = true) {
-            if (sameTxId) {
-                Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
-            } else {
-                SetProcessError(NKikimrTxDataShard::TError::SCHEME_CHANGED,
-                    "Duplicate scheme tx must not be proposed with a different tx id");
-            }
+        void SetSchemeTxDuplicate(bool sameTxId = true) { 
+            if (sameTxId) { 
+                Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED); 
+            } else { 
+                SetProcessError(NKikimrTxDataShard::TError::SCHEME_CHANGED, 
+                    "Duplicate scheme tx must not be proposed with a different tx id"); 
+            } 
         }
 
         void SetPrepared(ui64 minStep, ui64 maxStep, const TInstant& RequestStartTime) {
@@ -639,31 +639,31 @@ struct TEvDataShard {
         bool ForceDirty = false;
     };
 
-    struct TEvProposeTransactionRestart : public TEventPB<TEvProposeTransactionRestart, NKikimrTxDataShard::TEvProposeTransactionRestart, TEvDataShard::EvProposeTransactionRestart> {
-        TEvProposeTransactionRestart() = default;
-        TEvProposeTransactionRestart(ui64 tabletId, ui64 txId) {
-            Record.SetTabletId(tabletId);
-            Record.SetTxId(txId);
-        }
-    };
-
-    struct TEvProposeTransactionAttach : public TEventPB<TEvProposeTransactionAttach, NKikimrTxDataShard::TEvProposeTransactionAttach, TEvDataShard::EvProposeTransactionAttach> {
-        TEvProposeTransactionAttach() = default;
-        TEvProposeTransactionAttach(ui64 tabletId, ui64 txId) {
-            Record.SetTabletId(tabletId);
-            Record.SetTxId(txId);
-        }
-    };
-
-    struct TEvProposeTransactionAttachResult : public TEventPB<TEvProposeTransactionAttachResult, NKikimrTxDataShard::TEvProposeTransactionAttachResult, TEvDataShard::EvProposeTransactionAttachResult> {
-        TEvProposeTransactionAttachResult() = default;
-        TEvProposeTransactionAttachResult(ui64 tabletId, ui64 txId, NKikimrProto::EReplyStatus status) {
-            Record.SetTabletId(tabletId);
-            Record.SetTxId(txId);
-            Record.SetStatus(status);
-        }
-    };
-
+    struct TEvProposeTransactionRestart : public TEventPB<TEvProposeTransactionRestart, NKikimrTxDataShard::TEvProposeTransactionRestart, TEvDataShard::EvProposeTransactionRestart> { 
+        TEvProposeTransactionRestart() = default; 
+        TEvProposeTransactionRestart(ui64 tabletId, ui64 txId) { 
+            Record.SetTabletId(tabletId); 
+            Record.SetTxId(txId); 
+        } 
+    }; 
+ 
+    struct TEvProposeTransactionAttach : public TEventPB<TEvProposeTransactionAttach, NKikimrTxDataShard::TEvProposeTransactionAttach, TEvDataShard::EvProposeTransactionAttach> { 
+        TEvProposeTransactionAttach() = default; 
+        TEvProposeTransactionAttach(ui64 tabletId, ui64 txId) { 
+            Record.SetTabletId(tabletId); 
+            Record.SetTxId(txId); 
+        } 
+    }; 
+ 
+    struct TEvProposeTransactionAttachResult : public TEventPB<TEvProposeTransactionAttachResult, NKikimrTxDataShard::TEvProposeTransactionAttachResult, TEvDataShard::EvProposeTransactionAttachResult> { 
+        TEvProposeTransactionAttachResult() = default; 
+        TEvProposeTransactionAttachResult(ui64 tabletId, ui64 txId, NKikimrProto::EReplyStatus status) { 
+            Record.SetTabletId(tabletId); 
+            Record.SetTxId(txId); 
+            Record.SetStatus(status); 
+        } 
+    }; 
+ 
     struct TEvReturnBorrowedPart : public TEventPB<TEvReturnBorrowedPart, NKikimrTxDataShard::TEvReturnBorrowedPart, TEvDataShard::EvReturnBorrowedPart> {
         TEvReturnBorrowedPart() = default;
         TEvReturnBorrowedPart(ui64 tabletId, const TVector<TLogoBlobID>& partMetaVec) {
@@ -688,12 +688,12 @@ struct TEvDataShard {
                                                         NKikimrTxDataShard::TEvInitSplitMergeDestination,
                                                         TEvDataShard::EvInitSplitMergeDestination> {
         TEvInitSplitMergeDestination() = default;
-        TEvInitSplitMergeDestination(ui64 opId, ui64 schemeshardTabletId, ui64 subDomainPathId,
+        TEvInitSplitMergeDestination(ui64 opId, ui64 schemeshardTabletId, ui64 subDomainPathId, 
                                      const NKikimrTxDataShard::TSplitMergeDescription &splitDesc,
                                      const NKikimrSubDomains::TProcessingParams &processingParams) {
             Record.SetOperationCookie(opId);
             Record.SetSchemeshardTabletId(schemeshardTabletId);
-            Record.SetSubDomainPathId(subDomainPathId);
+            Record.SetSubDomainPathId(subDomainPathId); 
             Record.MutableSplitDescription()->CopyFrom(splitDesc);
             Record.MutableProcessingParams()->CopyFrom(processingParams);
         }
@@ -769,7 +769,7 @@ struct TEvDataShard {
     {
         TEvCancelBackup() = default;
 
-        explicit TEvCancelBackup(ui64 txid, ui64 tableId) {
+        explicit TEvCancelBackup(ui64 txid, ui64 tableId) { 
             Record.SetBackupTxId(txid);
             Record.SetTableId(tableId);
         }
@@ -1100,36 +1100,36 @@ struct TEvDataShard {
                                                          NKikimrTxDataShard::TEvGetDataHistogramResponse,
                                                          TEvDataShard::EvGetDataHistogramResponse> {
     };
-
-    struct TEvRefreshVolatileSnapshotRequest
-        : public TEventPB<TEvRefreshVolatileSnapshotRequest,
-                          NKikimrTxDataShard::TEvRefreshVolatileSnapshotRequest,
-                          TEvDataShard::EvRefreshVolatileSnapshotRequest>
-    {
-    };
-
-    struct TEvRefreshVolatileSnapshotResponse
-        : public TEventPB<TEvRefreshVolatileSnapshotResponse,
-                          NKikimrTxDataShard::TEvRefreshVolatileSnapshotResponse,
-                          TEvDataShard::EvRefreshVolatileSnapshotResponse>
-    {
-        using EStatus = NKikimrTxDataShard::TEvRefreshVolatileSnapshotResponse::EStatus;
-    };
-
-    struct TEvDiscardVolatileSnapshotRequest
-        : public TEventPB<TEvDiscardVolatileSnapshotRequest,
-                          NKikimrTxDataShard::TEvDiscardVolatileSnapshotRequest,
-                          TEvDataShard::EvDiscardVolatileSnapshotRequest>
-    {
-    };
-
-    struct TEvDiscardVolatileSnapshotResponse
-        : public TEventPB<TEvDiscardVolatileSnapshotResponse,
-                          NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse,
-                          TEvDataShard::EvDiscardVolatileSnapshotResponse>
-    {
-        using EStatus = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse::EStatus;
-    };
+ 
+    struct TEvRefreshVolatileSnapshotRequest 
+        : public TEventPB<TEvRefreshVolatileSnapshotRequest, 
+                          NKikimrTxDataShard::TEvRefreshVolatileSnapshotRequest, 
+                          TEvDataShard::EvRefreshVolatileSnapshotRequest> 
+    { 
+    }; 
+ 
+    struct TEvRefreshVolatileSnapshotResponse 
+        : public TEventPB<TEvRefreshVolatileSnapshotResponse, 
+                          NKikimrTxDataShard::TEvRefreshVolatileSnapshotResponse, 
+                          TEvDataShard::EvRefreshVolatileSnapshotResponse> 
+    { 
+        using EStatus = NKikimrTxDataShard::TEvRefreshVolatileSnapshotResponse::EStatus; 
+    }; 
+ 
+    struct TEvDiscardVolatileSnapshotRequest 
+        : public TEventPB<TEvDiscardVolatileSnapshotRequest, 
+                          NKikimrTxDataShard::TEvDiscardVolatileSnapshotRequest, 
+                          TEvDataShard::EvDiscardVolatileSnapshotRequest> 
+    { 
+    }; 
+ 
+    struct TEvDiscardVolatileSnapshotResponse 
+        : public TEventPB<TEvDiscardVolatileSnapshotResponse, 
+                          NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse, 
+                          TEvDataShard::EvDiscardVolatileSnapshotResponse> 
+    { 
+        using EStatus = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse::EStatus; 
+    }; 
 
     struct TEvMigrateSchemeShardRequest
         : public TEventPB<TEvMigrateSchemeShardRequest,
@@ -1353,22 +1353,22 @@ struct TEvDataShard {
                           TEvDataShard::EvKqpScan>
     {
     };
-
-    struct TEvGetRemovedRowVersions : public TEventLocal<TEvGetRemovedRowVersions, EvGetRemovedRowVersions> {
-        TPathId PathId;
-
-        TEvGetRemovedRowVersions(const TPathId& pathId)
-            : PathId(pathId)
-        { }
-    };
-
-    struct TEvGetRemovedRowVersionsResult : public TEventLocal<TEvGetRemovedRowVersionsResult, EvGetRemovedRowVersionsResult> {
-        NTable::TRowVersionRanges RemovedRowVersions;
-
-        TEvGetRemovedRowVersionsResult(const NTable::TRowVersionRanges& removedRowVersions)
-            : RemovedRowVersions(removedRowVersions)
-        { }
-    };
+ 
+    struct TEvGetRemovedRowVersions : public TEventLocal<TEvGetRemovedRowVersions, EvGetRemovedRowVersions> { 
+        TPathId PathId; 
+ 
+        TEvGetRemovedRowVersions(const TPathId& pathId) 
+            : PathId(pathId) 
+        { } 
+    }; 
+ 
+    struct TEvGetRemovedRowVersionsResult : public TEventLocal<TEvGetRemovedRowVersionsResult, EvGetRemovedRowVersionsResult> { 
+        NTable::TRowVersionRanges RemovedRowVersions; 
+ 
+        TEvGetRemovedRowVersionsResult(const NTable::TRowVersionRanges& removedRowVersions) 
+            : RemovedRowVersions(removedRowVersions) 
+        { } 
+    }; 
 
     struct TEvCompactTable : public TEventPB<TEvCompactTable, NKikimrTxDataShard::TEvCompactTable,
                                              TEvDataShard::EvCompactTable> {
@@ -1394,26 +1394,26 @@ struct TEvDataShard {
             Record.SetStatus(status);
         }
     };
-
-    /**
-     * This message is used to ask datashard to compact any borrowed parts it has
-     * for the specified user table. No reply is expected for this message,
-     * instead schemeshard expects to receive updated stats if and when
-     * such a compaction has finished.
-     */
-    struct TEvCompactBorrowed : public TEventPB<TEvCompactBorrowed, NKikimrTxDataShard::TEvCompactBorrowed, EvCompactBorrowed> {
-        TEvCompactBorrowed() = default;
-
-        TEvCompactBorrowed(const TPathId& pathId) {
-            Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
-            Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
-        }
-
-        // Sanity check for safe merging to earlier versions
-        static_assert(EvCompactBorrowed == EventSpaceBegin(TKikimrEvents::ES_TX_DATASHARD) + 7 * 512 + 60,
-                    "EvCompactBorrowed event has an unexpected value");
-    };
-
+ 
+    /** 
+     * This message is used to ask datashard to compact any borrowed parts it has 
+     * for the specified user table. No reply is expected for this message, 
+     * instead schemeshard expects to receive updated stats if and when 
+     * such a compaction has finished. 
+     */ 
+    struct TEvCompactBorrowed : public TEventPB<TEvCompactBorrowed, NKikimrTxDataShard::TEvCompactBorrowed, EvCompactBorrowed> { 
+        TEvCompactBorrowed() = default; 
+ 
+        TEvCompactBorrowed(const TPathId& pathId) { 
+            Record.MutablePathId()->SetOwnerId(pathId.OwnerId); 
+            Record.MutablePathId()->SetLocalId(pathId.LocalPathId); 
+        } 
+ 
+        // Sanity check for safe merging to earlier versions 
+        static_assert(EvCompactBorrowed == EventSpaceBegin(TKikimrEvents::ES_TX_DATASHARD) + 7 * 512 + 60, 
+                    "EvCompactBorrowed event has an unexpected value"); 
+    }; 
+ 
     struct TEvGetCompactTableStats : public TEventPB<TEvGetCompactTableStats, NKikimrTxDataShard::TEvGetCompactTableStats,
                                                      TEvDataShard::EvGetCompactTableStats> {
         TEvGetCompactTableStats() = default;
@@ -1428,117 +1428,117 @@ struct TEvDataShard {
         TEvGetCompactTableStatsResult() = default;
     };
 
-    struct TEvApplyReplicationChanges
-        : public TEventPB<TEvApplyReplicationChanges,
-                          NKikimrTxDataShard::TEvApplyReplicationChanges,
-                          EvApplyReplicationChanges>
-    {
-        TEvApplyReplicationChanges() = default;
-
-        explicit TEvApplyReplicationChanges(const TPathId& pathId, ui64 schemaVersion = 0) {
-            auto* p = Record.MutableTableId();
-            p->SetOwnerId(pathId.OwnerId);
-            p->SetTableId(pathId.LocalPathId);
-            if (schemaVersion != 0) {
-                p->SetSchemaVersion(schemaVersion);
-            }
-        }
-    };
-
-    struct TEvApplyReplicationChangesResult
-        : public TEventPB<TEvApplyReplicationChangesResult,
-                          NKikimrTxDataShard::TEvApplyReplicationChangesResult,
-                          EvApplyReplicationChangesResult>
-    {
-        using EStatus = NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus;
-        using EReason = NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason;
-
-        TEvApplyReplicationChangesResult() = default;
-
-        explicit TEvApplyReplicationChangesResult(
-                EStatus status,
-                EReason reason = NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE,
-                const TString& errorDescription = TString())
-        {
-            Record.SetStatus(status);
-            if (reason != NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE) {
-                Record.SetReason(reason);
-            }
-            if (!errorDescription.empty()) {
-                Record.SetErrorDescription(errorDescription);
-            }
-        }
-    };
-
-    struct TEvGetReplicationSourceOffsets
-        : public TEventPB<TEvGetReplicationSourceOffsets,
-                          NKikimrTxDataShard::TEvGetReplicationSourceOffsets,
-                          EvGetReplicationSourceOffsets>
-    {
-        TEvGetReplicationSourceOffsets() = default;
-
-        TEvGetReplicationSourceOffsets(ui64 readId, const TPathId& pathId) {
-            Record.SetReadId(readId);
-            SetPathId(pathId);
-        }
-
-        TEvGetReplicationSourceOffsets* SetPathId(const TPathId& pathId) {
-            auto* p = Record.MutableTableId();
-            p->SetOwnerId(pathId.OwnerId);
-            p->SetTableId(pathId.LocalPathId);
-            return this;
-        }
-
-        TPathId GetPathId() const {
-            const auto& p = Record.GetTableId();
-            return TPathId(p.GetOwnerId(), p.GetTableId());
-        }
-
-        TEvGetReplicationSourceOffsets* SetFrom(ui64 sourceId, ui64 splitKeyId) {
-            Record.SetFromSourceId(sourceId);
-            Record.SetFromSplitKeyId(splitKeyId);
-            return this;
-        }
-    };
-
-    struct TEvReplicationSourceOffsets
-        : public TEventPB<TEvReplicationSourceOffsets,
-                          NKikimrTxDataShard::TEvReplicationSourceOffsets,
-                          EvReplicationSourceOffsets>
-    {
-        TEvReplicationSourceOffsets() = default;
-
-        TEvReplicationSourceOffsets(ui64 readId, ui64 seqNo) {
-            Record.SetReadId(readId);
-            Record.SetSeqNo(seqNo);
-        }
-    };
-
-    struct TEvReplicationSourceOffsetsAck
-        : public TEventPB<TEvReplicationSourceOffsetsAck,
-                          NKikimrTxDataShard::TEvReplicationSourceOffsetsAck,
-                          EvReplicationSourceOffsetsAck>
-    {
-        TEvReplicationSourceOffsetsAck() = default;
-
-        TEvReplicationSourceOffsetsAck(ui64 readId, ui64 seqNo) {
-            Record.SetReadId(readId);
-            Record.SetAckSeqNo(seqNo);
-        }
-    };
-
-    struct TEvReplicationSourceOffsetsCancel
-        : public TEventPB<TEvReplicationSourceOffsetsCancel,
-                          NKikimrTxDataShard::TEvReplicationSourceOffsetsCancel,
-                          EvReplicationSourceOffsetsCancel>
-    {
-        TEvReplicationSourceOffsetsCancel() = default;
-
-        explicit TEvReplicationSourceOffsetsCancel(ui64 readId) {
-            Record.SetReadId(readId);
-        }
-    };
-
+    struct TEvApplyReplicationChanges 
+        : public TEventPB<TEvApplyReplicationChanges, 
+                          NKikimrTxDataShard::TEvApplyReplicationChanges, 
+                          EvApplyReplicationChanges> 
+    { 
+        TEvApplyReplicationChanges() = default; 
+ 
+        explicit TEvApplyReplicationChanges(const TPathId& pathId, ui64 schemaVersion = 0) { 
+            auto* p = Record.MutableTableId(); 
+            p->SetOwnerId(pathId.OwnerId); 
+            p->SetTableId(pathId.LocalPathId); 
+            if (schemaVersion != 0) { 
+                p->SetSchemaVersion(schemaVersion); 
+            } 
+        } 
+    }; 
+ 
+    struct TEvApplyReplicationChangesResult 
+        : public TEventPB<TEvApplyReplicationChangesResult, 
+                          NKikimrTxDataShard::TEvApplyReplicationChangesResult, 
+                          EvApplyReplicationChangesResult> 
+    { 
+        using EStatus = NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus; 
+        using EReason = NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason; 
+ 
+        TEvApplyReplicationChangesResult() = default; 
+ 
+        explicit TEvApplyReplicationChangesResult( 
+                EStatus status, 
+                EReason reason = NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE, 
+                const TString& errorDescription = TString()) 
+        { 
+            Record.SetStatus(status); 
+            if (reason != NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE) { 
+                Record.SetReason(reason); 
+            } 
+            if (!errorDescription.empty()) { 
+                Record.SetErrorDescription(errorDescription); 
+            } 
+        } 
+    }; 
+ 
+    struct TEvGetReplicationSourceOffsets 
+        : public TEventPB<TEvGetReplicationSourceOffsets, 
+                          NKikimrTxDataShard::TEvGetReplicationSourceOffsets, 
+                          EvGetReplicationSourceOffsets> 
+    { 
+        TEvGetReplicationSourceOffsets() = default; 
+ 
+        TEvGetReplicationSourceOffsets(ui64 readId, const TPathId& pathId) { 
+            Record.SetReadId(readId); 
+            SetPathId(pathId); 
+        } 
+ 
+        TEvGetReplicationSourceOffsets* SetPathId(const TPathId& pathId) { 
+            auto* p = Record.MutableTableId(); 
+            p->SetOwnerId(pathId.OwnerId); 
+            p->SetTableId(pathId.LocalPathId); 
+            return this; 
+        } 
+ 
+        TPathId GetPathId() const { 
+            const auto& p = Record.GetTableId(); 
+            return TPathId(p.GetOwnerId(), p.GetTableId()); 
+        } 
+ 
+        TEvGetReplicationSourceOffsets* SetFrom(ui64 sourceId, ui64 splitKeyId) { 
+            Record.SetFromSourceId(sourceId); 
+            Record.SetFromSplitKeyId(splitKeyId); 
+            return this; 
+        } 
+    }; 
+ 
+    struct TEvReplicationSourceOffsets 
+        : public TEventPB<TEvReplicationSourceOffsets, 
+                          NKikimrTxDataShard::TEvReplicationSourceOffsets, 
+                          EvReplicationSourceOffsets> 
+    { 
+        TEvReplicationSourceOffsets() = default; 
+ 
+        TEvReplicationSourceOffsets(ui64 readId, ui64 seqNo) { 
+            Record.SetReadId(readId); 
+            Record.SetSeqNo(seqNo); 
+        } 
+    }; 
+ 
+    struct TEvReplicationSourceOffsetsAck 
+        : public TEventPB<TEvReplicationSourceOffsetsAck, 
+                          NKikimrTxDataShard::TEvReplicationSourceOffsetsAck, 
+                          EvReplicationSourceOffsetsAck> 
+    { 
+        TEvReplicationSourceOffsetsAck() = default; 
+ 
+        TEvReplicationSourceOffsetsAck(ui64 readId, ui64 seqNo) { 
+            Record.SetReadId(readId); 
+            Record.SetAckSeqNo(seqNo); 
+        } 
+    }; 
+ 
+    struct TEvReplicationSourceOffsetsCancel 
+        : public TEventPB<TEvReplicationSourceOffsetsCancel, 
+                          NKikimrTxDataShard::TEvReplicationSourceOffsetsCancel, 
+                          EvReplicationSourceOffsetsCancel> 
+    { 
+        TEvReplicationSourceOffsetsCancel() = default; 
+ 
+        explicit TEvReplicationSourceOffsetsCancel(ui64 readId) { 
+            Record.SetReadId(readId); 
+        } 
+    }; 
+ 
 };
 
 IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info);

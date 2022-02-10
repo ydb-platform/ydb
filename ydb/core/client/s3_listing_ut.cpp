@@ -94,9 +94,9 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
 
                                         CompactionPolicy {
                                                 InMemSizeToSnapshot: 2000
-                                                InMemStepsToSnapshot: 1
+                                                InMemStepsToSnapshot: 1 
                                                 InMemForceStepsToSnapshot: 50
-                                                InMemForceSizeToSnapshot: 16777216
+                                                InMemForceSizeToSnapshot: 16777216 
                                                 InMemCompactionBrokerQueue: 0
                                                 ReadAheadHiThreshold: 1048576
                                                 ReadAheadLoThreshold: 16384

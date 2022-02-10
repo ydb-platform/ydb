@@ -29,7 +29,7 @@ void TExecutorBorrowLogic::FillBorrowProto(
     NKikimrExecutorFlat::TBorrowedPart &proto,
     const TBorrowedPartInfo &storedInfo)
 {
-    LogoBlobIDFromLogoBlobID(metaId, proto.MutableMetaId());
+    LogoBlobIDFromLogoBlobID(metaId, proto.MutableMetaId()); 
 
     if (storedInfo.BorrowInfo.FullBorrow) {
         proto.MutableLoaners()->Reserve(storedInfo.BorrowInfo.FullBorrow.size());
@@ -80,41 +80,41 @@ void TExecutorBorrowLogic::StoreBorrowProto(
         Garbage.push_back(gone);
 }
 
-bool TExecutorBorrowLogic::BundlePartiallyCompacted(
-    const NTable::IBundle &bundle,
-    const NTable::NFwd::TSieve &sieve,
+bool TExecutorBorrowLogic::BundlePartiallyCompacted( 
+    const NTable::IBundle &bundle, 
+    const NTable::NFwd::TSieve &sieve, 
     TLogCommit *commit)
-{
-    const TLogoBlobID &metaId = bundle.BundleId();
-    TBorrowedPartInfo *info = BorrowedInfo.FindPtr(metaId);
-    if (info == nullptr)
-        return true;
-
-    bool haveChanges = false;
-    if (info->BorrowInfo.FullBorrow && SelfTabletId == metaId.TabletID()) {
-        auto size = info->BorrowInfo.Keep.size();
-        sieve.MaterializeTo(info->BorrowInfo.Keep);
-
-        if (info->BorrowInfo.Keep.size() != size) {
-            std::sort(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end());
-            auto end = std::unique(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end());
-            Y_VERIFY(end == info->BorrowInfo.Keep.end(),
-                "Unexpected duplicates in compacted blobs");
-            KeepBytes += info->BorrowInfo.UpdateKeepBytes();
-            haveChanges = true;
-        }
-    }
-
+{ 
+    const TLogoBlobID &metaId = bundle.BundleId(); 
+    TBorrowedPartInfo *info = BorrowedInfo.FindPtr(metaId); 
+    if (info == nullptr) 
+        return true; 
+ 
+    bool haveChanges = false; 
+    if (info->BorrowInfo.FullBorrow && SelfTabletId == metaId.TabletID()) { 
+        auto size = info->BorrowInfo.Keep.size(); 
+        sieve.MaterializeTo(info->BorrowInfo.Keep); 
+ 
+        if (info->BorrowInfo.Keep.size() != size) { 
+            std::sort(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end()); 
+            auto end = std::unique(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end()); 
+            Y_VERIFY(end == info->BorrowInfo.Keep.end(), 
+                "Unexpected duplicates in compacted blobs"); 
+            KeepBytes += info->BorrowInfo.UpdateKeepBytes(); 
+            haveChanges = true; 
+        } 
+    } 
+ 
     Y_VERIFY(commit->WaitFollowerGcAck);
-
-    if (haveChanges) {
+ 
+    if (haveChanges) { 
         StoreBorrowProto(metaId, *info, commit);
-    }
-
-    // must be loaned or borrowed, cannot collect blobs
-    return false;
-}
-
+    } 
+ 
+    // must be loaned or borrowed, cannot collect blobs 
+    return false; 
+} 
+ 
 bool TExecutorBorrowLogic::BundleCompacted(
     const NTable::IBundle &bundle,
     const NTable::NFwd::TSieve &sieve,
@@ -127,18 +127,18 @@ bool TExecutorBorrowLogic::BundleCompacted(
 
     // 1. if bundle borrowed - keep blobs non-collected
     if (info->BorrowInfo.FullBorrow) {
-        Y_VERIFY(!info->BorrowInfo.HasKeep(bundle.BundleId()),
+        Y_VERIFY(!info->BorrowInfo.HasKeep(bundle.BundleId()), 
             "Trying to compact the same page collection twice");
-
+ 
         if (SelfTabletId == metaId.TabletID()) {
-            sieve.MaterializeTo(info->BorrowInfo.Keep);
+            sieve.MaterializeTo(info->BorrowInfo.Keep); 
             bundle.SaveAllBlobIdsTo(info->BorrowInfo.Keep);
 
-            std::sort(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end());
-            auto end = std::unique(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end());
-            Y_VERIFY(end == info->BorrowInfo.Keep.end(),
-                "Unexpected duplicates in compacted blobs");
-            KeepBytes += info->BorrowInfo.UpdateKeepBytes();
+            std::sort(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end()); 
+            auto end = std::unique(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end()); 
+            Y_VERIFY(end == info->BorrowInfo.Keep.end(), 
+                "Unexpected duplicates in compacted blobs"); 
+            KeepBytes += info->BorrowInfo.UpdateKeepBytes(); 
         }
     }
 
@@ -156,68 +156,68 @@ bool TExecutorBorrowLogic::BundleCompacted(
     return false;
 }
 
-bool TExecutorBorrowLogic::BundleCompacted(
-    const NTable::IBorrowBundle &bundle,
-    TLogCommit *commit)
-{
-    const TLogoBlobID &metaId = bundle.BundleId();
-    TBorrowedPartInfo *info = BorrowedInfo.FindPtr(metaId);
-    if (info == nullptr)
-        return true;
-
-    // if bundle borrowed - keep blobs non-collected
-    if (info->BorrowInfo.FullBorrow) {
-        Y_VERIFY(!info->BorrowInfo.HasKeep(metaId),
-            "Trying to compact the same bundle twice");
-
-        if (SelfTabletId == metaId.TabletID()) {
-            bundle.SaveAllBlobIdsTo(info->BorrowInfo.Keep);
-
-            std::sort(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end());
-            auto end = std::unique(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end());
-            Y_VERIFY(end == info->BorrowInfo.Keep.end(),
-                "Unexpected duplicates in compacted blobs");
-            KeepBytes += info->BorrowInfo.UpdateKeepBytes();
-        }
-    }
-
-    if (info->LoanInfo.Lender) {
-        info->LoanInfo.Collected = true;
-    }
-
-    CheckLoanCompletion(metaId, *info, commit->Step);
+bool TExecutorBorrowLogic::BundleCompacted( 
+    const NTable::IBorrowBundle &bundle, 
+    TLogCommit *commit) 
+{ 
+    const TLogoBlobID &metaId = bundle.BundleId(); 
+    TBorrowedPartInfo *info = BorrowedInfo.FindPtr(metaId); 
+    if (info == nullptr) 
+        return true; 
+ 
+    // if bundle borrowed - keep blobs non-collected 
+    if (info->BorrowInfo.FullBorrow) { 
+        Y_VERIFY(!info->BorrowInfo.HasKeep(metaId), 
+            "Trying to compact the same bundle twice"); 
+ 
+        if (SelfTabletId == metaId.TabletID()) { 
+            bundle.SaveAllBlobIdsTo(info->BorrowInfo.Keep); 
+ 
+            std::sort(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end()); 
+            auto end = std::unique(info->BorrowInfo.Keep.begin(), info->BorrowInfo.Keep.end()); 
+            Y_VERIFY(end == info->BorrowInfo.Keep.end(), 
+                "Unexpected duplicates in compacted blobs"); 
+            KeepBytes += info->BorrowInfo.UpdateKeepBytes(); 
+        } 
+    } 
+ 
+    if (info->LoanInfo.Lender) { 
+        info->LoanInfo.Collected = true; 
+    } 
+ 
+    CheckLoanCompletion(metaId, *info, commit->Step); 
+    Y_VERIFY(commit->WaitFollowerGcAck); 
+ 
+    // must be loaned or borrowed (otherwise would be not on list) 
+    // in this case - changes must be propagated to lender before cleanup 
+    // in that case - loaner must detach from borrowed bundle and we must keep blobs non-collect awhile 
+    StoreBorrowProto(metaId, *info, commit); 
+    return false; 
+} 
+ 
+bool TExecutorBorrowLogic::BundleCompacted( 
+    const TLogoBlobID &bundleId, 
+    TLogCommit *commit) 
+{ 
+    Y_VERIFY(SelfTabletId != bundleId.TabletID()); 
+    TBorrowedPartInfo *info = BorrowedInfo.FindPtr(bundleId); 
+    if (info == nullptr) 
+        return true; 
+ 
+    if (info->LoanInfo.Lender) { 
+        info->LoanInfo.Collected = true; 
+    } 
+ 
+    CheckLoanCompletion(bundleId, *info, commit->Step); 
     Y_VERIFY(commit->WaitFollowerGcAck);
-
-    // must be loaned or borrowed (otherwise would be not on list)
-    // in this case - changes must be propagated to lender before cleanup
-    // in that case - loaner must detach from borrowed bundle and we must keep blobs non-collect awhile
-    StoreBorrowProto(metaId, *info, commit);
-    return false;
-}
-
-bool TExecutorBorrowLogic::BundleCompacted(
-    const TLogoBlobID &bundleId,
-    TLogCommit *commit)
-{
-    Y_VERIFY(SelfTabletId != bundleId.TabletID());
-    TBorrowedPartInfo *info = BorrowedInfo.FindPtr(bundleId);
-    if (info == nullptr)
-        return true;
-
-    if (info->LoanInfo.Lender) {
-        info->LoanInfo.Collected = true;
-    }
-
-    CheckLoanCompletion(bundleId, *info, commit->Step);
-    Y_VERIFY(commit->WaitFollowerGcAck);
-
-    // must be loaned or borrowed (otherwise would be not on list)
-    // in this case - changes must be propagated to lender before cleanup
-    // in that case - loaner must detach from borrowed bundle and we must keep blobs non-collect awhile
-    StoreBorrowProto(bundleId, *info, commit);
-    return false;
-}
-
+ 
+    // must be loaned or borrowed (otherwise would be not on list) 
+    // in this case - changes must be propagated to lender before cleanup 
+    // in that case - loaner must detach from borrowed bundle and we must keep blobs non-collect awhile 
+    StoreBorrowProto(bundleId, *info, commit); 
+    return false; 
+} 
+ 
 void TExecutorBorrowLogic::BorrowBundle(
     const TLogoBlobID &bundleId,
     const TSet<ui64> &loaners,
@@ -228,16 +228,16 @@ void TExecutorBorrowLogic::BorrowBundle(
 
     TBorrowedPartInfo &storedInfo = storedInfoItPair.first->second;
 
-    Y_VERIFY(!(storedInfo.LoanInfo.Lender && storedInfo.LoanInfo.Collected),
-        "Sanity check: trying to borrow a compacted bundle");
+    Y_VERIFY(!(storedInfo.LoanInfo.Lender && storedInfo.LoanInfo.Collected), 
+        "Sanity check: trying to borrow a compacted bundle"); 
 
-    // It is possible to borrow partially compacted bundles, in which case
-    // keep list might not be empty. However, if bundle has been fully
-    // compacted keep list would contain bundleId and it is possible
-    // to check for that.
-    Y_VERIFY(!storedInfo.BorrowInfo.HasKeep(bundleId),
-        "Sanity check: trying to borrow a compacted bundle");
-
+    // It is possible to borrow partially compacted bundles, in which case 
+    // keep list might not be empty. However, if bundle has been fully 
+    // compacted keep list would contain bundleId and it is possible 
+    // to check for that. 
+    Y_VERIFY(!storedInfo.BorrowInfo.HasKeep(bundleId), 
+        "Sanity check: trying to borrow a compacted bundle"); 
+ 
     auto &fullBorrow = storedInfo.BorrowInfo.FullBorrow;
     fullBorrow.insert( // not replace as some borrows could exist
         fullBorrow.end(),
@@ -269,23 +269,23 @@ void TExecutorBorrowLogic::LoanBundle(
     StoreBorrowProto(bundleId, storedInfo, commit);
 }
 
-void TExecutorBorrowLogic::LoanTxStatus(
-    const TLogoBlobID &bundleId,
-    TPageCollectionTxEnv::TLoanTxStatus &loaned,
-    TLogCommit *commit)
-{
-    auto storedInfoItPair = BorrowedInfo.insert(std::make_pair(bundleId, TBorrowedPartInfo()));
-    Y_VERIFY(storedInfoItPair.second,
-        "must not back-borrow parts at %" PRIu64 " part owner %" PRIu64 " existing loan from %" PRIu64 " new loan from %" PRIu64,
-        SelfTabletId, bundleId.TabletID(), storedInfoItPair.first->second.LoanInfo.Lender, loaned.Lender);
-    HasFlag = true;
-
-    TBorrowedPartInfo &storedInfo = storedInfoItPair.first->second;
-    storedInfo.LoanInfo.Lender = loaned.Lender;
-
-    StoreBorrowProto(bundleId, storedInfo, commit);
-}
-
+void TExecutorBorrowLogic::LoanTxStatus( 
+    const TLogoBlobID &bundleId, 
+    TPageCollectionTxEnv::TLoanTxStatus &loaned, 
+    TLogCommit *commit) 
+{ 
+    auto storedInfoItPair = BorrowedInfo.insert(std::make_pair(bundleId, TBorrowedPartInfo())); 
+    Y_VERIFY(storedInfoItPair.second, 
+        "must not back-borrow parts at %" PRIu64 " part owner %" PRIu64 " existing loan from %" PRIu64 " new loan from %" PRIu64, 
+        SelfTabletId, bundleId.TabletID(), storedInfoItPair.first->second.LoanInfo.Lender, loaned.Lender); 
+    HasFlag = true; 
+ 
+    TBorrowedPartInfo &storedInfo = storedInfoItPair.first->second; 
+    storedInfo.LoanInfo.Lender = loaned.Lender; 
+ 
+    StoreBorrowProto(bundleId, storedInfo, commit); 
+} 
+ 
 void TExecutorBorrowLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, TLogCommit &commit)
 {
     snap.MutableBorrowInfoIds()->Reserve(BorrowedInfo.size());
@@ -379,7 +379,7 @@ void TExecutorBorrowLogic::UpdateBorrow(
                     storedInfo.BorrowInfo.Keep.begin(),
                     storedInfo.BorrowInfo.Keep.end());
                 TVector<TLogoBlobID>().swap(storedInfo.BorrowInfo.Keep);
-                KeepBytes += storedInfo.BorrowInfo.UpdateKeepBytes();
+                KeepBytes += storedInfo.BorrowInfo.UpdateKeepBytes(); 
             }
         } else {
             *it = storedInfo.BorrowInfo.FullBorrow.back();
@@ -444,7 +444,7 @@ void TExecutorBorrowLogic::ConfirmUpdateLoan(
 
 void TExecutorBorrowLogic::RestoreFollowerBorrowedInfo(const TLogoBlobID &blobId, const NKikimrExecutorFlat::TBorrowedPart &proto) {
     Y_UNUSED(blobId);
-    const TLogoBlobID metaInfoId = LogoBlobIDFromLogoBlobID(proto.GetMetaId());
+    const TLogoBlobID metaInfoId = LogoBlobIDFromLogoBlobID(proto.GetMetaId()); 
 
     if (proto.HasLender()) {
         auto storedInfoItPair = BorrowedInfo.insert(std::make_pair(metaInfoId, TBorrowedPartInfo()));
@@ -464,7 +464,7 @@ void TExecutorBorrowLogic::RestoreFollowerBorrowedInfo(const TLogoBlobID &blobId
 }
 
 void TExecutorBorrowLogic::RestoreBorrowedInfo(const TLogoBlobID &blobId, const NKikimrExecutorFlat::TBorrowedPart &proto) {
-    const TLogoBlobID metaInfoId = LogoBlobIDFromLogoBlobID(proto.GetMetaId());
+    const TLogoBlobID metaInfoId = LogoBlobIDFromLogoBlobID(proto.GetMetaId()); 
 
     auto storedInfoItPair = BorrowedInfo.insert(std::make_pair(metaInfoId, TBorrowedPartInfo()));
     TBorrowedPartInfo &storedInfo = storedInfoItPair.first->second;
@@ -472,7 +472,7 @@ void TExecutorBorrowLogic::RestoreBorrowedInfo(const TLogoBlobID &blobId, const 
     if (!storedInfoItPair.second) {
         Y_VERIFY(blobId > storedInfo.BorrowBlobId);
         Garbage.push_back(storedInfo.BorrowBlobId);
-        KeepBytes -= storedInfo.BorrowInfo.KeepBytes;
+        KeepBytes -= storedInfo.BorrowInfo.KeepBytes; 
         storedInfo = TBorrowedPartInfo();
     }
 
@@ -491,7 +491,7 @@ void TExecutorBorrowLogic::RestoreBorrowedInfo(const TLogoBlobID &blobId, const 
         storedInfo.BorrowInfo.Keep.reserve(proto.BorrowKeepListSize());
         for (const auto &x : proto.GetBorrowKeepList())
             storedInfo.BorrowInfo.Keep.emplace_back(LogoBlobIDFromLogoBlobID(x));
-        KeepBytes += storedInfo.BorrowInfo.UpdateKeepBytes();
+        KeepBytes += storedInfo.BorrowInfo.UpdateKeepBytes(); 
     }
 
     if (proto.HasLender()) {
@@ -557,40 +557,40 @@ TString TExecutorBorrowLogic::DebugCheckBorrowConsistency(THashSet<TLogoBlobID> 
     // every non-collected bundle must be known
 
     for (const auto &xpair : BorrowedInfo) {
-        bool collected;
+        bool collected; 
         if (xpair.second.LoanInfo.Lender) {
-            collected = xpair.second.LoanInfo.Collected;
-        } else if (xpair.second.BorrowInfo.FullBorrow) {
-            collected = xpair.second.BorrowInfo.HasKeep(xpair.first);
-        } else {
-            out << xpair.first << ": neither borrowed nor loaned. ";
-            continue;
+            collected = xpair.second.LoanInfo.Collected; 
+        } else if (xpair.second.BorrowInfo.FullBorrow) { 
+            collected = xpair.second.BorrowInfo.HasKeep(xpair.first); 
+        } else { 
+            out << xpair.first << ": neither borrowed nor loaned. "; 
+            continue; 
         }
-
-        if (collected) {
+ 
+        if (collected) { 
             if (knownBundles.contains(xpair.first))
-                out << xpair.first << ": collected bundle still present in database. ";
-        } else {
+                out << xpair.first << ": collected bundle still present in database. "; 
+        } else { 
             if (!knownBundles.contains(xpair.first))
-                out << xpair.first << ": non-collected bundle not present in database. ";
-        }
+                out << xpair.first << ": non-collected bundle not present in database. "; 
+        } 
     }
 
     // must be no foreign bundles not tracked by borrow logic
     return out;
 }
 
-THashMap<TLogoBlobID, TVector<ui64>> TExecutorBorrowLogic::GetBorrowedParts() const {
-    THashMap<TLogoBlobID, TVector<ui64>> result;
-    for (const auto &xpair : BorrowedInfo) {
-        if (xpair.second.BorrowInfo.FullBorrow) {
-            auto& tablets = result[xpair.first];
-            for (ui64 tablet : xpair.second.BorrowInfo.FullBorrow) {
-                tablets.push_back(tablet);
-            }
-        }
-    }
-    return result;
-}
-
+THashMap<TLogoBlobID, TVector<ui64>> TExecutorBorrowLogic::GetBorrowedParts() const { 
+    THashMap<TLogoBlobID, TVector<ui64>> result; 
+    for (const auto &xpair : BorrowedInfo) { 
+        if (xpair.second.BorrowInfo.FullBorrow) { 
+            auto& tablets = result[xpair.first]; 
+            for (ui64 tablet : xpair.second.BorrowInfo.FullBorrow) { 
+                tablets.push_back(tablet); 
+            } 
+        } 
+    } 
+    return result; 
+} 
+ 
 }}

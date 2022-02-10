@@ -47,32 +47,32 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     if (!schemeTx.HasReceiveSnapshot())
         return EExecutionStatus::Executed;
 
-    NIceDb::TNiceDb db(txc.DB);
-
+    NIceDb::TNiceDb db(txc.DB); 
+ 
     Y_VERIFY(schemeTx.HasCreateTable());
 
-    const bool mvcc = DataShard.IsMvccEnabled();
+    const bool mvcc = DataShard.IsMvccEnabled(); 
 
     for (auto &pr : op->InReadSets()) {
         for (auto& rsdata : pr.second) {
-            NKikimrTxDataShard::TSnapshotTransferReadSet rs;
-
-            // We currently support a single readset for a single user table
-            Y_VERIFY(DataShard.GetUserTables().size() == 1, "Support for more than 1 user table in a datashard is not implemented here");
-            ui32 localTableId = DataShard.GetUserTables().begin()->second->LocalTid;
-
-            TString snapBody = rsdata.Body;
-
-            if (rsdata.Body.StartsWith(SnapshotTransferReadSetMagic)) {
-                const bool ok = rs.ParseFromArray(
-                    rsdata.Body.data() + SnapshotTransferReadSetMagic.size(),
-                    rsdata.Body.size() - SnapshotTransferReadSetMagic.size());
-                Y_VERIFY(ok, "Failed to parse snapshot transfer readset");
-
-                TString compressedBody = rs.GetBorrowedSnapshot();
-                snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
-
-                TRowVersion minVersion(rs.GetMinWriteVersionStep(), rs.GetMinWriteVersionTxId());
+            NKikimrTxDataShard::TSnapshotTransferReadSet rs; 
+ 
+            // We currently support a single readset for a single user table 
+            Y_VERIFY(DataShard.GetUserTables().size() == 1, "Support for more than 1 user table in a datashard is not implemented here"); 
+            ui32 localTableId = DataShard.GetUserTables().begin()->second->LocalTid; 
+ 
+            TString snapBody = rsdata.Body; 
+ 
+            if (rsdata.Body.StartsWith(SnapshotTransferReadSetMagic)) { 
+                const bool ok = rs.ParseFromArray( 
+                    rsdata.Body.data() + SnapshotTransferReadSetMagic.size(), 
+                    rsdata.Body.size() - SnapshotTransferReadSetMagic.size()); 
+                Y_VERIFY(ok, "Failed to parse snapshot transfer readset"); 
+ 
+                TString compressedBody = rs.GetBorrowedSnapshot(); 
+                snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody); 
+ 
+                TRowVersion minVersion(rs.GetMinWriteVersionStep(), rs.GetMinWriteVersionTxId()); 
                 if (DataShard.GetSnapshotManager().GetMinWriteVersion() < minVersion)
                     DataShard.GetSnapshotManager().SetMinWriteVersion(db, minVersion);
 
@@ -86,27 +86,27 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                     TRowVersion lowWatermark(rs.GetMvccLowWatermarkStep(), rs.GetMvccLowWatermarkTxId());
                     if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark)
                         DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark);
-                }
-            }
-
-            txc.Env.LoanTable(localTableId, snapBody);
+                } 
+            } 
+ 
+            txc.Env.LoanTable(localTableId, snapBody); 
         }
     }
 
-    Y_VERIFY(DataShard.GetSnapshotManager().GetSnapshots().empty(),
-        "Found unexpected persistent snapshots at CopyTable destination");
-
+    Y_VERIFY(DataShard.GetSnapshotManager().GetSnapshots().empty(), 
+        "Found unexpected persistent snapshots at CopyTable destination"); 
+ 
     const auto minVersion = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark()
                                  : DataShard.GetSnapshotManager().GetMinWriteVersion();
 
-    // If MinWriteVersion is not zero, then all versions below it are inaccessible
+    // If MinWriteVersion is not zero, then all versions below it are inaccessible 
     if (minVersion) {
-        for (const auto& kv : DataShard.GetUserTables()) {
-            ui32 localTableId = kv.second->LocalTid;
-            txc.DB.RemoveRowVersions(localTableId, TRowVersion::Min(), minVersion);
-        }
-    }
-
+        for (const auto& kv : DataShard.GetUserTables()) { 
+            ui32 localTableId = kv.second->LocalTid; 
+            txc.DB.RemoveRowVersions(localTableId, TRowVersion::Min(), minVersion); 
+        } 
+    } 
+ 
     return EExecutionStatus::ExecutedNoMoreRestarts;
 }
 

@@ -25,7 +25,7 @@ namespace NTable {
 
         Tail = 1,
         Head = 17,
-        Edge = 28,
+        Edge = 28, 
     };
 
     /* Ev | Desc                                                   | Gone
@@ -62,17 +62,17 @@ namespace NTable {
        14   Per-part by key bloom filter support (EPage:ByKey v0)
      ---------------------------------------------------------------------
        15   Complete support ELargeObj::Outer, values packed in page collection
-     ---------------------------------------------------------------------
-       16   Read and write final key in EPage::Index
+     --------------------------------------------------------------------- 
+       16   Read and write final key in EPage::Index 
      ---------------------------------------------------------------------
        17   Fixed incomplete read support of rooted page collections
      ---------------------------------------------------------------------
        18   Durable db change serial numbers with EvBegin v1
             Stamp field in EvFlush is not used anymore
-     ---------------------------------------------------------------------
-       19   Generation and serialization of part slices
-     ---------------------------------------------------------------------
-       20   Support for partial bundle compaction
+     --------------------------------------------------------------------- 
+       19   Generation and serialization of part slices 
+     --------------------------------------------------------------------- 
+       20   Support for partial bundle compaction 
      ---------------------------------------------------------------------
        21   Fix of diverged TxStamp filed in EvBegin, KIKIMR-5323
      ---------------------------------------------------------------------
@@ -85,12 +85,12 @@ namespace NTable {
             Start write at least small variant of NLabel everywhere
      ---------------------------------------------------------------------
        25   Back to evolution 24 and legacy Tiny + Small labels
-     ---------------------------------------------------------------------
-       26   Parts with column groups
-     ---------------------------------------------------------------------
-       27   Parts with versioned rows and historic indexes
-     ---------------------------------------------------------------------
-       28   Parts with uncommitted delta rows
+     --------------------------------------------------------------------- 
+       26   Parts with column groups 
+     --------------------------------------------------------------------- 
+       27   Parts with versioned rows and historic indexes 
+     --------------------------------------------------------------------- 
+       28   Parts with uncommitted delta rows 
      */
 
 }

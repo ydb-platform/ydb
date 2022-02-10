@@ -92,21 +92,21 @@ public:
         }
     }
 
-    void Start() {
-        if (auto guard = Server->ProtectShutdown()) {
+    void Start() { 
+        if (auto guard = Server->ProtectShutdown()) { 
             (Service->*RequestCallback)(&Context, &Request, Writer.Get(), CQ, CQ, GetGRpcTag());
-        } else {
-            // Server is shutting down, new requests cannot be started
-            delete this;
-        }
-    }
-
+        } else { 
+            // Server is shutting down, new requests cannot be started 
+            delete this; 
+        } 
+    } 
+ 
 public:
     //! Start another instance of request to grab next incoming query (only when the server is not shutting down)
     void Clone() {
         if (!Server->IsShuttingDown()) {
             if (RequestCallback)
-                (new TSimpleRequest(Server, Service, CQ, Cb, RequestCallback, ActorSystem, Name, Counters))->Start();
+                (new TSimpleRequest(Server, Service, CQ, Cb, RequestCallback, ActorSystem, Name, Counters))->Start(); 
         }
     }
 
@@ -115,10 +115,10 @@ public:
     }
 
     void DestroyRequest() override {
-        if (RequestRegistered_) {
-            Server->DeregisterRequestCtx(this);
-            RequestRegistered_ = false;
-        }
+        if (RequestRegistered_) { 
+            Server->DeregisterRequestCtx(this); 
+            RequestRegistered_ = false; 
+        } 
         delete this;
     }
 
@@ -292,17 +292,17 @@ private:
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
             Name, ok ? "true" : "false", makeRequestString().data(), Context.peer().c_str(), Server->GetCurrentInFlight());
 
-        if (Context.c_call() == nullptr) {
-            Y_VERIFY(!ok);
-        } else if (!(RequestRegistered_ = Server->RegisterRequestCtx(this))) {
-            // Request cannot be registered due to shutdown
-            // It's unsafe to continue, so drop this request without processing
-            LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] dropped request Name# %s due to shutdown",
-                this, Name);
-            Context.TryCancel();
-            return false;
-        }
-
+        if (Context.c_call() == nullptr) { 
+            Y_VERIFY(!ok); 
+        } else if (!(RequestRegistered_ = Server->RegisterRequestCtx(this))) { 
+            // Request cannot be registered due to shutdown 
+            // It's unsafe to continue, so drop this request without processing 
+            LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] dropped request Name# %s due to shutdown", 
+                this, Name); 
+            Context.TryCancel(); 
+            return false; 
+        } 
+ 
         Clone();
 
         if (!ok) {
@@ -364,7 +364,7 @@ private:
 
     TMaybe<NMsgBusProxy::TBusMessageContext> BusContext;
     bool InProgress_;
-    bool RequestRegistered_ = false;
+    bool RequestRegistered_ = false; 
 };
 
 } // namespace
@@ -431,7 +431,7 @@ void TGRpcService::SetupIncomingRequests() {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    (new TSimpleRequest<NKikimrClient::IN, NKikimrClient::OUT>(this, &Service_, CQ, \
+    (new TSimpleRequest<NKikimrClient::IN, NKikimrClient::OUT>(this, &Service_, CQ, \ 
         [this](IRequestContext *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
             ACTION; \

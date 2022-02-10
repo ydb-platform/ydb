@@ -301,7 +301,7 @@ private:
 
         TVector<TKeyDesc::TColumnOp> columns;
         for (const auto& ci : ContentsColumns) {
-            TKeyDesc::TColumnOp op = { ci.Id, TKeyDesc::EColumnOperation::Read, ci.PType, 0, 0 };
+            TKeyDesc::TColumnOp op = { ci.Id, TKeyDesc::EColumnOperation::Read, ci.PType, 0, 0 }; 
             columns.push_back(op);
         }
 
@@ -314,7 +314,7 @@ private:
     void ResolveShards(const NActors::TActorContext& ctx) {
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
 
-        request->ResultSet.emplace_back(std::move(KeyRange));
+        request->ResultSet.emplace_back(std::move(KeyRange)); 
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         ctx.Send(SchemeCache, resolveReq.Release());
@@ -335,19 +335,19 @@ private:
 
     bool CheckAccess(TString& errorMessage) {
         const ui32 access = NACLib::EAccessRights::SelectRow;
-        if (access != 0
-                && UserToken != nullptr
-                && KeyRange->Status == TKeyDesc::EStatus::Ok
-                && KeyRange->SecurityObject != nullptr
-                && !KeyRange->SecurityObject->CheckAccess(access, *UserToken))
-        {
-            TStringStream explanation;
-            explanation << "Access denied for " << UserToken->GetUserSID()
-                        << " with access " << NACLib::AccessRightsToString(access)
-                        << " to table [" << Request->GetTableName() << "]";
+        if (access != 0 
+                && UserToken != nullptr 
+                && KeyRange->Status == TKeyDesc::EStatus::Ok 
+                && KeyRange->SecurityObject != nullptr 
+                && !KeyRange->SecurityObject->CheckAccess(access, *UserToken)) 
+        { 
+            TStringStream explanation; 
+            explanation << "Access denied for " << UserToken->GetUserSID() 
+                        << " with access " << NACLib::AccessRightsToString(access) 
+                        << " to table [" << Request->GetTableName() << "]"; 
 
-            errorMessage = explanation.Str();
-            return false;
+            errorMessage = explanation.Str(); 
+            return false; 
         }
         return true;
     }
@@ -359,10 +359,10 @@ private:
         }
 
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
-        Y_VERIFY(msg->Request->ResultSet.size() == 1);
-        KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription);
+        Y_VERIFY(msg->Request->ResultSet.size() == 1); 
+        KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription); 
 
-        if (msg->Request->ErrorCount > 0) {
+        if (msg->Request->ErrorCount > 0) { 
             return ReplyWithError(MSTATUS_ERROR, NTxProxy::TResultStatus::EStatus::ResolveError,
                                   Sprintf("Unknown table '%s'", Request->GetTableName().data()), ctx);
         }

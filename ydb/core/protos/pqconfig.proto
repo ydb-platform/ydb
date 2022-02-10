@@ -127,8 +127,8 @@ message TPQConfig {
     optional NKikimrNodeLimits.TNodeLimitsConfig.TPersQueueNodeConfig PersQueueNodeConfig = 36;
 
     optional bool EnableProtoSourceIdInfo = 37 [default = false];
-
-    optional string Database = 38;
+ 
+    optional string Database = 38; 
 
     message TClientServiceType {
         optional string Name = 1 [default = "data-transfer"];
@@ -144,15 +144,15 @@ message TPQConfig {
     optional bool MetaCacheSkipVersionCheck = 42 [default = false];
 }
 
-message TChannelProfile {
-    optional string PoolKind = 1;
-    optional uint64 Size = 2; // size in bytes
-    optional double ReadIops = 3; // required iops for read requests
-    optional double ReadBandwidth = 4; // required bandwidth (in bytes/sec) for read requests
-    optional double WriteIops = 5; // required iops for write requests
-    optional double WriteBandwidth = 6; // required bandwidth (in bytes/sec) for write requests
-}
-
+message TChannelProfile { 
+    optional string PoolKind = 1; 
+    optional uint64 Size = 2; // size in bytes 
+    optional double ReadIops = 3; // required iops for read requests 
+    optional double ReadBandwidth = 4; // required bandwidth (in bytes/sec) for read requests 
+    optional double WriteIops = 5; // required iops for write requests 
+    optional double WriteBandwidth = 6; // required bandwidth (in bytes/sec) for write requests 
+} 
+ 
 message TMirrorPartitionConfig {
     message TCredentials {
         message IamCredentials {
@@ -204,8 +204,8 @@ message TPartitionConfig {
     optional uint32 NumChannels = 10 [default = 10];
 
     optional uint32 TotalPartitions = 13 [default = 1];
-
-    repeated TChannelProfile ExplicitChannelProfiles = 14;
+ 
+    repeated TChannelProfile ExplicitChannelProfiles = 14; 
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
 };

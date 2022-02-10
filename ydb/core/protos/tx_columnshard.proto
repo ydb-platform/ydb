@@ -14,9 +14,9 @@ enum EResultStatus {
     ABORTED = 3;
     ERROR = 4;
     TIMEOUT = 5;
-    OUTDATED = 6;
-    SCHEMA_ERROR = 7;
-    SCHEMA_CHANGED = 8;
+    OUTDATED = 6; 
+    SCHEMA_ERROR = 7; 
+    SCHEMA_CHANGED = 8; 
     OVERLOADED = 9;
 
     UNKNOWN = 0xFFFF;
@@ -61,7 +61,7 @@ message TEvWrite {
     optional string DedupId = 5;
     optional bytes Data = 6;
     optional TMetadata Meta = 7;
-    optional NKikimrLongTxService.TLongTxId LongTxId = 8;
+    optional NKikimrLongTxService.TLongTxId LongTxId = 8; 
 }
 
 message TEvWriteResult {
@@ -117,11 +117,11 @@ enum ETransactionKind {
 message TEvProposeTransaction {
     optional NActorsProto.TActorId Source = 1;
     optional ETransactionKind TxKind = 2;
-    optional uint64 TxId = 3;
-    optional bytes TxBody = 4; // TCommitTxBody for TX_KIND_COMMIT
-
-    optional uint64 SchemeShardId = 5;
-    optional NKikimrSubDomains.TProcessingParams ProcessingParams = 6;
+    optional uint64 TxId = 3; 
+    optional bytes TxBody = 4; // TCommitTxBody for TX_KIND_COMMIT 
+ 
+    optional uint64 SchemeShardId = 5; 
+    optional NKikimrSubDomains.TProcessingParams ProcessingParams = 6; 
 }
 
 message TEvProposeTransactionResult {
@@ -130,102 +130,102 @@ message TEvProposeTransactionResult {
     optional uint64 Origin = 3;
     optional uint64 TxId = 4;
     optional uint64 MinStep = 5;
-    optional uint64 MaxStep = 6;
-    optional string StatusMessage = 7;
-    repeated fixed64 DomainCoordinators = 8;
-    optional uint64 Step = 9;
+    optional uint64 MaxStep = 6; 
+    optional string StatusMessage = 7; 
+    repeated fixed64 DomainCoordinators = 8; 
+    optional uint64 Step = 9; 
 }
 
-message TEvCancelTransactionProposal {
-    optional uint64 TxId = 1;
-}
-
-message TEvNotifyTxCompletion {
-    optional uint64 TxId = 1;
-}
-
-message TEvNotifyTxCompletionResult {
-    optional uint64 Origin = 1;
-    optional uint64 TxId = 2;
-}
-
+message TEvCancelTransactionProposal { 
+    optional uint64 TxId = 1; 
+} 
+ 
+message TEvNotifyTxCompletion { 
+    optional uint64 TxId = 1; 
+} 
+ 
+message TEvNotifyTxCompletionResult { 
+    optional uint64 Origin = 1; 
+    optional uint64 TxId = 2; 
+} 
+ 
 message TCommitTxBody {
     optional uint64 TxInitiator = 1;
     repeated uint64 WriteIds = 2;
 }
 
-message TInitShard {
-    optional uint32 DataChannelCount = 1;
+message TInitShard { 
+    optional uint32 DataChannelCount = 1; 
 }
 
-message TSchemaPresetVersionInfo {
-    optional uint64 Id = 1;
-    optional uint64 SinceStep = 2;
-    optional uint64 SinceTxId = 3;
+message TSchemaPresetVersionInfo { 
+    optional uint64 Id = 1; 
+    optional uint64 SinceStep = 2; 
+    optional uint64 SinceTxId = 3; 
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
-}
-
-message TTtlSettingsPresetVersionInfo {
-    optional uint64 Id = 1;
-    optional uint64 SinceStep = 2;
-    optional uint64 SinceTxId = 3;
+} 
+ 
+message TTtlSettingsPresetVersionInfo { 
+    optional uint64 Id = 1; 
+    optional uint64 SinceStep = 2; 
+    optional uint64 SinceTxId = 3; 
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
-}
-
-message TTableVersionInfo {
-    optional uint64 PathId = 1;
-    optional uint64 SinceStep = 2;
-    optional uint64 SinceTxId = 3;
+} 
+ 
+message TTableVersionInfo { 
+    optional uint64 PathId = 1; 
+    optional uint64 SinceStep = 2; 
+    optional uint64 SinceTxId = 3; 
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
-    optional uint32 SchemaPresetId = 5;
+    optional uint32 SchemaPresetId = 5; 
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 6;
-    optional uint32 TtlSettingsPresetId = 7;
-    optional uint64 SchemaPresetVersionAdj = 8;
-    optional uint64 TtlSettingsPresetVersionAdj = 9;
-}
-
-message TCreateTable {
-    optional uint64 PathId = 1;
+    optional uint32 TtlSettingsPresetId = 7; 
+    optional uint64 SchemaPresetVersionAdj = 8; 
+    optional uint64 TtlSettingsPresetVersionAdj = 9; 
+} 
+ 
+message TCreateTable { 
+    optional uint64 PathId = 1; 
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 2;
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 3;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
     optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 5;
-    optional uint64 SchemaPresetVersionAdj = 6;
-    optional uint64 TtlSettingsPresetVersionAdj = 7;
+    optional uint64 SchemaPresetVersionAdj = 6; 
+    optional uint64 TtlSettingsPresetVersionAdj = 7; 
 }
 
-message TAlterTable {
-    optional uint64 PathId = 1;
+message TAlterTable { 
+    optional uint64 PathId = 1; 
     optional NKikimrSchemeOp.TAlterColumnTable AlterBody = 2;
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 3;
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 4;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 5;
     optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 6;
-    optional uint64 SchemaPresetVersionAdj = 7;
-    optional uint64 TtlSettingsPresetVersionAdj = 8;
-}
-
-message TDropTable {
-    optional uint64 PathId = 1;
-}
-
-message TEnsureTables {
-    repeated TCreateTable Tables = 1;
-}
-
-message TAlterStore {
+    optional uint64 SchemaPresetVersionAdj = 7; 
+    optional uint64 TtlSettingsPresetVersionAdj = 8; 
+} 
+ 
+message TDropTable { 
+    optional uint64 PathId = 1; 
+} 
+ 
+message TEnsureTables { 
+    repeated TCreateTable Tables = 1; 
+} 
+ 
+message TAlterStore { 
     optional NKikimrSchemeOp.TAlterColumnStore AlterBody = 1;
-    repeated uint32 DroppedSchemaPresets = 2;
+    repeated uint32 DroppedSchemaPresets = 2; 
     repeated NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPresets = 3;
-    repeated uint32 DroppedTtlSettingsPresets = 4;
+    repeated uint32 DroppedTtlSettingsPresets = 4; 
     repeated NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPresets = 5;
-}
-
-message TSchemaSeqNo {
-    optional uint32 Generation = 1;
-    optional uint64 Round = 2;
-}
-
+} 
+ 
+message TSchemaSeqNo { 
+    optional uint32 Generation = 1; 
+    optional uint64 Round = 2; 
+} 
+ 
 message TIndexPortionMeta {
     oneof Produced {
         bool IsInserted = 1;
@@ -243,14 +243,14 @@ message TIndexColumnMeta {
 }
 
 message TSchemaTxBody {
-    optional TSchemaSeqNo SeqNo = 1;
-    oneof TxBody {
-        TInitShard InitShard = 2;
-        TEnsureTables EnsureTables = 3;
-        TDropTable DropTable = 4;
-        TAlterTable AlterTable = 5;
-        TAlterStore AlterStore = 6;
-    }
+    optional TSchemaSeqNo SeqNo = 1; 
+    oneof TxBody { 
+        TInitShard InitShard = 2; 
+        TEnsureTables EnsureTables = 3; 
+        TDropTable DropTable = 4; 
+        TAlterTable AlterTable = 5; 
+        TAlterStore AlterStore = 6; 
+    } 
 }
 
 message TTtlTxBody {

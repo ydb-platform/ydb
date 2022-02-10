@@ -206,9 +206,9 @@ public:
 
         TString errStr;
 
-        if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateExtSubDomain, userAttrsDetails, errStr) ||
-            !userAttrs->CheckLimits(errStr))
-        {
+        if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateExtSubDomain, userAttrsDetails, errStr) || 
+            !userAttrs->CheckLimits(errStr)) 
+        { 
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -259,14 +259,14 @@ public:
             alter->SetSharedHive(sharedHive);
         }
 
-        if (settings.HasDeclaredSchemeQuotas()) {
-            alter->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas());
-        }
-
-        if (settings.HasDatabaseQuotas()) {
-            alter->SetDatabaseQuotas(settings.GetDatabaseQuotas());
-        }
-
+        if (settings.HasDeclaredSchemeQuotas()) { 
+            alter->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas()); 
+        } 
+ 
+        if (settings.HasDatabaseQuotas()) { 
+            alter->SetDatabaseQuotas(settings.GetDatabaseQuotas()); 
+        } 
+ 
         Y_VERIFY(!context.SS->SubDomains.contains(newNode->PathId));
         auto& subDomainInfo = context.SS->SubDomains[newNode->PathId];
         subDomainInfo = new TSubDomainInfo();
@@ -274,7 +274,7 @@ public:
 
         context.SS->PersistSubDomain(db, newNode->PathId, *subDomainInfo);
         context.SS->PersistSubDomainAlter(db, newNode->PathId, *alter);
-        context.SS->IncrementPathDbRefCount(newNode->PathId);
+        context.SS->IncrementPathDbRefCount(newNode->PathId); 
 
         if (parentPath.Base()->HasActiveChanges()) {
             TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;

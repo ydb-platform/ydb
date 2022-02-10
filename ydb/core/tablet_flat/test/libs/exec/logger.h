@@ -118,7 +118,7 @@ namespace NFake {
         using ELnLev = NUtil::ELnLev;
 
         TLogFwd(TIntrusivePtr<TSink> sink)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TLogFwd::Inbox), IActor::LOG_ACTOR)
+            : ::NActors::IActor(static_cast<TReceiveFunc>(&TLogFwd::Inbox), IActor::LOG_ACTOR) 
             , Sink(std::move(sink))
         {
         }

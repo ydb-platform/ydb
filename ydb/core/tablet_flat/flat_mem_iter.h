@@ -5,10 +5,10 @@
 #include "flat_row_remap.h"
 #include "flat_row_state.h"
 #include "flat_mem_warm.h"
-#include "flat_mem_snapshot.h"
+#include "flat_mem_snapshot.h" 
 #include "flat_part_iface.h"
 #include "flat_page_label.h"
-#include "flat_table_committed.h"
+#include "flat_table_committed.h" 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 
@@ -21,14 +21,14 @@ namespace NTable {
 
         TMemIt(const TMemTable* memTable,
                 TIntrusiveConstPtr<TKeyNulls> nulls,
-                const TRemap* remap,
-                IPages *env,
-                NMem::TTreeIterator iterator)
+                const TRemap* remap, 
+                IPages *env, 
+                NMem::TTreeIterator iterator) 
             : MemTable(memTable)
             , Nulls(std::move(nulls))
             , Remap(remap)
             , Env(env)
-            , RowIt(std::move(iterator))
+            , RowIt(std::move(iterator)) 
         {
             Key.reserve(Nulls->Size());
 
@@ -38,24 +38,24 @@ namespace NTable {
 
         static TAutoPtr<TMemIt> Make(
                 const TMemTable& memTable,
-                const NMem::TTreeSnapshot& snapshot,
-                TCells key,
-                ESeek seek,
+                const NMem::TTreeSnapshot& snapshot, 
+                TCells key, 
+                ESeek seek, 
                 TIntrusiveConstPtr<TKeyNulls> nulls,
-                const TRemap *remap,
-                IPages *env,
-                EDirection direction = EDirection::Forward) noexcept
+                const TRemap *remap, 
+                IPages *env, 
+                EDirection direction = EDirection::Forward) noexcept 
         {
             auto *iter = new TMemIt(&memTable, std::move(nulls), remap, env, snapshot.Iterator());
 
-            switch (direction) {
-                case EDirection::Forward:
-                    iter->Seek(key, seek);
-                    break;
-                case EDirection::Reverse:
-                    iter->SeekReverse(key, seek);
-                    break;
-            }
+            switch (direction) { 
+                case EDirection::Forward: 
+                    iter->Seek(key, seek); 
+                    break; 
+                case EDirection::Reverse: 
+                    iter->SeekReverse(key, seek); 
+                    break; 
+            } 
 
             return iter;
         }
@@ -63,222 +63,222 @@ namespace NTable {
         void Seek(TCells key, ESeek seek) noexcept
         {
             Key.clear();
-            CurrentVersion = nullptr;
+            CurrentVersion = nullptr; 
 
             if (key) {
                 NMem::TPoint search{ key, *Nulls };
 
-                switch (seek) {
-                    case ESeek::Lower:
-                        RowIt.SeekLowerBound(search);
-                        break;
-                    case ESeek::Exact:
-                        RowIt.SeekExact(search);
-                        break;
-                    case ESeek::Upper:
-                        RowIt.SeekUpperBound(search);
-                        break;
+                switch (seek) { 
+                    case ESeek::Lower: 
+                        RowIt.SeekLowerBound(search); 
+                        break; 
+                    case ESeek::Exact: 
+                        RowIt.SeekExact(search); 
+                        break; 
+                    case ESeek::Upper: 
+                        RowIt.SeekUpperBound(search); 
+                        break; 
                 }
-            } else {
-                switch (seek) {
-                    case ESeek::Lower:
-                        RowIt.SeekFirst();
-                        break;
-                    case ESeek::Exact:
-                    case ESeek::Upper:
-                        RowIt.Invalidate();
-                        break;
-                }
+            } else { 
+                switch (seek) { 
+                    case ESeek::Lower: 
+                        RowIt.SeekFirst(); 
+                        break; 
+                    case ESeek::Exact: 
+                    case ESeek::Upper: 
+                        RowIt.Invalidate(); 
+                        break; 
+                } 
             }
         }
 
-        void SeekReverse(TCells key, ESeek seek) noexcept
-        {
-            Key.clear();
-            CurrentVersion = nullptr;
-
-            if (key) {
-                NMem::TPoint search{ key, *Nulls };
-
-                switch (seek) {
-                    case ESeek::Exact:
-                        RowIt.SeekExact(search);
-                        break;
-                    case ESeek::Lower:
-                        RowIt.SeekUpperBound(search, /* backwards */ true);
-                        break;
-                    case ESeek::Upper:
-                        RowIt.SeekLowerBound(search, /* backwards */ true);
-                        break;
-                }
-            } else {
-                switch (seek) {
-                    case ESeek::Lower:
-                        RowIt.SeekLast();
-                        break;
-                    case ESeek::Exact:
-                    case ESeek::Upper:
-                        RowIt.Invalidate();
-                        break;
-                }
-            }
-        }
-
+        void SeekReverse(TCells key, ESeek seek) noexcept 
+        { 
+            Key.clear(); 
+            CurrentVersion = nullptr; 
+ 
+            if (key) { 
+                NMem::TPoint search{ key, *Nulls }; 
+ 
+                switch (seek) { 
+                    case ESeek::Exact: 
+                        RowIt.SeekExact(search); 
+                        break; 
+                    case ESeek::Lower: 
+                        RowIt.SeekUpperBound(search, /* backwards */ true); 
+                        break; 
+                    case ESeek::Upper: 
+                        RowIt.SeekLowerBound(search, /* backwards */ true); 
+                        break; 
+                } 
+            } else { 
+                switch (seek) { 
+                    case ESeek::Lower: 
+                        RowIt.SeekLast(); 
+                        break; 
+                    case ESeek::Exact: 
+                    case ESeek::Upper: 
+                        RowIt.Invalidate(); 
+                        break; 
+                } 
+            } 
+        } 
+ 
         TDbTupleRef GetKey() const
         {
             Y_VERIFY_DEBUG(IsValid());
 
             const ui32 len = MemTable->Scheme->Keys->Size();
-            const auto *key = RowIt.GetKey();
+            const auto *key = RowIt.GetKey(); 
 
-            if (len >= Nulls->BasicTypes().size()) {
-                return { Nulls->BasicTypes().begin(), key, len };
+            if (len >= Nulls->BasicTypes().size()) { 
+                return { Nulls->BasicTypes().begin(), key, len }; 
             } else if (!Key) {
                 Key.insert(Key.end(), key, key + len);
                 Key.insert(Key.end(), (**Nulls).begin() + len, (**Nulls).end());
             }
 
-            return { Nulls->BasicTypes().begin(), Key.begin(), ui32(Key.size()) };
+            return { Nulls->BasicTypes().begin(), Key.begin(), ui32(Key.size()) }; 
         }
 
-        bool IsDelta() const noexcept
+        bool IsDelta() const noexcept 
         {
-            auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
+            auto* update = GetCurrentVersion(); 
+            Y_VERIFY(update); 
 
-            return update->RowVersion.Step == Max<ui64>();
-        }
+            return update->RowVersion.Step == Max<ui64>(); 
+        } 
+ 
+        ui64 GetDeltaTxId() const noexcept 
+        { 
+            auto* update = GetCurrentVersion(); 
+            Y_VERIFY(update); 
+            Y_VERIFY(update->RowVersion.Step == Max<ui64>()); 
 
-        ui64 GetDeltaTxId() const noexcept
-        {
-            auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-            Y_VERIFY(update->RowVersion.Step == Max<ui64>());
+            return update->RowVersion.TxId; 
+        } 
+ 
+        void ApplyDelta(TRowState& row) const noexcept 
+        { 
+            Y_VERIFY(row.Size() == Remap->Size(), "row state doesn't match the remap index"); 
+ 
+            auto* update = GetCurrentVersion(); 
+            Y_VERIFY(update); 
+            Y_VERIFY(update->RowVersion.Step == Max<ui64>()); 
+ 
+            if (row.Touch(update->Rop)) { 
+                for (auto& up : **update) { 
+                    ApplyColumn(row, up); 
+                } 
+            } 
+        } 
 
-            return update->RowVersion.TxId;
-        }
+        bool SkipDelta() noexcept 
+        { 
+            auto* update = GetCurrentVersion(); 
+            Y_VERIFY(update); 
+            Y_VERIFY(update->RowVersion.Step == Max<ui64>()); 
+ 
+            CurrentVersion = update->Next; 
+            return bool(CurrentVersion); 
+        } 
+ 
+        void Apply(TRowState& row, const NTable::TTransactionMap<TRowVersion>& committedTransactions) const noexcept 
+        { 
+            Y_VERIFY(row.Size() == Remap->Size(), "row state doesn't match the remap index"); 
+ 
+            auto* update = GetCurrentVersion(); 
+            Y_VERIFY(update); 
+ 
+            for (;;) { 
+                const bool isDelta = update->RowVersion.Step == Max<ui64>(); 
+                if (!isDelta || committedTransactions.Find(update->RowVersion.TxId)) { 
+                    if (row.Touch(update->Rop)) { 
+                        for (auto& up : **update) { 
+                            ApplyColumn(row, up); 
+                        } 
+                    } 
+                } 
+                if (!isDelta) { 
+                    break; 
+                } 
+                if (!(update = update->Next)) { 
+                    break; 
+                } 
+            } 
+        } 
+ 
+        /** 
+         * Returns row version at which current row state materialized 
+         */ 
+        TRowVersion GetRowVersion() const noexcept 
+        { 
+            auto* update = GetCurrentVersion(); 
+            Y_VERIFY(update); 
+            Y_VERIFY(update->RowVersion.Step != Max<ui64>(), "GetRowVersion cannot be called on deltas"); 
+            return update->RowVersion; 
+        } 
 
-        void ApplyDelta(TRowState& row) const noexcept
-        {
-            Y_VERIFY(row.Size() == Remap->Size(), "row state doesn't match the remap index");
-
-            auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-            Y_VERIFY(update->RowVersion.Step == Max<ui64>());
-
-            if (row.Touch(update->Rop)) {
-                for (auto& up : **update) {
-                    ApplyColumn(row, up);
-                }
-            }
-        }
-
-        bool SkipDelta() noexcept
-        {
-            auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-            Y_VERIFY(update->RowVersion.Step == Max<ui64>());
-
-            CurrentVersion = update->Next;
-            return bool(CurrentVersion);
-        }
-
-        void Apply(TRowState& row, const NTable::TTransactionMap<TRowVersion>& committedTransactions) const noexcept
-        {
-            Y_VERIFY(row.Size() == Remap->Size(), "row state doesn't match the remap index");
-
-            auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-
-            for (;;) {
-                const bool isDelta = update->RowVersion.Step == Max<ui64>();
-                if (!isDelta || committedTransactions.Find(update->RowVersion.TxId)) {
-                    if (row.Touch(update->Rop)) {
-                        for (auto& up : **update) {
-                            ApplyColumn(row, up);
-                        }
-                    }
-                }
-                if (!isDelta) {
-                    break;
-                }
-                if (!(update = update->Next)) {
-                    break;
-                }
-            }
-        }
-
-        /**
-         * Returns row version at which current row state materialized
-         */
-        TRowVersion GetRowVersion() const noexcept
-        {
-            auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-            Y_VERIFY(update->RowVersion.Step != Max<ui64>(), "GetRowVersion cannot be called on deltas");
-            return update->RowVersion;
-        }
-
-        /**
-         * Skips to row at the current key as seen at row version rowVersion
-         *
-         * Returns false if there is no such version, e.g. current key did not
-         * exist or didn't have any known updates at this rowVersion.
-         */
-        bool SkipToRowVersion(TRowVersion rowVersion, const NTable::TTransactionMap<TRowVersion>& committedTransactions) noexcept
-        {
-            Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
-
-            auto* chain = GetCurrentVersion();
-            Y_VERIFY_DEBUG(chain, "Unexpected empty chain");
-
-            // Skip uncommitted deltas
-            while (chain->RowVersion.Step == Max<ui64>() && !committedTransactions.Find(chain->RowVersion.TxId)) {
-                if (!(chain = chain->Next)) {
-                    CurrentVersion = nullptr;
-                    return false;
-                }
-                CurrentVersion = chain;
-            }
-
-            // Fast path check for the current version
-            if (chain->RowVersion.Step != Max<ui64>()) {
-                if (chain->RowVersion <= rowVersion) {
-                    return true;
-                }
-            } else {
-                auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
-                Y_VERIFY(commitVersion);
-                if (*commitVersion <= rowVersion) {
-                    return true;
-                }
-            }
-
+        /** 
+         * Skips to row at the current key as seen at row version rowVersion 
+         * 
+         * Returns false if there is no such version, e.g. current key did not 
+         * exist or didn't have any known updates at this rowVersion. 
+         */ 
+        bool SkipToRowVersion(TRowVersion rowVersion, const NTable::TTransactionMap<TRowVersion>& committedTransactions) noexcept 
+        { 
+            Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row"); 
+ 
+            auto* chain = GetCurrentVersion(); 
+            Y_VERIFY_DEBUG(chain, "Unexpected empty chain"); 
+ 
+            // Skip uncommitted deltas 
+            while (chain->RowVersion.Step == Max<ui64>() && !committedTransactions.Find(chain->RowVersion.TxId)) { 
+                if (!(chain = chain->Next)) { 
+                    CurrentVersion = nullptr; 
+                    return false; 
+                } 
+                CurrentVersion = chain; 
+            } 
+ 
+            // Fast path check for the current version 
+            if (chain->RowVersion.Step != Max<ui64>()) { 
+                if (chain->RowVersion <= rowVersion) { 
+                    return true; 
+                } 
+            } else { 
+                auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId); 
+                Y_VERIFY(commitVersion); 
+                if (*commitVersion <= rowVersion) { 
+                    return true; 
+                } 
+            } 
+ 
             InvisibleRowSkips++;
 
-            while ((chain = chain->Next)) {
-                if (chain->RowVersion.Step != Max<ui64>()) {
-                    if (chain->RowVersion <= rowVersion) {
-                        CurrentVersion = chain;
-                        return true;
-                    }
-
-                    InvisibleRowSkips++;
-                } else {
-                    auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
-                    if (commitVersion && *commitVersion <= rowVersion) {
-                        CurrentVersion = chain;
-                        return true;
-                    }
-                    if (commitVersion) {
-                        // Only committed deltas increment InvisibleRowSkips
-                        InvisibleRowSkips++;
-                    }
+            while ((chain = chain->Next)) { 
+                if (chain->RowVersion.Step != Max<ui64>()) { 
+                    if (chain->RowVersion <= rowVersion) { 
+                        CurrentVersion = chain; 
+                        return true; 
+                    } 
+ 
+                    InvisibleRowSkips++; 
+                } else { 
+                    auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId); 
+                    if (commitVersion && *commitVersion <= rowVersion) { 
+                        CurrentVersion = chain; 
+                        return true; 
+                    } 
+                    if (commitVersion) { 
+                        // Only committed deltas increment InvisibleRowSkips 
+                        InvisibleRowSkips++; 
+                    } 
                 }
             }
-
-            CurrentVersion = nullptr;
-            return false;
+ 
+            CurrentVersion = nullptr; 
+            return false; 
         }
 
         bool IsValid() const
@@ -286,26 +286,26 @@ namespace NTable {
             return RowIt.IsValid();
         }
 
-        void Next()
+        void Next() 
         {
-            Y_VERIFY_DEBUG(IsValid(), "Calling Next on an exhausted iterator");
-
+            Y_VERIFY_DEBUG(IsValid(), "Calling Next on an exhausted iterator"); 
+ 
             Key.clear();
-            CurrentVersion = nullptr;
-
+            CurrentVersion = nullptr; 
+ 
             RowIt.Next();
         }
 
-        void Prev()
-        {
-            Y_VERIFY_DEBUG(IsValid(), "Calling Prev on an exhausted iterator");
-
-            Key.clear();
-            CurrentVersion = nullptr;
-
-            RowIt.Prev();
-        }
-
+        void Prev() 
+        { 
+            Y_VERIFY_DEBUG(IsValid(), "Calling Prev on an exhausted iterator"); 
+ 
+            Key.clear(); 
+            CurrentVersion = nullptr; 
+ 
+            RowIt.Prev(); 
+        } 
+ 
     private:
         void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const noexcept
         {
@@ -319,7 +319,7 @@ namespace NTable {
             } else if (op != ELargeObj::Extern) {
                 Y_FAIL("Got an unknown ELargeObj reference type");
             } else {
-                const auto ref = up.Value.AsValue<ui64>();
+                const auto ref = up.Value.AsValue<ui64>(); 
 
                 if (auto blob = Env->Locate(MemTable, ref, up.Tag)) {
                     const auto got = NPage::THello().Read(**blob);
@@ -335,18 +335,18 @@ namespace NTable {
             }
         }
 
-        const NMem::TUpdate* GetCurrentVersion() const noexcept
-        {
-            Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
-
-            if (!CurrentVersion) {
-                CurrentVersion = RowIt.GetValue();
-                Y_VERIFY_DEBUG(CurrentVersion, "Unexpected empty chain");
-            }
-
-            return CurrentVersion;
-        }
-
+        const NMem::TUpdate* GetCurrentVersion() const noexcept 
+        { 
+            Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row"); 
+ 
+            if (!CurrentVersion) { 
+                CurrentVersion = RowIt.GetValue(); 
+                Y_VERIFY_DEBUG(CurrentVersion, "Unexpected empty chain"); 
+            } 
+ 
+            return CurrentVersion; 
+        } 
+ 
     public:
         const TMemTable *MemTable = nullptr;
         const TIntrusiveConstPtr<TKeyNulls> Nulls;
@@ -355,9 +355,9 @@ namespace NTable {
         ui64 InvisibleRowSkips = 0;
 
     private:
-        NMem::TTreeIterator RowIt;
+        NMem::TTreeIterator RowIt; 
         mutable TSmallVec<TCell> Key;
-        mutable const NMem::TUpdate* CurrentVersion = nullptr;
+        mutable const NMem::TUpdate* CurrentVersion = nullptr; 
     };
 
 }

@@ -73,11 +73,11 @@ namespace NBoot {
                 ++Skip, Queue.pop_front();
             }
 
-            Y_VERIFY(Queue || !Pending, "TRedo boot actor has lost entries");
+            Y_VERIFY(Queue || !Pending, "TRedo boot actor has lost entries"); 
 
-            if (!Queue) {
-                Env->Finish(this);
-            }
+            if (!Queue) { 
+                Env->Finish(this); 
+            } 
         }
 
         void Apply(ui64 stamp, const TLogEntry &entry, TString redo) noexcept
@@ -105,10 +105,10 @@ namespace NBoot {
                     }
                 }
 
-                if (auto *compaction = Logic->Result().Comp.Get()) {
-                    for (ui32 table: affects) {
-                        compaction->Snapshots[table].InMemSteps++;
-                    }
+                if (auto *compaction = Logic->Result().Comp.Get()) { 
+                    for (ui32 table: affects) { 
+                        compaction->Snapshots[table].InMemSteps++; 
+                    } 
                 }
             }
         }

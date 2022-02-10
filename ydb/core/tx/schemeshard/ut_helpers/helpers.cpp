@@ -17,10 +17,10 @@
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
 #include <util/system/env.h>
-
+ 
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
-
+ 
     template <typename TEvResponse, typename TEvRequest, typename TStatus>
     static ui32 ReliableProposeImpl(
         NActors::TTestActorRuntime& runtime, const TActorId& proposer,
@@ -140,7 +140,7 @@ namespace NSchemeShardUT_Private {
         } while(event->Record.GetTxId() < txId);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
 
-        CheckExpected(expectedResults, event->Record.GetStatus(), event->Record.GetReason());
+        CheckExpected(expectedResults, event->Record.GetStatus(), event->Record.GetReason()); 
         return event->Record.GetStatus();
     }
 
@@ -207,25 +207,25 @@ namespace NSchemeShardUT_Private {
     }
 
     NKikimrScheme::TEvDescribeSchemeResult DescribePathId(TTestActorRuntime& runtime, ui64 schemeShard, ui64 pathId, const NKikimrSchemeOp::TDescribeOptions& opts = { }) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         auto evLs = new TEvSchemeShard::TEvDescribeScheme(schemeShard, pathId);
-        evLs->Record.MutableOptions()->CopyFrom(opts);
+        evLs->Record.MutableOptions()->CopyFrom(opts); 
         ForwardToTablet(runtime, schemeShard, sender, evLs);
-        TAutoPtr<IEventHandle> handle;
+        TAutoPtr<IEventHandle> handle; 
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-        UNIT_ASSERT(event);
-
-        return event->GetRecord();
-    }
-
+        UNIT_ASSERT(event); 
+ 
+        return event->GetRecord(); 
+    } 
+ 
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts) {
         return DescribePath(runtime, TTestTxConfig::SchemeShard, path, opts);
     }
 
     NKikimrScheme::TEvDescribeSchemeResult DescribePathId(TTestActorRuntime& runtime, ui64 pathId, const NKikimrSchemeOp::TDescribeOptions& opts = { }) {
         return DescribePathId(runtime, TTestTxConfig::SchemeShard, pathId, opts);
-    }
-
+    } 
+ 
     NKikimrScheme::TEvDescribeSchemeResult DescribePrivatePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, bool returnPartitioning, bool returnBoundaries) {
         return DescribePath(runtime, schemeShard, path, returnPartitioning, returnBoundaries, true);
     }
@@ -276,24 +276,24 @@ namespace NSchemeShardUT_Private {
     }
 
     TString TestLs(TTestActorRuntime& runtime, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts,
-                NLs::TCheckFunc check) {
-        auto record = DescribePath(runtime, path, opts);
-
-        if (check) {
-            check(record);
-        }
-        return record.DebugString();
-    }
-
-    TString TestLsPathId(TTestActorRuntime& runtime, ui64 pathId, NLs::TCheckFunc check) {
-        auto record = DescribePathId(runtime, pathId);
-
-        if (check) {
-            check(record);
-        }
-        return record.DebugString();
-    }
-
+                NLs::TCheckFunc check) { 
+        auto record = DescribePath(runtime, path, opts); 
+ 
+        if (check) { 
+            check(record); 
+        } 
+        return record.DebugString(); 
+    } 
+ 
+    TString TestLsPathId(TTestActorRuntime& runtime, ui64 pathId, NLs::TCheckFunc check) { 
+        auto record = DescribePathId(runtime, pathId); 
+ 
+        if (check) { 
+            check(record); 
+        } 
+        return record.DebugString(); 
+    } 
+ 
     TEvSchemeShard::TEvModifySchemeTransaction* CopyTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf) {
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
@@ -478,8 +478,8 @@ namespace NSchemeShardUT_Private {
         std::apply(func, std::tie(tx))->SetName(name);
 
         return tx;
-    }
-
+    } 
+ 
     // Backup
     template <>
     auto CreateTransaction(const TString& parentPath, const TString& tableName, const TApplyIf& applyIf,
@@ -495,95 +495,95 @@ namespace NSchemeShardUT_Private {
 
         task->SetTableName(tableName);
         auto& settings = *task->MutableYTSettings();
-
+ 
         TString ytHost;
         TMaybe<ui16> ytPort;
         Split(GetEnv("YT_PROXY"), ':', ytHost, ytPort);
-
+ 
         settings.SetHost(ytHost);
         settings.SetPort(ytPort.GetOrElse(80));
         settings.SetTablePattern("<append=true>//tmp/table");
-
+ 
         return tx;
-    }
-
+    } 
+ 
     // Generic with attrs
     template <typename T>
     auto CreateTransaction(const TString& parentPath, const TString& scheme,
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs, const TApplyIf& applyIf,
             NKikimrSchemeOp::EOperationType type, TModifySchemeFunc<T> func)
-    {
+    { 
         NKikimrSchemeOp::TModifyScheme tx;
-
+ 
         tx.SetOperationType(type);
         tx.SetWorkingDir(parentPath);
         if (userAttrs.UserAttributesSize()) {
             tx.MutableAlterUserAttributes()->CopyFrom(userAttrs);
         }
         SetApplyIf(tx, applyIf);
-
+ 
         const bool ok = google::protobuf::TextFormat::ParseFromString(scheme, std::apply(func, std::tie(tx)));
         UNIT_ASSERT_C(ok, "protobuf parsing failed");
-
+ 
         return tx;
-    }
-
+    } 
+ 
     // MkDir
     template <>
     auto CreateTransaction(const TString& parentPath, const TString& name,
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs, const TApplyIf& applyIf,
             NKikimrSchemeOp::EOperationType type, TModifySchemeFunc<NKikimrSchemeOp::TMkDir> func)
-    {
+    { 
         NKikimrSchemeOp::TModifyScheme tx;
-
+ 
         tx.SetOperationType(type);
         tx.SetWorkingDir(parentPath);
         if (userAttrs.UserAttributesSize()) {
             tx.MutableAlterUserAttributes()->CopyFrom(userAttrs);
         }
         SetApplyIf(tx, applyIf);
-
+ 
         std::apply(func, std::tie(tx))->SetName(name);
 
         return tx;
-    }
-
+    } 
+ 
     // AlterUserAttrs
     template <>
     auto CreateTransaction(const TString& parentPath, const TString& name,
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs, const TApplyIf& applyIf,
             NKikimrSchemeOp::EOperationType type, TModifySchemeFunc<NKikimrSchemeOp::TAlterUserAttributes> func)
-    {
+    { 
         NKikimrSchemeOp::TModifyScheme tx;
-
+ 
         tx.SetOperationType(type);
         tx.SetWorkingDir(parentPath);
         tx.MutableAlterUserAttributes()->CopyFrom(userAttrs);
         SetApplyIf(tx, applyIf);
-
+ 
         std::apply(func, std::tie(tx))->SetPathName(name);
-
+ 
         return tx;
-    }
-
+    } 
+ 
     // Drop by pathId
     auto CreateTransaction(ui64 pathId, const TApplyIf& applyIf, NKikimrSchemeOp::EOperationType type) {
         NKikimrSchemeOp::TModifyScheme tx;
-
+ 
         tx.SetOperationType(type);
         tx.MutableDrop()->SetId(pathId);
         SetApplyIf(tx, applyIf);
-
+ 
         return tx;
-    }
-
+    } 
+ 
     TEvTx* CreateRequest(ui64 schemeShardId, ui64 txId, NKikimrSchemeOp::TModifyScheme&& tx) {
         auto ev = new TEvTx(txId, schemeShardId);
         *ev->Record.AddTransaction() = std::move(tx);
-
+ 
         return ev;
-    }
-
+    } 
+ 
     #define GENERIC_HELPERS(name, op, func) \
         TEvTx* name##Request(ui64 schemeShardId, ui64 txId, const TString& parentPath, const TString& scheme, const TApplyIf& applyIf) { \
             return CreateRequest(schemeShardId, txId, CreateTransaction(parentPath, scheme, applyIf, op, func)); \
@@ -614,7 +614,7 @@ namespace NSchemeShardUT_Private {
         { \
             return Test##name(runtime, TTestTxConfig::SchemeShard, txId, parentPath, scheme, expectedResults, applyIf); \
         }
-
+ 
     #define GENERIC_WITH_ATTRS_HELPERS(name, op, func) \
         TEvTx* name##Request(ui64 schemeShardId, ui64 txId, const TString& parentPath, const TString& scheme, \
                 const NKikimrSchemeOp::TAlterUserAttributes& userAttrs, const TApplyIf& applyIf) \
@@ -660,7 +660,7 @@ namespace NSchemeShardUT_Private {
         { \
             return Test##name(runtime, TTestTxConfig::SchemeShard, txId, parentPath, scheme, expectedResults, userAttrs, applyIf); \
         }
-
+ 
     #define DROP_BY_PATH_ID_HELPERS(name, op) \
         TEvTx* name##Request(ui64 schemeShardId, ui64 txId, ui64 pathId, const TApplyIf& applyIf) { \
             return CreateRequest(schemeShardId, txId, CreateTransaction(pathId, applyIf, op)); \
@@ -691,26 +691,26 @@ namespace NSchemeShardUT_Private {
         { \
             return Test##name(runtime, TTestTxConfig::SchemeShard, txId, pathId, expectedResults, applyIf); \
         }
-
+ 
     // subdomain
     GENERIC_WITH_ATTRS_HELPERS(CreateSubDomain, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain, &NKikimrSchemeOp::TModifyScheme::MutableSubDomain)
     GENERIC_HELPERS(AlterSubDomain, NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain, &NKikimrSchemeOp::TModifyScheme::MutableSubDomain)
     GENERIC_HELPERS(DropSubDomain, NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     GENERIC_HELPERS(ForceDropSubDomain, NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
-
+ 
     // ext subdomain
     GENERIC_WITH_ATTRS_HELPERS(CreateExtSubDomain, NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain, &NKikimrSchemeOp::TModifyScheme::MutableSubDomain)
     GENERIC_WITH_ATTRS_HELPERS(AlterExtSubDomain, NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain, &NKikimrSchemeOp::TModifyScheme::MutableSubDomain)
     GENERIC_HELPERS(ForceDropExtSubDomain, NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
-
+ 
     // dir
     GENERIC_WITH_ATTRS_HELPERS(MkDir, NKikimrSchemeOp::EOperationType::ESchemeOpMkDir, &NKikimrSchemeOp::TModifyScheme::MutableMkDir)
     GENERIC_HELPERS(RmDir, NKikimrSchemeOp::EOperationType::ESchemeOpRmDir, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(ForceDropUnsafe, NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe)
-
+ 
     // user attrs
     GENERIC_WITH_ATTRS_HELPERS(UserAttrs, NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes, &NKikimrSchemeOp::TModifyScheme::MutableAlterUserAttributes)
-
+ 
     // table
     GENERIC_WITH_ATTRS_HELPERS(CreateTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateTable)
     GENERIC_HELPERS(CreateIndexedTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateIndexedTable)
@@ -791,45 +791,45 @@ namespace NSchemeShardUT_Private {
 
     ui64 TestCreateSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme,
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs)
-    {
+    { 
         return TestCreateSubDomain(runtime, txId, parentPath, scheme, {NKikimrScheme::StatusAccepted}, userAttrs);
-    }
-
+    } 
+ 
     ui64 TestCreateExtSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme,
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs)
-    {
+    { 
         return TestCreateExtSubDomain(runtime, txId, parentPath, scheme, {NKikimrScheme::StatusAccepted}, userAttrs);
-    }
-
+    } 
+ 
     ui64 TestUserAttrs(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs)
-    {
+    { 
         return TestUserAttrs(runtime, txId, parentPath, name, {NKikimrScheme::StatusAccepted}, userAttrs);
-    }
-
-    void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
+    } 
+ 
+    void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, 
             const TString& mountToken, ui64 tokenVersion)
-    {
+    { 
         TActorId sender = runtime.AllocateEdgeActor();
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAssignBlockStoreVolume);
-
+ 
         transaction->MutableAssignBlockStoreVolume()->SetName(name);
         transaction->MutableAssignBlockStoreVolume()->SetNewMountToken(mountToken);
         transaction->MutableAssignBlockStoreVolume()->SetTokenVersion(tokenVersion);
 
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evTx);
-    }
-
-    void TestAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
+    } 
+ 
+    void TestAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, 
             const TString& mountToken, ui64 tokenVersion, const TVector<TEvSchemeShard::EStatus>& expectedResults)
-    {
+    { 
         AsyncAssignBlockStoreVolume(runtime, txId, parentPath, name, mountToken, tokenVersion);
-        TestModificationResults(runtime, txId, expectedResults);
-    }
-
+        TestModificationResults(runtime, txId, expectedResults); 
+    } 
+ 
     TEvSchemeShard::TEvCancelTx *CancelTxRequest(ui64 txId, ui64 targetTxId) {
         auto evTx = new TEvSchemeShard::TEvCancelTx();
         evTx->Record.SetTxId(txId);
@@ -1116,35 +1116,35 @@ namespace NSchemeShardUT_Private {
         return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus());
     }
 
-    NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query) {
-        NKikimrMiniKQL::TResult result;
-        TString error;
+    NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query) { 
+        NKikimrMiniKQL::TResult result; 
+        TString error; 
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, query, result, error);
         UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-        return result;
-    }
-
-    bool CheckLocalRowExists(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn, ui64 keyValue) {
-        auto query = Sprintf(
-            R"(
-                (
-                    (let key '('('%s (Uint64 '%s))))
-                    (let select '('%s))
-                    (return (AsList
-                        (SetResult 'Result (SelectRow '%s key select))
-                    ))
-                )
-            )",
-            keyColumn.c_str(), (TStringBuilder() << keyValue).c_str(),
-            keyColumn.c_str(),
-            tableName.c_str());
-        auto result = LocalMiniKQL(runtime, tabletId, query);
-        // Row exists:  Value { Struct { Optional { Optional { Struct { Optional { Uint64: 2 } } } } } } }
-        // Row missing: Value { Struct { Optional { } } } }
-        return result.GetValue().GetStruct(0).GetOptional().HasOptional();
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(error, ""); 
+        return result; 
+    } 
+ 
+    bool CheckLocalRowExists(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn, ui64 keyValue) { 
+        auto query = Sprintf( 
+            R"( 
+                ( 
+                    (let key '('('%s (Uint64 '%s)))) 
+                    (let select '('%s)) 
+                    (return (AsList 
+                        (SetResult 'Result (SelectRow '%s key select)) 
+                    )) 
+                ) 
+            )", 
+            keyColumn.c_str(), (TStringBuilder() << keyValue).c_str(), 
+            keyColumn.c_str(), 
+            tableName.c_str()); 
+        auto result = LocalMiniKQL(runtime, tabletId, query); 
+        // Row exists:  Value { Struct { Optional { Optional { Struct { Optional { Uint64: 2 } } } } } } } 
+        // Row missing: Value { Struct { Optional { } } } } 
+        return result.GetValue().GetStruct(0).GetOptional().HasOptional(); 
+    } 
+ 
     NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun,
                        NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
         TActorId sender = runtime.AllocateEdgeActor();
@@ -1704,34 +1704,34 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    TPathId TestFindTabletSubDomainPathId(
-            TTestActorRuntime& runtime, ui64 tabletId,
+    TPathId TestFindTabletSubDomainPathId( 
+            TTestActorRuntime& runtime, ui64 tabletId, 
             NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected)
-    {
+    { 
         return TestFindTabletSubDomainPathId(runtime, TTestTxConfig::SchemeShard, tabletId, expected);
-    }
-
-    TPathId TestFindTabletSubDomainPathId(
-            TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
+    } 
+ 
+    TPathId TestFindTabletSubDomainPathId( 
+            TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId, 
             NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected)
-    {
-        auto sender = runtime.AllocateEdgeActor();
+    { 
+        auto sender = runtime.AllocateEdgeActor(); 
         ForwardToTablet(runtime, schemeShard, sender, new TEvSchemeShard::TEvFindTabletSubDomainPathId(tabletId));
-
+ 
         auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(sender);
-        UNIT_ASSERT(ev);
-
-        const auto& record = ev->Get()->Record;
-        UNIT_ASSERT_EQUAL_C(record.GetStatus(), expected,
-            "Unexpected status "
+        UNIT_ASSERT(ev); 
+ 
+        const auto& record = ev->Get()->Record; 
+        UNIT_ASSERT_EQUAL_C(record.GetStatus(), expected, 
+            "Unexpected status " 
             << NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus_Name(record.GetStatus())
-            << " (expected status "
+            << " (expected status " 
             << NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus_Name(record.GetStatus())
-            << ")");
-
-        return TPathId(record.GetSchemeShardId(), record.GetSubDomainPathId());
-    }
-
+            << ")"); 
+ 
+        return TPathId(record.GetSchemeShardId(), record.GetSubDomainPathId()); 
+    } 
+ 
     TEvSchemeShard::TEvModifySchemeTransaction* CreateAlterLoginCreateUser(ui64 txId, const TString& user, const TString& password) {
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();

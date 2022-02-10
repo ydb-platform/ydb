@@ -14,7 +14,7 @@ bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TA
     if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion))
         return false;
 
-    Self->PromoteCompleteEdge(writeVersion.Step, txc);
+    Self->PromoteCompleteEdge(writeVersion.Step, txc); 
     return true;
 }
 

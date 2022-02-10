@@ -333,12 +333,12 @@ class ReplicationPolicy(object):
         return self._pb
 
 
-class StoragePool(object):
-    def __init__(self, media):
-        self.media = media
+class StoragePool(object): 
+    def __init__(self, media): 
+        self.media = media 
 
     def to_pb(self):
-        return _apis.ydb_table.StoragePool(media=self.media)
+        return _apis.ydb_table.StoragePool(media=self.media) 
 
 
 class StoragePolicy(object):

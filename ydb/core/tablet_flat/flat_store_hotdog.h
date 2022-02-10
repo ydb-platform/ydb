@@ -20,12 +20,12 @@ namespace NTabletFlatExecutor {
     public:
         using TLargeGlobId = NPageCollection::TLargeGlobId;
         using TPartView = NTable::TPartView;
-        using TColdPart = NTable::TColdPart;
+        using TColdPart = NTable::TColdPart; 
         using TPartComponents = NTable::TPartComponents;
         using TBundle = NKikimrExecutorFlat::TBundle;
         using TPages = TArrayRef<const NPageCollection::TLoadedPage>;
-        using TScreen = NTable::TScreen;
-        using TSlices = NTable::TSlices;
+        using TScreen = NTable::TScreen; 
+        using TSlices = NTable::TSlices; 
 
         TPageCollectionProtoHelper() = delete;
 

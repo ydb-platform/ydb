@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "scheme_type_id.h"
-#include "scheme_type_order.h"
+#include "scheme_type_order.h" 
 #include "scheme_types_defs.h"
 
 #include <util/generic/hash.h>
@@ -82,14 +82,14 @@ public:
     }
 
     template<typename T, typename = TStdLayout<T>>
-    T AsValue() const noexcept
-    {
-        Y_VERIFY(sizeof(T) == Size(), "AsValue<T>() type doesn't match TCell");
-
-        return ReadUnaligned<T>(Data());
-    }
-
-    template<typename T, typename = TStdLayout<T>>
+    T AsValue() const noexcept 
+    { 
+        Y_VERIFY(sizeof(T) == Size(), "AsValue<T>() type doesn't match TCell"); 
+ 
+        return ReadUnaligned<T>(Data()); 
+    } 
+ 
+    template<typename T, typename = TStdLayout<T>> 
     static inline TCell Make(const T &val) noexcept
     {
         auto *ptr = static_cast<const char*>(static_cast<const void*>(&val));
@@ -119,14 +119,14 @@ using TCellsRef = TConstArrayRef<const TCell>;
 
 // NULL is considered equal to another NULL and less than non-NULL
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
-inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrder type) {
+inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrder type) { 
     using TPair = std::pair<ui64, ui64>;
     if (a.IsNull())
         return b.IsNull() ? 0 : -1;
     if (b.IsNull())
         return 1;
 
-    switch (type.GetTypeId()) {
+    switch (type.GetTypeId()) { 
 
 #define SIMPLE_TYPE_SWITCH(typeEnum, castType)      \
     case NKikimr::NScheme::NTypeIds::typeEnum:      \
@@ -135,7 +135,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
         Y_VERIFY_DEBUG(b.IsInline());                      \
         castType va = ReadUnaligned<castType>((const castType*)a.InlineData()); \
         castType vb = ReadUnaligned<castType>((const castType*)b.InlineData()); \
-        return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
+        return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \ 
     }
 
     SIMPLE_TYPE_SWITCH(Int8,   i8);
@@ -173,8 +173,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
         size_t szb = b.Size();
         int cmp = memcmp(pa, pb, sza < szb ? sza : szb);
         if (cmp != 0)
-            return type.IsDescending() ? (cmp > 0 ? -1 : +1) : cmp; // N.B. cannot multiply, may overflow
-        return sza == szb ? 0 : ((sza < szb) != type.IsDescending() ? -1 : 1);
+            return type.IsDescending() ? (cmp > 0 ? -1 : +1) : cmp; // N.B. cannot multiply, may overflow 
+        return sza == szb ? 0 : ((sza < szb) != type.IsDescending() ? -1 : 1); 
     }
 
     case NKikimr::NScheme::NTypeIds::Decimal:
@@ -184,8 +184,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
         std::pair<ui64, i64> va = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)a.Data());
         std::pair<ui64, i64> vb = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)b.Data());
         if (va.second == vb.second)
-            return va.first == vb.first ? 0 : ((va.first < vb.first) != type.IsDescending() ? -1 : 1);
-        return (va.second < vb.second) != type.IsDescending() ? -1 : 1;
+            return va.first == vb.first ? 0 : ((va.first < vb.first) != type.IsDescending() ? -1 : 1); 
+        return (va.second < vb.second) != type.IsDescending() ? -1 : 1; 
     }
 
     default:
@@ -196,8 +196,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
 }
 
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
-template<class TTypeClass>
-inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt) {
+template<class TTypeClass> 
+inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt) { 
     for (ui32 i = 0; i < cnt; ++i) {
         int cmpRes = CompareTypedCells(a[i], b[i], type[i]);
         if (cmpRes != 0)
@@ -208,8 +208,8 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
 
 /// @warning Do not use this func to compare key with a range border. Partial key means it ends with Nulls here.
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
-template<class TTypeClass>
-inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) {
+template<class TTypeClass> 
+inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) { 
     Y_VERIFY_DEBUG(cnt_b <= cnt_a);
     ui32 i = 0;
     for (; i < cnt_b; ++i) {
@@ -298,98 +298,98 @@ struct TDbTupleRef {
     {}
 };
 
-// An array of cells that owns its data and may be safely copied/moved
-class TOwnedCellVec
-    : public TConstArrayRef<TCell>
-{
-private:
-    typedef TConstArrayRef<TCell> TCellVec;
-
-    class TData : public TAtomicRefCount<TData> {
-    public:
-        TData() = default;
-
-        void operator delete(void* mem);
-    };
-
-    struct TInit {
-        TCellVec Cells;
-        TIntrusivePtr<TData> Data;
-        size_t DataSize;
-    };
-
-    TOwnedCellVec(TInit init)
-        : TCellVec(std::move(init.Cells))
-        , Data(std::move(init.Data))
-        , DataSize_(init.DataSize)
-    { }
-
-    static TInit Allocate(TCellVec cells);
-
-    TCellVec& CellVec() {
-        return static_cast<TCellVec&>(*this);
-    }
-
-public:
-    TOwnedCellVec()
-        : TCellVec()
-        , DataSize_(0)
-    { }
-
-    explicit TOwnedCellVec(TCellVec cells)
-        : TOwnedCellVec(Allocate(cells))
-    { }
-
-    static TOwnedCellVec Make(TCellVec cells) {
-        return TOwnedCellVec(Allocate(cells));
-    }
-
-    TOwnedCellVec(const TOwnedCellVec& rhs)
-        : TCellVec(rhs)
-        , Data(rhs.Data)
-        , DataSize_(rhs.DataSize_)
-    { }
-
-    TOwnedCellVec(TOwnedCellVec&& rhs)
-        : TCellVec(rhs)
-        , Data(std::move(rhs.Data))
-        , DataSize_(rhs.DataSize_)
-    {
-        rhs.CellVec() = { };
-        rhs.DataSize_ = 0;
-    }
-
-    TOwnedCellVec& operator=(const TOwnedCellVec& rhs) {
-        if (Y_LIKELY(this != &rhs)) {
-            Data = rhs.Data;
-            DataSize_ = rhs.DataSize_;
-            CellVec() = rhs;
-        }
-
-        return *this;
-    }
-
-    TOwnedCellVec& operator=(TOwnedCellVec&& rhs) {
-        if (Y_LIKELY(this != &rhs)) {
-            Data = std::move(rhs.Data);
-            DataSize_ = rhs.DataSize_;
-            CellVec() = rhs;
-            rhs.CellVec() = { };
-            rhs.DataSize_ = 0;
-        }
-
-        return *this;
-    }
-
-    size_t DataSize() const {
-        return DataSize_;
-    }
-
-private:
-    TIntrusivePtr<TData> Data;
-    size_t DataSize_;
-};
-
+// An array of cells that owns its data and may be safely copied/moved 
+class TOwnedCellVec 
+    : public TConstArrayRef<TCell> 
+{ 
+private: 
+    typedef TConstArrayRef<TCell> TCellVec; 
+ 
+    class TData : public TAtomicRefCount<TData> { 
+    public: 
+        TData() = default; 
+ 
+        void operator delete(void* mem); 
+    }; 
+ 
+    struct TInit { 
+        TCellVec Cells; 
+        TIntrusivePtr<TData> Data; 
+        size_t DataSize; 
+    }; 
+ 
+    TOwnedCellVec(TInit init) 
+        : TCellVec(std::move(init.Cells)) 
+        , Data(std::move(init.Data)) 
+        , DataSize_(init.DataSize) 
+    { } 
+ 
+    static TInit Allocate(TCellVec cells); 
+ 
+    TCellVec& CellVec() { 
+        return static_cast<TCellVec&>(*this); 
+    } 
+ 
+public: 
+    TOwnedCellVec() 
+        : TCellVec() 
+        , DataSize_(0) 
+    { } 
+ 
+    explicit TOwnedCellVec(TCellVec cells) 
+        : TOwnedCellVec(Allocate(cells)) 
+    { } 
+ 
+    static TOwnedCellVec Make(TCellVec cells) { 
+        return TOwnedCellVec(Allocate(cells)); 
+    } 
+ 
+    TOwnedCellVec(const TOwnedCellVec& rhs) 
+        : TCellVec(rhs) 
+        , Data(rhs.Data) 
+        , DataSize_(rhs.DataSize_) 
+    { } 
+ 
+    TOwnedCellVec(TOwnedCellVec&& rhs) 
+        : TCellVec(rhs) 
+        , Data(std::move(rhs.Data)) 
+        , DataSize_(rhs.DataSize_) 
+    { 
+        rhs.CellVec() = { }; 
+        rhs.DataSize_ = 0; 
+    } 
+ 
+    TOwnedCellVec& operator=(const TOwnedCellVec& rhs) { 
+        if (Y_LIKELY(this != &rhs)) { 
+            Data = rhs.Data; 
+            DataSize_ = rhs.DataSize_; 
+            CellVec() = rhs; 
+        } 
+ 
+        return *this; 
+    } 
+ 
+    TOwnedCellVec& operator=(TOwnedCellVec&& rhs) { 
+        if (Y_LIKELY(this != &rhs)) { 
+            Data = std::move(rhs.Data); 
+            DataSize_ = rhs.DataSize_; 
+            CellVec() = rhs; 
+            rhs.CellVec() = { }; 
+            rhs.DataSize_ = 0; 
+        } 
+ 
+        return *this; 
+    } 
+ 
+    size_t DataSize() const { 
+        return DataSize_; 
+    } 
+ 
+private: 
+    TIntrusivePtr<TData> Data; 
+    size_t DataSize_; 
+}; 
+ 
 // Used to store/load a vector of TCell in bytes array
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellVec {

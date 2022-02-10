@@ -14,7 +14,7 @@
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/scheduler_actor.h>
-#include <library/cpp/actors/dnsresolver/dnsresolver.h>
+#include <library/cpp/actors/dnsresolver/dnsresolver.h> 
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect_common.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
@@ -27,7 +27,7 @@
 
 namespace NYql::NDqs {
     using namespace NActors;
-    using namespace NActors::NDnsResolver;
+    using namespace NActors::NDnsResolver; 
     using namespace NGrpc;
 
     class TYqlLogBackend: public TLogBackend {
@@ -147,9 +147,9 @@ namespace NYql::NDqs {
         nameserverTable->StaticNodeTable[nodeId] = std::make_pair(interconnectAddress, port);
 
         setup->LocalServices.emplace_back(
-            MakeDnsResolverActorId(), TActorSetupCmd(CreateOnDemandDnsResolver(), TMailboxType::ReadAsFilled, 0));
-
-        setup->LocalServices.emplace_back(
+            MakeDnsResolverActorId(), TActorSetupCmd(CreateOnDemandDnsResolver(), TMailboxType::ReadAsFilled, 0)); 
+ 
+        setup->LocalServices.emplace_back( 
             GetNameserviceActorId(), TActorSetupCmd(nameserverFactory(nameserverTable), TMailboxType::ReadAsFilled, 0));
 
 

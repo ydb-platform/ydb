@@ -6,7 +6,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <util/generic/intrlist.h>
+#include <util/generic/intrlist.h> 
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -88,13 +88,13 @@ class TTablet : public TActor<TTablet> {
         THolder<TFollowerUpdate> FollowerUpdate;
         TVector<TString> FollowerAuxUpdates;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
-        NMetrics::TTabletIopsRawValue GroupWrittenOps;
+        NMetrics::TTabletIopsRawValue GroupWrittenOps; 
 
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
 
-        size_t ByteSize;
-
+        size_t ByteSize; 
+ 
         TLogEntry(ui32 step, ui32 confirmedOnSend, ui64 sourceCookie)
             : Step(step)
             , ConfirmedOnSend(confirmedOnSend)
@@ -107,7 +107,7 @@ class TTablet : public TActor<TTablet> {
             , WaitFollowerGcAck(false)
             , CommitedMoment(TInstant::Zero())
             , SourceCookie(sourceCookie)
-            , ByteSize(0)
+            , ByteSize(0) 
         {}
     };
 
@@ -118,14 +118,14 @@ class TTablet : public TActor<TTablet> {
         TQueueType Queue;
         TQueueType PostponedFollowerUpdates;
         TIndex Index;
-        TDeque<TEvTablet::TEvCommit::TPtr> DelayCommitQueue;
+        TDeque<TEvTablet::TEvCommit::TPtr> DelayCommitQueue; 
 
         ui32 Confirmed;
         ui32 ConfirmedCommited;
         ui32 NextEntry;
         ui32 MinFollowerUpdate;
-        ui32 StepsInFlight;
-        ui64 BytesInFlight;
+        ui32 StepsInFlight; 
+        ui64 BytesInFlight; 
 
         std::pair<ui32, ui32> Snapshot;
 
@@ -138,8 +138,8 @@ class TTablet : public TActor<TTablet> {
             , ConfirmedCommited(0)
             , NextEntry(0)
             , MinFollowerUpdate(0)
-            , StepsInFlight(0)
-            , BytesInFlight(0)
+            , StepsInFlight(0) 
+            , BytesInFlight(0) 
         {}
     } Graph;
 
@@ -220,37 +220,37 @@ class TTablet : public TActor<TTablet> {
     ui32 FollowerId;
     ui32 DiscoveredLastBlocked;
     ui32 GcInFly;
-    ui32 GcInFlyStep;
-    ui32 GcNextStep;
+    ui32 GcInFlyStep; 
+    ui32 GcNextStep; 
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
     THolder<NTracing::ITrace> IntrospectionTrace;
     TActorId RebuildGraphRequest;
 
-    // Delayed cancellation reason
-    struct TDelayedCancelTablet {
-        const TEvTablet::TEvTabletDead::EReason Reason;
-        const TString Details;
-
-        explicit TDelayedCancelTablet(
-                TEvTablet::TEvTabletDead::EReason reason,
-                TString details = TString())
-            : Reason(reason)
-            , Details(std::move(details))
-        { }
-    };
-
-    TMaybe<TDelayedCancelTablet> DelayedCancelTablet;
-
-    // Optional supported features, by default none
-    ui32 SupportedFeatures = TEvTablet::TEvFeatures::None;
-
-    // Optional delayed blob storage status
-    NKikimrProto::EReplyStatus BlobStorageStatus = NKikimrProto::OK;
-    ui32 BlobStorageErrorStep = Max<ui32>();
-    TString BlobStorageErrorReason;
-    bool BlobStorageErrorReported = false;
-
+    // Delayed cancellation reason 
+    struct TDelayedCancelTablet { 
+        const TEvTablet::TEvTabletDead::EReason Reason; 
+        const TString Details; 
+ 
+        explicit TDelayedCancelTablet( 
+                TEvTablet::TEvTabletDead::EReason reason, 
+                TString details = TString()) 
+            : Reason(reason) 
+            , Details(std::move(details)) 
+        { } 
+    }; 
+ 
+    TMaybe<TDelayedCancelTablet> DelayedCancelTablet; 
+ 
+    // Optional supported features, by default none 
+    ui32 SupportedFeatures = TEvTablet::TEvFeatures::None; 
+ 
+    // Optional delayed blob storage status 
+    NKikimrProto::EReplyStatus BlobStorageStatus = NKikimrProto::OK; 
+    ui32 BlobStorageErrorStep = Max<ui32>(); 
+    TString BlobStorageErrorReason; 
+    bool BlobStorageErrorReported = false; 
+ 
     ui64 StateStorageGroup() const;
     ui64 TabletID() const;
 
@@ -314,7 +314,7 @@ class TTablet : public TActor<TTablet> {
     void Handle(TEvTablet::TEvPreCommit::TPtr &ev);
 
     void Handle(TEvTablet::TEvCommit::TPtr &ev);
-    bool HandleNext(TEvTablet::TEvCommit::TPtr &ev);
+    bool HandleNext(TEvTablet::TEvCommit::TPtr &ev); 
     void Handle(TEvTablet::TEvAux::TPtr &ev);
     void CheckEntry(TGraph::TIndex::iterator it);
 
@@ -327,7 +327,7 @@ class TTablet : public TActor<TTablet> {
 
     void GcLogChannel(ui32 step);
 
-    bool ProgressCommitQueue();
+    bool ProgressCommitQueue(); 
     void ProgressFollowerQueue();
     void SpreadFollowerAuxUpdate(const TString& auxUpdate);
     void SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower, const TString& auxUpdate);
@@ -338,17 +338,17 @@ class TTablet : public TActor<TTablet> {
 
     void Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev);
 
-    void HandleFeatures(TEvTablet::TEvFeatures::TPtr &ev);
-    void HandleStop(TEvTablet::TEvTabletStop::TPtr &ev);
-    void HandleStopped();
+    void HandleFeatures(TEvTablet::TEvFeatures::TPtr &ev); 
+    void HandleStop(TEvTablet::TEvTabletStop::TPtr &ev); 
+    void HandleStopped(); 
     void HandlePoisonPill();
     void HandleDemoted();
     void Handle(TEvTablet::TEvDemoted::TPtr &ev);
-    bool CheckBlobStorageError();
-    bool StopTablet(TEvTablet::TEvTabletStop::EReason stopReason,
-                    TEvTablet::TEvTabletDead::EReason deadReason,
-                    const TString &deadDetails = TString());
-    void ReassignYellowChannels(TVector<ui32> &&yellowChannels);
+    bool CheckBlobStorageError(); 
+    bool StopTablet(TEvTablet::TEvTabletStop::EReason stopReason, 
+                    TEvTablet::TEvTabletDead::EReason deadReason, 
+                    const TString &deadDetails = TString()); 
+    void ReassignYellowChannels(TVector<ui32> &&yellowChannels); 
     void CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TString &details = TString());
 
     void Handle(TEvTablet::TEvUpdateConfig::TPtr &ev);
@@ -364,9 +364,9 @@ class TTablet : public TActor<TTablet> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvInfo, HandleStateStorageInfoResolve);
             hFunc(TEvTablet::TEvPing, HandlePingBoot);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
             hFunc(TEvTabletPipe::TEvConnect, HandleQueued);
@@ -384,9 +384,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvStateStorage::TEvInfo, HandleStateStorageInfoLock);
             hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
             hFunc(TEvTablet::TEvPing, HandlePingBoot);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
             hFunc(TEvTabletPipe::TEvConnect, HandleQueued);
@@ -404,9 +404,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTabletBase::TEvFindLatestLogEntryResult, HandleFindLatestLogEntry);
             hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
             hFunc(TEvTablet::TEvPing, HandlePingBoot);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
             hFunc(TEvTabletPipe::TEvConnect, HandleQueued);
@@ -425,9 +425,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvStateStorage::TEvInfo, HandleStateStorageInfoUpgrade);
             hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
             hFunc(TEvTablet::TEvPing, HandlePingBoot);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
             hFunc(TEvTabletPipe::TEvConnect, HandleQueued);
@@ -446,9 +446,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTabletBase::TEvBlockBlobStorageResult, HandleBlockBlobStorageResult);
             hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
             hFunc(TEvTablet::TEvPing, HandlePingBoot);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
             hFunc(TEvTabletPipe::TEvConnect, HandleQueued);
@@ -467,9 +467,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTabletBase::TEvRebuildGraphResult, HandleRebuildGraphResult);
             hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
             hFunc(TEvTablet::TEvPing, HandlePingBoot);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
             hFunc(TEvTabletPipe::TEvConnect, HandleQueued);
@@ -488,9 +488,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTabletBase::TEvWriteLogResult, HandleWriteZeroEntry);
             hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
             hFunc(TEvTablet::TEvPing, HandlePingBoot);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
             hFunc(TEvTabletPipe::TEvConnect, HandleQueued);
@@ -522,9 +522,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvPing, Handle);
             hFunc(TEvTablet::TEvDemoted, Handle);
             cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             hFunc(TEvTabletPipe::TEvConnect, Handle);
             hFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
@@ -560,11 +560,11 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTabletBase::TEvFollowerRetry, HandleFollowerRetry);
             hFunc(TEvTabletBase::TEvTryBuildFollowerGraph, HandleByFollower);
             hFunc(TEvTabletBase::TEvRebuildGraphResult, HandleByFollower);
-            hFunc(TEvTabletPipe::TEvConnect, Handle);
-            hFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTabletPipe::TEvConnect, Handle); 
+            hFunc(TEvTabletPipe::TEvServerDestroyed, Handle); 
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
         }
     }
@@ -585,9 +585,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvents::TEvUndelivered, HandleByFollower);
             hFunc(TEvTabletPipe::TEvConnect, HandleByFollower);
             hFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
-            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
-            hFunc(TEvTablet::TEvTabletStop, HandleStop);
-            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures); 
+            hFunc(TEvTablet::TEvTabletStop, HandleStop); 
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped); 
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
         }
     }

@@ -9,10 +9,10 @@ SRCS(
     blob_manager_db.cpp
     blob_manager_txs.cpp
     columnshard__init.cpp
-    columnshard__notify_tx_completion.cpp
+    columnshard__notify_tx_completion.cpp 
     columnshard__plan_step.cpp
-    columnshard__progress_tx.cpp
-    columnshard__propose_cancel.cpp
+    columnshard__progress_tx.cpp 
+    columnshard__propose_cancel.cpp 
     columnshard__propose_transaction.cpp
     columnshard__read.cpp
     columnshard__read_blob_ranges.cpp

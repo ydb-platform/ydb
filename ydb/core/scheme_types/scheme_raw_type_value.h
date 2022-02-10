@@ -47,7 +47,7 @@ public:
             builder << ", value:" << TString((const char*)Buffer, BufferSize).Quote();
         }
         builder << ")";
-        return std::move(builder);
+        return std::move(builder); 
     }
 
     TStringBuf ToStringBuf() const {

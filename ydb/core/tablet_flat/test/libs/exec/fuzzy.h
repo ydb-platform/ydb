@@ -112,7 +112,7 @@ namespace NFake {
 
             auto it = txc.DB.Iterate(table, { }, cols, mode);
 
-            while (it->Next(NTable::ENext::All) == NTable::EReady::Data) { }
+            while (it->Next(NTable::ENext::All) == NTable::EReady::Data) { } 
 
             return it->Last() != NTable::EReady::Page;
         }

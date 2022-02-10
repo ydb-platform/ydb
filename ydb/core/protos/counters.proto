@@ -63,12 +63,12 @@ extend google.protobuf.FileOptions {
 // Counters common for every transaction type
 //
 enum ETxTypeSimpleCounters {
-    COUNTER_TT_SIMPLE_IGNORE = 0;
+    COUNTER_TT_SIMPLE_IGNORE = 0; 
 }
 
 enum ETxTypeCumulativeCounters {
-    COUNTER_TT_CULUMATIVE_IGNORE = 0;
-
+    COUNTER_TT_CULUMATIVE_IGNORE = 0; 
+ 
     COUNTER_TT_POSTPONED = 1                             [(CounterOpts) = {Name: "Postponed"}]; // Total restarts
     COUNTER_TT_RO_COMPLETED = 2                          [(CounterOpts) = {Name: "RoCompleted"}];
     COUNTER_TT_RW_COMPLETED = 3                          [(CounterOpts) = {Name: "RwCompleted"}];
@@ -81,8 +81,8 @@ enum ETxTypeCumulativeCounters {
     COUNTER_TT_TOUCHED_BLOCKS = 10                       [(CounterOpts) = {Name: "TouchedBlocks"}];
     COUNTER_TT_LOADED_BLOCKS = 11                        [(CounterOpts) = {Name: "LoadedBlocks"}];
     COUNTER_TT_TERMINATED = 12                           [(CounterOpts) = {Name: "Terminated"}];
-    COUNTER_TT_REDO_WRITTEN_BYTES = 13                   [(CounterOpts) = {Name: "RedoWrittenBytes"}];
-    COUNTER_TT_ANNEX_WRITTEN_BYTES = 14                  [(CounterOpts) = {Name: "AnnexWrittenBytes"}];
+    COUNTER_TT_REDO_WRITTEN_BYTES = 13                   [(CounterOpts) = {Name: "RedoWrittenBytes"}]; 
+    COUNTER_TT_ANNEX_WRITTEN_BYTES = 14                  [(CounterOpts) = {Name: "AnnexWrittenBytes"}]; 
 }
 
 enum ETxTypePercentileCounters {
@@ -106,6 +106,6 @@ enum ETxTypePercentileCounters {
         Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
         Ranges { Value: 32000000    Name: "(18) 32 < s"         }
     };
-
-    COUNTER_TT_PERCENTILE_IGNORE = 0;
+ 
+    COUNTER_TT_PERCENTILE_IGNORE = 0; 
 }

@@ -45,12 +45,12 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
     Y_VERIFY(op->IsDataTx() || op->IsReadTable());
     Y_VERIFY(!op->IsAborted());
 
-    if (CheckRejectDataTx(op, ctx)) {
-        op->Abort(EExecutionUnitKind::FinishPropose);
-
-        return EExecutionStatus::Executed;
-    }
-
+    if (CheckRejectDataTx(op, ctx)) { 
+        op->Abort(EExecutionUnitKind::FinishPropose); 
+ 
+        return EExecutionStatus::Executed; 
+    } 
+ 
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
     auto dataTx = tx->GetDataTx();
@@ -86,7 +86,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
     if (tx->IsMvccSnapshotRead()) {
         auto snapshot = tx->GetMvccSnapshot();
-        if (!DataShard.IsMvccEnabled()) {
+        if (!DataShard.IsMvccEnabled()) { 
             TString err = TStringBuilder()
                 << "Operation " << *op << " reads from snapshot " << snapshot
                 << " with MVCC feature disabled at " << DataShard.TabletID();
@@ -149,132 +149,132 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
             return EExecutionStatus::Executed;
         }
-
-        for (const auto& key : dataTx->TxInfo().Keys) {
-            if (key.IsWrite && DataShard.IsUserTable(key.Key->TableId)) {
-                ui64 keySize = 0;
-                for (const auto& cell : key.Key->Range.From) {
-                    keySize += cell.Size();
-                }
+ 
+        for (const auto& key : dataTx->TxInfo().Keys) { 
+            if (key.IsWrite && DataShard.IsUserTable(key.Key->TableId)) { 
+                ui64 keySize = 0; 
+                for (const auto& cell : key.Key->Range.From) { 
+                    keySize += cell.Size(); 
+                } 
                 if (keySize > NLimits::MaxWriteKeySize) {
-                    TString err = TStringBuilder()
+                    TString err = TStringBuilder() 
                         << "Operation " << *op << " writes key of " << keySize
                         << " bytes which exceeds limit " << NLimits::MaxWriteKeySize
                         << " bytes at " << DataShard.TabletID();
-
+ 
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
                         ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
-                    op->Abort(EExecutionUnitKind::FinishPropose);
-
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                    return EExecutionStatus::Executed;
-                }
-                for (const auto& col : key.Key->Columns) {
-                    if (col.Operation == TKeyDesc::EColumnOperation::Set ||
-                        col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate)
-                    {
+                    op->Abort(EExecutionUnitKind::FinishPropose); 
+ 
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err); 
+ 
+                    return EExecutionStatus::Executed; 
+                } 
+                for (const auto& col : key.Key->Columns) { 
+                    if (col.Operation == TKeyDesc::EColumnOperation::Set || 
+                        col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate) 
+                    { 
                         if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) {
-                            TString err = TStringBuilder()
-                                << "Transaction write value of " << col.ImmediateUpdateSize
-                                << " bytes is larger than the allowed threshold";
-
-                            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
-                            op->Abort(EExecutionUnitKind::FinishPropose);
-
-                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                            return EExecutionStatus::Executed;
-                        }
-                    }
-                }
-
-                if (DataShard.IsSubDomainOutOfSpace()) {
-                    switch (key.Key->RowOperation) {
-                        case TKeyDesc::ERowOperation::Read:
-                        case TKeyDesc::ERowOperation::Erase:
-                            // Read and erase are allowed even when we're out of disk space
-                            break;
-
-                        default: {
-                            // Updates are not allowed when database is out of space
-                            TString err = "Cannot perform writes: database is out of disk space";
-
-                            DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
-
-                            BuildResult(op)->AddError(NKikimrTxDataShard::TError::OUT_OF_SPACE, err);
-                            op->Abort(EExecutionUnitKind::FinishPropose);
-
-                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                            return EExecutionStatus::Executed;
-                        }
-                    }
-                }
-            }
-        }
+                            TString err = TStringBuilder() 
+                                << "Transaction write value of " << col.ImmediateUpdateSize 
+                                << " bytes is larger than the allowed threshold"; 
+ 
+                            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err); 
+                            op->Abort(EExecutionUnitKind::FinishPropose); 
+ 
+                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err); 
+ 
+                            return EExecutionStatus::Executed; 
+                        } 
+                    } 
+                } 
+ 
+                if (DataShard.IsSubDomainOutOfSpace()) { 
+                    switch (key.Key->RowOperation) { 
+                        case TKeyDesc::ERowOperation::Read: 
+                        case TKeyDesc::ERowOperation::Erase: 
+                            // Read and erase are allowed even when we're out of disk space 
+                            break; 
+ 
+                        default: { 
+                            // Updates are not allowed when database is out of space 
+                            TString err = "Cannot perform writes: database is out of disk space"; 
+ 
+                            DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE); 
+ 
+                            BuildResult(op)->AddError(NKikimrTxDataShard::TError::OUT_OF_SPACE, err); 
+                            op->Abort(EExecutionUnitKind::FinishPropose); 
+ 
+                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err); 
+ 
+                            return EExecutionStatus::Executed; 
+                        } 
+                    } 
+                } 
+            } 
+        } 
     }
 
-    if (op->IsReadTable()) {
-        const auto& record = dataTx->GetReadTableTransaction();
-        const auto& userTables = DataShard.GetUserTables();
-
-        TMaybe<TString> schemaChangedError;
-        if (auto it = userTables.find(record.GetTableId().GetTableId()); it != userTables.end()) {
-            const auto& tableInfo = *it->second;
-            for (const auto& columnRecord : record.GetColumns()) {
-                if (auto* columnInfo = tableInfo.Columns.FindPtr(columnRecord.GetId())) {
-                    // TODO: column types don't change when bound by id, but we may want to check anyway
-                } else {
-                    schemaChangedError = TStringBuilder() << "ReadTable cannot find column "
-                        << columnRecord.GetName() << " (" << columnRecord.GetId() << ")";
-                    break;
-                }
-            }
-            // TODO: validate key ranges?
-        } else {
-            schemaChangedError = TStringBuilder() << "ReadTable cannot find table "
-                << record.GetTableId().GetOwnerId() << ":" << record.GetTableId().GetTableId();
-        }
-
-        if (schemaChangedError) {
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)
-                ->AddError(NKikimrTxDataShard::TError::SCHEME_CHANGED, *schemaChangedError);
-            op->Abort(EExecutionUnitKind::FinishPropose);
-            return EExecutionStatus::Executed;
-        }
-
-        if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-            if (!op->IsImmediate()) {
-                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
-                    NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                    "ReadTable from snapshot must be an immediate transaction");
-                op->Abort(EExecutionUnitKind::FinishPropose);
-                return EExecutionStatus::Executed;
-            }
-
-            const TSnapshotKey key(
-                record.GetTableId().GetOwnerId(),
-                record.GetTableId().GetTableId(),
-                record.GetSnapshotStep(),
-                record.GetSnapshotTxId());
-
-            if (!DataShard.GetSnapshotManager().AcquireReference(key)) {
-                // TODO: try upgrading to mvcc snapshot when available
-                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
-                    NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
-                    TStringBuilder()
-                        << "Shard " << DataShard.TabletID()
-                        << " has no snapshot " << key);
-                op->Abort(EExecutionUnitKind::FinishPropose);
-                return EExecutionStatus::Executed;
-            }
-
-            op->SetAcquiredSnapshotKey(key);
-            op->SetUsingSnapshotFlag();
-        }
-    }
-
+    if (op->IsReadTable()) { 
+        const auto& record = dataTx->GetReadTableTransaction(); 
+        const auto& userTables = DataShard.GetUserTables(); 
+ 
+        TMaybe<TString> schemaChangedError; 
+        if (auto it = userTables.find(record.GetTableId().GetTableId()); it != userTables.end()) { 
+            const auto& tableInfo = *it->second; 
+            for (const auto& columnRecord : record.GetColumns()) { 
+                if (auto* columnInfo = tableInfo.Columns.FindPtr(columnRecord.GetId())) { 
+                    // TODO: column types don't change when bound by id, but we may want to check anyway 
+                } else { 
+                    schemaChangedError = TStringBuilder() << "ReadTable cannot find column " 
+                        << columnRecord.GetName() << " (" << columnRecord.GetId() << ")"; 
+                    break; 
+                } 
+            } 
+            // TODO: validate key ranges? 
+        } else { 
+            schemaChangedError = TStringBuilder() << "ReadTable cannot find table " 
+                << record.GetTableId().GetOwnerId() << ":" << record.GetTableId().GetTableId(); 
+        } 
+ 
+        if (schemaChangedError) { 
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR) 
+                ->AddError(NKikimrTxDataShard::TError::SCHEME_CHANGED, *schemaChangedError); 
+            op->Abort(EExecutionUnitKind::FinishPropose); 
+            return EExecutionStatus::Executed; 
+        } 
+ 
+        if (record.HasSnapshotStep() && record.HasSnapshotTxId()) { 
+            if (!op->IsImmediate()) { 
+                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError( 
+                    NKikimrTxDataShard::TError::BAD_ARGUMENT, 
+                    "ReadTable from snapshot must be an immediate transaction"); 
+                op->Abort(EExecutionUnitKind::FinishPropose); 
+                return EExecutionStatus::Executed; 
+            } 
+ 
+            const TSnapshotKey key( 
+                record.GetTableId().GetOwnerId(), 
+                record.GetTableId().GetTableId(), 
+                record.GetSnapshotStep(), 
+                record.GetSnapshotTxId()); 
+ 
+            if (!DataShard.GetSnapshotManager().AcquireReference(key)) { 
+                // TODO: try upgrading to mvcc snapshot when available 
+                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError( 
+                    NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST, 
+                    TStringBuilder() 
+                        << "Shard " << DataShard.TabletID() 
+                        << " has no snapshot " << key); 
+                op->Abort(EExecutionUnitKind::FinishPropose); 
+                return EExecutionStatus::Executed; 
+            } 
+ 
+            op->SetAcquiredSnapshotKey(key); 
+            op->SetUsingSnapshotFlag(); 
+        } 
+    } 
+ 
     if (!op->IsImmediate()) {
         if (!Pipeline.AssignPlanInterval(op)) {
             TString err = TStringBuilder()

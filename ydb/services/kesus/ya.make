@@ -1,15 +1,15 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     snaury
     g:kikimr
 )
-
-SRCS(
-    grpc_service.cpp
-)
-
-PEERDIR(
+ 
+SRCS( 
+    grpc_service.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/grpc/server
     ydb/core/base
     ydb/core/grpc_services
@@ -19,6 +19,6 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/operation_id
-)
-
-END()
+) 
+ 
+END() 

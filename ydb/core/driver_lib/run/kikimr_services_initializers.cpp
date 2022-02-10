@@ -158,7 +158,7 @@
 #include <library/cpp/actors/core/process_stats.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/io_dispatcher.h>
-#include <library/cpp/actors/dnsresolver/dnsresolver.h>
+#include <library/cpp/actors/dnsresolver/dnsresolver.h> 
 #include <library/cpp/actors/helpers/selfping_actor.h>
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -173,7 +173,7 @@
 
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/logger/log.h>
-
+ 
 #include <library/cpp/monlib/messagebus/mon_messagebus.h>
 
 #include <library/cpp/svnversion/svnversion.h>
@@ -527,9 +527,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         }
     }
 
-    auto schedulerConfig = CreateSchedulerConfig(systemConfig.GetScheduler());
-    schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
-    setup->Scheduler.Reset(CreateSchedulerThread(schedulerConfig));
+    auto schedulerConfig = CreateSchedulerConfig(systemConfig.GetScheduler()); 
+    schedulerConfig.MonCounters = GetServiceCounters(counters, "utils"); 
+    setup->Scheduler.Reset(CreateSchedulerThread(schedulerConfig)); 
     setup->LocalServices.emplace_back(MakeIoDispatcherActorId(), TActorSetupCmd(CreateIoDispatcherActor(
         schedulerConfig.MonCounters->GetSubgroup("subsystem", "io_dispatcher")), TMailboxType::HTSwap, systemPoolId));
 
@@ -537,7 +537,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
     if (Config.HasNameserviceConfig()) {
         const auto& nsConfig = Config.GetNameserviceConfig();
-        const TActorId resolverId = NDnsResolver::MakeDnsResolverActorId();
+        const TActorId resolverId = NDnsResolver::MakeDnsResolverActorId(); 
         const TActorId nameserviceId = GetNameserviceActorId();
 
         ui32 numNodes = 0;
@@ -552,9 +552,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             const TString resolveHost = node.HasInterconnectHost() ?
                 node.GetInterconnectHost() : host;
 
-            // Use ip address only when dns host not specified
-            const TString addr = resolveHost ? TString() : node.GetAddress();
-
+            // Use ip address only when dns host not specified 
+            const TString addr = resolveHost ? TString() : node.GetAddress(); 
+ 
             TNodeLocation location;
             if (node.HasWalleLocation()) {
                 location = TNodeLocation(node.GetWalleLocation());
@@ -568,14 +568,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             dataCenters.insert(location.GetDataCenterId());
         }
 
-        NDnsResolver::TOnDemandDnsResolverOptions resolverOptions;
-        resolverOptions.MonCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "dns_resolver");
-        IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions);
-
-        setup->LocalServices.emplace_back(
-            resolverId,
-            TActorSetupCmd(resolver, TMailboxType::HTSwap, systemPoolId));
-
+        NDnsResolver::TOnDemandDnsResolverOptions resolverOptions; 
+        resolverOptions.MonCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "dns_resolver"); 
+        IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions); 
+ 
+        setup->LocalServices.emplace_back( 
+            resolverId, 
+            TActorSetupCmd(resolver, TMailboxType::HTSwap, systemPoolId)); 
+ 
         IActor *nameservice;
 
         switch (nsConfig.GetType()) {
@@ -892,12 +892,12 @@ TLocalServiceInitializer::TLocalServiceInitializer(const TKikimrRunConfig& runCo
 void TLocalServiceInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
-    // choose pool id for important tablets
-    ui32 importantPoolId = appData->UserPoolId;
-    if (Config.GetFeatureFlags().GetImportantTabletsUseSystemPool()) {
-        importantPoolId = appData->SystemPoolId;
-    }
-
+    // choose pool id for important tablets 
+    ui32 importantPoolId = appData->UserPoolId; 
+    if (Config.GetFeatureFlags().GetImportantTabletsUseSystemPool()) { 
+        importantPoolId = appData->SystemPoolId; 
+    } 
+ 
     // setup local
     TLocalConfig::TPtr localConfig(new TLocalConfig());
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.SchemeShard] = TLocalConfig::TTabletClassInfo(
@@ -911,21 +911,21 @@ void TLocalServiceInitializer::InitializeServices(
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.PersQueueReadBalancer] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreatePersQueueReadBalancer, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.Coordinator] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateFlatTxCoordinator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
+        new TTabletSetupInfo(&CreateFlatTxCoordinator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.Mediator] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateTxMediator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.Kesus] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NKesus::CreateKesusTablet, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
+        new TTabletSetupInfo(&CreateTxMediator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.Kesus] = TLocalConfig::TTabletClassInfo( 
+        new TTabletSetupInfo(&NKesus::CreateKesusTablet, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.Hive] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateDefaultHive, TMailboxType::ReadAsFilled, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
+        new TTabletSetupInfo(&CreateDefaultHive, TMailboxType::ReadAsFilled, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.SysViewProcessor] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&NSysView::CreateSysViewProcessor, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.TestShard] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&NTestShard::CreateTestShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.ColumnShard] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateColumnShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.SequenceShard] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NSequenceShard::CreateSequenceShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.SequenceShard] = TLocalConfig::TTabletClassInfo( 
+        new TTabletSetupInfo(&NSequenceShard::CreateSequenceShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.ReplicationController] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&NReplication::CreateController, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
 
@@ -967,21 +967,21 @@ void TSharedCacheInitializer::InitializeServices(
         const NKikimr::TAppData* appData) {
     auto config = MakeIntrusive<TSharedPageCacheConfig>();
 
-    NKikimrSharedCache::TSharedCacheConfig cfg;
+    NKikimrSharedCache::TSharedCacheConfig cfg; 
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) {
-        cfg.MergeFrom(Config.GetBootstrapConfig().GetSharedCacheConfig());
+        cfg.MergeFrom(Config.GetBootstrapConfig().GetSharedCacheConfig()); 
     }
-    if (Config.HasSharedCacheConfig()) {
-        cfg.MergeFrom(Config.GetSharedCacheConfig());
-    }
+    if (Config.HasSharedCacheConfig()) { 
+        cfg.MergeFrom(Config.GetSharedCacheConfig()); 
+    } 
 
-    config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
-    config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
-
+    config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit(); 
+    config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit(); 
+ 
     TIntrusivePtr<NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
 
-    config->CacheConfig = new TCacheCacheConfig(cfg.GetMemoryLimit(),
+    config->CacheConfig = new TCacheCacheConfig(cfg.GetMemoryLimit(), 
             sausageGroup->GetCounter("fresh"),
             sausageGroup->GetCounter("staging"),
             sausageGroup->GetCounter("warm"));
@@ -989,10 +989,10 @@ void TSharedCacheInitializer::InitializeServices(
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
         TActorSetupCmd(CreateSharedPageCache(config.Get()), TMailboxType::ReadAsFilled, appData->UserPoolId)));
-
-    auto *configurator = NConsole::CreateSharedCacheConfigurator();
+ 
+    auto *configurator = NConsole::CreateSharedCacheConfigurator(); 
     setup->LocalServices.emplace_back(TActorId(),
-                                      TActorSetupCmd(configurator, TMailboxType::HTSwap, appData->UserPoolId));
+                                      TActorSetupCmd(configurator, TMailboxType::HTSwap, appData->UserPoolId)); 
 }
 
 // TBlobCacheInitializer
@@ -1088,18 +1088,18 @@ TResourceBrokerInitializer::TResourceBrokerInitializer(const TKikimrRunConfig& r
 void TResourceBrokerInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
-    NKikimrResourceBroker::TResourceBrokerConfig config = NResourceBroker::MakeDefaultConfig();
-
+    NKikimrResourceBroker::TResourceBrokerConfig config = NResourceBroker::MakeDefaultConfig(); 
+ 
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasCompactionBroker()) {
-        Y_FAIL("Legacy CompactionBroker configuration is no longer supported");
-    }
+        Y_FAIL("Legacy CompactionBroker configuration is no longer supported"); 
+    } 
 
-    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasResourceBroker()) {
-        NResourceBroker::MergeConfigUpdates(config, Config.GetBootstrapConfig().GetResourceBroker());
-    }
+    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasResourceBroker()) { 
+        NResourceBroker::MergeConfigUpdates(config, Config.GetBootstrapConfig().GetResourceBroker()); 
+    } 
 
-    if (Config.HasResourceBrokerConfig()) {
-        NResourceBroker::MergeConfigUpdates(config, Config.GetResourceBrokerConfig());
+    if (Config.HasResourceBrokerConfig()) { 
+        NResourceBroker::MergeConfigUpdates(config, Config.GetResourceBrokerConfig()); 
     }
 
     auto counters = GetServiceCounters(appData->Counters, "tablets");
@@ -1157,37 +1157,37 @@ void TTabletResolverInitializer::InitializeServices(
 
 }
 
-// TTabletPipePeNodeCachesInitializer
-
-TTabletPipePeNodeCachesInitializer::TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig) {
-}
-
-void TTabletPipePeNodeCachesInitializer::InitializeServices(
-            NActors::TActorSystemSetup* setup,
-            const NKikimr::TAppData* appData)
-{
-    auto counters = GetServiceCounters(appData->Counters, "tablets");
-
+// TTabletPipePeNodeCachesInitializer 
+ 
+TTabletPipePeNodeCachesInitializer::TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig) 
+    : IKikimrServicesInitializer(runConfig) { 
+} 
+ 
+void TTabletPipePeNodeCachesInitializer::InitializeServices( 
+            NActors::TActorSystemSetup* setup, 
+            const NKikimr::TAppData* appData) 
+{ 
+    auto counters = GetServiceCounters(appData->Counters, "tablets"); 
+ 
     TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
     leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
     leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
-    leaderPipeConfig->Counters = counters->GetSubgroup("type", "LEADER_PIPE_CACHE");
-
-    TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
-    followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
-    followerPipeConfig->PipeConfig.AllowFollower = true;
-    followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
-    followerPipeConfig->Counters = counters->GetSubgroup("type", "FOLLOWER_PIPE_CACHE");
-
-    setup->LocalServices.emplace_back(
-        MakePipePeNodeCacheID(false),
-        TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
-    setup->LocalServices.emplace_back(
-        MakePipePeNodeCacheID(true),
-        TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
-}
-
+    leaderPipeConfig->Counters = counters->GetSubgroup("type", "LEADER_PIPE_CACHE"); 
+ 
+    TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig(); 
+    followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30); 
+    followerPipeConfig->PipeConfig.AllowFollower = true; 
+    followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3}; 
+    followerPipeConfig->Counters = counters->GetSubgroup("type", "FOLLOWER_PIPE_CACHE"); 
+ 
+    setup->LocalServices.emplace_back( 
+        MakePipePeNodeCacheID(false), 
+        TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId)); 
+    setup->LocalServices.emplace_back( 
+        MakePipePeNodeCacheID(true), 
+        TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId)); 
+} 
+ 
 // TTabletMonitoringProxyInitializer
 
 TTabletMonitoringProxyInitializer::TTabletMonitoringProxyInitializer(const TKikimrRunConfig& runConfig)
@@ -1197,10 +1197,10 @@ TTabletMonitoringProxyInitializer::TTabletMonitoringProxyInitializer(const TKiki
 void TTabletMonitoringProxyInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
-    NTabletMonitoringProxy::TTabletMonitoringProxyConfig proxyConfig;
-    proxyConfig.SetRetryLimitCount(Config.GetMonitoringConfig().GetTabletMonitoringRetries());
-
-    TActorSetupCmd tabletMonitoringProxySetup(NTabletMonitoringProxy::CreateTabletMonitoringProxy(std::move(proxyConfig)), TMailboxType::ReadAsFilled, appData->UserPoolId);
+    NTabletMonitoringProxy::TTabletMonitoringProxyConfig proxyConfig; 
+    proxyConfig.SetRetryLimitCount(Config.GetMonitoringConfig().GetTabletMonitoringRetries()); 
+ 
+    TActorSetupCmd tabletMonitoringProxySetup(NTabletMonitoringProxy::CreateTabletMonitoringProxy(std::move(proxyConfig)), TMailboxType::ReadAsFilled, appData->UserPoolId); 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NTabletMonitoringProxy::MakeTabletMonitoringProxyID(), tabletMonitoringProxySetup));
 
 }
@@ -1257,21 +1257,21 @@ static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
 
     TTabletTypes::EType tabletType = TTabletTypes::StrToType(typeName);
 
-    ui32 workPoolId = appData->UserPoolId;
-    if (appData->FeatureFlags.GetImportantTabletsUseSystemPool()) {
-        switch (tabletType) {
-            case TTabletTypes::Coordinator:
-            case TTabletTypes::Mediator:
-            case TTabletTypes::Hive:
-                workPoolId = appData->SystemPoolId;
-                break;
-            default:
-                break;
-        }
-    }
-
-    tabletSetup = MakeTabletSetupInfo(tabletType, workPoolId, appData->SystemPoolId);
-
+    ui32 workPoolId = appData->UserPoolId; 
+    if (appData->FeatureFlags.GetImportantTabletsUseSystemPool()) { 
+        switch (tabletType) { 
+            case TTabletTypes::Coordinator: 
+            case TTabletTypes::Mediator: 
+            case TTabletTypes::Hive: 
+                workPoolId = appData->SystemPoolId; 
+                break; 
+            default: 
+                break; 
+        } 
+    } 
+ 
+    tabletSetup = MakeTabletSetupInfo(tabletType, workPoolId, appData->SystemPoolId); 
+ 
     if (tabletInfo->TabletType == TTabletTypes::TYPE_INVALID) {
         tabletInfo->TabletType = tabletType;
     }
@@ -1513,13 +1513,13 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                        TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
                                                                       appData->UserPoolId)));
     }
-
-    if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) {
-        if (IActor* proxy = NKesus::CreateKesusProxyService()) {
-            setup->LocalServices.emplace_back(NKesus::MakeKesusProxyServiceId(),
+ 
+    if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) { 
+        if (IActor* proxy = NKesus::CreateKesusProxyService()) { 
+            setup->LocalServices.emplace_back(NKesus::MakeKesusProxyServiceId(), 
                                               TActorSetupCmd(proxy, TMailboxType::ReadAsFilled, appData->UserPoolId));
-        }
-    }
+        } 
+    } 
 
     if (Config.HasGRpcConfig() && Config.GetGRpcConfig().GetStartGRpcProxy()) {
     // logical copy from TKikimrRunner::InitializeGrpc
@@ -1538,26 +1538,26 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         const bool ignoreServeRootDomain = ScopeId.IsTenantScope();
         const bool serveRootDomain = !ignoreServeRootDomain && config.GetServeRootDomains();
 
-        auto stringsFromProto = [](TVector<TString>& vec, const auto& proto) {
-            if (!proto.empty()) {
-                vec.reserve(proto.size());
-                for (const TString& value : proto) {
-                    vec.emplace_back(value);
-                }
-            }
-        };
-
+        auto stringsFromProto = [](TVector<TString>& vec, const auto& proto) { 
+            if (!proto.empty()) { 
+                vec.reserve(proto.size()); 
+                for (const TString& value : proto) { 
+                    vec.emplace_back(value); 
+                } 
+            } 
+        }; 
+ 
         TVector<TIntrusivePtr<NGRpcService::TGrpcEndpointDescription>> endpoints;
         const TString &address = config.GetHost() && config.GetHost() != "[::]" ? config.GetHost() : FQDNHostName();
         if (const ui32 port = config.GetPort()) {
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-            desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
-            desc->Port = config.GetPublicPort() ? config.GetPublicPort() : port;
+            desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address; 
+            desc->Port = config.GetPublicPort() ? config.GetPublicPort() : port; 
             desc->Ssl = false;
 
-            stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4());
-            stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
-
+            stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4()); 
+            stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6()); 
+ 
             if (serveRootDomain)
                 desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
@@ -1566,14 +1566,14 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
         if (const ui32 sslPort = config.GetSslPort()) {
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-            desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
-            desc->Port = config.GetPublicSslPort() ? config.GetPublicSslPort() : sslPort;
+            desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address; 
+            desc->Port = config.GetPublicSslPort() ? config.GetPublicSslPort() : sslPort; 
             desc->Ssl = true;
 
-            stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4());
-            stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
-            desc->TargetNameOverride = config.GetPublicTargetNameOverride();
-
+            stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4()); 
+            stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6()); 
+            desc->TargetNameOverride = config.GetPublicTargetNameOverride(); 
+ 
             if (serveRootDomain)
                 desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
 
@@ -1585,13 +1585,13 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             const TString &localAddress = sx.GetHost() ? (sx.GetHost() != "[::]" ? sx.GetHost() : FQDNHostName()) : address;
             if (const ui32 port = sx.GetPort()) {
                 TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-                desc->Address = sx.GetPublicHost() ? sx.GetPublicHost() : localAddress;
-                desc->Port = sx.GetPublicPort() ? sx.GetPublicPort() : port;
+                desc->Address = sx.GetPublicHost() ? sx.GetPublicHost() : localAddress; 
+                desc->Port = sx.GetPublicPort() ? sx.GetPublicPort() : port; 
                 desc->Ssl = false;
 
-                stringsFromProto(desc->AddressesV4, sx.GetPublicAddressesV4());
-                stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
-
+                stringsFromProto(desc->AddressesV4, sx.GetPublicAddressesV4()); 
+                stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6()); 
+ 
                 if (serveRootDomain)
                     desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
@@ -1600,14 +1600,14 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
             if (const ui32 sslPort = sx.GetSslPort()) {
                 TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-                desc->Address = sx.GetPublicHost() ? sx.GetPublicHost() : localAddress;
-                desc->Port = sx.GetPublicSslPort() ? sx.GetPublicSslPort() : sslPort;
+                desc->Address = sx.GetPublicHost() ? sx.GetPublicHost() : localAddress; 
+                desc->Port = sx.GetPublicSslPort() ? sx.GetPublicSslPort() : sslPort; 
                 desc->Ssl = true;
 
-                stringsFromProto(desc->AddressesV4, sx.GetPublicAddressesV4());
-                stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
-                desc->TargetNameOverride = sx.GetPublicTargetNameOverride();
-
+                stringsFromProto(desc->AddressesV4, sx.GetPublicAddressesV4()); 
+                stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6()); 
+                desc->TargetNameOverride = sx.GetPublicTargetNameOverride(); 
+ 
                 if (serveRootDomain)
                     desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
@@ -2039,34 +2039,34 @@ void TTxProxyInitializer::InitializeServices(TActorSystemSetup *setup,
             TActorSetupCmd(CreateTxProxy(CollectAllAllocatorsFromAllDomains(appData)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 }
 
-TLongTxServiceInitializer::TLongTxServiceInitializer(const TKikimrRunConfig &runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{
-}
-
-void TLongTxServiceInitializer::InitializeServices(TActorSystemSetup *setup,
-                                                   const TAppData *appData)
-{
-    auto* actor = NLongTxService::CreateLongTxService();
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-            NLongTxService::MakeLongTxServiceID(NodeId),
-            TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId)));
-}
-
-TSequenceProxyServiceInitializer::TSequenceProxyServiceInitializer(const TKikimrRunConfig &runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{
-}
-
-void TSequenceProxyServiceInitializer::InitializeServices(TActorSystemSetup *setup,
-                                                   const TAppData *appData)
-{
-    auto* actor = NSequenceProxy::CreateSequenceProxy();
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-            NSequenceProxy::MakeSequenceProxyServiceID(),
-            TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId)));
-}
-
+TLongTxServiceInitializer::TLongTxServiceInitializer(const TKikimrRunConfig &runConfig) 
+    : IKikimrServicesInitializer(runConfig) 
+{ 
+} 
+ 
+void TLongTxServiceInitializer::InitializeServices(TActorSystemSetup *setup, 
+                                                   const TAppData *appData) 
+{ 
+    auto* actor = NLongTxService::CreateLongTxService(); 
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>( 
+            NLongTxService::MakeLongTxServiceID(NodeId), 
+            TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId))); 
+} 
+ 
+TSequenceProxyServiceInitializer::TSequenceProxyServiceInitializer(const TKikimrRunConfig &runConfig) 
+    : IKikimrServicesInitializer(runConfig) 
+{ 
+} 
+ 
+void TSequenceProxyServiceInitializer::InitializeServices(TActorSystemSetup *setup, 
+                                                   const TAppData *appData) 
+{ 
+    auto* actor = NSequenceProxy::CreateSequenceProxy(); 
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>( 
+            NSequenceProxy::MakeSequenceProxyServiceID(), 
+            TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId))); 
+} 
+ 
 TLeaseHolderInitializer::TLeaseHolderInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {

@@ -71,16 +71,16 @@ caching_policy {
 storage_policy {
   preset_name: "my storage preset"
   syslog {
-    media: "ssd"
+    media: "ssd" 
   }
   log {
-    media: "ssd"
+    media: "ssd" 
   }
   data {
-    media: "ssd"
+    media: "ssd" 
   }
   external {
-    media: "hdd"
+    media: "hdd" 
   }
   keep_in_memory: ENABLED
 }
@@ -1421,10 +1421,10 @@ class TestSessionNotFound(Base):
                 ydb.StoragePolicy()
                 .with_preset_name('my storage preset')
                 .with_keep_in_memory(ydb.FeatureFlag.ENABLED)
-                .with_log_storage_settings(ydb.StoragePool('ssd'))
-                .with_external_storage_settings(ydb.StoragePool('hdd'))
-                .with_syslog_storage_settings(ydb.StoragePool('ssd'))
-                .with_data_storage_settings(ydb.StoragePool('ssd'))
+                .with_log_storage_settings(ydb.StoragePool('ssd')) 
+                .with_external_storage_settings(ydb.StoragePool('hdd')) 
+                .with_syslog_storage_settings(ydb.StoragePool('ssd')) 
+                .with_data_storage_settings(ydb.StoragePool('ssd')) 
             )
             .with_compaction_policy(
                 ydb.CompactionPolicy()
@@ -1513,9 +1513,9 @@ class TestSelectAfterDropWithRepetitions(object):
             )
         )
         cls.cluster.start()
-        cls.driver = ydb.Driver(ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)))
+        cls.driver = ydb.Driver(ydb.DriverConfig( 
+            database="/Root", 
+            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))) 
         cls.driver.wait()
 
     @classmethod
@@ -1574,9 +1574,9 @@ class TestMetaDataInvalidation(object):
     def setup_class(cls):
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
-        cls.driver = ydb.Driver(ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%d" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)))
+        cls.driver = ydb.Driver(ydb.DriverConfig( 
+            database="/Root", 
+            endpoint="%s:%d" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))) 
         cls.driver.wait()
 
     @classmethod
@@ -1660,9 +1660,9 @@ class TestJsonExample(object):
     def setup_class(cls):
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
-        cls.driver = ydb.Driver(ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%d" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)))
+        cls.driver = ydb.Driver(ydb.DriverConfig( 
+            database="/Root", 
+            endpoint="%s:%d" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))) 
         cls.driver.wait()
 
     @classmethod
@@ -1690,7 +1690,7 @@ class TestJsonExample(object):
         prepared = session.prepare(
             'DECLARE $key as Utf8; \n'
             'DECLARE $value as Json; \n'
-            'UPSERT INTO `/Root/test_json_unexpected_failure` (key, value) VALUES ($key, $value)')
+            'UPSERT INTO `/Root/test_json_unexpected_failure` (key, value) VALUES ($key, $value)') 
 
         def callee():
             session.transaction().execute(
@@ -1728,7 +1728,7 @@ class TestJsonExample(object):
         prepared = session.prepare(
             'DECLARE $key as Utf8; \n'
             'DECLARE $value as Json; \n'
-            'UPSERT INTO `/Root/test_json_success` (key, value) VALUES ($key, $value)')
+            'UPSERT INTO `/Root/test_json_success` (key, value) VALUES ($key, $value)') 
         session.transaction().execute(
             prepared,
             commit_tx=True,
@@ -1755,8 +1755,8 @@ class TestForPotentialDeadlock(object):
     def test_deadlocked_threads_on_cleanup(self):
         driver = ydb.Driver(
             ydb.DriverConfig(
-                database="/Root",
-                endpoint="%s:%d" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
+                database="/Root", 
+                endpoint="%s:%d" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port) 
             )
         )
         driver.wait()
@@ -1935,7 +1935,7 @@ class TestDocApiTables(WithTenant):
                 ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
             .with_primary_key('key')
-            .with_attributes({'__document_api_version': '1'})
+            .with_attributes({'__document_api_version': '1'}) 
         )
 
     def test_create_table(self):

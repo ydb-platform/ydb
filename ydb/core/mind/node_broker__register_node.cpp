@@ -24,11 +24,11 @@ public:
                const TString &reason,
                const TActorContext &ctx)
     {
-        const auto &rec = Event->Get()->Record;
-        auto host = rec.GetHost();
-        auto port = rec.GetPort();
+        const auto &rec = Event->Get()->Record; 
+        auto host = rec.GetHost(); 
+        auto port = rec.GetPort(); 
         LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Cannot register node " << host << ":" << port << ": " << code << ": " << reason);
+                    "Cannot register node " << host << ":" << port << ": " << code << ": " << reason); 
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(reason);
@@ -41,7 +41,7 @@ public:
         auto &rec = Event->Get()->Record;
         auto host = rec.GetHost();
         ui16 port = (ui16)rec.GetPort();
-        TString addr = rec.GetAddress();
+        TString addr = rec.GetAddress(); 
         auto expire = rec.GetFixedNodeId() ? TInstant::Max() : Self->Epoch.NextEnd;
 
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Execute");
@@ -61,7 +61,7 @@ public:
         }
 
         // Already registered?
-        auto it = Self->Hosts.find(std::make_tuple(host, addr, port));
+        auto it = Self->Hosts.find(std::make_tuple(host, addr, port)); 
         if (it != Self->Hosts.end()) {
             auto &node = Self->Nodes.find(it->second)->second;
             NodeId = node.NodeId;
@@ -101,9 +101,9 @@ public:
         if (Self->FreeIds.Empty())
             return Error(TStatus::ERROR_TEMP, "No free node IDs", ctx);
 
-        NodeId = Self->FreeIds.FirstNonZeroBit();
-        Self->FreeIds.Reset(NodeId);
-
+        NodeId = Self->FreeIds.FirstNonZeroBit(); 
+        Self->FreeIds.Reset(NodeId); 
+ 
         Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc, false);
         Node->Lease = 1;
         Node->Expire = expire;

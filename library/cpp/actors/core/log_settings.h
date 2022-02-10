@@ -73,7 +73,7 @@ namespace NActors {
             EComponent LoggerComponent;
             ui64 TimeThresholdMs;
             bool AllowDrop;
-            TDuration ThrottleDelay;
+            TDuration ThrottleDelay; 
             TArrayHolder<TAtomic> ComponentInfo;
             TVector<TString> ComponentNames;
             EComponent MinVal;
@@ -162,7 +162,7 @@ namespace NActors {
             static bool IsValidPriority(EPriority priority);
             bool IsValidComponent(EComponent component);
             void SetAllowDrop(bool val);
-            void SetThrottleDelay(TDuration value);
+            void SetThrottleDelay(TDuration value); 
             void SetUseLocalTimestamps(bool value);
 
         private:

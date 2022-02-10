@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util_basics.h"
+#include "util_basics.h" 
 #include "util_fmt_flat.h"
 #include "flat_exec_commit.h"
 #include "flat_boot_cookie.h"
@@ -44,7 +44,7 @@ namespace NSnap {
         }
 
         ui64 Since = 0; /* stamp of start accounting age    */
-        i64 Level = 0;  /* Total bytes kept by commit manager */
+        i64 Level = 0;  /* Total bytes kept by commit manager */ 
         ui64 Trace = 0; /* Redo log commits since last snap */
         ui64 Items = 0;
         ui64 Bytes = 0; /* Waste grown since last snapshot  */

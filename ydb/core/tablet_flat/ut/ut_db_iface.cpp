@@ -90,8 +90,8 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(60).Snap(1).Compact(1, false).Iter(1, false).Has(bar);
 
-        UNIT_ASSERT(me->Counters().Parts.RowsTotal == 3);
-        UNIT_ASSERT(me->Counters().Parts.RowsErase == 1);
+        UNIT_ASSERT(me->Counters().Parts.RowsTotal == 3); 
+        UNIT_ASSERT(me->Counters().Parts.RowsErase == 1); 
         UNIT_ASSERT(me.GetLog().size() == 10);
     }
 
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         /* Ensure that test was acomplished on non-trivial subset */
 
-        const auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+        const auto subset = me->Subset(1, TEpoch::Max(), { }, { }); 
 
         UNIT_ASSERT(subset->Flatten.size() == 3 && subset->Frozen.size() == 3);
     }
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.Begin().Put(1, ro3, ro4).Commit().Snap(1).Compact(1, false);
 
         { /*_ Check memtable snapshots for compactions */
-            auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            auto subset = me->Subset(1, TEpoch::Max(), { }, { }); 
 
             UNIT_ASSERT(subset->Flatten.size() == 2 && subset->Frozen.size() == 0);
             UNIT_ASSERT(subset->Flatten[0]->Stat.Rows == 2);
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(13).Iter(1).Has(ro1).Has(ro2).Has(ro3).Has(ro4);
 
         { /*_ Check Replace(...) with non-trivail subsets */
-            auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            auto subset = me->Subset(1, TEpoch::Max(), { }, { }); 
 
             UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Frozen.size() == 0);
             UNIT_ASSERT(subset->Flatten[0]->Stat.Rows == 4);
@@ -250,8 +250,8 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         UNIT_ASSERT(me->Counters().MemTableOps == 2);
         UNIT_ASSERT(me->Counters().MemTableBytes > 0);
-        UNIT_ASSERT(me->Counters().Parts.PlainBytes > 0);
-        UNIT_ASSERT(me->Counters().Parts.IndexBytes > 0);
+        UNIT_ASSERT(me->Counters().Parts.PlainBytes > 0); 
+        UNIT_ASSERT(me->Counters().Parts.IndexBytes > 0); 
 
         me.To(16).Compact(1, false).Iter(1).Has(ro4); /* NOOP compaction */
 
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(20).Begin().Apply(*MakeAlter(2).Flush()).Commit();
         me.To(21).Begin().Put(2, ro1, ro2).Commit().Snap(2).Compact(2);
 
-        UNIT_ASSERT(me->Counters().Parts.PartsCount == 4);
+        UNIT_ASSERT(me->Counters().Parts.PartsCount == 4); 
 
         /*_ 40: Finally drop entire table and check presence of garbage */
 
@@ -273,12 +273,12 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(me.BackLog().Garbage[1]->Frozen.size() == 0);
         UNIT_ASSERT(me->Counters().MemTableOps == 0);
         UNIT_ASSERT(me->Counters().MemTableBytes == 0);
-        UNIT_ASSERT(me->Counters().Parts.RowsTotal == 0);
-        UNIT_ASSERT(me->Counters().Parts.RowsErase == 0);
-        UNIT_ASSERT(me->Counters().Parts.PartsCount == 0);
-        UNIT_ASSERT(me->Counters().Parts.PlainBytes == 0);
-        UNIT_ASSERT(me->Counters().Parts.IndexBytes == 0);
-        UNIT_ASSERT(me->Counters().Parts.OtherBytes == 0);
+        UNIT_ASSERT(me->Counters().Parts.RowsTotal == 0); 
+        UNIT_ASSERT(me->Counters().Parts.RowsErase == 0); 
+        UNIT_ASSERT(me->Counters().Parts.PartsCount == 0); 
+        UNIT_ASSERT(me->Counters().Parts.PlainBytes == 0); 
+        UNIT_ASSERT(me->Counters().Parts.IndexBytes == 0); 
+        UNIT_ASSERT(me->Counters().Parts.OtherBytes == 0); 
     }
 
     Y_UNIT_TEST(Affects)
@@ -310,10 +310,10 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(34).Compact(2);
 
         UNIT_ASSERT(me->Counters().MemTableOps == 0);
-        UNIT_ASSERT(me.BackLog().Snapshots.at(0).Epoch == TEpoch::FromIndex(2));
+        UNIT_ASSERT(me.BackLog().Snapshots.at(0).Epoch == TEpoch::FromIndex(2)); 
 
         {
-            const auto subset = me->Subset(2, TEpoch::Max(), { }, { });
+            const auto subset = me->Subset(2, TEpoch::Max(), { }, { }); 
 
             UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Frozen.size() == 0);
         }
@@ -389,17 +389,17 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         /*_ 26: Annex should be promoted to external blobs in TMemTable */
 
-        auto subset = me.To(26).Snap(1)->Subset(1, TEpoch::Max(), { }, { });
+        auto subset = me.To(26).Snap(1)->Subset(1, TEpoch::Max(), { }, { }); 
 
         UNIT_ASSERT(subset->Frozen.size() == 1 && subset->Flatten.size() == 0);
-        UNIT_ASSERT(subset->Frozen[0]->GetBlobs()->Tail() == 2);
+        UNIT_ASSERT(subset->Frozen[0]->GetBlobs()->Tail() == 2); 
 
         /* Extra 8 bytes in each annex or external blob is occupied by
             NPage::TLabel prefix which prefixes many binary units in NTable
          */
 
-        UNIT_ASSERT(subset->Frozen[0]->GetBlobs()->GetRaw(0).Data.size() == 8 + 35);
-        UNIT_ASSERT(subset->Frozen[0]->GetBlobs()->GetRaw(1).Data.size() == 8 + 42);
+        UNIT_ASSERT(subset->Frozen[0]->GetBlobs()->GetRaw(0).Data.size() == 8 + 35); 
+        UNIT_ASSERT(subset->Frozen[0]->GetBlobs()->GetRaw(1).Data.size() == 8 + 42); 
 
         /*_ 28: Test blobs refereces generation after TMemTable snapshot */
 
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         /*_ 40: Compaction should turn all largeXX to external blobs */
 
-        auto last = me.To(40).Snap(1).Compact(1)->Subset(1, TEpoch::FromIndex(666), { }, { });
+        auto last = me.To(40).Snap(1).Compact(1)->Subset(1, TEpoch::FromIndex(666), { }, { }); 
 
         UNIT_ASSERT(last->Frozen.size() == 0 && last->Flatten.size() == 1);
 
@@ -425,8 +425,8 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(last->Flatten[0]->Blobs->Glob(2).Bytes() == 8 + 42);
         UNIT_ASSERT(last->Flatten[0]->Blobs->Glob(3).Bytes() == 8 + 44);
 
-        UNIT_ASSERT(me->Counters().Parts.LargeItems == 4);
-        UNIT_ASSERT(me->Counters().Parts.LargeBytes == 4 * 8 + 30 + 35 + 42 + 44);
+        UNIT_ASSERT(me->Counters().Parts.LargeItems == 4); 
+        UNIT_ASSERT(me->Counters().Parts.LargeBytes == 4 * 8 + 30 + 35 + 42 + 44); 
 
         me.To(41).Iter(1).Has(foo).Has(foo, ro30, ro35, ro42, ro44, zap);
 
@@ -434,9 +434,9 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(50).Begin().Put(1, zap).Commit().Snap(1);
 
-        auto closed = me->Subset(1, TEpoch::Max(), { }, { });
+        auto closed = me->Subset(1, TEpoch::Max(), { }, { }); 
 
-        UNIT_ASSERT(closed->Frozen.at(0)->GetBlobs()->Head == 3);
+        UNIT_ASSERT(closed->Frozen.at(0)->GetBlobs()->Head == 3); 
     }
 
     Y_UNIT_TEST(Outer)
@@ -460,280 +460,280 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(14).Begin().Put(1, foo, ro21).Commit().Snap(1).Compact(1, false);
         me.To(16).Iter(1, false).Has(foo, ro17, ro21);
 
-        auto subset = me.To(18)->Subset(1, TEpoch::Max(), { }, { });
+        auto subset = me.To(18)->Subset(1, TEpoch::Max(), { }, { }); 
 
         UNIT_ASSERT(subset->Flatten.size() == 2 && subset->Flatten[0]->Small);
         UNIT_ASSERT(subset->Flatten[0]->Small->Stats().Items == 1);
-        UNIT_ASSERT(me->Counters().Parts.SmallItems == 2);
-        UNIT_ASSERT(me->Counters().Parts.SmallBytes == 2 * 8 + 17 + 21);
-        UNIT_ASSERT(me->Counters().Parts.OtherBytes > 30);
+        UNIT_ASSERT(me->Counters().Parts.SmallItems == 2); 
+        UNIT_ASSERT(me->Counters().Parts.SmallBytes == 2 * 8 + 17 + 21); 
+        UNIT_ASSERT(me->Counters().Parts.OtherBytes > 30); 
 
         /*_ 20: Compact all data to the single final part */
 
-        auto last = me.To(20).Compact(1, true)->Subset(1, TEpoch::FromIndex(666), { }, { });
+        auto last = me.To(20).Compact(1, true)->Subset(1, TEpoch::FromIndex(666), { }, { }); 
 
         UNIT_ASSERT(last->Flatten.size() == 1 && last->Flatten[0]->Small);
         UNIT_ASSERT(last->Flatten[0]->Small->Stats().Items == 2);
         UNIT_ASSERT(last->Flatten[0]->Small->Stats().Size == 54);
-        UNIT_ASSERT(me->Counters().Parts.SmallItems == 2);
-        UNIT_ASSERT(me->Counters().Parts.SmallBytes == 2 * 8 + 17 + 21);
-        UNIT_ASSERT(me->Counters().Parts.OtherBytes > 30);
+        UNIT_ASSERT(me->Counters().Parts.SmallItems == 2); 
+        UNIT_ASSERT(me->Counters().Parts.SmallBytes == 2 * 8 + 17 + 21); 
+        UNIT_ASSERT(me->Counters().Parts.OtherBytes > 30); 
 
         /*_ 30: Clean database and check that all data gone */
 
         me.To(30).Begin().Apply(*TAlter().DropTable(1)).Commit();
 
-        UNIT_ASSERT(me->Counters().Parts.SmallItems == 0);
-        UNIT_ASSERT(me->Counters().Parts.SmallBytes == 0);
-        UNIT_ASSERT(me->Counters().Parts.OtherBytes == 0);
+        UNIT_ASSERT(me->Counters().Parts.SmallItems == 0); 
+        UNIT_ASSERT(me->Counters().Parts.SmallBytes == 0); 
+        UNIT_ASSERT(me->Counters().Parts.OtherBytes == 0); 
     }
 
-    Y_UNIT_TEST(VersionBasics)
-    {
-        TDbExec me;
-
-        me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit();
-
-        const auto nil = *me.Natural(1).Col(nullptr);
-        const auto foo = *me.Natural(1).Col("foo", 33_u64);
-        const auto bar = *me.Natural(1).Col("bar", 11_u64);
+    Y_UNIT_TEST(VersionBasics) 
+    { 
+        TDbExec me; 
+ 
+        me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit(); 
+ 
+        const auto nil = *me.Natural(1).Col(nullptr); 
+        const auto foo = *me.Natural(1).Col("foo", 33_u64); 
+        const auto bar = *me.Natural(1).Col("bar", 11_u64); 
         const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo");
         const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me");
         const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset);
         const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh");
-
-        me.To(11).Iter(1).NoKey(foo).NoKey(bar);
-
-        /*_ 10: Check rollback and next working tx  */
-
-        me.To(12).Begin().WriteVer({1, 50}).Add(1, foo).Add(1, nil).Commit();
-        me.To(13).Iter(1).Has(foo).HasN(nullptr, 77_u64).NoKey(bar);
-        me.To(14).Begin().WriteVer({1, 51}).Add(1, bar).Reject();
-        me.To(15).Iter(1).Has(foo).NoKey(bar);
-        me.To(16).Begin().WriteVer({1, 52}).Add(1, bar).Commit();
-        me.To(17).Iter(1).Has(foo).Has(bar);
-        me.To(18).Affects(0, { 1 });
-
-        /* Check versioned queries */
-        me.To(19).ReadVer({0, 0}).Iter(1).NoKey(foo).NoKey(bar);
-        me.To(20).ReadVer({1, 50}).Iter(1).Has(foo).NoKey(bar);
-        me.To(21).ReadVer({1, 51}).Iter(1).Has(foo).NoKey(bar);
-        me.To(22).ReadVer({1, 52}).Iter(1).Has(foo).Has(bar);
-
-        /* Not sure what this does, copied from Basics test */
-
-        me.To(23).Begin().Apply(*TAlter().SetRoom(1, 0, 1, 2, 1)).Commit();
-
-        /*_ 20: Check that log is applied correctly */
-
-        me.To(24).Replay(EPlay::Boot).Iter(1).Has(foo).Has(bar);
-        me.To(25).Replay(EPlay::Redo).Iter(1).Has(foo).Has(bar);
-
-        /* History should have been restored as well */
-
-        me.To(26).ReadVer({0, 0}).Iter(1).NoKey(foo).NoKey(bar);
-        me.To(27).ReadVer({1, 50}).Iter(1).Has(foo).NoKey(bar);
-        me.To(28).ReadVer({1, 51}).Iter(1).Has(foo).NoKey(bar);
-        me.To(28).ReadVer({1, 52}).Iter(1).Has(foo).Has(bar);
-
-        /*_ 30: Check erase of some row and update  */
-
+ 
+        me.To(11).Iter(1).NoKey(foo).NoKey(bar); 
+ 
+        /*_ 10: Check rollback and next working tx  */ 
+ 
+        me.To(12).Begin().WriteVer({1, 50}).Add(1, foo).Add(1, nil).Commit(); 
+        me.To(13).Iter(1).Has(foo).HasN(nullptr, 77_u64).NoKey(bar); 
+        me.To(14).Begin().WriteVer({1, 51}).Add(1, bar).Reject(); 
+        me.To(15).Iter(1).Has(foo).NoKey(bar); 
+        me.To(16).Begin().WriteVer({1, 52}).Add(1, bar).Commit(); 
+        me.To(17).Iter(1).Has(foo).Has(bar); 
+        me.To(18).Affects(0, { 1 }); 
+ 
+        /* Check versioned queries */ 
+        me.To(19).ReadVer({0, 0}).Iter(1).NoKey(foo).NoKey(bar); 
+        me.To(20).ReadVer({1, 50}).Iter(1).Has(foo).NoKey(bar); 
+        me.To(21).ReadVer({1, 51}).Iter(1).Has(foo).NoKey(bar); 
+        me.To(22).ReadVer({1, 52}).Iter(1).Has(foo).Has(bar); 
+ 
+        /* Not sure what this does, copied from Basics test */ 
+ 
+        me.To(23).Begin().Apply(*TAlter().SetRoom(1, 0, 1, 2, 1)).Commit(); 
+ 
+        /*_ 20: Check that log is applied correctly */ 
+ 
+        me.To(24).Replay(EPlay::Boot).Iter(1).Has(foo).Has(bar); 
+        me.To(25).Replay(EPlay::Redo).Iter(1).Has(foo).Has(bar); 
+ 
+        /* History should have been restored as well */ 
+ 
+        me.To(26).ReadVer({0, 0}).Iter(1).NoKey(foo).NoKey(bar); 
+        me.To(27).ReadVer({1, 50}).Iter(1).Has(foo).NoKey(bar); 
+        me.To(28).ReadVer({1, 51}).Iter(1).Has(foo).NoKey(bar); 
+        me.To(28).ReadVer({1, 52}).Iter(1).Has(foo).Has(bar); 
+ 
+        /*_ 30: Check erase of some row and update  */ 
+ 
         me.To(30).Begin().WriteVer({2, 60}).Add(1, ba1).Add(1, foo, ERowOp::Erase).Commit();
-        me.To(31).Iter(1, false).NoKey(foo).NoVal(bar);
-        me.To(32).Iter(1, false).HasN("bar", 11_u64, "yo"); /* omited arg1  */
-        me.To(33).Begin().WriteVer({2, 61}).Add(1, ba2).Commit();
-        me.To(34).Iter(1, false).HasN("bar", 77_u64, "me"); /* default arg1 */
-        me.To(35).Begin().WriteVer({2, 62}).Add(1, ba3).Commit();
-        me.To(36).Iter(1, false).HasN("bar", 99_u64, nullptr);
-        me.To(37).Begin().WriteVer({2, 63}).Add(1, ba4).Commit();
-        me.To(38).Iter(1, false).HasN("bar", nullptr, "eh").Has(ba4);
-
-        /*_ 40: Finally reboot again and check result */
-
-        me.To(40).Replay(EPlay::Boot).Iter(1, false).Has(ba4).NoKey(foo);
-        me.To(41).Replay(EPlay::Redo).Iter(1, false).Has(ba4).NoKey(foo);
-
-        /*_ 50: Erase and update the same row in tx */
-
+        me.To(31).Iter(1, false).NoKey(foo).NoVal(bar); 
+        me.To(32).Iter(1, false).HasN("bar", 11_u64, "yo"); /* omited arg1  */ 
+        me.To(33).Begin().WriteVer({2, 61}).Add(1, ba2).Commit(); 
+        me.To(34).Iter(1, false).HasN("bar", 77_u64, "me"); /* default arg1 */ 
+        me.To(35).Begin().WriteVer({2, 62}).Add(1, ba3).Commit(); 
+        me.To(36).Iter(1, false).HasN("bar", 99_u64, nullptr); 
+        me.To(37).Begin().WriteVer({2, 63}).Add(1, ba4).Commit(); 
+        me.To(38).Iter(1, false).HasN("bar", nullptr, "eh").Has(ba4); 
+ 
+        /*_ 40: Finally reboot again and check result */ 
+ 
+        me.To(40).Replay(EPlay::Boot).Iter(1, false).Has(ba4).NoKey(foo); 
+        me.To(41).Replay(EPlay::Redo).Iter(1, false).Has(ba4).NoKey(foo); 
+ 
+        /*_ 50: Erase and update the same row in tx */ 
+ 
         me.To(50).Begin().WriteVer({3, 70}).Add(1, bar, ERowOp::Erase).Add(1, bar).Commit();
-        me.To(51).Iter(1, false).Has(bar).NoKey(foo);
+        me.To(51).Iter(1, false).Has(bar).NoKey(foo); 
+ 
+        /*_ 60: Check rows counters after compaction */ 
+ 
+        me.To(60).Snap(1).Compact(1, false).Iter(1, false).Has(bar); 
+ 
+        UNIT_ASSERT(me->Counters().Parts.RowsTotal == 3); 
+        UNIT_ASSERT(me->Counters().Parts.RowsErase == 1); 
+        UNIT_ASSERT(me.GetLog().size() == 10); 
+ 
+        /* Check history after compaction is correct */ 
 
-        /*_ 60: Check rows counters after compaction */
-
-        me.To(60).Snap(1).Compact(1, false).Iter(1, false).Has(bar);
-
-        UNIT_ASSERT(me->Counters().Parts.RowsTotal == 3);
-        UNIT_ASSERT(me->Counters().Parts.RowsErase == 1);
-        UNIT_ASSERT(me.GetLog().size() == 10);
-
-        /* Check history after compaction is correct */
-
-        for (int base = 70; base <= 90; base += 10) {
-            me.To(base + 0).ReadVer({0, 0}).Iter(1).NoKey(foo).NoKey(bar);
-            me.To(base + 1).ReadVer({1, 50}).Iter(1).Has(foo).NoKey(bar);
-            me.To(base + 2).ReadVer({1, 51}).Iter(1).Has(foo).NoKey(bar);
-            me.To(base + 3).ReadVer({1, 52}).Iter(1).Has(foo).Has(bar);
-            me.To(base + 4).ReadVer({2, 60}).Iter(1, false).NoKey(foo).NoVal(bar);
-            me.To(base + 5).ReadVer({2, 60}).Iter(1, false).HasN("bar", 11_u64, "yo");
-            me.To(base + 6).ReadVer({2, 61}).Iter(1, false).HasN("bar", 77_u64, "me");
-            me.To(base + 7).ReadVer({2, 62}).Iter(1, false).HasN("bar", 99_u64, nullptr);
-            me.To(base + 8).ReadVer({2, 63}).Iter(1, false).HasN("bar", nullptr, "eh").Has(ba4);
-
-            // Run compaction for the next iteration
-            me.To(base + 9).Compact(1);
-        }
-    }
-
-    void RunVersionChecks(bool compactMemTables, bool compactFinal) {
-        TDbExec me;
-
-        const ui32 table = 1;
-        me.To(10)
-            .Begin()
-            .Apply(*TAlter()
-                .AddTable("me_1", table)
+        for (int base = 70; base <= 90; base += 10) { 
+            me.To(base + 0).ReadVer({0, 0}).Iter(1).NoKey(foo).NoKey(bar); 
+            me.To(base + 1).ReadVer({1, 50}).Iter(1).Has(foo).NoKey(bar); 
+            me.To(base + 2).ReadVer({1, 51}).Iter(1).Has(foo).NoKey(bar); 
+            me.To(base + 3).ReadVer({1, 52}).Iter(1).Has(foo).Has(bar); 
+            me.To(base + 4).ReadVer({2, 60}).Iter(1, false).NoKey(foo).NoVal(bar); 
+            me.To(base + 5).ReadVer({2, 60}).Iter(1, false).HasN("bar", 11_u64, "yo"); 
+            me.To(base + 6).ReadVer({2, 61}).Iter(1, false).HasN("bar", 77_u64, "me"); 
+            me.To(base + 7).ReadVer({2, 62}).Iter(1, false).HasN("bar", 99_u64, nullptr); 
+            me.To(base + 8).ReadVer({2, 63}).Iter(1, false).HasN("bar", nullptr, "eh").Has(ba4); 
+ 
+            // Run compaction for the next iteration 
+            me.To(base + 9).Compact(1); 
+        } 
+    } 
+ 
+    void RunVersionChecks(bool compactMemTables, bool compactFinal) { 
+        TDbExec me; 
+ 
+        const ui32 table = 1; 
+        me.To(10) 
+            .Begin() 
+            .Apply(*TAlter() 
+                .AddTable("me_1", table) 
                 .AddColumn(table, "key",    1, ETypes::Uint64, false)
                 .AddColumn(table, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
                 .AddColumn(table, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
-                .AddColumnToKey(table, 1))
-            .Commit();
-
-        // Add a "null" key with a 0/40 version, for a better code coverage in
-        // the version iteration cases, so compaction would actually try
-        // descending below 1/50 and won't bail out.
-        me.To(15).Begin().WriteVer({0, 40}).Put(table, *me.Natural(table).Col(nullptr)).Commit();
-
-        // Create 1000 rows with 3 consecutive versions each, filling different columns
-        me.To(20).Begin();
-        for (ui64 i = 1000; i < 2000; ++i) {
-            // Version 1/50, keys added, but all columns are empty (default)
+                .AddColumnToKey(table, 1)) 
+            .Commit(); 
+ 
+        // Add a "null" key with a 0/40 version, for a better code coverage in 
+        // the version iteration cases, so compaction would actually try 
+        // descending below 1/50 and won't bail out. 
+        me.To(15).Begin().WriteVer({0, 40}).Put(table, *me.Natural(table).Col(nullptr)).Commit(); 
+ 
+        // Create 1000 rows with 3 consecutive versions each, filling different columns 
+        me.To(20).Begin(); 
+        for (ui64 i = 1000; i < 2000; ++i) { 
+            // Version 1/50, keys added, but all columns are empty (default) 
             me.WriteVer({1, 50}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, ECellOp::Empty));
-            // Version 2/60, keys updated with arg1=i
+            // Version 2/60, keys updated with arg1=i 
             me.WriteVer({2, 60}).Put(table, *me.Natural(table).Col(i, i, ECellOp::Empty));
-            // Version 3/70, keys updated with arg2=3000-i
+            // Version 3/70, keys updated with arg2=3000-i 
             me.WriteVer({3, 70}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, 3000-i));
-        }
-        me.Commit().Snap(table);
-        if (compactMemTables) {
-            me.Compact(table, false);
-        }
-
-        // Create 1000 more rows using different memtables
-        me.To(22).Begin();
-        for (ui64 i = 2000; i < 3000; ++i) {
+        } 
+        me.Commit().Snap(table); 
+        if (compactMemTables) { 
+            me.Compact(table, false); 
+        } 
+ 
+        // Create 1000 more rows using different memtables 
+        me.To(22).Begin(); 
+        for (ui64 i = 2000; i < 3000; ++i) { 
             me.WriteVer({1, 50}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, ECellOp::Empty));
-        }
-        me.Commit().Snap(table);
-        if (compactMemTables) {
-            me.Compact(table, false);
-        }
-
-        me.To(23).Begin();
-        for (ui64 i = 2000; i < 3000; ++i) {
+        } 
+        me.Commit().Snap(table); 
+        if (compactMemTables) { 
+            me.Compact(table, false); 
+        } 
+ 
+        me.To(23).Begin(); 
+        for (ui64 i = 2000; i < 3000; ++i) { 
             me.WriteVer({2, 60}).Put(table, *me.Natural(table).Col(i, i, ECellOp::Empty));
-        }
-        me.Commit().Snap(table);
-        if (compactMemTables) {
-            me.Compact(table, false);
-        }
-
-        me.To(24).Begin();
-        for (ui64 i = 2000; i < 3000; ++i) {
+        } 
+        me.Commit().Snap(table); 
+        if (compactMemTables) { 
+            me.Compact(table, false); 
+        } 
+ 
+        me.To(24).Begin(); 
+        for (ui64 i = 2000; i < 3000; ++i) { 
             me.WriteVer({3, 70}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, 3000-i));
-        }
-        me.Commit().Snap(table);
-        if (compactMemTables) {
-            me.Compact(table, false);
-        }
-
-        // Run optional final compaction
-        if (compactFinal) {
-            me.To(25).Compact(table);
-        }
-
-        // Verify that results are correct for each version and row
-        me.To(30);
-        for (ui64 i = 1000; i < 3000; ++i) {
-            // No key before 1/50
-            me.ReadVer({1, 49}).Select(table).NoKey(*me.Natural(table).Col(i));
-            me.ReadVer({1, 49}).Iter(table).NoKey(*me.Natural(table).Col(i));
-            // Key with default values until 2/60
-            me.ReadVer({2, 59}).Select(table).HasN(i, 10004_u64, 10005_u64);
-            me.ReadVer({2, 59}).Iter(table).HasN(i, 10004_u64, 10005_u64);
-            // Key with arg1 set until 3/70
-            me.ReadVer({3, 69}).Select(table).HasN(i, i, 10005_u64);
-            me.ReadVer({3, 69}).Iter(table).HasN(i, i, 10005_u64);
-            // Key with both arg1 and arg2 starting with 3/70
-            me.ReadVer({3, 70}).Select(table).HasN(i, i, 3000-i);
-            me.ReadVer({3, 70}).Iter(table).HasN(i, i, 3000-i);
-        }
-
-        // Verify iteration before everything
-        me.To(31).ReadVer({0, 0}).Iter(table, false)
-            .Seek({ }, ESeek::Lower).Is(EReady::Gone);
-
-        // Verify iteration before 1/50
-        me.To(32).ReadVer({1, 49}).Iter(table, false)
-            .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64))
-            .Next().Is(EReady::Gone);
-
-        // Verify iteration before 2/60
-        {
-            auto checker = me.To(33).ReadVer({2, 59}).Iter(table, false)
-                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64));
-            for (ui64 i = 1000; i < 3000; ++i) {
-                checker.Next().Is(*me.Natural(table).Col(i, 10004_u64, 10005_u64));
-            }
-            checker.Next().Is(EReady::Gone);
-        }
-
-        // Verify iteration before 3/70
-        {
-            auto checker = me.To(34).ReadVer({3, 69}).Iter(table, false)
-                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64));
-            for (ui64 i = 1000; i < 3000; ++i) {
-                checker.Next().Is(*me.Natural(table).Col(i, i, 10005_u64));
-            }
-            checker.Next().Is(EReady::Gone);
-        }
-
-        // Verify iteration at 3/70
-        {
-            auto checker = me.To(35).ReadVer({3, 70}).Iter(table, false)
-                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64));
-            for (ui64 i = 1000; i < 3000; ++i) {
-                checker.Next().Is(*me.Natural(table).Col(i, i, 3000-i));
-            }
-            checker.Next().Is(EReady::Gone);
-        }
-
-        // Verify iteration at HEAD
-        {
-            auto checker = me.To(36).ReadVer(TRowVersion::Max()).Iter(table, false)
-                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64));
-            for (ui64 i = 1000; i < 3000; ++i) {
-                checker.Next().Is(*me.Natural(table).Col(i, i, 3000-i));
-            }
-            checker.Next().Is(EReady::Gone);
-        }
-    }
-
-    Y_UNIT_TEST(VersionPureMem) {
-        RunVersionChecks(false, false);
-    }
-
-    Y_UNIT_TEST(VersionPureParts) {
-        RunVersionChecks(true, false);
-    }
-
-    Y_UNIT_TEST(VersionCompactedMem) {
-        RunVersionChecks(false, true);
-    }
-
-    Y_UNIT_TEST(VersionCompactedParts) {
-        RunVersionChecks(true, true);
-    }
-
+        } 
+        me.Commit().Snap(table); 
+        if (compactMemTables) { 
+            me.Compact(table, false); 
+        } 
+ 
+        // Run optional final compaction 
+        if (compactFinal) { 
+            me.To(25).Compact(table); 
+        } 
+ 
+        // Verify that results are correct for each version and row 
+        me.To(30); 
+        for (ui64 i = 1000; i < 3000; ++i) { 
+            // No key before 1/50 
+            me.ReadVer({1, 49}).Select(table).NoKey(*me.Natural(table).Col(i)); 
+            me.ReadVer({1, 49}).Iter(table).NoKey(*me.Natural(table).Col(i)); 
+            // Key with default values until 2/60 
+            me.ReadVer({2, 59}).Select(table).HasN(i, 10004_u64, 10005_u64); 
+            me.ReadVer({2, 59}).Iter(table).HasN(i, 10004_u64, 10005_u64); 
+            // Key with arg1 set until 3/70 
+            me.ReadVer({3, 69}).Select(table).HasN(i, i, 10005_u64); 
+            me.ReadVer({3, 69}).Iter(table).HasN(i, i, 10005_u64); 
+            // Key with both arg1 and arg2 starting with 3/70 
+            me.ReadVer({3, 70}).Select(table).HasN(i, i, 3000-i); 
+            me.ReadVer({3, 70}).Iter(table).HasN(i, i, 3000-i); 
+        } 
+ 
+        // Verify iteration before everything 
+        me.To(31).ReadVer({0, 0}).Iter(table, false) 
+            .Seek({ }, ESeek::Lower).Is(EReady::Gone); 
+ 
+        // Verify iteration before 1/50 
+        me.To(32).ReadVer({1, 49}).Iter(table, false) 
+            .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64)) 
+            .Next().Is(EReady::Gone); 
+ 
+        // Verify iteration before 2/60 
+        { 
+            auto checker = me.To(33).ReadVer({2, 59}).Iter(table, false) 
+                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64)); 
+            for (ui64 i = 1000; i < 3000; ++i) { 
+                checker.Next().Is(*me.Natural(table).Col(i, 10004_u64, 10005_u64)); 
+            } 
+            checker.Next().Is(EReady::Gone); 
+        } 
+ 
+        // Verify iteration before 3/70 
+        { 
+            auto checker = me.To(34).ReadVer({3, 69}).Iter(table, false) 
+                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64)); 
+            for (ui64 i = 1000; i < 3000; ++i) { 
+                checker.Next().Is(*me.Natural(table).Col(i, i, 10005_u64)); 
+            } 
+            checker.Next().Is(EReady::Gone); 
+        } 
+ 
+        // Verify iteration at 3/70 
+        { 
+            auto checker = me.To(35).ReadVer({3, 70}).Iter(table, false) 
+                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64)); 
+            for (ui64 i = 1000; i < 3000; ++i) { 
+                checker.Next().Is(*me.Natural(table).Col(i, i, 3000-i)); 
+            } 
+            checker.Next().Is(EReady::Gone); 
+        } 
+ 
+        // Verify iteration at HEAD 
+        { 
+            auto checker = me.To(36).ReadVer(TRowVersion::Max()).Iter(table, false) 
+                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64)); 
+            for (ui64 i = 1000; i < 3000; ++i) { 
+                checker.Next().Is(*me.Natural(table).Col(i, i, 3000-i)); 
+            } 
+            checker.Next().Is(EReady::Gone); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(VersionPureMem) { 
+        RunVersionChecks(false, false); 
+    } 
+ 
+    Y_UNIT_TEST(VersionPureParts) { 
+        RunVersionChecks(true, false); 
+    } 
+ 
+    Y_UNIT_TEST(VersionCompactedMem) { 
+        RunVersionChecks(false, true); 
+    } 
+ 
+    Y_UNIT_TEST(VersionCompactedParts) { 
+        RunVersionChecks(true, true); 
+    } 
+ 
 }
 
 }

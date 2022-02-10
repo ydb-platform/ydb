@@ -50,11 +50,11 @@ _EFIELDTRANSFORMATIONTYPE = _descriptor.EnumDescriptor(
       serialized_options=None,
       type=None,
       create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='TRANSFORM_EMPTY_TO_NOTHING', index=3, number=3,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor( 
+      name='TRANSFORM_EMPTY_TO_NOTHING', index=3, number=3, 
+      serialized_options=None, 
+      type=None, 
+      create_key=_descriptor._internal_create_key), 
   ],
   containing_type=None,
   serialized_options=None,
@@ -144,7 +144,7 @@ ShardIteratorType = enum_type_wrapper.EnumTypeWrapper(_SHARDITERATORTYPE)
 TRANSFORM_NONE = 0
 TRANSFORM_BASE64 = 1
 TRANSFORM_DOUBLE_S_TO_INT_MS = 2
-TRANSFORM_EMPTY_TO_NOTHING = 3
+TRANSFORM_EMPTY_TO_NOTHING = 3 
 ENCRYPTION_UNDEFINED = 0
 NONE = 1
 KMS = 2
@@ -708,7 +708,7 @@ _SHARD = _descriptor.Descriptor(
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      serialized_options=b'\330\260\034\003', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+      serialized_options=b'\330\260\034\003', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
     _descriptor.FieldDescriptor(
       name='hash_key_range', full_name='Ydb.DataStreams.V1.Shard.hash_key_range', index=1,
       number=2, type=11, cpp_type=10, label=1,
@@ -722,7 +722,7 @@ _SHARD = _descriptor.Descriptor(
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      serialized_options=b'\330\260\034\003', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+      serialized_options=b'\330\260\034\003', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
     _descriptor.FieldDescriptor(
       name='sequence_number_range', full_name='Ydb.DataStreams.V1.Shard.sequence_number_range', index=3,
       number=4, type=11, cpp_type=10, label=1,
@@ -2573,14 +2573,14 @@ _PUTRECORDSRESULTENTRY = _descriptor.Descriptor(
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      serialized_options=b'\330\260\034\003', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+      serialized_options=b'\330\260\034\003', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
     _descriptor.FieldDescriptor(
       name='error_code', full_name='Ydb.DataStreams.V1.PutRecordsResultEntry.error_code', index=1,
       number=3, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      serialized_options=b'\330\260\034\003', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+      serialized_options=b'\330\260\034\003', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
     _descriptor.FieldDescriptor(
       name='sequence_number', full_name='Ydb.DataStreams.V1.PutRecordsResultEntry.sequence_number', index=2,
       number=4, type=9, cpp_type=9, label=1,
@@ -5841,8 +5841,8 @@ _CONSUMER.fields_by_name['consumer_creation_timestamp']._options = None
 _RECORD.fields_by_name['timestamp']._options = None
 _RECORD.fields_by_name['data']._options = None
 _STREAMDESCRIPTION.fields_by_name['stream_creation_timestamp']._options = None
-_SHARD.fields_by_name['adjacent_parent_shard_id']._options = None
-_SHARD.fields_by_name['parent_shard_id']._options = None
+_SHARD.fields_by_name['adjacent_parent_shard_id']._options = None 
+_SHARD.fields_by_name['parent_shard_id']._options = None 
 _CONSUMERDESCRIPTION.fields_by_name['consumer_creation_timestamp']._options = None
 _SHARDFILTER.fields_by_name['timestamp']._options = None
 _STARTINGPOSITION.fields_by_name['timestamp']._options = None
@@ -5850,8 +5850,8 @@ _STREAMDESCRIPTIONSUMMARY.fields_by_name['stream_creation_timestamp']._options =
 _LISTSHARDSREQUEST.fields_by_name['stream_creation_timestamp']._options = None
 _LISTSTREAMCONSUMERSREQUEST.fields_by_name['stream_creation_timestamp']._options = None
 _PUTRECORDSREQUESTENTRY.fields_by_name['data']._options = None
-_PUTRECORDSRESULTENTRY.fields_by_name['error_message']._options = None
-_PUTRECORDSRESULTENTRY.fields_by_name['error_code']._options = None
+_PUTRECORDSRESULTENTRY.fields_by_name['error_message']._options = None 
+_PUTRECORDSRESULTENTRY.fields_by_name['error_code']._options = None 
 _PUTRECORDREQUEST.fields_by_name['data']._options = None
 _GETSHARDITERATORREQUEST.fields_by_name['timestamp']._options = None
 # @@protoc_insertion_point(module_scope)

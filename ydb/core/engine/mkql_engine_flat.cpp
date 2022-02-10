@@ -314,7 +314,7 @@ public:
                 return EResult::ProgramError;
             }
 
-            TVector<THolder<TKeyDesc>> dbKeys;
+            TVector<THolder<TKeyDesc>> dbKeys; 
             TExploringNodeVisitor explorer;
 
             {
@@ -334,7 +334,7 @@ public:
                     THolder<TKeyDesc> desc = ExtractTableKey(callable, Strings, Env);
                     if (desc) {
                         it->second.Key = desc.Get();
-                        dbKeys.push_back(std::move(desc));
+                        dbKeys.push_back(std::move(desc)); 
                     } else if (callable.GetType()->GetNameStr() == Strings.SetResult) {
                         ExtractResultType(callable, Env, resTypes);
                     } else if (callable.GetType()->GetNameStr() == Strings.AcquireLocks) {
@@ -375,9 +375,9 @@ public:
         return EResult::Ok;
     }
 
-    TVector<THolder<TKeyDesc>>& GetDbKeys() noexcept override {
+    TVector<THolder<TKeyDesc>>& GetDbKeys() noexcept override { 
         Y_VERIFY(Program.GetNode(), "Program is not set");
-        return DbKeys;
+        return DbKeys; 
     }
 
     EResult PrepareShardPrograms(const TShardLimits& limits) noexcept override {
@@ -527,7 +527,7 @@ public:
         Y_VERIFY(AreAffectedShardsPrepared, "PrepareShardPrograms must be called first");
         Y_VERIFY(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
-        TVector<THolder<TKeyDesc>>().swap(DbKeys);
+        TVector<THolder<TKeyDesc>>().swap(DbKeys); 
         TVector<TProgramParts>().swap(SpecializedParts);
         AreShardProgramsExtracted = true;
     }
@@ -753,48 +753,48 @@ public:
         return EResult::Ok;
     }
 
-    EResult ValidateKeys(TValidationInfo& validationInfo) override {
-        EResult result = EResult::Ok;
-
-        std::pair<ui64, ui64> maxSnapshotTime = {0,0}; // unused for now
-        for (auto& validKey : validationInfo.Keys) {
-            TKeyDesc * key = validKey.Key.get();
-
-            bool valid = Settings.Host->IsValidKey(*key, maxSnapshotTime);
-
-            if (valid) {
-                auto curSchemaVersion = Settings.Host->GetTableSchemaVersion(key->TableId);
-                if (key->TableId.SchemaVersion && curSchemaVersion
-                    && curSchemaVersion != key->TableId.SchemaVersion) {
-
-                    const auto err = TStringBuilder()
-                        << "Schema version missmatch for table id: " << key->TableId
-                        << " mkql compiled on: " << key->TableId.SchemaVersion
-                        << " current version: " << curSchemaVersion;
-                    AddError(err);
-                    return EResult::SchemeChanged;
-                }
-            } else {
-                switch (key->Status) {
-                case TKeyDesc::EStatus::SnapshotNotExist:
-                    return EResult::SnapshotNotExist;
-                case TKeyDesc::EStatus::SnapshotNotReady:
-                    key->Status = TKeyDesc::EStatus::Ok;
-                    result = EResult::SnapshotNotReady;
-                    break;
-                default:
-                    TStringStream str;
-                    str << "Key validation status: " << (ui32)key->Status;
-                        //<< ", key: " << key; TODO
-                    AddError("Validate", __LINE__, str.Str().data());
-                    return EResult::KeyError;
-                }
-            }
-        }
-
-        return result;
-    }
-
+    EResult ValidateKeys(TValidationInfo& validationInfo) override { 
+        EResult result = EResult::Ok; 
+ 
+        std::pair<ui64, ui64> maxSnapshotTime = {0,0}; // unused for now 
+        for (auto& validKey : validationInfo.Keys) { 
+            TKeyDesc * key = validKey.Key.get(); 
+ 
+            bool valid = Settings.Host->IsValidKey(*key, maxSnapshotTime); 
+ 
+            if (valid) { 
+                auto curSchemaVersion = Settings.Host->GetTableSchemaVersion(key->TableId); 
+                if (key->TableId.SchemaVersion && curSchemaVersion 
+                    && curSchemaVersion != key->TableId.SchemaVersion) { 
+ 
+                    const auto err = TStringBuilder() 
+                        << "Schema version missmatch for table id: " << key->TableId 
+                        << " mkql compiled on: " << key->TableId.SchemaVersion 
+                        << " current version: " << curSchemaVersion; 
+                    AddError(err); 
+                    return EResult::SchemeChanged; 
+                } 
+            } else { 
+                switch (key->Status) { 
+                case TKeyDesc::EStatus::SnapshotNotExist: 
+                    return EResult::SnapshotNotExist; 
+                case TKeyDesc::EStatus::SnapshotNotReady: 
+                    key->Status = TKeyDesc::EStatus::Ok; 
+                    result = EResult::SnapshotNotReady; 
+                    break; 
+                default: 
+                    TStringStream str; 
+                    str << "Key validation status: " << (ui32)key->Status; 
+                        //<< ", key: " << key; TODO 
+                    AddError("Validate", __LINE__, str.Str().data()); 
+                    return EResult::KeyError; 
+                } 
+            } 
+        } 
+ 
+        return result; 
+    } 
+ 
     EResult Validate(TValidationInfo& validationInfo) override {
         Y_VERIFY(!IsProgramValidated, "Validate is already called");
         Y_VERIFY(ProgramPerOrigin.size() == 1, "One program must be added to engine");
@@ -918,7 +918,7 @@ public:
         }
 
         validationInfo.Clear();
-        EResult result;
+        EResult result; 
         {
             auto myReadsStruct = static_cast<TStructLiteral*>(myReads.GetNode());
             validationInfo.ReadsCount = myReadsStruct->GetValuesCount();
@@ -988,13 +988,13 @@ public:
             if (validationInfo.HasWrites() && Settings.Host->IsReadonly())
                 return EResult::IsReadonly;
 
-            result = ValidateKeys(validationInfo);
-            switch (result) {
-                case EResult::Ok:
-                case EResult::SnapshotNotReady:
-                    break;
-                default:
-                    return result;
+            result = ValidateKeys(validationInfo); 
+            switch (result) { 
+                case EResult::Ok: 
+                case EResult::SnapshotNotReady: 
+                    break; 
+                default: 
+                    return result; 
             }
 
             // Check if we expect incoming readsets
@@ -1037,15 +1037,15 @@ public:
             return EResult::ProgramError;
         }
 
-        if (Y_LIKELY(result == EResult::Ok)) {
-            validationInfo.Loaded = true;
-        }
-
+        if (Y_LIKELY(result == EResult::Ok)) { 
+            validationInfo.Loaded = true; 
+        } 
+ 
         IsProgramValidated = true;
         return result;
     }
 
-    EResult PinPages(ui64 pageFaultCount) override {
+    EResult PinPages(ui64 pageFaultCount) override { 
         Y_VERIFY(ProgramPerOrigin.size() == 1, "One program must be added to engine");
         Y_VERIFY(Settings.Host, "Host is not set");
 
@@ -1085,7 +1085,7 @@ public:
             }
         }
 
-        Settings.Host->PinPages(prechargeKeys, pageFaultCount);
+        Settings.Host->PinPages(prechargeKeys, pageFaultCount); 
         return EResult::Ok;
     }
 
@@ -2102,7 +2102,7 @@ private:
     TVector<TProgramParts> SpecializedParts;
     TMap<ui64, TRuntimeNode> ProgramPerOrigin;
     TMap<ui64, ui64> ProgramSizes;
-    TVector<THolder<TKeyDesc>> DbKeys;
+    TVector<THolder<TKeyDesc>> DbKeys; 
     TVector<TShardData> AffectedShards;
     TMaybe<bool> ReadOnlyProgram;
     THashMap<ui32, TCallableContext> ProxyCallables;

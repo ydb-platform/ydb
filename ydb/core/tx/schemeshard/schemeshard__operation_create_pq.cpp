@@ -176,19 +176,19 @@ void ApplySharding(TTxId txId,
                    TPathId pathId,
                    TPersQueueGroupInfo::TPtr pqGroup,
                    TTxState& txState,
-                   const TChannelsBindings& rbBindedChannels,
-                   const TChannelsBindings& pqBindedChannels,
+                   const TChannelsBindings& rbBindedChannels, 
+                   const TChannelsBindings& pqBindedChannels, 
                    TSchemeShard* ss) {
     pqGroup->AlterVersion = 0;
     TShardInfo shardInfo = TShardInfo::PersQShardInfo(txId, pathId);
-    shardInfo.BindedChannels = pqBindedChannels;
+    shardInfo.BindedChannels = pqBindedChannels; 
     Y_VERIFY(pqGroup->TotalGroupCount == pqGroup->PartitionsToAdd.size());
     const ui64 count = pqGroup->ExpectedShardCount();
     txState.Shards.reserve(count + 1);
     const auto startShardIdx = ss->ReserveShardIdxs(count + 1);
     for (ui64 i = 0; i < count; ++i) {
         const auto idx = ss->NextShardIdx(startShardIdx, i);
-        ss->RegisterShardInfo(idx, shardInfo);
+        ss->RegisterShardInfo(idx, shardInfo); 
         txState.Shards.emplace_back(idx, ETabletType::PersQueue, TTxState::CreateParts);
 
         TPQShardInfo::TPtr pqShard = new TPQShardInfo();
@@ -197,9 +197,9 @@ void ApplySharding(TTxId txId,
     }
 
     const auto idx = ss->NextShardIdx(startShardIdx, count);
-    ss->RegisterShardInfo(idx,
-        TShardInfo::PQBalancerShardInfo(txId, pathId)
-            .WithBindedChannels(rbBindedChannels));
+    ss->RegisterShardInfo(idx, 
+        TShardInfo::PQBalancerShardInfo(txId, pathId) 
+            .WithBindedChannels(rbBindedChannels)); 
     txState.Shards.emplace_back(idx, ETabletType::PersQueueReadBalancer, TTxState::CreateParts);
     pqGroup->BalancerShardIdx = idx;
 
@@ -410,18 +410,18 @@ public:
                                                    << ", path: " << dstPath.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (dstPath.IsResolved()) {
-                    result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
-                    result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-                }
+                if (dstPath.IsResolved()) { 
+                    result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId)); 
+                    result->SetPathId(dstPath.Base()->PathId.LocalPathId); 
+                } 
                 return result;
             }
         }
 
-        // This profile id is only used for pq read balancer tablet when
-        // explicit channel profiles are specified. Read balancer tablet is
-        // a tablet with local db which doesn't use extra channels in any way.
-        const ui32 tabletProfileId = 0;
+        // This profile id is only used for pq read balancer tablet when 
+        // explicit channel profiles are specified. Read balancer tablet is 
+        // a tablet with local db which doesn't use extra channels in any way. 
+        const ui32 tabletProfileId = 0; 
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.DomainId(), tabletChannelsBinding)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -429,42 +429,42 @@ public:
             return result;
         }
 
-        // This channel bindings are for PersQueue shards. They either use
-        // explicit channel profiles, or reuse channel profile above.
-        const auto& partConfig = createDEscription.GetPQTabletConfig().GetPartitionConfig();
-        TChannelsBindings pqChannelsBinding;
-        if (partConfig.ExplicitChannelProfilesSize() > 0) {
-            const auto& ecps = partConfig.GetExplicitChannelProfiles();
-
-            if (ecps.size() < 3 || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) {
-                auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
-                                    ecps.size(),
-                                    NHive::MAX_TABLET_CHANNELS);
+        // This channel bindings are for PersQueue shards. They either use 
+        // explicit channel profiles, or reuse channel profile above. 
+        const auto& partConfig = createDEscription.GetPQTabletConfig().GetPartitionConfig(); 
+        TChannelsBindings pqChannelsBinding; 
+        if (partConfig.ExplicitChannelProfilesSize() > 0) { 
+            const auto& ecps = partConfig.GetExplicitChannelProfiles(); 
+ 
+            if (ecps.size() < 3 || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) { 
+                auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]", 
+                                    ecps.size(), 
+                                    NHive::MAX_TABLET_CHANNELS); 
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                return result;
-            }
-
-            TVector<TStringBuf> partitionPoolKinds;
-            partitionPoolKinds.reserve(ecps.size());
-            for (const auto& ecp : ecps) {
-                partitionPoolKinds.push_back(ecp.GetPoolKind());
-            }
-
-            const auto resolved = context.SS->ResolveChannelsByPoolKinds(
-                partitionPoolKinds,
-                dstPath.DomainId(),
-                pqChannelsBinding);
-            if (!resolved) {
+                return result; 
+            } 
+ 
+            TVector<TStringBuf> partitionPoolKinds; 
+            partitionPoolKinds.reserve(ecps.size()); 
+            for (const auto& ecp : ecps) { 
+                partitionPoolKinds.push_back(ecp.GetPoolKind()); 
+            } 
+ 
+            const auto resolved = context.SS->ResolveChannelsByPoolKinds( 
+                partitionPoolKinds, 
+                dstPath.DomainId(), 
+                pqChannelsBinding); 
+            if (!resolved) { 
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
-                return result;
-            }
-
-            context.SS->SetPqChannelsParams(ecps, pqChannelsBinding);
-        } else {
-            pqChannelsBinding = tabletChannelsBinding;
-        }
-
+                                "Unable to construct channel binding for PersQueue with the storage pool"); 
+                return result; 
+            } 
+ 
+            context.SS->SetPqChannelsParams(ecps, pqChannelsBinding); 
+        } else { 
+            pqChannelsBinding = tabletChannelsBinding; 
+        } 
+ 
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -474,7 +474,7 @@ public:
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreatePQGroup, pathId);
 
-        ApplySharding(OperationId.GetTxId(), pathId, pqGroup, txState, tabletChannelsBinding, pqChannelsBinding, context.SS);
+        ApplySharding(OperationId.GetTxId(), pathId, pqGroup, txState, tabletChannelsBinding, pqChannelsBinding, context.SS); 
 
         NIceDb::TNiceDb db(context.Txc.DB);
 
@@ -490,7 +490,7 @@ public:
 
         context.SS->PersQueueGroups[pathId] = emptyGroup;
         context.SS->PersQueueGroups[pathId]->AlterData = pqGroup;
-        context.SS->IncrementPathDbRefCount(pathId);
+        context.SS->IncrementPathDbRefCount(pathId); 
 
         context.SS->PersistPersQueueGroup(db, pathId, emptyGroup);
         context.SS->PersistAddPersQueueGroupAlter(db, pathId, pqGroup);

@@ -39,7 +39,7 @@ private:
     bool Finished;
 
     TVector<NScheme::TTypeId> KeyColumnTypes;
-    THolder<NKikimr::TKeyDesc> KeyRange;
+    THolder<NKikimr::TKeyDesc> KeyRange; 
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
 
 public:
@@ -251,7 +251,7 @@ private:
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
 
-        request->ResultSet.emplace_back(std::move(KeyRange));
+        request->ResultSet.emplace_back(std::move(KeyRange)); 
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         ctx.Send(MakeSchemeCacheID(), resolveReq.Release());
@@ -277,10 +277,10 @@ private:
         }
 
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
-        Y_VERIFY(msg->Request->ResultSet.size() == 1);
-        KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription);
+        Y_VERIFY(msg->Request->ResultSet.size() == 1); 
+        KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription); 
 
-        if (msg->Request->ErrorCount > 0) {
+        if (msg->Request->ErrorCount > 0) { 
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Sprintf("Failed to get partitions for table [%s]",
                                                                         Request->GetProtoRequest()->path().c_str()), ctx);
         }

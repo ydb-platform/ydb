@@ -13,7 +13,7 @@ from ydb.connection import (
     _get_request_timeout,
     _set_server_timeouts,
     _RpcState as RpcState,
-    EndpointOptions,
+    EndpointOptions, 
     channel_factory,
     YDB_DATABASE_HEADER,
     YDB_TRACE_ID_HEADER,
@@ -107,17 +107,17 @@ class Connection:
         "closing",
     )
 
-    def __init__(
-        self,
-        endpoint: str,
-        driver_config: DriverConfig = None,
-        endpoint_options: EndpointOptions = None,
-    ):
+    def __init__( 
+        self, 
+        endpoint: str, 
+        driver_config: DriverConfig = None, 
+        endpoint_options: EndpointOptions = None, 
+    ): 
         global _stubs_list
         self.endpoint = endpoint
-        self._channel = channel_factory(
-            self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options
-        )
+        self._channel = channel_factory( 
+            self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options 
+        ) 
         self._driver_config = driver_config
 
         self._stub_instances = {}

@@ -521,13 +521,13 @@ private:
                 TNodeException(*optionsItem) << "Expected pair of atom and value");
 
             auto optionName = optionsItem->Child(0)->Content();
-            if (optionName != "ItemsLimit" &&
-                optionName != "BytesLimit" &&
-                optionName != "SkipNullKeys" &&
+            if (optionName != "ItemsLimit" && 
+                optionName != "BytesLimit" && 
+                optionName != "SkipNullKeys" && 
                 optionName != "Reverse" &&
                 optionName != "ForbidNullArgsFrom" &&
                 optionName != "ForbidNullArgsTo")
-            {
+            { 
                 ythrow TNodeException(node) << "Unsupported option: " << optionName;
             }
         }
@@ -1046,9 +1046,9 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                     FillKeyPosition(forbidNullArgsFrom, optionsItem->Child(1), lookup);
                 } else if (optionsItem->Child(0)->Content() == "ForbidNullArgsTo") {
                     FillKeyPosition(forbidNullArgsTo, optionsItem->Child(1), lookup);
-                } else if (optionsItem->Child(0)->Content() == "Reverse") {
-                    options.Reverse = MkqlBuildExpr(*optionsItem->Child(1), ctx);
-                } else {
+                } else if (optionsItem->Child(0)->Content() == "Reverse") { 
+                    options.Reverse = MkqlBuildExpr(*optionsItem->Child(1), ctx); 
+                } else { 
                     YQL_ENSURE(false, "Unexpected SelectRange option.");
                 }
             }

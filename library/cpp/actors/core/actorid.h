@@ -12,13 +12,13 @@ namespace NActors {
     // next 20 bits - node id itself
 
     struct TActorId {
-        static constexpr ui32 MaxServiceIDLength = 12;
-        static constexpr ui32 MaxPoolID = 0x000007FF;
-        static constexpr ui32 MaxNodeId = 0x000FFFFF;
-        static constexpr ui32 PoolIndexShift = 20;
-        static constexpr ui32 PoolIndexMask = MaxPoolID << PoolIndexShift;
-        static constexpr ui32 ServiceMask = 0x80000000;
-        static constexpr ui32 NodeIdMask = MaxNodeId;
+        static constexpr ui32 MaxServiceIDLength = 12; 
+        static constexpr ui32 MaxPoolID = 0x000007FF; 
+        static constexpr ui32 MaxNodeId = 0x000FFFFF; 
+        static constexpr ui32 PoolIndexShift = 20; 
+        static constexpr ui32 PoolIndexMask = MaxPoolID << PoolIndexShift; 
+        static constexpr ui32 ServiceMask = 0x80000000; 
+        static constexpr ui32 NodeIdMask = MaxNodeId; 
 
     private:
         union {

@@ -19,7 +19,7 @@ public:
         // check if we have State table and a row with valid SchemaVersion, ensure that this version does not exceed this one
         if (txc.DB.GetScheme().GetTableInfo(Schema::State::TableId)) {
             NIceDb::TNiceDb db(txc.DB);
-            auto state = db.Table<Schema::State>().Select<Schema::State::SchemaVersion>();
+            auto state = db.Table<Schema::State>().Select<Schema::State::SchemaVersion>(); 
             if (!state.IsReady()) {
                 return false;
             } else if (state.IsValid()) {

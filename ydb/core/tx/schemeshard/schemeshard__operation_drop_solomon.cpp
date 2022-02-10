@@ -85,10 +85,10 @@ public:
         Y_VERIFY(pathes.size() == 1);
         context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
 
-        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
-            context.SS->PersistRemoveSolomonVolume(db, pathId);
-        }
-
+        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) { 
+            context.SS->PersistRemoveSolomonVolume(db, pathId); 
+        } 
+ 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);
@@ -213,10 +213,10 @@ public:
                                                    << ", path: " << path.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (path.IsResolved() && path.Base()->IsSolomon() && path.Base()->PlannedToDrop()) {
+                if (path.IsResolved() && path.Base()->IsSolomon() && path.Base()->PlannedToDrop()) { 
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
-                }
+                } 
                 return result;
             }
         }

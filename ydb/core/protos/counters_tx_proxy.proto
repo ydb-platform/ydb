@@ -7,11 +7,11 @@ option java_package = "ru.yandex.kikimr.proto";
 option (TabletTypeName) = "TxProxy"; // Used as prefix for all counters
 
 enum ESimpleCounters {
-    COUNTER_SIMPLE_IGNORE = 0;
+    COUNTER_SIMPLE_IGNORE = 0; 
 }
 
 enum ECumulativeCounters {
-    COUNTER_CUMULATIVE_IGNORE = 0;
+    COUNTER_CUMULATIVE_IGNORE = 0; 
 }
 
 enum EPercentileCounters {
@@ -20,7 +20,7 @@ enum EPercentileCounters {
         Ranges { Value: 1      Name: "1 ms"      }
     };
 
-    COUNTER_PERCENTILE_IGNORE = 0;
+    COUNTER_PERCENTILE_IGNORE = 0; 
 }
 
 enum ETxTypes {

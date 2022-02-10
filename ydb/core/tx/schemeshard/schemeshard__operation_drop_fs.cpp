@@ -107,10 +107,10 @@ public:
             context.OnComplete.DeleteShard(shard.Idx);
         }
 
-        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
-            context.SS->PersistRemoveFileStoreInfo(db, pathId);
-        }
-
+        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) { 
+            context.SS->PersistRemoveFileStoreInfo(db, pathId); 
+        } 
+ 
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 

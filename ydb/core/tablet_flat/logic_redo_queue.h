@@ -52,8 +52,8 @@ namespace NRedo {
 
             Log->Push(entry);
 
-            Items++;
-            Memory += entry->BytesMem();
+            Items++; 
+            Memory += entry->BytesMem(); 
             LargeGlobIdsBytes += entry->BytesLargeGlobId();
 
             for (ui32 table : entry->Tables()) {
@@ -63,7 +63,7 @@ namespace NRedo {
                     Y_Fail(
                         "Entry " << NFmt::Do(*entry) << " queued below table"
                         << table << " edge " << NFmt::TStamp(edge->TxStamp));
-                } else if (auto *over = Overhead[table].Push(table, entry)) {
+                } else if (auto *over = Overhead[table].Push(table, entry)) { 
                     Changes.PushBack(over);
                 }
             }
@@ -87,21 +87,21 @@ namespace NRedo {
 
         void Flush(NKikimrExecutorFlat::TLogSnapshot &snap)
         {
-            for (auto &it : Overhead)
-                it.second.Clear();
+            for (auto &it : Overhead) 
+                it.second.Clear(); 
 
             auto was = std::exchange(Log, new TLog);
 
-            Items = 0;
-            Memory = 0;
+            Items = 0; 
+            Memory = 0; 
             LargeGlobIdsBytes = 0;
 
             auto logos = snap.MutableNonSnapLogBodies();
 
             while (TAutoPtr<TEntry> entry = was->Pop()) {
                 if (entry->FilterTables(Edges)) {
-                    for (auto blobId : entry->LargeGlobId.Blobs()) {
-                        LogoBlobIDFromLogoBlobID(blobId, logos->Add());
+                    for (auto blobId : entry->LargeGlobId.Blobs()) { 
+                        LogoBlobIDFromLogoBlobID(blobId, logos->Add()); 
                     }
 
                     if (entry->Embedded) {

@@ -10,7 +10,7 @@
 #include "flat_boot_bundle.h"
 #include "flat_boot_redo.h"
 #include "flat_boot_warm.h"
-#include "flat_boot_txstatus.h"
+#include "flat_boot_txstatus.h" 
 #include "flat_dbase_naked.h"
 #include "logic_redo_queue.h"
 #include "flat_database.h"
@@ -90,7 +90,7 @@ namespace NBoot {
                     << " " << NFmt::If(Snap.Get());
             }
 
-            Pending += Spawn<TSnap>(std::move(Deps), Snap);
+            Pending += Spawn<TSnap>(std::move(Deps), Snap); 
         }
 
         void StartStageMeta() noexcept
@@ -104,10 +104,10 @@ namespace NBoot {
                     << ", GCExt " << Back->GCELog.size() << " }";
             }
 
-            Pending += Spawn<TGCLog>(std::move(Back->GCELog));
-            Pending += Spawn<TLoans>(std::move(Back->LoansLog));
-            Pending += Spawn<TAlter>(std::move(Back->AlterLog));
-            Pending += Spawn<TTurns>();
+            Pending += Spawn<TGCLog>(std::move(Back->GCELog)); 
+            Pending += Spawn<TLoans>(std::move(Back->LoansLog)); 
+            Pending += Spawn<TAlter>(std::move(Back->AlterLog)); 
+            Pending += Spawn<TTurns>(); 
         }
 
         void StartStageDatabaseImpl() noexcept
@@ -122,54 +122,54 @@ namespace NBoot {
 
             for (auto &se: std::exchange(Back->Switches, { })) {
                 auto &wrap = Back->DatabaseImpl->Get(se.Table, false);
-
-                if (!wrap) {
-                    continue; // ignore dropped tables
-                }
-
+ 
+                if (!wrap) { 
+                    continue; // ignore dropped tables 
+                } 
+ 
                 auto &schema = Back->DatabaseImpl->Scheme->Tables.at(se.Table);
+ 
+                auto processBundles = [&](TVector<TSwitch::TBundle> &bundles) { 
+                    for (auto &bundle: bundles) { 
+                        if (bundle.Load) { 
+                            bundle.AddGroups([this](const TLogoBlobID &logo) 
+                                { return Logic->GetBSGroupFor(logo); }); 
 
-                auto processBundles = [&](TVector<TSwitch::TBundle> &bundles) {
-                    for (auto &bundle: bundles) {
-                        if (bundle.Load) {
-                            bundle.AddGroups([this](const TLogoBlobID &logo)
-                                { return Logic->GetBSGroupFor(logo); });
-
-                            // FIXME: currently it's only safe to use cold mode
-                            // for borrowed parts, otherwise we cannot perform
-                            // many important gc tasks without knowing the full
-                            // list of blobs.
+                            // FIXME: currently it's only safe to use cold mode 
+                            // for borrowed parts, otherwise we cannot perform 
+                            // many important gc tasks without knowing the full 
+                            // list of blobs. 
                             if (schema.ColdBorrow && !bundle.Deltas && bundle.LargeGlobIds[0].Lead.TabletID() != Back->Tablet) {
                                 Back->DatabaseImpl->Merge(
-                                    se.Table,
+                                    se.Table, 
                                     new NTable::TColdPartStore(
                                         std::move(bundle.LargeGlobIds),
-                                        std::move(bundle.Legacy),
-                                        std::move(bundle.Opaque),
-                                        bundle.Epoch));
-                                continue;
-                            }
-
+                                        std::move(bundle.Legacy), 
+                                        std::move(bundle.Opaque), 
+                                        bundle.Epoch)); 
+                                continue; 
+                            } 
+ 
                             Pending += Spawn<TBundleLoadStep>(se.Table, bundle);
-                        }
-                    }
-                };
-
-                processBundles(se.Bundles);
-                processBundles(se.MovedBundles);
-
-                for (auto &txStatus : se.TxStatus) {
-                    if (txStatus.Load) {
-                        Pending += Spawn<TBootTxStatus>(se.Table, txStatus);
-                    }
-                }
-
-                for (auto &range : std::exchange(se.RemovedRowVersions, { })) {
-                    wrap->RemoveRowVersions(range.Lower, range.Upper);
-                }
+                        } 
+                    } 
+                }; 
+ 
+                processBundles(se.Bundles); 
+                processBundles(se.MovedBundles); 
+ 
+                for (auto &txStatus : se.TxStatus) { 
+                    if (txStatus.Load) { 
+                        Pending += Spawn<TBootTxStatus>(se.Table, txStatus); 
+                    } 
+                } 
+ 
+                for (auto &range : std::exchange(se.RemovedRowVersions, { })) { 
+                    wrap->RemoveRowVersions(range.Lower, range.Upper); 
+                } 
             }
 
-            Pending += Spawn<TRedo>(std::move(Back->RedoLog));
+            Pending += Spawn<TRedo>(std::move(Back->RedoLog)); 
         }
 
         void StartStageResult(TResult &result) noexcept

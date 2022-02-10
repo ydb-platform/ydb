@@ -9,12 +9,12 @@ namespace NActors {
     struct TEvSchedulerInitialize : TEventLocal<TEvSchedulerInitialize, TEvents::TSystem::Bootstrap> {
         TVector<NSchedulerQueue::TReader*> ScheduleReaders;
         volatile ui64* CurrentTimestamp;
-        volatile ui64* CurrentMonotonic;
+        volatile ui64* CurrentMonotonic; 
 
-        TEvSchedulerInitialize(const TVector<NSchedulerQueue::TReader*>& scheduleReaders, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic)
+        TEvSchedulerInitialize(const TVector<NSchedulerQueue::TReader*>& scheduleReaders, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) 
             : ScheduleReaders(scheduleReaders)
             , CurrentTimestamp(currentTimestamp)
-            , CurrentMonotonic(currentMonotonic)
+            , CurrentMonotonic(currentMonotonic) 
         {
         }
     };

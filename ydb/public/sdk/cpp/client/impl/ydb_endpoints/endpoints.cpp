@@ -89,23 +89,23 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
 
     {
         std::unique_lock guard(Mutex_);
-        // Find endpoins which were removed
+        // Find endpoins which were removed 
         for (const auto& record : Records_) {
             if (index.find(record.Endpoint) == index.end()) {
                 removed.emplace_back(record.Endpoint);
 
                 auto it = KnownEndpoints_.find(record.Endpoint);
-                Y_VERIFY(it != KnownEndpoints_.end());
-                for (const auto& registry : it->second.TaggedObjs) {
+                Y_VERIFY(it != KnownEndpoints_.end()); 
+                for (const auto& registry : it->second.TaggedObjs) { 
                     notifyRemoved.emplace_back(registry.second);
                 }
                 KnownEndpoints_.erase(it);
             }
         }
-        // Find endpoints which were added
-        Records_ = std::move(uniqRec);
-        for (const auto& record : Records_) {
-            KnownEndpoints_[record.Endpoint].Record = record;
+        // Find endpoints which were added 
+        Records_ = std::move(uniqRec); 
+        for (const auto& record : Records_) { 
+            KnownEndpoints_[record.Endpoint].Record = record; 
         }
         Y_VERIFY(Records_.size() == KnownEndpoints_.size());
         EndpointCountGauge_.SetValue(Records_.size());
@@ -122,21 +122,21 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
     return removed;
 }
 
-TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TStringType& preferredEndpoint) const {
+TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TStringType& preferredEndpoint) const { 
     std::shared_lock guard(Mutex_);
-    if (!preferredEndpoint.empty()) {
-        auto it = KnownEndpoints_.find(preferredEndpoint);
-        if (it != KnownEndpoints_.end()) {
-            return it->second.Record;
-        }
+    if (!preferredEndpoint.empty()) { 
+        auto it = KnownEndpoints_.find(preferredEndpoint); 
+        if (it != KnownEndpoints_.end()) { 
+            return it->second.Record; 
+        } 
     }
     if (BestK_ == -1) {
         Y_ASSERT(Records_.empty());
-        return TEndpointRecord();
+        return TEndpointRecord(); 
     } else {
         // returns value in range [0, n)
         auto idx = RandomNumber<size_t>(BestK_ + 1);
-        return Records_[idx];
+        return Records_[idx]; 
     }
 }
 
@@ -151,11 +151,11 @@ void TEndpointElectorSafe::PessimizeEndpoint(const TStringType& endpoint) {
             PessimizationRatioGauge_.SetValue(newRatio);
             EndpointActiveGauge_.Dec();
             r.Priority = Max<i32>();
-
-            auto it = KnownEndpoints_.find(endpoint);
-            if (it != KnownEndpoints_.end()) {
-                it->second.Record.Priority = Max<i32>();
-            }
+ 
+            auto it = KnownEndpoints_.find(endpoint); 
+            if (it != KnownEndpoints_.end()) { 
+                it->second.Record.Priority = Max<i32>(); 
+            } 
         }
     }
     Sort(Records_.begin(), Records_.end());
@@ -183,11 +183,11 @@ bool TEndpointElectorSafe::LinkObjToEndpoint(const TStringType& endpoint, TEndpo
             return false;
         }
 
-        TTaggedObjRegistry& taggedObjs = objIt->second.TaggedObjs;
-        TTaggedObjRegistry::iterator registryIt = taggedObjs.find(tag);
+        TTaggedObjRegistry& taggedObjs = objIt->second.TaggedObjs; 
+        TTaggedObjRegistry::iterator registryIt = taggedObjs.find(tag); 
 
-        if (registryIt == taggedObjs.end()) {
-            registryIt = taggedObjs.emplace(tag, new TObjRegistry(endpoint)).first;
+        if (registryIt == taggedObjs.end()) { 
+            registryIt = taggedObjs.emplace(tag, new TObjRegistry(endpoint)).first; 
         }
 
         // Call Link under endpoint elector mutex.
@@ -211,7 +211,7 @@ void TEndpointElectorSafe::ForEachEndpoint(const THandleCb& cb, i32 minPriority,
         if (it->Priority > maxPriority)
             break;
 
-        const TTaggedObjRegistry& taggedObjs = KnownEndpoints_.at(it->Endpoint).TaggedObjs;
+        const TTaggedObjRegistry& taggedObjs = KnownEndpoints_.at(it->Endpoint).TaggedObjs; 
 
         auto registry = taggedObjs.find(tag);
         if (registry != taggedObjs.end()) {

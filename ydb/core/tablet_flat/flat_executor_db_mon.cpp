@@ -138,7 +138,7 @@ public:
                     ssize_t rowLimit = FromStringWithDefault<ssize_t>(cgi.Get("MaxRows"), 1000);
                     rowLimit = Max<ssize_t>(rowLimit, 1);
                     ssize_t rowCount = 0;
-                    while (result->Next(NTable::ENext::Data) == NTable::EReady::Data && rowCount < rowOffset + rowLimit) {
+                    while (result->Next(NTable::ENext::Data) == NTable::EReady::Data && rowCount < rowOffset + rowLimit) { 
                             ++rowCount;
                             if (rowCount > rowOffset) {
                                 str << "<tr>";
@@ -260,7 +260,7 @@ public:
                     }
 
                     // More rows?
-                    if (result->Next(NTable::ENext::Data) != NTable::EReady::Gone) {
+                    if (result->Next(NTable::ENext::Data) != NTable::EReady::Gone) { 
                         fnPrintLink(rowCount, rowLimit, Sprintf("Next %" PRISZT " rows", rowLimit));
                         str << "<br>";
                     }

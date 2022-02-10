@@ -14,7 +14,7 @@ static void CreateSampleTables(TSession session) {
         .AddNullableColumn("Key2", EPrimitiveType::String)
         .AddNullableColumn("Value", EPrimitiveType::Json)
         .SetPrimaryKeyColumns({"Key1", "Key2"})
-        .AddAttribute("__document_api_version", "1")
+        .AddAttribute("__document_api_version", "1") 
         .Build();
 
     auto schemeResult = session.CreateTable("/Root/DocumentApiTest", std::move(tableDesc)).ExtractValueSync();

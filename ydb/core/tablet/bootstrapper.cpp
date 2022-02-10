@@ -59,8 +59,8 @@ class TBootstrapper : public TActor<TBootstrapper> {
     ui64 RoundCounter;
     ui64 SelfSeed;
 
-    TInstant BootDelayedUntil;
-
+    TInstant BootDelayedUntil; 
+ 
     // we watch someone and do not act w/o shutdown
     struct TWatch {
         struct TWatched {
@@ -148,8 +148,8 @@ class TBootstrapper : public TActor<TBootstrapper> {
             Wait,
             Unknown,
             Free,
-            Undelivered,
-            Disconnected,
+            Undelivered, 
+            Disconnected, 
         };
 
         struct TAlien {
@@ -173,14 +173,14 @@ class TBootstrapper : public TActor<TBootstrapper> {
     TAutoPtr<TWatched> Watched; // we are under watch
     TAutoPtr<TRound> Round;
 
-    const char* GetTabletTypeName() {
-        return TTabletTypes::TypeToStr((TTabletTypes::EType)TabletInfo->TabletType);
-    }
-
-    const char* GetStateName(NKikimrBootstrapper::TEvWatchResult::EState state) {
-        return NKikimrBootstrapper::TEvWatchResult::EState_Name(state).c_str();
-    }
-
+    const char* GetTabletTypeName() { 
+        return TTabletTypes::TypeToStr((TTabletTypes::EType)TabletInfo->TabletType); 
+    } 
+ 
+    const char* GetStateName(NKikimrBootstrapper::TEvWatchResult::EState state) { 
+        return NKikimrBootstrapper::TEvWatchResult::EState_Name(state).c_str(); 
+    } 
+ 
     ui32 AlienIndex(ui32 alienNodeId) {
         for (ui32 i = 0, e = BootstrapperInfo->OtherNodes.size(); i != e; ++i)
             if (BootstrapperInfo->OtherNodes[i] == alienNodeId)
@@ -193,8 +193,8 @@ class TBootstrapper : public TActor<TBootstrapper> {
             return Boot(ctx);
 
         SelfSeed = AppData(ctx)->RandomProvider->GenRand64();
-        LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, begin new round, seed: %" PRIu64,
-                 TabletInfo->TabletID, GetTabletTypeName(), SelfSeed);
+        LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, begin new round, seed: %" PRIu64, 
+                 TabletInfo->TabletID, GetTabletTypeName(), SelfSeed); 
 
         const ui64 tabletId = TabletInfo->TabletID;
         ++RoundCounter;
@@ -212,8 +212,8 @@ class TBootstrapper : public TActor<TBootstrapper> {
     void Boot(const TActorContext &ctx) {
         Y_VERIFY(!LookOnActorID);
 
-        LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot",
-                   TabletInfo->TabletID, GetTabletTypeName());
+        LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot", 
+                   TabletInfo->TabletID, GetTabletTypeName()); 
 
         if (FollowerActorID) {
             LookOnActorID = FollowerActorID;
@@ -234,7 +234,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
     void Handle(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
         if (ev->Sender == LookOnActorID) {
             LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, tablet dead",
-                     TabletInfo->TabletID, GetTabletTypeName());
+                     TabletInfo->TabletID, GetTabletTypeName()); 
 
             LookOnActorID = TActorId();
             NotifyAndRound(ctx);
@@ -254,7 +254,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
         NotifyWatchers();
 
-        BootDelayedUntil = { };
+        BootDelayedUntil = { }; 
         Round.Destroy();
     }
 
@@ -271,22 +271,22 @@ class TBootstrapper : public TActor<TBootstrapper> {
     void BecomeWatch(const TActorId &watchOn, bool owner, const TActorContext &ctx) {
         Y_UNUSED(ctx);
 
-        BootDelayedUntil = { };
+        BootDelayedUntil = { }; 
         Round.Destroy();
 
         LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, become watch",
-                 TabletInfo->TabletID, GetTabletTypeName());
+                 TabletInfo->TabletID, GetTabletTypeName()); 
 
         Watches.Reset(new TWatch());
         Watched.Reset(new TWatched());
 
         LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, add watched node: %" PRIu32,
-                  TabletInfo->TabletID, GetTabletTypeName(), watchOn.NodeId());
+                  TabletInfo->TabletID, GetTabletTypeName(), watchOn.NodeId()); 
         Watches->Watched.push_back(TWatch::TWatched(watchOn, owner));
 
         if (BootstrapperInfo->StartFollowers && !FollowerActorID) {
-            LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot follower",
-                       TabletInfo->TabletID, GetTabletTypeName());
+            LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot follower", 
+                       TabletInfo->TabletID, GetTabletTypeName()); 
             TTabletSetupInfo *x = BootstrapperInfo->SetupInfo.Get();
             FollowerActorID = x->Follower(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles);
         }
@@ -302,8 +302,8 @@ class TBootstrapper : public TActor<TBootstrapper> {
         if (Round->Aliens[alienNodeIdx].State != TRound::EAlienState::Wait)
             return false;
 
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, apply alien %" PRIu32 " state: %s",
-                  TabletInfo->TabletID, GetTabletTypeName(), alien.NodeId(), GetStateName(state));
+        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, apply alien %" PRIu32 " state: %s", 
+                  TabletInfo->TabletID, GetTabletTypeName(), alien.NodeId(), GetStateName(state)); 
 
         switch (state) {
         case NKikimrBootstrapper::TEvWatchResult::UNKNOWN:
@@ -318,87 +318,87 @@ class TBootstrapper : public TActor<TBootstrapper> {
         case NKikimrBootstrapper::TEvWatchResult::WAITFOR:
             BecomeWatch(alien, false, ctx);
             return true;
-        case NKikimrBootstrapper::TEvWatchResult::UNDELIVERED:
-            Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Undelivered, Max<ui64>());
-            return false;
-        case NKikimrBootstrapper::TEvWatchResult::DISCONNECTED:
-            Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Disconnected, Max<ui64>());
-            return false;
+        case NKikimrBootstrapper::TEvWatchResult::UNDELIVERED: 
+            Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Undelivered, Max<ui64>()); 
+            return false; 
+        case NKikimrBootstrapper::TEvWatchResult::DISCONNECTED: 
+            Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Disconnected, Max<ui64>()); 
+            return false; 
         default:
             Y_FAIL("unhandled case");
         }
     }
 
-    bool CheckBootPermitted(size_t undelivered, size_t disconnected, const TActorContext &ctx) {
-        // Total number of nodes that participate in tablet booting
-        size_t total = 1 + BootstrapperInfo->OtherNodes.size();
-        Y_VERIFY_DEBUG(total >= 1 + undelivered + disconnected);
-
-        // Ignore nodes that don't have bootstrapper running
-        total -= undelivered;
-
-        // Number of nodes that need to be online for immediate boot (including us)
-        // Clamp it to 2 other nodes on clusters with very large boot node set
-        size_t quorum = Min(total / 2 + 1, (size_t) 3);
-        Y_VERIFY_DEBUG(quorum >= 1);
-
-        // Number of nodes currently online (including us)
-        size_t online = total - disconnected;
-        Y_VERIFY_DEBUG(online >= 1);
-
-        // If there are enough nodes online, just boot immediately
-        if (online >= quorum) {
-            BootDelayedUntil = { };
-            return true;
-        }
-
-        auto now = ctx.Now();
-        if (!BootDelayedUntil) {
-            // Delay boot decision until some later time
-            BootDelayedUntil = now + BootstrapperInfo->OfflineDelay;
-        } else if (BootDelayedUntil <= now) {
-            // We don't have enough online nodes, but try to boot anyway
-            BootDelayedUntil = { };
-            return true;
-        }
-
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, %" PRISZT "/%" PRISZT " nodes online (need %" PRISZT "), wait for threshold",
-                    TabletInfo->TabletID, GetTabletTypeName(), online, total, quorum);
-
-        const ui64 wx = BootstrapperInfo->WatchThreshold.MicroSeconds();
+    bool CheckBootPermitted(size_t undelivered, size_t disconnected, const TActorContext &ctx) { 
+        // Total number of nodes that participate in tablet booting 
+        size_t total = 1 + BootstrapperInfo->OtherNodes.size(); 
+        Y_VERIFY_DEBUG(total >= 1 + undelivered + disconnected); 
+ 
+        // Ignore nodes that don't have bootstrapper running 
+        total -= undelivered; 
+ 
+        // Number of nodes that need to be online for immediate boot (including us) 
+        // Clamp it to 2 other nodes on clusters with very large boot node set 
+        size_t quorum = Min(total / 2 + 1, (size_t) 3); 
+        Y_VERIFY_DEBUG(quorum >= 1); 
+ 
+        // Number of nodes currently online (including us) 
+        size_t online = total - disconnected; 
+        Y_VERIFY_DEBUG(online >= 1); 
+ 
+        // If there are enough nodes online, just boot immediately 
+        if (online >= quorum) { 
+            BootDelayedUntil = { }; 
+            return true; 
+        } 
+ 
+        auto now = ctx.Now(); 
+        if (!BootDelayedUntil) { 
+            // Delay boot decision until some later time 
+            BootDelayedUntil = now + BootstrapperInfo->OfflineDelay; 
+        } else if (BootDelayedUntil <= now) { 
+            // We don't have enough online nodes, but try to boot anyway 
+            BootDelayedUntil = { }; 
+            return true; 
+        } 
+ 
+        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, %" PRISZT "/%" PRISZT " nodes online (need %" PRISZT "), wait for threshold", 
+                    TabletInfo->TabletID, GetTabletTypeName(), online, total, quorum); 
+ 
+        const ui64 wx = BootstrapperInfo->WatchThreshold.MicroSeconds(); 
         const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000);
-
-        ctx.ExecutorThread.ActorSystem->Schedule(
+ 
+        ctx.ExecutorThread.ActorSystem->Schedule( 
             Min(sleepDuration, BootDelayedUntil - now),
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
-        Become(&TThis::StateSleep);
-        return false;
-    }
-
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter)); 
+        Become(&TThis::StateSleep); 
+        return false; 
+    } 
+ 
     void CheckRoundCompletion(const TActorContext &ctx) {
         ui64 minAlienSeed = Max<ui64>();
         ui32 minAlien = Max<ui32>();
-        size_t undelivered = 0;
-        size_t disconnected = 0;
+        size_t undelivered = 0; 
+        size_t disconnected = 0; 
         for (ui32 i = 0, e = Round->Aliens.size(); i != e; ++i) {
             const TRound::TAlien &alien = Round->Aliens[i];
-            switch (alien.State) {
-            case TRound::EAlienState::Wait:
+            switch (alien.State) { 
+            case TRound::EAlienState::Wait: 
                 return;
-            case TRound::EAlienState::Unknown:
-                break;
-            case TRound::EAlienState::Free:
+            case TRound::EAlienState::Unknown: 
+                break; 
+            case TRound::EAlienState::Free: 
                 if (minAlienSeed > alien.Seed) {
                     minAlienSeed = alien.Seed;
                     minAlien = BootstrapperInfo->OtherNodes[i];
                 }
-                break;
-            case TRound::EAlienState::Undelivered:
-                ++undelivered;
-                break;
-            case TRound::EAlienState::Disconnected:
-                ++disconnected;
-                break;
+                break; 
+            case TRound::EAlienState::Undelivered: 
+                ++undelivered; 
+                break; 
+            case TRound::EAlienState::Disconnected: 
+                ++disconnected; 
+                break; 
             }
         }
 
@@ -407,7 +407,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
         // ok, we got all reactions, now boot tablet or sleep for threshold
         if (minAlienSeed < SelfSeed || minAlienSeed == SelfSeed && ctx.SelfID.NodeId() > minAlien) {
             LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, lost round, wait for threshold",
-                      TabletInfo->TabletID, GetTabletTypeName());
+                      TabletInfo->TabletID, GetTabletTypeName()); 
 
             const ui64 wx = BootstrapperInfo->WatchThreshold.MicroSeconds();
             const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000);
@@ -415,8 +415,8 @@ class TBootstrapper : public TActor<TBootstrapper> {
             Become(&TThis::StateSleep);
             ctx.ExecutorThread.ActorSystem->Schedule(sleepDuration, new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
             return;
-        } else if (!CheckBootPermitted(undelivered, disconnected, ctx)) {
-            return;
+        } else if (!CheckBootPermitted(undelivered, disconnected, ctx)) { 
+            return; 
         } else {
             Boot(ctx);
             return;
@@ -452,26 +452,26 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleFree(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         const ui64 round = ev->Cookie;
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, undelivered from %s, round %" PRIu64,
-                    TabletInfo->TabletID, GetTabletTypeName(), ev->Sender.ToString().c_str(), round);
-
+        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, undelivered from %s, round %" PRIu64, 
+                    TabletInfo->TabletID, GetTabletTypeName(), ev->Sender.ToString().c_str(), round); 
+ 
         if (round != RoundCounter)
             return;
-
-        if (ApplyAlienState(ev->Sender, NKikimrBootstrapper::TEvWatchResult::UNDELIVERED, Max<ui64>(), ctx))
+ 
+        if (ApplyAlienState(ev->Sender, NKikimrBootstrapper::TEvWatchResult::UNDELIVERED, Max<ui64>(), ctx)) 
             return;
-
+ 
         CheckRoundCompletion(ctx);
     }
 
     void HandleFree(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         const ui32 node = ev->Get()->NodeId;
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, disconnected from %" PRIu32,
-                    TabletInfo->TabletID, GetTabletTypeName(), node);
-
+        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, disconnected from %" PRIu32, 
+                    TabletInfo->TabletID, GetTabletTypeName(), node); 
+ 
         if (ApplyAlienState(TActorId(node, 0, 0, 0), NKikimrBootstrapper::TEvWatchResult::DISCONNECTED, Max<ui64>(), ctx))
             return;
-
+ 
         CheckRoundCompletion(ctx);
     }
 
@@ -491,8 +491,8 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleWatch(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         const ui32 node = ev->Get()->NodeId;
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, disconnected from %" PRIu32,
-                    TabletInfo->TabletID, GetTabletTypeName(), node);
+        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, disconnected from %" PRIu32, 
+                    TabletInfo->TabletID, GetTabletTypeName(), node); 
 
         if (Watches->RemoveAlienNode(node)) {
             NotifyAndRound(ctx);

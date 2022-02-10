@@ -43,10 +43,10 @@ public:
         Y_VERIFY(txState->State == TTxState::ConfigureParts);
 
         TTabletId tabletId = TTabletId(ev->Get()->Record.GetTabletId());
-        TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
-        if (!idx) {
+        TShardIdx idx = context.SS->MustGetShardIdx(tabletId); 
+        if (!idx) { 
             LOG_ERROR(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                      "Tablet %" PRIu64 " is not known in TxId %" PRIu64,
+                      "Tablet %" PRIu64 " is not known in TxId %" PRIu64, 
                       tabletId, OperationId.GetTxId());
             return false;
         }
@@ -88,16 +88,16 @@ public:
 
         txState->ClearShardsInProgress();
 
-        // A helper hash map translating tablet id to destination range index
+        // A helper hash map translating tablet id to destination range index 
         THashMap<TTabletId, ui32> dstTabletToRangeIdx;
-
+ 
         auto getDstRangeIdx = [&dstTabletToRangeIdx] (TTabletId tabletId) -> ui32 {
-            auto it = dstTabletToRangeIdx.find(tabletId);
+            auto it = dstTabletToRangeIdx.find(tabletId); 
             Y_VERIFY_S(it != dstTabletToRangeIdx.end(),
                        "Cannot find range info for destination tablet " << tabletId);
-            return it->second;
-        };
-
+            return it->second; 
+        }; 
+ 
         // Fill tablet ids in split description
         NKikimrTxDataShard::TSplitMergeDescription& splitDescr = *txState->SplitDescription;
         for (ui32 i = 0; i < splitDescr.DestinationRangesSize(); ++i) {
@@ -105,7 +105,7 @@ public:
             auto shardIdx = context.SS->MakeLocalId(TLocalShardIdx(rangeDescr->GetShardIdx()));
             auto datashardId = context.SS->ShardInfos[shardIdx].TabletID;
             rangeDescr->SetTabletID(ui64(datashardId));
-            dstTabletToRangeIdx[datashardId] = i;
+            dstTabletToRangeIdx[datashardId] = i; 
         }
 
         // Save updated split description
@@ -121,8 +121,8 @@ public:
 
         const ui64 alterVersion = (*tableInfo)->AlterVersion;
 
-        const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId;
-
+        const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId; 
+ 
         for (const auto& shard: txState->Shards) {
             // Skip src shard
             if (shard.Operation != TTxState::CreateParts) {
@@ -150,26 +150,26 @@ public:
             Y_VERIFY(txState->SplitDescription);
             THolder<TEvDataShard::TEvInitSplitMergeDestination> event =
                 THolder(new TEvDataShard::TEvInitSplitMergeDestination(ui64(OperationId.GetTxId()), context.SS->TabletID(),
-                                                                   subDomainPathId,
+                                                                   subDomainPathId, 
                                                                    splitDescForShard,
                                                                    context.SS->SelectProcessingPrarams(txState->TargetPathId)));
 
-            // Add a new-style CreateTable with correct per-shard settings
-            // WARNING: legacy datashard will ignore this and use the schema
-            // received from some source datashard instead, so schemas must not
-            // diverge during a migration period. That's ok though, since
-            // schemas may only become incompatible after column family storage
-            // configuration is altered, and it's protected with a feature flag.
+            // Add a new-style CreateTable with correct per-shard settings 
+            // WARNING: legacy datashard will ignore this and use the schema 
+            // received from some source datashard instead, so schemas must not 
+            // diverge during a migration period. That's ok though, since 
+            // schemas may only become incompatible after column family storage 
+            // configuration is altered, and it's protected with a feature flag. 
             auto tableDesc = event->Record.MutableCreateTable();
-            context.SS->FillTableDescriptionForShardIdx(
-                txState->TargetPathId,
-                shard.Idx,
+            context.SS->FillTableDescriptionForShardIdx( 
+                txState->TargetPathId, 
+                shard.Idx, 
                 tableDesc,
-                rangeDescr.GetKeyRangeBegin(),
-                rangeDescr.GetKeyRangeEnd(),
-                true, false);
+                rangeDescr.GetKeyRangeBegin(), 
+                rangeDescr.GetKeyRangeEnd(), 
+                true, false); 
             context.SS->FillTableSchemaVersion(alterVersion, tableDesc);
-
+ 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shard.Idx, event.Release());
         }
 
@@ -212,10 +212,10 @@ public:
         Y_VERIFY(txState->State == TTxState::TransferData);
 
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
-        auto srcShardIdx = context.SS->GetShardIdx(tabletId);
-        if (!srcShardIdx) {
+        auto srcShardIdx = context.SS->GetShardIdx(tabletId); 
+        if (!srcShardIdx) { 
             LOG_ERROR(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                      "Tablet %" PRIu64 " is not known in TxId %" PRIu64,
+                      "Tablet %" PRIu64 " is not known in TxId %" PRIu64, 
                       tabletId, OperationId.GetTxId());
             return false;
         }
@@ -282,12 +282,12 @@ public:
             auto newAggrStats = tableInfo->GetStats().Aggregated;
             auto subDomainId = context.SS->ResolveDomainId(tableId);
             auto subDomainInfo = context.SS->ResolveDomainInfo(tableId);
-            subDomainInfo->AggrDiskSpaceUsage(context.SS, newAggrStats, oldAggrStats);
-            if (subDomainInfo->CheckDiskSpaceQuotas(context.SS)) {
+            subDomainInfo->AggrDiskSpaceUsage(context.SS, newAggrStats, oldAggrStats); 
+            if (subDomainInfo->CheckDiskSpaceQuotas(context.SS)) { 
                 context.SS->PersistSubDomainState(db, subDomainId, *subDomainInfo);
                 context.OnComplete.PublishToSchemeBoard(OperationId, subDomainId);
             }
-        }
+        } 
 
         Y_VERIFY(txState->ShardsInProgress.empty(), "All shards should have already completed their steps");
 
@@ -371,10 +371,10 @@ public:
         Y_VERIFY(txState->State == TTxState::NotifyPartitioningChanged);
 
 
-        auto idx = context.SS->GetShardIdx(tabletId);
-        if (!idx) {
+        auto idx = context.SS->GetShardIdx(tabletId); 
+        if (!idx) { 
             LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Datashard is not listed in tablet to shard map"
+                        "Datashard is not listed in tablet to shard map" 
                             << ", datashard: " << tabletId
                             << ", opId: " << OperationId);
             return false;
@@ -595,7 +595,7 @@ public:
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(txId, pathId);
         datashardInfo.BindedChannels = channels;
 
-        auto idx = context.SS->RegisterShardInfo(datashardInfo);
+        auto idx = context.SS->RegisterShardInfo(datashardInfo); 
 
         ui64 lastSrcPartition = srcPartitionIdxs.back();
         TString lastRangeEnd = tableInfo->GetPartitions()[lastSrcPartition].EndOfRange;
@@ -688,7 +688,7 @@ public:
         // Allocate new datashard ids
         TString rangeBegin = firstRangeBegin;
         for (ui64 i = 0; i < count; ++i) {
-            const auto idx = context.SS->RegisterShardInfo(datashardInfo);
+            const auto idx = context.SS->RegisterShardInfo(datashardInfo); 
 
             TString rangeEnd = rangeEnds[i];
             TTxState::TShardOperation dstShardOp(idx, ETabletType::DataShard, TTxState::CreateParts);
@@ -782,13 +782,13 @@ public:
         TTableInfo::TCPtr tableInfo = context.SS->Tables.at(path.Base()->PathId);
         Y_VERIFY(tableInfo);
 
-        if (tableInfo->IsBackup) {
-            TString errMsg = TStringBuilder()
-                << "cannot split/merge backup table " << info.GetTablePath();
+        if (tableInfo->IsBackup) { 
+            TString errMsg = TStringBuilder() 
+                << "cannot split/merge backup table " << info.GetTablePath(); 
             result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
-            return result;
-        }
-
+            return result; 
+        } 
+ 
         const THashMap<TShardIdx, ui64>& shardIdx2partition = tableInfo->GetShard2PartitionIdx();
 
         TVector<ui64> srcPartitionIdxs;
@@ -872,29 +872,29 @@ public:
 
         TChannelsBindings channelsBinding;
 
-        bool storePerShardConfig = false;
+        bool storePerShardConfig = false; 
         NKikimrSchemeOp::TPartitionConfig perShardConfig;
-
+ 
         if (context.SS->IsStorageConfigLogic(tableInfo)) {
-            TVector<TStorageRoom> storageRooms;
-            THashMap<ui32, ui32> familyRooms;
-            storageRooms.emplace_back(0);
-
-            if (!context.SS->GetBindingsRooms(path.DomainId(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) {
+            TVector<TStorageRoom> storageRooms; 
+            THashMap<ui32, ui32> familyRooms; 
+            storageRooms.emplace_back(0); 
+ 
+            if (!context.SS->GetBindingsRooms(path.DomainId(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) { 
                 errStr = TString("database doesn't have required storage pools to create tablet with storage config, details: ") + errStr;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
-
-            storePerShardConfig = true;
-            for (const auto& room : storageRooms) {
-                perShardConfig.AddStorageRooms()->CopyFrom(room);
-            }
-            for (const auto& familyRoom : familyRooms) {
-                auto* protoFamily = perShardConfig.AddColumnFamilies();
-                protoFamily->SetId(familyRoom.first);
-                protoFamily->SetRoom(familyRoom.second);
-            }
+ 
+            storePerShardConfig = true; 
+            for (const auto& room : storageRooms) { 
+                perShardConfig.AddStorageRooms()->CopyFrom(room); 
+            } 
+            for (const auto& familyRoom : familyRooms) { 
+                auto* protoFamily = perShardConfig.AddColumnFamilies(); 
+                protoFamily->SetId(familyRoom.first); 
+                protoFamily->SetRoom(familyRoom.second); 
+            } 
         } else if (context.SS->IsCompatibleChannelProfileLogic(path.DomainId(), tableInfo)) {
             if (!context.SS->GetChannelsBindings(path.DomainId(), tableInfo, channelsBinding, errStr)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
@@ -963,11 +963,11 @@ public:
             TShardInfo& shardInfo = context.SS->ShardInfos[shard.Idx];
             shardInfo.CurrentTxId = OperationId.GetTxId();
 
-            if (shard.Operation == TTxState::CreateParts) {
-                if (storePerShardConfig) {
+            if (shard.Operation == TTxState::CreateParts) { 
+                if (storePerShardConfig) { 
                     mutableTableInfo->PerShardPartitionConfig[shard.Idx].CopyFrom(perShardConfig);
-                }
-            }
+                } 
+            } 
         }
 
         path.DomainInfo()->AddInternalShards(op); //allow over commit for merge

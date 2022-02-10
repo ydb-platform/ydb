@@ -78,14 +78,14 @@ namespace NBoot {
         void SetTableEdge(const NKikimrExecutorFlat::TLogMemSnap &edge)
         {
             const ui64 stamp = TTxStamp(edge.GetGeneration(), edge.GetStep());
-            const NTable::TEpoch epoch(edge.HasHead() ? edge.GetHead() : 0);
+            const NTable::TEpoch epoch(edge.HasHead() ? edge.GetHead() : 0); 
 
             Y_VERIFY(stamp != Max<ui64>(), "Undefined TxStamp of snapshot");
 
             auto &last = Edges[edge.GetTable()];
 
             last.TxStamp = Max(last.TxStamp, stamp);
-            last.Head = Max(last.Head, epoch);
+            last.Head = Max(last.Head, epoch); 
         }
 
         const bool Follower = false;
@@ -108,7 +108,7 @@ namespace NBoot {
         TDeque<TSwitch> Switches;
         THashMap<ui32, NTable::TSnapEdge> Edges;
         THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
-        THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
+        THashMap<TLogoBlobID, TSharedData> TxStatusCaches; 
     };
 
 }

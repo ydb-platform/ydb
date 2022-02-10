@@ -221,10 +221,10 @@ private:
 
     void Initialize(const TTabletPercentileCounter& rp) {
         //
-        if (rp.IsInitialized()) {
-            Initialize(rp.RangeCount, rp.Ranges, rp.Integral);
-            SetTo(rp);
-        }
+        if (rp.IsInitialized()) { 
+            Initialize(rp.RangeCount, rp.Ranges, rp.Integral); 
+            SetTo(rp); 
+        } 
     }
 
     //
@@ -274,7 +274,7 @@ private:
 
     void Populate(const TTabletPercentileCounter& rp) {
         if (IsInitialized()) {
-            Y_VERIFY_DEBUG(RangeCount == rp.RangeCount);
+            Y_VERIFY_DEBUG(RangeCount == rp.RangeCount); 
             for (ui32 i = 0; i < RangeCount; ++i) {
                 Values[i] += rp.Values[i];
             }

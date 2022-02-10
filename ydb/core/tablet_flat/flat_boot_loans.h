@@ -56,11 +56,11 @@ namespace NBoot {
                 ++Skip, Queue.pop_front();
             }
 
-            Y_VERIFY(Queue || !Pending, "TLoans boot actor has lost entries");
+            Y_VERIFY(Queue || !Pending, "TLoans boot actor has lost entries"); 
 
-            if (!Queue) {
-                Env->Finish(this);
-            }
+            if (!Queue) { 
+                Env->Finish(this); 
+            } 
         }
 
         void Apply(const TLogoBlobID &label, TArrayRef<const char> body) noexcept

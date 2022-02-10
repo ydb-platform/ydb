@@ -1,249 +1,249 @@
-syntax = "proto3";
-
-package NKikimrKesus;
-
-option java_package = "ru.yandex.kikimr.proto";
+syntax = "proto3"; 
+ 
+package NKikimrKesus; 
+ 
+option java_package = "ru.yandex.kikimr.proto"; 
 option cc_enable_arenas = true;
-
+ 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-
-message TKesusError {
+ 
+message TKesusError { 
     Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
-}
-
-message TEvDummyRequest {
-    bool UseTransactions = 1;
-}
-
-message TEvDummyResponse {
-    // nothing
-}
-
-message TEvSetConfig {
-    uint64 TxId = 1;
-    Ydb.Coordination.Config Config = 2;
-    uint64 Version = 3;
-    string Path = 4;
-}
-
-message TEvSetConfigResult {
-    TKesusError Error = 1;
-    uint64 TxId = 2;
-    uint64 TabletId = 3;
-}
-
-message TEvGetConfig {
-    // nothing
-}
-
-message TEvGetConfigResult {
-    Ydb.Coordination.Config Config = 1;
-    uint64 Version = 2;
-    string Path = 3;
-}
-
-message TEvDescribeProxies {
-    string KesusPath = 1;
-}
-
-message TEvDescribeProxiesResult {
-    message TProxyDescription {
+} 
+ 
+message TEvDummyRequest { 
+    bool UseTransactions = 1; 
+} 
+ 
+message TEvDummyResponse { 
+    // nothing 
+} 
+ 
+message TEvSetConfig { 
+    uint64 TxId = 1; 
+    Ydb.Coordination.Config Config = 2; 
+    uint64 Version = 3; 
+    string Path = 4; 
+} 
+ 
+message TEvSetConfigResult { 
+    TKesusError Error = 1; 
+    uint64 TxId = 2; 
+    uint64 TabletId = 3; 
+} 
+ 
+message TEvGetConfig { 
+    // nothing 
+} 
+ 
+message TEvGetConfigResult { 
+    Ydb.Coordination.Config Config = 1; 
+    uint64 Version = 2; 
+    string Path = 3; 
+} 
+ 
+message TEvDescribeProxies { 
+    string KesusPath = 1; 
+} 
+ 
+message TEvDescribeProxiesResult { 
+    message TProxyDescription { 
         NActorsProto.TActorId ActorID = 1;
-        uint64 Generation = 2;
-        repeated uint64 AttachedSessions = 3;
-    }
-
-    repeated TProxyDescription Proxies = 1;
-}
-
-message TEvDescribeSessions {
-    string KesusPath = 1;
-}
-
-message TEvDescribeSessionsResult {
-    message TSessionDescription {
-        uint64 SessionId = 1;
-        uint64 TimeoutMillis = 2;
-        string Description = 3;
+        uint64 Generation = 2; 
+        repeated uint64 AttachedSessions = 3; 
+    } 
+ 
+    repeated TProxyDescription Proxies = 1; 
+} 
+ 
+message TEvDescribeSessions { 
+    string KesusPath = 1; 
+} 
+ 
+message TEvDescribeSessionsResult { 
+    message TSessionDescription { 
+        uint64 SessionId = 1; 
+        uint64 TimeoutMillis = 2; 
+        string Description = 3; 
         NActorsProto.TActorId OwnerProxy = 4;
-    }
-
-    repeated TSessionDescription Sessions = 1;
-}
-
-message TEvDescribeSemaphore {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-    string Name = 4;
-    bool IncludeOwners = 5;
-    bool IncludeWaiters = 6;
-    bool WatchData = 7;
-    bool WatchOwners = 8;
-}
-
-message TEvDescribeSemaphoreResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-    Ydb.Coordination.SemaphoreDescription SemaphoreDescription = 3;
-    bool WatchAdded = 4;
-}
-
-message TEvDescribeSemaphoreChanged {
-    uint64 ProxyGeneration = 1;
-    bool DataChanged = 2;
-    bool OwnersChanged = 3;
-}
-
-message TEvCreateSemaphore {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-    string Name = 4;
-    uint64 Limit = 5;
-    bytes Data = 6;
-}
-
-message TEvCreateSemaphoreResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-}
-
-message TEvUpdateSemaphore {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-    string Name = 4;
-    bytes Data = 5;
-}
-
-message TEvUpdateSemaphoreResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-}
-
-message TEvDeleteSemaphore {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-    string Name = 4;
-    bool Force = 5;
-}
-
-message TEvDeleteSemaphoreResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-}
-
-message TEvRegisterProxy {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-}
-
-message TEvRegisterProxyResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-}
-
-message TEvUnregisterProxy {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-}
-
-message TEvUnregisterProxyResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-}
-
-message TEvAttachSession {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-    uint64 TimeoutMillis = 4;
-    string Description = 5;
-    uint64 SeqNo = 6;
-    bytes ProtectionKey = 7;
-}
-
-message TEvAttachSessionResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-    uint64 SessionId = 3;
-}
-
-message TEvDetachSession {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-}
-
-message TEvDetachSessionResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-}
-
-message TEvDestroySession {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-}
-
-message TEvDestroySessionResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-}
-
-message TEvAcquireSemaphore {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-    string Name = 4;
-    uint64 TimeoutMillis = 5;
-    uint64 Count = 6;
-    bytes Data = 7;
-    bool Ephemeral = 8;
-}
-
-message TEvAcquireSemaphorePending {
-    uint64 ProxyGeneration = 1;
-}
-
-message TEvAcquireSemaphoreResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-    bool Acquired = 3;
-}
-
-message TEvReleaseSemaphore {
-    string KesusPath = 1;
-    uint64 ProxyGeneration = 2;
-    uint64 SessionId = 3;
-    string Name = 4;
-}
-
-message TEvReleaseSemaphoreResult {
-    uint64 ProxyGeneration = 1;
-    TKesusError Error = 2;
-    bool Released = 3;
-}
-
-message TEvProxyExpired {
-    uint64 ProxyGeneration = 1;
-}
-
-message TEvSessionExpired {
-    uint64 SessionId = 1;
-}
-
-message TEvSessionStolen {
-    uint64 ProxyGeneration = 1;
-    uint64 SessionId = 2;
-}
-
+    } 
+ 
+    repeated TSessionDescription Sessions = 1; 
+} 
+ 
+message TEvDescribeSemaphore { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+    string Name = 4; 
+    bool IncludeOwners = 5; 
+    bool IncludeWaiters = 6; 
+    bool WatchData = 7; 
+    bool WatchOwners = 8; 
+} 
+ 
+message TEvDescribeSemaphoreResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+    Ydb.Coordination.SemaphoreDescription SemaphoreDescription = 3; 
+    bool WatchAdded = 4; 
+} 
+ 
+message TEvDescribeSemaphoreChanged { 
+    uint64 ProxyGeneration = 1; 
+    bool DataChanged = 2; 
+    bool OwnersChanged = 3; 
+} 
+ 
+message TEvCreateSemaphore { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+    string Name = 4; 
+    uint64 Limit = 5; 
+    bytes Data = 6; 
+} 
+ 
+message TEvCreateSemaphoreResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvUpdateSemaphore { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+    string Name = 4; 
+    bytes Data = 5; 
+} 
+ 
+message TEvUpdateSemaphoreResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvDeleteSemaphore { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+    string Name = 4; 
+    bool Force = 5; 
+} 
+ 
+message TEvDeleteSemaphoreResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvRegisterProxy { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+} 
+ 
+message TEvRegisterProxyResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvUnregisterProxy { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+} 
+ 
+message TEvUnregisterProxyResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvAttachSession { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+    uint64 TimeoutMillis = 4; 
+    string Description = 5; 
+    uint64 SeqNo = 6; 
+    bytes ProtectionKey = 7; 
+} 
+ 
+message TEvAttachSessionResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+    uint64 SessionId = 3; 
+} 
+ 
+message TEvDetachSession { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+} 
+ 
+message TEvDetachSessionResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvDestroySession { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+} 
+ 
+message TEvDestroySessionResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvAcquireSemaphore { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+    string Name = 4; 
+    uint64 TimeoutMillis = 5; 
+    uint64 Count = 6; 
+    bytes Data = 7; 
+    bool Ephemeral = 8; 
+} 
+ 
+message TEvAcquireSemaphorePending { 
+    uint64 ProxyGeneration = 1; 
+} 
+ 
+message TEvAcquireSemaphoreResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+    bool Acquired = 3; 
+} 
+ 
+message TEvReleaseSemaphore { 
+    string KesusPath = 1; 
+    uint64 ProxyGeneration = 2; 
+    uint64 SessionId = 3; 
+    string Name = 4; 
+} 
+ 
+message TEvReleaseSemaphoreResult { 
+    uint64 ProxyGeneration = 1; 
+    TKesusError Error = 2; 
+    bool Released = 3; 
+} 
+ 
+message TEvProxyExpired { 
+    uint64 ProxyGeneration = 1; 
+} 
+ 
+message TEvSessionExpired { 
+    uint64 SessionId = 1; 
+} 
+ 
+message TEvSessionStolen { 
+    uint64 ProxyGeneration = 1; 
+    uint64 SessionId = 2; 
+} 
+ 
 //
 // Quoter control API.
 //

@@ -168,7 +168,7 @@ namespace {
 
             TTestCallback callback(123);
             TFuture<int> future = promise.GetFuture()
-                                      .Apply([&](const auto& theFuture) { return callback.Func(theFuture); });
+                                      .Apply([&](const auto& theFuture) { return callback.Func(theFuture); }); 
 
             promise.SetValue(456);
             UNIT_ASSERT_EQUAL(future.GetValue(), 123 + 456);
@@ -180,7 +180,7 @@ namespace {
 
             TTestCallback callback(123);
             TFuture<void> future = promise.GetFuture()
-                                       .Apply([&](const auto& theFuture) { return callback.VoidFunc(theFuture); });
+                                       .Apply([&](const auto& theFuture) { return callback.VoidFunc(theFuture); }); 
 
             promise.SetValue(456);
             UNIT_ASSERT(future.HasValue());
@@ -191,7 +191,7 @@ namespace {
 
             TTestCallback callback(123);
             TFuture<int> future = promise.GetFuture()
-                                      .Apply([&](const auto& theFuture) { return callback.FutureFunc(theFuture); });
+                                      .Apply([&](const auto& theFuture) { return callback.FutureFunc(theFuture); }); 
 
             promise.SetValue(456);
             UNIT_ASSERT_EQUAL(future.GetValue(), 123 + 456);
@@ -203,7 +203,7 @@ namespace {
 
             TTestCallback callback(123);
             TFuture<void> future = promise.GetFuture()
-                                       .Apply([&](const auto& theFuture) { return callback.FutureVoidFunc(theFuture); });
+                                       .Apply([&](const auto& theFuture) { return callback.FutureVoidFunc(theFuture); }); 
 
             promise.SetValue(456);
             UNIT_ASSERT(!future.HasValue());

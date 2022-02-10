@@ -14,8 +14,8 @@ namespace NRedo {
 
         void Clear() noexcept
         {
-            Trace.clear();
-            Bytes = 0;
+            Trace.clear(); 
+            Bytes = 0; 
         }
 
         TOverhead* Push(ui32 table, TEntry* entry) noexcept

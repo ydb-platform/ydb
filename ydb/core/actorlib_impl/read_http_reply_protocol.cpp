@@ -15,8 +15,8 @@ bool TReadHTTPReplyProtocol::CatchReadDataComplete(
         {
             Buf.resize(Filled + FREE_SPACE_HIGH_WATER_MARK);
         }
-
-        ResetReadBuf(&Buf[Filled], Buf.size() - Filled);
+ 
+        ResetReadBuf(&Buf[Filled], Buf.size() - Filled); 
         return false;
     }
 
@@ -48,7 +48,7 @@ bool TReadHTTPReplyProtocol::CatchReadDataComplete(
             Buf.resize(Filled + FREE_SPACE_HIGH_WATER_MARK);
         }
 
-        ResetReadBuf(&Buf[Filled], Buf.size() - Filled);
+        ResetReadBuf(&Buf[Filled], Buf.size() - Filled); 
         return false;
     }
 

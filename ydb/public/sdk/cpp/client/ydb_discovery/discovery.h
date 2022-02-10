@@ -27,9 +27,9 @@ struct TEndpointInfo {
     bool Ssl = false;
     TVector<TString> Services;
     TString Location;
-    TVector<TString> IPv4Addrs;
-    TVector<TString> IPv6Addrs;
-    TString SslTargetNameOverride;
+    TVector<TString> IPv4Addrs; 
+    TVector<TString> IPv6Addrs; 
+    TString SslTargetNameOverride; 
 };
 
 class TListEndpointsResult : public TStatus {

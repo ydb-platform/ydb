@@ -24,7 +24,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->NextChangeRecordOrder = 1;
         Self->LastChangeRecordGroup = 1;
         Self->TransQueue.Reset();
-        Self->SnapshotManager.Reset();
+        Self->SnapshotManager.Reset(); 
         Self->SchemaSnapshotManager.Reset();
         Self->S3Uploads.Reset();
         Self->S3Downloads.Reset();
@@ -34,12 +34,12 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         ChangeRecords.clear();
 
         bool done = ReadEverything(txc);
-
-        if (done && Self->State != TShardState::Offline) {
-            Self->SnapshotManager.Fix_KIKIMR_12289(txc.DB);
-            Self->SnapshotManager.Fix_KIKIMR_14259(txc.DB);
-        }
-
+ 
+        if (done && Self->State != TShardState::Offline) { 
+            Self->SnapshotManager.Fix_KIKIMR_12289(txc.DB); 
+            Self->SnapshotManager.Fix_KIKIMR_14259(txc.DB); 
+        } 
+ 
         return done;
     } catch (const TNotReadyTabletException &) {
         return false;
@@ -64,9 +64,9 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     } else if (Self->State == TShardState::Offline) {
         // Remind the schemeshard that this shard is in Offline state and can be deleted
         Self->ReportState(ctx, Self->State);
-    } else if (Self->State == TShardState::Ready) {
-        // Make sure schema defaults are updated when changed
-        Self->Execute(Self->CreateTxInitSchemaDefaults(), ctx);
+    } else if (Self->State == TShardState::Ready) { 
+        // Make sure schema defaults are updated when changed 
+        Self->Execute(Self->CreateTxInitSchemaDefaults(), ctx); 
     }
 
     Self->SwitchToWork(ctx);
@@ -80,27 +80,27 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     // Tables created with older SchemeShard versions don't have
     // path filled for user tables. Resolve path for them.
     Self->ResolveTablePath(ctx);
-
+ 
     // Plan cleanup if needed
-    if (Self->State == TShardState::Ready ||
-        Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
-        Self->State == TShardState::SplitSrcMakeSnapshot)
-    {
+    if (Self->State == TShardState::Ready || 
+        Self->State == TShardState::SplitSrcWaitForNoTxInFlight || 
+        Self->State == TShardState::SplitSrcMakeSnapshot) 
+    { 
         // Initialize snapshot expiration queue with current context time
         Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
 
         if (Self->GetSnapshotManager().HasExpiringSnapshots())
-            Self->PlanCleanup(ctx);
-    }
-
-    // Find subdomain path id if needed
-    if (Self->State == TShardState::Ready) {
-        if (Self->SubDomainPathId) {
-            Self->StartWatchingSubDomainPathId();
-        } else {
-            Self->StartFindSubDomainPathId();
-        }
-    }
+            Self->PlanCleanup(ctx); 
+    } 
+ 
+    // Find subdomain path id if needed 
+    if (Self->State == TShardState::Ready) { 
+        if (Self->SubDomainPathId) { 
+            Self->StartWatchingSubDomainPathId(); 
+        } else { 
+            Self->StartFindSubDomainPathId(); 
+        } 
+    } 
 
     Self->CreateChangeSender(ctx);
     Self->EnqueueChangeRecords(std::move(ChangeRecords));
@@ -152,16 +152,16 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::SchemaOperations);
         PRECHARGE_SYS_TABLE(Schema::SplitSrcSnapshots);
         PRECHARGE_SYS_TABLE(Schema::SplitDstReceivedSnapshots);
-        PRECHARGE_SYS_TABLE(Schema::Snapshots);
+        PRECHARGE_SYS_TABLE(Schema::Snapshots); 
         PRECHARGE_SYS_TABLE(Schema::S3Uploads);
         PRECHARGE_SYS_TABLE(Schema::S3UploadedParts);
         PRECHARGE_SYS_TABLE(Schema::S3Downloads);
         PRECHARGE_SYS_TABLE(Schema::ChangeRecords);
         PRECHARGE_SYS_TABLE(Schema::SrcChangeSenderActivations);
         PRECHARGE_SYS_TABLE(Schema::DstChangeSenderActivations);
-        PRECHARGE_SYS_TABLE(Schema::ReplicationSources);
-        PRECHARGE_SYS_TABLE(Schema::ReplicationSourceOffsets);
-        PRECHARGE_SYS_TABLE(Schema::DstReplicationSourceOffsetsReceived);
+        PRECHARGE_SYS_TABLE(Schema::ReplicationSources); 
+        PRECHARGE_SYS_TABLE(Schema::ReplicationSourceOffsets); 
+        PRECHARGE_SYS_TABLE(Schema::DstReplicationSourceOffsetsReceived); 
         PRECHARGE_SYS_TABLE(Schema::UserTablesStats);
         PRECHARGE_SYS_TABLE(Schema::SchemaSnapshots);
 
@@ -184,18 +184,18 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     LOAD_SYS_UI64(db, Schema::Sys_LastSchemeShardRound, Self->LastSchemeOpSeqNo.Round);
     LOAD_SYS_UI64(db, Schema::Sys_StatisticsDisabled, Self->StatisticsDisabled);
 
-    ui64 subDomainOwnerId = 0;
-    ui64 subDomainLocalPathId = 0;
-    LOAD_SYS_UI64(db, Schema::Sys_SubDomainOwnerId, subDomainOwnerId);
-    LOAD_SYS_UI64(db, Schema::Sys_SubDomainLocalPathId, subDomainLocalPathId);
-    if (subDomainOwnerId && subDomainLocalPathId && subDomainOwnerId == Self->CurrentSchemeShardId) {
-        // We only recognize subdomain path id when it's non-zero and matches
-        // current schemeshard id. This protects against migrations that used
-        // the older code version that did not support updating this path id.
-        Self->SubDomainPathId.emplace(subDomainOwnerId, subDomainLocalPathId);
-    }
-    LOAD_SYS_BOOL(db, Schema::Sys_SubDomainOutOfSpace, Self->SubDomainOutOfSpace);
-
+    ui64 subDomainOwnerId = 0; 
+    ui64 subDomainLocalPathId = 0; 
+    LOAD_SYS_UI64(db, Schema::Sys_SubDomainOwnerId, subDomainOwnerId); 
+    LOAD_SYS_UI64(db, Schema::Sys_SubDomainLocalPathId, subDomainLocalPathId); 
+    if (subDomainOwnerId && subDomainLocalPathId && subDomainOwnerId == Self->CurrentSchemeShardId) { 
+        // We only recognize subdomain path id when it's non-zero and matches 
+        // current schemeshard id. This protects against migrations that used 
+        // the older code version that did not support updating this path id. 
+        Self->SubDomainPathId.emplace(subDomainOwnerId, subDomainLocalPathId); 
+    } 
+    LOAD_SYS_BOOL(db, Schema::Sys_SubDomainOutOfSpace, Self->SubDomainOutOfSpace); 
+ 
     {
         TString rawProcessingParams;
         LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);
@@ -216,12 +216,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         while (!rowset.EndOfSet()) {
             ui64 tableId = rowset.GetValue<Schema::UserTables::Tid>();
             ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>();
-            ui32 shadowTid = rowset.GetValueOrDefault<Schema::UserTables::ShadowTid>();
+            ui32 shadowTid = rowset.GetValueOrDefault<Schema::UserTables::ShadowTid>(); 
             TString schema = rowset.GetValue<Schema::UserTables::Schema>();
             NKikimrSchemeOp::TTableDescription descr;
             bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
             Y_VERIFY(parseOk);
-            Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
+            Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid)); 
             if (!rowset.Next())
                 return false;
         }
@@ -293,8 +293,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             Y_VERIFY(parseOk);
         }
 
-        LOAD_SYS_BOOL(db, Schema::Sys_DstSplitSchemaInitialized, Self->DstSplitSchemaInitialized);
-
+        LOAD_SYS_BOOL(db, Schema::Sys_DstSplitSchemaInitialized, Self->DstSplitSchemaInitialized); 
+ 
         // Add all SRC datashards to the list
         Self->ReceiveSnapshotsFrom.clear();
         Self->ReceiveActivationsFrom.clear();
@@ -383,11 +383,11 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         // TODO: add propose blockers to blockers list
     }
 
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Snapshots::TableId)) {
-        if (!Self->SnapshotManager.Reload(db))
-            return false;
-    }
-
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Snapshots::TableId)) { 
+        if (!Self->SnapshotManager.Reload(db)) 
+            return false; 
+    } 
+ 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::S3Uploads::TableId)) {
         if (!Self->S3Uploads.Load(db))
             return false;
@@ -404,75 +404,75 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    Self->ReplicatedTables.clear();
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ReplicationSources::TableId)) {
-        auto rowset = db.Table<Schema::ReplicationSources>().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-        while (!rowset.EndOfSet()) {
-            TPathId pathId;
-            pathId.OwnerId = rowset.GetValue<Schema::ReplicationSources::PathOwnerId>();
-            pathId.LocalPathId = rowset.GetValue<Schema::ReplicationSources::TablePathId>();
-            ui64 sourceId = rowset.GetValue<Schema::ReplicationSources::SourceId>();
-            TString sourceName = rowset.GetValue<Schema::ReplicationSources::SourceName>();
-
-            if (auto* table = Self->EnsureReplicatedTable(pathId)) {
-                table->LoadSource(sourceId, sourceName);
-            }
-
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-    }
-
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ReplicationSourceOffsets::TableId)) {
-        auto rowset = db.Table<Schema::ReplicationSourceOffsets>().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-        while (!rowset.EndOfSet()) {
-            TPathId pathId;
-            pathId.OwnerId = rowset.GetValue<Schema::ReplicationSourceOffsets::PathOwnerId>();
-            pathId.LocalPathId = rowset.GetValue<Schema::ReplicationSourceOffsets::TablePathId>();
-            ui64 sourceId = rowset.GetValue<Schema::ReplicationSourceOffsets::SourceId>();
-
-            if (auto* table = Self->FindReplicatedTable(pathId)) {
-                if (auto* source = table->FindSource(sourceId)) {
-                    ui64 splitKeyId = rowset.GetValue<Schema::ReplicationSourceOffsets::SplitKeyId>();
-                    TSerializedCellVec splitKey = TSerializedCellVec(rowset.GetValue<Schema::ReplicationSourceOffsets::SplitKey>());
-                    i64 maxOffset = rowset.GetValue<Schema::ReplicationSourceOffsets::MaxOffset>();
-                    source->LoadSplitKey(splitKeyId, std::move(splitKey), maxOffset);
-                }
-            }
-
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-    }
-
-    Self->ReceiveReplicationSourceOffsetsFrom.clear();
-    if (Self->State == TShardState::SplitDstReceivingSnapshot && txc.DB.GetScheme().GetTableInfo(Schema::DstReplicationSourceOffsetsReceived::TableId)) {
-        auto rowset = db.Table<Schema::DstReplicationSourceOffsetsReceived>().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-        while (!rowset.EndOfSet()) {
-            TPathId pathId;
-            ui64 srcTabletId = rowset.GetValue<Schema::DstReplicationSourceOffsetsReceived::SrcTabletId>();
-            pathId.OwnerId = rowset.GetValue<Schema::DstReplicationSourceOffsetsReceived::PathOwnerId>();
-            pathId.LocalPathId = rowset.GetValue<Schema::DstReplicationSourceOffsetsReceived::TablePathId>();
-
-            Self->ReceiveReplicationSourceOffsetsFrom[srcTabletId].Received.insert(pathId);
-
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-    }
-
+    Self->ReplicatedTables.clear(); 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ReplicationSources::TableId)) { 
+        auto rowset = db.Table<Schema::ReplicationSources>().Select(); 
+        if (!rowset.IsReady()) { 
+            return false; 
+        } 
+        while (!rowset.EndOfSet()) { 
+            TPathId pathId; 
+            pathId.OwnerId = rowset.GetValue<Schema::ReplicationSources::PathOwnerId>(); 
+            pathId.LocalPathId = rowset.GetValue<Schema::ReplicationSources::TablePathId>(); 
+            ui64 sourceId = rowset.GetValue<Schema::ReplicationSources::SourceId>(); 
+            TString sourceName = rowset.GetValue<Schema::ReplicationSources::SourceName>(); 
+ 
+            if (auto* table = Self->EnsureReplicatedTable(pathId)) { 
+                table->LoadSource(sourceId, sourceName); 
+            } 
+ 
+            if (!rowset.Next()) { 
+                return false; 
+            } 
+        } 
+    } 
+ 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ReplicationSourceOffsets::TableId)) { 
+        auto rowset = db.Table<Schema::ReplicationSourceOffsets>().Select(); 
+        if (!rowset.IsReady()) { 
+            return false; 
+        } 
+        while (!rowset.EndOfSet()) { 
+            TPathId pathId; 
+            pathId.OwnerId = rowset.GetValue<Schema::ReplicationSourceOffsets::PathOwnerId>(); 
+            pathId.LocalPathId = rowset.GetValue<Schema::ReplicationSourceOffsets::TablePathId>(); 
+            ui64 sourceId = rowset.GetValue<Schema::ReplicationSourceOffsets::SourceId>(); 
+ 
+            if (auto* table = Self->FindReplicatedTable(pathId)) { 
+                if (auto* source = table->FindSource(sourceId)) { 
+                    ui64 splitKeyId = rowset.GetValue<Schema::ReplicationSourceOffsets::SplitKeyId>(); 
+                    TSerializedCellVec splitKey = TSerializedCellVec(rowset.GetValue<Schema::ReplicationSourceOffsets::SplitKey>()); 
+                    i64 maxOffset = rowset.GetValue<Schema::ReplicationSourceOffsets::MaxOffset>(); 
+                    source->LoadSplitKey(splitKeyId, std::move(splitKey), maxOffset); 
+                } 
+            } 
+ 
+            if (!rowset.Next()) { 
+                return false; 
+            } 
+        } 
+    } 
+ 
+    Self->ReceiveReplicationSourceOffsetsFrom.clear(); 
+    if (Self->State == TShardState::SplitDstReceivingSnapshot && txc.DB.GetScheme().GetTableInfo(Schema::DstReplicationSourceOffsetsReceived::TableId)) { 
+        auto rowset = db.Table<Schema::DstReplicationSourceOffsetsReceived>().Select(); 
+        if (!rowset.IsReady()) { 
+            return false; 
+        } 
+        while (!rowset.EndOfSet()) { 
+            TPathId pathId; 
+            ui64 srcTabletId = rowset.GetValue<Schema::DstReplicationSourceOffsetsReceived::SrcTabletId>(); 
+            pathId.OwnerId = rowset.GetValue<Schema::DstReplicationSourceOffsetsReceived::PathOwnerId>(); 
+            pathId.LocalPathId = rowset.GetValue<Schema::DstReplicationSourceOffsetsReceived::TablePathId>(); 
+ 
+            Self->ReceiveReplicationSourceOffsetsFrom[srcTabletId].Received.insert(pathId); 
+ 
+            if (!rowset.Next()) { 
+                return false; 
+            } 
+        } 
+    } 
+ 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::SchemaSnapshots::TableId)) {
         if (!Self->SchemaSnapshotManager.Load(db)) {
             return false;
@@ -573,32 +573,32 @@ public:
     }
 };
 
-/// Initializes schema defaults changes
+/// Initializes schema defaults changes 
 class TDataShard::TTxInitSchemaDefaults : public TTransactionBase<TDataShard> {
-public:
+public: 
     TTxInitSchemaDefaults(TDataShard* self)
-        : TBase(self)
-    {}
-
-    TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA_DEFAULTS; }
-
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Execute");
-
-        if (Self->State == TShardState::Ready) {
-            for (const auto& pr : Self->TableInfos) {
-                pr.second->ApplyDefaults(txc);
-            }
-        }
-
-        return true;
-    }
-
-    void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Complete");
-    }
-};
-
+        : TBase(self) 
+    {} 
+ 
+    TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA_DEFAULTS; } 
+ 
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override { 
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Execute"); 
+ 
+        if (Self->State == TShardState::Ready) { 
+            for (const auto& pr : Self->TableInfos) { 
+                pr.second->ApplyDefaults(txc); 
+            } 
+        } 
+ 
+        return true; 
+    } 
+ 
+    void Complete(const TActorContext &ctx) override { 
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Complete"); 
+    } 
+}; 
+ 
 ITransaction* TDataShard::CreateTxInit() {
     return new TTxInit(this);
 }
@@ -608,9 +608,9 @@ ITransaction* TDataShard::CreateTxInitSchema() {
 }
 
 ITransaction* TDataShard::CreateTxInitSchemaDefaults() {
-    return new TTxInitSchemaDefaults(this);
-}
-
+    return new TTxInitSchemaDefaults(this); 
+} 
+ 
 bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorContext &ctx,
                                           NKikimrTxDataShard::TError::EKind & status, TString& errMessage)
 {
@@ -628,9 +628,9 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         return true;
     }
 
-    auto* userTablesSchema = scheme.GetTableInfo(Schema::UserTables::TableId);
-    Y_VERIFY(userTablesSchema, "UserTables");
-
+    auto* userTablesSchema = scheme.GetTableInfo(Schema::UserTables::TableId); 
+    Y_VERIFY(userTablesSchema, "UserTables"); 
+ 
     // Check if user tables schema has changed since last time we synchronized it
     ui64 lastSchemeUpdate = txc.DB.Head(Schema::UserTables::TableId).Serial;
     if (lastSchemeUpdate > FollowerState.LastSchemeUpdate) {
@@ -645,79 +645,79 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 
             // Reload user tables metadata
             TableInfos.clear();
-
-            if (userTablesSchema->Columns.contains(Schema::UserTables::ShadowTid::ColumnId)) {
-                // New schema with ShadowTid column
-                auto rowset = db.Table<Schema::UserTables>().Select<
-                    Schema::UserTables::Tid,
-                    Schema::UserTables::LocalTid,
-                    Schema::UserTables::Schema,
-                    Schema::UserTables::ShadowTid>();
-                if (!rowset.IsReady())
+ 
+            if (userTablesSchema->Columns.contains(Schema::UserTables::ShadowTid::ColumnId)) { 
+                // New schema with ShadowTid column 
+                auto rowset = db.Table<Schema::UserTables>().Select< 
+                    Schema::UserTables::Tid, 
+                    Schema::UserTables::LocalTid, 
+                    Schema::UserTables::Schema, 
+                    Schema::UserTables::ShadowTid>(); 
+                if (!rowset.IsReady()) 
                     return false;
-                while (!rowset.EndOfSet()) {
-                    ui64 tableId = rowset.GetValue<Schema::UserTables::Tid>();
-                    ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>();
-                    ui32 shadowTid = rowset.GetValueOrDefault<Schema::UserTables::ShadowTid>();
-                    TString schema = rowset.GetValue<Schema::UserTables::Schema>();
+                while (!rowset.EndOfSet()) { 
+                    ui64 tableId = rowset.GetValue<Schema::UserTables::Tid>(); 
+                    ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>(); 
+                    ui32 shadowTid = rowset.GetValueOrDefault<Schema::UserTables::ShadowTid>(); 
+                    TString schema = rowset.GetValue<Schema::UserTables::Schema>(); 
                     NKikimrSchemeOp::TTableDescription descr;
-                    bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-                    Y_VERIFY(parseOk);
-                    AddUserTable(TPathId(GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
-                    if (!rowset.Next())
-                        return false;
-                }
-            } else {
-                // Older schema without ShadowTid column
-                auto rowset = db.Table<Schema::UserTables>().Select<
-                    Schema::UserTables::Tid,
-                    Schema::UserTables::LocalTid,
-                    Schema::UserTables::Schema>();
-                if (!rowset.IsReady())
-                    return false;
-                while (!rowset.EndOfSet()) {
-                    ui64 tableId = rowset.GetValue<Schema::UserTables::Tid>();
-                    ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>();
-                    ui32 shadowTid = 0;
-                    TString schema = rowset.GetValue<Schema::UserTables::Schema>();
+                    bool parseOk = ParseFromStringNoSizeLimit(descr, schema); 
+                    Y_VERIFY(parseOk); 
+                    AddUserTable(TPathId(GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid)); 
+                    if (!rowset.Next()) 
+                        return false; 
+                } 
+            } else { 
+                // Older schema without ShadowTid column 
+                auto rowset = db.Table<Schema::UserTables>().Select< 
+                    Schema::UserTables::Tid, 
+                    Schema::UserTables::LocalTid, 
+                    Schema::UserTables::Schema>(); 
+                if (!rowset.IsReady()) 
+                    return false; 
+                while (!rowset.EndOfSet()) { 
+                    ui64 tableId = rowset.GetValue<Schema::UserTables::Tid>(); 
+                    ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>(); 
+                    ui32 shadowTid = 0; 
+                    TString schema = rowset.GetValue<Schema::UserTables::Schema>(); 
                     NKikimrSchemeOp::TTableDescription descr;
-                    bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-                    Y_VERIFY(parseOk);
-                    AddUserTable(TPathId(GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
-                    if (!rowset.Next())
-                        return false;
-                }
+                    bool parseOk = ParseFromStringNoSizeLimit(descr, schema); 
+                    Y_VERIFY(parseOk); 
+                    AddUserTable(TPathId(GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid)); 
+                    if (!rowset.Next()) 
+                        return false; 
+                } 
             }
         }
         FollowerState.LastSchemeUpdate = lastSchemeUpdate;
     }
 
     // N.B. follower with snapshots support may be loaded in datashard without a snapshots table
-    if (scheme.GetTableInfo(Schema::Snapshots::TableId)) {
-        ui64 lastSnapshotsUpdate = txc.DB.Head(Schema::Snapshots::TableId).Serial;
+    if (scheme.GetTableInfo(Schema::Snapshots::TableId)) { 
+        ui64 lastSnapshotsUpdate = txc.DB.Head(Schema::Snapshots::TableId).Serial; 
         if (lastSnapshotsUpdate > FollowerState.LastSnapshotsUpdate) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
                     "Updating snapshots metadata on follower, tabletId " << TabletID()
                     << " prevGen " << (FollowerState.LastSnapshotsUpdate >> 32)
                     << " prevStep " << (FollowerState.LastSnapshotsUpdate & (ui32)-1)
-                    << " newGen " << (lastSnapshotsUpdate >> 32)
-                    << " newStep " << (lastSnapshotsUpdate & (ui32)-1));
-
-            NIceDb::TNiceDb db(txc.DB);
-            if (!SnapshotManager.Reload(db)) {
-                return false;
-            }
-
+                    << " newGen " << (lastSnapshotsUpdate >> 32) 
+                    << " newStep " << (lastSnapshotsUpdate & (ui32)-1)); 
+ 
+            NIceDb::TNiceDb db(txc.DB); 
+            if (!SnapshotManager.Reload(db)) { 
+                return false; 
+            } 
+ 
             FollowerState.LastSnapshotsUpdate = lastSnapshotsUpdate;
-        }
-
-        // Initialize PathOwnerId (required for snapshot keys)
-        if (PathOwnerId == INVALID_TABLET_ID) {
-            NIceDb::TNiceDb db(txc.DB);
-            LOAD_SYS_UI64(db, Schema::Sys_PathOwnerId, PathOwnerId);
-        }
-    }
-
+        } 
+ 
+        // Initialize PathOwnerId (required for snapshot keys) 
+        if (PathOwnerId == INVALID_TABLET_ID) { 
+            NIceDb::TNiceDb db(txc.DB); 
+            LOAD_SYS_UI64(db, Schema::Sys_PathOwnerId, PathOwnerId); 
+        } 
+    } 
+ 
     return true;
 }
 

@@ -35,11 +35,11 @@ bool TWaitForPlanUnit::IsReadyToExecute(TOperation::TPtr op) const
     return op->GetStep();
 }
 
-EExecutionStatus TWaitForPlanUnit::Execute(TOperation::TPtr op,
+EExecutionStatus TWaitForPlanUnit::Execute(TOperation::TPtr op, 
                                            TTransactionContext &,
                                            const TActorContext &)
 {
-    op->ResetCurrentTimer();
+    op->ResetCurrentTimer(); 
     return EExecutionStatus::Executed;
 }
 

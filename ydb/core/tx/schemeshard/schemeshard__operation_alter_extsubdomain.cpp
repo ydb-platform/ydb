@@ -18,9 +18,9 @@ void DeclareShards(TTxState& txState, TTxId txId, TPathId pathId,
 {
     txState.Shards.reserve(count);
     for (ui64 i = 0; i < count; ++i) {
-        auto shardId = ss->RegisterShardInfo(
-            TShardInfo(txId, pathId, type)
-                .WithBindedChannels(channelsBindings));
+        auto shardId = ss->RegisterShardInfo( 
+            TShardInfo(txId, pathId, type) 
+                .WithBindedChannels(channelsBindings)); 
         txState.Shards.emplace_back(shardId, type, TTxState::CreateParts);
     }
 }
@@ -383,14 +383,14 @@ public:
             return result;
         }
 
-        if (settings.HasDeclaredSchemeQuotas()) {
-            alterData->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas());
-        }
-
-        if (settings.HasDatabaseQuotas()) {
-            alterData->SetDatabaseQuotas(settings.GetDatabaseQuotas());
-        }
-
+        if (settings.HasDeclaredSchemeQuotas()) { 
+            alterData->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas()); 
+        } 
+ 
+        if (settings.HasDatabaseQuotas()) { 
+            alterData->SetDatabaseQuotas(settings.GetDatabaseQuotas()); 
+        } 
+ 
         NIceDb::TNiceDb db(context.Txc.DB);
 
         subDomain->LastTxId = OperationId.GetTxId();

@@ -21,11 +21,11 @@ public:
     }
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
-        if (DataShard.IsStopping()) {
-            // Avoid doing any new work when datashard is stopping
-            return false;
-        }
-
+        if (DataShard.IsStopping()) { 
+            // Avoid doing any new work when datashard is stopping 
+            return false; 
+        } 
+ 
         return !op->HasRuntimeConflicts();
     }
 

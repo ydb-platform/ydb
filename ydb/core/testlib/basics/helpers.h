@@ -42,7 +42,7 @@ namespace NFake {
                            ui64 stateStorageGroup = 0, bool replicasOnFirstNode = false);
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex);
+    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex); 
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches);
     void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);

@@ -45,16 +45,16 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-    if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
-            case ERestoreDataStatus::Ok:
-                break;
-            case ERestoreDataStatus::Restart:
-                return EExecutionStatus::Restart;
-            case ERestoreDataStatus::Error:
-                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
-        }
-    }
+    if (tx->IsTxDataReleased()) { 
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) { 
+            case ERestoreDataStatus::Ok: 
+                break; 
+            case ERestoreDataStatus::Restart: 
+                return EExecutionStatus::Restart; 
+            case ERestoreDataStatus::Error: 
+                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str()); 
+        } 
+    } 
 
     IEngineFlat *engine = tx->GetDataTx()->GetEngine();
     Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());

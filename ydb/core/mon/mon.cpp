@@ -54,7 +54,7 @@ namespace NActors {
                 HFunc(TEvents::TEvBootstrap, HandleBootstrap);
                 HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
                 HFunc(TEvents::TEvWakeup, HandleWakeup);
-                HFunc(TEvents::TEvUndelivered, HandleUndelivered);
+                HFunc(TEvents::TEvUndelivered, HandleUndelivered); 
                 HFunc(NMon::IEvHttpInfoRes, HandleInfoRes);
                 HFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             }
@@ -84,10 +84,10 @@ namespace NActors {
             Die(ctx);
         }
 
-        void HandleUndelivered(TEvents::TEvUndelivered::TPtr &, const TActorContext &ctx) {
-            ReplyActorUnavailableAndDie(ctx);
-        }
-
+        void HandleUndelivered(TEvents::TEvUndelivered::TPtr &, const TActorContext &ctx) { 
+            ReplyActorUnavailableAndDie(ctx); 
+        } 
+ 
         void HandleInfoRes(NMon::IEvHttpInfoRes::TPtr &ev, const NActors::TActorContext &ctx) {
             Result.SetValue(THolder<NMon::IEvHttpInfoRes>(ev->Release().Release()));
             Die(ctx);
@@ -142,7 +142,7 @@ namespace NActors {
                            << " " << GetMethod(Request.GetMethod())
                            << " " << Request.GetUri());
             }
-            ctx.Send(TargetActorId, new NMon::TEvHttpInfo(Request, serializedToken), IEventHandle::FlagTrackDelivery);
+            ctx.Send(TargetActorId, new NMon::TEvHttpInfo(Request, serializedToken), IEventHandle::FlagTrackDelivery); 
         }
 
         void ReplyOptionsResultAndDie(const TActorContext &ctx) {
@@ -193,23 +193,23 @@ namespace NActors {
             Die(ctx);
         }
 
-        void ReplyActorUnavailableAndDie(const TActorContext &ctx, const TString& error = TString()) {
-            TStringStream response;
-            TStringStream body;
-            body << "<html><body><h1>503 Actor Unavailable</h1>";
-            if (!error.empty()) {
-                body << "<p>" << error << "</p>";
-            }
-            body << "</body></html>";
-            response << "HTTP/1.1 503 Actor Unavailable\r\n";
-            response << "Content-Type: text/html\r\n";
-            response << "Content-Length: " << body.Size() << "\r\n";
-            response << "\r\n";
-            response << body.Str();
-            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            Die(ctx);
-        }
-
+        void ReplyActorUnavailableAndDie(const TActorContext &ctx, const TString& error = TString()) { 
+            TStringStream response; 
+            TStringStream body; 
+            body << "<html><body><h1>503 Actor Unavailable</h1>"; 
+            if (!error.empty()) { 
+                body << "<p>" << error << "</p>"; 
+            } 
+            body << "</body></html>"; 
+            response << "HTTP/1.1 503 Actor Unavailable\r\n"; 
+            response << "Content-Type: text/html\r\n"; 
+            response << "Content-Length: " << body.Size() << "\r\n"; 
+            response << "\r\n"; 
+            response << body.Str(); 
+            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+            Die(ctx); 
+        } 
+ 
         virtual TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const TActorId& parentId) override {
             Y_UNUSED(parentId);
             return new NActors::IEventHandle(self, self, new TEvents::TEvBootstrap(), 0);

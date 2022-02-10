@@ -3191,8 +3191,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
+        runtime.GetAppData().AllowColumnFamiliesForTest = true; 
+ 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             Columns { Name: "key"        Type: "Uint32"}
@@ -3207,7 +3207,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Cannot have multiple column families without StorageConfig
+        // Cannot have multiple column families without StorageConfig 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                                  Name: "Table"
                                                  PartitionConfig {
@@ -3218,8 +3218,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                    }
                                                  }
                                              )", {NKikimrScheme::StatusInvalidParameter});
-
-        // Cannot have multiple changes for the same column family 0
+ 
+        // Cannot have multiple changes for the same column family 0 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                                  Name: "Table"
                                                  PartitionConfig {
@@ -3235,8 +3235,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                    }
                                                  }
                                              )", {NKikimrScheme::StatusInvalidParameter});
-
-        // Cannot switch from legacy table to StorageConfig
+ 
+        // Cannot switch from legacy table to StorageConfig 
         TestAlterTable(runtime, ++txId, "/MyRoot",
                        R"(
                        Name: "Table"
@@ -3252,7 +3252,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                          }
                        })", {NKikimrScheme::StatusInvalidParameter});
 
-        // Changing column family settings should be OK
+        // Changing column family settings should be OK 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                                  Name: "Table"
                                                  PartitionConfig {
@@ -3265,7 +3265,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                              )");
         env.TestWaitNotification(runtime, txId);
 
-        // Copying table with changed column family settings should be OK
+        // Copying table with changed column family settings should be OK 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "CopyTable"
                             CopyFromTable: "/MyRoot/Table"
@@ -3298,7 +3298,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            "Name: \"MyRoot\"");
         env.TestWaitNotification(runtime, txId);
 
-        // Copy table while changing StorageConfig is OK
+        // Copy table while changing StorageConfig is OK 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "CopyTable2"
                             CopyFromTable: "/MyRoot/Table"
@@ -3315,7 +3315,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        // Changing codecs doesn't change StorageConfig, so it's OK
+        // Changing codecs doesn't change StorageConfig, so it's OK 
         TestAlterTable(runtime, ++txId, "/MyRoot",
                        R"(
                        Name: "CopyTable2"
@@ -3328,19 +3328,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                        })");
         env.TestWaitNotification(runtime, txId);
 
-        // Adding column families to StorageConfig based tables is OK
+        // Adding column families to StorageConfig based tables is OK 
         TestAlterTable(runtime, ++txId, "/MyRoot",
-                       R"(
-                       Name: "CopyTable2"
-                       Columns { Name: "Value"  Family: 1 }
-                       PartitionConfig {
-                         ColumnFamilies {
-                           Id: 1
-                           ColumnCodec: ColumnCodecLZ4
-                           ColumnCache: ColumnCacheNone
-                         }
-                       })");
-        env.TestWaitNotification(runtime, txId);
+                       R"( 
+                       Name: "CopyTable2" 
+                       Columns { Name: "Value"  Family: 1 } 
+                       PartitionConfig { 
+                         ColumnFamilies { 
+                           Id: 1 
+                           ColumnCodec: ColumnCodecLZ4 
+                           ColumnCache: ColumnCacheNone 
+                         } 
+                       })"); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "CopyTable3"
@@ -3353,13 +3353,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 Cdbg << "-----------" << Endl << partConfig.DebugString() << "\n~~~~~~\n" << Endl;
 
                 UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), families);
+                UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), families); 
 
                 const auto& otherFamily = partConfig.GetColumnFamilies(0);
                 UNIT_ASSERT_VALUES_EQUAL(otherFamily.GetId(), 0);
                 UNIT_ASSERT_EQUAL(otherFamily.GetColumnCache(), cacheType);
 
-                UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), families - 1);
+                UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), families - 1); 
             };
         };
 
@@ -3389,10 +3389,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto descrChecker = [] (size_t families) {
             return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                //Cerr << record.DebugString() << Endl;
+                //Cerr << record.DebugString() << Endl; 
                 UNIT_ASSERT_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-                UNIT_ASSERT_EQUAL(families, record.GetPathDescription().GetTable().GetPartitionConfig().ColumnFamiliesSize());
-            };
+                UNIT_ASSERT_EQUAL(families, record.GetPathDescription().GetTable().GetPartitionConfig().ColumnFamiliesSize()); 
+            }; 
         };
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
@@ -3897,78 +3897,78 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
     }
 
-    Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key"    Type: "Uint32"}
-                    Columns { Name: "col1"   Type: "Uint32"}
-                    Columns { Name: "col2"   Type: "Uint32"}
-                    KeyColumnNames: ["key"]
-                )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    DropColumns { Name: "col1" }
-                )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "col1"   Type: "Utf8"}
-                )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437194
-                                SplitBoundary {
-                                    KeyPrefix {
-                                        Tuple { Optional { Uint32: 3000000000 } }
-                                    }
-                                })");
-        env.TestWaitNotification(runtime, txId);
-    }
-
-    Y_UNIT_TEST(AlterTableDropColumnSplitThenReCreate) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key"    Type: "Uint32"}
-                    Columns { Name: "col1"   Type: "Uint32"}
-                    Columns { Name: "col2"   Type: "Uint32"}
-                    KeyColumnNames: ["key"]
-                )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    DropColumns { Name: "col1" }
-                )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437194
-                                SplitBoundary {
-                                    KeyPrefix {
-                                        Tuple { Optional { Uint32: 3000000000 } }
-                                    }
-                                })");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "col1"   Type: "Utf8"}
-                )");
-        env.TestWaitNotification(runtime, txId);
-    }
-
+    Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key"    Type: "Uint32"} 
+                    Columns { Name: "col1"   Type: "Uint32"} 
+                    Columns { Name: "col2"   Type: "Uint32"} 
+                    KeyColumnNames: ["key"] 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    DropColumns { Name: "col1" } 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "col1"   Type: "Utf8"} 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"( 
+                                SourceTabletId: 9437194 
+                                SplitBoundary { 
+                                    KeyPrefix { 
+                                        Tuple { Optional { Uint32: 3000000000 } } 
+                                    } 
+                                })"); 
+        env.TestWaitNotification(runtime, txId); 
+    } 
+ 
+    Y_UNIT_TEST(AlterTableDropColumnSplitThenReCreate) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key"    Type: "Uint32"} 
+                    Columns { Name: "col1"   Type: "Uint32"} 
+                    Columns { Name: "col2"   Type: "Uint32"} 
+                    KeyColumnNames: ["key"] 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    DropColumns { Name: "col1" } 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"( 
+                                SourceTabletId: 9437194 
+                                SplitBoundary { 
+                                    KeyPrefix { 
+                                        Tuple { Optional { Uint32: 3000000000 } } 
+                                    } 
+                                })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "col1"   Type: "Utf8"} 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+    } 
+ 
     Y_UNIT_TEST(AlterTableKeyColumns) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -4325,10 +4325,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
+        runtime.GetAppData().AllowColumnFamiliesForTest = true; 
+ 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
-                            StoragePools {
+                            StoragePools { 
                               Name: "pool-1"
                               Kind: "pool-kind-1"
                             }
@@ -4337,50 +4337,50 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                               Kind: "pool-kind-2"
                             }
                             StoragePools {
-                                Name: "name_USER_0_kind_hdd-1"
-                                Kind: "hdd-1"
-                            }
-                            StoragePools {
-                                Name: "name_USER_0_kind_hdd-2"
-                                Kind: "hdd-2"
-                            }
-                            Name: "MyRoot"
-                            )");
-        env.TestWaitNotification(runtime, txId);
-
-        // Multiple column families with StorageConfig are forbidden
+                                Name: "name_USER_0_kind_hdd-1" 
+                                Kind: "hdd-1" 
+                            } 
+                            StoragePools { 
+                                Name: "name_USER_0_kind_hdd-2" 
+                                Kind: "hdd-2" 
+                            } 
+                            Name: "MyRoot" 
+                            )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Multiple column families with StorageConfig are forbidden 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table0"
-                            Columns { Name: "key"    Type: "Uint32" }
-                            Columns { Name: "Value"  Type: "Utf8"   Family: 1 }
-                            KeyColumnNames: ["key"]
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 100 } }
-                            }}
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 200 } }
-                            }}
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecPlain
-                                ColumnCache: ColumnCacheNone
-                                StorageConfig {
-                                  SysLog {}
-                                  Log {}
-                                }
-                              }
-                              ColumnFamilies {
-                                Id: 1
-                                ColumnCodec: ColumnCodecLZ4
-                                ColumnCache: ColumnCacheNone
-                                StorageConfig {
-                                  SysLog {}
-                                  Log {}
-                                }
-                              }
+                            Name: "Table0" 
+                            Columns { Name: "key"    Type: "Uint32" } 
+                            Columns { Name: "Value"  Type: "Utf8"   Family: 1 } 
+                            KeyColumnNames: ["key"] 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 100 } } 
+                            }} 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 200 } } 
+                            }} 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecPlain 
+                                ColumnCache: ColumnCacheNone 
+                                StorageConfig { 
+                                  SysLog {} 
+                                  Log {} 
+                                } 
+                              } 
+                              ColumnFamilies { 
+                                Id: 1 
+                                ColumnCodec: ColumnCodecLZ4 
+                                ColumnCache: ColumnCacheNone 
+                                StorageConfig { 
+                                  SysLog {} 
+                                  Log {} 
+                                } 
+                              } 
                             })", {NKikimrScheme::StatusInvalidParameter});
-
+ 
         // Auto generation column families do not generate by ID
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table0"
@@ -4405,86 +4405,86 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                               }
                             })", {NKikimrScheme::StatusSchemeError});
 
-        // Creating a table with family should be OK
+        // Creating a table with family should be OK 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            Columns { Name: "key"    Type: "Uint32" FamilyName: "default" }
-                            Columns { Name: "Value"  Type: "Utf8"   FamilyName: "alt" }
-                            KeyColumnNames: ["key"]
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 100 } }
-                            }}
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 200 } }
-                            }}
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecPlain
-                                ColumnCache: ColumnCacheNone
-                                StorageConfig {
-                                  SysLog {}
-                                  Log {}
-                                }
-                              }
-                              ColumnFamilies {
-                                Name: "alt"
-                                ColumnCodec: ColumnCodecLZ4
-                                ColumnCache: ColumnCacheNone
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
-        // Specifying FamilyName should be enough to autogenerate the family
+                            Name: "Table1" 
+                            Columns { Name: "key"    Type: "Uint32" FamilyName: "default" } 
+                            Columns { Name: "Value"  Type: "Utf8"   FamilyName: "alt" } 
+                            KeyColumnNames: ["key"] 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 100 } } 
+                            }} 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 200 } } 
+                            }} 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecPlain 
+                                ColumnCache: ColumnCacheNone 
+                                StorageConfig { 
+                                  SysLog {} 
+                                  Log {} 
+                                } 
+                              } 
+                              ColumnFamilies { 
+                                Name: "alt" 
+                                ColumnCodec: ColumnCodecLZ4 
+                                ColumnCache: ColumnCacheNone 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Specifying FamilyName should be enough to autogenerate the family 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table2"
-                            Columns { Name: "key"    Type: "Uint32" }
-                            Columns { Name: "Value"  Type: "Utf8"   FamilyName: "alt" }
-                            KeyColumnNames: ["key"]
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 100 } }
-                            }}
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 200 } }
-                            }}
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecPlain
-                                ColumnCache: ColumnCacheNone
-                                StorageConfig {
-                                  SysLog {}
-                                  Log {}
-                                }
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
-        // Create a table that has no alternative families initially
+                            Name: "Table2" 
+                            Columns { Name: "key"    Type: "Uint32" } 
+                            Columns { Name: "Value"  Type: "Utf8"   FamilyName: "alt" } 
+                            KeyColumnNames: ["key"] 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 100 } } 
+                            }} 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 200 } } 
+                            }} 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecPlain 
+                                ColumnCache: ColumnCacheNone 
+                                StorageConfig { 
+                                  SysLog {} 
+                                  Log {} 
+                                } 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Create a table that has no alternative families initially 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table3"
-                            Columns { Name: "key"    Type: "Uint32" }
-                            Columns { Name: "Value"  Type: "Utf8"   }
-                            KeyColumnNames: ["key"]
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 100 } }
-                            }}
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 200 } }
-                            }}
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecPlain
-                                ColumnCache: ColumnCacheNone
-                                StorageConfig {
-                                  SysLog {}
-                                  Log {}
-                                }
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
+                            Name: "Table3" 
+                            Columns { Name: "key"    Type: "Uint32" } 
+                            Columns { Name: "Value"  Type: "Utf8"   } 
+                            KeyColumnNames: ["key"] 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 100 } } 
+                            }} 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 200 } } 
+                            }} 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecPlain 
+                                ColumnCache: ColumnCacheNone 
+                                StorageConfig { 
+                                  SysLog {} 
+                                  Log {} 
+                                } 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         // Create a table that has no alternative families initially
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table4"
@@ -4511,46 +4511,46 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        auto schemaChecker = [] (size_t families = 2) {
+        auto schemaChecker = [] (size_t families = 2) { 
             return [=] (const NKikimrSchemeOp::TTableDescription& tableDescription) {
-                Cerr << "-----------\n" << tableDescription.DebugString() << "\n~~~~~~\n";
-
-                const auto& partConfig = tableDescription.GetPartitionConfig();
-
-                UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), families);
-
-                const auto& mainFamily = partConfig.GetColumnFamilies(0);
-                UNIT_ASSERT_VALUES_EQUAL(mainFamily.GetId(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(0).GetFamily(), 0);
-
-                if (families > 1) {
-                    const auto& altFamily = partConfig.GetColumnFamilies(1);
-                    UNIT_ASSERT_VALUES_EQUAL(altFamily.GetId(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(altFamily.GetName(), "alt");
-                    UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 1);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 0);
-                }
-            };
-        };
-
-        auto descrChecker = [schemaChecker] (size_t families = 2) {
+                Cerr << "-----------\n" << tableDescription.DebugString() << "\n~~~~~~\n"; 
+ 
+                const auto& partConfig = tableDescription.GetPartitionConfig(); 
+ 
+                UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 2); 
+                UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), families); 
+ 
+                const auto& mainFamily = partConfig.GetColumnFamilies(0); 
+                UNIT_ASSERT_VALUES_EQUAL(mainFamily.GetId(), 0); 
+                UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(0).GetFamily(), 0); 
+ 
+                if (families > 1) { 
+                    const auto& altFamily = partConfig.GetColumnFamilies(1); 
+                    UNIT_ASSERT_VALUES_EQUAL(altFamily.GetId(), 1); 
+                    UNIT_ASSERT_VALUES_EQUAL(altFamily.GetName(), "alt"); 
+                    UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 1); 
+                } else { 
+                    UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 0); 
+                } 
+            }; 
+        }; 
+ 
+        auto descrChecker = [schemaChecker] (size_t families = 2) { 
             return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                 UNIT_ASSERT_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-                schemaChecker(families)(record.GetPathDescription().GetTable());
-            };
-        };
-
-        Cerr << "Checking Table1" << Endl;
+                schemaChecker(families)(record.GetPathDescription().GetTable()); 
+            }; 
+        }; 
+ 
+        Cerr << "Checking Table1" << Endl; 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1", true),
                            {descrChecker()});
-
-        Cerr << "Checking Table2" << Endl;
+ 
+        Cerr << "Checking Table2" << Endl; 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2", true),
                            {descrChecker()});
-
-        Cerr << "Checking Table3" << Endl;
+ 
+        Cerr << "Checking Table3" << Endl; 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table3", true),
                            {descrChecker(1)});
 
@@ -4560,7 +4560,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         Cerr << "Checking Table1" << Endl;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1", true),
                            {descrChecker()});
-
+ 
         Cerr << "Checking Table2" << Endl;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2", true),
                            {descrChecker()});
@@ -4658,28 +4658,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table3", true),
                            {descrChecker()});
 
-        // /MyRoot/Table1
-        Cerr << "Checking tablets for Table1" << Endl;
+        // /MyRoot/Table1 
+        Cerr << "Checking tablets for Table1" << Endl; 
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+0, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
-            schemaChecker()(tableDescription);
-        }
-
-        // /MyRoot/Table2
-        Cerr << "Checking tablets for Table2" << Endl;
+            schemaChecker()(tableDescription); 
+        } 
+ 
+        // /MyRoot/Table2 
+        Cerr << "Checking tablets for Table2" << Endl; 
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 3);
-            schemaChecker()(tableDescription);
-        }
-
-        // /MyRoot/Table3
-        Cerr << "Checking tablets for Table3" << Endl;
+            schemaChecker()(tableDescription); 
+        } 
+ 
+        // /MyRoot/Table3 
+        Cerr << "Checking tablets for Table3" << Endl; 
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 4);
-            schemaChecker()(tableDescription);
-        }
-    }
-
+            schemaChecker()(tableDescription); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(DefaulColumnFamiliesWithNonCanonicName) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -4845,14 +4845,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
 
     Y_UNIT_TEST(MultipleColumnFamiliesWithStorage) { //+
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        runtime.GetAppData().AllowColumnFamiliesForTest = true; 
+ 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
-                            StoragePools {
+                            StoragePools { 
                               Name: "pool-1"
                               Kind: "pool-kind-1"
                             }
@@ -4861,271 +4861,271 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                               Kind: "pool-kind-2"
                             }
                             StoragePools {
-                                Name: "name_USER_0_kind_hdd-1"
-                                Kind: "hdd-1"
-                            }
-                            StoragePools {
-                                Name: "name_USER_0_kind_hdd-2"
-                                Kind: "hdd-2"
-                            }
-                            StoragePools {
-                                Name: "name_USER_0_kind_hdd-3"
-                                Kind: "hdd-3"
-                            }
-                            Name: "MyRoot"
-                            )");
-        env.TestWaitNotification(runtime, txId);
-
-        struct TColumnExpectation {
-            ui32 FamilyId;
-        };
-
-        struct TFamilyExpectation {
-            ui32 FamilyId;
-            TString FamilyName;
-            ui32 RoomId;
-        };
-
-        struct TRoomExpectation {
-            ui32 RoomId;
-            ui32 DataChannel;
-        };
-
-        struct TSchemaChecker {
-            TString CheckName;
-            TVector<TColumnExpectation> Columns;
-            TVector<TFamilyExpectation> Families;
-            TVector<TRoomExpectation> Rooms;
-
+                                Name: "name_USER_0_kind_hdd-1" 
+                                Kind: "hdd-1" 
+                            } 
+                            StoragePools { 
+                                Name: "name_USER_0_kind_hdd-2" 
+                                Kind: "hdd-2" 
+                            } 
+                            StoragePools { 
+                                Name: "name_USER_0_kind_hdd-3" 
+                                Kind: "hdd-3" 
+                            } 
+                            Name: "MyRoot" 
+                            )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        struct TColumnExpectation { 
+            ui32 FamilyId; 
+        }; 
+ 
+        struct TFamilyExpectation { 
+            ui32 FamilyId; 
+            TString FamilyName; 
+            ui32 RoomId; 
+        }; 
+ 
+        struct TRoomExpectation { 
+            ui32 RoomId; 
+            ui32 DataChannel; 
+        }; 
+ 
+        struct TSchemaChecker { 
+            TString CheckName; 
+            TVector<TColumnExpectation> Columns; 
+            TVector<TFamilyExpectation> Families; 
+            TVector<TRoomExpectation> Rooms; 
+ 
             void operator()(const NKikimrSchemeOp::TTableDescription& tableDescription) const {
-                Cerr << "-----------\n" << tableDescription.DebugString() << "\n~~~~~~\n";
-
-                const auto& partConfig = tableDescription.GetPartitionConfig();
-
-                UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), Columns.size());
-                UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), Families.size());
-                UNIT_ASSERT_VALUES_EQUAL(partConfig.StorageRoomsSize(), Rooms.size());
-
-                for (size_t idx = 0; idx < Columns.size(); ++idx) {
-                    const auto& protoColumn = tableDescription.GetColumns(idx);
-                    const auto& expectedColumn = Columns[idx];
-                    UNIT_ASSERT_VALUES_EQUAL_C(protoColumn.GetFamily(), expectedColumn.FamilyId,
-                        CheckName << " while checking family of column " << idx);
-                }
-
-                for (size_t idx = 0; idx < Families.size(); ++idx) {
-                    const auto& protoFamily = partConfig.GetColumnFamilies(idx);
-                    const auto& expectedFamily = Families[idx];
-                    UNIT_ASSERT_VALUES_EQUAL_C(protoFamily.GetId(), expectedFamily.FamilyId,
-                        CheckName << " while checking id of family " << idx);
-                    UNIT_ASSERT_VALUES_EQUAL_C(protoFamily.GetName(), expectedFamily.FamilyName,
-                        CheckName << " while checking name of family " << idx);
-                    UNIT_ASSERT_VALUES_EQUAL_C(protoFamily.GetRoom(), expectedFamily.RoomId,
-                        CheckName << " while checking room of family " << idx);
-                }
-
-                for (size_t idx = 0; idx < Rooms.size(); ++idx) {
-                    const auto& protoRoom = partConfig.GetStorageRooms(idx);
-                    const auto& expectedRoom = Rooms[idx];
-                    UNIT_ASSERT_VALUES_EQUAL_C(protoRoom.GetRoomId(), expectedRoom.RoomId,
-                        CheckName << " while checking id of room " << idx);
-                    ui32 syslogChannel = Max<ui32>();
-                    ui32 logChannel = Max<ui32>();
-                    ui32 dataChannel = Max<ui32>();
-                    for (const auto& exp : protoRoom.GetExplanation()) {
-                        switch (exp.GetPurpose()) {
-                            case NKikimrStorageSettings::TChannelPurpose::SysLog:
-                                syslogChannel = exp.GetChannel();
-                                break;
-                            case NKikimrStorageSettings::TChannelPurpose::Log:
-                                logChannel = exp.GetChannel();
-                                break;
-                            case NKikimrStorageSettings::TChannelPurpose::Data:
-                                dataChannel = exp.GetChannel();
-                                break;
-                            default:
-                                break;
-                        }
-                    }
-                    // Primary room must have syslog and log defined correctly
-                    // Other rooms must not have any mention of syslog and log
-                    ui32 syslogExpected = protoRoom.GetRoomId() == 0 ? 0 : Max<ui32>();
-                    ui32 logExpected = protoRoom.GetRoomId() == 0 ? 1 : Max<ui32>();
-                    UNIT_ASSERT_VALUES_EQUAL_C(syslogChannel, syslogExpected,
-                        CheckName << " while checking syslog channel of room " << idx);
-                    UNIT_ASSERT_VALUES_EQUAL_C(logChannel, logExpected,
-                        CheckName << " while checking log channel of room " << idx);
-                    UNIT_ASSERT_VALUES_EQUAL_C(dataChannel, expectedRoom.DataChannel,
-                        CheckName << " while checking data channel of room " << idx);
-                }
-            }
-
+                Cerr << "-----------\n" << tableDescription.DebugString() << "\n~~~~~~\n"; 
+ 
+                const auto& partConfig = tableDescription.GetPartitionConfig(); 
+ 
+                UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), Columns.size()); 
+                UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), Families.size()); 
+                UNIT_ASSERT_VALUES_EQUAL(partConfig.StorageRoomsSize(), Rooms.size()); 
+ 
+                for (size_t idx = 0; idx < Columns.size(); ++idx) { 
+                    const auto& protoColumn = tableDescription.GetColumns(idx); 
+                    const auto& expectedColumn = Columns[idx]; 
+                    UNIT_ASSERT_VALUES_EQUAL_C(protoColumn.GetFamily(), expectedColumn.FamilyId, 
+                        CheckName << " while checking family of column " << idx); 
+                } 
+ 
+                for (size_t idx = 0; idx < Families.size(); ++idx) { 
+                    const auto& protoFamily = partConfig.GetColumnFamilies(idx); 
+                    const auto& expectedFamily = Families[idx]; 
+                    UNIT_ASSERT_VALUES_EQUAL_C(protoFamily.GetId(), expectedFamily.FamilyId, 
+                        CheckName << " while checking id of family " << idx); 
+                    UNIT_ASSERT_VALUES_EQUAL_C(protoFamily.GetName(), expectedFamily.FamilyName, 
+                        CheckName << " while checking name of family " << idx); 
+                    UNIT_ASSERT_VALUES_EQUAL_C(protoFamily.GetRoom(), expectedFamily.RoomId, 
+                        CheckName << " while checking room of family " << idx); 
+                } 
+ 
+                for (size_t idx = 0; idx < Rooms.size(); ++idx) { 
+                    const auto& protoRoom = partConfig.GetStorageRooms(idx); 
+                    const auto& expectedRoom = Rooms[idx]; 
+                    UNIT_ASSERT_VALUES_EQUAL_C(protoRoom.GetRoomId(), expectedRoom.RoomId, 
+                        CheckName << " while checking id of room " << idx); 
+                    ui32 syslogChannel = Max<ui32>(); 
+                    ui32 logChannel = Max<ui32>(); 
+                    ui32 dataChannel = Max<ui32>(); 
+                    for (const auto& exp : protoRoom.GetExplanation()) { 
+                        switch (exp.GetPurpose()) { 
+                            case NKikimrStorageSettings::TChannelPurpose::SysLog: 
+                                syslogChannel = exp.GetChannel(); 
+                                break; 
+                            case NKikimrStorageSettings::TChannelPurpose::Log: 
+                                logChannel = exp.GetChannel(); 
+                                break; 
+                            case NKikimrStorageSettings::TChannelPurpose::Data: 
+                                dataChannel = exp.GetChannel(); 
+                                break; 
+                            default: 
+                                break; 
+                        } 
+                    } 
+                    // Primary room must have syslog and log defined correctly 
+                    // Other rooms must not have any mention of syslog and log 
+                    ui32 syslogExpected = protoRoom.GetRoomId() == 0 ? 0 : Max<ui32>(); 
+                    ui32 logExpected = protoRoom.GetRoomId() == 0 ? 1 : Max<ui32>(); 
+                    UNIT_ASSERT_VALUES_EQUAL_C(syslogChannel, syslogExpected, 
+                        CheckName << " while checking syslog channel of room " << idx); 
+                    UNIT_ASSERT_VALUES_EQUAL_C(logChannel, logExpected, 
+                        CheckName << " while checking log channel of room " << idx); 
+                    UNIT_ASSERT_VALUES_EQUAL_C(dataChannel, expectedRoom.DataChannel, 
+                        CheckName << " while checking data channel of room " << idx); 
+                } 
+            } 
+ 
             void operator()(const NKikimrScheme::TEvDescribeSchemeResult& record) const {
                 UNIT_ASSERT_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-
-                // Schemeshard must return data without any mention of rooms
-                TSchemaChecker derived{ CheckName, Columns, Families, { } };
-                for (auto& family : derived.Families) {
-                    family.RoomId = 0;
-                }
-
-                derived(record.GetPathDescription().GetTable());
-            }
-        };
-
-        auto checkSchema = [&] (const TSchemaChecker& checker) {
-            Cerr << "Checking tablets for Table1" << Endl;
+ 
+                // Schemeshard must return data without any mention of rooms 
+                TSchemaChecker derived{ CheckName, Columns, Families, { } }; 
+                for (auto& family : derived.Families) { 
+                    family.RoomId = 0; 
+                } 
+ 
+                derived(record.GetPathDescription().GetTable()); 
+            } 
+        }; 
+ 
+        auto checkSchema = [&] (const TSchemaChecker& checker) { 
+            Cerr << "Checking tablets for Table1" << Endl; 
             for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+0, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
                 NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
-                checker(tableDescription);
-            }
-
-            Cerr << "Checking schema for Table1" << Endl;
+                checker(tableDescription); 
+            } 
+ 
+            Cerr << "Checking schema for Table1" << Endl; 
             TestLs(runtime, "/MyRoot/Table1", true, checker);
-        };
-
-        // Creating a table with alt family on a different data storage should be OK
+        }; 
+ 
+        // Creating a table with alt family on a different data storage should be OK 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            Columns { Name: "key"    Type: "Uint32" FamilyName: "default" }
-                            Columns { Name: "Value"  Type: "Utf8"   FamilyName: "alt" }
-                            KeyColumnNames: ["key"]
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 100 } }
-                            }}
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 200 } }
-                            }}
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecPlain
-                                ColumnCache: ColumnCacheNone
-                                StorageConfig {
-                                  SysLog { PreferredPoolKind: "hdd-1" }
-                                  Log { PreferredPoolKind: "hdd-1" }
-                                  Data { PreferredPoolKind: "hdd-1" }
-                                }
-                              }
-                              ColumnFamilies {
-                                Name: "alt"
-                                ColumnCodec: ColumnCodecLZ4
-                                ColumnCache: ColumnCacheNone
-                                StorageConfig {
-                                  Data { PreferredPoolKind: "hdd-2" }
-                                }
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({
-            "After initial create",
-            { { 0 }, { 1 } },
+                            Name: "Table1" 
+                            Columns { Name: "key"    Type: "Uint32" FamilyName: "default" } 
+                            Columns { Name: "Value"  Type: "Utf8"   FamilyName: "alt" } 
+                            KeyColumnNames: ["key"] 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 100 } } 
+                            }} 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 200 } } 
+                            }} 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecPlain 
+                                ColumnCache: ColumnCacheNone 
+                                StorageConfig { 
+                                  SysLog { PreferredPoolKind: "hdd-1" } 
+                                  Log { PreferredPoolKind: "hdd-1" } 
+                                  Data { PreferredPoolKind: "hdd-1" } 
+                                } 
+                              } 
+                              ColumnFamilies { 
+                                Name: "alt" 
+                                ColumnCodec: ColumnCodecLZ4 
+                                ColumnCache: ColumnCacheNone 
+                                StorageConfig { 
+                                  Data { PreferredPoolKind: "hdd-2" } 
+                                } 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 
+            "After initial create", 
+            { { 0 }, { 1 } }, 
             { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 1 }, { 1, 2 } }
-        });
-
-        // Trying to move default column family to the same storage should add default name
+            { { 0, 1 }, { 1, 2 } } 
+        }); 
+ 
+        // Trying to move default column family to the same storage should add default name 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Name: "default"
-                                StorageConfig {
-                                  Data { PreferredPoolKind: "hdd-1" }
-                                }
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({
-            "After no-op move of default family",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 1 }, { 1, 2 } }
-        });
-
-        // Trying to move alt column family to the same storage should succeed without changes
+                            Name: "Table1" 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Name: "default" 
+                                StorageConfig { 
+                                  Data { PreferredPoolKind: "hdd-1" } 
+                                } 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 
+            "After no-op move of default family", 
+            { { 0 }, { 1 } }, 
+            { { 0, "default", 0 }, { 1, "alt", 1 } }, 
+            { { 0, 1 }, { 1, 2 } } 
+        }); 
+ 
+        // Trying to move alt column family to the same storage should succeed without changes 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Name: "alt"
-                                StorageConfig {
-                                  Data { PreferredPoolKind: "hdd-2" }
-                                }
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({
-            "After no-op move of alt family",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 1 }, { 1, 2 } }
-        });
-
-        // Trying to move default column family to a different storage
+                            Name: "Table1" 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Name: "alt" 
+                                StorageConfig { 
+                                  Data { PreferredPoolKind: "hdd-2" } 
+                                } 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 
+            "After no-op move of alt family", 
+            { { 0 }, { 1 } }, 
+            { { 0, "default", 0 }, { 1, "alt", 1 } }, 
+            { { 0, 1 }, { 1, 2 } } 
+        }); 
+ 
+        // Trying to move default column family to a different storage 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Name: "default"
-                                StorageConfig {
-                                  Data { PreferredPoolKind: "hdd-3" }
-                                }
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({
-            "After moving default family to hdd-3",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 3 }, { 1, 2 } }
-        });
-
-        // Trying to move alt column family to the same different storage should combine rooms
+                            Name: "Table1" 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Name: "default" 
+                                StorageConfig { 
+                                  Data { PreferredPoolKind: "hdd-3" } 
+                                } 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 
+            "After moving default family to hdd-3", 
+            { { 0 }, { 1 } }, 
+            { { 0, "default", 0 }, { 1, "alt", 1 } }, 
+            { { 0, 3 }, { 1, 2 } } 
+        }); 
+ 
+        // Trying to move alt column family to the same different storage should combine rooms 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Name: "alt"
-                                StorageConfig {
-                                  Data { PreferredPoolKind: "hdd-3" }
-                                }
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({
-            "After moving alt family to hdd-3",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 0 } },
-            { { 0, 3 } }
-        });
-
-        // Trying to move alt column family to some older storage should reuse existing channel
+                            Name: "Table1" 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Name: "alt" 
+                                StorageConfig { 
+                                  Data { PreferredPoolKind: "hdd-3" } 
+                                } 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 
+            "After moving alt family to hdd-3", 
+            { { 0 }, { 1 } }, 
+            { { 0, "default", 0 }, { 1, "alt", 0 } }, 
+            { { 0, 3 } } 
+        }); 
+ 
+        // Trying to move alt column family to some older storage should reuse existing channel 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            PartitionConfig {
-                              ColumnFamilies {
-                                Name: "alt"
-                                StorageConfig {
-                                  Data { PreferredPoolKind: "hdd-1" }
-                                }
-                              }
-                            })");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({
-            "After moving alt family to hdd-1",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 3 }, { 1, 1 } }
-        });
-    }
-
+                            Name: "Table1" 
+                            PartitionConfig { 
+                              ColumnFamilies { 
+                                Name: "alt" 
+                                StorageConfig { 
+                                  Data { PreferredPoolKind: "hdd-1" } 
+                                } 
+                              } 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 
+            "After moving alt family to hdd-1", 
+            { { 0 }, { 1 } }, 
+            { { 0, "default", 0 }, { 1, "alt", 1 } }, 
+            { { 0, 3 }, { 1, 1 } } 
+        }); 
+    } 
+ 
     NLs::TCheckFunc CheckCompactionPolicy(NKikimr::NLocalDb::TCompactionPolicyPtr expecedPolicy) {
         return [=] (const NKikimrScheme::TEvDescribeSchemeResult& describeRec) {
             NKikimr::NLocalDb::TCompactionPolicy realPolicy(describeRec.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy());
@@ -5140,7 +5140,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         const ui64 datashardTabletId = TTestTxConfig::FakeHiveTablets;
         NKikimr::NLocalDb::TCompactionPolicyPtr defaultUserTablePolicy = NKikimr::NLocalDb::CreateDefaultUserTablePolicy();
-        NKikimr::NLocalDb::TCompactionPolicyPtr defaultSystemTablePolicy = NKikimr::NLocalDb::CreateDefaultTablePolicy();
+        NKikimr::NLocalDb::TCompactionPolicyPtr defaultSystemTablePolicy = NKikimr::NLocalDb::CreateDefaultTablePolicy(); 
 
         // Create table with 1-level compaction policy
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -5749,68 +5749,68 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTableSplitSchema) { //+
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        auto schemaChecker = [](TVector<TString> columns) {
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        auto schemaChecker = [](TVector<TString> columns) { 
             return [=] (const NKikimrSchemeOp::TTableDescription& tableDescription) {
-                UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), columns.size());
-                for (size_t idx = 0; idx < tableDescription.ColumnsSize(); ++idx) {
-                    UNIT_ASSERT_VALUES_EQUAL_C(tableDescription.GetColumns(idx).GetName(), columns[idx],
-                        "While comparing column " << idx);
-                }
-            };
-        };
-
-        auto checkSchema = [&](TVector<int> tabletIdxs, TVector<TString> columns) {
-            auto checker = schemaChecker(std::move(columns));
-            for (int tabletIdx : tabletIdxs) {
+                UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), columns.size()); 
+                for (size_t idx = 0; idx < tableDescription.ColumnsSize(); ++idx) { 
+                    UNIT_ASSERT_VALUES_EQUAL_C(tableDescription.GetColumns(idx).GetName(), columns[idx], 
+                        "While comparing column " << idx); 
+                } 
+            }; 
+        }; 
+ 
+        auto checkSchema = [&](TVector<int> tabletIdxs, TVector<TString> columns) { 
+            auto checker = schemaChecker(std::move(columns)); 
+            for (int tabletIdx : tabletIdxs) { 
                 ui64 tabletId = TTestTxConfig::FakeHiveTablets + tabletIdx;
                 NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
-                checker(tableDescription);
-            }
-        };
-
-        // Creating a table with initial columns
+                checker(tableDescription); 
+            } 
+        }; 
+ 
+        // Creating a table with initial columns 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            Columns { Name: "Key"    Type: "Uint32" }
-                            Columns { Name: "Value"  Type: "Utf8"   }
-                            KeyColumnNames: ["Key"]
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 100 } }
-                            }}
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 200 } }
-                            }}
-                            )");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({ 0, 1, 2 }, { "Key", "Value" });
-
-        // Alter table adding more volumns
+                            Name: "Table1" 
+                            Columns { Name: "Key"    Type: "Uint32" } 
+                            Columns { Name: "Value"  Type: "Utf8"   } 
+                            KeyColumnNames: ["Key"] 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 100 } } 
+                            }} 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 200 } } 
+                            }} 
+                            )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 0, 1, 2 }, { "Key", "Value" }); 
+ 
+        // Alter table adding more volumns 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table1"
-                            Columns { Name: "Add1"  Type: "Uint32" }
-                            Columns { Name: "Add2"  Type: "Uint32" }
-                            )");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({ 0, 1, 2 }, { "Key", "Value", "Add1", "Add2" });
-
-        // Split the middle tablet in two
+                            Name: "Table1" 
+                            Columns { Name: "Add1"  Type: "Uint32" } 
+                            Columns { Name: "Add2"  Type: "Uint32" } 
+                            )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 0, 1, 2 }, { "Key", "Value", "Add1", "Add2" }); 
+ 
+        // Split the middle tablet in two 
         TestSplitTable(runtime, ++txId, "/MyRoot/Table1", R"(
-                            SourceTabletId: 9437195
-                            SplitBoundary { KeyPrefix {
-                                Tuple { Optional { Uint32 : 150 } }
-                            }}
-                            )");
-        env.TestWaitNotification(runtime, txId);
-
-        checkSchema({ 0, 3, 4, 2 }, { "Key", "Value", "Add1", "Add2" });
-    }
-
+                            SourceTabletId: 9437195 
+                            SplitBoundary { KeyPrefix { 
+                                Tuple { Optional { Uint32 : 150 } } 
+                            }} 
+                            )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        checkSchema({ 0, 3, 4, 2 }, { "Key", "Value", "Add1", "Add2" }); 
+    } 
+ 
     Y_UNIT_TEST(AlterTableSettings) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -5877,10 +5877,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
                         PartitionConfig {
-                            EnableEraseCache: true
-                        }
-                    )");
-        env.TestWaitNotification(runtime, txId);
+                            EnableEraseCache: true 
+                        } 
+                    )"); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {TCheckExecutorFastLogPolicy{false},
@@ -5888,14 +5888,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets));
         UNIT_ASSERT_VALUES_EQUAL(true, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
         UNIT_ASSERT_VALUES_EQUAL(true, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                        Name: "Table"
-                        PartitionConfig {
-                            EnableEraseCache: false
-                        }
-                    )");
-        env.TestWaitNotification(runtime, txId);
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                        Name: "Table" 
+                        PartitionConfig { 
+                            EnableEraseCache: false 
+                        } 
+                    )"); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {TCheckExecutorFastLogPolicy{false},
@@ -5903,10 +5903,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets));
         UNIT_ASSERT_VALUES_EQUAL(true, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
         UNIT_ASSERT_VALUES_EQUAL(false, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                        Name: "Table"
-                        PartitionConfig {
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                        Name: "Table" 
+                        PartitionConfig { 
                             ExecutorFastLogPolicy: true
                             EnableFilterByKey: false
                         }
@@ -6668,146 +6668,146 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+20));
     }
 
-    Y_UNIT_TEST(PQGroupExplicitChannels) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
-
-        // Cannot create a group with 2 channels
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 10 "
-                        "PartitionPerTablet: 10 "
-                        "PQTabletConfig { PartitionConfig { "
-                        "  LifetimeSeconds : 10 "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "} }",
+    Y_UNIT_TEST(PQGroupExplicitChannels) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA"); 
+ 
+        // Cannot create a group with 2 channels 
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/DirA", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 10 " 
+                        "PartitionPerTablet: 10 " 
+                        "PQTabletConfig { PartitionConfig { " 
+                        "  LifetimeSeconds : 10 " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "} }", 
                         {NKikimrScheme::StatusInvalidParameter});
-
-        // It's ok to create a group with 4 channels
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 10 "
-                        "PartitionPerTablet: 10 "
-                        "PQTabletConfig { PartitionConfig { "
-                        "  LifetimeSeconds : 10 "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } "
-                        "} }");
-        env.TestWaitNotification(runtime, txId);
-
-        for (const auto& kv : env.GetHiveState()->Tablets) {
-            if (kv.second.Type == ETabletType::PersQueue) {
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels.size(), 4u);
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[0].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[1].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[2].GetStoragePoolName(), "pool-2");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[3].GetStoragePoolName(), "pool-2");
-            }
-        }
-
-        // Add more tablets, channels shouldn't change
-        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 11 "
-                        "PartitionPerTablet: 11 "
-                        "PQTabletConfig { PartitionConfig { "
-                        "  LifetimeSeconds : 10 "
-                        "} }");
-        env.TestWaitNotification(runtime, txId);
-
-        // One more time, we should still use explicit channel profiles
-        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 12 "
-                        "PartitionPerTablet: 12 "
-                        "PQTabletConfig { PartitionConfig { "
-                        "  LifetimeSeconds : 10 "
-                        "} }");
-        env.TestWaitNotification(runtime, txId);
-
-        for (const auto& kv : env.GetHiveState()->Tablets) {
-            if (kv.second.Type == ETabletType::PersQueue) {
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels.size(), 4u);
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[0].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[1].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[2].GetStoragePoolName(), "pool-2");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[3].GetStoragePoolName(), "pool-2");
-            }
-        }
-
-        // Add more channels, tablets should be recreated
-        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 12 "
-                        "PartitionPerTablet: 12 "
-                        "PQTabletConfig { PartitionConfig { "
-                        "  LifetimeSeconds : 10 "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } "
-                        "} }");
-        env.TestWaitNotification(runtime, txId);
-
-        for (const auto& kv : env.GetHiveState()->Tablets) {
-            if (kv.second.Type == ETabletType::PersQueue) {
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels.size(), 5u);
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[0].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[1].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[2].GetStoragePoolName(), "pool-2");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[3].GetStoragePoolName(), "pool-2");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[4].GetStoragePoolName(), "pool-2");
-            }
-        }
-
-        // Cannot reduce the number of channels back to 4
-        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 12 "
-                        "PartitionPerTablet: 12 "
-                        "PQTabletConfig { PartitionConfig { "
-                        "  LifetimeSeconds : 10 "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } "
-                        "} }",
+ 
+        // It's ok to create a group with 4 channels 
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/DirA", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 10 " 
+                        "PartitionPerTablet: 10 " 
+                        "PQTabletConfig { PartitionConfig { " 
+                        "  LifetimeSeconds : 10 " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } " 
+                        "} }"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        for (const auto& kv : env.GetHiveState()->Tablets) { 
+            if (kv.second.Type == ETabletType::PersQueue) { 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels.size(), 4u); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[0].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[1].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[2].GetStoragePoolName(), "pool-2"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[3].GetStoragePoolName(), "pool-2"); 
+            } 
+        } 
+ 
+        // Add more tablets, channels shouldn't change 
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 11 " 
+                        "PartitionPerTablet: 11 " 
+                        "PQTabletConfig { PartitionConfig { " 
+                        "  LifetimeSeconds : 10 " 
+                        "} }"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // One more time, we should still use explicit channel profiles 
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 12 " 
+                        "PartitionPerTablet: 12 " 
+                        "PQTabletConfig { PartitionConfig { " 
+                        "  LifetimeSeconds : 10 " 
+                        "} }"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        for (const auto& kv : env.GetHiveState()->Tablets) { 
+            if (kv.second.Type == ETabletType::PersQueue) { 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels.size(), 4u); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[0].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[1].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[2].GetStoragePoolName(), "pool-2"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[3].GetStoragePoolName(), "pool-2"); 
+            } 
+        } 
+ 
+        // Add more channels, tablets should be recreated 
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 12 " 
+                        "PartitionPerTablet: 12 " 
+                        "PQTabletConfig { PartitionConfig { " 
+                        "  LifetimeSeconds : 10 " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } " 
+                        "} }"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        for (const auto& kv : env.GetHiveState()->Tablets) { 
+            if (kv.second.Type == ETabletType::PersQueue) { 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels.size(), 5u); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[0].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[1].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[2].GetStoragePoolName(), "pool-2"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[3].GetStoragePoolName(), "pool-2"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[4].GetStoragePoolName(), "pool-2"); 
+            } 
+        } 
+ 
+        // Cannot reduce the number of channels back to 4 
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 12 " 
+                        "PartitionPerTablet: 12 " 
+                        "PQTabletConfig { PartitionConfig { " 
+                        "  LifetimeSeconds : 10 " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-2\" } " 
+                        "} }", 
                         {NKikimrScheme::StatusInvalidParameter});
-
-        // Changing pool kinds, tablets should be recreated
-        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 12 "
-                        "PartitionPerTablet: 12 "
-                        "PQTabletConfig { PartitionConfig { "
-                        "  LifetimeSeconds : 10 "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } "
-                        "} }");
-        env.TestWaitNotification(runtime, txId);
-
-        for (const auto& kv : env.GetHiveState()->Tablets) {
-            if (kv.second.Type == ETabletType::PersQueue) {
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels.size(), 5u);
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[0].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[1].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[2].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[3].GetStoragePoolName(), "pool-1");
-                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[4].GetStoragePoolName(), "pool-1");
-            }
-        }
-    }
-
+ 
+        // Changing pool kinds, tablets should be recreated 
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA", 
+                        "Name: \"PQGroup_1\"" 
+                        "TotalGroupCount: 12 " 
+                        "PartitionPerTablet: 12 " 
+                        "PQTabletConfig { PartitionConfig { " 
+                        "  LifetimeSeconds : 10 " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "  ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" } " 
+                        "} }"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        for (const auto& kv : env.GetHiveState()->Tablets) { 
+            if (kv.second.Type == ETabletType::PersQueue) { 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels.size(), 5u); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[0].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[1].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[2].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[3].GetStoragePoolName(), "pool-1"); 
+                UNIT_ASSERT_VALUES_EQUAL(kv.second.BoundChannels[4].GetStoragePoolName(), "pool-1"); 
+            } 
+        } 
+    } 
+ 
     Y_UNIT_TEST(Restart) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -7148,23 +7148,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
 
-        // Missing parameters
+        // Missing parameters 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", "", {NKikimrScheme::StatusSchemeError});
-
+ 
         vc.SetBlockSize(4096);
 
         // Creating volumes without partitions not allowed
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
                                    vdescr.DebugString(),
                                    {NKikimrScheme::StatusSchemeError});
-
+ 
         vc.AddPartitions()->SetBlockCount(16);
 
         // Specifying config version not allowed
@@ -7173,15 +7173,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
                                    vdescr.DebugString(),
                                    {NKikimrScheme::StatusSchemeError});
-
+ 
         vc.ClearVersion();
 
         // No channel profiles
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
                                    vdescr.DebugString(),
                                    {NKikimrScheme::StatusInvalidParameter});
-
-        // Normal volume with 2 partitions
+ 
+        // Normal volume with 2 partitions 
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
@@ -7193,13 +7193,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(3)});
-
-        // Already exists
+ 
+        // Already exists 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
                                    vdescr.DebugString(),
                                    {NKikimrScheme::StatusAlreadyExists});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateBlockStoreVolumeWithVolumeChannelsProfiles) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -7254,22 +7254,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, /* nchannels */ 6);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime, /* nchannels */ 6); 
+        ui64 txId = 100; 
+ 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
 
-        // Cannot alter missing volumes
+        // Cannot alter missing volumes 
         vc.AddPartitions()->SetBlockCount(32);
         vc.AddPartitions()->SetBlockCount(32);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
                                   vdescr.DebugString(),
                                   {NKikimrScheme::StatusPathDoesNotExist});
         vc.Clear();
-
-        // Create volume with 1 partition
+ 
+        // Create volume with 1 partition 
         vc.SetBlockSize(4096);
         vc.AddPartitions()->SetBlockCount(16);
         vc.SetDiskId("foo");
@@ -7292,8 +7292,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
-
-        // Alter it into 2 bigger partitions
+ 
+        // Alter it into 2 bigger partitions 
         vc.SetVersion(1);
         vc.AddPartitions()->SetBlockCount(32);
         vc.AddPartitions()->SetBlockCount(32);
@@ -7303,16 +7303,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(3)});
-
+ 
         vc.SetVersion(2);
 
-        // Alter with less partitions not allowed
+        // Alter with less partitions not allowed 
         vc.AddPartitions()->SetBlockCount(32);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
                                   vdescr.DebugString(),
                                   {NKikimrScheme::StatusInvalidParameter});
-
-        // Changing block size not allowed
+ 
+        // Changing block size not allowed 
         vc.AddPartitions()->SetBlockCount(32);
         vc.SetBlockSize(8192);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
@@ -7320,7 +7320,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                   {NKikimrScheme::StatusInvalidParameter});
         vc.ClearBlockSize();
         vc.ClearPartitions();
-
+ 
         // Setting media kind for the first time is allowed
         vc.SetStorageMediaKind(1);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
@@ -7373,7 +7373,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
         vc.Clear();
-
+ 
         vc.SetVersion(4);
 
         // Deleting channel profiles is not allowed
@@ -7494,19 +7494,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                   {NKikimrScheme::StatusInvalidParameter});
         vc.ClearPartitions();
 
-        // Changing Opaque is allowed
+        // Changing Opaque is allowed 
         vc.SetOpaque("binary data");
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
         vc.Clear();
 
-        {
-            NKikimrBlockStore::TVolumeConfig config;
-            TestLs(runtime, "/MyRoot/BSVolume", false, NLs::ExtractVolumeConfig(&config));
+        { 
+            NKikimrBlockStore::TVolumeConfig config; 
+            TestLs(runtime, "/MyRoot/BSVolume", false, NLs::ExtractVolumeConfig(&config)); 
             UNIT_ASSERT_VALUES_EQUAL(config.GetDiskId(), "foo");
-            UNIT_ASSERT_VALUES_EQUAL(config.GetOpaque(), "binary data");
-        }
-
+            UNIT_ASSERT_VALUES_EQUAL(config.GetOpaque(), "binary data"); 
+        } 
+ 
         vc.SetVersion(7);
 
         // Now change DiskId, FolderId and add some Tags, it shouldn't affect other values
@@ -7549,14 +7549,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         vc.Clear();
 
-        {
-            NKikimrBlockStore::TVolumeConfig config;
+        { 
+            NKikimrBlockStore::TVolumeConfig config; 
             NLs::ExtractVolumeConfig(&config)(DescribePath(runtime, "/MyRoot/BSVolume"));
-            UNIT_ASSERT_VALUES_EQUAL(config.GetBlockSize(), 4096u);
-            UNIT_ASSERT_VALUES_EQUAL(config.PartitionsSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetBlockSize(), 4096u); 
+            UNIT_ASSERT_VALUES_EQUAL(config.PartitionsSize(), 2); 
             UNIT_ASSERT_VALUES_EQUAL(config.GetDiskId(), "foobaz");
-            UNIT_ASSERT_VALUES_EQUAL(config.GetFolderId(), "baz");
-            UNIT_ASSERT_VALUES_EQUAL(config.GetOpaque(), "binary data");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetFolderId(), "baz"); 
+            UNIT_ASSERT_VALUES_EQUAL(config.GetOpaque(), "binary data"); 
 
             UNIT_ASSERT_VALUES_EQUAL(config.TagsSize(), 3);
             UNIT_ASSERT_VALUES_EQUAL(config.GetTags(0), "tag1");
@@ -7621,9 +7621,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
             UNIT_ASSERT_VALUES_EQUAL(config.GetVolumeExplicitChannelProfiles(2).GetPoolKind(), "pool-kind-2");
             UNIT_ASSERT_VALUES_EQUAL(config.GetVolumeExplicitChannelProfiles(2).GetSize(), 128);
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(AlterBlockStoreVolumeWithNonReplicatedPartitions) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -7678,12 +7678,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", {NKikimrScheme::StatusPathDoesNotExist});
-
-        // Create volume with 1 partition
+ 
+        // Create volume with 1 partition 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
@@ -7698,8 +7698,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
-
-        // Drop the volume
+ 
+        // Drop the volume 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
@@ -7709,8 +7709,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(DropBlockStoreVolumeWithNonReplicatedPartitions) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -7748,11 +7748,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DropBlockStoreVolume2) { //+
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        // Create volume with 1 partition
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        // Create volume with 1 partition 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
@@ -7765,38 +7765,38 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
-
-        // Drop the volume twice in parallel
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), 
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)}); 
+ 
+        // Drop the volume twice in parallel 
         AsyncDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         AsyncDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         TestModificationResult(runtime, txId-1);
 
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
-        UNIT_ASSERT(event);
+        UNIT_ASSERT(event); 
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
-        CheckExpected(
+        CheckExpected( 
             { NKikimrScheme::StatusMultipleModifications },
-            event->Record.GetStatus(), event->Record.GetReason());
-
+            event->Record.GetStatus(), event->Record.GetReason()); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetPathDropTxId(), txId-1);
-
+ 
         env.TestWaitNotification(runtime, txId-1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AssignBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        // Cannot assign non-existant volume
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        // Cannot assign non-existant volume 
         TestAssignBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", "Owner123", 0,
                 {NKikimrScheme::StatusPathDoesNotExist});
-
-        // Create volume with 1 partition
+ 
+        // Create volume with 1 partition 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
@@ -7810,13 +7810,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
         vc.Clear();
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished});
 
-        // Assign volume to Owner123
+        // Assign volume to Owner123 
         TestAssignBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", "Owner123");
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::CheckMountToken("BSVolume", "Owner123")});
 
@@ -7836,22 +7836,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestAssignBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", "Owner126", 2,
             {NKikimrScheme::StatusPreconditionFailed});
 
-        // Alter is allowed
+        // Alter is allowed 
         vc.SetVersion(1);
         vc.AddPartitions()->SetBlockCount(32);
         vc.AddPartitions()->SetBlockCount(32);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
-
-        // Drop is allowed
+ 
+        // Drop is allowed 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AssignBlockStoreVolumeDuringAlter) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        // Create volume with 1 partition
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        // Create volume with 1 partition 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
@@ -7865,7 +7865,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
         vc.Clear();
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished});
 
@@ -7874,17 +7874,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.AddPartitions()->SetBlockCount(32);
         AsyncAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         AsyncAssignBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", "Owner123");
-
+ 
         TestModificationResult(runtime, txId-1);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
 
         env.TestWaitNotification(runtime, {txId-1, txId});
 
-        // Mount token should be set correctly
+        // Mount token should be set correctly 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::CheckMountToken("BSVolume", "Owner123")});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AssignBlockStoreCheckVersionInAlter) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -7941,14 +7941,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(BlockStoreVolumeLimits) { //+
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         TestUserAttrs(runtime, ++txId, "", "MyRoot",
-            AlterUserAttrs({{"__volume_space_limit", "131072"}})); /* 32 x 4096 */
+            AlterUserAttrs({{"__volume_space_limit", "131072"}})); /* 32 x 4096 */ 
         env.TestWaitNotification(runtime, txId);
-
+ 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         auto& vc = *vdescr.MutableVolumeConfig();
         vc.SetBlockSize(4096);
@@ -7958,19 +7958,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
 
-        // Use half of the quota initially
+        // Use half of the quota initially 
         vdescr.SetName("BSVolume1");
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-
-        // Cannot have more than quota
+ 
+        // Cannot have more than quota 
         vdescr.SetName("BSVolume2");
         vc.MutablePartitions(0)->SetBlockCount(17);
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
                         vdescr.DebugString(),
                         {NKikimrScheme::StatusPreconditionFailed});
-
-        // It's ok to use quota completely, but only the first create should succeed
+ 
+        // It's ok to use quota completely, but only the first create should succeed 
         vc.SetSizeDecreaseAllowed(true);
         vc.MutablePartitions(0)->SetBlockCount(16);
         AsyncCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
@@ -7978,21 +7978,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId, txId-1});
-
-        // Cannot increase volume size beyond current quota
+ 
+        // Cannot increase volume size beyond current quota 
         vc.Clear();
         vc.SetVersion(1);
         vc.AddPartitions()->SetBlockCount(17);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
                         vdescr.DebugString(),
                         {NKikimrScheme::StatusPreconditionFailed});
-
+ 
         // It's ok to decrease volume size for volumes with the SizeDecreaseAllowed flag
         vc.MutablePartitions(0)->SetBlockCount(8);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-
-        // After successful alter we may use freed quota for more volumes
+ 
+        // After successful alter we may use freed quota for more volumes 
         vdescr.SetName("BSVolume3");
         vc.Clear();
         vc.SetBlockSize(4096);
@@ -8003,8 +8003,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-
-        // We may drop a volume and then use freed quota in an alter
+ 
+        // We may drop a volume and then use freed quota in an alter 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume1");
         env.TestWaitNotification(runtime, txId);
 
@@ -8014,8 +8014,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.AddPartitions()->SetBlockCount(24);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-
-        // Currently quota is full, cannot create even a single block volume
+ 
+        // Currently quota is full, cannot create even a single block volume 
         vdescr.SetName("BSVolume4");
         vc.Clear();
         vc.SetBlockSize(4096);
@@ -8027,28 +8027,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
                         vdescr.DebugString(),
                         {NKikimrScheme::StatusPreconditionFailed});
-
-        // It's possible to modify quota size
+ 
+        // It's possible to modify quota size 
         TestUserAttrs(runtime, ++txId, "", "MyRoot",
-            AlterUserAttrs({{"__volume_space_limit", "135168"}})); /* 33 x 4096 */
+            AlterUserAttrs({{"__volume_space_limit", "135168"}})); /* 33 x 4096 */ 
         env.TestWaitNotification(runtime, txId);
-
-        // Now single block volume should succeed
+ 
+        // Now single block volume should succeed 
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-
-        // Change limit to be specifically about SSD
+ 
+        // Change limit to be specifically about SSD 
         TestUserAttrs(runtime, ++txId, "", "MyRoot",
-            AlterUserAttrs({{"__volume_space_limit_ssd", "147456"}}, {"__volume_space_limit"})); /* (32 + 4) x 4096 */
+            AlterUserAttrs({{"__volume_space_limit_ssd", "147456"}}, {"__volume_space_limit"})); /* (32 + 4) x 4096 */ 
         env.TestWaitNotification(runtime, txId);
-
-        // Now we should be able to create any size volumes with the default kind
+ 
+        // Now we should be able to create any size volumes with the default kind 
         vdescr.SetName("BSVolume5");
         vc.MutablePartitions(0)->SetBlockCount(128);
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-
-        // But no more than 32 blocks for SSD volumes
+ 
+        // But no more than 32 blocks for SSD volumes 
         vdescr.SetName("BSVolume6");
         vc.SetStorageMediaKind(1);
         vc.SetSizeDecreaseAllowed(true);
@@ -8060,11 +8060,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::UserAttrsHas({
-                {"__volume_space_allocated", "790528"},
-                {"__volume_space_allocated_ssd", "147456"}})});
-
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), { 
+            NLs::UserAttrsHas({ 
+                {"__volume_space_allocated", "790528"}, 
+                {"__volume_space_allocated_ssd", "147456"}})}); 
+ 
         // It's ok to decrease volume size
         vc.Clear();
         vc.SetVersion(1);
@@ -8072,15 +8072,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::UserAttrsHas({
-                {"__volume_space_allocated", "692224"},
-                {"__volume_space_allocated_ssd", "36864"}})});
-
-        TestMkDir(runtime, txId++, "/MyRoot", "MyDir");
-        env.TestWaitNotification(runtime, txId);
-
-        // Now we can create a 24-block volume (in a subdirectory)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), { 
+            NLs::UserAttrsHas({ 
+                {"__volume_space_allocated", "692224"}, 
+                {"__volume_space_allocated_ssd", "36864"}})}); 
+ 
+        TestMkDir(runtime, txId++, "/MyRoot", "MyDir"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Now we can create a 24-block volume (in a subdirectory) 
         vdescr.SetName("BSVolume7");
         vc.Clear();
         vc.SetBlockSize(4096);
@@ -8090,71 +8090,71 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/MyDir", vdescr.DebugString());
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/MyDir", vdescr.DebugString()); 
         env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::UserAttrsHas({
-                {"__volume_space_allocated", "790528"},
-                {"__volume_space_allocated_ssd", "147456"}})});
-
-        // We cannot create another volume in a subdirectory (due to root limits)
-        vdescr.SetName("BSVolume8");
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/MyDir",
-                        vdescr.DebugString(),
+ 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), { 
+            NLs::UserAttrsHas({ 
+                {"__volume_space_allocated", "790528"}, 
+                {"__volume_space_allocated_ssd", "147456"}})}); 
+ 
+        // We cannot create another volume in a subdirectory (due to root limits) 
+        vdescr.SetName("BSVolume8"); 
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/MyDir", 
+                        vdescr.DebugString(), 
                         {NKikimrScheme::StatusPreconditionFailed});
-
-        // Create a subdomain
-        TestCreateSubDomain(runtime, ++txId,  "/MyRoot",
-                            "Coordinators: 0 "
-                            "Mediators: 0 "
-                            "Name: \"NBS\""
-                            "StoragePools {"
-                            "  Name: \"name_NBS_kind_hdd-1\""
-                            "  Kind: \"pool-kind-1\""
-                            "}"
-                            "StoragePools {"
-                            "  Name: \"name_NBS_kind_hdd-2\""
-                            "  Kind: \"pool-kind-2\""
-                            "}");
-        env.TestWaitNotification(runtime, txId);
-
-        // It's ok to create volume in a subdomain (separate limits)
-        vdescr.SetName("BSVolume1");
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/NBS", vdescr.DebugString());
-        env.TestWaitNotification(runtime, txId);
-
-        // Root allocated attributes must not change
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::UserAttrsHas({
-                {"__volume_space_allocated", "790528"},
-                {"__volume_space_allocated_ssd", "147456"}})});
-
-        // New volume is counted towards subdomain volume limits
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/NBS"), {
-            NLs::UserAttrsHas({
-                {"__volume_space_allocated", "98304"},
-                {"__volume_space_allocated_ssd", "110592"}})});
-
-        // Apply limits on a subdomain
-        TestUserAttrs(runtime, ++txId, "/MyRoot", "NBS",
-            AlterUserAttrs({{"__volume_space_limit_ssd", "221184"}})); /* (48 + 6) x 4096 */
-        env.TestWaitNotification(runtime, txId);
-
-        // We should be able to create another 24-block volume
-        vdescr.SetName("BSVolume2");
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/NBS", vdescr.DebugString());
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/NBS"), {
-            NLs::UserAttrsHas({
-                {"__volume_space_allocated", "196608"},
-                {"__volume_space_allocated_ssd", "221184"}})});
-
-        // We shouldn't be able to create more ssd volumes
-        vdescr.SetName("BSVolume3");
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/NBS",
-                        vdescr.DebugString(),
+ 
+        // Create a subdomain 
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", 
+                            "Coordinators: 0 " 
+                            "Mediators: 0 " 
+                            "Name: \"NBS\"" 
+                            "StoragePools {" 
+                            "  Name: \"name_NBS_kind_hdd-1\"" 
+                            "  Kind: \"pool-kind-1\"" 
+                            "}" 
+                            "StoragePools {" 
+                            "  Name: \"name_NBS_kind_hdd-2\"" 
+                            "  Kind: \"pool-kind-2\"" 
+                            "}"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // It's ok to create volume in a subdomain (separate limits) 
+        vdescr.SetName("BSVolume1"); 
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/NBS", vdescr.DebugString()); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Root allocated attributes must not change 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), { 
+            NLs::UserAttrsHas({ 
+                {"__volume_space_allocated", "790528"}, 
+                {"__volume_space_allocated_ssd", "147456"}})}); 
+ 
+        // New volume is counted towards subdomain volume limits 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/NBS"), { 
+            NLs::UserAttrsHas({ 
+                {"__volume_space_allocated", "98304"}, 
+                {"__volume_space_allocated_ssd", "110592"}})}); 
+ 
+        // Apply limits on a subdomain 
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "NBS", 
+            AlterUserAttrs({{"__volume_space_limit_ssd", "221184"}})); /* (48 + 6) x 4096 */ 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // We should be able to create another 24-block volume 
+        vdescr.SetName("BSVolume2"); 
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/NBS", vdescr.DebugString()); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/NBS"), { 
+            NLs::UserAttrsHas({ 
+                {"__volume_space_allocated", "196608"}, 
+                {"__volume_space_allocated_ssd", "221184"}})}); 
+ 
+        // We shouldn't be able to create more ssd volumes 
+        vdescr.SetName("BSVolume3"); 
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/NBS", 
+                        vdescr.DebugString(), 
                         {NKikimrScheme::StatusPreconditionFailed});
     }
 
@@ -8461,18 +8461,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateDropKesus) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        // Create two kesus nodes
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        // Create two kesus nodes 
         TestCreateKesus(runtime, ++txId, "/MyRoot", "Name: \"Kesus1\"");
         TestCreateKesus(runtime, ++txId, "/MyRoot", "Name: \"Kesus2\"");
         env.TestWaitNotification(runtime, {txId, txId-1});
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(2), NLs::ShardsInsideDomain(2)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus1"),
@@ -8480,14 +8480,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus2"),
                            {NLs::Finished});
 
-        // Already exists
+        // Already exists 
         TestCreateKesus(runtime, ++txId, "/MyRoot", "Name: \"Kesus1\"",
             {NKikimrScheme::StatusAlreadyExists});
-
-        // Drop the first one
+ 
+        // Drop the first one 
         TestDropKesus(runtime, ++txId, "/MyRoot", "Kesus1");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus1"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus2"),
@@ -8497,7 +8497,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
 
-        // Drop the second one
+        // Drop the second one 
         TestDropKesus(runtime, ++txId, "/MyRoot", "Kesus2");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus2"),
@@ -8506,18 +8506,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
-    }
+    } 
 
     Y_UNIT_TEST(CreateAlterKesus) { //+
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
 
         TestCreateKesus(runtime, ++txId, "/MyRoot",
-                        "Name: \"Kesus1\" "
-                        "Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }");
+                        "Name: \"Kesus1\" " 
+                        "Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }"); 
         env.TestWaitNotification(runtime, txId);
-
+ 
 
         auto checkKesusConfig = [=] (ui64 a, ui64 b) {
           return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -8525,31 +8525,31 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 UNIT_ASSERT_EQUAL(config.self_check_period_millis(), a);
                 UNIT_ASSERT_EQUAL(config.session_grace_period_millis(), b);
             };
-        };
-
+        }; 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus1"),
                            {NLs::Finished, checkKesusConfig(1234, 5678)});
+ 
 
-
-        // Test the first setting is modified independently
+        // Test the first setting is modified independently 
         TestAlterKesus(runtime, ++txId, "/MyRoot",
-                        "Name: \"Kesus1\" "
-                        "Config: { self_check_period_millis: 2345 }");
+                        "Name: \"Kesus1\" " 
+                        "Config: { self_check_period_millis: 2345 }"); 
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus1"),
                            {checkKesusConfig(2345, 5678)});
 
-        // Test the second setting is modified independently
+        // Test the second setting is modified independently 
         TestAlterKesus(runtime, ++txId, "/MyRoot",
-                        "Name: \"Kesus1\" "
-                        "Config: { session_grace_period_millis: 6789 }");
+                        "Name: \"Kesus1\" " 
+                        "Config: { session_grace_period_millis: 6789 }"); 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus1"),
                            {checkKesusConfig(2345, 6789)});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateDropSolomon) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -8642,7 +8642,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/JunkSolomon"),
                            {NLs::PathNotExist});
     }
-
+ 
     Y_UNIT_TEST(CreateAlterDropSolomon) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -8810,40 +8810,40 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
 
-    Y_UNIT_TEST(CreateTableWithCompactionStrategies) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            Columns { Name: "key" Type: "Uint32" }
-            KeyColumnNames: [ "key" ]
-            PartitionConfig {
-                CompactionPolicy {
-                    CompactionStrategy: CompactionStrategyGenerational
-                }
-            }
-            )");
-        env.TestWaitNotification(runtime, txId);
-        TestDescribe(runtime, "/MyRoot/Table1");
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table2"
-            Columns { Name: "key" Type: "Uint32" }
-            KeyColumnNames: [ "key" ]
-            PartitionConfig {
-                CompactionPolicy {
-                    CompactionStrategy: CompactionStrategySharded
-                }
-            }
-            )",
-            { KIKIMR_ALLOW_SHARDED_COMPACTION ?
+    Y_UNIT_TEST(CreateTableWithCompactionStrategies) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table1" 
+            Columns { Name: "key" Type: "Uint32" } 
+            KeyColumnNames: [ "key" ] 
+            PartitionConfig { 
+                CompactionPolicy { 
+                    CompactionStrategy: CompactionStrategyGenerational 
+                } 
+            } 
+            )"); 
+        env.TestWaitNotification(runtime, txId); 
+        TestDescribe(runtime, "/MyRoot/Table1"); 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table2" 
+            Columns { Name: "key" Type: "Uint32" } 
+            KeyColumnNames: [ "key" ] 
+            PartitionConfig { 
+                CompactionPolicy { 
+                    CompactionStrategy: CompactionStrategySharded 
+                } 
+            } 
+            )", 
+            { KIKIMR_ALLOW_SHARDED_COMPACTION ? 
                 NKikimrScheme::StatusAccepted :
                 NKikimrScheme::StatusInvalidParameter });
-
-        if (KIKIMR_ALLOW_SHARDED_COMPACTION) {
-            env.TestWaitNotification(runtime, txId);
+ 
+        if (KIKIMR_ALLOW_SHARDED_COMPACTION) { 
+            env.TestWaitNotification(runtime, txId); 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"),
                                { [](const auto& result) {
                                    auto strategy = result
@@ -8853,51 +8853,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                     .GetCompactionPolicy()
                                     .GetCompactionStrategy();
                                    UNIT_ASSERT(strategy == NKikimrSchemeOp::CompactionStrategySharded);}});
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(AlterTableWithCompactionStrategies) { //+
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            Columns { Name: "key" Type: "Uint32" }
-            KeyColumnNames: [ "key" ]
-            PartitionConfig {
-                CompactionPolicy {
-                }
-            }
-            )");
-        env.TestWaitNotification(runtime, txId);
-        TestDescribe(runtime, "/MyRoot/Table1");
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            PartitionConfig {
-                CompactionPolicy {
-                    CompactionStrategy: CompactionStrategyGenerational
-                }
-            }
-            )");
-        env.TestWaitNotification(runtime, txId);
-        TestDescribe(runtime, "/MyRoot/Table1");
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            PartitionConfig {
-                CompactionPolicy {
-                    CompactionStrategy: CompactionStrategySharded
-                }
-            }
-            )",
-            { KIKIMR_ALLOW_SHARDED_COMPACTION ?
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table1" 
+            Columns { Name: "key" Type: "Uint32" } 
+            KeyColumnNames: [ "key" ] 
+            PartitionConfig { 
+                CompactionPolicy { 
+                } 
+            } 
+            )"); 
+        env.TestWaitNotification(runtime, txId); 
+        TestDescribe(runtime, "/MyRoot/Table1"); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table1" 
+            PartitionConfig { 
+                CompactionPolicy { 
+                    CompactionStrategy: CompactionStrategyGenerational 
+                } 
+            } 
+            )"); 
+        env.TestWaitNotification(runtime, txId); 
+        TestDescribe(runtime, "/MyRoot/Table1"); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table1" 
+            PartitionConfig { 
+                CompactionPolicy { 
+                    CompactionStrategy: CompactionStrategySharded 
+                } 
+            } 
+            )", 
+            { KIKIMR_ALLOW_SHARDED_COMPACTION ? 
                 NKikimrScheme::StatusAccepted :
                 NKikimrScheme::StatusInvalidParameter });
-
-        if (KIKIMR_ALLOW_SHARDED_COMPACTION) {
-            env.TestWaitNotification(runtime, txId);
+ 
+        if (KIKIMR_ALLOW_SHARDED_COMPACTION) { 
+            env.TestWaitNotification(runtime, txId); 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                                { [](const auto& result) {
                                    auto strategy = result
@@ -8907,9 +8907,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                     .GetCompactionPolicy()
                                     .GetCompactionStrategy();
                                    UNIT_ASSERT(strategy == NKikimrSchemeOp::CompactionStrategySharded);}});
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(SimultaneousDropFroceDrop) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -9319,65 +9319,65 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys/partition_stats", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA/.sys/partition_stats", {NKikimrScheme::StatusSchemeError});
     }
-
-    Y_UNIT_TEST(DocumentApiVersion) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        // Document api version must be a number
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                        "Name: \"Table\" "
-                        "Columns { Name: \"Key\" Type: \"Uint64\"} "
-                        "Columns { Name: \"Value\" Type: \"Uint64\"} "
-                        "KeyColumnNames: [\"Key\"]",
+ 
+    Y_UNIT_TEST(DocumentApiVersion) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        // Document api version must be a number 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                        "Name: \"Table\" " 
+                        "Columns { Name: \"Key\" Type: \"Uint64\"} " 
+                        "Columns { Name: \"Value\" Type: \"Uint64\"} " 
+                        "KeyColumnNames: [\"Key\"]", 
                         {NKikimrScheme::StatusInvalidParameter},
-                        AlterUserAttrs({{"__document_api_version", "foo"}}));
-
-        // Document api version cannot be zero
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                        "Name: \"Table\" "
-                        "Columns { Name: \"Key\" Type: \"Uint64\"} "
-                        "Columns { Name: \"Value\" Type: \"Uint64\"} "
-                        "KeyColumnNames: [\"Key\"]",
+                        AlterUserAttrs({{"__document_api_version", "foo"}})); 
+ 
+        // Document api version cannot be zero 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                        "Name: \"Table\" " 
+                        "Columns { Name: \"Key\" Type: \"Uint64\"} " 
+                        "Columns { Name: \"Value\" Type: \"Uint64\"} " 
+                        "KeyColumnNames: [\"Key\"]", 
                         {NKikimrScheme::StatusInvalidParameter},
-                        AlterUserAttrs({{"__document_api_version", "0"}}));
-
-        // Document api version 1 is ok
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                        "Name: \"Table\" "
-                        "Columns { Name: \"Key\" Type: \"Uint64\"} "
-                        "Columns { Name: \"Value\" Type: \"Uint64\"} "
-                        "KeyColumnNames: [\"Key\"]",
+                        AlterUserAttrs({{"__document_api_version", "0"}})); 
+ 
+        // Document api version 1 is ok 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                        "Name: \"Table\" " 
+                        "Columns { Name: \"Key\" Type: \"Uint64\"} " 
+                        "Columns { Name: \"Value\" Type: \"Uint64\"} " 
+                        "KeyColumnNames: [\"Key\"]", 
                         {NKikimrScheme::StatusAccepted},
-                        AlterUserAttrs({{"__document_api_version", "1"}}));
-        env.TestWaitNotification(runtime, txId);
-
-        // Changing document api version is not allowed
+                        AlterUserAttrs({{"__document_api_version", "1"}})); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Changing document api version is not allowed 
         TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusInvalidParameter},
             AlterUserAttrs({{"__document_api_version", "2"}}), { });
-
-        // Removing document api version is not allowed
+ 
+        // Removing document api version is not allowed 
         TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusInvalidParameter},
             AlterUserAttrs({{"__document_api_version", ""}}), { });
-
-        // Create a new table without an attribute
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                        "Name: \"TableWoDocumentApi\" "
-                        "Columns { Name: \"Key\" Type: \"Uint64\"} "
-                        "Columns { Name: \"Value\" Type: \"Uint64\"} "
-                        "KeyColumnNames: [\"Key\"]");
-        env.TestWaitNotification(runtime, txId);
-
-        // Adding document api version is not allowed
+ 
+        // Create a new table without an attribute 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                        "Name: \"TableWoDocumentApi\" " 
+                        "Columns { Name: \"Key\" Type: \"Uint64\"} " 
+                        "Columns { Name: \"Value\" Type: \"Uint64\"} " 
+                        "KeyColumnNames: [\"Key\"]"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        // Adding document api version is not allowed 
         TestUserAttrs(runtime, ++txId, "/MyRoot", "TableWoDocumentApi", {NKikimrScheme::StatusInvalidParameter},
             AlterUserAttrs({{"__document_api_version", "1"}}), { });
-
-        // Creating other objects (e.g. directories) with document api version is not allowed
-        TestMkDir(runtime, ++txId, "/MyRoot", "DirA",
+ 
+        // Creating other objects (e.g. directories) with document api version is not allowed 
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA", 
             {NKikimrScheme::StatusInvalidParameter},
-            AlterUserAttrs({{"__document_api_version", "1"}}));
-    }
+            AlterUserAttrs({{"__document_api_version", "1"}})); 
+    } 
 
 
     class TSchemaHelpler {

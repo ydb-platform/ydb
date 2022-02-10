@@ -77,9 +77,9 @@ message TColumnDescription {
     optional uint32 Id = 4;
     optional uint32 Family = 5; // On default place column to default(0) family
     optional string FamilyName = 6; // set Family by name (0 - "default")
-    oneof DefaultValue {
-        string DefaultFromSequence = 7; // Path to sequence for default values
-    }
+    oneof DefaultValue { 
+        string DefaultFromSequence = 7; // Path to sequence for default values 
+    } 
     optional bool NotNull = 8;
 }
 
@@ -99,7 +99,7 @@ message TStorageConfig {
 
 message TFamilyDescription {
     optional uint32 Id = 1;
-    optional uint32 Room = 2; // Used by datashard, must not be used by users
+    optional uint32 Room = 2; // Used by datashard, must not be used by users 
     optional uint32 Codec = 3; // DEPRECATED: use ColumnCodec
     optional bool InMemory = 4; // DEPRECATED: use ColumnCache
     optional string Name = 5;
@@ -109,12 +109,12 @@ message TFamilyDescription {
     optional TStorageConfig StorageConfig = 9;
 }
 
-enum ECompactionStrategy {
-    CompactionStrategyUnset = 0;
-    CompactionStrategyGenerational = 1;
-    CompactionStrategySharded = 2;
-}
-
+enum ECompactionStrategy { 
+    CompactionStrategyUnset = 0; 
+    CompactionStrategyGenerational = 1; 
+    CompactionStrategySharded = 2; 
+} 
+ 
 message TCompactionPolicy {
     message TBackgroundPolicy {
         // How much (in %) of forced compaction criteria should be met to submit background task.
@@ -140,57 +140,57 @@ message TCompactionPolicy {
         optional bool KeepInCache = 7;
         optional TBackgroundPolicy BackgroundCompactionPolicy = 8;
         optional string ResourceBrokerTask = 9;
-        optional uint32 ExtraCompactionPercent = 10;
-        optional uint64 ExtraCompactionMinSize = 11;
-        optional uint32 ExtraCompactionExpPercent = 12;
-        optional uint64 ExtraCompactionExpMaxSize = 13;
-        optional uint64 UpliftPartSize = 14;
+        optional uint32 ExtraCompactionPercent = 10; 
+        optional uint64 ExtraCompactionMinSize = 11; 
+        optional uint32 ExtraCompactionExpPercent = 12; 
+        optional uint64 ExtraCompactionExpMaxSize = 13; 
+        optional uint64 UpliftPartSize = 14; 
     }
 
-    message TShardPolicy {
-        // Adjacent shards smaller than this will be merged
-        optional uint64 MinShardSize = 1 [default = 33554432];
-
-        // Shards bigger than this will split in two or more pieces
-        optional uint64 MaxShardSize = 2 [default = 134217728];
-
-        // Slices smaller than this will get prioritized compaction
-        optional uint64 MinSliceSize = 3 [default = 2097152];
-
-        // Level will be compacted when there are more than this number of slices
-        optional uint32 MaxSlicesPerLevel = 4 [default = 256];
-
-        // Shard will be compacted when there are more than this number of levels
-        optional uint32 MaxTotalLevels = 5 [default = 16];
-
-        // Shard will avoid compacting less than this number of levels
-        optional uint32 MinLevelsToCompact = 6 [default = 2];
-
-        // Level will be compacted when it has X% of its data in upper levels
-        optional uint32 NewDataPercentToCompact = 7 [default = 100];
-
-        // Level will be compacted when it has X% of its rows in upper levels
-        optional uint32 NewRowsPercentToCompact = 8 [default = 0];
-
-        // Resource broker task type for compactions
-        optional string ResourceBrokerTask = 9 [default = "compaction_gen1"];
-
-        // Base priority for compaction tasks
-        optional uint32 TaskPriorityBase = 10 [default = 1000];
-
-        // Task priority will be increased for every N levels over the minimum
-        optional uint32 TaskPriorityLevelsBoost = 11 [default = 1];
-
-        // Task priority will be decreased for every N bytes of input
-        optional uint64 TaskPrioritySizePenalty = 12 [default = 4194304];
-
-        // Part data may be reused, unless it would leave this much garbage
-        optional uint32 MaxGarbagePercentToReuse = 13 [default = 20];
-
-        // Minimum slice that that may be reused
-        optional uint64 MinSliceSizeToReuse = 14 [default = 524288];
-    }
-
+    message TShardPolicy { 
+        // Adjacent shards smaller than this will be merged 
+        optional uint64 MinShardSize = 1 [default = 33554432]; 
+ 
+        // Shards bigger than this will split in two or more pieces 
+        optional uint64 MaxShardSize = 2 [default = 134217728]; 
+ 
+        // Slices smaller than this will get prioritized compaction 
+        optional uint64 MinSliceSize = 3 [default = 2097152]; 
+ 
+        // Level will be compacted when there are more than this number of slices 
+        optional uint32 MaxSlicesPerLevel = 4 [default = 256]; 
+ 
+        // Shard will be compacted when there are more than this number of levels 
+        optional uint32 MaxTotalLevels = 5 [default = 16]; 
+ 
+        // Shard will avoid compacting less than this number of levels 
+        optional uint32 MinLevelsToCompact = 6 [default = 2]; 
+ 
+        // Level will be compacted when it has X% of its data in upper levels 
+        optional uint32 NewDataPercentToCompact = 7 [default = 100]; 
+ 
+        // Level will be compacted when it has X% of its rows in upper levels 
+        optional uint32 NewRowsPercentToCompact = 8 [default = 0]; 
+ 
+        // Resource broker task type for compactions 
+        optional string ResourceBrokerTask = 9 [default = "compaction_gen1"]; 
+ 
+        // Base priority for compaction tasks 
+        optional uint32 TaskPriorityBase = 10 [default = 1000]; 
+ 
+        // Task priority will be increased for every N levels over the minimum 
+        optional uint32 TaskPriorityLevelsBoost = 11 [default = 1]; 
+ 
+        // Task priority will be decreased for every N bytes of input 
+        optional uint64 TaskPrioritySizePenalty = 12 [default = 4194304]; 
+ 
+        // Part data may be reused, unless it would leave this much garbage 
+        optional uint32 MaxGarbagePercentToReuse = 13 [default = 20]; 
+ 
+        // Minimum slice that that may be reused 
+        optional uint64 MinSliceSizeToReuse = 14 [default = 524288]; 
+    } 
+ 
     optional uint64 InMemSizeToSnapshot = 1;
     optional uint32 InMemStepsToSnapshot = 2; // snapshot inmem state when size AND steps from last snapshot passed
     optional uint32 InMemForceStepsToSnapshot = 3; // OR steps passed
@@ -206,12 +206,12 @@ message TCompactionPolicy {
     optional string InMemResourceBrokerTask = 14;
     optional string SnapshotResourceBrokerTask = 15;
     optional string BackupResourceBrokerTask = 16;
-    optional uint64 LogOverheadSizeToSnapshot = 17;
-    optional uint32 LogOverheadCountToSnapshot = 18;
-    optional uint32 DroppedRowsPercentToCompact = 19;
-    optional ECompactionStrategy CompactionStrategy = 20 [default = CompactionStrategyUnset];
-    optional TShardPolicy ShardPolicy = 21;
-    optional bool KeepEraseMarkers = 22;
+    optional uint64 LogOverheadSizeToSnapshot = 17; 
+    optional uint32 LogOverheadCountToSnapshot = 18; 
+    optional uint32 DroppedRowsPercentToCompact = 19; 
+    optional ECompactionStrategy CompactionStrategy = 20 [default = CompactionStrategyUnset]; 
+    optional TShardPolicy ShardPolicy = 21; 
+    optional bool KeepEraseMarkers = 22; 
 
     repeated TGenerationPolicy Generation = 10;
 }
@@ -265,11 +265,11 @@ message TPartitionConfig {
     optional bool EnableFilterByKey = 15 [default = false]; // Build and use per-part bloom filter for fast key non-existence check
     optional bool ExecutorFastLogPolicy = 16 [default  = true]; // Commit log faster at the expense of bandwidth for cross-DC
     repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
-    optional bool EnableEraseCache = 18 [default = true]; // Use erase cache for faster iteration over erased rows
-    optional uint32 EraseCacheMinRows = 19; // Minimum number of erased rows worth caching (default 16)
-    optional uint32 EraseCacheMaxBytes = 20; // Maximum number of bytes to use for cached rows (default 1MB)
+    optional bool EnableEraseCache = 18 [default = true]; // Use erase cache for faster iteration over erased rows 
+    optional uint32 EraseCacheMinRows = 19; // Minimum number of erased rows worth caching (default 16) 
+    optional uint32 EraseCacheMaxBytes = 20; // Maximum number of bytes to use for cached rows (default 1MB) 
     optional EFreezeState FreezeState = 21;
-    optional bool ShadowData = 22; // Table has separate shadow data for later merging
+    optional bool ShadowData = 22; // Table has separate shadow data for later merging 
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
@@ -280,11 +280,11 @@ message TSplitBoundary {
     optional bytes SerializedKeyPrefix = 2;       // Or same as above but already serialized
 }
 
-message TShardIdx {
-    optional uint64 OwnerId = 1;
-    optional uint64 LocalId = 2;
-}
-
+message TShardIdx { 
+    optional uint64 OwnerId = 1; 
+    optional uint64 LocalId = 2; 
+} 
+ 
 message TTTLSettings {
     enum EUnit {
         UNIT_AUTO = 0;
@@ -353,7 +353,7 @@ message TTableDescription {
     optional bool IsBackup = 37 [default = false];
 
     repeated TCdcStreamDescription CdcStreams = 38;
-    repeated TSequenceDescription Sequences = 39;
+    repeated TSequenceDescription Sequences = 39; 
 }
 
 message TCompressionOptions {
@@ -361,37 +361,37 @@ message TCompressionOptions {
     optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set)
 }
 
-message TOlapColumnDescription {
-    // This id is auto-generated by schemeshard
-    optional uint32 Id = 1;
-
-    // Column name is required, some column names are reserved
-    optional string Name = 2;
-
-    optional string Type = 3;
-    optional uint32 TypeId = 4; // TypeId cannot be set explicitly, use Type
-
+message TOlapColumnDescription { 
+    // This id is auto-generated by schemeshard 
+    optional uint32 Id = 1; 
+ 
+    // Column name is required, some column names are reserved 
+    optional string Name = 2; 
+ 
+    optional string Type = 3; 
+    optional uint32 TypeId = 4; // TypeId cannot be set explicitly, use Type 
+ 
     // TODO: Intermediate codecs such as Delta, DubleDelta, dictionary encoding, etc.
     //TCompressionOptions Compression = 5;
-}
-
-message TAlterOlapColumn {
-    // Existing column name to alter
-    optional string Name = 1;
-
-    // TODO: there's currently nothing to alter
-}
-
-message TDropOlapColumn {
-    // Existing column name to drop
-    optional string Name = 1;
-}
-
+} 
+ 
+message TAlterOlapColumn { 
+    // Existing column name to alter 
+    optional string Name = 1; 
+ 
+    // TODO: there's currently nothing to alter 
+} 
+ 
+message TDropOlapColumn { 
+    // Existing column name to drop 
+    optional string Name = 1; 
+} 
+ 
 enum EColumnTableEngine {
     COLUMN_ENGINE_NONE = 0;
     COLUMN_ENGINE_REPLACING_TIMESERIES = 1;
-}
-
+} 
+ 
 enum EOlapProgramType {
     OLAP_PROGRAM_SSA_PROGRAM = 1;
     OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS = 2;
@@ -404,18 +404,18 @@ message TStorageTierConfig {
 }
 
 message TColumnTableSchema {
-    // A list of columns for tables with this schema
-    repeated TOlapColumnDescription Columns = 1;
-    repeated string KeyColumnNames = 2;
-
-    // A type of engine used by the table
+    // A list of columns for tables with this schema 
+    repeated TOlapColumnDescription Columns = 1; 
+    repeated string KeyColumnNames = 2; 
+ 
+    // A type of engine used by the table 
     optional EColumnTableEngine Engine = 3;
-
-    // Internal fields
-    optional uint32 NextColumnId = 4;
-
-    // Incremented on each schema change
-    optional uint64 Version = 5 [default = 1];
+ 
+    // Internal fields 
+    optional uint32 NextColumnId = 4; 
+ 
+    // Incremented on each schema change 
+    optional uint64 Version = 5 [default = 1]; 
 
     //optional EColumnCodec DefaultCompressionCodec = 6; // deprecated, not used before replace
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
@@ -425,53 +425,53 @@ message TColumnTableSchema {
     // You could use any combination of the tiers in TColumnDataLifeCycle.Tiering in any order.
     // If storage tier's Compression is not set it would be derived from table's DefaultCompression.
     repeated TStorageTierConfig StorageTiers = 9;
-}
-
+} 
+ 
 message TAlterColumnTableSchema {
-    repeated TOlapColumnDescription AddColumns = 1;
-    repeated TAlterOlapColumn AlterColumns = 2;
-    repeated TDropOlapColumn DropColumns = 3;
-    repeated string AddKeyColumnNames = 4;
+    repeated TOlapColumnDescription AddColumns = 1; 
+    repeated TAlterOlapColumn AlterColumns = 2; 
+    repeated TDropOlapColumn DropColumns = 3; 
+    repeated string AddKeyColumnNames = 4; 
     //optional TCompressionOptions DefaultCompression = 5;
-}
-
-// Schema presets are used to manage multiple tables with the same schema
-// Tables may be created without an explicit list of columns, linking to the
-// same schema preset. Later schema presets may be altered, effectively
-// altering all tables that have the same preset.
+} 
+ 
+// Schema presets are used to manage multiple tables with the same schema 
+// Tables may be created without an explicit list of columns, linking to the 
+// same schema preset. Later schema presets may be altered, effectively 
+// altering all tables that have the same preset. 
 message TColumnTableSchemaPreset {
-    // This id is auto-generated by schemeshard
-    optional uint32 Id = 1;
-
-    // Preset name is required, preset named "default" will be used by default
-    optional string Name = 2;
-
+    // This id is auto-generated by schemeshard 
+    optional uint32 Id = 1; 
+ 
+    // Preset name is required, preset named "default" will be used by default 
+    optional string Name = 2; 
+ 
     optional TColumnTableSchema Schema = 3;
-}
-
+} 
+ 
 message TAlterColumnTableSchemaPreset {
-    // Existing preset name to alter
-    optional string Name = 1;
-
+    // Existing preset name to alter 
+    optional string Name = 1; 
+ 
     optional TAlterColumnTableSchema AlterSchema = 2;
-}
-
+} 
+ 
 message TRemoveColumnTableSchemaPreset {
-    // Existing preset name to remove
-    optional string Name = 1;
-}
-
+    // Existing preset name to remove 
+    optional string Name = 1; 
+} 
+ 
 // TTL and external storage eviction policies
 message TColumnDataLifeCycle {
     message TTtl {
-        optional string ColumnName = 1;
+        optional string ColumnName = 1; 
         oneof Expire {
             uint32 ExpireAfterSeconds = 2;
             uint64 ExpireAfterBytes = 4;
         }
         optional TTTLSettings.EUnit ColumnUnit = 3;
-    }
-
+    } 
+ 
     message TStorageTier {
         optional string Name = 1; // name of TStorageTierConfig in TColumnTableSchema
         optional TTtl Eviction = 2;
@@ -483,174 +483,174 @@ message TColumnDataLifeCycle {
         repeated TStorageTier Tiers = 1;
     }
 
-    message TDisabled {
-    }
-
-    oneof Status {
+    message TDisabled { 
+    } 
+ 
+    oneof Status { 
         TTtl Enabled = 1;
-        TDisabled Disabled = 2;
+        TDisabled Disabled = 2; 
         TStorageTiering Tiering = 4;
-    }
-
-    // Incremented on each settings change
-    optional uint64 Version = 3 [default = 1];
-}
-
+    } 
+ 
+    // Incremented on each settings change 
+    optional uint64 Version = 3 [default = 1]; 
+} 
+ 
 message TColumnTableTtlSettingsPreset {
-    // This id is auto-generated by schemeshard
-    optional uint32 Id = 1;
-
-    // Preset name is required, preset named "default" will be used by default
-    optional string Name = 2;
-
+    // This id is auto-generated by schemeshard 
+    optional uint32 Id = 1; 
+ 
+    // Preset name is required, preset named "default" will be used by default 
+    optional string Name = 2; 
+ 
     optional TColumnDataLifeCycle TtlSettings = 3;
-}
-
+} 
+ 
 message TAlterColumnTableTtlSettingsPreset {
-    // Existing preset name to alter
-    optional string Name = 1;
-
+    // Existing preset name to alter 
+    optional string Name = 1; 
+ 
     optional TColumnDataLifeCycle AlterTtlSettings = 2;
-}
-
+} 
+ 
 message TRemoveColumnTableTtlSettingsPreset {
-    // Existing preset name to remove
-    optional string Name = 1;
-}
-
+    // Existing preset name to remove 
+    optional string Name = 1; 
+} 
+ 
 message TColumnStorageConfig {
-    optional TStorageSettings SysLog = 1;
-    optional TStorageSettings Log = 2;
-    optional TStorageSettings Data = 3;
-    optional uint32 DataChannelCount = 4;
-}
-
-// This is used internally by schemeshard
+    optional TStorageSettings SysLog = 1; 
+    optional TStorageSettings Log = 2; 
+    optional TStorageSettings Data = 3; 
+    optional uint32 DataChannelCount = 4; 
+} 
+ 
+// This is used internally by schemeshard 
 message TColumnStoreSharding {
-    repeated TShardIdx MetaShards = 1;
-    repeated TShardIdx ColumnShards = 2;
-}
-
+    repeated TShardIdx MetaShards = 1; 
+    repeated TShardIdx ColumnShards = 2; 
+} 
+ 
 message TColumnStoreDescription {
     optional string Name = 1;
     optional uint32 RESERVED_MetaShardCount = 2;
     optional uint32 ColumnShardCount = 3;
     repeated uint64 RESERVED_MetaShards = 4;
-    repeated uint64 ColumnShards = 5;
+    repeated uint64 ColumnShards = 5; 
     repeated TColumnTableSchemaPreset SchemaPresets = 6;
     repeated TColumnTableTtlSettingsPreset RESERVED_TtlSettingsPresets = 7;
     optional TColumnStorageConfig StorageConfig = 10;
-
-    // Internal fields
-    optional uint32 NextSchemaPresetId = 8;
-    optional uint32 NextTtlSettingsPresetId = 9;
+ 
+    // Internal fields 
+    optional uint32 NextSchemaPresetId = 8; 
+    optional uint32 NextTtlSettingsPresetId = 9; 
 }
 
 message TAlterColumnStore {
-    optional string Name = 1;
+    optional string Name = 1; 
     repeated TColumnTableSchemaPreset AddSchemaPresets = 2;
     repeated TAlterColumnTableSchemaPreset AlterSchemaPresets = 3;
     repeated TRemoveColumnTableSchemaPreset RemoveSchemaPresets = 4;
     repeated TColumnTableTtlSettingsPreset RESERVED_AddTtlSettingsPresets = 5;
     repeated TAlterColumnTableTtlSettingsPreset RESERVED_AlterTtlSettingsPresets = 6;
     repeated TRemoveColumnTableTtlSettingsPreset RESERVED_RemoveTtlSettingsPresets = 7;
-}
-
+} 
+ 
 message TColumnTableSharding {
-    // Version is incremented each time table sharding is changed
-    // This field is managed by the system.
-    optional uint64 Version = 1;
-
-    // An ordered list of currently used column shards
-    // This field is managed by the system.
-    repeated uint64 ColumnShards = 2;
-
-    // An unordered list of additional column shards that may have stored data
-    // using an older sharding method. Readers may need to include these
-    // shards when performing queries.
-    // This field is managed by the system.
-    repeated uint64 AdditionalColumnShards = 3;
-
-    // When true the mapping of primary key to column shard is unique.
-    // One example when this is false is when sharding for new data is random,
-    // the same primary key may have been written to multiple column shards.
-    // One example when this is true is hash partitioning using primary key,
-    // when each unique primary key is only mapped to one column shard.
-    // This field is managed by the system.
-    optional bool UniquePrimaryKey = 4;
-
-    // Random sharding chooses a random shard for new data at write time
-    message TRandomSharding {
-        // No additional fields
-    }
-
-    // Hash sharding is based on a hash of specified columns' values at write time.
-    message THashSharding {
-        enum EHashFunction {
-            // A simple hash modulo number of shards
-            HASH_FUNCTION_DEFAULT = 0;
+    // Version is incremented each time table sharding is changed 
+    // This field is managed by the system. 
+    optional uint64 Version = 1; 
+ 
+    // An ordered list of currently used column shards 
+    // This field is managed by the system. 
+    repeated uint64 ColumnShards = 2; 
+ 
+    // An unordered list of additional column shards that may have stored data 
+    // using an older sharding method. Readers may need to include these 
+    // shards when performing queries. 
+    // This field is managed by the system. 
+    repeated uint64 AdditionalColumnShards = 3; 
+ 
+    // When true the mapping of primary key to column shard is unique. 
+    // One example when this is false is when sharding for new data is random, 
+    // the same primary key may have been written to multiple column shards. 
+    // One example when this is true is hash partitioning using primary key, 
+    // when each unique primary key is only mapped to one column shard. 
+    // This field is managed by the system. 
+    optional bool UniquePrimaryKey = 4; 
+ 
+    // Random sharding chooses a random shard for new data at write time 
+    message TRandomSharding { 
+        // No additional fields 
+    } 
+ 
+    // Hash sharding is based on a hash of specified columns' values at write time. 
+    message THashSharding { 
+        enum EHashFunction { 
+            // A simple hash modulo number of shards 
+            HASH_FUNCTION_DEFAULT = 0; 
             HASH_FUNCTION_CLOUD_LOGS = 1;
-        }
-
-        // Hash function used for mapping column values to a column shard
-        optional EHashFunction Function = 1;
-
-        // A list of columns used for hashing, must not be empty
-        repeated string Columns = 2;
-
-        // When true the mapping of column values to column shard is unique.
-        // One example when this may become false is when table sharding is
-        // changed and older data with the same column values may be left on
-        // a different shard.
-        optional bool UniqueShardKey = 3;
-    }
-
-    oneof Method {
-        TRandomSharding RandomSharding = 5;
-        THashSharding HashSharding = 6;
-    }
-}
-
+        } 
+ 
+        // Hash function used for mapping column values to a column shard 
+        optional EHashFunction Function = 1; 
+ 
+        // A list of columns used for hashing, must not be empty 
+        repeated string Columns = 2; 
+ 
+        // When true the mapping of column values to column shard is unique. 
+        // One example when this may become false is when table sharding is 
+        // changed and older data with the same column values may be left on 
+        // a different shard. 
+        optional bool UniqueShardKey = 3; 
+    } 
+ 
+    oneof Method { 
+        TRandomSharding RandomSharding = 5; 
+        THashSharding HashSharding = 6; 
+    } 
+} 
+ 
 message TColumnTableDescription {
-    optional string Name = 1;
-
-    // When creating a table these may be omitted, then ttl preset will be
-    // used instead. When describing current schema and settings are always
-    // returned.
+    optional string Name = 1; 
+ 
+    // When creating a table these may be omitted, then ttl preset will be 
+    // used instead. When describing current schema and settings are always 
+    // returned. 
     optional TColumnTableSchema Schema = 2;
     optional TColumnDataLifeCycle TtlSettings = 3;
-
-    // Table may be created using presets specific to the olap store.
-    optional uint32 SchemaPresetId = 4;
+ 
+    // Table may be created using presets specific to the olap store. 
+    optional uint32 SchemaPresetId = 4; 
     optional uint32 RESERVED_TtlSettingsPresetId = 5;
-    optional string SchemaPresetName = 6;
+    optional string SchemaPresetName = 6; 
     optional string RESERVED_TtlSettingsPresetName = 7;
-
-    // Associated olap store id, initialized by schemeshard
+ 
+    // Associated olap store id, initialized by schemeshard 
     // May be missing for tables that are not part of an ColumnStore
     optional NKikimrProto.TPathID ColumnStorePathId = 8;
-
-    // Specifies the desired number of ColumnShards for this table
-    optional uint32 ColumnShardCount = 9;
-
-    // Sharding schema used by this table, may be used for specifying sharding settings
+ 
+    // Specifies the desired number of ColumnShards for this table 
+    optional uint32 ColumnShardCount = 9; 
+ 
+    // Sharding schema used by this table, may be used for specifying sharding settings 
     optional TColumnTableSharding Sharding = 10;
-
-    // Internal fields that make sure versions always increase when presets are switched
-    optional uint64 SchemaPresetVersionAdj = 11;
-    optional uint64 TtlSettingsPresetVersionAdj = 12;
-}
-
+ 
+    // Internal fields that make sure versions always increase when presets are switched 
+    optional uint64 SchemaPresetVersionAdj = 11; 
+    optional uint64 TtlSettingsPresetVersionAdj = 12; 
+} 
+ 
 message TAlterColumnTable {
-    optional string Name = 1;
-
+    optional string Name = 1; 
+ 
     optional TAlterColumnTableSchema AlterSchema = 2;
     optional TColumnDataLifeCycle AlterTtlSettings = 3;
-
-    optional string AlterSchemaPresetName = 4;
+ 
+    optional string AlterSchemaPresetName = 4; 
     optional string RESERVED_AlterTtlSettingsPresetName = 5;
-}
-
+} 
+ 
 message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
@@ -788,7 +788,7 @@ message TIndexAlteringConfig {
 message TIndexedTableCreationConfig {
     optional TTableDescription TableDescription = 1;
     repeated TIndexCreationConfig IndexDescription = 2;
-    repeated TSequenceDescription SequenceDescription = 3;
+    repeated TSequenceDescription SequenceDescription = 3; 
 }
 
 message TInitiateBuildIndexMainTable {
@@ -932,22 +932,22 @@ message TRtmrVolumeDescription {
     repeated TPartition Partitions = 4;
 }
 
-message TBlockStoreVolumeDescription {
-    message TPartition {
-        optional uint32 PartitionId = 1;
-        optional uint64 TabletId = 2;
-    }
-
-    optional string Name = 1; // mandatory
-    optional uint64 PathId = 2;
-    optional NKikimrBlockStore.TVolumeConfig VolumeConfig = 3; // mandatory
-    repeated TPartition Partitions = 4; // do not set
-    optional uint64 VolumeTabletId = 5; // do not set
-    optional uint64 AlterVersion = 6; // do not set
-    optional string MountToken = 7; // do not set
+message TBlockStoreVolumeDescription { 
+    message TPartition { 
+        optional uint32 PartitionId = 1; 
+        optional uint64 TabletId = 2; 
+    } 
+ 
+    optional string Name = 1; // mandatory 
+    optional uint64 PathId = 2; 
+    optional NKikimrBlockStore.TVolumeConfig VolumeConfig = 3; // mandatory 
+    repeated TPartition Partitions = 4; // do not set 
+    optional uint64 VolumeTabletId = 5; // do not set 
+    optional uint64 AlterVersion = 6; // do not set 
+    optional string MountToken = 7; // do not set 
     optional uint64 TokenVersion = 8; // do not set
-}
-
+} 
+ 
 message TFileStoreDescription {
     optional string Name = 1; // mandatory
     optional uint64 PathId = 2;
@@ -956,14 +956,14 @@ message TFileStoreDescription {
     optional uint64 Version = 5; // do not set
 }
 
-message TKesusDescription {
-    optional string Name = 1; // mandatory
-    optional uint64 PathId = 2;
-    optional uint64 KesusTabletId = 3; // do not set
-    optional Ydb.Coordination.Config Config = 4;
-    optional uint64 Version = 5; // do not set
-}
-
+message TKesusDescription { 
+    optional string Name = 1; // mandatory 
+    optional uint64 PathId = 2; 
+    optional uint64 KesusTabletId = 3; // do not set 
+    optional Ydb.Coordination.Config Config = 4; 
+    optional uint64 Version = 5; // do not set 
+} 
+ 
 message TSolomonVolumeDescription {
     message TPartition {
         optional uint64 PartitionId = 1;
@@ -1002,12 +1002,12 @@ message TAlterSolomonVolume {
     optional bool UpdateChannelsBinding = 4 [default = false];
 }
 
-message TBlockStoreAssignOp {
-    optional string Name = 1; // mandatory
-    optional string NewMountToken = 2; // unset to unassign
+message TBlockStoreAssignOp { 
+    optional string Name = 1; // mandatory 
+    optional string NewMountToken = 2; // unset to unassign 
     optional uint64 TokenVersion = 3;
-}
-
+} 
+ 
 message TModifyACL {
     optional string Name = 1;
     optional bytes DiffACL = 2; // NACLibProto.TDiffACL
@@ -1039,25 +1039,25 @@ message TMove { // private description of the operation
     optional string DstPath = 2;
 }
 
-message TSequenceDescription {
-    optional string Name = 1; // mandatory
+message TSequenceDescription { 
+    optional string Name = 1; // mandatory 
     optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard
-    optional uint64 Version = 3; // incremented every time sequence is altered
-    optional uint64 SequenceShard = 4; // current sequenceshard, assigned by schemeshard
-
-    optional sint64 MinValue = 5; // minimum value, defaults to 1 or Min<i64>
-    optional sint64 MaxValue = 6; // maximum value, defaults to Max<i64> or -1
-    optional sint64 StartValue = 7; // start value, defaults to MinValue
-    optional uint64 Cache = 8; // number of items to cache, defaults to 1
-    optional sint64 Increment = 9; // increment at each call, defaults to 1
-    optional bool Cycle = 10; // true when cycle on overflow is allowed
-}
-
-message TSequenceSharding {
-    // The last shard is the one currently active
-    repeated TShardIdx SequenceShards = 1;
-}
-
+    optional uint64 Version = 3; // incremented every time sequence is altered 
+    optional uint64 SequenceShard = 4; // current sequenceshard, assigned by schemeshard 
+ 
+    optional sint64 MinValue = 5; // minimum value, defaults to 1 or Min<i64> 
+    optional sint64 MaxValue = 6; // maximum value, defaults to Max<i64> or -1 
+    optional sint64 StartValue = 7; // start value, defaults to MinValue 
+    optional uint64 Cache = 8; // number of items to cache, defaults to 1 
+    optional sint64 Increment = 9; // increment at each call, defaults to 1 
+    optional bool Cycle = 10; // true when cycle on overflow is allowed 
+} 
+ 
+message TSequenceSharding { 
+    // The last shard is the one currently active 
+    repeated TShardIdx SequenceShards = 1; 
+} 
+ 
 message TReplicationDescription {
     optional string Name = 1;
     optional NKikimrReplication.TReplicationConfig Config = 2;
@@ -1081,16 +1081,16 @@ enum EOperationType {
     ESchemeOpCreateSubDomain = 12;
     ESchemeOpDropSubDomain = 13;
     ESchemeOpCreateRtmrVolume = 14;
-    ESchemeOpCreateBlockStoreVolume = 15;
-    ESchemeOpAlterBlockStoreVolume = 16;
-    ESchemeOpAssignBlockStoreVolume = 17;
-    ESchemeOpDropBlockStoreVolume = 18;
-    ESchemeOpCreateKesus = 19;
-    ESchemeOpDropKesus = 20;
+    ESchemeOpCreateBlockStoreVolume = 15; 
+    ESchemeOpAlterBlockStoreVolume = 16; 
+    ESchemeOpAssignBlockStoreVolume = 17; 
+    ESchemeOpDropBlockStoreVolume = 18; 
+    ESchemeOpCreateKesus = 19; 
+    ESchemeOpDropKesus = 20; 
     ESchemeOpForceDropSubDomain = 21;
     ESchemeOpCreateSolomonVolume = 22;
     ESchemeOpDropSolomonVolume = 23;
-    ESchemeOpAlterKesus = 24;
+    ESchemeOpAlterKesus = 24; 
     ESchemeOpAlterSubDomain = 25;
     ESchemeOpAlterUserAttributes = 26;
 
@@ -1162,11 +1162,11 @@ enum EOperationType {
 
     ESchemeOpMoveTable = 71;
     ESchemeOpMoveTableIndex = 72;
-
-    // Sequences
-    ESchemeOpCreateSequence = 73;
-    ESchemeOpAlterSequence = 74;
-    ESchemeOpDropSequence = 75;
+ 
+    // Sequences 
+    ESchemeOpCreateSequence = 73; 
+    ESchemeOpAlterSequence = 74; 
+    ESchemeOpDropSequence = 75; 
 
     // Replication
     ESchemeOpCreateReplication = 76;
@@ -1222,7 +1222,7 @@ message TDropIndex {
 message TModifyScheme {
     optional string WorkingDir = 1;
     optional EOperationType OperationType = 2;
-    optional bool Internal = 36 [default = false]; // internal operations are not generated directly by the user
+    optional bool Internal = 36 [default = false]; // internal operations are not generated directly by the user 
     optional bool FailOnExist = 50 [default = false]; // as a replacement for TEvModifySchemeTransaction.FailOnExist
 
     optional TMkDir MkDir = 3;
@@ -1236,10 +1236,10 @@ message TModifyScheme {
     optional TBackupTask Backup = 11;
     optional NKikimrSubDomains.TSubDomainSettings SubDomain = 12;
     optional TRtmrVolumeDescription CreateRtmrVolume = 13;
-    optional TBlockStoreVolumeDescription CreateBlockStoreVolume = 14;
-    optional TBlockStoreVolumeDescription AlterBlockStoreVolume = 15;
-    optional TBlockStoreAssignOp AssignBlockStoreVolume = 16;
-    optional TKesusDescription Kesus = 17;
+    optional TBlockStoreVolumeDescription CreateBlockStoreVolume = 14; 
+    optional TBlockStoreVolumeDescription AlterBlockStoreVolume = 15; 
+    optional TBlockStoreAssignOp AssignBlockStoreVolume = 16; 
+    optional TKesusDescription Kesus = 17; 
     optional TCreateSolomonVolume CreateSolomonVolume = 18;
     optional TAlterUserAttributes AlterUserAttributes = 19;
     repeated TApplyIf ApplyIf = 20;
@@ -1271,7 +1271,7 @@ message TModifyScheme {
     optional TDropCdcStream DropCdcStream = 47;
     optional TMove MoveTable = 48;
     optional TMove MoveTableIndex = 49;
-    optional TSequenceDescription Sequence = 51;
+    optional TSequenceDescription Sequence = 51; 
     optional TReplicationDescription Replication = 52;
 }
 
@@ -1315,8 +1315,8 @@ enum EPathType {
     EPathTypePersQueueGroup = 3;
     EPathTypeSubDomain = 4;
     EPathTypeRtmrVolume = 5;
-    EPathTypeBlockStoreVolume = 6;
-    EPathTypeKesus = 7;
+    EPathTypeBlockStoreVolume = 6; 
+    EPathTypeKesus = 7; 
     EPathTypeSolomonVolume = 8;
     EPathTypeTableIndex = 9; // Used for abstract index
     EPathTypeExtSubDomain = 10;
@@ -1324,7 +1324,7 @@ enum EPathType {
     EPathTypeColumnStore = 12;
     EPathTypeColumnTable = 13;
     EPathTypeCdcStream = 14;
-    EPathTypeSequence = 15;
+    EPathTypeSequence = 15; 
     EPathTypeReplication = 16;
 }
 
@@ -1369,12 +1369,12 @@ message TPathVersion {
     optional uint64 ColumnStoreVersion = 16;
     optional uint64 ColumnTableVersion = 17;
     optional uint64 ColumnTableShardingVersion = 18;
-    optional uint64 SubDomainStateVersion = 19;
+    optional uint64 SubDomainStateVersion = 19; 
     optional uint64 ColumnTableSchemaVersion = 20;
     optional uint64 ColumnTableTtlSettingsVersion = 21;
     optional uint64 CdcStreamVersion = 22;
     optional uint64 SecurityStateVersion = 23;
-    optional uint64 SequenceVersion = 24;
+    optional uint64 SequenceVersion = 24; 
     optional uint64 ReplicationVersion = 25;
 }
 
@@ -1446,8 +1446,8 @@ message TPathDescription {
     optional NKikimrTabletBase.TMetrics TabletMetrics = 9;
     optional NKikimrSubDomains.TDomainDescription DomainDescription = 10;
     optional TRtmrVolumeDescription RtmrVolumeDescription = 11; // for rtmr volume
-    optional TBlockStoreVolumeDescription BlockStoreVolumeDescription = 12;
-    optional TKesusDescription Kesus = 13;
+    optional TBlockStoreVolumeDescription BlockStoreVolumeDescription = 12; 
+    optional TKesusDescription Kesus = 13; 
     optional TSolomonVolumeDescription SolomonDescription = 14;
     repeated NKikimrTableStats.TTableStats TablePartitionStats = 15;
     repeated TUserAttribute UserAttributes = 16;
@@ -1458,7 +1458,7 @@ message TPathDescription {
     optional TColumnStoreDescription ColumnStoreDescription = 21;
     optional TColumnTableDescription ColumnTableDescription = 22;
     optional TCdcStreamDescription CdcStreamDescription = 23;
-    optional TSequenceDescription SequenceDescription = 24;
+    optional TSequenceDescription SequenceDescription = 24; 
     optional TReplicationDescription ReplicationDescription = 25;
 }
 

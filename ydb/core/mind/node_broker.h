@@ -186,15 +186,15 @@ inline ui32 NodeIdToDomain(ui32 nodeId)
     return nodeId & DOMAIN_MASK;
 }
 
-inline ui32 NodeIdToDomain(ui32 nodeId, const TDomainsInfo& domains) {
-    // All nodes belong to the same domain when it's the only one defined
-    if (Y_LIKELY(domains.Domains.size() == 1)) {
-        return domains.Domains.begin()->first;
-    }
-
-    return NodeIdToDomain(nodeId);
-}
-
+inline ui32 NodeIdToDomain(ui32 nodeId, const TDomainsInfo& domains) { 
+    // All nodes belong to the same domain when it's the only one defined 
+    if (Y_LIKELY(domains.Domains.size() == 1)) { 
+        return domains.Domains.begin()->first; 
+    } 
+ 
+    return NodeIdToDomain(nodeId); 
+} 
+ 
 IActor *CreateNodeBroker(const TActorId &tablet, TTabletStorageInfo *info);
 
 } // NNodeBroker

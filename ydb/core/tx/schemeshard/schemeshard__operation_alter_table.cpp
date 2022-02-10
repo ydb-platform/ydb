@@ -63,10 +63,10 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     auto copyAlter = alter;
 
-    const bool hasSchemaChanges = (
-            copyAlter.ColumnsSize() != 0 ||
-            copyAlter.DropColumnsSize() != 0);
-
+    const bool hasSchemaChanges = ( 
+            copyAlter.ColumnsSize() != 0 || 
+            copyAlter.DropColumnsSize() != 0); 
+ 
     if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() !=  table->IsBackup) {
         errStr = Sprintf("Cannot add/remove 'IsBackup' property");
         status = NKikimrScheme::StatusInvalidParameter;
@@ -80,7 +80,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
 
     if (copyAlter.HasPartitionConfig() && copyAlter.GetPartitionConfig().HasFreezeState()) {
-        if (hasSchemaChanges) {
+        if (hasSchemaChanges) { 
             errStr = Sprintf("Mix freeze cmd with other options is forbiden");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
@@ -126,7 +126,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     return alterData;
 }
 
-void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr table, const TBindingsRoomsChanges& bindingChanges, TOperationContext& context) {
+void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr table, const TBindingsRoomsChanges& bindingChanges, TOperationContext& context) { 
 
     path->LastTxId = opId.GetTxId();
     path->PathState = TPathElement::EPathState::EPathStateAlter;
@@ -136,30 +136,30 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
 
     NIceDb::TNiceDb db(context.Txc.DB);
 
-    TTxState::ETxState commonShardOp = table->NeedRecreateParts()
+    TTxState::ETxState commonShardOp = table->NeedRecreateParts() 
             ? TTxState::CreateParts
             : TTxState::ConfigureParts;
 
     txState.Shards.reserve(table->GetPartitions().size());
     for (const auto& shard : table->GetPartitions()) {
         auto shardIdx = shard.ShardIdx;
-        TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
-
-        auto shardOp = commonShardOp;
-
+        TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx]; 
+ 
+        auto shardOp = commonShardOp; 
+ 
         auto it = bindingChanges.find(GetPoolsMapping(shardInfo.BindedChannels));
         if (it != bindingChanges.end()) {
-            if (it->second.ChannelsBindingsUpdated) {
-                // We must recreate this shard to apply new channel bindings
-                shardOp = TTxState::CreateParts;
-                shardInfo.BindedChannels = it->second.ChannelsBindings;
-                context.SS->PersistChannelsBinding(db, shardIdx, shardInfo.BindedChannels);
-            }
-
-            table->PerShardPartitionConfig[shardIdx].CopyFrom(it->second.PerShardConfig);
-            context.SS->PersistAddTableShardPartitionConfig(db, shardIdx, it->second.PerShardConfig);
-        }
-
+            if (it->second.ChannelsBindingsUpdated) { 
+                // We must recreate this shard to apply new channel bindings 
+                shardOp = TTxState::CreateParts; 
+                shardInfo.BindedChannels = it->second.ChannelsBindings; 
+                context.SS->PersistChannelsBinding(db, shardIdx, shardInfo.BindedChannels); 
+            } 
+ 
+            table->PerShardPartitionConfig[shardIdx].CopyFrom(it->second.PerShardConfig); 
+            context.SS->PersistAddTableShardPartitionConfig(db, shardIdx, it->second.PerShardConfig); 
+        } 
+ 
         txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, shardOp);
 
         shardInfo.CurrentTxId = opId.GetTxId();
@@ -271,7 +271,7 @@ public:
                         "Propose modify scheme on datashard " << datashardId << " txid: " << OperationId << " at schemeshard" << ssId);
 
             auto seqNo = context.SS->StartRound(*txState);
-            TString txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
+            TString txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo); 
             THolder<TEvDataShard::TEvProposeTransaction> event =
                 MakeHolder<TEvDataShard::TEvProposeTransaction>(NKikimrTxDataShard::TX_KIND_SCHEME,
                                                         ui64(ssId), //owner schemeshard tablet id
@@ -584,17 +584,17 @@ public:
             return result;
         }
 
-        TBindingsRoomsChanges bindingChanges;
-
-        if (context.SS->IsStorageConfigLogic(table)) {
-            if (!context.SS->GetBindingsRoomsChanges(path.DomainId(), table->GetPartitions(), alterData->PartitionConfigFull(), bindingChanges, errStr)) {
+        TBindingsRoomsChanges bindingChanges; 
+ 
+        if (context.SS->IsStorageConfigLogic(table)) { 
+            if (!context.SS->GetBindingsRoomsChanges(path.DomainId(), table->GetPartitions(), alterData->PartitionConfigFull(), bindingChanges, errStr)) { 
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                return result;
-            }
-        }
-
+                return result; 
+            } 
+        } 
+ 
         table->PrepareAlter(alterData);
-        PrepareChanges(OperationId, path.Base(), table, bindingChanges, context);
+        PrepareChanges(OperationId, path.Base(), table, bindingChanges, context); 
 
         State = NextState();
         SetState(SelectStateFunc(State));

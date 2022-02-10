@@ -46,26 +46,26 @@ void TTableProfiles::Load(const NKikimrConfig::TTableProfilesConfig &config)
 }
 
 NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetNamedFamilyDescription(NKikimrConfig::TStoragePolicy &policy, const TString& name) const {
-    for (size_t i = 0; i < policy.ColumnFamiliesSize(); ++i) {
-        const auto& family = policy.GetColumnFamilies(i);
-        if (family.HasName() && name == family.GetName()) {
-            return policy.MutableColumnFamilies(i);
-        }
-    }
-    auto res = policy.AddColumnFamilies();
-    res->SetName(name);
-    return res;
-}
-
+    for (size_t i = 0; i < policy.ColumnFamiliesSize(); ++i) { 
+        const auto& family = policy.GetColumnFamilies(i); 
+        if (family.HasName() && name == family.GetName()) { 
+            return policy.MutableColumnFamilies(i); 
+        } 
+    } 
+    auto res = policy.AddColumnFamilies(); 
+    res->SetName(name); 
+    return res; 
+} 
+ 
 NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetDefaultFamilyDescription(NKikimrConfig::TStoragePolicy &policy) const {
-    for (size_t i = 0; i < policy.ColumnFamiliesSize(); ++i) {
-        const auto& family = policy.GetColumnFamilies(i);
-        if ((family.HasId() && family.GetId() == 0) ||
-            (!family.HasId() && !family.HasName()))
-        {
+    for (size_t i = 0; i < policy.ColumnFamiliesSize(); ++i) { 
+        const auto& family = policy.GetColumnFamilies(i); 
+        if ((family.HasId() && family.GetId() == 0) || 
+            (!family.HasId() && !family.HasName())) 
+        { 
             return policy.MutableColumnFamilies(i);
-        }
-    }
+        } 
+    } 
     auto res = policy.AddColumnFamilies();
     res->SetId(0);
     return res;
@@ -90,7 +90,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
     NKikimrConfig::TStoragePolicy storagePolicy;
     NKikimrConfig::TReplicationPolicy replicationPolicy;
     NKikimrConfig::TCachingPolicy cachingPolicy;
-    auto &partitionConfig = *tableDesc.MutablePartitionConfig();
+    auto &partitionConfig = *tableDesc.MutablePartitionConfig(); 
 
     if (profile.preset_name() && !TableProfiles.contains(profile.preset_name())) {
         code = Ydb::StatusIds::BAD_REQUEST;
@@ -196,36 +196,36 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         // Apply overwritten storage settings for syslog.
         if (policy.has_syslog()) {
             auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableSysLog();
-            settings.SetPreferredPoolKind(policy.syslog().media());
+            settings.SetPreferredPoolKind(policy.syslog().media()); 
             settings.SetAllowOtherKinds(false);
         }
         // Apply overwritten storage settings for log.
         if (policy.has_log()) {
             auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableLog();
-            settings.SetPreferredPoolKind(policy.log().media());
+            settings.SetPreferredPoolKind(policy.log().media()); 
             settings.SetAllowOtherKinds(false);
         }
         // Apply overwritten storage settings for data.
         if (policy.has_data()) {
             auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableData();
-            settings.SetPreferredPoolKind(policy.data().media());
+            settings.SetPreferredPoolKind(policy.data().media()); 
             settings.SetAllowOtherKinds(false);
         }
         // Apply overwritten storage settings for external.
         if (policy.has_external()) {
             auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableExternal();
-            settings.SetPreferredPoolKind(policy.external().media());
+            settings.SetPreferredPoolKind(policy.external().media()); 
             settings.SetAllowOtherKinds(false);
         }
         switch (policy.keep_in_memory()) {
         case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
             break;
         case Ydb::FeatureFlag::ENABLED:
-            if (!AppData()->FeatureFlags.GetEnablePublicApiKeepInMemory()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = "Setting keep_in_memory to ENABLED is not allowed";
-                return false;
-            }
+            if (!AppData()->FeatureFlags.GetEnablePublicApiKeepInMemory()) { 
+                code = Ydb::StatusIds::BAD_REQUEST; 
+                error = "Setting keep_in_memory to ENABLED is not allowed"; 
+                return false; 
+            } 
             GetDefaultFamilyDescription(storagePolicy)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
             break;
         case Ydb::FeatureFlag::DISABLED:
@@ -237,74 +237,74 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                             (ui32)policy.keep_in_memory());
             return false;
         }
-
-        // Perform the same overrides for each named policy there is
-        for (auto& family : policy.column_families()) {
-            const TString& name = family.name();
-            if (name.empty()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = "Cannot override settings for a family without a name";
-                return false;
-            }
-
-            auto& familyProto = (name == "default")
-                ? *GetDefaultFamilyDescription(storagePolicy)
-                : *GetNamedFamilyDescription(storagePolicy, name);
-
-            // Make sure schemeshard has the correct family name specified
-            if (!familyProto.HasName()) {
-                familyProto.SetName(name);
-            }
-
-            if (family.has_data()) {
-                auto& settings = *familyProto.MutableStorageConfig()->MutableData();
-                settings.SetPreferredPoolKind(family.data().media());
-                settings.SetAllowOtherKinds(false);
-            }
-
-            if (family.has_external()) {
-                auto& settings = *familyProto.MutableStorageConfig()->MutableExternal();
-                settings.SetPreferredPoolKind(family.external().media());
-                settings.SetAllowOtherKinds(false);
-            }
-
-            switch (family.keep_in_memory()) {
-            case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
-                break;
-            case Ydb::FeatureFlag::ENABLED:
-                if (!AppData()->FeatureFlags.GetEnablePublicApiKeepInMemory()) {
-                    code = Ydb::StatusIds::BAD_REQUEST;
-                    error = "Setting keep_in_memory to ENABLED is not allowed";
-                    return false;
-                }
+ 
+        // Perform the same overrides for each named policy there is 
+        for (auto& family : policy.column_families()) { 
+            const TString& name = family.name(); 
+            if (name.empty()) { 
+                code = Ydb::StatusIds::BAD_REQUEST; 
+                error = "Cannot override settings for a family without a name"; 
+                return false; 
+            } 
+ 
+            auto& familyProto = (name == "default") 
+                ? *GetDefaultFamilyDescription(storagePolicy) 
+                : *GetNamedFamilyDescription(storagePolicy, name); 
+ 
+            // Make sure schemeshard has the correct family name specified 
+            if (!familyProto.HasName()) { 
+                familyProto.SetName(name); 
+            } 
+ 
+            if (family.has_data()) { 
+                auto& settings = *familyProto.MutableStorageConfig()->MutableData(); 
+                settings.SetPreferredPoolKind(family.data().media()); 
+                settings.SetAllowOtherKinds(false); 
+            } 
+ 
+            if (family.has_external()) { 
+                auto& settings = *familyProto.MutableStorageConfig()->MutableExternal(); 
+                settings.SetPreferredPoolKind(family.external().media()); 
+                settings.SetAllowOtherKinds(false); 
+            } 
+ 
+            switch (family.keep_in_memory()) { 
+            case Ydb::FeatureFlag::STATUS_UNSPECIFIED: 
+                break; 
+            case Ydb::FeatureFlag::ENABLED: 
+                if (!AppData()->FeatureFlags.GetEnablePublicApiKeepInMemory()) { 
+                    code = Ydb::StatusIds::BAD_REQUEST; 
+                    error = "Setting keep_in_memory to ENABLED is not allowed"; 
+                    return false; 
+                } 
                 familyProto.SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
-                break;
-            case Ydb::FeatureFlag::DISABLED:
-                familyProto.ClearColumnCache();
-                break;
-            default:
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("unknown keep-in-memory featrure flag status %" PRIu32,
-                                (ui32)family.keep_in_memory());
-                return false;
-            }
-
-            switch (family.compression()) {
-            case Ydb::Table::ColumnFamilyPolicy::COMPRESSION_UNSPECIFIED:
-                break;
-            case Ydb::Table::ColumnFamilyPolicy::UNCOMPRESSED:
+                break; 
+            case Ydb::FeatureFlag::DISABLED: 
+                familyProto.ClearColumnCache(); 
+                break; 
+            default: 
+                code = Ydb::StatusIds::BAD_REQUEST; 
+                error = Sprintf("unknown keep-in-memory featrure flag status %" PRIu32, 
+                                (ui32)family.keep_in_memory()); 
+                return false; 
+            } 
+ 
+            switch (family.compression()) { 
+            case Ydb::Table::ColumnFamilyPolicy::COMPRESSION_UNSPECIFIED: 
+                break; 
+            case Ydb::Table::ColumnFamilyPolicy::UNCOMPRESSED: 
                 familyProto.SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
-                break;
-            case Ydb::Table::ColumnFamilyPolicy::COMPRESSED:
+                break; 
+            case Ydb::Table::ColumnFamilyPolicy::COMPRESSED: 
                 familyProto.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
-                break;
-            default:
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("unknown compression value %" PRIu32,
-                                (ui32)family.compression());
-                return false;
-            }
-        }
+                break; 
+            default: 
+                code = Ydb::StatusIds::BAD_REQUEST; 
+                error = Sprintf("unknown compression value %" PRIu32, 
+                                (ui32)family.compression()); 
+                return false; 
+            } 
+        } 
     } else if (StoragePolicies.contains(tableProfile.GetStoragePolicy())) {
         storagePolicy = StoragePolicies.at(tableProfile.GetStoragePolicy());
     }
@@ -387,13 +387,13 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
     if (executionPolicy.HasTxReadSizeLimit())
         partitionConfig.SetTxReadSizeLimit(executionPolicy.GetTxReadSizeLimit());
 
-    if (executionPolicy.HasEnableEraseCache())
-        partitionConfig.SetEnableEraseCache(executionPolicy.GetEnableEraseCache());
-    if (executionPolicy.HasEraseCacheMinRows())
-        partitionConfig.SetEraseCacheMinRows(executionPolicy.GetEraseCacheMinRows());
-    if (executionPolicy.HasEraseCacheMaxBytes())
-        partitionConfig.SetEraseCacheMaxBytes(executionPolicy.GetEraseCacheMaxBytes());
-
+    if (executionPolicy.HasEnableEraseCache()) 
+        partitionConfig.SetEnableEraseCache(executionPolicy.GetEnableEraseCache()); 
+    if (executionPolicy.HasEraseCacheMinRows()) 
+        partitionConfig.SetEraseCacheMinRows(executionPolicy.GetEraseCacheMinRows()); 
+    if (executionPolicy.HasEraseCacheMaxBytes()) 
+        partitionConfig.SetEraseCacheMaxBytes(executionPolicy.GetEraseCacheMaxBytes()); 
+ 
     // Apply partitioning policy.
     if (partitioningPolicy.HasUniformPartitionsCount())
         tableDesc.SetUniformPartitionsCount(partitioningPolicy.GetUniformPartitionsCount());

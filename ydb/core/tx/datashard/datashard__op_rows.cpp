@@ -72,19 +72,19 @@ public:
     TTxType GetTxType() const override { return TXTYPE_ERASE_ROWS; }
 };
 
-static void OutOfSpace(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE);
-}
-
+static void OutOfSpace(NKikimrTxDataShard::TEvUploadRowsResponse& response) { 
+    response.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE); 
+} 
+ 
 static void WrongShardState(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
 }
 
-static void OutOfSpace(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
-    // NOTE: this function is never called, because erase is allowed when out of space
-    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
-}
-
+static void OutOfSpace(NKikimrTxDataShard::TEvEraseRowsResponse& response) { 
+    // NOTE: this function is never called, because erase is allowed when out of space 
+    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE); 
+} 
+ 
 static void WrongShardState(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
 }
@@ -94,22 +94,22 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     TString rejectReason;
     bool reject = self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReason);
-    bool outOfSpace = false;
+    bool outOfSpace = false; 
 
-    if (!reject && isWrite) {
+    if (!reject && isWrite) { 
         if (self->IsAnyChannelYellowStop()) {
-            reject = true;
-            outOfSpace = true;
-            rejectReason = TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID();
-            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
-        } else if (self->IsSubDomainOutOfSpace()) {
-            reject = true;
-            outOfSpace = true;
-            rejectReason = "Cannot perform writes: database is out of disk space";
-            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
-        }
-    }
-
+            reject = true; 
+            outOfSpace = true; 
+            rejectReason = TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID(); 
+            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE); 
+        } else if (self->IsSubDomainOutOfSpace()) { 
+            reject = true; 
+            outOfSpace = true; 
+            rejectReason = "Cannot perform writes: database is out of disk space"; 
+            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE); 
+        } 
+    } 
+ 
     if (!reject) {
         return false;
     }
@@ -120,11 +120,11 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
 
     auto response = MakeHolder<TEvResponse>();
     response->Record.SetTabletID(self->TabletID());
-    if (outOfSpace) {
-        OutOfSpace(response->Record);
-    } else {
-        WrongShardState(response->Record);
-    }
+    if (outOfSpace) { 
+        OutOfSpace(response->Record); 
+    } else { 
+        WrongShardState(response->Record); 
+    } 
     response->Record.SetErrorDescription(rejectReason);
     ctx.Send(ev->Sender, std::move(response));
 
@@ -132,7 +132,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
 }
 
 void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) {
-    if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true)) {
+    if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true)) { 
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
     } else {
         IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
@@ -140,7 +140,7 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
 }
 
 void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
-    if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false)) {
+    if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false)) { 
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);
     } else {
         IncCounter(COUNTER_ERASE_ROWS_OVERLOADED);

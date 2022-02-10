@@ -26,26 +26,26 @@ namespace NTable {
         }
 
     private:
-        TLimit Limit(ui32 table) noexcept override
+        TLimit Limit(ui32 table) noexcept override 
         {
-            if (Lookup(table)) {
-                return TLimit{ Family->Large, 8 * 1024 * 1024 - 8 };
-            } else {
-                return TLimit{ Max<ui32>(), 0 };
-            }
+            if (Lookup(table)) { 
+                return TLimit{ Family->Large, 8 * 1024 * 1024 - 8 }; 
+            } else { 
+                return TLimit{ Max<ui32>(), 0 }; 
+            } 
         }
 
         TResult Place(ui32 table, TTag, TArrayRef<const char> data) noexcept override
         {
-            Y_VERIFY(Lookup(table) && data.size() >= Family->Large);
+            Y_VERIFY(Lookup(table) && data.size() >= Family->Large); 
 
-            auto blob = NPage::THello::Wrap(data, EPage::Opaque, 0);
+            auto blob = NPage::THello::Wrap(data, EPage::Opaque, 0); 
 
-            const TLogoBlobID fake(0, 0, 0, Room->Blobs, blob.size(), 0);
+            const TLogoBlobID fake(0, 0, 0, Room->Blobs, blob.size(), 0); 
 
-            Blobs.emplace_back(TGlobId{ fake, 0 }, std::move(blob));
-
-            return Blobs.size() - 1;
+            Blobs.emplace_back(TGlobId{ fake, 0 }, std::move(blob)); 
+ 
+            return Blobs.size() - 1; 
         }
 
         bool Lookup(ui32 table) noexcept

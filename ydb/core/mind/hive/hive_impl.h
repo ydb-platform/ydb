@@ -384,7 +384,7 @@ protected:
     TResourceProfilesPtr ResourceProfiles;
     NKikimrLocal::TLocalConfig LocalConfig;
     bool ReadyForConnections = false; // is Hive ready for incoming connections?
-    ui64 NextTabletUnlockSeqNo = 1; // sequence number for unlock events
+    ui64 NextTabletUnlockSeqNo = 1; // sequence number for unlock events 
     bool SpreadNeighbours = true; // spread tablets of the same object across cluster
     TSequenceGenerator Sequencer;
     TOwnershipKeeper Keeper;
@@ -425,10 +425,10 @@ protected:
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext&) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
 
-    bool ReassignChannelsEnabled() const override {
-        return true;
-    }
-
+    bool ReassignChannelsEnabled() const override { 
+        return true; 
+    } 
+ 
     void BuildLocalConfig();
     void BuildCurrentConfig();
     void Cleanup();

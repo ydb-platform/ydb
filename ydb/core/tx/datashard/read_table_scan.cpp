@@ -270,7 +270,7 @@ public:
         return NKikimrServices::TActivity::TX_READ_TABLE_SCAN;
     }
 
-    TReadTableScan(ui64 txId, ui64 shardId, TUserTable::TCPtr tableInfo,
+    TReadTableScan(ui64 txId, ui64 shardId, TUserTable::TCPtr tableInfo, 
                    const NKikimrTxDataShard::TReadTableTransaction &tx, TActorId sink,
                    TActorId dataShard)
         : TActor(&TThis::StateWork)
@@ -282,7 +282,7 @@ public:
         , MessageQuota(0)
         , MessageSizeLimit(10 << 20)
         , TableInfo(tableInfo)
-        , Tx(tx)
+        , Tx(tx) 
         , ScanRange(tx.GetRange())
         , CheckUpper(false)
         , PendingAcks(0)
@@ -434,15 +434,15 @@ private:
         auto ctx = TActivationContext::AsActorContext();
         auto aid = ctx.RegisterWithSameMailbox(this);
 
-        for (const auto& columnRecord : Tx.GetColumns()) {
-            if (!scheme->ColInfo(columnRecord.GetId())) {
-                Error = TStringBuilder() << "ReadTable cannot find column "
-                    << columnRecord.GetName() << " (" << columnRecord.GetId() << ")";
-                SchemaChanged = true;
-                return { EScan::Final, { } };
-            }
-        }
-
+        for (const auto& columnRecord : Tx.GetColumns()) { 
+            if (!scheme->ColInfo(columnRecord.GetId())) { 
+                Error = TStringBuilder() << "ReadTable cannot find column " 
+                    << columnRecord.GetName() << " (" << columnRecord.GetId() << ")"; 
+                SchemaChanged = true; 
+                return { EScan::Final, { } }; 
+            } 
+        } 
+ 
         auto *ev = new TDataShard::TEvPrivate::TEvRegisterScanActor(TxId);
         ctx.MakeFor(aid).Send(DataShard, ev);
 
@@ -475,7 +475,7 @@ private:
                                            ScanRange.ToInclusive,
                                            TableInfo->Range.ToInclusive,
                                            TableInfo->KeyColumnTypes);
-
+ 
         if (cmpFrom > 0) {
             auto seek = ScanRange.FromInclusive ? NTable::ESeek::Lower : NTable::ESeek::Upper;
             lead.To(Tags, ScanRange.From.GetCells(), seek);
@@ -485,14 +485,14 @@ private:
 
         CheckUpper = (cmpTo < 0);
 
-        if (CheckUpper) {
-            lead.Until(ScanRange.To.GetCells(), ScanRange.ToInclusive);
-        }
-
+        if (CheckUpper) { 
+            lead.Until(ScanRange.To.GetCells(), ScanRange.ToInclusive); 
+        } 
+ 
         return EScan::Feed;
     }
 
-    EScan MaybeSendResponseMessage(bool last, const TArrayRef<const TCell>& lastKey = { })
+    EScan MaybeSendResponseMessage(bool last, const TArrayRef<const TCell>& lastKey = { }) 
     {
         ui64 rows = Writer->GetMessageRows();
 
@@ -513,13 +513,13 @@ private:
                           TxId,
                           NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA);
         Writer->Flush(result->Record);
-
-        // Allows sink to detect missing chunks and resume on failures
-        result->Record.SetDataSeqNo(NextDataSeqNo++);
-        if (lastKey) {
-            result->Record.SetDataLastKey(TSerializedCellVec::Serialize(lastKey));
-        }
-
+ 
+        // Allows sink to detect missing chunks and resume on failures 
+        result->Record.SetDataSeqNo(NextDataSeqNo++); 
+        if (lastKey) { 
+            result->Record.SetDataLastKey(TSerializedCellVec::Serialize(lastKey)); 
+        } 
+ 
         ctx.Send(Sink, result,
                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 
@@ -548,38 +548,38 @@ private:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow &row) noexcept override
     {
-        Y_VERIFY_DEBUG(DebugCheckKeyInRange(key));
+        Y_VERIFY_DEBUG(DebugCheckKeyInRange(key)); 
 
         Writer->PutRow(row);
 
-        return MaybeSendResponseMessage(false, key);
+        return MaybeSendResponseMessage(false, key); 
     }
 
-    bool DebugCheckKeyInRange(TArrayRef<const TCell> key) {
-        auto cmp = CompareBorders<true, true>(
-                key, ScanRange.To.GetCells(),
-                true, ScanRange.ToInclusive,
-                TableInfo->KeyColumnTypes);
-
-        return cmp <= 0;
-    }
-
+    bool DebugCheckKeyInRange(TArrayRef<const TCell> key) { 
+        auto cmp = CompareBorders<true, true>( 
+                key, ScanRange.To.GetCells(), 
+                true, ScanRange.ToInclusive, 
+                TableInfo->KeyColumnTypes); 
+ 
+        return cmp <= 0; 
+    } 
+ 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
     {
-        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        auto ctx = TActivationContext::ActorContextFor(SelfId()); 
 
-        if (!SchemaChanged) {
-            if (abort != EAbort::None)
-                Error = "Aborted by scan host env";
+        if (!SchemaChanged) { 
+            if (abort != EAbort::None) 
+                Error = "Aborted by scan host env"; 
 
-            TAutoPtr<TEvTxProcessing::TEvStreamQuotaRelease> request
-                = new TEvTxProcessing::TEvStreamQuotaRelease;
-            request->Record.SetTxId(TxId);
-            request->Record.SetShardId(ShardId);
+            TAutoPtr<TEvTxProcessing::TEvStreamQuotaRelease> request 
+                = new TEvTxProcessing::TEvStreamQuotaRelease; 
+            request->Record.SetTxId(TxId); 
+            request->Record.SetShardId(ShardId); 
 
-            ctx.Send(Sink, request.Release());
-        }
-
+            ctx.Send(Sink, request.Release()); 
+        } 
+ 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Finish scan ShardId: " << ShardId
                     << ", TxId: " << TxId
@@ -587,9 +587,9 @@ private:
 
         Driver = nullptr;
 
-        Die(ctx);
+        Die(ctx); 
 
-        return new TReadTableProd(Error, SchemaChanged);
+        return new TReadTableProd(Error, SchemaChanged); 
     }
 
 private:
@@ -603,20 +603,20 @@ private:
     ui64 MessageSizeLimit;
     TString Error;
     THolder<TRowsToResult> Writer;
-    TUserTable::TCPtr TableInfo;
-    NKikimrTxDataShard::TReadTableTransaction Tx;
+    TUserTable::TCPtr TableInfo; 
+    NKikimrTxDataShard::TReadTableTransaction Tx; 
     TSerializedTableRange ScanRange;
     bool CheckUpper;
     ui64 RowLimit;
     ui64 PendingAcks;
-    ui64 NextDataSeqNo = 1;
+    ui64 NextDataSeqNo = 1; 
     bool Finished;
-    bool SchemaChanged = false;
+    bool SchemaChanged = false; 
 };
 
 TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
                                         ui64 shardId,
-                                        TUserTable::TCPtr tableInfo,
+                                        TUserTable::TCPtr tableInfo, 
                                         const NKikimrTxDataShard::TReadTableTransaction &tx,
                                         TActorId sink,
                                         TActorId dataShard)

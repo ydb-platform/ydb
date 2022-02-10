@@ -10,12 +10,12 @@ namespace NKikimr {
         ui64 Generation;
         ui64 Round;
 
-        TMessageSeqNo()
-            : Generation(0)
-            , Round(0)
-        {}
-
-        TMessageSeqNo(ui64 gen, ui64 round)
+        TMessageSeqNo() 
+            : Generation(0) 
+            , Round(0) 
+        {} 
+ 
+        TMessageSeqNo(ui64 gen, ui64 round) 
             : Generation(gen)
             , Round(round)
         {}
@@ -43,21 +43,21 @@ namespace NKikimr {
         }
 
         bool operator <= (const TMessageSeqNo& other) const {
-            return Generation < other.Generation ||
-                    (Generation == other.Generation && Round <= other.Round);
+            return Generation < other.Generation || 
+                    (Generation == other.Generation && Round <= other.Round); 
         }
 
         bool operator >= (const TMessageSeqNo& other) const {
             return (other <= *this);
         }
 
-        TMessageSeqNo& operator ++ () {
-            if (0 == ++Round) {
-                ++Generation;
-            }
-            return *this;
-        }
-
+        TMessageSeqNo& operator ++ () { 
+            if (0 == ++Round) { 
+                ++Generation; 
+            } 
+            return *this; 
+        } 
+ 
         void Out(IOutputStream& o) const {
             o << Generation << ":" << Round;
         }

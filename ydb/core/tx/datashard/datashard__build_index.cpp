@@ -27,7 +27,7 @@ using TTags = TVector<NTable::TTag>;
 
 using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
 
-static TColumnsTags GetAllTags(const TUserTable::TCPtr tableInfo) {
+static TColumnsTags GetAllTags(const TUserTable::TCPtr tableInfo) { 
     TColumnsTags result;
 
     for (const auto& it: tableInfo->Columns) {
@@ -37,7 +37,7 @@ static TColumnsTags GetAllTags(const TUserTable::TCPtr tableInfo) {
     return result;
 }
 
-static TColumnsTypes GetAllTypes(const TUserTable::TCPtr tableInfo) {
+static TColumnsTypes GetAllTypes(const TUserTable::TCPtr tableInfo) { 
     TColumnsTypes result;
 
     for (const auto& it: tableInfo->Columns) {
@@ -232,7 +232,7 @@ public:
                     const TSerializedTableRange& range,
                     const TVector<TString> targetIndexColumns,
                     const TVector<TString> targetDataColumns,
-                    TUserTable::TCPtr tableInfo,
+                    TUserTable::TCPtr tableInfo, 
                     TUploadLimits limits)
         : TActor(&TThis::StateWork)
         , Limits(limits)
@@ -537,7 +537,7 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
         const TSerializedTableRange& range,
         const TVector<TString>& targetIndexColumns,
         const TVector<TString>& targetDataColumns,
-        TUserTable::TCPtr tableInfo,
+        TUserTable::TCPtr tableInfo, 
         TUploadLimits limits)
 {
     return new TBuildIndexScan(

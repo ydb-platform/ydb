@@ -5,7 +5,7 @@
 #include "flat_fwd_misc.h"
 #include "flat_page_blobs.h"
 #include "flat_part_screen.h"
-#include "flat_part_slice.h"
+#include "flat_part_slice.h" 
 
 namespace NKikimr {
 namespace NTable {
@@ -20,7 +20,7 @@ namespace NFwd {
         TBlobs(TIntrusiveConstPtr<NPage::TFrames> frames, TIntrusiveConstPtr<TSlices> slices, TEdges edge, bool trace)
             : Edge(std::move(edge))
             , Frames(std::move(frames))
-            , Filter(std::move(slices))
+            , Filter(std::move(slices)) 
             , Trace(trace ? new THoles{ } : nullptr)
         {
             Tags.resize(Frames->Stats().Tags.size(), 0);
@@ -82,15 +82,15 @@ namespace NFwd {
         }
 
         TIntrusiveConstPtr<NPage::TFrames> GetFrames() const noexcept
-        {
-            return Frames;
-        }
-
+        { 
+            return Frames; 
+        } 
+ 
         TIntrusiveConstPtr<TSlices> GetSlices() const noexcept
-        {
-            return Filter.GetSlices();
-        }
-
+        { 
+            return Filter.GetSlices(); 
+        } 
+ 
     private:
         TPage& Lookup(ui32 ref) noexcept
         {
@@ -115,11 +115,11 @@ namespace NFwd {
                 return FrameTo(ref, Frames->Relation(ref));
             } else {
                 const auto &page = Lookup(ref);
-                Y_VERIFY(page.Size < Max<ui32>(), "Unexpected huge page");
+                Y_VERIFY(page.Size < Max<ui32>(), "Unexpected huge page"); 
 
                 i16 refer = ref - page.Refer; /* back to relative refer */
 
-                return FrameTo(ref, { 0, page.Tag, refer, static_cast<ui32>(page.Size) });
+                return FrameTo(ref, { 0, page.Tag, refer, static_cast<ui32>(page.Size) }); 
             }
         }
 
@@ -144,9 +144,9 @@ namespace NFwd {
 
                 for ( ; Grow < next; Grow++) {
                     auto &page = Lookup(Grow);
-                    const auto rel = Frames->Relation(Grow);
+                    const auto rel = Frames->Relation(Grow); 
 
-                    if (!Tags.at(page.Tag) || page.Size >= Edge.at(page.Tag) || !Filter.Has(rel.Row)) {
+                    if (!Tags.at(page.Tag) || page.Size >= Edge.at(page.Tag) || !Filter.Has(rel.Row)) { 
                         /* Page doesn't fits to load criteria   */
                     } else if (page.Fetch == EFetch::None) {
                         auto size = head->AddToQueue(Grow, ui16(EPage::Opaque));
@@ -228,7 +228,7 @@ namespace NFwd {
     private:
         const TVector<ui32> Edge;       /* Desired bytes limit of blobs */
         const TIntrusiveConstPtr<NPage::TFrames> Frames;
-        const TSlicesRowFilter Filter;
+        const TSlicesRowFilter Filter; 
         TVector<ui8> Tags;              /* Ever used col tags on env    */
         TPageId Lower = 0;              /* Pinned frame lower bound ref */
         TPageId Upper = 0;              /* Pinned frame upper bound ref */

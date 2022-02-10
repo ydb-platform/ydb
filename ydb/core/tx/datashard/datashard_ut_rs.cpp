@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
             TDispatchOptions options;
             //TDataShard::TEvPrivate::EvRemoveOldInReadSets
-            options.FinalEvents.emplace_back(EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 9, 5);
+            options.FinalEvents.emplace_back(EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 9, 5); 
             runtime.DispatchEvents(options);
 
             // We can't be sure RS are cleaned up because shared event number

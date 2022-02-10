@@ -1,18 +1,18 @@
-#include "node.h" 
-#include "context.h" 
- 
+#include "node.h"
+#include "context.h"
+
 #include <ydb/library/yql/ast/yql_type_string.h>
 
 #include <library/cpp/charset/ci_string.h>
-#include <util/string/builder.h> 
-#include <util/string/cast.h> 
- 
+#include <util/string/builder.h>
+#include <util/string/cast.h>
+
 #include <array>
 
-using namespace NYql; 
- 
+using namespace NYql;
+
 namespace NSQLTranslationV0 {
- 
+
 class TAggregationFactory : public IAggregation {
 public:
     TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi = false)
@@ -24,7 +24,7 @@ public:
             FakeSource = BuildFakeSource(pos);
         }
     }
- 
+
 protected:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
         ui32 expectedArgs = !Factory ? 2 : (isFactory ? 0 : 1);
@@ -1122,7 +1122,7 @@ private:
         Lambdas[0] = BuildLambda(Pos, Y("value", "parent"), Y("NamedApply", exprs[adjustArgsCount], Q(Y("value")), Y("AsStruct"), Y("DependsOn", "parent")));
         Lambdas[1] = BuildLambda(Pos, Y("value", "state", "parent"), Y("NamedApply", exprs[adjustArgsCount + 1], Q(Y("state", "value")), Y("AsStruct"), Y("DependsOn", "parent")));
         Lambdas[2] = BuildLambda(Pos, Y("one", "two"), Y("Apply", exprs[adjustArgsCount + 2], "one", "two"));
- 
+
         for (size_t i = 3U; i < Lambdas.size(); ++i) {
             const auto j = adjustArgsCount + i;
             Lambdas[i] = BuildLambda(Pos, Y("state"), j >= exprs.size() ? AstNode("state") : Y("Apply", exprs[j], "state"));
@@ -1151,19 +1151,19 @@ private:
             if (!lambda->Init(ctx, src)) {
                 return false;
             }
-        } 
+        }
 
         if (!DefVal->Init(ctx, src)) {
             return false;
         }
 
         return TAggregationFactory::DoInit(ctx, src);
-    } 
- 
+    }
+
     std::array<TNodePtr, 6> Lambdas;
     TNodePtr DefVal;
 };
- 
+
 TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
     return new TUserDefinedAggregationFactory(pos, name, factory, aggMode);
 }
@@ -1194,11 +1194,11 @@ private:
         Expr->SetCountHint(Expr->IsConstant());
         Expr = ctx.GroundBlockShortcutsForExpr(Expr);
         return TAggregationFactory::DoInit(ctx, src);
-    } 
+    }
 };
- 
+
 TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode) {
     return new TCountAggregation(pos, name, func, aggMode);
 }
- 
+
 } // namespace NSQLTranslationV0

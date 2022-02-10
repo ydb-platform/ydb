@@ -500,8 +500,8 @@ public:
     TRuntimeNode Increment(TRuntimeNode data);
     TRuntimeNode Decrement(TRuntimeNode data);
     TRuntimeNode Abs(TRuntimeNode data);
-    TRuntimeNode Plus(TRuntimeNode data); 
-    TRuntimeNode Minus(TRuntimeNode data); 
+    TRuntimeNode Plus(TRuntimeNode data);
+    TRuntimeNode Minus(TRuntimeNode data);
 
     TRuntimeNode Add(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode Sub(TRuntimeNode data1, TRuntimeNode data2);

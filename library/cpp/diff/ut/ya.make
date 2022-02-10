@@ -1,15 +1,15 @@
-UNITTEST() 
- 
-OWNER(antonovvk) 
- 
+UNITTEST()
+
+OWNER(antonovvk)
+
 SRCDIR(library/cpp/diff)
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/diff
-) 
- 
-SRCS( 
-    diff_ut.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    diff_ut.cpp
+)
+
+END()

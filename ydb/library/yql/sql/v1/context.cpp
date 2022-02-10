@@ -1,5 +1,5 @@
-#include "context.h" 
- 
+#include "context.h"
+
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/yql_paths.h>
@@ -12,10 +12,10 @@
 #undef GetMessage
 #endif
 
-using namespace NYql; 
- 
+using namespace NYql;
+
 namespace NSQLTranslationV1 {
- 
+
 namespace {
 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
@@ -71,13 +71,13 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , Settings(settings)
-    , Pool(new TMemoryPool(4096)) 
+    , Pool(new TMemoryPool(4096))
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
-{ 
+{
     for (auto lib : settings.Libraries) {
         Libraries[lib] = Nothing();
     }
@@ -110,19 +110,19 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
         }
     }
     DiscoveryMode = (NSQLTranslation::ESqlMode::DISCOVERY == Settings.Mode);
-} 
- 
-TContext::~TContext() 
-{ 
+}
+
+TContext::~TContext()
+{
     for (auto& x: AllScopes) {
         x->Clear();
     }
-} 
- 
-const NYql::TPosition& TContext::Pos() const { 
-    return Position; 
-} 
- 
+}
+
+const NYql::TPosition& TContext::Pos() const {
+    return Position;
+}
+
 TString TContext::MakeName(const TString& name) {
     auto iter = GenIndexes.find(name);
     if (iter == GenIndexes.end()) {
@@ -132,17 +132,17 @@ TString TContext::MakeName(const TString& name) {
     str << name << iter->second;
     ++iter->second;
     return str;
-} 
- 
+}
+
 IOutputStream& TContext::Error(NYql::TIssueCode code) {
     return Error(Pos(), code);
-} 
- 
+}
+
 IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
     HasPendingErrors = true;
     return MakeIssue(TSeverityIds::S_ERROR, code, pos);
-} 
- 
+}
+
 IOutputStream& TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code) {
     return MakeIssue(TSeverityIds::S_WARNING, code, pos);
 }
@@ -457,19 +457,19 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
     return {};
 }
 
-TTranslation::TTranslation(TContext& ctx) 
-    : Ctx(ctx) 
-{ 
-} 
- 
-TContext& TTranslation::Context() { 
-    return Ctx; 
-} 
- 
+TTranslation::TTranslation(TContext& ctx)
+    : Ctx(ctx)
+{
+}
+
+TContext& TTranslation::Context() {
+    return Ctx;
+}
+
 IOutputStream& TTranslation::Error() {
-    return Ctx.Error(); 
-} 
- 
+    return Ctx.Error();
+}
+
 TNodePtr TTranslation::GetNamedNode(const TString& name) {
     if (name == "$_") {
         Ctx.Error() << "Unable to reference anonymous name " << name;
@@ -495,7 +495,7 @@ TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, cons
         auto result = Ctx.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>()));
         Y_VERIFY_DEBUG(result.second);
         mapIt = result.first;
-    } 
+    }
 
     mapIt->second.push_front(MakeIntrusive<TNodeWithUsageInfo>(node, namePos, Ctx.ScopeLevel));
     return resultName;
@@ -523,9 +523,9 @@ void TTranslation::PopNamedNode(const TString& name) {
     mapIt->second.pop_front();
     if (mapIt->second.empty()) {
         Ctx.Scoped->NamedNodes.erase(mapIt);
-    } 
-} 
- 
+    }
+}
+
 void TTranslation::WarnUnusedNodes() const {
     if (Ctx.HasPendingErrors) {
         // result is not reliable in this case
@@ -554,6 +554,6 @@ TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32
 
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {
     Error() << ruleName << ": alternative is not implemented yet: " << AltDescription(node, altCase, descr);
-} 
- 
+}
+
 } // namespace NSQLTranslationV1

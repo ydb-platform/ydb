@@ -1,4 +1,4 @@
-#include "type_ann_expr.h" 
+#include "type_ann_expr.h"
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
@@ -552,7 +552,7 @@ private:
     THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes;
 };
 
-} // namespace 
+} // namespace
 
 IGraphTransformer::TStatus CheckWholeProgramType(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
@@ -677,4 +677,4 @@ TExprNode::TPtr ParseAndAnnotate(
     return exprRoot;
 }
 
-} // namespace NYql 
+} // namespace NYql

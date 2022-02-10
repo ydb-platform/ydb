@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "node.h"
 #include "sql.h"
 
@@ -9,13 +9,13 @@
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/cluster_mapping.h>
 
-#include <util/generic/hash.h> 
-#include <util/generic/map.h> 
+#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/generic/maybe.h>
-#include <util/generic/set.h> 
+#include <util/generic/set.h>
 #include <util/generic/deque.h>
-#include <util/generic/vector.h> 
- 
+#include <util/generic/vector.h>
+
 namespace NSQLTranslationV1 {
     inline bool IsAnonymousName(const TString& name) {
         return name == "$_";
@@ -31,7 +31,7 @@ namespace NSQLTranslationV1 {
             , NamePos(namePos)
             , Level(level)
         {}
- 
+
         TNodePtr Node;
         TPosition NamePos;
         int Level = 0;
@@ -77,31 +77,31 @@ namespace NSQLTranslationV1 {
     };
 
     class TContext {
-    public: 
+    public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
                  NYql::TIssues& issues);
- 
-        virtual ~TContext(); 
- 
-        const NYql::TPosition& Pos() const; 
- 
-        void ClearBlockScope(); 
+
+        virtual ~TContext();
+
+        const NYql::TPosition& Pos() const;
+
+        void ClearBlockScope();
         TString MakeName(const TString& name);
- 
+
         IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
         IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
         IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code);
         IOutputStream& Info(NYql::TPosition pos);
- 
+
         void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action);
 
-        template <typename TToken> 
+        template <typename TToken>
         const TString& Token(const TToken& token) {
-            Position.Row = token.GetLine(); 
-            Position.Column = token.GetColumn() + 1; 
-            return token.GetValue(); 
-        } 
- 
+            Position.Row = token.GetLine();
+            Position.Column = token.GetColumn() + 1;
+            return token.GetValue();
+        }
+
         template <typename TToken>
         TPosition TokenPosition(const TToken& token) {
             TPosition pos = Position;
@@ -182,25 +182,25 @@ namespace NSQLTranslationV1 {
             return TopLevelColumnReferenceState;
         }
 
-    private: 
+    private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
- 
-    private: 
-        NYql::TPosition Position; 
+
+    private:
+        NYql::TPosition Position;
         THolder<TStringOutput> IssueMsgHolder;
         NSQLTranslation::TClusterMapping ClusterMapping;
         TString PathPrefix;
         THashMap<TString, TString> ProviderPathPrefixes;
         THashMap<TString, TString> ClusterPathPrefixes;
         bool IntoHeading = true;
- 
+
         friend class TColumnRefScope;
 
         EColumnRefState ColumnReferenceState = EColumnRefState::Deny;
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
         TString NoColumnErrorContext = "in current scope";
 
-    public: 
+    public:
         THashMap<TString, TNodePtr> Variables;
         NSQLTranslation::TTranslationSettings Settings;
         std::unique_ptr<TMemoryPool> Pool;
@@ -258,8 +258,8 @@ namespace NSQLTranslationV1 {
         THashMap<TString, ui32> PackageVersions;
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
-    }; 
- 
+    };
+
     class TColumnRefScope {
     public:
         TColumnRefScope(TContext& ctx, EColumnRefState state, bool isTopLevelExpr = true)
@@ -293,31 +293,31 @@ namespace NSQLTranslationV1 {
 
     TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex);
 
-    class TTranslation { 
-    protected: 
+    class TTranslation {
+    protected:
         typedef TSet<ui32> TSetType;
- 
-    protected: 
-        TTranslation(TContext& ctx); 
- 
-    public: 
-        TContext& Context(); 
+
+    protected:
+        TTranslation(TContext& ctx);
+
+    public:
+        TContext& Context();
         IOutputStream& Error();
- 
-        template <typename TToken> 
+
+        template <typename TToken>
         const TString& Token(const TToken& token) {
-            return Ctx.Token(token); 
-        } 
- 
-        template <typename TToken> 
+            return Ctx.Token(token);
+        }
+
+        template <typename TToken>
         TString Identifier(const TToken& token) {
             return IdContent(Ctx, Token(token));
-        } 
- 
+        }
+
         TString Identifier(const TString& str) const {
             return IdContent(Ctx, str);
-        } 
- 
+        }
+
         TNodePtr GetNamedNode(const TString& name);
 
         using TNodeBuilderByName = std::function<TNodePtr(const TString& effectiveName)>;
@@ -326,22 +326,22 @@ namespace NSQLTranslationV1 {
         TString PushNamedAtom(TPosition namePos, const TString& name);
         void PopNamedNode(const TString& name);
         void WarnUnusedNodes() const;
- 
-        template <typename TNode> 
+
+        template <typename TNode>
         void AltNotImplemented(const TString& ruleName, const TNode& node) {
-            AltNotImplemented(ruleName, node.Alt_case(), node, TNode::descriptor()); 
-        } 
- 
-        template <typename TNode> 
+            AltNotImplemented(ruleName, node.Alt_case(), node, TNode::descriptor());
+        }
+
+        template <typename TNode>
         TString AltDescription(const TNode& node) const {
             return AltDescription(node, node.Alt_case(), TNode::descriptor());
-        } 
- 
-    protected: 
+        }
+
+    protected:
         void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
         TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
- 
-    protected: 
-        TContext& Ctx; 
-    }; 
+
+    protected:
+        TContext& Ctx;
+    };
 }  // namespace NSQLTranslationV1

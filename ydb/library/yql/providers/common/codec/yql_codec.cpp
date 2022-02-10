@@ -1,9 +1,9 @@
-#include "yql_codec.h" 
+#include "yql_codec.h"
 #include "yql_restricted_yson.h"
 #include "yql_codec_type_flags.h"
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
- 
+
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -12,10 +12,10 @@
 
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/swap_bytes.h>
- 
+
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/writer.h>
- 
+
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/detail.h>
@@ -23,18 +23,18 @@
 #include <util/string/cast.h>
 #include <util/generic/map.h>
 
-namespace NYql { 
+namespace NYql {
 namespace NCommon {
- 
-using namespace NKikimr; 
-using namespace NKikimr::NMiniKQL; 
+
+using namespace NKikimr;
+using namespace NKikimr::NMiniKQL;
 using namespace NYson::NDetail;
- 
+
 void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, TType* type,
     const TVector<ui32>* structPositions) {
     // Result format
-    switch (type->GetKind()) { 
-    case TType::EKind::Void: 
+    switch (type->GetKind()) {
+    case TType::EKind::Void:
         writer.OnVoid();
         return;
     case TType::EKind::Null:
@@ -46,10 +46,10 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
     case TType::EKind::EmptyDict:
         writer.OnEmptyDict();
         return;
-    case TType::EKind::Data: 
-        { 
-            auto dataType = AS_TYPE(TDataType, type); 
-            switch (dataType->GetSchemeType()) { 
+    case TType::EKind::Data:
+        {
+            auto dataType = AS_TYPE(TDataType, type);
+            switch (dataType->GetSchemeType()) {
             case NUdf::TDataType<bool>::Id:
                 writer.OnBooleanScalar(value.Get<bool>());
                 return;
@@ -81,7 +81,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
                 writer.OnFloatScalar(value.Get<float>());
                 return;
             case NUdf::TDataType<double>::Id:
-                writer.OnDoubleScalar(value.Get<double>()); 
+                writer.OnDoubleScalar(value.Get<double>());
                 return;
 
             case NUdf::TDataType<NUdf::TJson>::Id:
@@ -127,44 +127,44 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
                 return;
             }
 
-            default: 
+            default:
                 throw yexception() << "Unknown data type: " << dataType->GetSchemeType();
-            } 
-        } 
-        break; 
-    case TType::EKind::Struct: 
-        { 
+            }
+        }
+        break;
+    case TType::EKind::Struct:
+        {
             writer.OnBeginList();
-            auto structType = AS_TYPE(TStructType, type); 
-            if (structPositions && structPositions->size() != structType->GetMembersCount()) { 
+            auto structType = AS_TYPE(TStructType, type);
+            if (structPositions && structPositions->size() != structType->GetMembersCount()) {
                 YQL_ENSURE(false, "Invalid struct positions");
-            } 
-            for (ui32 i = 0, e = structType->GetMembersCount(); i < e; ++i) { 
-                const ui32 pos = structPositions ? (*structPositions)[i] : i; 
+            }
+            for (ui32 i = 0, e = structType->GetMembersCount(); i < e; ++i) {
+                const ui32 pos = structPositions ? (*structPositions)[i] : i;
                 if (pos < e) {
                     writer.OnListItem();
                     WriteYsonValueImpl(writer, value.GetElement(pos), structType->GetMemberType(pos), nullptr);
                 }
-            } 
- 
+            }
+
             writer.OnEndList();
             return;
-        } 
-    case TType::EKind::List: 
-        { 
-            writer.OnBeginList(); 
-            auto listType = AS_TYPE(TListType, type); 
+        }
+    case TType::EKind::List:
+        {
+            writer.OnBeginList();
+            auto listType = AS_TYPE(TListType, type);
             const auto it = value.GetListIterator();
             for (NUdf::TUnboxedValue item; it.Next(item);) {
                 writer.OnListItem();
                 WriteYsonValueImpl(writer, item, listType->GetItemType(), nullptr);
-            } 
- 
-            writer.OnEndList(); 
+            }
+
+            writer.OnEndList();
             return;
-        } 
-    case TType::EKind::Optional: 
-        { 
+        }
+    case TType::EKind::Optional:
+        {
             if (!value) {
                 writer.OnEntity();
             } else {
@@ -173,13 +173,13 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
                 writer.OnListItem();
                 WriteYsonValueImpl(writer, value.GetOptionalValue(), optionalType->GetItemType(), nullptr);
                 writer.OnEndList();
-            } 
+            }
             return;
-        } 
-    case TType::EKind::Dict: 
-        { 
-            writer.OnBeginList(); 
-            auto dictType = AS_TYPE(TDictType, type); 
+        }
+    case TType::EKind::Dict:
+        {
+            writer.OnBeginList();
+            auto dictType = AS_TYPE(TDictType, type);
             const auto it = value.GetDictIterator();
             for (NUdf::TUnboxedValue key, payload; it.NextPair(key, payload);) {
                 writer.OnListItem();
@@ -190,24 +190,24 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
                     writer.OnListItem();
                     WriteYsonValueImpl(writer, payload, dictType->GetPayloadType(), nullptr);
                 }
-                writer.OnEndList(); 
-            } 
- 
-            writer.OnEndList(); 
-        } 
+                writer.OnEndList();
+            }
+
+            writer.OnEndList();
+        }
         return;
-    case TType::EKind::Tuple: 
-        { 
-            writer.OnBeginList(); 
-            auto tupleType = AS_TYPE(TTupleType, type); 
-            for (ui32 i = 0, e = tupleType->GetElementsCount(); i < e; ++i) { 
-                writer.OnListItem(); 
+    case TType::EKind::Tuple:
+        {
+            writer.OnBeginList();
+            auto tupleType = AS_TYPE(TTupleType, type);
+            for (ui32 i = 0, e = tupleType->GetElementsCount(); i < e; ++i) {
+                writer.OnListItem();
                 WriteYsonValueImpl(writer, value.GetElement(i), tupleType->GetElementType(i), nullptr);
-            } 
- 
-            writer.OnEndList(); 
+            }
+
+            writer.OnEndList();
             return;
-        } 
+        }
     case TType::EKind::Variant:
         {
             writer.OnBeginList();
@@ -221,7 +221,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
             } else {
                 WriteYsonValueImpl(writer, value.GetVariantItem(), AS_TYPE(TStructType, underlyingType)->GetMemberType(index), nullptr);
             }
- 
+
             writer.OnEndList();
             return;
         }
@@ -233,11 +233,11 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
             return;
         }
 
-    default: 
+    default:
         YQL_ENSURE(false, "unknown type " << type->GetKindAsStr());
-    } 
-} 
- 
+    }
+}
+
 void WriteYsonValue(NYson::TYsonConsumerBase& writer, const NUdf::TUnboxedValuePod& value, TType* type,
     const TVector<ui32>* structPositions)
 {
@@ -247,23 +247,23 @@ void WriteYsonValue(NYson::TYsonConsumerBase& writer, const NUdf::TUnboxedValueP
 
 TString WriteYsonValue(const NUdf::TUnboxedValuePod& value, TType* type, const TVector<ui32>* structPositions,
     NYson::EYsonFormat format) {
-    TStringStream str; 
+    TStringStream str;
     NYson::TYsonWriter writer(&str, format);
     WriteYsonValue(writer, value, type, structPositions);
     return str.Str();
-} 
- 
-TCodecContext::TCodecContext( 
-    const TTypeEnvironment& env, 
+}
+
+TCodecContext::TCodecContext(
+    const TTypeEnvironment& env,
     const IFunctionRegistry& functionRegistry,
     const NKikimr::NMiniKQL::THolderFactory* holderFactory /* = nullptr */
-) 
-    : Env(env) 
+)
+    : Env(env)
     , Builder(Env, functionRegistry)
     , HolderFactory(holderFactory)
-{ 
-} 
- 
+{
+}
+
 TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TString>* columns) {
     if (inputType->GetKind() != TType::EKind::Struct) {
         return Nothing();
@@ -2400,4 +2400,4 @@ TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikim
 }
 
 } // namespace NCommon
-} // namespace NYql 
+} // namespace NYql

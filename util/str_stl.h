@@ -210,29 +210,29 @@ struct TEqualTo<std::pair<TFirst, TSecond>> {
 
 template <class T>
 struct TCIEqualTo {
-}; 
- 
-template <> 
-struct TCIEqualTo<const char*> { 
+};
+
+template <>
+struct TCIEqualTo<const char*> {
     inline bool operator()(const char* a, const char* b) const {
-        return stricmp(a, b) == 0; 
-    } 
-}; 
- 
-template <> 
-struct TCIEqualTo<TStringBuf> { 
+        return stricmp(a, b) == 0;
+    }
+};
+
+template <>
+struct TCIEqualTo<TStringBuf> {
     inline bool operator()(const TStringBuf a, const TStringBuf b) const {
         return a.size() == b.size() && strnicmp(a.data(), b.data(), a.size()) == 0;
-    } 
-}; 
- 
-template <> 
+    }
+};
+
+template <>
 struct TCIEqualTo<TString> {
     inline bool operator()(const TString& a, const TString& b) const {
         return a.size() == b.size() && strnicmp(a.data(), b.data(), a.size()) == 0;
-    } 
-}; 
- 
+    }
+};
+
 template <class T>
 struct TLess: public std::less<T> {
 };

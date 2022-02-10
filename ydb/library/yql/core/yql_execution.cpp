@@ -303,7 +303,7 @@ public:
     TStatus ExecuteChildren(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, ui32 depth) {
         TStatus combinedStatus = TStatus::Ok;
         TExprNode::TListType newChildren;
-        bool newNode = false; 
+        bool newNode = false;
         for (auto& child : node->Children()) {
             auto newChild = child;
             if (child->GetState() == TExprNode::EState::ExecutionRequired) {
@@ -317,10 +317,10 @@ public:
             } else if (child->GetState() == TExprNode::EState::ExecutionPending) {
                 combinedStatus = combinedStatus.Combine(TStatus::Repeat);
             }
-            newChildren.push_back(newChild); 
-            if (newChild != child) { 
-                newNode = true; 
-            } 
+            newChildren.push_back(newChild);
+            if (newChild != child) {
+                newNode = true;
+            }
         }
 
         if (combinedStatus.Level == TStatus::Ok) {
@@ -331,9 +331,9 @@ public:
             if (combinedStatus.Level == TStatus::Error) {
                 node->SetState(TExprNode::EState::Error);
             }
-            if (newNode) { 
+            if (newNode) {
                 output = ctx.ChangeChildren(*node, std::move(newChildren));
-            } 
+            }
 
             return combinedStatus;
         }

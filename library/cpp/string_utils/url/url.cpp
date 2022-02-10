@@ -83,12 +83,12 @@ size_t GetHttpPrefixSize(const wchar16* url, bool ignorehttps) noexcept {
 
 size_t GetHttpPrefixSize(const TStringBuf url, bool ignorehttps) noexcept {
     return GetHttpPrefixSizeImpl<char>(url.data(), TKnownSize(url.size()), ignorehttps);
-} 
- 
+}
+
 size_t GetHttpPrefixSize(const TWtringBuf url, bool ignorehttps) noexcept {
     return GetHttpPrefixSizeImpl<wchar16>(url.data(), TKnownSize(url.size()), ignorehttps);
-} 
- 
+}
+
 TStringBuf CutHttpPrefix(const TStringBuf url, bool ignorehttps) noexcept {
     return CutHttpPrefixImpl(url, ignorehttps);
 }
@@ -109,20 +109,20 @@ size_t GetSchemePrefixSize(const TStringBuf url) noexcept {
     const char* n = delim.brk(url.data(), url.end());
 
     if (n + 2 >= url.end() || *n != ':' || n[1] != '/' || n[2] != '/') {
-        return 0; 
+        return 0;
     }
 
-    return n + 3 - url.begin(); 
+    return n + 3 - url.begin();
 }
 
 TStringBuf GetSchemePrefix(const TStringBuf url) noexcept {
-    return url.Head(GetSchemePrefixSize(url)); 
-} 
- 
+    return url.Head(GetSchemePrefixSize(url));
+}
+
 TStringBuf CutSchemePrefix(const TStringBuf url) noexcept {
-    return url.Tail(GetSchemePrefixSize(url)); 
-} 
- 
+    return url.Tail(GetSchemePrefixSize(url));
+}
+
 template <bool KeepPort>
 static inline TStringBuf GetHostAndPortImpl(const TStringBuf url) {
     TStringBuf urlNoScheme = url;

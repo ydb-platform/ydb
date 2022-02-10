@@ -492,15 +492,15 @@ namespace NUri {
 
 Y_DECLARE_OUT_SPEC(inline, NUri::TField::EField, out, t) {
     out << NUri::FieldToString(t);
-} 
- 
+}
+
 Y_DECLARE_OUT_SPEC(inline, NUri::TScheme::EKind, out, t) {
     out << NUri::SchemeKindToString(t);
-} 
- 
+}
+
 Y_DECLARE_OUT_SPEC(inline, NUri::TState::EParsed, out, t) {
     out << NUri::ParsedStateToString(t);
-} 
+}
 
 static inline ui16 DefaultPort(NUri::TScheme::EKind scheme) {
     return NUri::TSchemeInfo::GetDefaultPort(scheme);

@@ -1,37 +1,37 @@
-#include "node.h" 
-#include "context.h" 
+#include "node.h"
+#include "context.h"
 
 #include <ydb/library/yql/ast/yql_type_string.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
- 
+
 #include <library/cpp/charset/ci_string.h>
- 
+
 #include <util/digest/fnv.h>
 
-using namespace NYql; 
- 
+using namespace NYql;
+
 namespace NSQLTranslationV0 {
- 
-class TUniqueTableKey: public ITableKeys { 
-public: 
+
+class TUniqueTableKey: public ITableKeys {
+public:
     TUniqueTableKey(TPosition pos, const TString& cluster, const TDeferredAtom& name, const TString& view)
-        : ITableKeys(pos) 
+        : ITableKeys(pos)
         , Cluster(cluster)
-        , Name(name) 
-        , View(view) 
+        , Name(name)
+        , View(view)
         , Full(name.GetRepr())
-    { 
-        if (!View.empty()) { 
-            Full += ":" + View; 
-        } 
-    } 
- 
+    {
+        if (!View.empty()) {
+            Full += ":" + View;
+        }
+    }
+
     const TString* GetTableName() const override {
         return Name.GetLiteral() ? &Full : nullptr;
-    } 
- 
+    }
+
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
         if (View == "@") {
             auto key = Y("TempTable", Name.Build());
@@ -39,18 +39,18 @@ public:
         }
 
         bool tableScheme = mode == ITableKeys::EBuildKeysMode::CREATE;
-        if (tableScheme && !View.empty()) { 
-            ctx.Error(Pos) << "Table view can not be created with CREATE TABLE clause"; 
-            return nullptr; 
-        } 
+        if (tableScheme && !View.empty()) {
+            ctx.Error(Pos) << "Table view can not be created with CREATE TABLE clause";
+            return nullptr;
+        }
         auto path = ctx.GetPrefixedPath(Cluster, Name);
         if (!path) {
             return nullptr;
         }
         auto key = Y("Key", Q(Y(Q(tableScheme ? "tablescheme" : "table"), Y("String", path))));
-        if (!View.empty()) { 
+        if (!View.empty()) {
             key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, View)))));
-        } 
+        }
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
             IsQueryMode(ctx.Settings.Mode) &&
             ctx.GetClusterProvider(Cluster).GetRef() != "kikimr" &&
@@ -58,45 +58,45 @@ public:
 
             key = Y("MrTableConcat", key);
         }
-        return key; 
-    } 
- 
-private: 
+        return key;
+    }
+
+private:
     TString Cluster;
     TDeferredAtom Name;
     TString View;
     TString Full;
-}; 
- 
+};
+
 TNodePtr BuildTableKey(TPosition pos, const TString& cluster, const TDeferredAtom& name, const TString& view) {
     return new TUniqueTableKey(pos, cluster, name, view);
-} 
- 
-class TPrepTableKeys: public ITableKeys { 
-public: 
+}
+
+class TPrepTableKeys: public ITableKeys {
+public:
     TPrepTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args)
-        : ITableKeys(pos) 
+        : ITableKeys(pos)
         , Cluster(cluster)
-        , Func(func) 
-        , Args(args) 
+        , Func(func)
+        , Args(args)
     {
-    } 
- 
+    }
+
     void ExtractTableName(TContext&ctx, TTableArg& arg) {
         MakeTableFromExpression(ctx, arg.Expr, arg.Id);
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
         if (mode == ITableKeys::EBuildKeysMode::CREATE) {
-            // TODO: allow creation of multiple tables 
-            ctx.Error(Pos) << "Mutiple table creation is not implemented yet"; 
-            return nullptr; 
-        } 
- 
+            // TODO: allow creation of multiple tables
+            ctx.Error(Pos) << "Mutiple table creation is not implemented yet";
+            return nullptr;
+        }
+
         TCiString func(Func);
         if (func == "concat_strict") {
-            auto tuple = Y(); 
-            for (auto& arg: Args) { 
+            auto tuple = Y();
+            for (auto& arg: Args) {
                 ExtractTableName(ctx, arg);
                 TNodePtr key;
                 if (arg.HasAt) {
@@ -113,10 +113,10 @@ public:
                     }
                 }
 
-                tuple = L(tuple, key); 
-            } 
-            return Q(tuple); 
-        } 
+                tuple = L(tuple, key);
+            }
+            return Q(tuple);
+        }
         else if (func == "concat") {
             auto concat = Y("MrTableConcat");
             for (auto& arg : Args) {
@@ -302,27 +302,27 @@ public:
         }
 
         ctx.Error(Pos) << "Unknown table name preprocessor: " << Func;
-        return nullptr; 
-    } 
- 
-private: 
+        return nullptr;
+    }
+
+private:
     TString Cluster;
     TString Func;
     TVector<TTableArg> Args;
-}; 
- 
+};
+
 TNodePtr BuildTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args) {
     return new TPrepTableKeys(pos, cluster, func, args);
-} 
- 
+}
+
 class TInputOptions final: public TAstListNode {
-public: 
+public:
     TInputOptions(TPosition pos, const TVector<TString>& hints)
-        : TAstListNode(pos) 
-        , Hints(hints) 
+        : TAstListNode(pos)
+        , Hints(hints)
     {
     }
- 
+
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
         TSet<TString> used;
@@ -333,41 +333,41 @@ public:
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
-            TNodePtr option; 
+            TNodePtr option;
             if (used.insert(hint).second) {
                 option = Y(BuildQuotedAtom(Pos, hint));
-            } 
-            if (option) { 
-                Nodes.push_back(Q(option)); 
-            } 
-        } 
-        return true; 
-    } 
- 
+            }
+            if (option) {
+                Nodes.push_back(Q(option));
+            }
+        }
+        return true;
+    }
+
     TPtr DoClone() const final {
         return {};
     }
 
-private: 
+private:
     TVector<TString> Hints;
-}; 
- 
+};
+
 TNodePtr BuildInputOptions(TPosition pos, const TVector<TString>& hints) {
     if (hints.empty()) {
         return nullptr;
     }
 
-    return new TInputOptions(pos, hints); 
-} 
- 
+    return new TInputOptions(pos, hints);
+}
+
 class TInputTablesNode final: public TAstListNode {
-public: 
+public:
     TInputTablesNode(TPosition pos, const TTableList& tables, bool inSubquery)
-        : TAstListNode(pos) 
-        , Tables(tables) 
+        : TAstListNode(pos)
+        , Tables(tables)
         , InSubquery(inSubquery)
     {}
- 
+
     bool DoInit(TContext& ctx, ISource* src) override {
         THashSet<TString> tables;
         for (auto& tr: Tables) {
@@ -375,20 +375,20 @@ public:
                 continue;
             }
 
-            if (!tr.Check(ctx)) { 
-                return false; 
-            } 
-            auto tableKeys = tr.Keys->GetTableKeys(); 
+            if (!tr.Check(ctx)) {
+                return false;
+            }
+            auto tableKeys = tr.Keys->GetTableKeys();
             auto keys = tableKeys->BuildKeys(ctx, ITableKeys::EBuildKeysMode::INPUT);
             ctx.PushBlockShortcuts();
             if (!keys || !keys->Init(ctx, src)) {
-                return false; 
-            } 
+                return false;
+            }
             keys = ctx.GroundBlockShortcutsForExpr(keys);
             auto service = tr.ServiceName(ctx);
             auto fields = Y("Void");
             auto source = Y("DataSource", BuildQuotedAtom(Pos, service), BuildQuotedAtom(Pos, tr.Cluster));
-            auto options = tr.Options ? Q(tr.Options) : Q(Y()); 
+            auto options = tr.Options ? Q(tr.Options) : Q(Y());
             Add(Y("let", "x", keys->Y(TString(ReadName), "world", source, keys, fields, options)));
             if (service != YtProviderName) {
                 if (InSubquery) {
@@ -401,45 +401,45 @@ public:
 
             Add(Y("let", tr.RefName, Y(TString(RightName), "x")));
             ctx.UsedClusters.insert(tr.Cluster);
-        } 
-        return TAstListNode::DoInit(ctx, src); 
-    } 
- 
+        }
+        return TAstListNode::DoInit(ctx, src);
+    }
+
     TPtr DoClone() const final {
         return {};
     }
 
-private: 
+private:
     TTableList Tables;
     const bool InSubquery;
-}; 
- 
+};
+
 TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubquery) {
     return new TInputTablesNode(pos, tables, inSubquery);
-} 
- 
+}
+
 class TCreateTableNode final: public TAstListNode {
-public: 
+public:
     TCreateTableNode(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns,
         const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns,
         const TVector<std::pair<TIdentifier, bool>>& orderByColumns)
-        : TAstListNode(pos) 
-        , Table(tr) 
-        , Columns(columns) 
+        : TAstListNode(pos)
+        , Table(tr)
+        , Columns(columns)
         , PkColumns(pkColumns)
         , PartitionByColumns(partitionByColumns)
         , OrderByColumns(orderByColumns)
     {}
- 
+
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Table.Check(ctx)) { 
-            return false; 
-        } 
+        if (!Table.Check(ctx)) {
+            return false;
+        }
         auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
         ctx.PushBlockShortcuts();
         if (!keys || !keys->Init(ctx, src)) {
-            return false; 
-        } 
+            return false;
+        }
         keys = ctx.GroundBlockShortcutsForExpr(keys);
 
         if (!PkColumns.empty() || !PartitionByColumns.empty() || !OrderByColumns.empty()) {
@@ -468,45 +468,45 @@ public:
             }
         }
 
-        auto columns = Y(); 
-        for (auto& col: Columns) { 
+        auto columns = Y();
+        for (auto& col: Columns) {
             auto type = ParseType(TypeByAlias(col.Type, !col.IsTypeString), *ctx.Pool, ctx.Issues, col.Pos);
-            if (!type) { 
-                return false; 
-            } 
+            if (!type) {
+                return false;
+            }
             Y_ASSERT(type->IsList());
             Y_ASSERT(type->GetChildrenCount() > 1);
-            auto typeName = type->GetChild(0); 
+            auto typeName = type->GetChild(0);
             Y_ASSERT(typeName->IsAtom());
-            if (typeName->GetContent() == "OptionalType") { 
-                ctx.Error(col.Pos) << "CREATE TABLE clause requires non-optional column types in scheme"; 
-                return false; 
-            } 
-            if (col.Nullable) { 
-                type = TAstNode::NewList( 
-                    col.Pos, 
-                    *ctx.Pool, 
-                    TAstNode::NewLiteralAtom( 
-                        col.Pos, 
-                        "OptionalType", 
-                        *ctx.Pool 
-                    ), 
-                    type 
-                ); 
-            } 
-            columns = L(columns, Q(Y(BuildQuotedAtom(Pos, col.Name), AstNode(type)))); 
-        } 
- 
-        auto opts = Y(); 
-        if (Table.Options) { 
-            if (!Table.Options->Init(ctx, src)) { 
-                return false; 
-            } 
-            opts = Table.Options; 
-        } 
-        opts = L(opts, Q(Y(Q("mode"), Q("create")))); 
-        opts = L(opts, Q(Y(Q("columns"), Q(columns)))); 
- 
+            if (typeName->GetContent() == "OptionalType") {
+                ctx.Error(col.Pos) << "CREATE TABLE clause requires non-optional column types in scheme";
+                return false;
+            }
+            if (col.Nullable) {
+                type = TAstNode::NewList(
+                    col.Pos,
+                    *ctx.Pool,
+                    TAstNode::NewLiteralAtom(
+                        col.Pos,
+                        "OptionalType",
+                        *ctx.Pool
+                    ),
+                    type
+                );
+            }
+            columns = L(columns, Q(Y(BuildQuotedAtom(Pos, col.Name), AstNode(type))));
+        }
+
+        auto opts = Y();
+        if (Table.Options) {
+            if (!Table.Options->Init(ctx, src)) {
+                return false;
+            }
+            opts = Table.Options;
+        }
+        opts = L(opts, Q(Y(Q("mode"), Q("create"))));
+        opts = L(opts, Q(Y(Q("columns"), Q(columns))));
+
         const auto serviceName = to_lower(Table.ServiceName(ctx));
         if (serviceName == RtmrProviderName) {
             if (!PkColumns.empty() && !PartitionByColumns.empty()) {
@@ -547,34 +547,34 @@ public:
             }
         }
 
-        Add("block", Q(Y( 
-            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))), 
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
             Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-        ))); 
- 
-        ctx.UsedClusters.insert(Table.Cluster); 
-        return TAstListNode::DoInit(ctx, src); 
-    } 
- 
+        )));
+
+        ctx.UsedClusters.insert(Table.Cluster);
+        return TAstListNode::DoInit(ctx, src);
+    }
+
     TPtr DoClone() const final {
         return {};
     }
-private: 
-    TTableRef Table; 
+private:
+    TTableRef Table;
     TVector<TColumnSchema> Columns;
     TVector<TIdentifier> PkColumns;
     TVector<TIdentifier> PartitionByColumns;
     TVector<std::pair<TIdentifier, bool>> OrderByColumns; // column, is desc?
-}; 
- 
+};
+
 TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns,
     const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns,
     const TVector<std::pair<TIdentifier, bool>>& orderByColumns)
 {
     return new TCreateTableNode(pos, tr, columns, pkColumns, partitionByColumns, orderByColumns);
-} 
- 
+}
+
 class TAlterTableNode final: public TAstListNode {
 public:
     TAlterTableNode(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt intent)
@@ -664,48 +664,48 @@ TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TVector<TColu
 }
 
 class TDropTableNode final: public TAstListNode {
-public: 
-    TDropTableNode(TPosition pos, const TTableRef& tr) 
-        : TAstListNode(pos) 
-        , Table(tr) 
+public:
+    TDropTableNode(TPosition pos, const TTableRef& tr)
+        : TAstListNode(pos)
+        , Table(tr)
     {
         FakeSource = BuildFakeSource(pos);
     }
- 
+
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
-        if (!Table.Check(ctx)) { 
-            return false; 
-        } 
+        if (!Table.Check(ctx)) {
+            return false;
+        }
         auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::DROP);
         ctx.PushBlockShortcuts();
         if (!keys || !keys->Init(ctx, FakeSource.Get())) {
-            return false; 
-        } 
+            return false;
+        }
         keys = ctx.GroundBlockShortcutsForExpr(keys);
 
-        Add("block", Q(Y( 
-            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))), 
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(Y(Q(Y(Q("mode"), Q("drop"))))))),
             Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-        ))); 
+        )));
 
         ctx.UsedClusters.insert(Table.Cluster);
         return TAstListNode::DoInit(ctx, FakeSource.Get());
-    } 
- 
+    }
+
     TPtr DoClone() const final {
         return {};
     }
-private: 
-    TTableRef Table; 
+private:
+    TTableRef Table;
     TSourcePtr FakeSource;
-}; 
- 
-TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr) { 
-    return new TDropTableNode(pos, tr); 
-} 
- 
+};
+
+TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr) {
+    return new TDropTableNode(pos, tr);
+}
+
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},
@@ -731,25 +731,25 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
 };
 
 class TWriteTableNode final: public TAstListNode {
-public: 
+public:
     TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode,
         TNodePtr options)
-        : TAstListNode(pos) 
-        , Label(label) 
-        , Table(table) 
+        : TAstListNode(pos)
+        , Label(label)
+        , Table(table)
         , Mode(mode)
         , Options(options)
     {}
- 
+
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Table.Check(ctx)) { 
-            return false; 
-        } 
+        if (!Table.Check(ctx)) {
+            return false;
+        }
         auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::WRITE);
         ctx.PushBlockShortcuts();
         if (!keys || !keys->Init(ctx, src)) {
-            return false; 
-        } 
+            return false;
+        }
         keys = ctx.GroundBlockShortcutsForExpr(keys);
 
         const auto serviceName = to_lower(Table.ServiceName(ctx));
@@ -778,50 +778,50 @@ public:
             options->Add(Q(Y(Q("mode"), Q(modeStr ? *modeStr : "unsupported"))));
         }
 
-        Add("block", Q((Y( 
-            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))), 
+        Add("block", Q((Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Label, Q(options))),
             Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-        )))); 
+        ))));
 
         ctx.UsedClusters.insert(Table.Cluster);
-        return TAstListNode::DoInit(ctx, src); 
-    } 
- 
+        return TAstListNode::DoInit(ctx, src);
+    }
+
     TPtr DoClone() const final {
         return {};
     }
-private: 
+private:
     TString Label;
-    TTableRef Table; 
+    TTableRef Table;
     EWriteColumnMode Mode;
     TNodePtr Options;
-}; 
- 
+};
+
 TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options)
 {
     return new TWriteTableNode(pos, label, table, mode, std::move(options));
-} 
- 
+}
+
 class TClustersSinkOperationBase: public TAstListNode {
 protected:
     TClustersSinkOperationBase(TPosition pos, const TSet<TString>& clusters)
-        : TAstListNode(pos) 
+        : TAstListNode(pos)
         , Clusters(clusters) {}
- 
+
     virtual TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) = 0;
- 
+
     bool DoInit(TContext& ctx, ISource* src) override {
-        auto block(Y()); 
-        auto clusters = &Clusters; 
-        if (Clusters.empty()) { 
-            clusters = &ctx.UsedClusters; 
-        } 
+        auto block(Y());
+        auto clusters = &Clusters;
+        if (Clusters.empty()) {
+            clusters = &ctx.UsedClusters;
+        }
         if (clusters->empty() && !ctx.CurrCluster.empty()) {
             clusters->insert(ctx.CurrCluster);
         }
 
-        for (auto& cluster: *clusters) { 
+        for (auto& cluster: *clusters) {
             TString normalizedClusterName;
             auto service = ctx.GetClusterProvider(cluster, normalizedClusterName);
             if (!service) {
@@ -838,22 +838,22 @@ protected:
 
             block = L(block, Y("let", sinkName, Y("DataSink", BuildQuotedAtom(Pos, *service), BuildQuotedAtom(Pos, normalizedClusterName))));
             block = L(block, op);
-        } 
+        }
 
-        clusters->clear(); 
-        block = L(block, Y("return", "world")); 
-        Add("block", Q(block)); 
+        clusters->clear();
+        block = L(block, Y("return", "world"));
+        Add("block", Q(block));
 
-        return TAstListNode::DoInit(ctx, src); 
+        return TAstListNode::DoInit(ctx, src);
      }
- 
+
     TPtr DoClone() const final {
         return {};
     }
-private: 
+private:
     TSet<TString> Clusters;
-}; 
- 
+};
+
 class TCommitClustersNode: public TClustersSinkOperationBase {
 public:
     TCommitClustersNode(TPosition pos, const TSet<TString>& clusters)
@@ -867,9 +867,9 @@ public:
 };
 
 TNodePtr BuildCommitClusters(TPosition pos, const TSet<TString>& clusters) {
-    return new TCommitClustersNode(pos, clusters); 
-} 
- 
+    return new TCommitClustersNode(pos, clusters);
+}
+
 class TRollbackClustersNode: public TClustersSinkOperationBase {
 public:
     TRollbackClustersNode(TPosition pos, const TSet<TString>& clusters)
@@ -890,49 +890,49 @@ TNodePtr BuildRollbackClusters(TPosition pos, const TSet<TString>& clusters) {
 }
 
 class TWriteResultNode final: public TAstListNode {
-public: 
+public:
     TWriteResultNode(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters)
-        : TAstListNode(pos) 
-        , Label(label) 
-        , Settings(settings) 
-        , CommitClusters(BuildCommitClusters(Pos, clusters)) 
+        : TAstListNode(pos)
+        , Label(label)
+        , Settings(settings)
+        , CommitClusters(BuildCommitClusters(Pos, clusters))
     {}
- 
+
     bool DoInit(TContext& ctx, ISource* src) override {
-        auto block(Y( 
+        auto block(Y(
             Y("let", "result_sink", Y("DataSink", Q(TString(ResultProviderName)))),
             Y("let", "world", Y(TString(WriteName), "world", "result_sink", Y("Key"), Label, Q(Settings)))
-        )); 
-        if (ctx.PragmaAutoCommit) { 
-            block = L(block, Y("let", "world", CommitClusters)); 
-        } 
- 
+        ));
+        if (ctx.PragmaAutoCommit) {
+            block = L(block, Y("let", "world", CommitClusters));
+        }
+
         block = L(block, Y("return", Y(TString(CommitName), "world", "result_sink")));
-        Add("block", Q(block)); 
-        return TAstListNode::DoInit(ctx, src); 
-    } 
- 
+        Add("block", Q(block));
+        return TAstListNode::DoInit(ctx, src);
+    }
+
     TPtr DoClone() const final {
         return {};
     }
-private: 
+private:
     TString Label;
-    TNodePtr Settings; 
-    TNodePtr CommitClusters; 
-}; 
- 
+    TNodePtr Settings;
+    TNodePtr CommitClusters;
+};
+
 TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters) {
-    return new TWriteResultNode(pos, label, settings, clusters); 
-} 
- 
-class TYqlProgramNode: public TAstListNode { 
-public: 
+    return new TWriteResultNode(pos, label, settings, clusters);
+}
+
+class TYqlProgramNode: public TAstListNode {
+public:
     TYqlProgramNode(TPosition pos, const TVector<TNodePtr>& blocks, bool topLevel)
-        : TAstListNode(pos) 
-        , Blocks(blocks) 
+        : TAstListNode(pos)
+        , Blocks(blocks)
         , TopLevel(topLevel)
     {}
- 
+
     bool DoInit(TContext& ctx, ISource* src) override {
         bool hasError = false;
         if (TopLevel) {
@@ -979,7 +979,7 @@ public:
                         Add(Y("let", BuildAtom(node->GetPos(), nodes.first), node));
                     }
                 }
-            } 
+            }
 
             if (ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIBRARY) {
                 auto configSource = Y("DataSource", BuildQuotedAtom(Pos, TString(ConfigProviderName)));
@@ -1003,14 +1003,14 @@ public:
             }
         }
 
-        for (auto& block: Blocks) { 
+        for (auto& block: Blocks) {
             if (block->SubqueryAlias()) {
                 continue;
             }
             if (!block->Init(ctx, nullptr)) {
                 hasError = true;
                 continue;
-            } 
+            }
         }
 
         for (auto& block: Blocks) {
@@ -1027,8 +1027,8 @@ public:
                 const auto& ref = block->GetLabel();
                 Add(Y("let", ref ? ref : "world", block));
             }
-        } 
- 
+        }
+
         if (TopLevel) {
             if (ctx.UniversalAliases) {
                 decltype(Nodes) preparedNodes;
@@ -1049,8 +1049,8 @@ public:
         }
 
         return !hasError;
-    } 
- 
+    }
+
     TPtr DoClone() const final {
         return {};
     }
@@ -1136,19 +1136,19 @@ public:
         return {};
     }
 
-private: 
+private:
     TString Prefix;
     TString Name;
     TVector<TDeferredAtom> Values;
     bool ValueDefault;
     TNodePtr Node;
     TSourcePtr FakeSource;
-}; 
- 
+};
+
 TNodePtr BuildPragma(TPosition pos, const TString& prefix, const TString& name, const TVector<TDeferredAtom>& values, bool valueDefault) {
     return new TPragmaNode(pos, prefix, name, values, valueDefault);
-} 
- 
+}
+
 class TSqlLambda final: public TAstListNode {
 public:
     TSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq)

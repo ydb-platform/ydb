@@ -77,16 +77,16 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         UNIT_ASSERT_VALUES_EQUAL("file://yandex.ru", AddSchemePrefix("file://yandex.ru"));
         UNIT_ASSERT_VALUES_EQUAL("ftp://ya.ru", AddSchemePrefix("ya.ru", "ftp"));
     }
- 
+
     Y_UNIT_TEST(TestSchemeGet) {
-        UNIT_ASSERT_VALUES_EQUAL("http://", GetSchemePrefix("http://ya.ru/bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL("", GetSchemePrefix("yaru")); 
-        UNIT_ASSERT_VALUES_EQUAL("yaru://", GetSchemePrefix("yaru://ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("", GetSchemePrefix("ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("ftp://", GetSchemePrefix("ftp://ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("https://", GetSchemePrefix("https://")); // is that right? 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL("http://", GetSchemePrefix("http://ya.ru/bebe"));
+        UNIT_ASSERT_VALUES_EQUAL("", GetSchemePrefix("yaru"));
+        UNIT_ASSERT_VALUES_EQUAL("yaru://", GetSchemePrefix("yaru://ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("", GetSchemePrefix("ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("ftp://", GetSchemePrefix("ftp://ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("https://", GetSchemePrefix("https://")); // is that right?
+    }
+
     Y_UNIT_TEST(TestSchemeCut) {
         UNIT_ASSERT_VALUES_EQUAL("ya.ru/bebe", CutSchemePrefix("http://ya.ru/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("yaru", CutSchemePrefix("yaru"));

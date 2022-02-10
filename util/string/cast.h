@@ -3,7 +3,7 @@
 #include <util/system/defaults.h>
 #include <util/stream/str.h>
 #include <util/generic/string.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/yexception.h>
 
@@ -151,11 +151,11 @@ inline T FromString(const TChar* data) {
 }
 
 template <class T>
-inline T FromString(const TStringBuf& s) { 
+inline T FromString(const TStringBuf& s) {
     return ::FromString<T>(s.data(), s.size());
-} 
- 
-template <class T> 
+}
+
+template <class T>
 inline T FromString(const TString& s) {
     return ::FromString<T>(s.data(), s.size());
 }
@@ -171,11 +171,11 @@ inline TString FromString<TString>(const TString& s) {
 }
 
 template <class T>
-inline T FromString(const TWtringBuf& s) { 
+inline T FromString(const TWtringBuf& s) {
     return ::FromString<T, typename TWtringBuf::char_type>(s.data(), s.size());
-} 
- 
-template <class T> 
+}
+
+template <class T>
 inline T FromString(const TUtf16String& s) {
     return ::FromString<T, wchar16>(s.data(), s.size());
 }

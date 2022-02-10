@@ -1,49 +1,49 @@
-/** \file 
- * Defines the basic structure to support recognizing by either a lexer, 
- * parser, or tree parser. 
- * \addtogroup BaseRecognizer 
- * @{ 
- */ 
+/** \file
+ * Defines the basic structure to support recognizing by either a lexer,
+ * parser, or tree parser.
+ * \addtogroup BaseRecognizer
+ * @{
+ */
 #ifndef	_ANTLR3_BASERECOGNIZER_HPP
 #define	_ANTLR3_BASERECOGNIZER_HPP
- 
-// [The "BSD licence"] 
-// Copyright (c) 2005-2009 Gokulakannan Somasundaram, ElectronDB 
- 
-// 
-// All rights reserved. 
-// 
-// Redistribution and use in source and binary forms, with or without 
-// modification, are permitted provided that the following conditions 
-// are met: 
-// 1. Redistributions of source code must retain the above copyright 
-//    notice, this list of conditions and the following disclaimer. 
-// 2. Redistributions in binary form must reproduce the above copyright 
-//    notice, this list of conditions and the following disclaimer in the 
-//    documentation and/or other materials provided with the distribution. 
-// 3. The name of the author may not be used to endorse or promote products 
-//    derived from this software without specific prior written permission. 
-// 
-// THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR 
-// IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES 
-// OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
-// IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, 
-// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT 
-// NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
-// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
- 
+
+// [The "BSD licence"]
+// Copyright (c) 2005-2009 Gokulakannan Somasundaram, ElectronDB
+
+//
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions
+// are met:
+// 1. Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+// 2. Redistributions in binary form must reproduce the above copyright
+//    notice, this list of conditions and the following disclaimer in the
+//    documentation and/or other materials provided with the distribution.
+// 3. The name of the author may not be used to endorse or promote products
+//    derived from this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+// IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+// OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+// IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+// NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 namespace antlr3 {
- 
-/** \brief Base tracking context structure for all types of 
- * recognizers. 
- */ 
-template< class ImplTraits, class StreamType > 
-class BaseRecognizer : public ImplTraits::AllocPolicyType 
-{ 
-public: 
+
+/** \brief Base tracking context structure for all types of
+ * recognizers.
+ */
+template< class ImplTraits, class StreamType >
+class BaseRecognizer : public ImplTraits::AllocPolicyType
+{
+public:
 	typedef typename ImplTraits::AllocPolicyType	AllocPolicyType;
 	typedef typename StreamType::IntStreamType	IntStreamType;
 	typedef typename ComponentTypeFinder<ImplTraits, StreamType>::ComponentType  SuperType;
@@ -57,17 +57,17 @@ public:
 	typedef typename ImplTraits::LexerType LexerType;
 	typedef typename ImplTraits::ParserType ParserType;
 	typedef typename ImplTraits::TreeParserType TreeParserType;
- 
+
 	typedef typename AllocPolicyType::template StackType<StringType>  StringStackType;
 	typedef typename AllocPolicyType::template ListType<StringType>  StringListType;
- 
-private: 
+
+private:
 	/// A pointer to the shared recognizer state, such that multiple
 	/// recognizers can use the same inputs streams and so on (in
 	/// the case of grammar inheritance for instance.
 	///
 	RecognizerSharedStateType*		m_state;
- 
+
 	/// If set to something other than NULL, then this structure is
 	/// points to an instance of the debugger interface. In general, the
 	/// debugger is only referenced internally in recovery/error operations
@@ -75,18 +75,18 @@ private:
 	/// in every function/method
 	///
 	DebugEventListenerType*		m_debugger;
- 
- 
-public: 
+
+
+public:
 	BaseRecognizer(ANTLR_UINT32 sizeHint, RecognizerSharedStateType* state);
- 
+
 	SuperType* get_super();
 	RecognizerSharedStateType* get_state() const;
 	DebugEventListenerType* get_debugger() const;
 	void  set_state( RecognizerSharedStateType* state );
 	void  set_debugger( DebugEventListenerType* debugger );
- 
-    /// Match current input symbol against ttype.  Upon error, do one token 
+
+    /// Match current input symbol against ttype.  Upon error, do one token
 	/// insertion or deletion if possible.
 	/// To turn off single token insertion or deletion error
 	/// recovery, override mismatchRecover() and have it call
@@ -96,7 +96,7 @@ public:
 	/// symbols that can follow rule ref.
 	///
     const UnitType*	match(ANTLR_UINT32 ttype, BitsetListType* follow);
- 
+
 	/// Consumes the next token, whatever it is, and resets the recognizer state
 	/// so that it is not in error.
 	///
@@ -104,20 +104,20 @@ public:
 	/// Recognizer context pointer
 	///
     void	matchAny();
- 
+
 	/// function that decides if the token ahead of the current one is the
 	/// one we were loking for, in which case the curernt one is very likely extraneous
 	/// and can be reported that way.
 	///
 	bool mismatchIsUnwantedToken(IntStreamType* input, ANTLR_UINT32 ttype);
- 
+
 	/// function that decides if the current token is one that can logically
 	/// follow the one we were looking for, in which case the one we were looking for is
 	/// probably missing from the input.
 	///
 	bool mismatchIsMissingToken(IntStreamType* input, BitsetListType* follow);
- 
-    /// Factor out what to do upon token mismatch so tree parsers can behave 
+
+    /// Factor out what to do upon token mismatch so tree parsers can behave
 	/// differently.  Override and call mismatchRecover(input, ttype, follow)
 	/// to get single token insertion and deletion.  Use this to turn off
 	/// single token insertion and deletion. Override mismatchRecover
@@ -125,9 +125,9 @@ public:
 	///
 	/// \remark mismatch only works for parsers and must be overridden for anything else.
 	///
-    void mismatch(ANTLR_UINT32 ttype, BitsetListType* follow); 
- 
-    /// Report a recognition problem. 
+    void mismatch(ANTLR_UINT32 ttype, BitsetListType* follow);
+
+    /// Report a recognition problem.
 	///
 	/// This method sets errorRecovery to indicate the parser is recovering
 	/// not parsing.  Once in recovery mode, no errors are generated.
@@ -146,13 +146,13 @@ public:
 	void	reportError( ClassForwarder<LexerType> );
 	template<typename CompType>
 	void	reportError( ClassForwarder<CompType> );
- 
-    /** Function that is called to display a recognition error message. You may 
-     *  override this function independently of (*reportError)() above as that function calls 
-     *  this one to do the actual exception printing. 
-     */ 
+
+    /** Function that is called to display a recognition error message. You may
+     *  override this function independently of (*reportError)() above as that function calls
+     *  this one to do the actual exception printing.
+     */
     void	displayRecognitionError(ANTLR_UINT8** tokenNames);
- 
+
 	/// Get number of recognition errors (lexer, parser, tree parser).  Each
 	/// recognizer tracks its own number.  So parser and lexer each have
 	/// separate count.  Does not count the spurious errors found between
@@ -161,34 +161,34 @@ public:
 	/// \see reportError()
 	///
 	ANTLR_UINT32 getNumberOfSyntaxErrors();
- 
-    /** Function that recovers from an error found in the input stream. 
-     *  Generally, this will be a #ANTLR3_EXCEPTION_NOVIABLE_ALT but it could also 
-     *  be from a mismatched token that the (*match)() could not recover from. 
-     */ 
+
+    /** Function that recovers from an error found in the input stream.
+     *  Generally, this will be a #ANTLR3_EXCEPTION_NOVIABLE_ALT but it could also
+     *  be from a mismatched token that the (*match)() could not recover from.
+     */
     void	recover();
- 
-    /** function that is a hook to listen to token consumption during error recovery. 
-     *  This is mainly used by the debug parser to send events to the listener. 
-     */ 
+
+    /** function that is a hook to listen to token consumption during error recovery.
+     *  This is mainly used by the debug parser to send events to the listener.
+     */
     void	beginResync();
- 
-    /** function that is a hook to listen to token consumption during error recovery. 
-     *  This is mainly used by the debug parser to send events to the listener. 
-     */ 
+
+    /** function that is a hook to listen to token consumption during error recovery.
+     *  This is mainly used by the debug parser to send events to the listener.
+     */
     void	endResync();
- 
+
 	/** function that is a hook to listen to token consumption during error recovery.
-     *  This is mainly used by the debug parser to send events to the listener. 
-     */ 
+     *  This is mainly used by the debug parser to send events to the listener.
+     */
     void	beginBacktrack(ANTLR_UINT32 level);
- 
-    /** function that is a hook to listen to token consumption during error recovery. 
-     *  This is mainly used by the debug parser to send events to the listener. 
-     */ 
+
+    /** function that is a hook to listen to token consumption during error recovery.
+     *  This is mainly used by the debug parser to send events to the listener.
+     */
     void	endBacktrack(ANTLR_UINT32 level, bool successful);
- 
-    /// Compute the error recovery set for the current rule. 
+
+    /// Compute the error recovery set for the current rule.
 	/// Documentation below is from the Java implementation.
 	///
 	/// During rule invocation, the parser pushes the set of tokens that can
@@ -282,8 +282,8 @@ public:
 	/// at run-time upon error to avoid overhead during parsing.
 	///
     BitsetType*	computeErrorRecoverySet();
- 
-    /// Compute the context-sensitive FOLLOW set for current rule. 
+
+    /// Compute the context-sensitive FOLLOW set for current rule.
 	/// Documentation below is from the Java runtime.
 	///
 	/// This is the set of token types that can follow a specific rule
@@ -338,12 +338,12 @@ public:
 	/// throwing an exception.
 	///
     BitsetType*	computeCSRuleFollow();
- 
-    /// Compute the current followset for the input stream. 
+
+    /// Compute the current followset for the input stream.
 	///
     BitsetType*	combineFollows(bool exact);
- 
-    /// Attempt to recover from a single missing or extra token. 
+
+    /// Attempt to recover from a single missing or extra token.
 	///
 	/// EXTRA TOKEN
 	///
@@ -377,67 +377,67 @@ public:
 	/// error flag and rules cascade back when this is set.
 	///
     const UnitType* recoverFromMismatchedToken( ANTLR_UINT32	ttype, BitsetListType*	follow);
- 
-    /** Function that recovers from a mismatched set in the token stream, in a similar manner 
-     *  to (*recoverFromMismatchedToken) 
-     */ 
+
+    /** Function that recovers from a mismatched set in the token stream, in a similar manner
+     *  to (*recoverFromMismatchedToken)
+     */
     const UnitType* recoverFromMismatchedSet(BitsetListType*	follow);
- 
-    /** common routine to handle single token insertion for recovery functions. 
-     */ 
+
+    /** common routine to handle single token insertion for recovery functions.
+     */
 	/// This code is factored out from mismatched token and mismatched set
 	///  recovery.  It handles "single token insertion" error recovery for
 	/// both.  No tokens are consumed to recover from insertions.  Return
 	/// true if recovery was possible else return false.
 	///
     bool	recoverFromMismatchedElement(BitsetListType*	follow);
- 
-    /** function that consumes input until the next token matches 
-     *  the given token. 
-     */ 
+
+    /** function that consumes input until the next token matches
+     *  the given token.
+     */
     void	consumeUntil(ANTLR_UINT32   tokenType);
- 
-    /** function that consumes input until the next token matches 
-     *  one in the given set. 
-     */ 
+
+    /** function that consumes input until the next token matches
+     *  one in the given set.
+     */
     void	consumeUntilSet(BitsetType*	set);
- 
-    /** function that returns an ANTLR3_LIST of the strings that identify 
-     *  the rules in the parser that got you to this point. Can be overridden by installing your 
+
+    /** function that returns an ANTLR3_LIST of the strings that identify
+     *  the rules in the parser that got you to this point. Can be overridden by installing your
      *	own function set.
-     * 
-     * \todo Document how to override invocation stack functions. 
-     */ 
+     *
+     * \todo Document how to override invocation stack functions.
+     */
 	StringStackType	getRuleInvocationStack();
 	StringStackType	getRuleInvocationStackNamed(ANTLR_UINT8*    name);
- 
-    /** function that converts an ANLR3_LIST of tokens to an ANTLR3_LIST of 
-     *  string token names. As this is mostly used in string template processing it may not be useful 
-     *  in the C runtime. 
-     */ 
+
+    /** function that converts an ANLR3_LIST of tokens to an ANTLR3_LIST of
+     *  string token names. As this is mostly used in string template processing it may not be useful
+     *  in the C runtime.
+     */
     StringListType	toStrings( const StringListType& );
- 
-    /** function to return whether the rule has parsed input starting at the supplied 
-     *  start index before. If the rule has not parsed input starting from the supplied start index, 
-     *  then it will return ANTLR3_MEMO_RULE_UNKNOWN. If it has parsed from the suppled start point 
-     *  then it will return the point where it last stopped parsing after that start point. 
-     */ 
+
+    /** function to return whether the rule has parsed input starting at the supplied
+     *  start index before. If the rule has not parsed input starting from the supplied start index,
+     *  then it will return ANTLR3_MEMO_RULE_UNKNOWN. If it has parsed from the suppled start point
+     *  then it will return the point where it last stopped parsing after that start point.
+     */
     ANTLR_MARKER	getRuleMemoization( ANTLR_INTKEY	ruleIndex,
 												ANTLR_MARKER	ruleParseStart);
- 
-    /** function that determines whether the rule has parsed input at the current index 
-     *  in the input stream 
-     */ 
+
+    /** function that determines whether the rule has parsed input at the current index
+     *  in the input stream
+     */
     bool	alreadyParsedRule(ANTLR_MARKER	ruleIndex);
- 
-    /** Function that records whether the rule has parsed the input at a 
-     *  current position successfully or not. 
-     */ 
+
+    /** Function that records whether the rule has parsed the input at a
+     *  current position successfully or not.
+     */
     void	memoize(ANTLR_MARKER	ruleIndex,
 								ANTLR_MARKER	ruleParseStart);
- 
+
 	/// Function that returns the current input symbol.
-    /// The is placed into any label for the associated token ref; e.g., x=ID.  Token 
+    /// The is placed into any label for the associated token ref; e.g., x=ID.  Token
 	/// and tree parsers need to return different objects. Rather than test
 	/// for input stream type or change the IntStream interface, I use
 	/// a simple method to ask the recognizer to tell me what the current
@@ -450,7 +450,7 @@ public:
 	const UnitType*	getCurrentInputSymbol(IntStreamType* istream, ClassForwarder<LexerType>);
 	const UnitType*	getCurrentInputSymbol(IntStreamType* istream, ClassForwarder<ParserType>);
 	const UnitType*	getCurrentInputSymbol(IntStreamType* istream, ClassForwarder<TreeParserType>);
- 
+
 	/// Conjure up a missing token during error recovery.
 	///
 	/// The recognizer attempts to recover from single missing
@@ -473,37 +473,37 @@ public:
 	UnitType*	getMissingSymbol( IntStreamType*		istream, ExceptionBaseType*		e,
 												ANTLR_UINT32			expectedTokenType,
 												BitsetListType*		follow);
- 
-    /** Function that returns whether the supplied grammar function 
-     *  will parse the current input stream or not. This is the way that syntactic 
-     *  predicates are evaluated. Unlike java, C is perfectly happy to invoke code 
-     *  via a pointer to a function (hence that's what all the ANTLR3 C interfaces 
-     *  do. 
-     */ 
+
+    /** Function that returns whether the supplied grammar function
+     *  will parse the current input stream or not. This is the way that syntactic
+     *  predicates are evaluated. Unlike java, C is perfectly happy to invoke code
+     *  via a pointer to a function (hence that's what all the ANTLR3 C interfaces
+     *  do.
+     */
 	template<typename Predicate>
-    bool  synpred( ClassForwarder<Predicate> ); 
- 
+    bool  synpred( ClassForwarder<Predicate> );
+
 	//In place of exConstruct, just directly instantiate the Exception Object
- 
-    /** Reset the recognizer 
-     */ 
-    void  reset(); 
+
+    /** Reset the recognizer
+     */
+    void  reset();
 	void  reset( ClassForwarder<LexerType> );
 	template<typename CompType>
 	void  reset( ClassForwarder<CompType> );
- 
+
 	void exConstruct();
- 
-    ~BaseRecognizer(); 
- 
-}; 
- 
+
+    ~BaseRecognizer();
+
+};
+
 }
- 
-#include "antlr3baserecognizer.inl" 
- 
-/// @} 
-/// 
- 
+
+#include "antlr3baserecognizer.inl"
+
+/// @}
+///
+
 #endif	    /* _ANTLR3_BASERECOGNIZER_H	*/
- 
+

@@ -1,19 +1,19 @@
 #pragma once
 
-#include "node.h" 
-#include "context.h" 
- 
+#include "node.h"
+#include "context.h"
+
 #include <ydb/library/yql/ast/yql_type_string.h>
 
 #include <library/cpp/charset/ci_string.h>
-#include <util/string/builder.h> 
-#include <util/string/cast.h> 
+#include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/string/util.h>
- 
-using namespace NYql; 
- 
+
+using namespace NYql;
+
 namespace NSQLTranslationV1 {
- 
+
 class TListBuiltin: public TCallNode {
 public:
     TListBuiltin(TPosition pos,

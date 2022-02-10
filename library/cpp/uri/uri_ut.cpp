@@ -941,7 +941,7 @@ namespace NUri {
         TString r;
         ProcessQargs(url, r);
         return r;
-    } 
+    }
 
     bool QueryArgsFilter(const TQueryArg& arg, void* filterData) {
         const char* skipName = static_cast<const char*>(filterData);

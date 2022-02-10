@@ -12,7 +12,7 @@ SRCS(
     yql_callable_transform.h
     yql_csv.cpp
     yql_csv.h
-    yql_data_provider.h 
+    yql_data_provider.h
     yql_execution.cpp
     yql_execution.h
     yql_expr_constraint.cpp
@@ -43,8 +43,8 @@ SRCS(
     yql_opt_utils.h
     yql_opt_window.cpp
     yql_opt_window.h
-    yql_type_annotation.cpp 
-    yql_type_annotation.h 
+    yql_type_annotation.cpp
+    yql_type_annotation.h
     yql_type_helpers.cpp
     yql_type_helpers.h
     yql_udf_index.cpp

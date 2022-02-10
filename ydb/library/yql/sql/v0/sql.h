@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/parser/proto_ast/proto_ast.h>
 #include <ydb/library/yql/public/issue/yql_warning.h>

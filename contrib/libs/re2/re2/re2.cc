@@ -1,14 +1,14 @@
-// Copyright 2003-2009 The RE2 Authors.  All Rights Reserved. 
-// Use of this source code is governed by a BSD-style 
-// license that can be found in the LICENSE file. 
- 
-// Regular expression interface RE2. 
-// 
-// Originally the PCRE C++ wrapper, but adapted to use 
-// the new automata-based regular expression engines. 
- 
+// Copyright 2003-2009 The RE2 Authors.  All Rights Reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Regular expression interface RE2.
+//
+// Originally the PCRE C++ wrapper, but adapted to use
+// the new automata-based regular expression engines.
+
 #include "re2/re2.h"
- 
+
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
@@ -22,7 +22,7 @@
 #include <atomic>
 #include <iterator>
 #include <mutex>
-#include <string> 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -30,18 +30,18 @@
 #include "util/logging.h"
 #include "util/strutil.h"
 #include "util/utf.h"
-#include "re2/prog.h" 
-#include "re2/regexp.h" 
+#include "re2/prog.h"
+#include "re2/regexp.h"
 #include "re2/sparse_array.h"
- 
-namespace re2 { 
- 
-// Maximum number of args we can set 
-static const int kMaxArgs = 16; 
-static const int kVecSize = 1+kMaxArgs; 
- 
+
+namespace re2 {
+
+// Maximum number of args we can set
+static const int kMaxArgs = 16;
+static const int kVecSize = 1+kMaxArgs;
+
 const int RE2::Options::kDefaultMaxMem;  // initialized in re2.h
- 
+
 RE2::Options::Options(RE2::CannedOptions opt)
   : encoding_(opt == RE2::Latin1 ? EncodingLatin1 : EncodingUTF8),
     posix_syntax_(opt == RE2::POSIX),
@@ -57,120 +57,120 @@ RE2::Options::Options(RE2::CannedOptions opt)
     word_boundary_(false),
     one_line_(false) {
 }
- 
+
 // static empty objects for use as const references.
 // To avoid global constructors, allocated in RE2::Init().
 static const std::string* empty_string;
 static const std::map<std::string, int>* empty_named_groups;
 static const std::map<int, std::string>* empty_group_names;
- 
-// Converts from Regexp error code to RE2 error code. 
-// Maybe some day they will diverge.  In any event, this 
-// hides the existence of Regexp from RE2 users. 
+
+// Converts from Regexp error code to RE2 error code.
+// Maybe some day they will diverge.  In any event, this
+// hides the existence of Regexp from RE2 users.
 static RE2::ErrorCode RegexpErrorToRE2(re2::RegexpStatusCode code) {
-  switch (code) { 
+  switch (code) {
     case re2::kRegexpSuccess:
-      return RE2::NoError; 
+      return RE2::NoError;
     case re2::kRegexpInternalError:
-      return RE2::ErrorInternal; 
+      return RE2::ErrorInternal;
     case re2::kRegexpBadEscape:
-      return RE2::ErrorBadEscape; 
+      return RE2::ErrorBadEscape;
     case re2::kRegexpBadCharClass:
-      return RE2::ErrorBadCharClass; 
+      return RE2::ErrorBadCharClass;
     case re2::kRegexpBadCharRange:
-      return RE2::ErrorBadCharRange; 
+      return RE2::ErrorBadCharRange;
     case re2::kRegexpMissingBracket:
-      return RE2::ErrorMissingBracket; 
+      return RE2::ErrorMissingBracket;
     case re2::kRegexpMissingParen:
-      return RE2::ErrorMissingParen; 
+      return RE2::ErrorMissingParen;
     case re2::kRegexpUnexpectedParen:
       return RE2::ErrorUnexpectedParen;
     case re2::kRegexpTrailingBackslash:
-      return RE2::ErrorTrailingBackslash; 
+      return RE2::ErrorTrailingBackslash;
     case re2::kRegexpRepeatArgument:
-      return RE2::ErrorRepeatArgument; 
+      return RE2::ErrorRepeatArgument;
     case re2::kRegexpRepeatSize:
-      return RE2::ErrorRepeatSize; 
+      return RE2::ErrorRepeatSize;
     case re2::kRegexpRepeatOp:
-      return RE2::ErrorRepeatOp; 
+      return RE2::ErrorRepeatOp;
     case re2::kRegexpBadPerlOp:
-      return RE2::ErrorBadPerlOp; 
+      return RE2::ErrorBadPerlOp;
     case re2::kRegexpBadUTF8:
-      return RE2::ErrorBadUTF8; 
+      return RE2::ErrorBadUTF8;
     case re2::kRegexpBadNamedCapture:
-      return RE2::ErrorBadNamedCapture; 
-  } 
-  return RE2::ErrorInternal; 
-} 
- 
+      return RE2::ErrorBadNamedCapture;
+  }
+  return RE2::ErrorInternal;
+}
+
 static std::string trunc(const StringPiece& pattern) {
-  if (pattern.size() < 100) 
+  if (pattern.size() < 100)
     return std::string(pattern);
   return std::string(pattern.substr(0, 100)) + "...";
-} 
- 
- 
-RE2::RE2(const char* pattern) { 
-  Init(pattern, DefaultOptions); 
-} 
- 
+}
+
+
+RE2::RE2(const char* pattern) {
+  Init(pattern, DefaultOptions);
+}
+
 RE2::RE2(const std::string& pattern) {
-  Init(pattern, DefaultOptions); 
-} 
- 
-RE2::RE2(const StringPiece& pattern) { 
-  Init(pattern, DefaultOptions); 
-} 
- 
-RE2::RE2(const StringPiece& pattern, const Options& options) { 
-  Init(pattern, options); 
-} 
- 
-int RE2::Options::ParseFlags() const { 
-  int flags = Regexp::ClassNL; 
-  switch (encoding()) { 
-    default: 
+  Init(pattern, DefaultOptions);
+}
+
+RE2::RE2(const StringPiece& pattern) {
+  Init(pattern, DefaultOptions);
+}
+
+RE2::RE2(const StringPiece& pattern, const Options& options) {
+  Init(pattern, options);
+}
+
+int RE2::Options::ParseFlags() const {
+  int flags = Regexp::ClassNL;
+  switch (encoding()) {
+    default:
       if (log_errors())
         LOG(ERROR) << "Unknown encoding " << encoding();
-      break; 
-    case RE2::Options::EncodingUTF8: 
-      break; 
-    case RE2::Options::EncodingLatin1: 
-      flags |= Regexp::Latin1; 
-      break; 
-  } 
- 
-  if (!posix_syntax()) 
-    flags |= Regexp::LikePerl; 
- 
-  if (literal()) 
-    flags |= Regexp::Literal; 
- 
-  if (never_nl()) 
-    flags |= Regexp::NeverNL; 
- 
+      break;
+    case RE2::Options::EncodingUTF8:
+      break;
+    case RE2::Options::EncodingLatin1:
+      flags |= Regexp::Latin1;
+      break;
+  }
+
+  if (!posix_syntax())
+    flags |= Regexp::LikePerl;
+
+  if (literal())
+    flags |= Regexp::Literal;
+
+  if (never_nl())
+    flags |= Regexp::NeverNL;
+
   if (dot_nl())
     flags |= Regexp::DotNL;
 
   if (never_capture())
     flags |= Regexp::NeverCapture;
 
-  if (!case_sensitive()) 
-    flags |= Regexp::FoldCase; 
- 
-  if (perl_classes()) 
-    flags |= Regexp::PerlClasses; 
- 
-  if (word_boundary()) 
-    flags |= Regexp::PerlB; 
- 
-  if (one_line()) 
-    flags |= Regexp::OneLine; 
- 
-  return flags; 
-} 
- 
-void RE2::Init(const StringPiece& pattern, const Options& options) { 
+  if (!case_sensitive())
+    flags |= Regexp::FoldCase;
+
+  if (perl_classes())
+    flags |= Regexp::PerlClasses;
+
+  if (word_boundary())
+    flags |= Regexp::PerlB;
+
+  if (one_line())
+    flags |= Regexp::OneLine;
+
+  return flags;
+}
+
+void RE2::Init(const StringPiece& pattern, const Options& options) {
   static std::once_flag empty_once;
   std::call_once(empty_once, []() {
     empty_string = new std::string;
@@ -179,70 +179,70 @@ void RE2::Init(const StringPiece& pattern, const Options& options) {
   });
 
   pattern_.assign(pattern.data(), pattern.size());
-  options_.Copy(options); 
+  options_.Copy(options);
   entire_regexp_ = NULL;
   error_ = empty_string;
   error_code_ = NoError;
   error_arg_.clear();
   prefix_.clear();
   prefix_foldcase_ = false;
-  suffix_regexp_ = NULL; 
-  prog_ = NULL; 
+  suffix_regexp_ = NULL;
+  prog_ = NULL;
   num_captures_ = -1;
   is_one_pass_ = false;
 
-  rprog_ = NULL; 
-  named_groups_ = NULL; 
-  group_names_ = NULL; 
- 
-  RegexpStatus status; 
-  entire_regexp_ = Regexp::Parse( 
-    pattern_, 
-    static_cast<Regexp::ParseFlags>(options_.ParseFlags()), 
-    &status); 
-  if (entire_regexp_ == NULL) { 
-    if (options_.log_errors()) { 
-      LOG(ERROR) << "Error parsing '" << trunc(pattern_) << "': " 
-                 << status.Text(); 
-    } 
+  rprog_ = NULL;
+  named_groups_ = NULL;
+  group_names_ = NULL;
+
+  RegexpStatus status;
+  entire_regexp_ = Regexp::Parse(
+    pattern_,
+    static_cast<Regexp::ParseFlags>(options_.ParseFlags()),
+    &status);
+  if (entire_regexp_ == NULL) {
+    if (options_.log_errors()) {
+      LOG(ERROR) << "Error parsing '" << trunc(pattern_) << "': "
+                 << status.Text();
+    }
     error_ = new std::string(status.Text());
-    error_code_ = RegexpErrorToRE2(status.code()); 
+    error_code_ = RegexpErrorToRE2(status.code());
     error_arg_ = std::string(status.error_arg());
-    return; 
-  } 
- 
+    return;
+  }
+
   re2::Regexp* suffix;
-  if (entire_regexp_->RequiredPrefix(&prefix_, &prefix_foldcase_, &suffix)) 
-    suffix_regexp_ = suffix; 
-  else 
-    suffix_regexp_ = entire_regexp_->Incref(); 
- 
-  // Two thirds of the memory goes to the forward Prog, 
-  // one third to the reverse prog, because the forward 
-  // Prog has two DFAs but the reverse prog has one. 
-  prog_ = suffix_regexp_->CompileToProg(options_.max_mem()*2/3); 
-  if (prog_ == NULL) { 
-    if (options_.log_errors()) 
-      LOG(ERROR) << "Error compiling '" << trunc(pattern_) << "'"; 
+  if (entire_regexp_->RequiredPrefix(&prefix_, &prefix_foldcase_, &suffix))
+    suffix_regexp_ = suffix;
+  else
+    suffix_regexp_ = entire_regexp_->Incref();
+
+  // Two thirds of the memory goes to the forward Prog,
+  // one third to the reverse prog, because the forward
+  // Prog has two DFAs but the reverse prog has one.
+  prog_ = suffix_regexp_->CompileToProg(options_.max_mem()*2/3);
+  if (prog_ == NULL) {
+    if (options_.log_errors())
+      LOG(ERROR) << "Error compiling '" << trunc(pattern_) << "'";
     error_ = new std::string("pattern too large - compile failed");
-    error_code_ = RE2::ErrorPatternTooLarge; 
-    return; 
-  } 
- 
+    error_code_ = RE2::ErrorPatternTooLarge;
+    return;
+  }
+
   // We used to compute this lazily, but it's used during the
   // typical control flow for a match call, so we now compute
   // it eagerly, which avoids the overhead of std::once_flag.
   num_captures_ = suffix_regexp_->NumCaptures();
 
-  // Could delay this until the first match call that 
-  // cares about submatch information, but the one-pass 
-  // machine's memory gets cut from the DFA memory budget, 
-  // and that is harder to do if the DFA has already 
-  // been built. 
-  is_one_pass_ = prog_->IsOnePass(); 
-} 
- 
-// Returns rprog_, computing it if needed. 
+  // Could delay this until the first match call that
+  // cares about submatch information, but the one-pass
+  // machine's memory gets cut from the DFA memory budget,
+  // and that is harder to do if the DFA has already
+  // been built.
+  is_one_pass_ = prog_->IsOnePass();
+}
+
+// Returns rprog_, computing it if needed.
 re2::Prog* RE2::ReverseProg() const {
   std::call_once(rprog_once_, [](const RE2* re) {
     re->rprog_ =
@@ -255,32 +255,32 @@ re2::Prog* RE2::ReverseProg() const {
       // is fine. More importantly, an RE2 object is supposed to be logically
       // immutable: whatever ok() would have returned after Init() completed,
       // it should continue to return that no matter what ReverseProg() does.
-    } 
+    }
   }, this);
-  return rprog_; 
-} 
- 
-RE2::~RE2() { 
-  if (suffix_regexp_) 
-    suffix_regexp_->Decref(); 
-  if (entire_regexp_) 
-    entire_regexp_->Decref(); 
-  delete prog_; 
-  delete rprog_; 
+  return rprog_;
+}
+
+RE2::~RE2() {
+  if (suffix_regexp_)
+    suffix_regexp_->Decref();
+  if (entire_regexp_)
+    entire_regexp_->Decref();
+  delete prog_;
+  delete rprog_;
   if (error_ != empty_string)
-    delete error_; 
+    delete error_;
   if (named_groups_ != NULL && named_groups_ != empty_named_groups)
-    delete named_groups_; 
+    delete named_groups_;
   if (group_names_ != NULL &&  group_names_ != empty_group_names)
-    delete group_names_; 
-} 
- 
-int RE2::ProgramSize() const { 
-  if (prog_ == NULL) 
-    return -1; 
-  return prog_->size(); 
-} 
- 
+    delete group_names_;
+}
+
+int RE2::ProgramSize() const {
+  if (prog_ == NULL)
+    return -1;
+  return prog_->size();
+}
+
 int RE2::ReverseProgramSize() const {
   if (prog_ == NULL)
     return -1;
@@ -346,7 +346,7 @@ int RE2::ReverseProgramFanout(std::vector<int>* histogram) const {
   return Fanout(prog, histogram);
 }
 
-// Returns named_groups_, computing it if needed. 
+// Returns named_groups_, computing it if needed.
 const std::map<std::string, int>& RE2::NamedCapturingGroups() const {
   std::call_once(named_groups_once_, [](const RE2* re) {
     if (re->suffix_regexp_ != NULL)
@@ -354,10 +354,10 @@ const std::map<std::string, int>& RE2::NamedCapturingGroups() const {
     if (re->named_groups_ == NULL)
       re->named_groups_ = empty_named_groups;
   }, this);
-  return *named_groups_; 
-} 
- 
-// Returns group_names_, computing it if needed. 
+  return *named_groups_;
+}
+
+// Returns group_names_, computing it if needed.
 const std::map<int, std::string>& RE2::CapturingGroupNames() const {
   std::call_once(group_names_once_, [](const RE2* re) {
     if (re->suffix_regexp_ != NULL)
@@ -365,94 +365,94 @@ const std::map<int, std::string>& RE2::CapturingGroupNames() const {
     if (re->group_names_ == NULL)
       re->group_names_ = empty_group_names;
   }, this);
-  return *group_names_; 
-} 
- 
-/***** Convenience interfaces *****/ 
- 
-bool RE2::FullMatchN(const StringPiece& text, const RE2& re, 
-                     const Arg* const args[], int n) { 
-  return re.DoMatch(text, ANCHOR_BOTH, NULL, args, n); 
-} 
- 
-bool RE2::PartialMatchN(const StringPiece& text, const RE2& re, 
-                        const Arg* const args[], int n) { 
-  return re.DoMatch(text, UNANCHORED, NULL, args, n); 
-} 
- 
-bool RE2::ConsumeN(StringPiece* input, const RE2& re, 
-                   const Arg* const args[], int n) { 
+  return *group_names_;
+}
+
+/***** Convenience interfaces *****/
+
+bool RE2::FullMatchN(const StringPiece& text, const RE2& re,
+                     const Arg* const args[], int n) {
+  return re.DoMatch(text, ANCHOR_BOTH, NULL, args, n);
+}
+
+bool RE2::PartialMatchN(const StringPiece& text, const RE2& re,
+                        const Arg* const args[], int n) {
+  return re.DoMatch(text, UNANCHORED, NULL, args, n);
+}
+
+bool RE2::ConsumeN(StringPiece* input, const RE2& re,
+                   const Arg* const args[], int n) {
   size_t consumed;
-  if (re.DoMatch(*input, ANCHOR_START, &consumed, args, n)) { 
-    input->remove_prefix(consumed); 
-    return true; 
-  } else { 
-    return false; 
-  } 
-} 
- 
-bool RE2::FindAndConsumeN(StringPiece* input, const RE2& re, 
-                          const Arg* const args[], int n) { 
+  if (re.DoMatch(*input, ANCHOR_START, &consumed, args, n)) {
+    input->remove_prefix(consumed);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool RE2::FindAndConsumeN(StringPiece* input, const RE2& re,
+                          const Arg* const args[], int n) {
   size_t consumed;
-  if (re.DoMatch(*input, UNANCHORED, &consumed, args, n)) { 
-    input->remove_prefix(consumed); 
-    return true; 
-  } else { 
-    return false; 
-  } 
-} 
- 
+  if (re.DoMatch(*input, UNANCHORED, &consumed, args, n)) {
+    input->remove_prefix(consumed);
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool RE2::Replace(std::string* str,
                   const RE2& re,
                   const StringPiece& rewrite) {
-  StringPiece vec[kVecSize]; 
-  int nvec = 1 + MaxSubmatch(rewrite); 
+  StringPiece vec[kVecSize];
+  int nvec = 1 + MaxSubmatch(rewrite);
   if (nvec > 1 + re.NumberOfCapturingGroups())
-    return false; 
+    return false;
   if (nvec > static_cast<int>(arraysize(vec)))
     return false;
   if (!re.Match(*str, 0, str->size(), UNANCHORED, vec, nvec))
-    return false; 
- 
+    return false;
+
   std::string s;
-  if (!re.Rewrite(&s, rewrite, vec, nvec)) 
-    return false; 
- 
+  if (!re.Rewrite(&s, rewrite, vec, nvec))
+    return false;
+
   assert(vec[0].data() >= str->data());
   assert(vec[0].data() + vec[0].size() <= str->data() + str->size());
-  str->replace(vec[0].data() - str->data(), vec[0].size(), s); 
-  return true; 
-} 
- 
+  str->replace(vec[0].data() - str->data(), vec[0].size(), s);
+  return true;
+}
+
 int RE2::GlobalReplace(std::string* str,
                        const RE2& re,
                        const StringPiece& rewrite) {
-  StringPiece vec[kVecSize]; 
-  int nvec = 1 + MaxSubmatch(rewrite); 
+  StringPiece vec[kVecSize];
+  int nvec = 1 + MaxSubmatch(rewrite);
   if (nvec > 1 + re.NumberOfCapturingGroups())
-    return false; 
+    return false;
   if (nvec > static_cast<int>(arraysize(vec)))
     return false;
- 
-  const char* p = str->data(); 
-  const char* ep = p + str->size(); 
-  const char* lastend = NULL; 
+
+  const char* p = str->data();
+  const char* ep = p + str->size();
+  const char* lastend = NULL;
   std::string out;
-  int count = 0; 
+  int count = 0;
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
   // Iterate just once when fuzzing. Otherwise, we easily get bogged down
   // and coverage is unlikely to improve despite significant expense.
   while (p == str->data()) {
 #else
-  while (p <= ep) { 
+  while (p <= ep) {
 #endif
     if (!re.Match(*str, static_cast<size_t>(p - str->data()),
                   str->size(), UNANCHORED, vec, nvec))
-      break; 
+      break;
     if (p < vec[0].data())
       out.append(p, vec[0].data() - p);
     if (vec[0].data() == lastend && vec[0].empty()) {
-      // Disallow empty match at end of last match: skip ahead. 
+      // Disallow empty match at end of last match: skip ahead.
       //
       // fullrune() takes int, not ptrdiff_t. However, it just looks
       // at the leading byte and treats any length >= 4 the same.
@@ -476,155 +476,155 @@ int RE2::GlobalReplace(std::string* str,
       }
       // Most likely, re is in Latin-1 mode. If it is in UTF-8 mode,
       // we fell through from above and the GIGO principle applies.
-      if (p < ep) 
-        out.append(p, 1); 
-      p++; 
-      continue; 
-    } 
-    re.Rewrite(&out, rewrite, vec, nvec); 
+      if (p < ep)
+        out.append(p, 1);
+      p++;
+      continue;
+    }
+    re.Rewrite(&out, rewrite, vec, nvec);
     p = vec[0].data() + vec[0].size();
-    lastend = p; 
-    count++; 
-  } 
- 
-  if (count == 0) 
-    return 0; 
- 
-  if (p < ep) 
-    out.append(p, ep - p); 
+    lastend = p;
+    count++;
+  }
+
+  if (count == 0)
+    return 0;
+
+  if (p < ep)
+    out.append(p, ep - p);
   using std::swap;
-  swap(out, *str); 
-  return count; 
-} 
- 
+  swap(out, *str);
+  return count;
+}
+
 bool RE2::Extract(const StringPiece& text,
                   const RE2& re,
                   const StringPiece& rewrite,
                   std::string* out) {
-  StringPiece vec[kVecSize]; 
-  int nvec = 1 + MaxSubmatch(rewrite); 
+  StringPiece vec[kVecSize];
+  int nvec = 1 + MaxSubmatch(rewrite);
   if (nvec > 1 + re.NumberOfCapturingGroups())
-    return false; 
+    return false;
   if (nvec > static_cast<int>(arraysize(vec)))
     return false;
   if (!re.Match(text, 0, text.size(), UNANCHORED, vec, nvec))
-    return false; 
- 
-  out->clear(); 
-  return re.Rewrite(out, rewrite, vec, nvec); 
-} 
- 
+    return false;
+
+  out->clear();
+  return re.Rewrite(out, rewrite, vec, nvec);
+}
+
 std::string RE2::QuoteMeta(const StringPiece& unquoted) {
   std::string result;
-  result.reserve(unquoted.size() << 1); 
- 
-  // Escape any ascii character not in [A-Za-z_0-9]. 
-  // 
-  // Note that it's legal to escape a character even if it has no 
-  // special meaning in a regular expression -- so this function does 
-  // that.  (This also makes it identical to the perl function of the 
-  // same name except for the null-character special case; 
-  // see `perldoc -f quotemeta`.) 
+  result.reserve(unquoted.size() << 1);
+
+  // Escape any ascii character not in [A-Za-z_0-9].
+  //
+  // Note that it's legal to escape a character even if it has no
+  // special meaning in a regular expression -- so this function does
+  // that.  (This also makes it identical to the perl function of the
+  // same name except for the null-character special case;
+  // see `perldoc -f quotemeta`.)
   for (size_t ii = 0; ii < unquoted.size(); ++ii) {
-    // Note that using 'isalnum' here raises the benchmark time from 
-    // 32ns to 58ns: 
-    if ((unquoted[ii] < 'a' || unquoted[ii] > 'z') && 
-        (unquoted[ii] < 'A' || unquoted[ii] > 'Z') && 
-        (unquoted[ii] < '0' || unquoted[ii] > '9') && 
-        unquoted[ii] != '_' && 
-        // If this is the part of a UTF8 or Latin1 character, we need 
-        // to copy this byte without escaping.  Experimentally this is 
-        // what works correctly with the regexp library. 
-        !(unquoted[ii] & 128)) { 
-      if (unquoted[ii] == '\0') {  // Special handling for null chars. 
-        // Note that this special handling is not strictly required for RE2, 
-        // but this quoting is required for other regexp libraries such as 
-        // PCRE. 
-        // Can't use "\\0" since the next character might be a digit. 
-        result += "\\x00"; 
-        continue; 
-      } 
-      result += '\\'; 
-    } 
-    result += unquoted[ii]; 
-  } 
- 
-  return result; 
-} 
- 
+    // Note that using 'isalnum' here raises the benchmark time from
+    // 32ns to 58ns:
+    if ((unquoted[ii] < 'a' || unquoted[ii] > 'z') &&
+        (unquoted[ii] < 'A' || unquoted[ii] > 'Z') &&
+        (unquoted[ii] < '0' || unquoted[ii] > '9') &&
+        unquoted[ii] != '_' &&
+        // If this is the part of a UTF8 or Latin1 character, we need
+        // to copy this byte without escaping.  Experimentally this is
+        // what works correctly with the regexp library.
+        !(unquoted[ii] & 128)) {
+      if (unquoted[ii] == '\0') {  // Special handling for null chars.
+        // Note that this special handling is not strictly required for RE2,
+        // but this quoting is required for other regexp libraries such as
+        // PCRE.
+        // Can't use "\\0" since the next character might be a digit.
+        result += "\\x00";
+        continue;
+      }
+      result += '\\';
+    }
+    result += unquoted[ii];
+  }
+
+  return result;
+}
+
 bool RE2::PossibleMatchRange(std::string* min, std::string* max,
                              int maxlen) const {
-  if (prog_ == NULL) 
-    return false; 
- 
+  if (prog_ == NULL)
+    return false;
+
   int n = static_cast<int>(prefix_.size());
-  if (n > maxlen) 
-    n = maxlen; 
- 
-  // Determine initial min max from prefix_ literal. 
+  if (n > maxlen)
+    n = maxlen;
+
+  // Determine initial min max from prefix_ literal.
   *min = prefix_.substr(0, n);
   *max = prefix_.substr(0, n);
-  if (prefix_foldcase_) { 
+  if (prefix_foldcase_) {
     // prefix is ASCII lowercase; change *min to uppercase.
-    for (int i = 0; i < n; i++) { 
+    for (int i = 0; i < n; i++) {
       char& c = (*min)[i];
       if ('a' <= c && c <= 'z')
         c += 'A' - 'a';
-    } 
-  } 
- 
-  // Add to prefix min max using PossibleMatchRange on regexp. 
+    }
+  }
+
+  // Add to prefix min max using PossibleMatchRange on regexp.
   std::string dmin, dmax;
-  maxlen -= n; 
-  if (maxlen > 0 && prog_->PossibleMatchRange(&dmin, &dmax, maxlen)) { 
+  maxlen -= n;
+  if (maxlen > 0 && prog_->PossibleMatchRange(&dmin, &dmax, maxlen)) {
     min->append(dmin);
     max->append(dmax);
   } else if (!max->empty()) {
-    // prog_->PossibleMatchRange has failed us, 
-    // but we still have useful information from prefix_. 
+    // prog_->PossibleMatchRange has failed us,
+    // but we still have useful information from prefix_.
     // Round up *max to allow any possible suffix.
     PrefixSuccessor(max);
-  } else { 
-    // Nothing useful. 
-    *min = ""; 
-    *max = ""; 
-    return false; 
-  } 
- 
-  return true; 
-} 
- 
-// Avoid possible locale nonsense in standard strcasecmp. 
-// The string a is known to be all lowercase. 
+  } else {
+    // Nothing useful.
+    *min = "";
+    *max = "";
+    return false;
+  }
+
+  return true;
+}
+
+// Avoid possible locale nonsense in standard strcasecmp.
+// The string a is known to be all lowercase.
 static int ascii_strcasecmp(const char* a, const char* b, size_t len) {
   const char* ae = a + len;
- 
-  for (; a < ae; a++, b++) { 
+
+  for (; a < ae; a++, b++) {
     uint8_t x = *a;
     uint8_t y = *b;
-    if ('A' <= y && y <= 'Z') 
-      y += 'a' - 'A'; 
-    if (x != y) 
-      return x - y; 
-  } 
-  return 0; 
-} 
- 
- 
-/***** Actual matching and rewriting code *****/ 
- 
-bool RE2::Match(const StringPiece& text, 
+    if ('A' <= y && y <= 'Z')
+      y += 'a' - 'A';
+    if (x != y)
+      return x - y;
+  }
+  return 0;
+}
+
+
+/***** Actual matching and rewriting code *****/
+
+bool RE2::Match(const StringPiece& text,
                 size_t startpos,
                 size_t endpos,
-                Anchor re_anchor, 
-                StringPiece* submatch, 
-                int nsubmatch) const { 
+                Anchor re_anchor,
+                StringPiece* submatch,
+                int nsubmatch) const {
   if (!ok()) {
-    if (options_.log_errors()) 
-      LOG(ERROR) << "Invalid RE2: " << *error_; 
-    return false; 
-  } 
- 
+    if (options_.log_errors())
+      LOG(ERROR) << "Invalid RE2: " << *error_;
+    return false;
+  }
+
   if (startpos > endpos || endpos > text.size()) {
     if (options_.log_errors())
       LOG(ERROR) << "RE2: invalid startpos, endpos pair. ["
@@ -634,23 +634,23 @@ bool RE2::Match(const StringPiece& text,
     return false;
   }
 
-  StringPiece subtext = text; 
-  subtext.remove_prefix(startpos); 
+  StringPiece subtext = text;
+  subtext.remove_prefix(startpos);
   subtext.remove_suffix(text.size() - endpos);
- 
-  // Use DFAs to find exact location of match, filter out non-matches. 
- 
-  // Don't ask for the location if we won't use it. 
-  // SearchDFA can do extra optimizations in that case. 
-  StringPiece match; 
-  StringPiece* matchp = &match; 
-  if (nsubmatch == 0) 
-    matchp = NULL; 
- 
-  int ncap = 1 + NumberOfCapturingGroups(); 
-  if (ncap > nsubmatch) 
-    ncap = nsubmatch; 
- 
+
+  // Use DFAs to find exact location of match, filter out non-matches.
+
+  // Don't ask for the location if we won't use it.
+  // SearchDFA can do extra optimizations in that case.
+  StringPiece match;
+  StringPiece* matchp = &match;
+  if (nsubmatch == 0)
+    matchp = NULL;
+
+  int ncap = 1 + NumberOfCapturingGroups();
+  if (ncap > nsubmatch)
+    ncap = nsubmatch;
+
   // If the regexp is anchored explicitly, must not be in middle of text.
   if (prog_->anchor_start() && startpos != 0)
     return false;
@@ -658,53 +658,53 @@ bool RE2::Match(const StringPiece& text,
     return false;
 
   // If the regexp is anchored explicitly, update re_anchor
-  // so that we can potentially fall into a faster case below. 
-  if (prog_->anchor_start() && prog_->anchor_end()) 
-    re_anchor = ANCHOR_BOTH; 
-  else if (prog_->anchor_start() && re_anchor != ANCHOR_BOTH) 
-    re_anchor = ANCHOR_START; 
- 
-  // Check for the required prefix, if any. 
+  // so that we can potentially fall into a faster case below.
+  if (prog_->anchor_start() && prog_->anchor_end())
+    re_anchor = ANCHOR_BOTH;
+  else if (prog_->anchor_start() && re_anchor != ANCHOR_BOTH)
+    re_anchor = ANCHOR_START;
+
+  // Check for the required prefix, if any.
   size_t prefixlen = 0;
-  if (!prefix_.empty()) { 
+  if (!prefix_.empty()) {
     if (startpos != 0)
       return false;
-    prefixlen = prefix_.size(); 
-    if (prefixlen > subtext.size()) 
-      return false; 
-    if (prefix_foldcase_) { 
-      if (ascii_strcasecmp(&prefix_[0], subtext.data(), prefixlen) != 0) 
-        return false; 
-    } else { 
-      if (memcmp(&prefix_[0], subtext.data(), prefixlen) != 0) 
-        return false; 
-    } 
-    subtext.remove_prefix(prefixlen); 
-    // If there is a required prefix, the anchor must be at least ANCHOR_START. 
-    if (re_anchor != ANCHOR_BOTH) 
-      re_anchor = ANCHOR_START; 
-  } 
- 
-  Prog::Anchor anchor = Prog::kUnanchored; 
-  Prog::MatchKind kind = Prog::kFirstMatch; 
-  if (options_.longest_match()) 
-    kind = Prog::kLongestMatch; 
- 
+    prefixlen = prefix_.size();
+    if (prefixlen > subtext.size())
+      return false;
+    if (prefix_foldcase_) {
+      if (ascii_strcasecmp(&prefix_[0], subtext.data(), prefixlen) != 0)
+        return false;
+    } else {
+      if (memcmp(&prefix_[0], subtext.data(), prefixlen) != 0)
+        return false;
+    }
+    subtext.remove_prefix(prefixlen);
+    // If there is a required prefix, the anchor must be at least ANCHOR_START.
+    if (re_anchor != ANCHOR_BOTH)
+      re_anchor = ANCHOR_START;
+  }
+
+  Prog::Anchor anchor = Prog::kUnanchored;
+  Prog::MatchKind kind = Prog::kFirstMatch;
+  if (options_.longest_match())
+    kind = Prog::kLongestMatch;
+
   bool can_one_pass = is_one_pass_ && ncap <= Prog::kMaxOnePassCapture;
   bool can_bit_state = prog_->CanBitState();
   size_t bit_state_text_max_size = prog_->bit_state_text_max_size();
- 
+
 #ifdef RE2_HAVE_THREAD_LOCAL
   hooks::context = this;
 #endif
-  bool dfa_failed = false; 
+  bool dfa_failed = false;
   bool skipped_test = false;
-  switch (re_anchor) { 
-    default: 
+  switch (re_anchor) {
+    default:
       LOG(DFATAL) << "Unexpected re_anchor value: " << re_anchor;
       return false;
 
-    case UNANCHORED: { 
+    case UNANCHORED: {
       if (prog_->anchor_end()) {
         // This is a very special case: we don't need the forward DFA because
         // we already know where the match must end! Instead, the reverse DFA
@@ -735,78 +735,9 @@ bool RE2::Match(const StringPiece& text,
         break;
       }
 
-      if (!prog_->SearchDFA(subtext, text, anchor, kind, 
-                            matchp, &dfa_failed, NULL)) { 
-        if (dfa_failed) { 
-          if (options_.log_errors())
-            LOG(ERROR) << "DFA out of memory: "
-                       << "pattern length " << pattern_.size() << ", "
-                       << "program size " << prog_->size() << ", "
-                       << "list count " << prog_->list_count() << ", "
-                       << "bytemap range " << prog_->bytemap_range();
-          // Fall back to NFA below. 
-          skipped_test = true; 
-          break; 
-        } 
-        return false; 
-      } 
-      if (matchp == NULL)  // Matched.  Don't care where.
-        return true; 
-      // SearchDFA set match.end() but didn't know where the
-      // match started.  Run the regexp backward from match.end()
-      // to find the longest possible match -- that's where it started. 
-      Prog* prog = ReverseProg(); 
-      if (prog == NULL) {
-        // Fall back to NFA below.
-        skipped_test = true;
-        break;
-      }
-      if (!prog->SearchDFA(match, text, Prog::kAnchored, 
-                           Prog::kLongestMatch, &match, &dfa_failed, NULL)) { 
-        if (dfa_failed) { 
-          if (options_.log_errors())
-            LOG(ERROR) << "DFA out of memory: "
-                       << "pattern length " << pattern_.size() << ", "
-                       << "program size " << prog->size() << ", "
-                       << "list count " << prog->list_count() << ", "
-                       << "bytemap range " << prog->bytemap_range();
-          // Fall back to NFA below. 
-          skipped_test = true; 
-          break; 
-        } 
-        if (options_.log_errors())
-          LOG(ERROR) << "SearchDFA inconsistency";
-        return false; 
-      } 
-      break; 
-    } 
- 
-    case ANCHOR_BOTH: 
-    case ANCHOR_START: 
-      if (re_anchor == ANCHOR_BOTH) 
-        kind = Prog::kFullMatch; 
-      anchor = Prog::kAnchored; 
- 
-      // If only a small amount of text and need submatch 
-      // information anyway and we're going to use OnePass or BitState 
-      // to get it, we might as well not even bother with the DFA: 
-      // OnePass or BitState will be fast enough. 
-      // On tiny texts, OnePass outruns even the DFA, and 
-      // it doesn't have the shared state and occasional mutex that 
-      // the DFA does. 
-      if (can_one_pass && text.size() <= 4096 && 
-          (ncap > 1 || text.size() <= 16)) {
-        skipped_test = true; 
-        break; 
-      } 
-      if (can_bit_state && text.size() <= bit_state_text_max_size &&
-          ncap > 1) {
-        skipped_test = true; 
-        break; 
-      } 
-      if (!prog_->SearchDFA(subtext, text, anchor, kind, 
-                            &match, &dfa_failed, NULL)) { 
-        if (dfa_failed) { 
+      if (!prog_->SearchDFA(subtext, text, anchor, kind,
+                            matchp, &dfa_failed, NULL)) {
+        if (dfa_failed) {
           if (options_.log_errors())
             LOG(ERROR) << "DFA out of memory: "
                        << "pattern length " << pattern_.size() << ", "
@@ -814,169 +745,238 @@ bool RE2::Match(const StringPiece& text,
                        << "list count " << prog_->list_count() << ", "
                        << "bytemap range " << prog_->bytemap_range();
           // Fall back to NFA below.
-          skipped_test = true; 
-          break; 
-        } 
-        return false; 
-      } 
-      break; 
-  } 
- 
-  if (!skipped_test && ncap <= 1) { 
-    // We know exactly where it matches.  That's enough. 
-    if (ncap == 1) 
-      submatch[0] = match; 
-  } else { 
-    StringPiece subtext1; 
-    if (skipped_test) { 
-      // DFA ran out of memory or was skipped: 
-      // need to search in entire original text. 
-      subtext1 = subtext; 
-    } else { 
-      // DFA found the exact match location: 
-      // let NFA run an anchored, full match search 
-      // to find submatch locations. 
-      subtext1 = match; 
-      anchor = Prog::kAnchored; 
-      kind = Prog::kFullMatch; 
-    } 
- 
-    if (can_one_pass && anchor != Prog::kUnanchored) { 
-      if (!prog_->SearchOnePass(subtext1, text, anchor, kind, submatch, ncap)) { 
+          skipped_test = true;
+          break;
+        }
+        return false;
+      }
+      if (matchp == NULL)  // Matched.  Don't care where.
+        return true;
+      // SearchDFA set match.end() but didn't know where the
+      // match started.  Run the regexp backward from match.end()
+      // to find the longest possible match -- that's where it started.
+      Prog* prog = ReverseProg();
+      if (prog == NULL) {
+        // Fall back to NFA below.
+        skipped_test = true;
+        break;
+      }
+      if (!prog->SearchDFA(match, text, Prog::kAnchored,
+                           Prog::kLongestMatch, &match, &dfa_failed, NULL)) {
+        if (dfa_failed) {
+          if (options_.log_errors())
+            LOG(ERROR) << "DFA out of memory: "
+                       << "pattern length " << pattern_.size() << ", "
+                       << "program size " << prog->size() << ", "
+                       << "list count " << prog->list_count() << ", "
+                       << "bytemap range " << prog->bytemap_range();
+          // Fall back to NFA below.
+          skipped_test = true;
+          break;
+        }
+        if (options_.log_errors())
+          LOG(ERROR) << "SearchDFA inconsistency";
+        return false;
+      }
+      break;
+    }
+
+    case ANCHOR_BOTH:
+    case ANCHOR_START:
+      if (re_anchor == ANCHOR_BOTH)
+        kind = Prog::kFullMatch;
+      anchor = Prog::kAnchored;
+
+      // If only a small amount of text and need submatch
+      // information anyway and we're going to use OnePass or BitState
+      // to get it, we might as well not even bother with the DFA:
+      // OnePass or BitState will be fast enough.
+      // On tiny texts, OnePass outruns even the DFA, and
+      // it doesn't have the shared state and occasional mutex that
+      // the DFA does.
+      if (can_one_pass && text.size() <= 4096 &&
+          (ncap > 1 || text.size() <= 16)) {
+        skipped_test = true;
+        break;
+      }
+      if (can_bit_state && text.size() <= bit_state_text_max_size &&
+          ncap > 1) {
+        skipped_test = true;
+        break;
+      }
+      if (!prog_->SearchDFA(subtext, text, anchor, kind,
+                            &match, &dfa_failed, NULL)) {
+        if (dfa_failed) {
+          if (options_.log_errors())
+            LOG(ERROR) << "DFA out of memory: "
+                       << "pattern length " << pattern_.size() << ", "
+                       << "program size " << prog_->size() << ", "
+                       << "list count " << prog_->list_count() << ", "
+                       << "bytemap range " << prog_->bytemap_range();
+          // Fall back to NFA below.
+          skipped_test = true;
+          break;
+        }
+        return false;
+      }
+      break;
+  }
+
+  if (!skipped_test && ncap <= 1) {
+    // We know exactly where it matches.  That's enough.
+    if (ncap == 1)
+      submatch[0] = match;
+  } else {
+    StringPiece subtext1;
+    if (skipped_test) {
+      // DFA ran out of memory or was skipped:
+      // need to search in entire original text.
+      subtext1 = subtext;
+    } else {
+      // DFA found the exact match location:
+      // let NFA run an anchored, full match search
+      // to find submatch locations.
+      subtext1 = match;
+      anchor = Prog::kAnchored;
+      kind = Prog::kFullMatch;
+    }
+
+    if (can_one_pass && anchor != Prog::kUnanchored) {
+      if (!prog_->SearchOnePass(subtext1, text, anchor, kind, submatch, ncap)) {
         if (!skipped_test && options_.log_errors())
-          LOG(ERROR) << "SearchOnePass inconsistency"; 
-        return false; 
-      } 
+          LOG(ERROR) << "SearchOnePass inconsistency";
+        return false;
+      }
     } else if (can_bit_state && subtext1.size() <= bit_state_text_max_size) {
-      if (!prog_->SearchBitState(subtext1, text, anchor, 
-                                 kind, submatch, ncap)) { 
+      if (!prog_->SearchBitState(subtext1, text, anchor,
+                                 kind, submatch, ncap)) {
         if (!skipped_test && options_.log_errors())
-          LOG(ERROR) << "SearchBitState inconsistency"; 
-        return false; 
-      } 
-    } else { 
-      if (!prog_->SearchNFA(subtext1, text, anchor, kind, submatch, ncap)) { 
+          LOG(ERROR) << "SearchBitState inconsistency";
+        return false;
+      }
+    } else {
+      if (!prog_->SearchNFA(subtext1, text, anchor, kind, submatch, ncap)) {
         if (!skipped_test && options_.log_errors())
-          LOG(ERROR) << "SearchNFA inconsistency"; 
-        return false; 
-      } 
-    } 
-  } 
- 
-  // Adjust overall match for required prefix that we stripped off. 
-  if (prefixlen > 0 && nsubmatch > 0) 
+          LOG(ERROR) << "SearchNFA inconsistency";
+        return false;
+      }
+    }
+  }
+
+  // Adjust overall match for required prefix that we stripped off.
+  if (prefixlen > 0 && nsubmatch > 0)
     submatch[0] = StringPiece(submatch[0].data() - prefixlen,
-                              submatch[0].size() + prefixlen); 
- 
-  // Zero submatches that don't exist in the regexp. 
-  for (int i = ncap; i < nsubmatch; i++) 
+                              submatch[0].size() + prefixlen);
+
+  // Zero submatches that don't exist in the regexp.
+  for (int i = ncap; i < nsubmatch; i++)
     submatch[i] = StringPiece();
-  return true; 
-} 
- 
-// Internal matcher - like Match() but takes Args not StringPieces. 
-bool RE2::DoMatch(const StringPiece& text, 
+  return true;
+}
+
+// Internal matcher - like Match() but takes Args not StringPieces.
+bool RE2::DoMatch(const StringPiece& text,
                   Anchor re_anchor,
                   size_t* consumed,
-                  const Arg* const* args, 
-                  int n) const { 
-  if (!ok()) { 
-    if (options_.log_errors()) 
-      LOG(ERROR) << "Invalid RE2: " << *error_; 
-    return false; 
-  } 
- 
+                  const Arg* const* args,
+                  int n) const {
+  if (!ok()) {
+    if (options_.log_errors())
+      LOG(ERROR) << "Invalid RE2: " << *error_;
+    return false;
+  }
+
   if (NumberOfCapturingGroups() < n) {
     // RE has fewer capturing groups than number of Arg pointers passed in.
     return false;
   }
 
-  // Count number of capture groups needed. 
-  int nvec; 
-  if (n == 0 && consumed == NULL) 
-    nvec = 0; 
-  else 
-    nvec = n+1; 
- 
-  StringPiece* vec; 
-  StringPiece stkvec[kVecSize]; 
-  StringPiece* heapvec = NULL; 
- 
+  // Count number of capture groups needed.
+  int nvec;
+  if (n == 0 && consumed == NULL)
+    nvec = 0;
+  else
+    nvec = n+1;
+
+  StringPiece* vec;
+  StringPiece stkvec[kVecSize];
+  StringPiece* heapvec = NULL;
+
   if (nvec <= static_cast<int>(arraysize(stkvec))) {
-    vec = stkvec; 
-  } else { 
-    vec = new StringPiece[nvec]; 
-    heapvec = vec; 
-  } 
- 
+    vec = stkvec;
+  } else {
+    vec = new StringPiece[nvec];
+    heapvec = vec;
+  }
+
   if (!Match(text, 0, text.size(), re_anchor, vec, nvec)) {
-    delete[] heapvec; 
-    return false; 
-  } 
- 
+    delete[] heapvec;
+    return false;
+  }
+
   if (consumed != NULL)
     *consumed = static_cast<size_t>(EndPtr(vec[0]) - BeginPtr(text));
- 
-  if (n == 0 || args == NULL) { 
-    // We are not interested in results 
-    delete[] heapvec; 
-    return true; 
-  } 
- 
-  // If we got here, we must have matched the whole pattern. 
-  for (int i = 0; i < n; i++) { 
-    const StringPiece& s = vec[i+1]; 
-    if (!args[i]->Parse(s.data(), s.size())) { 
-      // TODO: Should we indicate what the error was? 
-      delete[] heapvec; 
-      return false; 
-    } 
-  } 
- 
-  delete[] heapvec; 
-  return true; 
-} 
- 
-// Checks that the rewrite string is well-formed with respect to this 
-// regular expression. 
+
+  if (n == 0 || args == NULL) {
+    // We are not interested in results
+    delete[] heapvec;
+    return true;
+  }
+
+  // If we got here, we must have matched the whole pattern.
+  for (int i = 0; i < n; i++) {
+    const StringPiece& s = vec[i+1];
+    if (!args[i]->Parse(s.data(), s.size())) {
+      // TODO: Should we indicate what the error was?
+      delete[] heapvec;
+      return false;
+    }
+  }
+
+  delete[] heapvec;
+  return true;
+}
+
+// Checks that the rewrite string is well-formed with respect to this
+// regular expression.
 bool RE2::CheckRewriteString(const StringPiece& rewrite,
                              std::string* error) const {
-  int max_token = -1; 
-  for (const char *s = rewrite.data(), *end = s + rewrite.size(); 
-       s < end; s++) { 
-    int c = *s; 
-    if (c != '\\') { 
-      continue; 
-    } 
-    if (++s == end) { 
-      *error = "Rewrite schema error: '\\' not allowed at end."; 
-      return false; 
-    } 
-    c = *s; 
-    if (c == '\\') { 
-      continue; 
-    } 
+  int max_token = -1;
+  for (const char *s = rewrite.data(), *end = s + rewrite.size();
+       s < end; s++) {
+    int c = *s;
+    if (c != '\\') {
+      continue;
+    }
+    if (++s == end) {
+      *error = "Rewrite schema error: '\\' not allowed at end.";
+      return false;
+    }
+    c = *s;
+    if (c == '\\') {
+      continue;
+    }
     if (!isdigit(c)) {
-      *error = "Rewrite schema error: " 
-               "'\\' must be followed by a digit or '\\'."; 
-      return false; 
-    } 
-    int n = (c - '0'); 
-    if (max_token < n) { 
-      max_token = n; 
-    } 
-  } 
- 
-  if (max_token > NumberOfCapturingGroups()) { 
+      *error = "Rewrite schema error: "
+               "'\\' must be followed by a digit or '\\'.";
+      return false;
+    }
+    int n = (c - '0');
+    if (max_token < n) {
+      max_token = n;
+    }
+  }
+
+  if (max_token > NumberOfCapturingGroups()) {
     *error = StringPrintf(
         "Rewrite schema requests %d matches, but the regexp only has %d "
         "parenthesized subexpressions.",
         max_token, NumberOfCapturingGroups());
-    return false; 
-  } 
-  return true; 
-} 
- 
+    return false;
+  }
+  return true;
+}
+
 // Returns the maximum submatch needed for the rewrite to be done by Replace().
 // E.g. if rewrite == "foo \\2,\\1", returns 2.
 int RE2::MaxSubmatch(const StringPiece& rewrite) {
@@ -1033,32 +1033,32 @@ bool RE2::Rewrite(std::string* out,
   return true;
 }
 
-/***** Parsers for various types *****/ 
- 
+/***** Parsers for various types *****/
+
 namespace re2_internal {
 
 template <>
 bool Parse(const char* str, size_t n, void* dest) {
-  // We fail if somebody asked us to store into a non-NULL void* pointer 
-  return (dest == NULL); 
-} 
- 
+  // We fail if somebody asked us to store into a non-NULL void* pointer
+  return (dest == NULL);
+}
+
 template <>
 bool Parse(const char* str, size_t n, std::string* dest) {
-  if (dest == NULL) return true; 
+  if (dest == NULL) return true;
   dest->assign(str, n);
-  return true; 
-} 
- 
+  return true;
+}
+
 #if defined(ARCADIA_ROOT)
 template <>
 bool Parse(const char* str, size_t n, TString* dest) {
-  if (dest == NULL) return true; 
+  if (dest == NULL) return true;
   dest->assign(str, n);
-  return true; 
-} 
+  return true;
+}
 #endif
- 
+
 template <>
 bool Parse(const char* str, size_t n, StringPiece* dest) {
   if (dest == NULL) return true;
@@ -1068,16 +1068,16 @@ bool Parse(const char* str, size_t n, StringPiece* dest) {
 
 template <>
 bool Parse(const char* str, size_t n, char* dest) {
-  if (n != 1) return false; 
-  if (dest == NULL) return true; 
+  if (n != 1) return false;
+  if (dest == NULL) return true;
   *dest = str[0];
-  return true; 
-} 
- 
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, signed char* dest) {
-  if (n != 1) return false; 
-  if (dest == NULL) return true; 
+  if (n != 1) return false;
+  if (dest == NULL) return true;
   *dest = str[0];
   return true;
 }
@@ -1087,12 +1087,12 @@ bool Parse(const char* str, size_t n, unsigned char* dest) {
   if (n != 1) return false;
   if (dest == NULL) return true;
   *dest = str[0];
-  return true; 
-} 
- 
-// Largest number spec that we are willing to parse 
-static const int kMaxNumberLength = 32; 
- 
+  return true;
+}
+
+// Largest number spec that we are willing to parse
+static const int kMaxNumberLength = 32;
+
 // REQUIRES "buf" must have length at least nbuf.
 // Copies "str" into "buf" and null-terminates.
 // Overwrites *np with the new length.
@@ -1101,7 +1101,7 @@ static const char* TerminateNumber(char* buf, size_t nbuf, const char* str,
   size_t n = *np;
   if (n == 0) return "";
   if (n > 0 && isspace(*str)) {
-    // We are less forgiving than the strtoxxx() routines and do not 
+    // We are less forgiving than the strtoxxx() routines and do not
     // allow leading spaces. We do allow leading spaces for floats.
     if (!accept_spaces) {
       return "";
@@ -1110,8 +1110,8 @@ static const char* TerminateNumber(char* buf, size_t nbuf, const char* str,
       n--;
       str++;
     }
-  } 
- 
+  }
+
   // Although buf has a fixed maximum size, we can still handle
   // arbitrarily large integers correctly by omitting leading zeros.
   // (Numbers that are still too long will be out of range.)
@@ -1125,7 +1125,7 @@ static const char* TerminateNumber(char* buf, size_t nbuf, const char* str,
     neg = true;
     n--;
     str++;
-  } 
+  }
 
   if (n >= 3 && str[0] == '0' && str[1] == '0') {
     while (n >= 3 && str[2] == '0') {
@@ -1148,11 +1148,11 @@ static const char* TerminateNumber(char* buf, size_t nbuf, const char* str,
   buf[n] = '\0';
   *np = n;
   return buf;
-} 
- 
+}
+
 template <>
 bool Parse(const char* str, size_t n, float* dest) {
-  if (n == 0) return false; 
+  if (n == 0) return false;
   static const int kMaxLength = 200;
   char buf[kMaxLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, true);
@@ -1185,127 +1185,127 @@ bool Parse(const char* str, size_t n, double* dest) {
 template <>
 bool Parse(const char* str, size_t n, long* dest, int radix) {
   if (n == 0) return false;
-  char buf[kMaxNumberLength+1]; 
+  char buf[kMaxNumberLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, false);
-  char* end; 
-  errno = 0; 
-  long r = strtol(str, &end, radix); 
-  if (end != str + n) return false;   // Leftover junk 
-  if (errno) return false; 
-  if (dest == NULL) return true; 
+  char* end;
+  errno = 0;
+  long r = strtol(str, &end, radix);
+  if (end != str + n) return false;   // Leftover junk
+  if (errno) return false;
+  if (dest == NULL) return true;
   *dest = r;
-  return true; 
-} 
- 
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, unsigned long* dest, int radix) {
-  if (n == 0) return false; 
-  char buf[kMaxNumberLength+1]; 
+  if (n == 0) return false;
+  char buf[kMaxNumberLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, false);
-  if (str[0] == '-') { 
+  if (str[0] == '-') {
     // strtoul() will silently accept negative numbers and parse
     // them.  This module is more strict and treats them as errors.
     return false;
-  } 
- 
-  char* end; 
-  errno = 0; 
-  unsigned long r = strtoul(str, &end, radix); 
-  if (end != str + n) return false;   // Leftover junk 
-  if (errno) return false; 
-  if (dest == NULL) return true; 
+  }
+
+  char* end;
+  errno = 0;
+  unsigned long r = strtoul(str, &end, radix);
+  if (end != str + n) return false;   // Leftover junk
+  if (errno) return false;
+  if (dest == NULL) return true;
   *dest = r;
-  return true; 
-} 
- 
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, short* dest, int radix) {
-  long r; 
+  long r;
   if (!Parse(str, n, &r, radix)) return false;  // Could not parse
   if ((short)r != r) return false;              // Out of range
-  if (dest == NULL) return true; 
+  if (dest == NULL) return true;
   *dest = (short)r;
-  return true; 
-} 
- 
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, unsigned short* dest, int radix) {
-  unsigned long r; 
+  unsigned long r;
   if (!Parse(str, n, &r, radix)) return false;  // Could not parse
   if ((unsigned short)r != r) return false;     // Out of range
-  if (dest == NULL) return true; 
+  if (dest == NULL) return true;
   *dest = (unsigned short)r;
-  return true; 
-} 
- 
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, int* dest, int radix) {
-  long r; 
+  long r;
   if (!Parse(str, n, &r, radix)) return false;  // Could not parse
   if ((int)r != r) return false;                // Out of range
-  if (dest == NULL) return true; 
+  if (dest == NULL) return true;
   *dest = (int)r;
-  return true; 
-} 
- 
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, unsigned int* dest, int radix) {
-  unsigned long r; 
+  unsigned long r;
   if (!Parse(str, n, &r, radix)) return false;  // Could not parse
   if ((unsigned int)r != r) return false;       // Out of range
-  if (dest == NULL) return true; 
+  if (dest == NULL) return true;
   *dest = (unsigned int)r;
-  return true; 
-} 
- 
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, long long* dest, int radix) {
-  if (n == 0) return false; 
-  char buf[kMaxNumberLength+1]; 
+  if (n == 0) return false;
+  char buf[kMaxNumberLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, false);
-  char* end; 
-  errno = 0; 
+  char* end;
+  errno = 0;
   long long r = strtoll(str, &end, radix);
-  if (end != str + n) return false;   // Leftover junk 
-  if (errno) return false; 
-  if (dest == NULL) return true; 
+  if (end != str + n) return false;   // Leftover junk
+  if (errno) return false;
+  if (dest == NULL) return true;
   *dest = r;
-  return true; 
-} 
- 
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, unsigned long long* dest, int radix) {
-  if (n == 0) return false; 
-  char buf[kMaxNumberLength+1]; 
+  if (n == 0) return false;
+  char buf[kMaxNumberLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, false);
-  if (str[0] == '-') { 
-    // strtoull() will silently accept negative numbers and parse 
-    // them.  This module is more strict and treats them as errors. 
-    return false; 
-  } 
-  char* end; 
-  errno = 0; 
+  if (str[0] == '-') {
+    // strtoull() will silently accept negative numbers and parse
+    // them.  This module is more strict and treats them as errors.
+    return false;
+  }
+  char* end;
+  errno = 0;
   unsigned long long r = strtoull(str, &end, radix);
-  if (end != str + n) return false;   // Leftover junk 
-  if (errno) return false; 
-  if (dest == NULL) return true; 
+  if (end != str + n) return false;   // Leftover junk
+  if (errno) return false;
+  if (dest == NULL) return true;
   *dest = r;
-  return true; 
-} 
- 
+  return true;
+}
+
 }  // namespace re2_internal
- 
+
 namespace hooks {
- 
+
 #ifdef RE2_HAVE_THREAD_LOCAL
 thread_local const RE2* context = NULL;
 #endif
- 
+
 template <typename T>
 union Hook {
   void Store(T* cb) { cb_.store(cb, std::memory_order_release); }
   T* Load() const { return cb_.load(std::memory_order_acquire); }
- 
+
 #if !defined(__clang__) && defined(_MSC_VER)
   // Citing https://github.com/protocolbuffers/protobuf/pull/4777 as precedent,
   // this is a gross hack to make std::atomic<T*> constant-initialized on MSVC.
@@ -1313,10 +1313,10 @@ union Hook {
                 "std::atomic<T*> must be always lock-free");
   T* cb_for_constinit_;
 #endif
- 
+
   std::atomic<T*> cb_;
 };
- 
+
 template <typename T>
 static void DoNothing(const T&) {}
 
@@ -1332,4 +1332,4 @@ DEFINE_HOOK(DFASearchFailure, dfa_search_failure)
 
 }  // namespace hooks
 
-}  // namespace re2 
+}  // namespace re2

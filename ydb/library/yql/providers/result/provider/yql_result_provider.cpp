@@ -1,5 +1,5 @@
 #include "yql_result_provider.h"
- 
+
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -13,7 +13,7 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
- 
+
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/string/cast.h>

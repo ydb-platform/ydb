@@ -1,21 +1,21 @@
-#pragma once 
- 
-#include "type_ann_core.h" 
- 
+#pragma once
+
+#include "type_ann_core.h"
+
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
- 
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/ast/yql_expr_types.h>
- 
-namespace NYql { 
-namespace NTypeAnnImpl { 
- 
-    struct TContext { 
-        TExprContext& Expr; 
- 
+
+namespace NYql {
+namespace NTypeAnnImpl {
+
+    struct TContext {
+        TExprContext& Expr;
+
         TContext(TExprContext& expr);
-    }; 
- 
+    };
+
     struct TExtContext : public TContext {
         TTypeAnnotationContext& Types;
 
@@ -24,7 +24,7 @@ namespace NTypeAnnImpl {
         void RegisterResolvedImport(const IUdfResolver::TImport& import);
     };
 
-    // Implemented in type_ann_join.cpp 
+    // Implemented in type_ann_join.cpp
     IGraphTransformer::TStatus JoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus JoinDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus MapJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
@@ -32,9 +32,9 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus EquiJoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus CombineCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus GroupingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
- 
+
     TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TStructExprType& structType, TContext& ctx);
 
     TExprNode::TPtr MakeNothingData(TExprContext& ctx, TPositionHandle pos, TStringBuf data);
-} // namespace NTypeAnnImpl 
-} // namespace NYql 
+} // namespace NTypeAnnImpl
+} // namespace NYql

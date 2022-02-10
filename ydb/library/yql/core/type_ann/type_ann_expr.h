@@ -1,11 +1,11 @@
 #pragma once
 
-#include "type_ann_core.h" 
- 
+#include "type_ann_core.h"
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/ast/yql_expr_types.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
- 
+
 namespace NYql {
 
 TAutoPtr<IGraphTransformer> CreateTypeAnnotationTransformer(

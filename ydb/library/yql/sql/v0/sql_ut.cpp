@@ -1,4 +1,4 @@
-#include "sql.h" 
+#include "sql.h"
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <util/generic/map.h>
@@ -6,14 +6,14 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/split.h>
- 
+
 using namespace NSQLTranslationV0;
- 
+
 enum class EDebugOutput {
     None,
     ToCerr,
 };
- 
+
 TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::None) {
     TStringStream s;
     res.Issues.PrintTo(s);
@@ -101,8 +101,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TableHints) {
         UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH INFER_SCHEME").IsOk());
         UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEME)").IsOk());
-    } 
- 
+    }
+
     Y_UNIT_TEST(InNoHints) {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input WHERE key IN (1,2,3)");
         UNIT_ASSERT(res.Root);
@@ -232,13 +232,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(JoinParseCorrect) {
-        NYql::TAstParseResult res = SqlToYql( 
+        NYql::TAstParseResult res = SqlToYql(
             " SELECT table_bb.*, table_aa.key as megakey"
             " FROM plato.Input AS table_aa"
             " JOIN plato.Input AS table_bb"
             " ON table_aa.value == table_bb.value;"
-        ); 
-        UNIT_ASSERT(res.Root); 
+        );
+        UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "SelectMembers") {
@@ -256,17 +256,17 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SelectMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
-    } 
- 
+    }
+
     Y_UNIT_TEST(Join3Table) {
-        NYql::TAstParseResult res = SqlToYql( 
+        NYql::TAstParseResult res = SqlToYql(
             " SELECT table_bb.*, table_aa.key as gigakey, table_cc.* "
             " FROM plato.Input AS table_aa"
             " JOIN plato.Input AS table_bb ON table_aa.key == table_bb.key"
             " JOIN plato.Input AS table_cc ON table_aa.subkey == table_cc.subkey;"
-        ); 
+        );
         Err2Str(res);
-        UNIT_ASSERT(res.Root); 
+        UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "SelectMembers") {
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SelectMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
-    } 
+    }
 
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
         NYql::TAstParseResult res = SqlToYql(
@@ -896,14 +896,14 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT( SqlToYql("SELECT @@@@@@@@@").IsOk());
         UNIT_ASSERT(!SqlToYql("SELECT @@@@@@@@@@").IsOk());
     }
-} 
- 
+}
+
 
 Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(StrayUTF8) {
         /// 'c' in plato is russian here
         NYql::TAstParseResult res = SqlToYql("select * from сedar.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
 
         TString a1 = Err2Str(res);
         TString a2(R"foo(<main>:1:14: Error: Unexpected character 'с' (Unicode character <1089>) : cannot match to any predicted input...
@@ -913,8 +913,8 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 )foo");
 
         UNIT_ASSERT_NO_DIFF(a1, a2);
-    } 
- 
+    }
+
     Y_UNIT_TEST(IvalidStringLiteralWithEscapedBackslash) {
         NYql::TAstParseResult res1 = SqlToYql(R"foo($bar = 'a\\'b';)foo");
         NYql::TAstParseResult res2 = SqlToYql(R"foo($bar = "a\\"b";)foo");
@@ -960,17 +960,17 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(WrongTokenTrivial) {
         NYql::TAstParseResult res = SqlToYql("foo");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: Unexpected token 'foo' : cannot match to any predicted input...\n\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(InvalidDoubleAtString) {
         NYql::TAstParseResult res = SqlToYql("select @@@@@@");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unexpected character : syntax error...\n\n"
                                           "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n"    );
-    } 
- 
+    }
+
     Y_UNIT_TEST(InvalidDoubleAtStringWhichWasAcceptedEarlier) {
         NYql::TAstParseResult res = SqlToYql("SELECT @@foo@@ @ @@bar@@");
         UNIT_ASSERT(!res.Root);
@@ -979,140 +979,140 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(InvalidStringFromTable) {
         NYql::TAstParseResult res = SqlToYql("select \"FOO\"\"BAR from plato.foo");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: Unexpected character : syntax error...\n\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(InvalidDoubleAtStringFromTable) {
         NYql::TAstParseResult res = SqlToYql("select @@@@@@ from plato.foo");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected character : syntax error...\n\n"
                                           "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectInvalidSyntax) {
         NYql::TAstParseResult res = SqlToYql("select 1 form Wat");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:9: Error: Unexpected token 'form' : syntax error...\n\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectNoCluster) {
         NYql::TAstParseResult res = SqlToYql("select foo from bar");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: No cluster name given and no default cluster is selected\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectDuplicateColumns) {
         NYql::TAstParseResult res = SqlToYql("select a, a from plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:11: Error: Unable to use duplicate column names. Collision in name: a\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectDuplicateLabels) {
         NYql::TAstParseResult res = SqlToYql("select a as foo, b as foo from plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:18: Error: Unable to use duplicate column names. Collision in name: foo\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectCaseWithoutThen) {
         NYql::TAstParseResult res = SqlToYql("select case when true 1;");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:1:22: Error: Unexpected token absence : Missing THEN \n\n"
             "<main>:1:23: Error: Unexpected token absence : Missing END \n\n"
-        ); 
-    } 
- 
+        );
+    }
+
     Y_UNIT_TEST(SelectComplexCaseWithoutThen) {
-        NYql::TAstParseResult res = SqlToYql( 
-            "SELECT *\n" 
+        NYql::TAstParseResult res = SqlToYql(
+            "SELECT *\n"
             "FROM plato.Input AS a\n"
-            "WHERE CASE WHEN a.key = \"foo\" a.subkey ELSE a.value END\n" 
-        ); 
+            "WHERE CASE WHEN a.key = \"foo\" a.subkey ELSE a.value END\n"
+        );
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:3:24: Error: Unexpected token '\"foo\"' : cannot match to any predicted input...\n\n"
             "<main>:3:39: Error: Unexpected token absence : Missing THEN \n\n"
-        ); 
-    } 
- 
+        );
+    }
+
     Y_UNIT_TEST(SelectCaseWithoutEnd) {
         NYql::TAstParseResult res = SqlToYql("select case a when b then c end from plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: ELSE is required\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectWithBadAggregationNoInput) {
         NYql::TAstParseResult res = SqlToYql("select a, Min(b), c");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Source does not allow column references\n"
            "<main>:1:1: Error: Source does not allow column references\n"
            "<main>:1:1: Error: Source does not allow column references\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectWithBadAggregation) {
         NYql::TAstParseResult res = SqlToYql("select count(*), key from plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:18: Error: Expression has to be an aggregation function or key column, because aggregation is used elsewhere in this subquery\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectWithBadAggregatedTerms) {
         NYql::TAstParseResult res = SqlToYql("select key, subkey from plato.Input group by key");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Expression has to be an aggregation function or key column, because aggregation is used elsewhere in this subquery\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectWithBadAggregationInHaving) {
         NYql::TAstParseResult res = SqlToYql("select key from plato.Input group by key having value == \"foo\"");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:55: Error: Expression has to be an aggregation function or key column, because aggregation is used elsewhere in this subquery\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectWithDuplicateGroupingColumns) {
         NYql::TAstParseResult res = SqlToYql("select c from plato.Input group by c, c");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Duplicate grouping column: c\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectWithBadAggregationInGrouping) {
         NYql::TAstParseResult res = SqlToYql("select a, Min(b), c group by c");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Source does not allow column references\n"
             "<main>:1:1: Error: Source does not allow column references\n"
             "<main>:1:1: Error: Source does not allow column references\n"
             "<main>:1:1: Error: Source does not allow column references\n"
             "<main>:1:1: Error: No aggregations were specified\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectWithOpOnBadAggregation) {
         NYql::TAstParseResult res = SqlToYql("select a + Min(b) from plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:10: Error: Expression has to be an aggregation function or key column, because aggregation is used elsewhere in this subquery\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectOrderByConstantNum) {
         NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by 1");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY constant expression\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectOrderByConstantExpr) {
         NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by 1 * 42");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:38: Error: Unable to ORDER BY constant expression\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectOrderByConstantString) {
         NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by \"nest\"");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY constant expression\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectOrderByAggregated) {
         NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by min(a)");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY aggregated values\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(ErrorInOrderByExpresison) {
         NYql::TAstParseResult res = SqlToYql("select key, value from plato.Input order by (key as zey)");
         UNIT_ASSERT(!res.Root);
@@ -1121,10 +1121,10 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(SelectAggregatedWhere) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input where count(key)");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:33: Error: Can not use aggregated values in filtering\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(DoubleFrom) {
         NYql::TAstParseResult res = SqlToYql("from plato.Input select * from plato.Input");
         UNIT_ASSERT(!res.Root);
@@ -1133,68 +1133,68 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(SelectJoinMissingCorrName) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input1 as a join plato.Input2 as b on a.key == key");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:65: Error: JOIN: column requires correlation name\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectJoinEmptyCorrNames) {
-        NYql::TAstParseResult res = SqlToYql( 
+        NYql::TAstParseResult res = SqlToYql(
             "$left = (SELECT * FROM plato.Input1 LIMIT 2);\n"
             "$right = (SELECT * FROM plato.Input2 LIMIT 2);\n"
             "SELECT * FROM $left FULL JOIN $right USING (key);\n"
-        ); 
-        UNIT_ASSERT(!res.Root); 
+        );
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:45: Error: At least one correlation name is required in join\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectJoinSameCorrNames) {
         NYql::TAstParseResult res = SqlToYql("SELECT Input.key FROM plato.Input JOIN plato.Input1 ON Input.key == Input.subkey\n");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:66: Error: JOIN: different correlation names are required for joined tables\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectJoinConstPredicateArg) {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input1 as A JOIN plato.Input2 as B ON A.key == B.key AND A.subkey == \"wtf\"\n");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:87: Error: JOIN: equality predicate arguments must not be constant\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectJoinNonEqualityPredicate) {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input1 as A JOIN plato.Input2 as B ON A.key == B.key AND A.subkey > B.subkey\n");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:87: Error: JOIN ON expression must be a conjunction of equality predicates\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectEquiJoinCorrNameOutOfScope) {
-        NYql::TAstParseResult res = SqlToYql( 
-            "PRAGMA equijoin;\n" 
+        NYql::TAstParseResult res = SqlToYql(
+            "PRAGMA equijoin;\n"
             "SELECT * FROM plato.A JOIN plato.B ON A.key == C.key JOIN plato.C ON A.subkey == C.subkey;\n"
-        ); 
-        UNIT_ASSERT(!res.Root); 
+        );
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:45: Error: JOIN: can not use source: C in equality predicate, it is out of current join scope\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectEquiJoinNoRightSource) {
-        NYql::TAstParseResult res = SqlToYql( 
-            "PRAGMA equijoin;\n" 
+        NYql::TAstParseResult res = SqlToYql(
+            "PRAGMA equijoin;\n"
             "SELECT * FROM plato.A JOIN plato.B ON A.key == B.key JOIN plato.C ON A.subkey == B.subkey;\n"
-        ); 
-        UNIT_ASSERT(!res.Root); 
+        );
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:79: Error: JOIN ON equality predicate must have one of its arguments from the rightmost source\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(InsertNoCluster) {
-        NYql::TAstParseResult res = SqlToYql("insert into Output (foo) values (1)"); 
-        UNIT_ASSERT(!res.Root); 
+        NYql::TAstParseResult res = SqlToYql("insert into Output (foo) values (1)");
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:34: Error: No cluster name given and no default cluster is selected\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(InsertValuesNoLabels) {
         NYql::TAstParseResult res = SqlToYql("insert into plato.Output values (1)");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: INSERT INTO ... VALUES requires specification of table columns\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(UpsertValuesNoLabelsKikimr) {
         NYql::TAstParseResult res = SqlToYql("upsert into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(!res.Root);
@@ -1209,33 +1209,33 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(InsertValuesInvalidLabels) {
         NYql::TAstParseResult res = SqlToYql("insert into plato.Output (foo) values (1, 2)");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: VALUES have 2 columns, INSERT INTO expects: 1\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(BuiltinFileOpNoArgs) {
         NYql::TAstParseResult res = SqlToYql("select FilePath()");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: FilePath() requires exactly 1 arguments, given: 0\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(ProcessWithHaving) {
         NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf(value) having value == 1");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet! You may request it on yql@ maillist.\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(ReduceNoBy) {
         NYql::TAstParseResult res = SqlToYql("reduce plato.Input using some::udf(value)");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unexpected token absence : Missing ON \n\n<main>:1:25: Error: Unexpected token absence : Missing USING \n\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(ReduceDistinct) {
         NYql::TAstParseResult res = SqlToYql("reduce plato.Input on key using some::udf(distinct value)");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:52: Error: REDUCE does not allow DISTINCT arguments\n");
-    } 
+    }
 
     Y_UNIT_TEST(ProcessMultipleRowsPlaceholders) {
         NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf($ROWS, $ROWS)");
@@ -1275,7 +1275,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:15: Error: Unknown name: $ROWS\n");
     }
- 
+
     Y_UNIT_TEST(ProcessWithInvalidSource) {
         NYql::TAstParseResult res = SqlToYql("PROCESS $input USING YQL::AsList($ROWS);");
         UNIT_ASSERT(!res.Root);
@@ -1290,27 +1290,27 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(CreateTableWithView) {
         NYql::TAstParseResult res = SqlToYql("CREATE TABLE plato.foo:bar (key INT);");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:22: Error: Unexpected token ':' : syntax error...\n\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(CreateTableWithOptColumn) {
         NYql::TAstParseResult res = SqlToYql("CREATE TABLE plato.foo (key \"Int32?\");");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:25: Error: CREATE TABLE clause requires non-optional column types in scheme\n");
     }
- 
+
     Y_UNIT_TEST(AsteriskWithSomethingAfter) {
         NYql::TAstParseResult res = SqlToYql("select *, LENGTH(value) from plato.Input;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Unable to use general '*' with other columns, either specify concrete table like '<table>.*', either specify concrete columns.\n");
     }
- 
+
     Y_UNIT_TEST(AsteriskWithSomethingBefore) {
         NYql::TAstParseResult res = SqlToYql("select LENGTH(value), * from plato.Input;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:23: Error: Unable to use general '*' with other columns, either specify concrete table like '<table>.*', either specify concrete columns.\n");
-    } 
+    }
 
     Y_UNIT_TEST(DuplicatedQualifiedAsterisk) {
         NYql::TAstParseResult res = SqlToYql("select in.*, key, in.* from plato.Input as in;");
@@ -1741,4 +1741,4 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:5: Error: Unknown cluster: PlatO\n");
     }
-} 
+}

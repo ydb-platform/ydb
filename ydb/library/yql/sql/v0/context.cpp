@@ -1,5 +1,5 @@
-#include "context.h" 
- 
+#include "context.h"
+
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -11,10 +11,10 @@
 #undef GetMessage
 #endif
 
-using namespace NYql; 
- 
+using namespace NYql;
+
 namespace NSQLTranslationV0 {
- 
+
 namespace {
 
 TNodePtr AddTablePathPrefix(TContext &ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
@@ -50,13 +50,13 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , Settings(settings)
-    , Pool(new TMemoryPool(4096)) 
+    , Pool(new TMemoryPool(4096))
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
     , CurrCluster(settings.DefaultCluster)
     , HasPendingErrors(false)
     , Libraries(settings.Libraries)
-{ 
+{
     Position.File = settings.File;
 
     for (auto& flag: settings.Flags) {
@@ -71,16 +71,16 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
             this->*(*ptr) = value;
         }
     }
-} 
- 
-TContext::~TContext() 
-{ 
-} 
- 
-const NYql::TPosition& TContext::Pos() const { 
-    return Position; 
-} 
- 
+}
+
+TContext::~TContext()
+{
+}
+
+const NYql::TPosition& TContext::Pos() const {
+    return Position;
+}
+
 TString TContext::MakeName(const TString& name) {
     auto iter = GenIndexes.find(name);
     if (iter == GenIndexes.end()) {
@@ -90,17 +90,17 @@ TString TContext::MakeName(const TString& name) {
     str << name << iter->second;
     ++iter->second;
     return str;
-} 
- 
+}
+
 IOutputStream& TContext::Error() {
-    return Error(Pos()); 
-} 
- 
+    return Error(Pos());
+}
+
 IOutputStream& TContext::Error(NYql::TPosition pos) {
     HasPendingErrors = true;
     return MakeIssue(TSeverityIds::S_ERROR, TIssuesIds::DEFAULT_ERROR, pos);
-} 
- 
+}
+
 IOutputStream& TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code) {
     return MakeIssue(TSeverityIds::S_WARNING, code, pos);
 }
@@ -337,29 +337,29 @@ bool TContext::UseUnordered(const TTableRef& table) const {
     return YtProviderName == to_lower(GetClusterProvider(table.Cluster).GetOrElse(TString()));
 }
 
-TTranslation::TTranslation(TContext& ctx) 
-    : Ctx(ctx) 
-{ 
-} 
- 
-TContext& TTranslation::Context() { 
-    return Ctx; 
-} 
- 
+TTranslation::TTranslation(TContext& ctx)
+    : Ctx(ctx)
+{
+}
+
+TContext& TTranslation::Context() {
+    return Ctx;
+}
+
 IOutputStream& TTranslation::Error() {
-    return Ctx.Error(); 
-} 
- 
+    return Ctx.Error();
+}
+
 TNodePtr TTranslation::GetNamedNode(const TString& name) {
     auto mapIt = Ctx.NamedNodes.find(name);
     if (mapIt == Ctx.NamedNodes.end()) {
-        Ctx.Error() << "Unknown name: " << name; 
-        return nullptr; 
-    } 
+        Ctx.Error() << "Unknown name: " << name;
+        return nullptr;
+    }
     Y_VERIFY_DEBUG(!mapIt->second.empty());
     return mapIt->second.top()->Clone();
-} 
- 
+}
+
 void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
     Y_VERIFY_DEBUG(node);
     auto mapIt = Ctx.NamedNodes.find(name);
@@ -367,7 +367,7 @@ void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
         auto result = Ctx.NamedNodes.insert(std::make_pair(name, TStack<TNodePtr>()));
         Y_VERIFY_DEBUG(result.second);
         mapIt = result.first;
-    } 
+    }
 
     mapIt->second.push(node);
 }
@@ -379,9 +379,9 @@ void TTranslation::PopNamedNode(const TString& name) {
     mapIt->second.pop();
     if (mapIt->second.empty()) {
         Ctx.NamedNodes.erase(mapIt);
-    } 
-} 
- 
+    }
+}
+
 TString GetDescription(const google::protobuf::Message& node, const google::protobuf::FieldDescriptor* d) {
     const auto& field = node.GetReflection()->GetMessage(node, d);
     return field.GetReflection()->GetString(field, d->message_type()->FindFieldByName("Descr"));
@@ -393,6 +393,6 @@ TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32
 
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {
     Error() << ruleName << ": alternative is not implemented yet: " << GetDescription(node, descr->FindFieldByNumber(altCase));
-} 
- 
+}
+
 } // namespace NSQLTranslationV0

@@ -1,11 +1,11 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     g:yql
     g:yql_ydb_core
 )
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/charset
     library/cpp/enumbitset
     ydb/library/yql/minikql
@@ -17,26 +17,26 @@ PEERDIR(
     ydb/library/yql/parser/proto_ast
     ydb/library/yql/parser/proto_ast/collect_issues
     ydb/library/yql/parser/proto_ast/gen/v0
-) 
- 
-SRCS( 
-    aggregation.cpp 
-    builtin.cpp 
-    context.cpp 
-    join.cpp 
-    insert.cpp 
+)
+
+SRCS(
+    aggregation.cpp
+    builtin.cpp
+    context.cpp
+    join.cpp
+    insert.cpp
     list_builtin.cpp
-    node.cpp 
-    select.cpp 
-    sql.cpp 
-    query.cpp 
-) 
- 
+    node.cpp
+    select.cpp
+    sql.cpp
+    query.cpp
+)
+
 YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(node.h)
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     ut

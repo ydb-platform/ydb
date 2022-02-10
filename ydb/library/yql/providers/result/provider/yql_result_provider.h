@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/core/yql_execution.h>
- 
+
 namespace Nkikimr::NMiniKQL {
     class IFunctionRegistry;
 }

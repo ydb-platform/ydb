@@ -2025,7 +2025,7 @@ bool IsDependedImpl(const TExprNode& node, const Set& dependences, TNodeSet& vis
         if (IsDependedImpl(*child, dependences, visited))
             return true;
     }
- 
+
     return false;
 }
 
@@ -2178,7 +2178,7 @@ TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMa
                     processed.emplace(&arg, argIt->second);
                     newArgsList.emplace_back(argIt->second);
                 });
- 
+
                 auto newBody = GetLambdaBody(*start);
                 std::for_each(newBody.begin(), newBody.end(), [&](TExprNode::TPtr& node) {
                     node = DoReplace<KeepTypeAnns>(node, newReplaces, localReplaces, changes, processed, ctx);
@@ -2323,11 +2323,11 @@ TExprNode::TPtr TExprContext::ReplaceNode(TExprNode::TPtr&& start, const TExprNo
         }
     } else if (&src == start) {
         return dst;
-    } 
+    }
 
     return ReplaceNodes(std::move(start), {{&src, std::move(dst)}});
 }
- 
+
 TExprNode::TPtr TExprContext::ReplaceNodes(TExprNode::TPtr&& start, const TNodeOnNodeOwnedMap& replaces) {
     TNodeOnNodeOwnedMap processed;
     return replaces.empty() ? std::move(start) : ReplaceNodesImpl<false>(std::move(start), replaces, processed, *this);

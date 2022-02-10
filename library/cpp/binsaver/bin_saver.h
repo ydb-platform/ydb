@@ -189,16 +189,16 @@ private:
         if (IsReading()) {
             data.clear();
             TStoredSize nSize;
-            Add(2, &nSize); 
+            Add(2, &nSize);
             for (TStoredSize i = 0; i < nSize; ++i) {
-                typename T::value_type member; 
+                typename T::value_type member;
                 Add(1, &member);
                 data.insert(member);
             }
         } else {
             TStoredSize nSize = data.size();
             CheckOverflow(nSize, data.size());
-            Add(2, &nSize); 
+            Add(2, &nSize);
             for (const auto& elem : data) {
                 auto member = elem;
                 Add(1, &member);

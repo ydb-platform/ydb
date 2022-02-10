@@ -1,5 +1,5 @@
-LIBRARY() 
- 
+LIBRARY()
+
 # git repository: https://github.com/ibre5041/antlr3.git
 # XXX fork of: https://github.com/antlr/antlr3.git
 # directory: runtime/Cpp
@@ -11,19 +11,19 @@ LICENSE(
     BSD-3-Clause AND
     Unicode-Mappings
 )
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 OWNER(g:yql)
 
-NO_COMPILER_WARNINGS() 
- 
+NO_COMPILER_WARNINGS()
+
 ADDINCL(
     GLOBAL contrib/libs/antlr3_cpp_runtime/include
 )
- 
-SRCS( 
-    antlr3.cpp 
-) 
- 
-END() 
+
+SRCS(
+    antlr3.cpp
+)
+
+END()

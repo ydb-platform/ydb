@@ -722,7 +722,7 @@ RECURSE(
     path.py
     pathlib2
     pathspec
-    pathtools
+    pathtools 
     pathy
     patsy
     paypalrestsdk

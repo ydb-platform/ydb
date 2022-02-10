@@ -5,7 +5,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/buffer.h>
-#include <util/generic/map.h> 
+#include <util/generic/map.h>
 
 struct TBinarySerializable {
     ui32 Data = 0;
@@ -90,11 +90,11 @@ Y_UNIT_TEST(TestMoveOnlyType) {
 Y_UNIT_TEST(TestVectorStrok) {
     TestBinSaverSerialization(TVector<TString>{"A", "B", "C"});
 }
- 
+
 Y_UNIT_TEST(TestCArray) {
     TestBinSaverSerialization(TTypeWithArray());
 }
- 
+
 Y_UNIT_TEST(TestSets) {
     TestBinSaverSerialization(THashSet<TString>{"A", "B", "C"});
     TestBinSaverSerialization(TSet<TString>{"A", "B", "C"});

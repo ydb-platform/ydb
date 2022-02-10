@@ -318,7 +318,7 @@ void TCheckDataTxUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
-    return THolder(new TCheckDataTxUnit(dataShard, pipeline));
+    return THolder(new TCheckDataTxUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

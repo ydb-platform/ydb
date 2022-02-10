@@ -122,7 +122,7 @@ void TCompleteOperationUnit::Complete(TOperation::TPtr op,
 THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard,
                                                     TPipeline &pipeline)
 {
-    return THolder(new TCompleteOperationUnit(dataShard, pipeline));
+    return THolder(new TCompleteOperationUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

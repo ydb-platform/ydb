@@ -257,7 +257,7 @@ private:
 };
 
 THolder<IGraphTransformer> CreateDqsRecaptureTransformer(TDqStatePtr state) {
-    return THolder(new TDqsRecaptureTransformer(state));
+    return THolder(new TDqsRecaptureTransformer(state)); 
 }
 
 } // NYql

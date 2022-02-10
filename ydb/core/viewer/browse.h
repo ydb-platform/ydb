@@ -467,7 +467,7 @@ public:
         auto& bsGroupInfo = *bsResult->Record.MutableBSGroupInfo();
 
         while (!bsGroupInfo.empty()) {
-            THolder<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo> groupInfo(bsGroupInfo.ReleaseLast());
+            THolder<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo> groupInfo(bsGroupInfo.ReleaseLast()); 
             ErasureSpecies.insert(groupInfo->GetErasureSpecies());
             for (const auto& vDiskInfo : groupInfo->GetVDiskInfo()) {
                 VDiskCategories.insert(vDiskInfo.GetVDiskCategory());

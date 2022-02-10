@@ -92,12 +92,12 @@ public:
 
 
             THolder<TEvDataShard::TEvProposeTransaction> event =
-                THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
+                THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME, 
                                                         context.SS->TabletID(),
                                                         context.Ctx.SelfID,
                                                         ui64(OperationId.GetTxId()),
                                                         txBody,
-                                                        context.SS->SelectProcessingPrarams(txState->TargetPathId)));
+                                                        context.SS->SelectProcessingPrarams(txState->TargetPathId))); 
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx,  event.Release());
         }
@@ -279,15 +279,15 @@ class TFinalizeBuildIndex: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateTxShards(OperationId));
+            return THolder(new TCreateTxShards(OperationId)); 
         case TTxState::ConfigureParts:
-            return THolder(new TConfigureParts(OperationId));
+            return THolder(new TConfigureParts(OperationId)); 
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return THolder(new TPropose(OperationId)); 
         case TTxState::ProposedWaitParts:
-            return THolder(new NTableState::TProposedWaitParts(OperationId));
+            return THolder(new NTableState::TProposedWaitParts(OperationId)); 
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return THolder(new TDone(OperationId)); 
         default:
             return nullptr;
         }

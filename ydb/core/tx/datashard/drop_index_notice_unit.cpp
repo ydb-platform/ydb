@@ -71,7 +71,7 @@ THolder<TExecutionUnit> CreateDropIndexNoticeUnit(
     TDataShard& dataShard,
     TPipeline& pipeline)
 {
-    return THolder(new TDropIndexNoticeUnit(dataShard, pipeline));
+    return THolder(new TDropIndexNoticeUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

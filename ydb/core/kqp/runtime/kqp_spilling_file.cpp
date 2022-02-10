@@ -802,7 +802,7 @@ private:
                 TFile file;
                 if (CreateFile) {
                     file = TFile(FileName, CreateAlways | WrOnly);
-                    resp->NewFileHandle = MakeHolder<TFileHandle>(FileName, OpenExisting | RdWr);
+                    resp->NewFileHandle = MakeHolder<TFileHandle>(FileName, OpenExisting | RdWr); 
                 } else {
                     file = TFile::ForAppend(FileName);
                 }

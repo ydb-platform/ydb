@@ -465,7 +465,7 @@ public:
             BLOG_D("THive::TTxCreateTablet::Complete TabletId: " << TabletId <<
                 " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " State: " << ETabletStateName(State));
             Y_VERIFY(!!Sender);
-            THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(Status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
+            THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(Status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason); 
             if (ForwardRequest.HasHiveTabletId()) {
                 reply->Record.MutableForwardRequest()->CopyFrom(ForwardRequest);
             }

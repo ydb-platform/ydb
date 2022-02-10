@@ -38,7 +38,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TIntrusivePtr<NMonitoring::TDynamicCounters> tabletsGroup = GetServiceCounters(AppData(ctx)->Counters, "tablets");
         TIntrusivePtr<NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection");
-        TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
+        TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup)); 
 
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
         TString branch = GetTag();
@@ -705,7 +705,7 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvTabletLookupRequest::TPtr &ev, const TActorContext &ctx) {
-        THolder<TEvWhiteboard::TEvTabletLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTabletLookupResponse>();
+        THolder<TEvWhiteboard::TEvTabletLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTabletLookupResponse>(); 
         auto& record = response->Record;
         TVector<ui64> tabletIDs;
         TabletIntrospectionData->GetTabletIDs(tabletIDs);
@@ -717,7 +717,7 @@ protected:
 
     void Handle(TEvWhiteboard::TEvTraceLookupRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 tabletID = ev->Get()->Record.GetTabletID();
-        THolder<TEvWhiteboard::TEvTraceLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTraceLookupResponse>();
+        THolder<TEvWhiteboard::TEvTraceLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTraceLookupResponse>(); 
         auto& record = response->Record;
         TVector<NTracing::TTraceID> tabletTraces;
         TabletIntrospectionData->GetTraces(tabletID, tabletTraces);
@@ -732,7 +732,7 @@ protected:
         ui64 tabletID = requestRecord.GetTabletID();
         NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID());
 
-        THolder<TEvWhiteboard::TEvTraceResponse> response = MakeHolder<TEvWhiteboard::TEvTraceResponse>();
+        THolder<TEvWhiteboard::TEvTraceResponse> response = MakeHolder<TEvWhiteboard::TEvTraceResponse>(); 
         auto& responseRecord = response->Record;
         auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID);
         NTracing::TTraceInfo traceInfo = {
@@ -760,7 +760,7 @@ protected:
         NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID());
         TString signalID = requestRecord.GetSignalID();
 
-        THolder<TEvWhiteboard::TEvSignalBodyResponse> response = MakeHolder<TEvWhiteboard::TEvSignalBodyResponse>();
+        THolder<TEvWhiteboard::TEvSignalBodyResponse> response = MakeHolder<TEvWhiteboard::TEvSignalBodyResponse>(); 
         auto& responseRecord = response->Record;
         auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID);
         TStringStream str;
@@ -786,7 +786,7 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
-        THolder<TEvWhiteboard::TEvSystemStateUpdate> systemStatsUpdate = MakeHolder<TEvWhiteboard::TEvSystemStateUpdate>();
+        THolder<TEvWhiteboard::TEvSystemStateUpdate> systemStatsUpdate = MakeHolder<TEvWhiteboard::TEvSystemStateUpdate>(); 
         TVector<double> loadAverage = GetLoadAverage();
         for (double d : loadAverage) {
             systemStatsUpdate->Record.AddLoadAverage(d);

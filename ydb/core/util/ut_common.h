@@ -26,7 +26,7 @@ namespace NKikimr {
         }
 
         static THolder<TWorkerThread> Spawn(std::function<void()> func) {
-            THolder<TWorkerThread> thread = MakeHolder<TWorkerThread>(std::move(func));
+            THolder<TWorkerThread> thread = MakeHolder<TWorkerThread>(std::move(func)); 
             thread->Start();
             return thread;
         }

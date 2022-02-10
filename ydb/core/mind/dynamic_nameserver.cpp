@@ -112,7 +112,7 @@ void TDynamicNodeSearcher::OnSuccess(const TActorContext &ctx)
     THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
     auto it = Config->DynamicNodes.find(NodeId);
     if (it != Config->DynamicNodes.end())
-        reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
+        reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address, 
                                                      it->second.Host, it->second.ResolveHost,
                                                      it->second.Port, it->second.Location);
     ctx.Send(OrigRequest->Sender, reply.Release());
@@ -362,7 +362,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
     if (!config || nodeId <= config->MaxStaticNodeId) {
         auto it = StaticConfig->StaticNodeTable.find(nodeId);
         if (it != StaticConfig->StaticNodeTable.end())
-            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
+            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address, 
                                                          it->second.Host, it->second.ResolveHost,
                                                          it->second.Port, it->second.Location);
         ctx.Send(ev->Sender, reply.Release());
@@ -370,7 +370,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
         ui32 domain = NodeIdToDomain(nodeId, *AppData(ctx)->DomainsInfo);
         auto it = DynamicConfigs[domain]->DynamicNodes.find(nodeId);
         if (it != DynamicConfigs[domain]->DynamicNodes.end() && it->second.Expire > ctx.Now()) {
-            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
+            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address, 
                                                          it->second.Host, it->second.ResolveHost,
                                                          it->second.Port, it->second.Location);
             ctx.Send(ev->Sender, reply.Release());

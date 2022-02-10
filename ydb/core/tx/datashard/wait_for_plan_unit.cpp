@@ -51,7 +51,7 @@ void TWaitForPlanUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
-    return MakeHolder<TWaitForPlanUnit>(dataShard, pipeline);
+    return MakeHolder<TWaitForPlanUnit>(dataShard, pipeline); 
 }
 
 } // namespace NDataShard

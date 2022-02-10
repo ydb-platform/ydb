@@ -47,7 +47,7 @@ public:
 };
 
 THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline) {
-    return THolder(new TProtectSchemeEchoesUnit(dataShard, pipeline));
+    return THolder(new TProtectSchemeEchoesUnit(dataShard, pipeline)); 
 }
 
 } // namespace NlatterDataShard

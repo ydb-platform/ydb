@@ -152,7 +152,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(TActiveTransaction& 
 }
 
 THolder<TExecutionUnit> CreateBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TBuildKqpDataTxOutRSUnit(dataShard, pipeline));
+    return THolder(new TBuildKqpDataTxOutRSUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

@@ -1038,7 +1038,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
 }
 
 void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> navigate(ev->Get()->Request.Release());
+    THolder<NSchemeCache::TSchemeCacheNavigate> navigate(ev->Get()->Request.Release()); 
     Y_VERIFY(navigate->ResultSet.size() == 1);
 
     auto &navEntry = navigate->ResultSet.front();

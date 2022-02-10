@@ -607,11 +607,11 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         Y_VERIFY(path || pathId);
 
         if (!pathId) {
-            notify = MakeHolder<TNotify>(path, std::forward<Args>(args)...);
+            notify = MakeHolder<TNotify>(path, std::forward<Args>(args)...); 
         } else if (!path) {
-            notify = MakeHolder<TNotify>(pathId, std::forward<Args>(args)...);
+            notify = MakeHolder<TNotify>(pathId, std::forward<Args>(args)...); 
         } else {
-            notify = MakeHolder<TNotify>(path, pathId, std::forward<Args>(args)...);
+            notify = MakeHolder<TNotify>(path, pathId, std::forward<Args>(args)...); 
         }
 
         return notify;

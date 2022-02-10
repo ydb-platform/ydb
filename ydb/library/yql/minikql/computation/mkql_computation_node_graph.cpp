@@ -864,7 +864,7 @@ private:
 };
 
 IComputationPatternCache::TPtr IComputationPatternCache::Create() {
-    return THolder(new TComputationPatternCache());
+    return THolder(new TComputationPatternCache()); 
 }
 
 IComputationPattern::TPtr TComputationPatternCache::EmplacePattern(const TString& serialized, PrepareFunc prepareFunc) {

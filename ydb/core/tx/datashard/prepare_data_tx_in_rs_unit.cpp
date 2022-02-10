@@ -108,7 +108,7 @@ void TPrepareDataTxInRSUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreatePrepareDataTxInRSUnit(TDataShard &dataShard,
                                                     TPipeline &pipeline)
 {
-    return THolder(new TPrepareDataTxInRSUnit(dataShard, pipeline));
+    return THolder(new TPrepareDataTxInRSUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

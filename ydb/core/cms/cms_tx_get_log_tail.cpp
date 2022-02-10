@@ -30,7 +30,7 @@ public:
                     "TTxGetLogTail found " << records.size()
                     << " matching log records");
 
-        Response = MakeHolder<TEvCms::TEvGetLogTailResponse>();
+        Response = MakeHolder<TEvCms::TEvGetLogTailResponse>(); 
         auto &rec = Response->Record;
         rec.MutableStatus()->SetCode(TStatus::OK);
         for (auto it = records.rbegin(); it != records.rend(); ++it) {

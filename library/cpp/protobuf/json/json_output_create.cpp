@@ -6,27 +6,27 @@
 
 namespace NProtobufJson {
     TJsonMapOutputPtr CreateJsonMapOutput(IOutputStream& out, const NJson::TJsonWriterConfig& config) {
-        return MakeHolder<TJsonWriterOutput>(&out, config);
+        return MakeHolder<TJsonWriterOutput>(&out, config); 
     }
 
     TJsonMapOutputPtr CreateJsonMapOutput(NJson::TJsonWriter& writer) {
-        return MakeHolder<TBaseJsonWriterOutput>(writer);
+        return MakeHolder<TBaseJsonWriterOutput>(writer); 
     }
 
     TJsonMapOutputPtr CreateJsonMapOutput(TString& str, const TProto2JsonConfig& config) {
-        return MakeHolder<TJsonStringWriterOutput>(&str, config);
+        return MakeHolder<TJsonStringWriterOutput>(&str, config); 
     }
 
     TJsonMapOutputPtr CreateJsonMapOutput(TStringStream& out, const TProto2JsonConfig& config) {
-        return MakeHolder<TJsonWriterOutput>(&out, config);
+        return MakeHolder<TJsonWriterOutput>(&out, config); 
     }
 
     TJsonMapOutputPtr CreateJsonMapOutput(IOutputStream& out, const TProto2JsonConfig& config) {
-        return MakeHolder<TJsonWriterOutput>(&out, config);
+        return MakeHolder<TJsonWriterOutput>(&out, config); 
     }
 
     TJsonMapOutputPtr CreateJsonMapOutput(NJson::TJsonValue& json) {
-        return MakeHolder<TJsonValueOutput>(json);
+        return MakeHolder<TJsonValueOutput>(json); 
     }
 
 }

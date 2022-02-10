@@ -173,13 +173,13 @@ class TCreateBlockStoreVolume: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return MakeHolder<TCreateParts>(OperationId); 
         case TTxState::ConfigureParts:
-            return MakeHolder<NBSVState::TConfigureParts>(OperationId);
+            return MakeHolder<NBSVState::TConfigureParts>(OperationId); 
         case TTxState::Propose:
-            return MakeHolder<NBSVState::TPropose>(OperationId);
+            return MakeHolder<NBSVState::TPropose>(OperationId); 
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TDone>(OperationId); 
         default:
             return nullptr;
         }

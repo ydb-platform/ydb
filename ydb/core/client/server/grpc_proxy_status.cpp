@@ -145,7 +145,7 @@ public:
 
 
     void ReplyAndDie(const TActorContext& ctx) {
-        THolder<TEvGRpcProxyStatus::TEvResponse> response = MakeHolder<TEvGRpcProxyStatus::TEvResponse>();
+        THolder<TEvGRpcProxyStatus::TEvResponse> response = MakeHolder<TEvGRpcProxyStatus::TEvResponse>(); 
 
         response->PerNodeResponse = PerNodeResponse;
         response->NodeNames = NodeNames;
@@ -235,7 +235,7 @@ void
 TGRpcProxyStatusActor::Handle(TEvGRpcProxyStatus::TEvResponse::TPtr &ev, const TActorContext& ctx) {
 
     for (auto & sender : Requests) {
-        THolder<TEvGRpcProxyStatus::TEvResponse> response = MakeHolder<TEvGRpcProxyStatus::TEvResponse>();
+        THolder<TEvGRpcProxyStatus::TEvResponse> response = MakeHolder<TEvGRpcProxyStatus::TEvResponse>(); 
         response->PerNodeResponse = ev->Get()->PerNodeResponse;
         response->NodeNames = ev->Get()->NodeNames;
         response->NodeDataCenter = ev->Get()->NodeDataCenter;

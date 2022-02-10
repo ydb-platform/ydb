@@ -61,7 +61,7 @@ private:
             RLOG_SQS_DEBUG("Create proxy subactor[" << i << "]. Req id: " << reqId);
             requests[i].SetRequestId(reqId);
             requests[i].SetRequestRateLimit(false); // already requested
-            this->Register(new TProxyActor(requests[i], MakeHolder<TBatchRequestReplyCallback>(this->SelfId(), i)));
+            this->Register(new TProxyActor(requests[i], MakeHolder<TBatchRequestReplyCallback>(this->SelfId(), i))); 
         }
     }
 

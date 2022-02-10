@@ -98,9 +98,9 @@ namespace NMonitoring {
     THolder<ICountableConsumer> CreateEncoder(IOutputStream* out, EFormat format, TCountableBase::EVisibility vis) {
         switch (format) {
             case EFormat::JSON:
-                return MakeHolder<TConsumer>(NMonitoring::EncoderJson(out), vis);
+                return MakeHolder<TConsumer>(NMonitoring::EncoderJson(out), vis); 
             case EFormat::SPACK:
-                return MakeHolder<TConsumer>(NMonitoring::EncoderSpackV1(
+                return MakeHolder<TConsumer>(NMonitoring::EncoderSpackV1( 
                     out,
                     NMonitoring::ETimePrecision::SECONDS,
                     NMonitoring::ECompression::ZSTD), vis);

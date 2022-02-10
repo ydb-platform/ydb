@@ -162,7 +162,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
     {}
 
     void InitClientSsl() {
-        Bio.Reset(BIO_new(IoMethod()));
+        Bio.Reset(BIO_new(IoMethod())); 
         BIO_set_data(Bio.Get(), this);
         BIO_set_nbio(Bio.Get(), 1);
         Ctx = CreateClientContext();
@@ -171,7 +171,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
     }
 
     void InitServerSsl(SSL_CTX* ctx) {
-        Bio.Reset(BIO_new(IoMethod()));
+        Bio.Reset(BIO_new(IoMethod())); 
         BIO_set_data(Bio.Get(), this);
         BIO_set_nbio(Bio.Get(), 1);
         Ssl = ConstructSsl(ctx, Bio.Get());

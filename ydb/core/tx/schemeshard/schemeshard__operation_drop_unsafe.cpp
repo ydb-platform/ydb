@@ -146,9 +146,9 @@ class TDropForceUnsafe: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return MakeHolder<TPropose>(OperationId); 
         case TTxState::ProposedDeleteParts:
-            return MakeHolder<TProposedDeletePart>(OperationId);
+            return MakeHolder<TProposedDeletePart>(OperationId); 
         default:
             return nullptr;
         }

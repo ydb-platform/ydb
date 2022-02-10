@@ -139,7 +139,7 @@ void TBuildSchemeTxOutRSUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateBuildSchemeTxOutRSUnit(TDataShard &dataShard,
                                                      TPipeline &pipeline)
 {
-    return MakeHolder<TBuildSchemeTxOutRSUnit>(dataShard, pipeline);
+    return MakeHolder<TBuildSchemeTxOutRSUnit>(dataShard, pipeline); 
 }
 
 } // namespace NDataShard

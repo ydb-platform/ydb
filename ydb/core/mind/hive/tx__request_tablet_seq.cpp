@@ -58,7 +58,7 @@ public:
             BLOG_CRIT("Could not allocate sequence of " << Size << " elements for " << Owner);
         } else {
             BLOG_D("Respond with sequence " << Sequence << " to " << Owner);
-            THolder<TEvHive::TEvResponseTabletIdSequence> response = MakeHolder<TEvHive::TEvResponseTabletIdSequence>();
+            THolder<TEvHive::TEvResponseTabletIdSequence> response = MakeHolder<TEvHive::TEvResponseTabletIdSequence>(); 
             const auto& pbRecord(Event->Get()->Record);
             response->Record.MutableOwner()->CopyFrom(pbRecord.GetOwner());
             response->Record.SetBeginId(Sequence.Begin);

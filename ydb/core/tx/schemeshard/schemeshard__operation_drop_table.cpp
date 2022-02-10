@@ -131,7 +131,7 @@ public:
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
             THolder<TEvDataShard::TEvProposeTransaction> event =
-                MakeHolder<TEvDataShard::TEvProposeTransaction>(NKikimrTxDataShard::TX_KIND_SCHEME,
+                MakeHolder<TEvDataShard::TEvProposeTransaction>(NKikimrTxDataShard::TX_KIND_SCHEME, 
                                                         context.SS->TabletID(),
                                                         context.Ctx.SelfID,
                                                         ui64(OperationId.GetTxId()),
@@ -413,7 +413,7 @@ public:
                                << " repeated message, ack it anyway"
                                << " at tablet: " << ssId);
 
-        THolder<TEvDataShard::TEvSchemaChangedResult> event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
+        THolder<TEvDataShard::TEvSchemaChangedResult> event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(); 
         event->Record.SetTxId(ui64(OperationId.GetTxId()));
 
         context.OnComplete.Send(ackTo, std::move(event));
@@ -478,7 +478,7 @@ private:
         switch(state) {
         case TTxState::Waiting:
         case TTxState::DropParts:
-            return MakeHolder<TDropParts>(OperationId);
+            return MakeHolder<TDropParts>(OperationId); 
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId, AfterPropose);
         case TTxState::WaitShadowPathPublication:
@@ -486,10 +486,10 @@ private:
         case TTxState::DeletePathBarrier:
             return MakeHolder<TDeleteTableBarrier>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return MakeHolder<NTableState::TProposedWaitParts>(OperationId); 
         case TTxState::Done:
         case TTxState::ProposedDeleteParts:
-            return MakeHolder<TProposedDeletePart>(OperationId);
+            return MakeHolder<TProposedDeletePart>(OperationId); 
         default:
             return nullptr;
         }

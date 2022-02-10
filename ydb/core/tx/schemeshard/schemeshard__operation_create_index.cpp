@@ -93,9 +93,9 @@ class TCreateTableIndex: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
         switch(state) {
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return THolder(new TPropose(OperationId)); 
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return THolder(new TDone(OperationId)); 
         default:
             return nullptr;
         }

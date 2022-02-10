@@ -99,7 +99,7 @@ namespace NActors {
                 return ev.GetTypeRewrite() == TEventType::EventType;
             };
             THolder<IEventHandle> event = WaitForSpecificEvent(filter, deadline);
-            return THolder<typename TEventType::THandle>(static_cast<typename TEventType::THandle*>(event ? event.Release() : nullptr));
+            return THolder<typename TEventType::THandle>(static_cast<typename TEventType::THandle*>(event ? event.Release() : nullptr)); 
         }
 
     protected: // Actor System compatibility section

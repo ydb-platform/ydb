@@ -323,7 +323,7 @@ private:
 };
 
 THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx) {
-    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx));
+    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx)); 
 }
 
 } // NYql::NDqs

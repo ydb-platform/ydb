@@ -640,7 +640,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::Answer(const TActorContext& ctx, 
                 res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
                 res->SetErrorReason("Getting of session info failed");
             }
-            THolder<TEvPersQueue::TEvReadSessionsInfoResponse> request = MakeHolder<TEvPersQueue::TEvReadSessionsInfoResponse>();
+            THolder<TEvPersQueue::TEvReadSessionsInfoResponse> request = MakeHolder<TEvPersQueue::TEvReadSessionsInfoResponse>(); 
             request->Record.Swap(&(BalancerResponse->Get()->Record));
             request->Record.ClearPartitionInfo();
 

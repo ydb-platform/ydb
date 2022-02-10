@@ -30,7 +30,7 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
         Execute(CreateCreateTablet(std::move(rec), ev->Sender, ev->Cookie));
     } else {
         BLOG_ERROR("Invalid arguments specified to TEvCreateTablet: " << rec.DebugString());
-        THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
+        THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(); 
         reply->Record.SetStatus(NKikimrProto::EReplyStatus::ERROR);
         reply->Record.SetErrorReason(NKikimrHive::EErrorReason::ERROR_REASON_INVALID_ARGUMENTS);
         if (rec.HasOwner()) {
@@ -612,7 +612,7 @@ void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
 
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     BLOG_W("Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << ev->Get()->NodeId);
-    Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
+    Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release()))); 
 }
 
 void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
@@ -1698,7 +1698,7 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
         }
     }
 
-    THolder<TEvHive::TEvResponseHiveDomainStats> response = MakeHolder<TEvHive::TEvResponseHiveDomainStats>();
+    THolder<TEvHive::TEvResponseHiveDomainStats> response = MakeHolder<TEvHive::TEvResponseHiveDomainStats>(); 
     auto& record = response->Record;
 
     for (const auto& pr1 : subDomainStats) {
@@ -1723,7 +1723,7 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
-    THolder<TEvHive::TEvResponseHiveNodeStats> response = MakeHolder<TEvHive::TEvResponseHiveNodeStats>();
+    THolder<TEvHive::TEvResponseHiveNodeStats> response = MakeHolder<TEvHive::TEvResponseHiveNodeStats>(); 
     auto& record = response->Record;
     for (auto it = Nodes.begin(); it != Nodes.end(); ++it) {
         auto& nodeStats = *record.AddNodeStats();
@@ -1751,7 +1751,7 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
-    THolder<TEvHive::TEvResponseHiveStorageStats> response = MakeHolder<TEvHive::TEvResponseHiveStorageStats>();
+    THolder<TEvHive::TEvResponseHiveStorageStats> response = MakeHolder<TEvHive::TEvResponseHiveStorageStats>(); 
     auto& record = response->Record;
     for (const auto& [name, pool] : StoragePools) {
         auto& pbPool = *record.AddPools();
@@ -2141,7 +2141,7 @@ const TVector<i64>& THive::GetTabletTypeAllowedMetricIds(TTabletTypes::EType typ
 }
 
 THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> THive::BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId) {
-    THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> groupParameters = MakeHolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>();
+    THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> groupParameters = MakeHolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>(); 
     Y_VERIFY(channelId < tablet.BoundChannels.size());
     const auto& binding = tablet.BoundChannels[channelId];
     groupParameters->MutableStoragePoolSpecifier()->SetName(binding.GetStoragePoolName());
@@ -2236,7 +2236,7 @@ void THive::RequestPoolsInformation() {
     }
 
     if (!requests.empty()) {
-        THolder<TEvBlobStorage::TEvControllerSelectGroups> ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+        THolder<TEvBlobStorage::TEvControllerSelectGroups> ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>(); 
         NKikimrBlobStorage::TEvControllerSelectGroups& record = ev->Record;
         record.SetReturnAllMatchingGroups(true);
         record.SetBlockUntilAllResourcesAreComplete(true);

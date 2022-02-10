@@ -165,7 +165,7 @@ THolder<TExecutionUnit> CreateCheckSnapshotTxUnit(
         TDataShard& dataShard,
         TPipeline& pipeline)
 {
-    return THolder(new TCheckSnapshotTxUnit(dataShard, pipeline));
+    return THolder(new TCheckSnapshotTxUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

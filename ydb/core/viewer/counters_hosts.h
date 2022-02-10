@@ -60,7 +60,7 @@ public:
 
     void SendRequest(ui32 nodeId, const TActorContext& ctx) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-        THolder<TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
+        THolder<TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>(); 
         ctx.Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         ++NodesRequested;
     }

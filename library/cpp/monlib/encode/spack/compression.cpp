@@ -353,11 +353,11 @@ namespace NMonitoring {
             case ECompression::IDENTITY:
                 return nullptr;
             case ECompression::ZLIB:
-                return MakeHolder<TFramedDecompressStream<TZlibCodec, TAdler32>>(in);
+                return MakeHolder<TFramedDecompressStream<TZlibCodec, TAdler32>>(in); 
             case ECompression::ZSTD:
-                return MakeHolder<TFramedDecompressStream<TZstdCodec, TXxHash32>>(in);
+                return MakeHolder<TFramedDecompressStream<TZstdCodec, TXxHash32>>(in); 
             case ECompression::LZ4:
-                return MakeHolder<TFramedDecompressStream<TLz4Codec, TXxHash32>>(in);
+                return MakeHolder<TFramedDecompressStream<TLz4Codec, TXxHash32>>(in); 
             case ECompression::UNKNOWN:
                 return nullptr;
         }
@@ -369,11 +369,11 @@ namespace NMonitoring {
             case ECompression::IDENTITY:
                 return nullptr;
             case ECompression::ZLIB:
-                return MakeHolder<TFramedCompressStream<TZlibCodec, TAdler32>>(out);
+                return MakeHolder<TFramedCompressStream<TZlibCodec, TAdler32>>(out); 
             case ECompression::ZSTD:
-                return MakeHolder<TFramedCompressStream<TZstdCodec, TXxHash32>>(out);
+                return MakeHolder<TFramedCompressStream<TZstdCodec, TXxHash32>>(out); 
             case ECompression::LZ4:
-                return MakeHolder<TFramedCompressStream<TLz4Codec, TXxHash32>>(out);
+                return MakeHolder<TFramedCompressStream<TLz4Codec, TXxHash32>>(out); 
             case ECompression::UNKNOWN:
                 return nullptr;
         }

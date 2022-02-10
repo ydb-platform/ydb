@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
     };
 
     void Check(THolder<IEventBase> && message) {
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>(); 
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
 
         TManualEvent doneEvent;
         TAtomic itemsProcessed = 0;
-        TActorId actor = actorSystem.Register(new TActorCoro(MakeHolder<TCoroActor>(doneEvent, itemsProcessed)));
+        TActorId actor = actorSystem.Register(new TActorCoro(MakeHolder<TCoroActor>(doneEvent, itemsProcessed))); 
         NanoSleep(3UL * 1000 * 1000 * 1000);
         actorSystem.Send(actor, message.Release());
         doneEvent.WaitI();

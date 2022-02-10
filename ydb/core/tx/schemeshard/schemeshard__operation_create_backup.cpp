@@ -37,12 +37,12 @@ struct TBackup {
 
             TString txBody = context.SS->FillBackupTxBody(txState.TargetPathId, backup, i, seqNo);
             THolder<TEvDataShard::TEvProposeTransaction> event =
-                THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
+                THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME, 
                                                         context.SS->TabletID(),
                                                         context.Ctx.SelfID,
                                                         ui64(opId.GetTxId()),
                                                         txBody,
-                                                        processingParams));
+                                                        processingParams)); 
 
             context.OnComplete.BindMsgToPipe(opId, datashardId, idx, event.Release());
 

@@ -12,7 +12,7 @@ namespace NTable{
             ITimeProvider* time,
             TString taskNameSuffix)
     {
-        return MakeHolder<NCompGen::TGenCompactionStrategy>(
+        return MakeHolder<NCompGen::TGenCompactionStrategy>( 
                 table, backend, broker, time, std::move(taskNameSuffix));
     }
 
@@ -24,7 +24,7 @@ namespace NTable{
             ITimeProvider* time,
             TString taskNameSuffix)
     {
-        return MakeHolder<NCompShard::TShardedCompactionStrategy>(
+        return MakeHolder<NCompShard::TShardedCompactionStrategy>( 
                 table, backend, broker, logger, time, std::move(taskNameSuffix));
     }
 

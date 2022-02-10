@@ -132,7 +132,7 @@ private:
 };
 
 THolder<TExecTransformerBase> CreateSolomonDataSinkExecTransformer(TSolomonState::TPtr state) {
-    return THolder(new TSolomonDataSinkExecTransformer(state));
+    return THolder(new TSolomonDataSinkExecTransformer(state)); 
 }
 
 } // namespace NYql

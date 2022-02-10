@@ -32,7 +32,7 @@ bool THive::SeenDomain(TSubDomainKey domain) {
 }
 
 void THive::ResolveDomain(TSubDomainKey domain) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(); 
     request->ResultSet.emplace_back();
     auto& entry = request->ResultSet.back();
     entry.TableId = TTableId(domain.first, domain.second);

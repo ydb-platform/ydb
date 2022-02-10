@@ -151,7 +151,7 @@ namespace NActors {
             if (type.empty()) {
                 type = "application/json";
             }
-            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(
+            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>( 
                                 "HTTP/1.1 204 No Content\r\n"
                                 "Allow: OPTIONS, GET, POST\r\n"
                                 "Content-Type: " + type + "\r\n"
@@ -172,7 +172,7 @@ namespace NActors {
             response << "Content-Length: " << body.Size() << "\r\n";
             response << "\r\n";
             response << body.Str();
-            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
             Die(ctx);
         }
 
@@ -189,7 +189,7 @@ namespace NActors {
             response << "Content-Length: " << body.Size() << "\r\n";
             response << "\r\n";
             response << body.Str();
-            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
             Die(ctx);
         }
 

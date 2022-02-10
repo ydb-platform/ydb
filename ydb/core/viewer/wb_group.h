@@ -243,7 +243,7 @@ public:
     }
 
     static THolder<ResponseType> GroupResponse(THolder<TResponseType>& source, const TVector<const FieldDescriptor*>& groupFields, bool allEnums = false) {
-        THolder<TResponseType> result = MakeHolder<TResponseType>();
+        THolder<TResponseType> result = MakeHolder<TResponseType>(); 
         TElementsFieldType* field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
         bool allKeys = allEnums && IsEnum(groupFields);
         TMap<TPartProtoKey, ui32> counters;

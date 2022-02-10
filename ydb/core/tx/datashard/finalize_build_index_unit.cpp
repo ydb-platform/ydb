@@ -67,7 +67,7 @@ THolder<TExecutionUnit> CreateFinalizeBuildIndexUnit(
     TDataShard& dataShard,
     TPipeline& pipeline)
 {
-    return THolder(new TFinalizeBuildIndexUnit(dataShard, pipeline));
+    return THolder(new TFinalizeBuildIndexUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

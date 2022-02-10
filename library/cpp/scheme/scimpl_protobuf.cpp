@@ -316,7 +316,7 @@ namespace NSc {
 
         auto mutableField = reflection->GetMutableRepeatedFieldRef<Message>(&msg, field);
         for (const auto& value : fieldValue.GetDict()) {
-            THolder<Message> entry(mutableField.NewMessage());
+            THolder<Message> entry(mutableField.NewMessage()); 
             auto entryDesc = entry->GetDescriptor();
             auto keyField = entryDesc->FindFieldByNumber(1);
             auto valueField = entryDesc->FindFieldByNumber(2);

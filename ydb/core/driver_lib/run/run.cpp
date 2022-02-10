@@ -313,7 +313,7 @@ public:
     virtual void Initialize(NKikimr::TAppData* appData) override
     {
         if (Config.HasCmsConfig())
-            appData->DefaultCmsConfig = MakeHolder<NKikimrCms::TCmsConfig>(Config.GetCmsConfig());
+            appData->DefaultCmsConfig = MakeHolder<NKikimrCms::TCmsConfig>(Config.GetCmsConfig()); 
     }
 };
 

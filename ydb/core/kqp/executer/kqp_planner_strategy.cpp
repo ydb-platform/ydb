@@ -127,7 +127,7 @@ public:
 } // anonymous namespace
 
 THolder<IKqpPlannerStrategy> CreateKqpGreedyPlanner() {
-    return MakeHolder<TKqpGreedyPlanner>();
+    return MakeHolder<TKqpGreedyPlanner>(); 
 }
 
 } // namespace NKikimr::NKqp

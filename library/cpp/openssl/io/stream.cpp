@@ -282,11 +282,11 @@ public:
     TBuiltinCerts() {
         TString c = NResource::Find("/builtin/cacert");
 
-        TBioPtr cbio(BIO_new_mem_buf(c.data(), c.size()));
+        TBioPtr cbio(BIO_new_mem_buf(c.data(), c.size())); 
         Y_ENSURE_EX(cbio, TSslError() << "BIO_new_mem_buf");
 
         while (true) {
-            TX509Ptr cert(PEM_read_bio_X509(cbio.Get(), nullptr, nullptr, nullptr));
+            TX509Ptr cert(PEM_read_bio_X509(cbio.Get(), nullptr, nullptr, nullptr)); 
             if (!cert) {
                 break;
             }
@@ -304,7 +304,7 @@ public:
     }
 
     TOpenSslX509StorePtr GetX509Store() const {
-        TOpenSslX509StorePtr store(X509_STORE_new());
+        TOpenSslX509StorePtr store(X509_STORE_new()); 
 
         for (const TX509Ptr& c : Certs) {
             if (0 == X509_STORE_add_cert(store.Get(), c.Get())) {

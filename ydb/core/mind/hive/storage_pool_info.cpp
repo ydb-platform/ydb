@@ -157,7 +157,7 @@ void TStoragePoolInfo::Invalidate() {
 }
 
 THolder<TEvControllerSelectGroups::TGroupParameters> TStoragePoolInfo::BuildRefreshRequest() const {
-    THolder<TEvControllerSelectGroups::TGroupParameters> params = MakeHolder<TEvControllerSelectGroups::TGroupParameters>();
+    THolder<TEvControllerSelectGroups::TGroupParameters> params = MakeHolder<TEvControllerSelectGroups::TGroupParameters>(); 
     params->MutableStoragePoolSpecifier()->SetName(Name);
     return params;
 }

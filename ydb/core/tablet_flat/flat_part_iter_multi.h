@@ -1536,7 +1536,7 @@ namespace NTable {
                 CurrentIt = std::move(it->second);
                 Cache.erase(it);
             } else {
-                CurrentIt = MakeHolder<TPartSimpleIt>(part, Tags, Nulls, Env);
+                CurrentIt = MakeHolder<TPartSimpleIt>(part, Tags, Nulls, Env); 
             }
             CurrentIt->SetBounds(Current->Slice);
         }

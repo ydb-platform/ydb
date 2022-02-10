@@ -719,7 +719,7 @@ void TCheckSchemeTxUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return THolder(new TCheckSchemeTxUnit(dataShard, pipeline));
+    return THolder(new TCheckSchemeTxUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

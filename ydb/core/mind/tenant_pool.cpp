@@ -343,7 +343,7 @@ public:
 
     THolder<TEvTenantPool::TEvTenantPoolStatus> BuildStatusEvent(bool listStatic = false)
     {
-        THolder<TEvTenantPool::TEvTenantPoolStatus> ev = MakeHolder<TEvTenantPool::TEvTenantPoolStatus>();
+        THolder<TEvTenantPool::TEvTenantPoolStatus> ev = MakeHolder<TEvTenantPool::TEvTenantPoolStatus>(); 
         if (listStatic) {
             for (auto& pr : Config->StaticSlots) {
                 NKikimrTenantPool::TSlotConfig& slotConfig = pr.second;
@@ -652,7 +652,7 @@ public:
 
         auto slot = DynamicSlots[rec.GetSlotId()];
         if (slot->ActiveAction) {
-            slot->PendingActions.emplace(ev.Release());
+            slot->PendingActions.emplace(ev.Release()); 
             return;
         }
 

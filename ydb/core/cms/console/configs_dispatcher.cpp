@@ -712,7 +712,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
         Send(ev->Sender, std::move(resp), 0, ev->Cookie);
     } else {
         Register(CreateNodeConfigCourier(ev->Get()->ConfigItemKinds, SelfId(), NextRequestCookie));
-        ConfigRequests[NextRequestCookie++] = THolder<IEventHandle>(ev.Release());
+        ConfigRequests[NextRequestCookie++] = THolder<IEventHandle>(ev.Release()); 
     }
 }
 

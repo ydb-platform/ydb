@@ -678,7 +678,7 @@ namespace NKikimr {
                 using namespace std::placeholders;
                 auto call = [&reconfigureProxy, msg = ev->Get()] (TVDiskInfo<TNeighborVDiskState>& x) {
                     reconfigureProxy(std::unique_ptr<TEvVGenerationChange>(msg->Clone()), x);
-                };
+                }; 
                 DecisionMaker.ReconfigureAllWorkingProxies(call);
             }
 

@@ -73,7 +73,7 @@ private:
 };
 
 THolder<IGraphTransformer> CreateSolomonIODiscoveryTransformer(TSolomonState::TPtr state) {
-    return THolder(new TSolomonIODiscoveryTransformer(state));
+    return THolder(new TSolomonIODiscoveryTransformer(state)); 
 }
 
 } // namespace NYql

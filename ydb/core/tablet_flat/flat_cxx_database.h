@@ -1044,7 +1044,7 @@ struct Schema {
                     if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, {}, {}, columns, IteratorType::Direction)) {
                         return nullptr;
                     }
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, NTable::TKeyRange{ }, columns).Release());
+                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, NTable::TKeyRange{ }, columns).Release()); 
                 }
 
                 static bool Precharge(TToughDb& database, NTable::TTagsRef columns) {
@@ -1091,7 +1091,7 @@ struct Schema {
                     range.MinInclusive = true;
                     range.MaxKey = maxKey;
                     range.MaxInclusive = true;
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
+                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release()); 
                 }
 
                 static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
@@ -1138,7 +1138,7 @@ struct Schema {
                     range.MinInclusive = true;
                     range.MaxKey = { };
                     range.MaxInclusive = true;
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
+                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release()); 
                 }
 
                 static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
@@ -1184,7 +1184,7 @@ struct Schema {
                     range.MinInclusive = true;
                     range.MaxKey = maxKey;
                     range.MaxInclusive = true;
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
+                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release()); 
                 }
 
                 static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
@@ -1239,7 +1239,7 @@ struct Schema {
                     range.MinInclusive = true;
                     range.MaxKey = maxKey;
                     range.MaxInclusive = true;
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
+                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release()); 
                 }
 
                 static bool Precharge(TToughDb& database,
@@ -1274,7 +1274,7 @@ struct Schema {
 
                 static THolder<NTable::TTableIt> MakeIterator(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> key(keyValues);
-                    return THolder<NTable::TTableIt>(database.IterateExact(TableId, key, columns).Release());
+                    return THolder<NTable::TTableIt>(database.IterateExact(TableId, key, columns).Release()); 
                 }
 
                 static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {

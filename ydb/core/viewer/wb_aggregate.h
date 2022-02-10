@@ -19,7 +19,7 @@ public:
     using TResponseType = ResponseType;
 
     static THolder<TResponseType> AggregateResponses(TVector<THolder<TResponseType>>& responses) {
-        THolder<TResponseType> result = MakeHolder<TResponseType>();
+        THolder<TResponseType> result = MakeHolder<TResponseType>(); 
         for (const auto& response : responses) {
             AggregateMessage(result->Record, response->Record);
         }
@@ -27,7 +27,7 @@ public:
     }
 
     static THolder<TResponseType> AggregateResponses(TMap<TTabletId, THolder<TResponseType>>& responses) {
-        THolder<TResponseType> result = MakeHolder<TResponseType>();
+        THolder<TResponseType> result = MakeHolder<TResponseType>(); 
         for (const auto& response : responses) {
             AggregateMessage(result->Record, response.second->Record);
         }

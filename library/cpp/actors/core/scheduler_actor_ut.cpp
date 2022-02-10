@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(SchedulerActor) {
     };
 
     void Test(TAtomicBase eventsTotalCount, ui32 scheduleDeltaMs) {
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>(); 
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);

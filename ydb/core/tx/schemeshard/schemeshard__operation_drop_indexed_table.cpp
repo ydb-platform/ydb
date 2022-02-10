@@ -282,7 +282,7 @@ class TDropTableIndex: public TSubOperation {
         case TTxState::DeletePathBarrier:
             return THolder(new TDeletePathBarrier(OperationId));
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return THolder(new TDone(OperationId)); 
         default:
             return nullptr;
         }

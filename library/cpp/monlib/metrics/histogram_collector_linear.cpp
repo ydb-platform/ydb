@@ -62,6 +62,6 @@ namespace NMonitoring {
                                             << ", but got: " << bucketsCount);
         Y_ENSURE(bucketWidth >= 1, "bucketWidth must be >= 1, got: " << bucketWidth);
 
-        return MakeHolder<TLinearHistogramCollector>(bucketsCount, startValue, bucketWidth);
+        return MakeHolder<TLinearHistogramCollector>(bucketsCount, startValue, bucketWidth); 
     }
 }

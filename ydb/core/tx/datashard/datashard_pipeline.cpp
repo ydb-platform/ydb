@@ -615,7 +615,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         // it will be added at load.
         if (op->HasLoadedInRSFlag())
             op->AddInReadSet(rs.Record);
-        op->AddDelayedAck(THolder(ack.Release()));
+        op->AddDelayedAck(THolder(ack.Release())); 
         op->AddDelayedInReadSet(rs.Record);
 
         AddCandidateOp(op);

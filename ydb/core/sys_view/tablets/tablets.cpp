@@ -360,7 +360,7 @@ private:
 THolder<IActor> CreateTabletsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TTabletsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TTabletsScan>(ownerId, scanId, tableId, tableRange, columns); 
 }
 
 } // NKikimr::NSysView

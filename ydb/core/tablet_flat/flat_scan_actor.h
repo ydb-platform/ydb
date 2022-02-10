@@ -458,7 +458,7 @@ namespace NOps {
                     if (stat.ElapsedCycles() >= MaxCyclesPerIteration) {
                         // Yield to allow other actors to use this thread
                         if (!ContinueInFly) {
-                            SendToSelf(MakeHolder<TEvContinue>());
+                            SendToSelf(MakeHolder<TEvContinue>()); 
                             ContinueInFly = true;
                         }
                         yield = true;

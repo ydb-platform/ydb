@@ -20,7 +20,7 @@ class TBinLog {
 
 public:
     TBinLog() {
-        Buffer = TArrayHolder<TItem>(new TItem[Size]);
+        Buffer = TArrayHolder<TItem>(new TItem[Size]); 
     }
 
     inline void Write(ui64 value) {

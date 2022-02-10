@@ -22,14 +22,14 @@ UNIT_TEST_SUITE_REGISTRATION(TLogElementTest);
 
 void TLogElementTest::TestMoveCtor() {
     TStringStream output;
-    TLog log(MakeHolder<TStreamLogBackend>(&output));
+    TLog log(MakeHolder<TStreamLogBackend>(&output)); 
 
-    THolder<TLogElement> src = MakeHolder<TLogElement>(&log);
+    THolder<TLogElement> src = MakeHolder<TLogElement>(&log); 
 
     TString message = "Hello, World!";
     (*src) << message;
 
-    THolder<TLogElement> dst = MakeHolder<TLogElement>(std::move(*src));
+    THolder<TLogElement> dst = MakeHolder<TLogElement>(std::move(*src)); 
 
     src.Destroy();
     UNIT_ASSERT(output.Str() == "");

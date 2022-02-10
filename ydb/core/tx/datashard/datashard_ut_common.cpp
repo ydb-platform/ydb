@@ -741,7 +741,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
         UNIT_ASSERT_VALUES_EQUAL(tx->ShardsCount(), 1);
         TString txBody;
         ui32 shard = tx->GetShardProgram(0, txBody);
-        THolder<TEvDataShard::TEvProposeTransaction> event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+        THolder<TEvDataShard::TEvProposeTransaction> event = MakeHolder<TEvDataShard::TEvProposeTransaction>( 
             NKikimrTxDataShard::TX_KIND_DATA, Tester.Sender, txId, txBody, tx->TxFlags());
         immEvents.emplace_back(std::make_pair(shard, std::move(event)));
         results.insert(std::make_pair(shard, txId));

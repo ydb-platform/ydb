@@ -1597,7 +1597,7 @@ void TTenantSlotBroker::ProcessTx(ITransaction *tx,
                                   const TActorContext &ctx)
 {
     Y_VERIFY(tx);
-    TxQueue.emplace_back(tx);
+    TxQueue.emplace_back(tx); 
     ProcessNextTx(ctx);
 }
 

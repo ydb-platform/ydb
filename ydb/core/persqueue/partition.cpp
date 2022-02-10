@@ -249,7 +249,7 @@ void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst)
 {
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst); 
     NKikimrClient::TResponse& resp = response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -258,7 +258,7 @@ void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst)
 
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie)
 {
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst); 
     NKikimrClient::TResponse& resp = response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -274,7 +274,7 @@ void TPartition::ReplyWrite(
     Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
     Y_VERIFY(seqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, seqNo);
 
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst); 
     NKikimrClient::TResponse& resp = response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -301,7 +301,7 @@ void TPartition::ReplyWrite(
 void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset,
     const TInstant writeTimestamp, const TInstant createTimestamp)
 {
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst); 
     NKikimrClient::TResponse& resp = response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -1035,7 +1035,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     if (ManageWriteTimestampEstimate)
         WriteTimestampEstimate = now;
 
-    THolder <TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
+    THolder <TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>(); 
     bool haveChanges = DropOldStuff(request.Get(), false, ctx);
     if (DiskIsFull) {
         AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
@@ -1732,7 +1732,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
         ProcessReserveRequests(ctx);
 
     } else {
-        it->second.WaitToChangeOwner.push_back(THolder<TEvPQ::TEvChangeOwner>(ev.Release()));
+        it->second.WaitToChangeOwner.push_back(THolder<TEvPQ::TEvChangeOwner>(ev.Release())); 
     }
 }
 
@@ -1743,7 +1743,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
     UpdateWriteBufferIsFullState(ctx.Now());
     Counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
     for (auto& ev : it->second.WaitToChangeOwner) { //this request maybe could be done right now
-        WaitToChangeOwner.push_back(THolder<TEvPQ::TEvChangeOwner>(ev.Release()));
+        WaitToChangeOwner.push_back(THolder<TEvPQ::TEvChangeOwner>(ev.Release())); 
     }
     auto jt = it;
     ++jt;
@@ -2049,7 +2049,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorC
 
 
 void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
-    THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
+    THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>(); 
     NKikimrPQ::TClientInfoResponse& result(response->Record);
     result.SetPartition(Partition);
     result.SetStartOffset(StartOffset);
@@ -2290,7 +2290,7 @@ TReadAnswer TReadInfo::FormAnswer(
     const ui64 sizeLag
 ) {
     Y_UNUSED(partition);
-    THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(cookie);
+    THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(cookie); 
     NKikimrClient::TResponse& res = answer->Response;
     const TEvPQ::TEvBlobResponse* response = &blobResponse;
 

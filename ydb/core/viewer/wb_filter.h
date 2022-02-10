@@ -229,7 +229,7 @@ public:
     };
 
     static THolder<ResponseType> FilterResponse(THolder<TResponseType>& source, const TVector<THolder<IFieldProtoFilter>>& filters) {
-        THolder<TResponseType> result = MakeHolder<TResponseType>();
+        THolder<TResponseType> result = MakeHolder<TResponseType>(); 
         auto* field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
         auto* sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source.Get());
         field->Reserve(sourceField->size());
@@ -297,34 +297,34 @@ public:
                             StringSplitter(value.substr(1, value.size() - 2)).Split(',').SkipEmpty().Collect(&values);
                             switch (fieldDescriptor->cpp_type()) {
                             case FieldDescriptor::CPPTYPE_INT32:
-                                filter = MakeHolder<TFieldProtoFilterInValue<i32>>(fieldDescriptor, FromStringWithDefaultArray<i32>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<i32>>(fieldDescriptor, FromStringWithDefaultArray<i32>(values)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_INT64:
-                                filter = MakeHolder<TFieldProtoFilterInValue<i64>>(fieldDescriptor, FromStringWithDefaultArray<i64>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<i64>>(fieldDescriptor, FromStringWithDefaultArray<i64>(values)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_UINT32:
-                                filter = MakeHolder<TFieldProtoFilterInValue<ui32>>(fieldDescriptor, FromStringWithDefaultArray<ui32>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<ui32>>(fieldDescriptor, FromStringWithDefaultArray<ui32>(values)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_UINT64:
-                                filter = MakeHolder<TFieldProtoFilterInValue<ui64>>(fieldDescriptor, FromStringWithDefaultArray<ui64>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<ui64>>(fieldDescriptor, FromStringWithDefaultArray<ui64>(values)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_DOUBLE:
-                                filter = MakeHolder<TFieldProtoFilterInValue<double>>(fieldDescriptor, FromStringWithDefaultArray<double>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<double>>(fieldDescriptor, FromStringWithDefaultArray<double>(values)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_FLOAT:
-                                filter = MakeHolder<TFieldProtoFilterInValue<float>>(fieldDescriptor, FromStringWithDefaultArray<float>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<float>>(fieldDescriptor, FromStringWithDefaultArray<float>(values)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_BOOL:
-                                filter = MakeHolder<TFieldProtoFilterInValue<bool>>(fieldDescriptor, FromStringWithDefaultArray<bool>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<bool>>(fieldDescriptor, FromStringWithDefaultArray<bool>(values)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_ENUM:
-                                filter = MakeHolder<TFieldProtoFilterInValue<TEnumValue>>(fieldDescriptor, ConvertStringArray<TEnumValue>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<TEnumValue>>(fieldDescriptor, ConvertStringArray<TEnumValue>(values)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_STRING:
-                                filter = MakeHolder<TFieldProtoFilterInValue<TString>>(fieldDescriptor, values);
+                                filter = MakeHolder<TFieldProtoFilterInValue<TString>>(fieldDescriptor, values); 
                                 break;
                             case FieldDescriptor::CPPTYPE_MESSAGE:
-                                filter = MakeHolder<TFieldProtoFilterInValue<TMessageValue>>(fieldDescriptor, ConvertStringArray<TMessageValue>(values));
+                                filter = MakeHolder<TFieldProtoFilterInValue<TMessageValue>>(fieldDescriptor, ConvertStringArray<TMessageValue>(values)); 
                                 break;
                             default:
                                 break;
@@ -332,34 +332,34 @@ public:
                         } else {
                             switch (fieldDescriptor->cpp_type()) {
                             case FieldDescriptor::CPPTYPE_INT32:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_INT64:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_UINT32:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_UINT64:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_DOUBLE:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_FLOAT:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_BOOL:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_ENUM:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<TEnumValue>>(fieldDescriptor, TEnumValue(value)); 
                                 break;
                             case FieldDescriptor::CPPTYPE_STRING:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<TString>>(fieldDescriptor, value);
+                                filter = MakeHolder<TFieldProtoFilterEqValue<TString>>(fieldDescriptor, value); 
                                 break;
                             case FieldDescriptor::CPPTYPE_MESSAGE:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<TMessageValue>>(fieldDescriptor, TMessageValue(value));
+                                filter = MakeHolder<TFieldProtoFilterEqValue<TMessageValue>>(fieldDescriptor, TMessageValue(value)); 
                                 break;
                             default:
                                 break;
@@ -368,34 +368,34 @@ public:
                     } else if (op == "<>" || op == "!=") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<TString>>(fieldDescriptor, value);
+                            filter = MakeHolder<TFieldProtoFilterNeValue<TString>>(fieldDescriptor, value); 
                             break;
                         case FieldDescriptor::CPPTYPE_MESSAGE:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<TMessageValue>>(fieldDescriptor, TMessageValue(value));
+                            filter = MakeHolder<TFieldProtoFilterNeValue<TMessageValue>>(fieldDescriptor, TMessageValue(value)); 
                             break;
                         default:
                             break;
@@ -403,31 +403,31 @@ public:
                     } else if (op == "<") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = MakeHolder<TFieldProtoFilterLtValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = MakeHolder<TFieldProtoFilterLtValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = MakeHolder<TFieldProtoFilterLtValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = MakeHolder<TFieldProtoFilterLtValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = MakeHolder<TFieldProtoFilterLtValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = MakeHolder<TFieldProtoFilterLtValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = MakeHolder<TFieldProtoFilterLtValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = MakeHolder<TFieldProtoFilterLtValue<TEnumValue>>(fieldDescriptor, TEnumValue(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<TString>>(fieldDescriptor, value);
+                            filter = MakeHolder<TFieldProtoFilterLtValue<TString>>(fieldDescriptor, value); 
                             break;
                         default:
                             break;
@@ -435,31 +435,31 @@ public:
                     } else if (op == ">") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = MakeHolder<TFieldProtoFilterGtValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = MakeHolder<TFieldProtoFilterGtValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = MakeHolder<TFieldProtoFilterGtValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = MakeHolder<TFieldProtoFilterGtValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = MakeHolder<TFieldProtoFilterGtValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = MakeHolder<TFieldProtoFilterGtValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = MakeHolder<TFieldProtoFilterGtValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = MakeHolder<TFieldProtoFilterGtValue<TEnumValue>>(fieldDescriptor, TEnumValue(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<TString>>(fieldDescriptor, value);
+                            filter = MakeHolder<TFieldProtoFilterGtValue<TString>>(fieldDescriptor, value); 
                             break;
                         default:
                             break;
@@ -467,31 +467,31 @@ public:
                     } else if (op == "<=") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = MakeHolder<TFieldProtoFilterLeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = MakeHolder<TFieldProtoFilterLeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = MakeHolder<TFieldProtoFilterLeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = MakeHolder<TFieldProtoFilterLeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = MakeHolder<TFieldProtoFilterLeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = MakeHolder<TFieldProtoFilterLeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = MakeHolder<TFieldProtoFilterLeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = MakeHolder<TFieldProtoFilterLeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<TString>>(fieldDescriptor, value);
+                            filter = MakeHolder<TFieldProtoFilterLeValue<TString>>(fieldDescriptor, value); 
                             break;
                         default:
                             break;
@@ -499,31 +499,31 @@ public:
                     } else if (op == ">=") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = MakeHolder<TFieldProtoFilterGeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = MakeHolder<TFieldProtoFilterGeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = MakeHolder<TFieldProtoFilterGeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = MakeHolder<TFieldProtoFilterGeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = MakeHolder<TFieldProtoFilterGeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = MakeHolder<TFieldProtoFilterGeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = MakeHolder<TFieldProtoFilterGeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = MakeHolder<TFieldProtoFilterGeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value)); 
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<TString>>(fieldDescriptor, value);
+                            filter = MakeHolder<TFieldProtoFilterGeValue<TString>>(fieldDescriptor, value); 
                             break;
                         default:
                             break;

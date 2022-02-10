@@ -208,7 +208,7 @@ bool TLog::OpenLog(const char* path, ELogPriority lp) {
     if (path) {
         ResetBackend(CreateLogBackend(path, lp));
     } else {
-        ResetBackend(MakeHolder<TStreamLogBackend>(&Cerr));
+        ResetBackend(MakeHolder<TStreamLogBackend>(&Cerr)); 
     }
 
     return true;

@@ -403,12 +403,12 @@ public:
 
             if (!PathId) {
                 Y_VERIFY(isDeletion);
-                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(Path, isDeletion);
+                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(Path, isDeletion); 
             } else if (!Path) {
                 Y_VERIFY(isDeletion);
-                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(PathId, isDeletion);
+                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(PathId, isDeletion); 
             } else {
-                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(Path, PathId, isDeletion);
+                notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(Path, PathId, isDeletion); 
             }
 
             if (!isDeletion) {

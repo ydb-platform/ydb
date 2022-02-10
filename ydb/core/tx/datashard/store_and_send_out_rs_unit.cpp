@@ -88,7 +88,7 @@ void TStoreAndSendOutRSUnit::Complete(TOperation::TPtr op,
 THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard &dataShard,
                                                     TPipeline &pipeline)
 {
-    return THolder(new TStoreAndSendOutRSUnit(dataShard, pipeline));
+    return THolder(new TStoreAndSendOutRSUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

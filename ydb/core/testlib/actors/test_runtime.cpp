@@ -32,7 +32,7 @@ namespace NActors {
 
     void TTestActorRuntime::Initialize() {
         SetScheduledEventFilter(&TTestActorRuntime::DefaultScheduledFilterFunc);
-        NodeFactory = MakeHolder<TNodeFactory>();
+        NodeFactory = MakeHolder<TNodeFactory>(); 
         InitNodes();
     }
 

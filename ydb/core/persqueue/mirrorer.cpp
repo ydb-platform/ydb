@@ -125,7 +125,7 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg) {
         MirrorerErrors.Inc(1);
     }
 
-    THolder<TEvPersQueue::TEvReportPartitionError> request = MakeHolder<TEvPersQueue::TEvReportPartitionError>();
+    THolder<TEvPersQueue::TEvReportPartitionError> request = MakeHolder<TEvPersQueue::TEvReportPartitionError>(); 
     auto& record = request->Record;
     record.SetTimestamp(ctx.Now().Seconds());
     record.SetService(NKikimrServices::PQ_MIRRORER);
@@ -311,7 +311,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
         return;
     }
 
-    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>(); 
     auto req = request->Record.MutablePartitionRequest();
     req->SetTopic(TopicName);
     req->SetPartition(Partition);
@@ -349,7 +349,7 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
 void TMirrorer::RetryWrite(const TActorContext& ctx) {
     Y_VERIFY(WriteRequestInFlight);
 
-    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>(); 
     auto req = request->Record.MutablePartitionRequest();
     req->CopyFrom(WriteRequestInFlight.value());
 

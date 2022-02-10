@@ -15,7 +15,7 @@ namespace {
 } // namespace
 
 THolder<IAuthProvider> CreateFakeAuth() {
-    return MakeHolder<TFakeAuthProvider>();
+    return MakeHolder<TFakeAuthProvider>(); 
 }
 
 

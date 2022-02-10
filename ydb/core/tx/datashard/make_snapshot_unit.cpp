@@ -81,7 +81,7 @@ void TMakeSnapshotUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateMakeSnapshotUnit(TDataShard &dataShard,
                                                TPipeline &pipeline)
 {
-    return THolder(new TMakeSnapshotUnit(dataShard, pipeline));
+    return THolder(new TMakeSnapshotUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

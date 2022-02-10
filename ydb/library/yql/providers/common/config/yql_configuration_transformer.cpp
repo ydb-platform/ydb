@@ -158,7 +158,7 @@ THolder<IGraphTransformer> CreateProviderConfigurationTransformer(
     TSettingDispatcher::TPtr dispatcher,
     const TTypeAnnotationContext& types,
     const TString& provider) {
-    return THolder(new TProviderConfigurationTransformer(dispatcher, types, provider));
+    return THolder(new TProviderConfigurationTransformer(dispatcher, types, provider)); 
 }
 
 } // namespace NCommon

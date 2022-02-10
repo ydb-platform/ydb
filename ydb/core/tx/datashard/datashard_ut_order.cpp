@@ -53,7 +53,7 @@ public:
     }
 #if 0
     TActiveTransaction MakeActiveTx(ui64 step, ui64 txId, const TString& txBody) {
-        THolder<NMiniKQL::IEngineFlatHost> host = MakeHolder<NMiniKQL::TEngineHost>(DB);
+        THolder<NMiniKQL::IEngineFlatHost> host = MakeHolder<NMiniKQL::TEngineHost>(DB); 
         THolder<NMiniKQL::IEngineFlat> engine = CreateEngineFlat(
             NMiniKQL::TEngineFlatSettings(NMiniKQL::IEngineFlat::EProtocol::V1,
                                           FunctionRegistry.Get(), *RandomProvider, *TimeProvider, host.Get()));

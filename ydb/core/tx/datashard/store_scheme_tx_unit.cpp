@@ -98,7 +98,7 @@ void TStoreSchemeTxUnit::Complete(TOperation::TPtr op,
 THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return THolder(new TStoreSchemeTxUnit(dataShard, pipeline));
+    return THolder(new TStoreSchemeTxUnit(dataShard, pipeline)); 
 }
 
 } // namespace NDataShard

@@ -249,7 +249,7 @@ public:
 
         Y_VERIFY_DEBUG(IsSorted());
 
-        Values = TArrayHolder<ui64>(new ui64[RangeCount]());
+        Values = TArrayHolder<ui64>(new ui64[RangeCount]()); 
     }
 
     void Clear() {

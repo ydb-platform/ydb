@@ -89,12 +89,12 @@ void TModChooser::AddMode(const TString& mode, const TMainFunctionRawPtrV func, 
 }
 
 void TModChooser::AddMode(const TString& mode, const TMainFunctionPtr func, const TString& description, bool hidden, bool noCompletion) {
-    Wrappers.push_back(MakeHolder<PtrWrapper>(func));
+    Wrappers.push_back(MakeHolder<PtrWrapper>(func)); 
     AddMode(mode, Wrappers.back().Get(), description, hidden, noCompletion);
 }
 
 void TModChooser::AddMode(const TString& mode, const TMainFunctionPtrV func, const TString& description, bool hidden, bool noCompletion) {
-    Wrappers.push_back(MakeHolder<PtrvWrapper>(func));
+    Wrappers.push_back(MakeHolder<PtrvWrapper>(func)); 
     AddMode(mode, Wrappers.back().Get(), description, hidden, noCompletion);
 }
 
@@ -103,11 +103,11 @@ void TModChooser::AddMode(const TString& mode, TMainClass* func, const TString& 
         ythrow yexception() << "TMode '" << mode << "' already exists in TModChooser.";
     }
 
-    Modes[mode] = UnsortedModes.emplace_back(MakeHolder<TMode>(mode, func, description, hidden, noCompletion)).Get();
+    Modes[mode] = UnsortedModes.emplace_back(MakeHolder<TMode>(mode, func, description, hidden, noCompletion)).Get(); 
 }
 
 void TModChooser::AddMode(const TString& mode, TMainClassV* func, const TString& description, bool hidden, bool noCompletion) {
-    Wrappers.push_back(MakeHolder<ClassWrapper>(func));
+    Wrappers.push_back(MakeHolder<ClassWrapper>(func)); 
     AddMode(mode, Wrappers.back().Get(), description, hidden, noCompletion);
 }
 

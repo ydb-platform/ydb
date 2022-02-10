@@ -157,14 +157,14 @@ public:
 
         // Schedule execution timeout
         {
-            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandle>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup());
+            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandle>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()); 
             ExecTimeoutCookieHolder.Reset(ISchedulerCookie::Make2Way());
 
             CreateLongTimer(ctx, ExecTimeoutPeriod, wakeupEv, AppData(ctx)->SystemPoolId, ExecTimeoutCookieHolder.Get());
         }
 
         if (!record.GetUserToken().empty()) {
-            UserToken = MakeHolder<NACLib::TUserToken>(record.GetUserToken());
+            UserToken = MakeHolder<NACLib::TUserToken>(record.GetUserToken()); 
         }
 
         const auto& tx = record.GetTransaction();
@@ -1190,14 +1190,14 @@ public:
 
         // Schedule execution timeout
         {
-            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandle>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup());
+            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandle>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()); 
             ExecTimeoutCookieHolder.Reset(ISchedulerCookie::Make2Way());
 
             CreateLongTimer(ctx, ExecTimeoutPeriod, wakeupEv, AppData(ctx)->SystemPoolId, ExecTimeoutCookieHolder.Get());
         }
 
         if (!record.GetUserToken().empty()) {
-            UserToken = MakeHolder<NACLib::TUserToken>(record.GetUserToken());
+            UserToken = MakeHolder<NACLib::TUserToken>(record.GetUserToken()); 
         }
 
         const auto& tx = record.GetTransaction();

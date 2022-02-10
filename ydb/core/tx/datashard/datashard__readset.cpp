@@ -40,8 +40,8 @@ namespace NDataShard {
     }
 
     THolder<IEventHandle> TDataShard::TTxReadSet::MakeAck(const TActorContext& ctx) {
-        return THolder(new IEventHandle(Ev->Sender, ctx.SelfID,
-                                new TEvTxProcessing::TEvReadSetAck(*Ev->Get(), Self->TabletID())));
+        return THolder(new IEventHandle(Ev->Sender, ctx.SelfID, 
+                                new TEvTxProcessing::TEvReadSetAck(*Ev->Get(), Self->TabletID()))); 
     }
 
     void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {

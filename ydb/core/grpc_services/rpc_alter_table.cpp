@@ -137,7 +137,7 @@ public:
 
         const auto& req = GetProtoRequest();
         if (!Request_->GetInternalToken().empty()) {
-            UserToken = MakeHolder<NACLib::TUserToken>(Request_->GetInternalToken());
+            UserToken = MakeHolder<NACLib::TUserToken>(Request_->GetInternalToken()); 
         }
 
         auto ops = GetOps();

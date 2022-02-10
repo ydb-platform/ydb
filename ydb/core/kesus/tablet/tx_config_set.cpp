@@ -27,7 +27,7 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
             "[" << Self->TabletID() << "] TTxConfigSet::Execute (sender=" << Sender
                 << ", cookie=" << Cookie << ", path=" << Record.GetConfig().path().Quote() << ")");
 
-        Reply = MakeHolder<TEvKesus::TEvSetConfigResult>(Record.GetTxId(), Self->TabletID());
+        Reply = MakeHolder<TEvKesus::TEvSetConfigResult>(Record.GetTxId(), Self->TabletID()); 
 
         ui64 newVersion = Record.GetVersion();
         if (newVersion == 0) {

@@ -137,8 +137,8 @@ void TCgiParameters::ScanAddAll(const TStringBuf query) {
     TAddEscaped f = {this};
 
     DoScan<true>(query, f);
-} 
- 
+}
+
 TString TCgiParameters::Print() const {
     TString res;
 

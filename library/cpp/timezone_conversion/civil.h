@@ -145,7 +145,7 @@ namespace NDatetime {
 
     /** Just to simply calculations between dates/times.
      * NDatetime::Calc<TCivilDay>(TCivilSecond(2001, 1, 1, 10, 10, 10), 5); // returns TCivilDay(2001, 1, 6);
-     * @param[in] tp is a timepoint with which calc will be
+     * @param[in] tp is a timepoint with which calc will be 
      * @param[in] diff is quantity of which will be added (of type T) to the tp
      * @return the calculated T type
      */
@@ -154,18 +154,18 @@ namespace NDatetime {
         return T(tp) + diff;
     }
 
-    /** Non-template methods for adding dates/times.
-    * @param[in] tp is a timepoint with which calc will be
-    * @param[in] diff is quantity of which will be added to the tp
-    * @return the calculated TCivilSecond object
-    */
-    TCivilSecond AddYears(const TCivilSecond& tp, TDiff diff);
-    TCivilSecond AddMonths(const TCivilSecond& tp, TDiff diff);
-    TCivilSecond AddDays(const TCivilSecond& tp, TDiff diff);
-    TCivilSecond AddHours(const TCivilSecond& tp, TDiff diff);
-    TCivilSecond AddMinutes(const TCivilSecond& tp, TDiff diff);
-    TCivilSecond AddSeconds(const TCivilSecond& tp, TDiff diff);
-
+    /** Non-template methods for adding dates/times. 
+    * @param[in] tp is a timepoint with which calc will be 
+    * @param[in] diff is quantity of which will be added to the tp 
+    * @return the calculated TCivilSecond object 
+    */ 
+    TCivilSecond AddYears(const TCivilSecond& tp, TDiff diff); 
+    TCivilSecond AddMonths(const TCivilSecond& tp, TDiff diff); 
+    TCivilSecond AddDays(const TCivilSecond& tp, TDiff diff); 
+    TCivilSecond AddHours(const TCivilSecond& tp, TDiff diff); 
+    TCivilSecond AddMinutes(const TCivilSecond& tp, TDiff diff); 
+    TCivilSecond AddSeconds(const TCivilSecond& tp, TDiff diff); 
+ 
     /** Method to add TCivilDiff
      * @param[in] tp is a timepoint with which calc will be
      * @param[in] diff is quantity of which will be added to the tp

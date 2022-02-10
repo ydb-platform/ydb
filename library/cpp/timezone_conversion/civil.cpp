@@ -92,36 +92,36 @@ namespace NDatetime {
     TInstant Convert(const TCivilSecond& tp, const TTimeZone& tz) {
         return TInstant::Seconds(cctz::convert(tp, tz).time_since_epoch().count());
     }
-
-    TCivilSecond AddYears(const TCivilSecond& tp, TDiff diff) {
-        TCivilYear newYear = Calc<TCivilYear>(tp, diff);
-        return NDatetime::TCivilSecond(newYear.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second());
-    }
-
-    TCivilSecond AddMonths(const TCivilSecond& tp, TDiff diff) {
-        TCivilMonth newMonth = Calc<TCivilMonth>(tp, diff);
-        return NDatetime::TCivilSecond(newMonth.year(), newMonth.month(), tp.day(), tp.hour(), tp.minute(), tp.second());
-    }
-
-    TCivilSecond AddDays(const TCivilSecond& tp, TDiff diff) {
-        TCivilDay newDay = Calc<TCivilDay>(tp, diff);
-        return NDatetime::TCivilSecond(newDay.year(), newDay.month(), newDay.day(), tp.hour(), tp.minute(), tp.second());
-    }
-
-    TCivilSecond AddHours(const TCivilSecond& tp, TDiff diff) {
-        TCivilHour newHour = Calc<TCivilHour>(tp, diff);
-        return NDatetime::TCivilSecond(newHour.year(), newHour.month(), newHour.day(), newHour.hour(), tp.minute(), tp.second());
-    }
-
-    TCivilSecond AddMinutes(const TCivilSecond& tp, TDiff diff) {
-        TCivilMinute newMinute = Calc<TCivilMinute>(tp, diff);
-        return NDatetime::TCivilSecond(newMinute.year(), newMinute.month(), newMinute.day(), newMinute.hour(), newMinute.minute(), tp.second());
-    }
-
-    TCivilSecond AddSeconds(const TCivilSecond& tp, TDiff diff) {
-        return Calc<TCivilSecond>(tp, diff);
-    }
-
+ 
+    TCivilSecond AddYears(const TCivilSecond& tp, TDiff diff) { 
+        TCivilYear newYear = Calc<TCivilYear>(tp, diff); 
+        return NDatetime::TCivilSecond(newYear.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second()); 
+    } 
+ 
+    TCivilSecond AddMonths(const TCivilSecond& tp, TDiff diff) { 
+        TCivilMonth newMonth = Calc<TCivilMonth>(tp, diff); 
+        return NDatetime::TCivilSecond(newMonth.year(), newMonth.month(), tp.day(), tp.hour(), tp.minute(), tp.second()); 
+    } 
+ 
+    TCivilSecond AddDays(const TCivilSecond& tp, TDiff diff) { 
+        TCivilDay newDay = Calc<TCivilDay>(tp, diff); 
+        return NDatetime::TCivilSecond(newDay.year(), newDay.month(), newDay.day(), tp.hour(), tp.minute(), tp.second()); 
+    } 
+ 
+    TCivilSecond AddHours(const TCivilSecond& tp, TDiff diff) { 
+        TCivilHour newHour = Calc<TCivilHour>(tp, diff); 
+        return NDatetime::TCivilSecond(newHour.year(), newHour.month(), newHour.day(), newHour.hour(), tp.minute(), tp.second()); 
+    } 
+ 
+    TCivilSecond AddMinutes(const TCivilSecond& tp, TDiff diff) { 
+        TCivilMinute newMinute = Calc<TCivilMinute>(tp, diff); 
+        return NDatetime::TCivilSecond(newMinute.year(), newMinute.month(), newMinute.day(), newMinute.hour(), newMinute.minute(), tp.second()); 
+    } 
+ 
+    TCivilSecond AddSeconds(const TCivilSecond& tp, TDiff diff) { 
+        return Calc<TCivilSecond>(tp, diff); 
+    } 
+ 
     TCivilSecond AddCivil(const TCivilSecond& tp, TCivilDiff diff) {
         switch (diff.Unit) {
             case ECivilUnit::Second: {

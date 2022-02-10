@@ -121,7 +121,7 @@ namespace NPrivate {
 //! Usage: for (auto [ai, bi, ci] : Zip(a, b, c)) {...}
 template <typename... TContainers>
 auto Zip(TContainers&&... containers) {
-    return ::NPrivate::TZipper<TContainers...>::Zip(
+    return ::NPrivate::TZipper<TContainers...>::Zip( 
         std::forward<TContainers>(containers)...,
         std::make_index_sequence<sizeof...(TContainers)>{}
     );

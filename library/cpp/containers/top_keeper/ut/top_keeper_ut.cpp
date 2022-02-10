@@ -17,15 +17,15 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
     Y_UNIT_TEST(CorrectnessTest) {
         int m = 20000;
 
-        TLimitedHeap<std::pair<int, int>> h1(m);
-        TTopKeeper<std::pair<int, int>> h2(m);
-
+        TLimitedHeap<std::pair<int, int>> h1(m); 
+        TTopKeeper<std::pair<int, int>> h2(m); 
+ 
         int n = 20000000;
         while (n--) {
             int r = int(Rnd());
 
-            h1.Insert({r, -r});
-            h2.Emplace(r, -r);
+            h1.Insert({r, -r}); 
+            h2.Emplace(r, -r); 
         }
 
         h2.Finalize();

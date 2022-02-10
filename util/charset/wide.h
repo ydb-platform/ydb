@@ -406,12 +406,12 @@ inline void WideToUTF8(const TCharType* text, size_t len, char* dest, size_t& wr
     written = p - reinterpret_cast<unsigned char*>(dest);
 }
 
-constexpr size_t WideToUTF8BufferSize(const size_t inputStringSize) noexcept {
-    return inputStringSize * 4; // * 4 because the conversion functions can convert unicode character into maximum 4 bytes of UTF8
-}
-
+constexpr size_t WideToUTF8BufferSize(const size_t inputStringSize) noexcept { 
+    return inputStringSize * 4; // * 4 because the conversion functions can convert unicode character into maximum 4 bytes of UTF8 
+} 
+ 
 inline TStringBuf WideToUTF8(const TWtringBuf src, TString& dst) {
-    dst.ReserveAndResize(WideToUTF8BufferSize(src.size()));
+    dst.ReserveAndResize(WideToUTF8BufferSize(src.size())); 
     size_t written = 0;
     WideToUTF8(src.data(), src.size(), dst.begin(), written);
     Y_ASSERT(dst.size() >= written);

@@ -147,19 +147,19 @@ void THashTest::TestHMapConstructorsAndAssignments() {
     UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
     UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
     UNIT_ASSERT_VALUES_EQUAL(4, c3.at("four"));
-
+ 
     const container c4{
         {"one", 1},
         {"two", 2},
-        {"three", 3},
+        {"three", 3}, 
         {"four", 4},
-    };
-
-    UNIT_ASSERT_VALUES_EQUAL(4, c4.size());
-    UNIT_ASSERT_VALUES_EQUAL(1, c4.at("one"));
-    UNIT_ASSERT_VALUES_EQUAL(2, c4.at("two"));
-    UNIT_ASSERT_VALUES_EQUAL(3, c4.at("three"));
-    UNIT_ASSERT_VALUES_EQUAL(4, c4.at("four"));
+    }; 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(4, c4.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(1, c4.at("one")); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c4.at("two")); 
+    UNIT_ASSERT_VALUES_EQUAL(3, c4.at("three")); 
+    UNIT_ASSERT_VALUES_EQUAL(4, c4.at("four")); 
 
     // non-existent values must be zero-initialized
     UNIT_ASSERT_VALUES_EQUAL(c1["nonexistent"], 0);
@@ -1035,8 +1035,8 @@ void THashTest::TestHSetEmplaceDirect() {
     hash.emplace_direct(ins, 1);
     UNIT_ASSERT(hash.contains(0));
     UNIT_ASSERT(!hash.contains(1));
-}
-
+} 
+ 
 void THashTest::TestNonCopyable() {
     struct TValue: public TNonCopyable {
         int value;

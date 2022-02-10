@@ -1,5 +1,5 @@
 #include "utility.h"
-#include "ymath.h"
+#include "ymath.h" 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
         UNIT_ASSERT_VALUES_EQUAL(Min(TUnorderedTag{"first"}, TUnorderedTag{"second"}, TUnorderedTag{"third"}).Tag, "first");
         UNIT_ASSERT_VALUES_EQUAL(Max(TUnorderedTag{"first"}, TUnorderedTag{"second"}, TUnorderedTag{"third"}).Tag, "first");
     }
-
+ 
     Y_UNIT_TEST(TestMean) {
         UNIT_ASSERT_EQUAL(Mean(5), 5);
         UNIT_ASSERT_EQUAL(Mean(1, 2, 3), 2);

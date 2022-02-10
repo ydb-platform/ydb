@@ -139,27 +139,27 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         UNIT_ASSERT_VALUES_EQUAL(autoSizeRef[0], '4');
         UNIT_ASSERT_VALUES_EQUAL(autoSizeRef[3], '\0');
     }
-
+ 
     Y_UNIT_TEST(TestEqualityOperator) {
-        static constexpr size_t size = 5;
+        static constexpr size_t size = 5; 
         int a[size]{1, 2, 3, 4, 5};
         int b[size]{5, 4, 3, 2, 1};
         int c[size - 1]{5, 4, 3, 2};
         float d[size]{1.f, 2.f, 3.f, 4.f, 5.f};
-
+ 
         TArrayRef<int> aRef(a);
         TConstArrayRef<int> aConstRef(a, size);
-
+ 
         TArrayRef<int> bRef(b);
-
+ 
         TArrayRef<int> cRef(c, size - 1);
-
+ 
         TArrayRef<float> dRef(d, size);
         TConstArrayRef<float> dConstRef(d, size);
-
+ 
         UNIT_ASSERT_EQUAL(aRef, aConstRef);
         UNIT_ASSERT_EQUAL(dRef, dConstRef);
-
+ 
         UNIT_ASSERT_UNEQUAL(aRef, cRef);
         UNIT_ASSERT_UNEQUAL(aRef, bRef);
 
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
 
         //Testing if operator== compares values, not pointers
         UNIT_ASSERT_EQUAL(cRef, bSubRef);
-    }
+    } 
 
     Y_UNIT_TEST(TestImplicitConstructionFromContainer) {
         /* Just test compilation. */

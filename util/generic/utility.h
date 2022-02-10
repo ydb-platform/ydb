@@ -30,18 +30,18 @@ constexpr const T& ClampVal(const T& val, const T& min, const T& max) {
     return val < min ? min : (max < val ? max : val);
 }
 
-template <typename T = double, typename... Args>
-static T Mean(const Args&... other) noexcept {
-    const auto numArgs = sizeof...(other);
-
-    auto sum = T();
-    for (const auto& v : {other...}) {
-        sum += v;
-    }
-
-    return sum / numArgs;
-}
-
+template <typename T = double, typename... Args> 
+static T Mean(const Args&... other) noexcept { 
+    const auto numArgs = sizeof...(other); 
+ 
+    auto sum = T(); 
+    for (const auto& v : {other...}) { 
+        sum += v; 
+    } 
+ 
+    return sum / numArgs; 
+} 
+ 
 template <class T>
 static inline void Zero(T& t) noexcept {
     memset((void*)&t, 0, sizeof(t));

@@ -439,10 +439,10 @@ static inline void Fill(I f, I l, const T& v) {
 }
 
 template <typename I, typename S, typename T>
-static inline I FillN(I f, S n, const T& v) {
-    return std::fill_n(f, n, v);
-}
-
+static inline I FillN(I f, S n, const T& v) { 
+    return std::fill_n(f, n, v); 
+} 
+ 
 template <class T>
 static inline void Reverse(T f, T l) {
     std::reverse(f, l);

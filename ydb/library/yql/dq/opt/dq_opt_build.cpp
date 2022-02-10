@@ -289,7 +289,7 @@ public:
         output = input;
 
         TNodeOnNodeOwnedMap replaces;
-        VisitExpr(input, [&ctx, &replaces](const TExprNode::TPtr& node) { 
+        VisitExpr(input, [&ctx, &replaces](const TExprNode::TPtr& node) {
             if (node->IsLambda()) {
                 return false;
             }

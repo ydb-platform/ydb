@@ -21,9 +21,9 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
 
     void SendRequest() {
         const TActorId proxy = MakeBlobStorageProxyID(GroupId);
-        THolder<TEvBlobStorage::TEvBlock> event(new TEvBlobStorage::TEvBlock(TabletId, Generation, TInstant::Max())); 
-        event->IsMonitored = false; 
-        SendToBSProxy(TlsActivationContext->AsActorContext(), proxy, event.Release()); 
+        THolder<TEvBlobStorage::TEvBlock> event(new TEvBlobStorage::TEvBlock(TabletId, Generation, TInstant::Max()));
+        event->IsMonitored = false;
+        SendToBSProxy(TlsActivationContext->AsActorContext(), proxy, event.Release());
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr&) {

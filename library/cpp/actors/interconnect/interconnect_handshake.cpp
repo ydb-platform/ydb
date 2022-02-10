@@ -93,8 +93,8 @@ namespace NActors {
         TMaybe<THolder<TProgramInfo>> ProgramInfo; // filled in in case of successful handshake; even if null
         TSessionParams Params;
         bool ResolveTimedOut = false;
-        THashMap<ui32, TInstant> LastLogNotice; 
-        const TDuration MuteDuration = TDuration::Seconds(15); 
+        THashMap<ui32, TInstant> LastLogNotice;
+        const TDuration MuteDuration = TDuration::Seconds(15);
         TInstant Deadline;
 
     public:
@@ -791,12 +791,12 @@ namespace NActors {
 
             if (network) {
                 TInstant now = Now();
-                TInstant prevLog = LastLogNotice[PeerNodeId]; 
-                NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG; 
-                if (now - prevLog > MuteDuration) { 
-                    logPriority = NActors::NLog::PRI_NOTICE; 
-                    LastLogNotice[PeerNodeId] = now; 
-                } 
+                TInstant prevLog = LastLogNotice[PeerNodeId];
+                NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG;
+                if (now - prevLog > MuteDuration) {
+                    logPriority = NActors::NLog::PRI_NOTICE;
+                    LastLogNotice[PeerNodeId] = now;
+                }
                 LOG_LOG_NET_X(logPriority, PeerNodeId, "network-related error occured on handshake: %s", msg.data());
             } else {
                 // calculate log severity based on failure type; permanent failures lead to error log messages
@@ -883,12 +883,12 @@ namespace NActors {
                     break;
             }
 
-            auto it = LastLogNotice.find(PeerNodeId); 
-            NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG; 
-            if (it != LastLogNotice.end()) { 
-                LastLogNotice.erase(it); 
-                logPriority = NActors::NLog::PRI_NOTICE; 
-            } 
+            auto it = LastLogNotice.find(PeerNodeId);
+            NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG;
+            if (it != LastLogNotice.end()) {
+                LastLogNotice.erase(it);
+                logPriority = NActors::NLog::PRI_NOTICE;
+            }
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH05", logPriority, "connected to peer");
         }
 

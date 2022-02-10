@@ -70,7 +70,7 @@ namespace NFake {
             } else if (eh->CastAsLocal<NFake::TEvTerm>()) {
 
             } else {
-                Y_Fail("Unexpected event " << TypeName(*eh->GetBase())); 
+                Y_Fail("Unexpected event " << TypeName(*eh->GetBase()));
             }
         }
 
@@ -112,7 +112,7 @@ namespace NFake {
 
             } else if (auto logl = Logger->Log(ELnLev::Abort)) {
                 logl
-                    << "Cannot register " << TypeName(*cmd.Actor) << " on " 
+                    << "Cannot register " << TypeName(*cmd.Actor) << " on "
                     << " level " << level << ", head " << Head << ".." << Edge;
             }
         }

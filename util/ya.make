@@ -317,7 +317,7 @@ JOIN_SRCS(
     system/thread.cpp
     system/tls.cpp
     system/types.cpp
-    system/type_name.cpp 
+    system/type_name.cpp
     system/unaligned_mem.cpp
     system/user.cpp
     system/utime.cpp

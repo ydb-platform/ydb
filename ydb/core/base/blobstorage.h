@@ -1205,7 +1205,7 @@ struct TEvBlobStorage {
         const ui32 Generation;
         const TInstant Deadline;
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
-        bool IsMonitored = true; 
+        bool IsMonitored = true;
         ui32 RestartCounter = 0;
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline)
@@ -1227,7 +1227,7 @@ struct TEvBlobStorage {
             str << "TEvBlock {TabletId# " << TabletId
                 << " Generation# " << Generation
                 << " Deadline# " << Deadline.MilliSeconds()
-                << " IsMonitored# " << IsMonitored 
+                << " IsMonitored# " << IsMonitored
                 << "}";
             return str.Str();
         }
@@ -1777,7 +1777,7 @@ struct TEvBlobStorage {
         bool Collect;
 
         bool IsMultiCollectAllowed;
-        bool IsMonitored = true; 
+        bool IsMonitored = true;
 
         ui32 RestartCounter = 0;
 
@@ -1837,7 +1837,7 @@ struct TEvBlobStorage {
             }
             str << " Hard# " << (Hard ? "true" : "false");
             str << " IsMultiCollectAllowed# " << IsMultiCollectAllowed;
-            str << " IsMonitored# " << IsMonitored; 
+            str << " IsMonitored# " << IsMonitored;
             if (Keep.Get()) {
                 str << " KeepSize# " << Keep->size() << " {";
                 for (ui32 i = 0; i < Keep->size(); ++i) {

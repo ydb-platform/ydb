@@ -135,7 +135,7 @@
 #include <util/system/shmat.h>
 #include <util/system/rusage.h>
 #include <util/system/yassert.h>
-#include <util/system/tempfile.h> 
+#include <util/system/tempfile.h>
 #include <util/system/atomic.h>
 #include <util/system/yield.h>
 #include <util/system/filemap.h>
@@ -163,7 +163,7 @@
 #include <util/system/datetime.h>
 #include <util/system/utime.h>
 #include <util/system/mlock.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 #include <util/system/file.h>
 #include <util/system/atexit.h>
 #include <util/system/context_x86.h>

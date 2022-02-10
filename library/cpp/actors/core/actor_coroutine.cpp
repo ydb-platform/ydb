@@ -2,7 +2,7 @@
 #include "executor_thread.h"
 
 #include <util/system/sanitizers.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 
 namespace NActors {
     static constexpr size_t StackOverflowGap = 4096;
@@ -143,7 +143,7 @@ namespace NActors {
                 Y_FAIL("unhandled TDtorException");
             }
         } catch (const std::exception& ex) {
-            Y_FAIL("unhandled exception of type %s", TypeName(ex).data()); 
+            Y_FAIL("unhandled exception of type %s", TypeName(ex).data());
         } catch (...) {
             Y_FAIL("unhandled exception of type not derived from std::exception");
         }

@@ -28,33 +28,33 @@ namespace NKikimr {
 namespace NKeyValue {
 
 class TKeyValueState {
-    struct TRangeSet { 
-        TMap<ui64, ui64> EndForBegin; 
- 
-        TRangeSet() { 
-        } 
- 
-        void Add(ui64 begin, ui64 end) { 
-            Y_VERIFY(begin < end, "begin# %" PRIu64 " end# %" PRIu64, (ui64)begin, (ui64)end); 
-            EndForBegin[begin] = end; 
-        } 
- 
-        bool Remove(ui64 x) { 
-            auto it = EndForBegin.upper_bound(x); 
-            if (it != EndForBegin.begin()) { 
-                it--; 
-            } else { 
-                return false; 
-            } 
-            if (x >= it->second) { 
-                return false; 
-            } 
-            Y_VERIFY(it->first <= x); 
-            EndForBegin.erase(it); 
-            return true; 
-        } 
-    }; 
- 
+    struct TRangeSet {
+        TMap<ui64, ui64> EndForBegin;
+
+        TRangeSet() {
+        }
+
+        void Add(ui64 begin, ui64 end) {
+            Y_VERIFY(begin < end, "begin# %" PRIu64 " end# %" PRIu64, (ui64)begin, (ui64)end);
+            EndForBegin[begin] = end;
+        }
+
+        bool Remove(ui64 x) {
+            auto it = EndForBegin.upper_bound(x);
+            if (it != EndForBegin.begin()) {
+                it--;
+            } else {
+                return false;
+            }
+            if (x >= it->second) {
+                return false;
+            }
+            Y_VERIFY(it->first <= x);
+            EndForBegin.erase(it);
+            return true;
+        }
+    };
+
 public:
     using TIndex = TMap<TString, TIndexRecord>;
     using TCommand = NKikimrKeyValue::ExecuteTransactionRequest::Command;
@@ -243,7 +243,7 @@ protected:
 
     using TKeySet = TIncrementalKeySet;
 
-    TVector<TRangeSet> ChannelRangeSets; 
+    TVector<TRangeSet> ChannelRangeSets;
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
     TSet<TLogoBlobID> Trash;
@@ -266,7 +266,7 @@ protected:
     bool IsTabletYellowMove;
     bool IsTabletYellowStop;
     TActorId ChannelBalancerActorId;
-    ui64 InitialCollectsSent = 0; 
+    ui64 InitialCollectsSent = 0;
 
     TDeque<TAutoPtr<TIntermediate>> Queue;
     ui64 IntermediatesInFlight;
@@ -312,26 +312,26 @@ public:
     void Load(const TString &key, const TString& value);
     void InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration, ISimpleDb &db,
         const TActorContext &ctx, const TTabletStorageInfo *info);
-    void RegisterInitialCollectResult(const TActorContext &ctx); 
-    void SendCutHistory(const TActorContext &ctx); 
+    void RegisterInitialCollectResult(const TActorContext &ctx);
+    void SendCutHistory(const TActorContext &ctx);
     void OnInitQueueEmpty(const TActorContext &ctx);
     void OnStateWork(const TActorContext &ctx);
     void RequestExecute(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info);
-    void RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info); 
- 
-    // garbage collection methods 
+    void RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
+
+    // garbage collection methods
     void PrepareCollectIfNeeded(const TActorContext &ctx);
     void StoreCollectExecute(ISimpleDb &db, const TActorContext &ctx);
     void StoreCollectComplete(const TActorContext &ctx);
     void EraseCollectExecute(ISimpleDb &db, const TActorContext &ctx);
     void EraseCollectComplete(const TActorContext &ctx);
-    void SendStoreCollect(const TActorContext &ctx, const THelpers::TGenerationStep &genStep, 
-        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep); 
-    void StartCollectingIfPossible(const TActorContext &ctx); 
-    ui64 OnEvCollect(const TActorContext &ctx); 
-    void OnEvCollectDone(ui64 perGenerationCounterStepSize, const TActorContext &ctx); 
-    void OnEvEraseCollect(const TActorContext &ctx); 
+    void SendStoreCollect(const TActorContext &ctx, const THelpers::TGenerationStep &genStep,
+        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep);
+    void StartCollectingIfPossible(const TActorContext &ctx);
+    ui64 OnEvCollect(const TActorContext &ctx);
+    void OnEvCollectDone(ui64 perGenerationCounterStepSize, const TActorContext &ctx);
+    void OnEvEraseCollect(const TActorContext &ctx);
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,

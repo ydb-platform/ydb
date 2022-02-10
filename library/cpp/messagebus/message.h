@@ -11,12 +11,12 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/system/defaults.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 #include <util/system/yassert.h>
 
-#include <optional> 
-#include <typeinfo> 
- 
+#include <optional>
+#include <typeinfo>
+
 namespace NBus {
     ///////////////////////////////////////////////////////////////////
     /// \brief Structure to preserve identity from message to reply
@@ -37,10 +37,10 @@ namespace NBus {
         TInstant RecvTime;
 
 #ifndef NDEBUG
-        std::optional<TString> MessageType; 
+        std::optional<TString> MessageType;
 #endif
 
-    private: 
+    private:
         // TODO: drop
         TNetAddr GetNetAddr() const;
 
@@ -91,12 +91,12 @@ namespace NBus {
             }
         }
 
-        void SetMessageType(const std::type_info& messageTypeInfo) { 
+        void SetMessageType(const std::type_info& messageTypeInfo) {
 #ifndef NDEBUG
             Y_VERIFY(!MessageType, "state check");
-            MessageType = TypeName(messageTypeInfo); 
+            MessageType = TypeName(messageTypeInfo);
 #else
-            Y_UNUSED(messageTypeInfo); 
+            Y_UNUSED(messageTypeInfo);
 #endif
         }
     };

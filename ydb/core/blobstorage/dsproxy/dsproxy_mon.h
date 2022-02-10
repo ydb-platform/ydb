@@ -139,9 +139,9 @@ public:
 
 protected:
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> PercentileCounters; 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> ResponseGroup; 
-    ui64 GroupIdGen = Max<ui64>(); // group id:group gen 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> PercentileCounters;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> ResponseGroup;
+    ui64 GroupIdGen = Max<ui64>(); // group id:group gen
     std::atomic<bool> IsLimitedMon = ATOMIC_VAR_INIT(true);
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> ThroughputGroup;
@@ -267,13 +267,13 @@ public:
             const TIntrusivePtr<NMonitoring::TDynamicCounters>& percentileCounters,
             const TIntrusivePtr<NMonitoring::TDynamicCounters>& overviewCounters,
             const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-            const TIntrusivePtr<TDsProxyNodeMon> &nodeMon, 
-            bool isLimitedMon); 
+            const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+            bool isLimitedMon);
 
     bool GetGroupIdGen(ui32 *groupId, ui32 *groupGen) const;
 
-    void BecomeFull(); 
- 
+    void BecomeFull();
+
     void SerializeToWhiteboard(NKikimrWhiteboard::TBSGroupStateInfo& pb, ui32 groupId) const;
 
     void CountPutEvent(ui32 size) {
@@ -287,16 +287,16 @@ public:
     void CountThroughput(NKikimrBlobStorage::EPutHandleClass cls, ui32 size) {
         switch (cls) {
             case NKikimrBlobStorage::EPutHandleClass::TabletLog:
-                PutTabletLogThroughput->Count(size); 
+                PutTabletLogThroughput->Count(size);
                 break;
             case NKikimrBlobStorage::EPutHandleClass::AsyncBlob:
-                PutAsyncBlobThroughput->Count(size); 
+                PutAsyncBlobThroughput->Count(size);
                 break;
             case NKikimrBlobStorage::EPutHandleClass::UserData:
-                PutUserDataThroughput->Count(size); 
+                PutUserDataThroughput->Count(size);
                 break;
         }
-        PutThroughput->Count(size); 
+        PutThroughput->Count(size);
     }
 
     void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,

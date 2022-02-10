@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                 testString[i] = (char)data[i];
             }
             TDataPartSet partSet;
-            type.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet); 
+            type.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet);
             for (ui32 i = 0; i < 6; ++i) {
                 UNIT_ASSERT_EQUAL_C(partSet.Parts[i].size(), expectedParts[i].size(), Sprintf("%lu == %lu",
                                                                 partSet.Parts[i].size(), expectedParts[i].size()));
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                     }
                     TDataPartSet partSet;
                     try {
-                        groupType.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet); 
+                        groupType.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet);
                     } catch (yexception ex) {
                         ex << " [in SplitData while testing " << errorInfo << "]";
                         throw ex;
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 //                TRope rope;
 //                for (size_t i = 0; i < dataSize; ++i) {
 //                    TString base = GenerateRandomString(1);
-//                    rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base)); 
+//                    rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base));
 //                }
 //                Y_VERIFY(rope.GetSize() == dataSize);
 //                return rope;
@@ -393,11 +393,11 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 //                TRope rope;
 //                for (size_t i = 1; i < dataSize && rope.GetSize() + i <= dataSize; ++i) {
 //                    TString base = GenerateRandomString(i);
-//                    rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base)); 
+//                    rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base));
 //                }
 //                if (rope.GetSize() < dataSize) {
 //                    TString base = GenerateRandomString(dataSize - rope.GetSize());
-//                    rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base)); 
+//                    rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base));
 //                }
 //                Y_VERIFY(rope.GetSize() == dataSize);
 //                return rope;
@@ -415,10 +415,10 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 //                    ui64 size = (ui64) randGen.GenRand() % maxSize;
 //                    if (rope.GetSize() + size <= dataSize) {
 //                        TString base = GenerateRandomString(size);
-//                        rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base)); 
+//                        rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base));
 //                    } else {
 //                        TString base = GenerateRandomString(dataSize - rope.GetSize());
-//                        rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base)); 
+//                        rope.Insert(rope.End(), TRopeHelpers::RopeFromStringReference(base));
 //                    }
 //                }
 //                Y_VERIFY(rope.GetSize() == dataSize);
@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                     ((char*)testString.data())[i] = (char)(i % 10) + '0';
                 }
 
-                inputBuffer = TRopeHelpers::RopeFromStringMemcpy(testString); 
+                inputBuffer = TRopeHelpers::RopeFromStringMemcpy(testString);
             }
 
             TDataPartSet partSet;
@@ -759,7 +759,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                 ((ui8*)testString.data())[i] = (ui8)i;
             }
             TDataPartSet partSet;
-            groupType.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet); 
+            groupType.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet);
             for (ui32 p = 0; p < groupType.DataParts(); ++p) {
                 auto &part = partSet.Parts[p];
                 VERBOSE_COUT("Part# " << p << " Size# " << part.size() << " Data# ");
@@ -823,7 +823,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 
             // Split the data into parts
             TDataPartSet partSet;
-            groupType.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet); 
+            groupType.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet);
             ui64 partSize = groupType.PartSize(TRopeErasureType::CrcModeNone, dataSize);
             for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) {
                 UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size());
@@ -887,7 +887,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                     for (ui32 idx = 0; idx < partSet.Parts.size(); ++idx) {
                         ui32 cutBegin = Min(partSize, needBegin);
                         ui32 cutSize = Min(partSize, needEnd) - cutBegin;
-                        partSet.Parts[idx].ReferenceTo(TRopeHelpers::RopeFromStringMemcpy( 
+                        partSet.Parts[idx].ReferenceTo(TRopeHelpers::RopeFromStringMemcpy(
                                 partSet.Parts[idx].OwnedRope.ConvertToString().substr(
                                         cutBegin, cutSize)), cutBegin, cutSize, partSize);
                     }
@@ -900,7 +900,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                         ui32 cutSize = Min(partSize, needEnd) - cutBegin;
                         partSet.Parts[idx].clear();
                         TString tmp = TString::Uninitialized(cutSize);
-                        partSet.Parts[idx].ReferenceTo(TRopeHelpers::RopeFromStringMemcpy(tmp), cutBegin, cutSize, partSize); 
+                        partSet.Parts[idx].ReferenceTo(TRopeHelpers::RopeFromStringMemcpy(tmp), cutBegin, cutSize, partSize);
                     }
 
                     // Restore the data

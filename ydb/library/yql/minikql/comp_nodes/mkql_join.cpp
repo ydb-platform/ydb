@@ -312,7 +312,7 @@ private:
     const bool SingleShot;
     struct TFileState {
         TFileState()
-            : File(TTempFileHandle::InCurrentDir()) 
+            : File(TTempFileHandle::InCurrentDir())
             , TotalSize(0)
         {}
 
@@ -1582,7 +1582,7 @@ private:
     const bool SingleShot;
     struct TFileState {
         TFileState()
-            : File(TTempFileHandle::InCurrentDir()) 
+            : File(TTempFileHandle::InCurrentDir())
             , TotalSize(0)
         {}
 

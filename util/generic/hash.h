@@ -4,7 +4,7 @@
 #include "mapfindptr.h"
 
 #include <util/memory/alloc.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 #include <util/system/yassert.h>
 #include <util/str_stl.h>
 #include "yexception.h"

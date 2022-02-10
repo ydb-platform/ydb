@@ -456,7 +456,7 @@ public:
         , PutImpl(info, state, ev, mon, enableRequestMod3x3ForMinLatecy)
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , Deadline(ev->Deadline)
-        , StartTime(now) 
+        , StartTime(now)
         , HandleClass(ev->HandleClass)
         , ReportedBytes(0)
         , TimeStatsEnabled(timeStatsEnabled)
@@ -502,7 +502,7 @@ public:
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , IsManyPuts(true)
         , Deadline(TInstant::Zero())
-        , StartTime(now) 
+        , StartTime(now)
         , HandleClass(handleClass)
         , ReportedBytes(0)
         , TimeStatsEnabled(timeStatsEnabled)
@@ -631,7 +631,7 @@ public:
             << " Group# " << Info->GroupID
             << " BlobIDs# " << BlobIdSequenceToString()
             << " Not answered in "
-            << (TActivationContext::Now() - StartTime).Seconds() << " seconds"); 
+            << (TActivationContext::Now() - StartTime).Seconds() << " seconds");
         if (TInstant::Now() > Deadline) {
             ErrorReason = "Deadline exceeded";
             ReplyAndDie(NKikimrProto::DEADLINE);

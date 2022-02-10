@@ -35,9 +35,9 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
 
     THPTimer PutTimer;
     TInstant GetStatusSentAt;
-    TInstant LastSuccess; 
-    const TDuration MuteDuration = TDuration::Seconds(5); 
-    TLogPriorityMuteChecker<NLog::PRI_DEBUG, NLog::PRI_ERROR> ErrorStateMuteChecker; 
+    TInstant LastSuccess;
+    const TDuration MuteDuration = TDuration::Seconds(5);
+    TLogPriorityMuteChecker<NLog::PRI_DEBUG, NLog::PRI_ERROR> ErrorStateMuteChecker;
 
     THashMap<ui32, TInstant> TimeForNextSend;
 
@@ -116,26 +116,26 @@ public:
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
-            TInstant now = TAppData::TimeProvider->Now(); 
- 
+            TInstant now = TAppData::TimeProvider->Now();
+
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
             str << " Unexpected EvPut result# " << NKikimrProto::EReplyStatus_Name(status).data();
             str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
-            str << " Now# " << now.MilliSeconds(); 
+            str << " Now# " << now.MilliSeconds();
             str << " duration# " << duration;
             str << " GotAt# " << IntermediateResults->Stat.IntermediateCreatedAt.MilliSeconds();
-            str << " LastSuccess# " << LastSuccess; 
-            str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds(); 
+            str << " LastSuccess# " << LastSuccess;
+            str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds();
             str << " EnqueuedAs# " << IntermediateResults->Stat.EnqueuedAs;
-            str << " ErrorReason# " << ev->Get()->ErrorReason; 
+            str << " ErrorReason# " << ev->Get()->ErrorReason;
             str << " Marker# KV24";
- 
-            NLog::EPriority logPriority = ErrorStateMuteChecker.Register(now, MuteDuration); 
- 
+
+            NLog::EPriority logPriority = ErrorStateMuteChecker.Register(now, MuteDuration);
+
             ReplyErrorAndDie(ctx, str.Str(),
-                status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR, 
-                logPriority); 
+                status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR,
+                logPriority);
             return;
         }
         ui64 cookie = ev->Cookie;
@@ -165,8 +165,8 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvStatusResult::TPtr &ev, const TActorContext &ctx) {
-        TInstant now = TAppData::TimeProvider->Now(); 
-        ui64 durationMs = (now - GetStatusSentAt).MilliSeconds(); 
+        TInstant now = TAppData::TimeProvider->Now();
+        ui64 durationMs = (now - GetStatusSentAt).MilliSeconds();
         IntermediateResults->Stat.GetStatusLatencies.push_back(durationMs);
 
         ui64 cookie = ev->Cookie; // groupId
@@ -178,13 +178,13 @@ public:
             str << "KeyValue# " << TabletInfo->TabletID;
             str << " Unexpected EvStatusResult# " << NKikimrProto::EReplyStatus_Name(status).data();
             str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
-            str << " Now# " << now.MilliSeconds(); 
+            str << " Now# " << now.MilliSeconds();
             str << " GetStatusSentAt# " << GetStatusSentAt.MilliSeconds();
             str << " GotAt# " << IntermediateResults->Stat.IntermediateCreatedAt.MilliSeconds();
-            str << " LastSuccess# " << LastSuccess; 
-            str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds(); 
+            str << " LastSuccess# " << LastSuccess;
+            str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds();
             str << " EnqueuedAs# " << IntermediateResults->Stat.EnqueuedAs;
-            str << " ErrorReason# " << ev->Get()->ErrorReason; 
+            str << " ErrorReason# " << ev->Get()->ErrorReason;
             str << " Marker# KV28";
             ReplyErrorAndDie(ctx, str.Str(),
                 status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR);
@@ -195,7 +195,7 @@ public:
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
             str << " EvStatus cookie# " << (ui64)cookie;
-            str << " > GetStatuses# " << (ui32)IntermediateResults->GetStatuses.size(); 
+            str << " > GetStatuses# " << (ui32)IntermediateResults->GetStatuses.size();
             str << " Marker# KV29";
             ReplyErrorAndDie(ctx, str.Str());
             return;
@@ -241,17 +241,17 @@ public:
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
-            TInstant now = TAppData::TimeProvider->Now(); 
- 
+            TInstant now = TAppData::TimeProvider->Now();
+
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
             str << " Unexpected EvGet result# " << NKikimrProto::EReplyStatus_Name(status).data();
             str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
-            str << " Now# " << now.MilliSeconds(); 
+            str << " Now# " << now.MilliSeconds();
             str << " SentAt# " << request.SentAt.MilliSeconds();
             str << " GotAt# " << IntermediateResults->Stat.IntermediateCreatedAt.MilliSeconds();
-            str << " LastSuccess# " << LastSuccess; 
-            str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds(); 
+            str << " LastSuccess# " << LastSuccess;
+            str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds();
             str << " EnqueuedAs# " << IntermediateResults->Stat.EnqueuedAs;
             str << " ErrorReason# " << ev->Get()->ErrorReason;
             str << " Marker# KV26";
@@ -318,19 +318,19 @@ public:
     }
 
     bool UpdateRequest(const TActorContext &ctx) {
-        TInstant now = TAppData::TimeProvider->Now(); 
-        if (IntermediateResults->Deadline <= now) { 
+        TInstant now = TAppData::TimeProvider->Now();
+        if (IntermediateResults->Deadline <= now) {
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
             str << " Deadline reached Deadline# " << IntermediateResults->Deadline.MilliSeconds();
-            str << " Now# " << now.MilliSeconds(); 
+            str << " Now# " << now.MilliSeconds();
             str << " GotAt# " << IntermediateResults->Stat.IntermediateCreatedAt.MilliSeconds();
             str << " EnqueuedAs# " << IntermediateResults->Stat.EnqueuedAs;
             str << " Marker# KV30";
             ReplyErrorAndDie(ctx, str.Str(), NMsgBusProxy::MSTATUS_TIMEOUT);
             return true;
         }
-        LastSuccess = now; 
+        LastSuccess = now;
         bool sentSomething = false;
         while (SendSomeReadRequests(ctx)) {
             sentSomething = true;
@@ -403,16 +403,16 @@ public:
 
     void Handle(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        TInstant now = TAppData::TimeProvider->Now(); 
- 
+        TInstant now = TAppData::TimeProvider->Now();
+
         TStringStream str;
         str << "KeyValue# " << TabletInfo->TabletID;
         str << " Deadline reached before answering the request.";
         str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
-        str << " Now# " << now.MilliSeconds(); 
+        str << " Now# " << now.MilliSeconds();
         str << " GotAt# " << IntermediateResults->Stat.IntermediateCreatedAt.MilliSeconds();
-        str << " LastSuccess# " << LastSuccess; 
-        str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds(); 
+        str << " LastSuccess# " << LastSuccess;
+        str << " SinceLastSuccess# " << (now - LastSuccess).MilliSeconds();
         str << " EnqueuedAs# " << IntermediateResults->Stat.EnqueuedAs;
         str << " Marker# KV312";
         ReplyErrorAndDie(ctx, str.Str(), NMsgBusProxy::MSTATUS_TIMEOUT);
@@ -422,13 +422,13 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         // Check parameters and send requests
         if (IntermediateResults->Deadline != TInstant::Max()) {
-            TInstant now = TAppData::TimeProvider->Now(); 
-            if (IntermediateResults->Deadline <= now) { 
+            TInstant now = TAppData::TimeProvider->Now();
+            if (IntermediateResults->Deadline <= now) {
                 TStringStream str;
                 str << "KeyValue# " << TabletInfo->TabletID;
                 str << " Deadline reached before processing request.";
                 str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
-                str << " Now# " << now.MilliSeconds(); 
+                str << " Now# " << now.MilliSeconds();
                 str << " GotAt# " << IntermediateResults->Stat.IntermediateCreatedAt.MilliSeconds();
                 str << " EnqueuedAs# " << IntermediateResults->Stat.EnqueuedAs;
                 str << " Marker# KV311";
@@ -436,7 +436,7 @@ public:
                 return;
             }
 
-            const TDuration timeout = IntermediateResults->Deadline - now; 
+            const TDuration timeout = IntermediateResults->Deadline - now;
             ctx.Schedule(timeout, new TEvents::TEvWakeup());
         }
 
@@ -458,10 +458,10 @@ public:
     }
 
     void ReplyErrorAndDie(const TActorContext &ctx, TString errorDescription,
-            NMsgBusProxy::EResponseStatus status = NMsgBusProxy::MSTATUS_INTERNALERROR, 
-            NLog::EPriority logPriority = NLog::PRI_ERROR) { 
-        LOG_LOG_S(ctx, logPriority, NKikimrServices::KEYVALUE, errorDescription); 
- 
+            NMsgBusProxy::EResponseStatus status = NMsgBusProxy::MSTATUS_INTERNALERROR,
+            NLog::EPriority logPriority = NLog::PRI_ERROR) {
+        LOG_LOG_S(ctx, logPriority, NKikimrServices::KEYVALUE, errorDescription);
+
         THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
         if (IntermediateResults->HasCookie) {
             response->Record.SetCookie(IntermediateResults->Cookie);

@@ -6,7 +6,7 @@
     #include <cxxabi.h>
 #endif
 
-#include "type_name.h" 
+#include "type_name.h"
 
 namespace {
 
@@ -42,19 +42,19 @@ const char* NPrivate::TCppDemangler::Demangle(const char* name) {
 TString CppDemangle(const TString& name) {
     return NPrivate::TCppDemangler().Demangle(name.data());
 }
- 
-TString TypeName(const std::type_info& typeInfo) { 
+
+TString TypeName(const std::type_info& typeInfo) {
     TString demangled = CppDemangle(typeInfo.name()); // NOLINT(arcadia-typeid-name-restriction)
 #if defined(_linux_) || defined(_darwin_)
     SubstGlobal(demangled, STD_ABI_PREFIX, STD_PREFIX);
 #endif
     return demangled;
-} 
- 
-TString TypeName(const std::type_index& typeIndex) { 
+}
+
+TString TypeName(const std::type_index& typeIndex) {
     TString demangled = CppDemangle(typeIndex.name());
 #if defined(_linux_) || defined(_darwin_)
     SubstGlobal(demangled, STD_ABI_PREFIX, STD_PREFIX);
 #endif
     return demangled;
-} 
+}

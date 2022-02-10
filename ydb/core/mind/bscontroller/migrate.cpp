@@ -32,13 +32,13 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& front = Queue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM03, "Execute tx from queue", (Type, TypeName(*front))); 
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM03, "Execute tx from queue", (Type, TypeName(*front)));
             return front->Execute(txc);
         }
 
         void Complete(const TActorContext&) override {
             auto& front = Queue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM04, "Complete tx from queue", (Type, TypeName(*front))); 
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM04, "Complete tx from queue", (Type, TypeName(*front)));
             front->Complete();
             Queue.pop_front();
             if (Queue) {

@@ -3,7 +3,7 @@
 #include "event.h"
 #include "scheduler_cookie.h"
 #include "event_load.h"
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 
 namespace NActors {
     template <typename TEv, ui32 TEventType>

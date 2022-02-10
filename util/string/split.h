@@ -651,58 +651,58 @@ namespace NStringSplitPrivate {
     using TIteratorOf = typename TIteratorOfImpl<String>::type;
 
     template <class String>
-    class TStringSplitter; 
- 
-    template <class String> 
-    struct TIterState: public TStringBufOf<String> { 
-    public: 
+    class TStringSplitter;
+
+    template <class String>
+    struct TIterState: public TStringBufOf<String> {
+    public:
         using TStringBufType = TStringBufOf<String>;
         using TIterator = TIteratorOf<String>;
-        friend class TStringSplitter<String>; 
+        friend class TStringSplitter<String>;
 
         TIterState(const String& string) noexcept
-            : TStringBufType() 
-            , DelimiterEnd_(std::begin(string)) 
-            , OriginEnd_(std::end(string)) 
+            : TStringBufType()
+            , DelimiterEnd_(std::begin(string))
+            , OriginEnd_(std::end(string))
         {
         }
 
         template <
             typename Other,
-            typename = std::enable_if_t< 
-                std::is_convertible<Other, TStringBufType>::value>> 
+            typename = std::enable_if_t<
+                std::is_convertible<Other, TStringBufType>::value>>
         bool operator==(const Other& toCompare) const {
             return TStringBufType(*this) == TStringBufType(toCompare);
         }
 
         TIterator TokenStart() const noexcept {
-            return this->begin(); 
+            return this->begin();
         }
 
         TIterator TokenDelim() const noexcept {
-            return this->end(); 
+            return this->end();
         }
 
         TStringBufType Token() const noexcept {
-            return *this; 
+            return *this;
         }
 
         TStringBufType Delim() const noexcept {
-            return MakeStringBuf<TStringBufType>(TokenDelim(), DelimiterEnd_); 
+            return MakeStringBuf<TStringBufType>(TokenDelim(), DelimiterEnd_);
         }
 
     private:
-        void UpdateParentBuf(TIterator tokenStart, TIterator tokenDelim) noexcept { 
-            *static_cast<TStringBufType*>(this) = MakeStringBuf<TStringBufType>(tokenStart, tokenDelim); 
+        void UpdateParentBuf(TIterator tokenStart, TIterator tokenDelim) noexcept {
+            *static_cast<TStringBufType*>(this) = MakeStringBuf<TStringBufType>(tokenStart, tokenDelim);
         }
 
-        bool DelimiterIsEmpty() const noexcept { 
-            return TokenDelim() == DelimiterEnd_; 
+        bool DelimiterIsEmpty() const noexcept {
+            return TokenDelim() == DelimiterEnd_;
         }
- 
-    private: 
-        TIterator DelimiterEnd_; 
-        const TIterator OriginEnd_; 
+
+    private:
+        TIterator DelimiterEnd_;
+        const TIterator OriginEnd_;
     };
 
     template <class Base>
@@ -829,8 +829,8 @@ namespace NStringSplitPrivate {
         using TStringType = String;
         using TChar = typename TStringType::value_type;
         using TIteratorState = TIterState<TStringType>;
-        using TStringBufType = typename TIteratorState::TStringBufType; 
-        using TIterator = typename TIteratorState::TIterator; 
+        using TStringBufType = typename TIteratorState::TStringBufType;
+        using TIterator = typename TIteratorState::TIterator;
 
         /**
          * Base class for all split ranges that actually does the splitting.
@@ -841,18 +841,18 @@ namespace NStringSplitPrivate {
             inline TSplitRangeBase(OtherString&& s, Args&&... args)
                 : String_(std::forward<OtherString>(s))
                 , State_(String_)
-                , Delimiter_(std::forward<Args>(args)...) 
+                , Delimiter_(std::forward<Args>(args)...)
             {
             }
 
             inline TIteratorState* Next() {
-                if (State_.DelimiterIsEmpty()) { 
+                if (State_.DelimiterIsEmpty()) {
                     return nullptr;
                 }
 
-                const auto tokenBegin = State_.DelimiterEnd_; 
-                const auto tokenEnd = Delimiter_.Ptr()->Find(State_.DelimiterEnd_, State_.OriginEnd_); 
-                State_.UpdateParentBuf(tokenBegin, tokenEnd); 
+                const auto tokenBegin = State_.DelimiterEnd_;
+                const auto tokenEnd = Delimiter_.Ptr()->Find(State_.DelimiterEnd_, State_.OriginEnd_);
+                State_.UpdateParentBuf(tokenBegin, tokenEnd);
 
                 return &State_;
             }
@@ -860,7 +860,7 @@ namespace NStringSplitPrivate {
         private:
             TStringType String_;
             TIteratorState State_;
-            DelimStorage Delimiter_; 
+            DelimStorage Delimiter_;
         };
 
         template <class Base, class Filter>
@@ -888,7 +888,7 @@ namespace NStringSplitPrivate {
         struct TNonEmptyFilter {
             template <class TToken>
             inline bool Accept(const TToken* token) noexcept {
-                return !token->empty(); 
+                return !token->empty();
             }
         };
 
@@ -967,8 +967,8 @@ namespace NStringSplitPrivate {
                     --Count;
                     return false;
                 } else if (Count == 1) {
-                    token->DelimiterEnd_ = token->OriginEnd_; 
-                    token->UpdateParentBuf(token->TokenStart(), token->DelimiterEnd_); 
+                    token->DelimiterEnd_ = token->OriginEnd_;
+                    token->UpdateParentBuf(token->TokenStart(), token->DelimiterEnd_);
                     return false;
                 }
                 return true;

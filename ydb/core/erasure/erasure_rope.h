@@ -17,7 +17,7 @@
 namespace NKikimr {
 namespace NErasureRope {
 
-class TRopeHelpers { 
+class TRopeHelpers {
 public:
     using Iterator = TRope::TConstIterator;
 
@@ -51,13 +51,13 @@ public:
 
     static TRope RopeCopy(const TRope& src) {
         TRope copy = RopeUninitialized(src.GetSize());
-        TRopeUtils::Memcpy(copy.Begin(), src.Begin(), src.GetSize()); 
+        TRopeUtils::Memcpy(copy.Begin(), src.Begin(), src.GetSize());
         return copy;
     }
 
     static TRope RopeFromStringMemcpy(const TString& string) {
         TRope rope = RopeUninitialized(string.size());
-        TRopeUtils::Memcpy(rope.Begin(), string.data(), string.size()); 
+        TRopeUtils::Memcpy(rope.Begin(), string.data(), string.size());
         return rope;
     }
 
@@ -235,7 +235,7 @@ struct TPartFragment {
     ui64 Size = 0;
     ui64 PartSize = 0; // Full size of the part
 
-    mutable TRopeHelpers::TRopeFastView FastViewer; 
+    mutable TRopeHelpers::TRopeFastView FastViewer;
 
     TPartFragment() = default;
 
@@ -244,7 +244,7 @@ struct TPartFragment {
         Offset = lhs.Offset;
         Size = lhs.Size;
         PartSize = lhs.PartSize;
-        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope); 
+        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
         FastViewer.SetOffset(Offset);
     }
 
@@ -256,7 +256,7 @@ struct TPartFragment {
         Offset = lhs.Offset;
         Size = lhs.Size;
         PartSize = lhs.PartSize;
-        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope); 
+        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
         FastViewer.SetOffset(Offset);
         return *this;
     }
@@ -270,20 +270,20 @@ struct TPartFragment {
         Offset = 0;
         Size = 0;
         PartSize = 0;
-        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope); 
+        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
     }
 
     void UninitializedOwnedWhole(ui64 size) {
-        OwnedRope = TRopeHelpers::RopeUninitialized(size); 
-        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope); 
+        OwnedRope = TRopeHelpers::RopeUninitialized(size);
+        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
         Offset = 0;
         Size = size;
         PartSize = size;
     }
 
     void ResetToWhole(const TRope& whole) {
-        OwnedRope = TRopeHelpers::RopeCopy(whole); 
-        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope); 
+        OwnedRope = TRopeHelpers::RopeCopy(whole);
+        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
         Offset = 0;
         Size = whole.GetSize();
         PartSize = Size;
@@ -291,7 +291,7 @@ struct TPartFragment {
 
     void ReferenceTo(const TRope& whole) {
         OwnedRope = whole;
-        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope); 
+        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
         Offset = 0;
         Size = whole.GetSize();
         PartSize = Size;
@@ -299,7 +299,7 @@ struct TPartFragment {
 
     void ReferenceTo(const TRope &piece, ui64 offset, ui64 size, ui64 partSize) {
         OwnedRope = piece;
-        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope); 
+        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
         Offset = offset;
         Y_VERIFY(size <= piece.GetSize());
         Size = size;
@@ -329,8 +329,8 @@ struct TPartFragment {
     }
 
     void ResetWithFullCopy() {
-        OwnedRope = TRopeHelpers::RopeCopy(OwnedRope); 
-        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope); 
+        OwnedRope = TRopeHelpers::RopeCopy(OwnedRope);
+        FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
     }
 
     ui64 GetContiguousSize(ui64 pos) const {
@@ -359,7 +359,7 @@ struct TDataPartSet {
 
     bool Is8Aligned() const {
         for (ui32 i = 0; i < 8u; ++i) {
-            if ((PartsMask & (1u << i)) && !TRopeHelpers::Is8Aligned(Parts[i].OwnedRope)) { 
+            if ((PartsMask & (1u << i)) && !TRopeHelpers::Is8Aligned(Parts[i].OwnedRope)) {
                 return false;
             }
         }

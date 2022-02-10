@@ -12,7 +12,7 @@
 #include <util/stream/format.h>
 #include <util/stream/output.h>
 #include <util/system/backtrace.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 #include <util/system/execpath.h>
 #include <util/system/platform.h>
 #include <util/system/mlock.h>

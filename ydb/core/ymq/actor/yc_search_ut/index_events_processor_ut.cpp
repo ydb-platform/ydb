@@ -108,11 +108,11 @@ private:
 
         TAsyncStatus RunDataQuery(const TString& query) {
             auto status = Parent->TableClient->RetryOperation<NYdb::NTable::TDataQueryResult>(
-                    [query](NYdb::NTable::TSession session) { 
+                    [query](NYdb::NTable::TSession session) {
                         return session.ExecuteDataQuery(
                                 query, NYdb::NTable::TTxControl::BeginTx().CommitTx(),
                                 NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::Seconds(10))
-                        ).Apply([](const auto &future) mutable { 
+                        ).Apply([](const auto &future) mutable {
                             return future;
                         });
             });

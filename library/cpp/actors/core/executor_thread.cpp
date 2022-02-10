@@ -19,7 +19,7 @@
 #include <unistd.h>
 #endif
 
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 #include <util/system/datetime.h>
 
 LWTRACE_USING(ACTORLIB_PROVIDER)
@@ -92,7 +92,7 @@ namespace NActors {
             return "nullptr";
         }
         try {
-            return TypeName(*t); 
+            return TypeName(*t);
         } catch (...) {
             return "unknown-type";
         }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/util/rope.h> 
+#include <library/cpp/actors/util/rope.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/align.h>
 
@@ -57,23 +57,23 @@ public:
     }
 };
 
-class TRopeAlignedBufferBackend : public IRopeChunkBackend { 
-    TAlignedBuf Buffer; 
- 
-public: 
-    TRopeAlignedBufferBackend(size_t size, size_t align) 
-        : Buffer(size, align) 
-    {} 
- 
-    TData GetData() const override { 
-        return {reinterpret_cast<const char *>(Buffer.Data()), Buffer.Size()}; 
-    } 
- 
-    size_t GetCapacity() const override { 
-        return Buffer.Size(); 
-    } 
-}; 
- 
+class TRopeAlignedBufferBackend : public IRopeChunkBackend {
+    TAlignedBuf Buffer;
+
+public:
+    TRopeAlignedBufferBackend(size_t size, size_t align)
+        : Buffer(size, align)
+    {}
+
+    TData GetData() const override {
+        return {reinterpret_cast<const char *>(Buffer.Data()), Buffer.Size()};
+    }
+
+    size_t GetCapacity() const override {
+        return Buffer.Size();
+    }
+};
+
 void inline Print(const ui8* out, size_t size) {
     for (ui32 i = 0; i < size; ++i) {
         if (i % 16 == 0) {

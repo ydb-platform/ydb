@@ -7,9 +7,9 @@
 #include <google/protobuf/message.h>
 #include <contrib/libs/grpc/include/grpcpp/support/sync_stream.h>
 #include <util/string/builder.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 
-#define TEST_CASE_NAME (TypeName(*this).rfind("TTestCase") != TString::npos ? TypeName(*this).substr(TypeName(*this).rfind("TTestCase") + 9) : TypeName(*this)) 
+#define TEST_CASE_NAME (TypeName(*this).rfind("TTestCase") != TString::npos ? TypeName(*this).substr(TypeName(*this).rfind("TTestCase") + 9) : TypeName(*this))
 
 static constexpr int DEBUG_LOG_LEVEL = 7;
 

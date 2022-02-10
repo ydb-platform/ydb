@@ -4,7 +4,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/system/types.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 #include <util/stream/output.h>
 
 namespace NKikimr {

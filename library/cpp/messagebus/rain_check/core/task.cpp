@@ -2,7 +2,7 @@
 
 #include <library/cpp/messagebus/actor/temp_tls_vector.h>
 
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 #include <util/system/tls.h>
 
 using namespace NRainCheck;
@@ -208,7 +208,7 @@ ITaskBase* TTaskRunnerBase::CurrentTaskImpl() {
 }
 
 TString TTaskRunnerBase::GetStatusSingleLine() {
-    return TypeName(*Impl); 
+    return TypeName(*Impl);
 }
 
 bool NRainCheck::AreWeInsideTask() {

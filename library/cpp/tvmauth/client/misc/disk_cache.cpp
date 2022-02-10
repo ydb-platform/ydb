@@ -11,7 +11,7 @@
 #include <util/stream/str.h>
 #include <util/system/fs.h>
 #include <util/system/sysstat.h>
-#include <util/system/tempfile.h> 
+#include <util/system/tempfile.h>
 
 #include <exception>
 

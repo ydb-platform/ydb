@@ -1,36 +1,36 @@
 #include "dsproxy_mon.h"
 
-static const TVector<float> Percentiles1 = {1.0f}; 
-static const TVector<float> Percentiles4 = {0.5f, 0.9f, 0.95f, 1.0f}; 
- 
+static const TVector<float> Percentiles1 = {1.0f};
+static const TVector<float> Percentiles4 = {0.5f, 0.9f, 0.95f, 1.0f};
+
 namespace NKikimr {
 
 TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
         const TIntrusivePtr<NMonitoring::TDynamicCounters>& percentileCounters,
         const TIntrusivePtr<NMonitoring::TDynamicCounters>& overviewCounters,
         const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-        const TIntrusivePtr<TDsProxyNodeMon> &nodeMon, 
-        bool constructLimited) 
+        const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+        bool constructLimited)
     : NodeMon(nodeMon)
     , Counters(counters)
-    , PercentileCounters(percentileCounters) 
-    , ResponseGroup(percentileCounters->GetSubgroup("subsystem", "response")) 
+    , PercentileCounters(percentileCounters)
+    , ResponseGroup(percentileCounters->GetSubgroup("subsystem", "response"))
     , LatencyOverviewGroup(overviewCounters->GetSubgroup("subsystem", "latency"))
     , EventGroup(Counters->GetSubgroup("subsystem", "event"))
     , HandoffGroup(Counters->GetSubgroup("subsystem", "handoff"))
     , ActiveRequestsGroup(Counters->GetSubgroup("subsystem", "requests"))
 {
     if (info) {
-        const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo(); 
-        GroupIdGen = (ui64(dyn.GroupId) << 32) | dyn.GroupGeneration; 
+        const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo();
+        GroupIdGen = (ui64(dyn.GroupId) << 32) | dyn.GroupGeneration;
     }
 
-    BlockResponseTime.Initialize(ResponseGroup, "event", "block", "Response in millisec", Percentiles1); 
+    BlockResponseTime.Initialize(ResponseGroup, "event", "block", "Response in millisec", Percentiles1);
 
-    if (!constructLimited) { 
-        BecomeFull(); 
-    } 
- 
+    if (!constructLimited) {
+        BecomeFull();
+    }
+
     // event counters
     EventPut = EventGroup->GetCounter("EvPut", true);
     EventPutBytes = EventGroup->GetCounter("EvPutBytes", true);
@@ -103,38 +103,38 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
     RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
 }
 
-void TBlobStorageGroupProxyMon::BecomeFull() { 
-    if (IsLimitedMon) { 
-        ThroughputGroup = PercentileCounters->GetSubgroup("subsystem", "throughput"); 
+void TBlobStorageGroupProxyMon::BecomeFull() {
+    if (IsLimitedMon) {
+        ThroughputGroup = PercentileCounters->GetSubgroup("subsystem", "throughput");
         PutTabletLogThroughput.reset(new TThroughputMeter(4, ThroughputGroup, "event", "putTabletLog", "bytes per second", Percentiles4));
         PutAsyncBlobThroughput.reset(new TThroughputMeter(4, ThroughputGroup, "event", "putAsyncBlob", "bytes per second", Percentiles4));
         PutUserDataThroughput.reset(new TThroughputMeter(4, ThroughputGroup, "event", "putUserData", "bytes per second", Percentiles4));
         PutThroughput.reset(new TThroughputMeter(4, ThroughputGroup, "event", "any", "bytes per second", Percentiles4));
- 
-        PutResponseTime.Initialize(ResponseGroup, "event", "put", "Response in millisec", Percentiles4); 
- 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> putTabletLogGroup = 
-            ResponseGroup->GetSubgroup("event", "putTabletLog"); 
- 
-        PutTabletLogResponseTime.Initialize(ResponseGroup, "event", "putTabletLogAll", "ms", Percentiles1); 
- 
-        PutTabletLogResponseTime256.Initialize(putTabletLogGroup, "size", "256", "Response in millisec", Percentiles1); 
-        PutTabletLogResponseTime512.Initialize(putTabletLogGroup, "size", "512", "Response in millisec", Percentiles1); 
- 
-        PutAsyncBlobResponseTime.Initialize(ResponseGroup, "event", "putAsyncBlob", "Response in millisec", Percentiles1); 
-        PutUserDataResponseTime.Initialize(ResponseGroup, "event", "putUserData", "Response in millisec", Percentiles1); 
- 
-        GetResponseTime.Initialize(ResponseGroup, "event", "get", "Response in millisec", Percentiles1); 
- 
-        DiscoverResponseTime.Initialize(ResponseGroup, "event", "discover", "Response in millisec", Percentiles1); 
-        IndexRestoreGetResponseTime.Initialize(ResponseGroup, "event", "indexRestoreGet", "Response in millisec", 
-                Percentiles1); 
-        RangeResponseTime.Initialize(ResponseGroup, "event", "range", "Response in millisec", Percentiles1); 
+
+        PutResponseTime.Initialize(ResponseGroup, "event", "put", "Response in millisec", Percentiles4);
+
+        TIntrusivePtr<NMonitoring::TDynamicCounters> putTabletLogGroup =
+            ResponseGroup->GetSubgroup("event", "putTabletLog");
+
+        PutTabletLogResponseTime.Initialize(ResponseGroup, "event", "putTabletLogAll", "ms", Percentiles1);
+
+        PutTabletLogResponseTime256.Initialize(putTabletLogGroup, "size", "256", "Response in millisec", Percentiles1);
+        PutTabletLogResponseTime512.Initialize(putTabletLogGroup, "size", "512", "Response in millisec", Percentiles1);
+
+        PutAsyncBlobResponseTime.Initialize(ResponseGroup, "event", "putAsyncBlob", "Response in millisec", Percentiles1);
+        PutUserDataResponseTime.Initialize(ResponseGroup, "event", "putUserData", "Response in millisec", Percentiles1);
+
+        GetResponseTime.Initialize(ResponseGroup, "event", "get", "Response in millisec", Percentiles1);
+
+        DiscoverResponseTime.Initialize(ResponseGroup, "event", "discover", "Response in millisec", Percentiles1);
+        IndexRestoreGetResponseTime.Initialize(ResponseGroup, "event", "indexRestoreGet", "Response in millisec",
+                Percentiles1);
+        RangeResponseTime.Initialize(ResponseGroup, "event", "range", "Response in millisec", Percentiles1);
         PatchResponseTime.Initialize(ResponseGroup, "event", "patch", "Response in millisec", Percentiles1);
-    } 
-    IsLimitedMon = false; 
-} 
- 
+    }
+    IsLimitedMon = false;
+}
+
 void TBlobStorageGroupProxyMon::SerializeToWhiteboard(NKikimrWhiteboard::TBSGroupStateInfo& pb, ui32 groupId) const {
     NKikimrWhiteboard::EFlag flag = NKikimrWhiteboard::EFlag::Green;
 
@@ -163,9 +163,9 @@ void TBlobStorageGroupProxyMon::SerializeToWhiteboard(NKikimrWhiteboard::TBSGrou
 }
 
 bool TBlobStorageGroupProxyMon::GetGroupIdGen(ui32 *groupId, ui32 *groupGen) const {
-    ui64 value = GroupIdGen; 
-    if (value != Max<ui64>()) { 
-        const ui64 mask = Max<ui32>(); 
+    ui64 value = GroupIdGen;
+    if (value != Max<ui64>()) {
+        const ui64 mask = Max<ui32>();
         *groupId = (value >> 32) & mask;
         *groupGen = value & mask;
         return true;
@@ -197,10 +197,10 @@ void TBlobStorageGroupProxyMon::Update() {
 }
 
 void TBlobStorageGroupProxyMon::ThroughputUpdate() {
-    if (!IsLimitedMon) { 
-        for (auto *sensor : {&PutTabletLogThroughput, &PutAsyncBlobThroughput, &PutUserDataThroughput, &PutThroughput}) { 
+    if (!IsLimitedMon) {
+        for (auto *sensor : {&PutTabletLogThroughput, &PutAsyncBlobThroughput, &PutUserDataThroughput, &PutThroughput}) {
             sensor->get()->UpdateHistogram();
-        } 
+        }
     }
 }
 

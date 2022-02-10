@@ -11,7 +11,7 @@
 #include <library/cpp/messagebus/scheduler/scheduler.h>
 
 #include <util/generic/object_counter.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 #include <util/stream/output.h>
 
 #include <typeinfo>
@@ -49,7 +49,7 @@ struct TObjectCountCheck {
         }
 
         void operator()() {
-            UNIT_ASSERT_VALUES_EQUAL_C(0L, TObjectCounter<T>::ObjectCount(), TypeName<T>()); 
+            UNIT_ASSERT_VALUES_EQUAL_C(0L, TObjectCounter<T>::ObjectCount(), TypeName<T>());
         }
     };
 

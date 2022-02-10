@@ -54,7 +54,7 @@ TDataProviderInitializer GetDqDataProviderInitializer(
 
         info.Source = CreateDqDataSource(state, execTransformerFactory);
         info.Sink = CreateDqDataSink(state);
-        info.OpenSession = [dqGateway, metrics, gatewaysConfig, state]( 
+        info.OpenSession = [dqGateway, metrics, gatewaysConfig, state](
             const TString& sessionId,
             const TString& username,
             const TOperationProgressWriter& progressWriter,

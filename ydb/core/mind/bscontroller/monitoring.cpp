@@ -391,17 +391,17 @@ public:
 
     TString GenerateHtml() {
         TStringStream s;
-        Self->RenderHeader(s); 
- 
+        Self->RenderHeader(s);
+
         HTML(s) {
             ui64 offset = Offset;
 
             H3() {
-                s << "Health events"; 
+                s << "Health events";
             }
-            H3() { 
-                s << "Health-related operations since " << Since.ToRfc822StringLocal(); 
-            } 
+            H3() {
+                s << "Health-related operations since " << Since.ToRfc822StringLocal();
+            }
             TABLE_CLASS("table") {
                 TABLEHEAD() {
                     TABLER() {
@@ -418,7 +418,7 @@ public:
                         const TEvent& event = *it;
                         TABLER() {
                             TABLED() { s << event.Timestamp.ToStringUpToSeconds(); }
-                            TABLED() { s << event.Timestamp.ToRfc822StringLocal(); } 
+                            TABLED() { s << event.Timestamp.ToRfc822StringLocal(); }
                             TABLED() { s << event.Message; }
                             TABLED() {
                                 for (const TReassignItem& item : event.Reassign) {
@@ -457,8 +457,8 @@ public:
                 renderPageLink("Last page", lastPageOffset);
             }
         }
- 
-        Self->RenderFooter(s); 
+
+        Self->RenderFooter(s);
         return s.Str();
     }
 
@@ -643,8 +643,8 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
             Execute(new TTxMonEvent_HealthEvents(ev->Sender, cgi, this));
             return true;
         } else if (page == "SelfHeal") {
-            bool hiddenAction = cgi.Has("action") && cgi.Get("action") == "disableSelfHeal"; 
-            if (cgi.Has("disable") && cgi.Get("disable") == "1" && hiddenAction) { 
+            bool hiddenAction = cgi.Has("action") && cgi.Get("action") == "disableSelfHeal";
+            if (cgi.Has("disable") && cgi.Get("disable") == "1" && hiddenAction) {
                 Register(new TDisableSelfHealActor(ev->Sender, TStringBuilder() << "?TabletID="
                     << TabletID() << "&page=SelfHeal"));
             } else {

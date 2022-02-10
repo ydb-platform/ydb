@@ -377,9 +377,9 @@ namespace NKikimr::NBsController {
             const TInstant now = TActivationContext::Now();
 
             HTML(out) {
-                H2() { 
-                    out << "BlobStorage Controller"; 
-                } 
+                H2() {
+                    out << "BlobStorage Controller";
+                }
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         out << "Self-Heal status";
@@ -387,14 +387,14 @@ namespace NKikimr::NBsController {
                     DIV_CLASS("panel-body") {
                         out << (selfHealEnabled ? "Enabled" : "Disabled");
                         if (selfHealEnabled) {
-                            out << "<br/>" << Endl; 
-                            out << "<form method='POST'>" << Endl; 
-                            out << "<input type='hidden' name='TabletID' value='" << TabletId << "'>" << Endl; 
-                            out << "<input type='hidden' name='page' value='SelfHeal'>" << Endl; 
-                            out << "<input type='hidden' name='disable' value='1'>" << Endl; 
-                            out << "<input type='hidden' name='action' value='disableSelfHeal'>" << Endl; 
-                            out << "<input class='btn btn-primary' type='submit' value='DISABLE NOW'/>" << Endl; 
-                            out << "</form>"; 
+                            out << "<br/>" << Endl;
+                            out << "<form method='POST'>" << Endl;
+                            out << "<input type='hidden' name='TabletID' value='" << TabletId << "'>" << Endl;
+                            out << "<input type='hidden' name='page' value='SelfHeal'>" << Endl;
+                            out << "<input type='hidden' name='disable' value='1'>" << Endl;
+                            out << "<input type='hidden' name='action' value='disableSelfHeal'>" << Endl;
+                            out << "<input class='btn btn-primary' type='submit' value='DISABLE NOW'/>" << Endl;
+                            out << "</form>";
                         }
                     }
                 }

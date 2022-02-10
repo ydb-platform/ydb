@@ -11,8 +11,8 @@ namespace NProtoBuf {
         TFieldPath();
         TFieldPath(const Descriptor* msgType, const TStringBuf& path); // throws exception if path doesn't exist
         TFieldPath(const TVector<const FieldDescriptor*>& path);
-        TFieldPath(const TFieldPath&) = default; 
-        TFieldPath& operator=(const TFieldPath&) = default; 
+        TFieldPath(const TFieldPath&) = default;
+        TFieldPath& operator=(const TFieldPath&) = default;
 
         bool InitUnsafe(const Descriptor* msgType, const TStringBuf path); // noexcept
         void Init(const Descriptor* msgType, const TStringBuf& path);      // throws

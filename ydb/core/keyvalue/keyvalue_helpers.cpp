@@ -111,9 +111,9 @@ void THelpers::DbEraseCollect(ISimpleDb &db, const TActorContext &ctx) {
     db.Erase(key, ctx);
 }
 
-THelpers::TGenerationStep THelpers::GenerationStep(const TLogoBlobID &id) { 
-    return std::make_tuple(id.Generation(), id.Step()); 
-} 
- 
+THelpers::TGenerationStep THelpers::GenerationStep(const TLogoBlobID &id) {
+    return std::make_tuple(id.Generation(), id.Step());
+}
+
 } // NKeyValue
 } // NKikimr

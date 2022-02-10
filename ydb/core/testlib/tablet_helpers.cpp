@@ -301,7 +301,7 @@ namespace NKikimr {
                 return TTestActorRuntime::EEventAction::PROCESS;
 
             HasReboot0 = true;
-            TString eventType = (event->HasEvent() && event->GetBase()) ? TypeName(*event->GetBase()) : "nullptr"; 
+            TString eventType = (event->HasEvent() && event->GetBase()) ? TypeName(*event->GetBase()) : "nullptr";
 
             if (KillOnCommit && IsCommitResult(event)) {
                 if (ENABLE_REBOOT_DISPATCH_LOG)

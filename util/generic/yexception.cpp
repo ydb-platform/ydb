@@ -2,7 +2,7 @@
 #include "yexception.h"
 
 #include <util/system/backtrace.h>
-#include <util/system/type_name.h> 
+#include <util/system/type_name.h>
 
 #include <cxxabi.h>
 
@@ -11,7 +11,7 @@
 #include <cstdio>
 
 TString FormatExc(const std::exception& exception) {
-    return TString::Join(TStringBuf("("), TypeName(exception), TStringBuf(") "), exception.what()); 
+    return TString::Join(TStringBuf("("), TypeName(exception), TStringBuf(") "), exception.what());
 }
 
 TString CurrentExceptionMessage() {

@@ -230,11 +230,11 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
 
 
 TVector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const TCoCompare& predicate,
-    const TExprNode* rawLambdaArg, const TExprBase& input) 
+    const TExprNode* rawLambdaArg, const TExprBase& input)
 {
     TVector<std::pair<TExprBase, TExprBase>> out;
 
-    auto convertNode = [rawLambdaArg](const TExprBase& node) -> TMaybeNode<TExprBase> { 
+    auto convertNode = [rawLambdaArg](const TExprBase& node) -> TMaybeNode<TExprBase> {
         if (node.Maybe<TCoNull>()) {
             return node;
         }
@@ -539,7 +539,7 @@ TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, TExprContext
         return NullNode;
     }
 
-    auto parameters = ExtractComparisonParameters(predicate, lambdaArg, input); 
+    auto parameters = ExtractComparisonParameters(predicate, lambdaArg, input);
 
     if (parameters.empty()) {
         return NullNode;

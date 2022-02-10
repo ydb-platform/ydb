@@ -431,7 +431,7 @@ public:
             return dbCounters->GetCounterBlock(serviceName, requestName);
         }
 
-        dbCounters = DbCounters.InsertIfAbsentWithInit(database, [&database, this] { 
+        dbCounters = DbCounters.InsertIfAbsentWithInit(database, [&database, this] {
             auto counters = MakeIntrusive<TGRpcDbCounters>();
 
             if (ActorSystem) {

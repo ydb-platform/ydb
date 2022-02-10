@@ -41,7 +41,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters());
     TIntrusivePtr<TDsProxyNodeMon> nodeMon(new TDsProxyNodeMon(counters, true));
     TIntrusivePtr<TBlobStorageGroupProxyMon> mon(new TBlobStorageGroupProxyMon(counters, counters, counters,
-                group.GetInfo(), nodeMon, false)); 
+                group.GetInfo(), nodeMon, false));
 
     TLogContext logCtx(NKikimrServices::BS_PROXY_PUT, false);
     logCtx.LogAcc.IsLogEnabled = false;
@@ -177,7 +177,7 @@ struct TTestPutAllOk {
         , Data(AlphaData(DataSize))
         , Counters(new NMonitoring::TDynamicCounters())
         , NodeMon(new TDsProxyNodeMon(Counters, true))
-        , Mon(new TBlobStorageGroupProxyMon(Counters, Counters, Counters, Group.GetInfo(), NodeMon, false)) 
+        , Mon(new TBlobStorageGroupProxyMon(Counters, Counters, Counters, Group.GetInfo(), NodeMon, false))
         , LogCtx(NKikimrServices::BS_PROXY_PUT, false)
         , PartSets(BlobCount)
     {

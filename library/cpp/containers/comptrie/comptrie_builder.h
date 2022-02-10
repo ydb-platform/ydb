@@ -46,7 +46,7 @@ public:
     typedef typename TCompactTrieKeySelector<TSymbol>::TKey TKey;
     typedef typename TCompactTrieKeySelector<TSymbol>::TKeyBuf TKeyBuf;
 
-    explicit TCompactTrieBuilder(TCompactTrieBuilderFlags flags = CTBF_NONE, TPacker packer = TPacker(), IAllocator* alloc = TDefaultAllocator::Instance());
+    explicit TCompactTrieBuilder(TCompactTrieBuilderFlags flags = CTBF_NONE, TPacker packer = TPacker(), IAllocator* alloc = TDefaultAllocator::Instance()); 
 
     // All Add.. methods return true if it was a new key, false if the key already existed.
 
@@ -72,14 +72,14 @@ public:
     }
 
     bool Find(const TSymbol* key, size_t keylen, TData* value) const;
-    bool Find(const TKeyBuf& key, TData* value = nullptr) const {
+    bool Find(const TKeyBuf& key, TData* value = nullptr) const { 
         return Find(key.data(), key.size(), value);
     }
 
-    bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value = nullptr) const;
-    bool FindLongestPrefix(const TKeyBuf& key, size_t* prefixLen, TData* value = nullptr) const {
+    bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value = nullptr) const; 
+    bool FindLongestPrefix(const TKeyBuf& key, size_t* prefixLen, TData* value = nullptr) const { 
         return FindLongestPrefix(key.data(), key.size(), prefixLen, value);
-    }
+    } 
 
     size_t Save(IOutputStream& os) const;
     size_t SaveAndDestroy(IOutputStream& os);

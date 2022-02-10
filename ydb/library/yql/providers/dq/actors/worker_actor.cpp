@@ -70,7 +70,7 @@ class TDqWorker: public TRichActor<TDqWorker>
     static constexpr ui32 INPUT_SIZE = 100000;
 
 public:
-    static constexpr char ActorName[] = "YQL_DQ_WORKER";
+    static constexpr char ActorName[] = "YQL_DQ_WORKER"; 
 
     explicit TDqWorker(
         const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,

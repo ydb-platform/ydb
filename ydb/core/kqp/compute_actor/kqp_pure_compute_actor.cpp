@@ -34,7 +34,7 @@ public:
 
     TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask&& task,
         IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits) 
         : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkActorFactory), settings, memoryLimits)
         , ComputeCtx(settings.StatsMode)
     {
@@ -317,8 +317,8 @@ private:
 } // anonymous namespace
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask&& task,
-    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
-    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
+    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory, 
+    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits) 
 {
     return new TKqpComputeActor(executerId, txId, std::move(task), std::move(sourceActorFactory),
         std::move(sinkActorFactory), settings, memoryLimits);

@@ -22,19 +22,19 @@ class TDqSourceFactory;
 
 const i64 PQReadDefaultFreeSpace = 16_MB;
 
-std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
-    NPq::NProto::TDqPqTopicSource&& settings,
+std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor( 
+    NPq::NProto::TDqPqTopicSource&& settings, 
     ui64 inputIndex,
     TTxId txId,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    NYdb::TDriver driver,
+    NYdb::TDriver driver, 
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    IDqSourceActor::ICallbacks* callback,
+    IDqSourceActor::ICallbacks* callback, 
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     i64 bufferSize = PQReadDefaultFreeSpace
     );
 
-void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory); 
 
 } // namespace NYql::NDq

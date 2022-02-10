@@ -1,31 +1,31 @@
-#include "action.h"
+#include "action.h" 
 
-#include <util/generic/is_in.h>
+#include <util/generic/is_in.h> 
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
-namespace {
-
-constexpr ui32 FOR_QUEUE = 1;
-constexpr ui32 FOR_USER = 2;
-constexpr ui32 FOR_MESSAGE = 4;
-constexpr ui32 BATCH = 8;
-constexpr ui32 FAST = 16;
-constexpr ui32 PRIVATE = 32;
+namespace { 
+ 
+constexpr ui32 FOR_QUEUE = 1; 
+constexpr ui32 FOR_USER = 2; 
+constexpr ui32 FOR_MESSAGE = 4; 
+constexpr ui32 BATCH = 8; 
+constexpr ui32 FAST = 16; 
+constexpr ui32 PRIVATE = 32; 
 constexpr ui32 YMQ_FOR_QUEUE = 64;
 constexpr ui32 YMQ_FOR_USER = 128;
-
-struct TActionProps {
-    TString StringName;
+ 
+struct TActionProps { 
+    TString StringName; 
     TString ConvMethodName;
-    EAction Action;
-    ui32 Flags;
-    EAction NonBatchAction;
-};
-
-static const TActionProps ActionProps[] = {
+    EAction Action; 
+    ui32 Flags; 
+    EAction NonBatchAction; 
+}; 
+ 
+static const TActionProps ActionProps[] = { 
     {"Unknown",                      "unknown",                         EAction::Unknown,                       0,                                      EAction::Unknown},
     {"ChangeMessageVisibility",      "change_message_visibility",       EAction::ChangeMessageVisibility,       FOR_QUEUE | FOR_MESSAGE | FAST,         EAction::ChangeMessageVisibility},
     {"ChangeMessageVisibilityBatch", "change_message_visibility_batch", EAction::ChangeMessageVisibilityBatch,  FOR_QUEUE | FOR_MESSAGE | BATCH | FAST, EAction::ChangeMessageVisibility},
@@ -51,99 +51,99 @@ static const TActionProps ActionProps[] = {
     {"ListPermissions",              "list_permissions",                EAction::ListPermissions,               FOR_USER | FAST,                        EAction::ListPermissions},
     {"ListDeadLetterSourceQueues",   "list_dead_letter_source_queues",  EAction::ListDeadLetterSourceQueues,    FOR_QUEUE | FAST,                       EAction::ListDeadLetterSourceQueues},
     {"CountQueues",                  "count_queues",                    EAction::CountQueues,                   FOR_USER | FAST | PRIVATE,              EAction::CountQueues},
-};
-
-static_assert(Y_ARRAY_SIZE(ActionProps) == EAction::ActionsArraySize);
-
-THashMap<TString, EAction> GetStringToAction() {
-    THashMap<TString, EAction> ret;
-    for (int action = EAction::Unknown + 1; action < EAction::ActionsArraySize; ++action) {
-        const TActionProps& props = ActionProps[action];
-        ret[props.StringName] = props.Action;
-    }
-    return ret;
-}
-
-const TActionProps& GetProps(EAction action) {
-    int index = static_cast<int>(action);
-    if (index < 0 || index >= EAction::ActionsArraySize) {
-        index = EAction::Unknown;
-    }
-    return ActionProps[index];
-}
-
-const THashMap<TString, EAction> StringToAction = GetStringToAction();
-
-} // namespace
-
+}; 
+ 
+static_assert(Y_ARRAY_SIZE(ActionProps) == EAction::ActionsArraySize); 
+ 
+THashMap<TString, EAction> GetStringToAction() { 
+    THashMap<TString, EAction> ret; 
+    for (int action = EAction::Unknown + 1; action < EAction::ActionsArraySize; ++action) { 
+        const TActionProps& props = ActionProps[action]; 
+        ret[props.StringName] = props.Action; 
+    } 
+    return ret; 
+} 
+ 
+const TActionProps& GetProps(EAction action) { 
+    int index = static_cast<int>(action); 
+    if (index < 0 || index >= EAction::ActionsArraySize) { 
+        index = EAction::Unknown; 
+    } 
+    return ActionProps[index]; 
+} 
+ 
+const THashMap<TString, EAction> StringToAction = GetStringToAction(); 
+ 
+} // namespace 
+ 
 EAction ActionFromString(const TString& name) {
-    auto ai = StringToAction.find(name);
-    if (ai == StringToAction.end()) {
+    auto ai = StringToAction.find(name); 
+    if (ai == StringToAction.end()) { 
         return EAction::Unknown;
     }
     return ai->second;
 }
 
-const TString& ActionToString(EAction action) {
-    return GetProps(action).StringName;
-}
-
+const TString& ActionToString(EAction action) { 
+    return GetProps(action).StringName; 
+} 
+ 
 const TString& ActionToCloudConvMethod(EAction action) {
     return GetProps(action).ConvMethodName;
 }
 
-bool IsBatchAction(EAction action) {
-    return GetProps(action).Flags & BATCH;
-}
-
-EAction GetNonBatchAction(EAction action) {
-    return GetProps(action).NonBatchAction;
-}
-
-bool IsActionForQueue(EAction action) {
-    return GetProps(action).Flags & FOR_QUEUE;
-}
-
+bool IsBatchAction(EAction action) { 
+    return GetProps(action).Flags & BATCH; 
+} 
+ 
+EAction GetNonBatchAction(EAction action) { 
+    return GetProps(action).NonBatchAction; 
+} 
+ 
+bool IsActionForQueue(EAction action) { 
+    return GetProps(action).Flags & FOR_QUEUE; 
+} 
+ 
 bool IsActionForQueueYMQ(EAction action) {
     return GetProps(action).Flags & YMQ_FOR_QUEUE;
 }
 
-bool IsActionForUser(EAction action) {
-    return GetProps(action).Flags & FOR_USER;
-}
-
+bool IsActionForUser(EAction action) { 
+    return GetProps(action).Flags & FOR_USER; 
+} 
+ 
 bool IsActionForUserYMQ(EAction action) {
     return GetProps(action).Flags & YMQ_FOR_USER;
 }
 
-bool IsActionForMessage(EAction action) {
-    return GetProps(action).Flags & FOR_MESSAGE;
-}
-
-bool IsFastAction(EAction action) {
-    return GetProps(action).Flags & FAST;
-}
-
-bool IsPrivateAction(EAction action) {
-    return GetProps(action).Flags & PRIVATE;
-}
-
-bool IsProxyAction(EAction action) {
-#define ACTION_CASE(a) case EAction::a: \
-    return true;
-
-    switch (action) {
-        ENUMERATE_PROXY_ACTIONS(ACTION_CASE)
-    default:
-        return false;
-    }
-
-#undef ACTION_CASE
-}
-
-} // namespace NKikimr::NSQS
-
-template<>
-void Out<NKikimr::NSQS::EAction>(IOutputStream& out, typename TTypeTraits<NKikimr::NSQS::EAction>::TFuncParam action) {
-    out << ActionToString(action);
-}
+bool IsActionForMessage(EAction action) { 
+    return GetProps(action).Flags & FOR_MESSAGE; 
+} 
+ 
+bool IsFastAction(EAction action) { 
+    return GetProps(action).Flags & FAST; 
+} 
+ 
+bool IsPrivateAction(EAction action) { 
+    return GetProps(action).Flags & PRIVATE; 
+} 
+ 
+bool IsProxyAction(EAction action) { 
+#define ACTION_CASE(a) case EAction::a: \ 
+    return true; 
+ 
+    switch (action) { 
+        ENUMERATE_PROXY_ACTIONS(ACTION_CASE) 
+    default: 
+        return false; 
+    } 
+ 
+#undef ACTION_CASE 
+} 
+ 
+} // namespace NKikimr::NSQS 
+ 
+template<> 
+void Out<NKikimr::NSQS::EAction>(IOutputStream& out, typename TTypeTraits<NKikimr::NSQS::EAction>::TFuncParam action) { 
+    out << ActionToString(action); 
+} 

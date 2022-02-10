@@ -863,17 +863,17 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
     }
 
     Y_UNIT_TEST(TestGetNoAdd) {
-        NSc::TValue v = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5}}");
+        NSc::TValue v = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5}}"); 
         UNIT_ASSERT(v.GetNoAdd("a") != nullptr);
         UNIT_ASSERT(v.GetNoAdd("b") != nullptr);
         UNIT_ASSERT(v.GetNoAdd("c") != nullptr);
         UNIT_ASSERT(v.GetNoAdd("d") == nullptr);
         UNIT_ASSERT(v.GetNoAdd("value") == nullptr);
-
+ 
         NSc::TValue* child = v.GetNoAdd("c");
         UNIT_ASSERT(child != nullptr);
         (*child)["e"]["f"] = 42;
-        const NSc::TValue expectedResult = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5,e:{f:42}}}");
-        UNIT_ASSERT_VALUES_EQUAL(v, expectedResult);
-    }
+        const NSc::TValue expectedResult = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5,e:{f:42}}}"); 
+        UNIT_ASSERT_VALUES_EQUAL(v, expectedResult); 
+    } 
 };

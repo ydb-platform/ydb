@@ -176,9 +176,9 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
     TConfig Config;
 
-    TYdbConnectionPtr YdbConnection;
+    TYdbConnectionPtr YdbConnection; 
 
-    ::NYq::TYqSharedResources::TPtr YqSharedResources;
+    ::NYq::TYqSharedResources::TPtr YqSharedResources; 
     TDbPool::TPtr DbPool;
 
     static constexpr int64_t InitialRevision = 1;
@@ -195,7 +195,7 @@ public:
         : Counters(counters)
         , FinalStatusCounters(counters)
         , Config(config, common)
-        , YqSharedResources(yqSharedResources)
+        , YqSharedResources(yqSharedResources) 
         , CredProviderFactory(credProviderFactory)
     {
     }
@@ -392,46 +392,46 @@ public:
         const auto& request = ev->Get()->Request;
         NYql::TIssues issues = ValidateEvent(ev);
 
-        if (request.has_content()) {
-            const YandexQuery::BindingContent& content = request.content();
-            if (content.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.acl.visibility field is not specified"));
-            }
+        if (request.has_content()) { 
+            const YandexQuery::BindingContent& content = request.content(); 
+            if (content.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) { 
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.acl.visibility field is not specified")); 
+            } 
 
             if (content.name() != to_lower(content.name())) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Incorrect binding name: " + content.name() + ". Please use only lower case"));
             }
 
-            if (!content.has_setting()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.setting field is not specified"));
-            }
+            if (!content.has_setting()) { 
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.setting field is not specified")); 
+            } 
 
-            const YandexQuery::BindingSetting& setting = content.setting();
+            const YandexQuery::BindingSetting& setting = content.setting(); 
             if (!Config.AvailableBindings.contains(setting.binding_case())) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding of the specified type is disabled"));
             }
 
-            switch (setting.binding_case()) {
-            case YandexQuery::BindingSetting::kDataStreams: {
-                const YandexQuery::DataStreamsBinding dataStreams = setting.data_streams();
-                if (!dataStreams.has_schema()) {
-                    issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
-                }
-                break;
-            }
-            case YandexQuery::BindingSetting::BINDING_NOT_SET: {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding is not set"));
-                break;
-            }
-                // Do not replace with default. Adding a new binding should cause a compilation error
-            case YandexQuery::BindingSetting::kObjectStorage:
-                break;
-            }
-        } else {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding field is not specified"));
+            switch (setting.binding_case()) { 
+            case YandexQuery::BindingSetting::kDataStreams: { 
+                const YandexQuery::DataStreamsBinding dataStreams = setting.data_streams(); 
+                if (!dataStreams.has_schema()) { 
+                    issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden")); 
+                } 
+                break; 
+            } 
+            case YandexQuery::BindingSetting::BINDING_NOT_SET: { 
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding is not set")); 
+                break; 
+            } 
+                // Do not replace with default. Adding a new binding should cause a compilation error 
+            case YandexQuery::BindingSetting::kObjectStorage: 
+                break; 
+            } 
+        } else { 
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding field is not specified")); 
         }
 
-        return issues;
+        return issues; 
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
@@ -803,7 +803,7 @@ private:
         Send(sender, new T(issues), 0, cookie);
         requestCounters->InFly->Dec();
         requestCounters->Error->Inc();
-        requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+        requestCounters->LatencyMs->Collect(delta.MilliSeconds()); 
     }
 
     static YandexQuery::CommonMeta CreateCommonMeta(const TString& id, const TString& user, const TInstant& startTime, int64_t revision) {

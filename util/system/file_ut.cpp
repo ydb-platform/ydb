@@ -210,7 +210,7 @@ void TFileTest::TestLocale() {
     UNIT_ASSERT_VALUES_EQUAL(f.GetName(), "Имя.txt");
     UNIT_ASSERT_VALUES_EQUAL(f.GetLength(), 0);
     f.Close();
-    UNIT_ASSERT(NFs::Remove("Имя.txt"));
+    UNIT_ASSERT(NFs::Remove("Имя.txt")); 
 #ifdef _unix_
     setlocale(LC_CTYPE, loc);
 #endif

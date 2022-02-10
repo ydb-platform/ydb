@@ -2,11 +2,11 @@ UNITTEST_FOR(ydb/library/yql/providers/solomon/async_io)
 
 OWNER(
     d-mokhnatkin
-    g:yq
+    g:yq 
     g:yql
 )
 
-INCLUDE(${ARCADIA_ROOT}/kikimr/yq/tools/solomon_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/kikimr/yq/tools/solomon_emulator/recipe/recipe.inc) 
 
 SRCS(
     dq_solomon_write_actor_ut.cpp

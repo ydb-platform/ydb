@@ -1,53 +1,53 @@
 #pragma once
 #include "defs.h"
 #include "quoter_service.h"
-
+ 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-
+ 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/lwtrace/shuttle.h>
-
+ 
 #include <util/generic/set.h>
 #include <util/generic/deque.h>
 
 namespace NKikimr {
 namespace NQuoter {
 
-extern const TString CONSUMED_COUNTER_NAME;
-extern const TString REQUESTED_COUNTER_NAME;
-extern const TString RESOURCE_COUNTER_SENSOR_NAME;
-extern const TString QUOTER_COUNTER_SENSOR_NAME;
-extern const TString QUOTER_SERVICE_COUNTER_SENSOR_NAME;
-extern const TString RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME;
-extern const TString RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME;
-extern const TString RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME;
-extern const TString RESOURCE_DROPPED_COUNTER_SENSOR_NAME;
-extern const TString RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME;
-extern const TString RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME;
-extern const TString REQUEST_QUEUE_TIME_SENSOR_NAME;
-extern const TString REQUEST_TIME_SENSOR_NAME;
-extern const TString REQUESTS_COUNT_SENSOR_NAME;
-extern const TString ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME;
-extern const TString DISCONNECTS_COUNTER_SENSOR_NAME;
-
+extern const TString CONSUMED_COUNTER_NAME; 
+extern const TString REQUESTED_COUNTER_NAME; 
+extern const TString RESOURCE_COUNTER_SENSOR_NAME; 
+extern const TString QUOTER_COUNTER_SENSOR_NAME; 
+extern const TString QUOTER_SERVICE_COUNTER_SENSOR_NAME; 
+extern const TString RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME; 
+extern const TString RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME; 
+extern const TString RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME; 
+extern const TString RESOURCE_DROPPED_COUNTER_SENSOR_NAME; 
+extern const TString RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME; 
+extern const TString RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME; 
+extern const TString REQUEST_QUEUE_TIME_SENSOR_NAME; 
+extern const TString REQUEST_TIME_SENSOR_NAME; 
+extern const TString REQUESTS_COUNT_SENSOR_NAME; 
+extern const TString ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME; 
+extern const TString DISCONNECTS_COUNTER_SENSOR_NAME; 
+ 
 using EResourceOperator = TEvQuota::EResourceOperator;
 using EStatUpdatePolicy = TEvQuota::EStatUpdatePolicy;
 using EUpdateState = TEvQuota::EUpdateState;
 
 struct TResource;
 
-NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets();
-
+NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets(); 
+ 
 struct TRequest {
     TActorId Source = TActorId();
     ui64 EventCookie = 0;
 
-    TInstant StartTime;
+    TInstant StartTime; 
     EResourceOperator Operator = EResourceOperator::Unknown;
     TInstant Deadline = TInstant::Max();
     ui32 ResourceLeaf = Max<ui32>();
@@ -57,9 +57,9 @@ struct TRequest {
 
     ui32 PrevByOwner = Max<ui32>();
     ui32 NextByOwner = Max<ui32>();
-
-    // tracing
-    mutable NLWTrace::TOrbit Orbit;
+ 
+    // tracing 
+    mutable NLWTrace::TOrbit Orbit; 
 };
 
 class TReqState {
@@ -102,9 +102,9 @@ struct TResourceLeaf {
 
     TString QuoterName; // optional
     TString ResourceName;
-
-    TInstant StartQueueing = TInstant::Zero(); // optional phase
-    TInstant StartCharging = TInstant::Zero(); // when resource is processed
+ 
+    TInstant StartQueueing = TInstant::Zero(); // optional phase 
+    TInstant StartCharging = TInstant::Zero(); // when resource is processed 
 };
 
 class TResState {
@@ -120,9 +120,9 @@ public:
 struct TResource {
     const ui64 QuoterId;
     const ui64 ResourceId;
-    const TString Quoter;
+    const TString Quoter; 
     const TString Resource;
-    const TQuoterServiceConfig& QuoterServiceConfig;
+    const TQuoterServiceConfig& QuoterServiceConfig; 
 
     TInstant Activation = TInstant::Zero();
     TInstant NextTick = TInstant::Zero();
@@ -132,56 +132,56 @@ struct TResource {
     ui32 QueueTail = Max<ui32>();
 
     ui32 QueueSize = 0;
-    double QueueWeight = 0;
+    double QueueWeight = 0; 
 
     TInstant LastAllocated = TInstant::Max();
 
-    double FreeBalance = 0.0; // could be used w/o pace limit
-    double Balance = 0.0; // total balance, but under pace limit
-    double TickRate = 0.0;
+    double FreeBalance = 0.0; // could be used w/o pace limit 
+    double Balance = 0.0; // total balance, but under pace limit 
+    double TickRate = 0.0; 
 
     TDuration TickSize = TDuration::Seconds(1);
     TMap<ui32, TEvQuota::TUpdateTick> QuotaChannels;
 
     // stats block
     TEvQuota::EStatUpdatePolicy StatUpdatePolicy = TEvQuota::EStatUpdatePolicy::Never;
-    double AmountConsumed = 0.0; // consumed from last stats notification
+    double AmountConsumed = 0.0; // consumed from last stats notification 
     TTimeSeriesMap<double> History; // consumption history from last stats notification
-    TInstant StartStarvationTime = TInstant::Zero();
+    TInstant StartStarvationTime = TInstant::Zero(); 
 
-    struct {
-        NMonitoring::TDynamicCounters::TCounterPtr Consumed;
-        NMonitoring::TDynamicCounters::TCounterPtr Requested;
-        NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
-        NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecInStarvation;
-        NMonitoring::THistogramPtr RequestQueueTime;
-        NMonitoring::THistogramPtr RequestTime;
-    } Counters;
-
-    TResource(ui64 quoterId, ui64 resourceId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig, const NMonitoring::TDynamicCounterPtr& quoterCounters)
+    struct { 
+        NMonitoring::TDynamicCounters::TCounterPtr Consumed; 
+        NMonitoring::TDynamicCounters::TCounterPtr Requested; 
+        NMonitoring::TDynamicCounters::TCounterPtr RequestsCount; 
+        NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecInStarvation; 
+        NMonitoring::THistogramPtr RequestQueueTime; 
+        NMonitoring::THistogramPtr RequestTime; 
+    } Counters; 
+ 
+    TResource(ui64 quoterId, ui64 resourceId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig, const NMonitoring::TDynamicCounterPtr& quoterCounters) 
         : QuoterId(quoterId)
         , ResourceId(resourceId)
-        , Quoter(quoter)
+        , Quoter(quoter) 
         , Resource(resource)
-        , QuoterServiceConfig(quoterServiceConfig)
-    {
-        auto counters = quoterCounters->GetSubgroup(RESOURCE_COUNTER_SENSOR_NAME, resource ? resource : "__StaticRatedResource");
-        Counters.Consumed = counters->GetCounter(CONSUMED_COUNTER_NAME, true);
-        Counters.Requested = counters->GetCounter(REQUESTED_COUNTER_NAME, true);
-        Counters.RequestQueueTime = counters->GetHistogram(REQUEST_QUEUE_TIME_SENSOR_NAME, GetLatencyHistogramBuckets());
-        Counters.RequestTime = counters->GetHistogram(REQUEST_TIME_SENSOR_NAME, GetLatencyHistogramBuckets());
-        Counters.RequestsCount = counters->GetCounter(REQUESTS_COUNT_SENSOR_NAME, true);
-        Counters.ElapsedMicrosecInStarvation = counters->GetCounter(ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME, true);
-    }
+        , QuoterServiceConfig(quoterServiceConfig) 
+    { 
+        auto counters = quoterCounters->GetSubgroup(RESOURCE_COUNTER_SENSOR_NAME, resource ? resource : "__StaticRatedResource"); 
+        Counters.Consumed = counters->GetCounter(CONSUMED_COUNTER_NAME, true); 
+        Counters.Requested = counters->GetCounter(REQUESTED_COUNTER_NAME, true); 
+        Counters.RequestQueueTime = counters->GetHistogram(REQUEST_QUEUE_TIME_SENSOR_NAME, GetLatencyHistogramBuckets()); 
+        Counters.RequestTime = counters->GetHistogram(REQUEST_TIME_SENSOR_NAME, GetLatencyHistogramBuckets()); 
+        Counters.RequestsCount = counters->GetCounter(REQUESTS_COUNT_SENSOR_NAME, true); 
+        Counters.ElapsedMicrosecInStarvation = counters->GetCounter(ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME, true); 
+    } 
 
     void ApplyQuotaChannel(const TEvQuota::TUpdateTick &tick);
     TDuration Charge(double amount, TInstant now); // Zero - fullfiled, Max - not in current tick, Duration - in current tick, but not right now due to pace limit
-    TDuration Charge(TRequest& request, TResourceLeaf& leaf, TInstant now);
+    TDuration Charge(TRequest& request, TResourceLeaf& leaf, TInstant now); 
     void ChargeUsedAmount(double amount, TInstant now);
-
-    void MarkStartedCharging(TRequest& request, TResourceLeaf& leaf, TInstant now);
-    void StartStarvation(TInstant now);
-    void StopStarvation(TInstant now);
+ 
+    void MarkStartedCharging(TRequest& request, TResourceLeaf& leaf, TInstant now); 
+    void StartStarvation(TInstant now); 
+    void StopStarvation(TInstant now); 
 };
 
 struct TScheduleTick {
@@ -198,24 +198,24 @@ struct TQuoterState {
     TSet<ui32> WaitingQueueResolve; // => requests
     TMap<TString, TSet<ui32>> WaitingResource; // => requests
 
-    struct {
-        NMonitoring::TDynamicCounterPtr QuoterCounters;
-    } Counters;
-
-    TResource& GetOrCreate(ui64 quoterId, ui64 resId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig);
+    struct { 
+        NMonitoring::TDynamicCounterPtr QuoterCounters; 
+    } Counters; 
+ 
+    TResource& GetOrCreate(ui64 quoterId, ui64 resId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig); 
     bool Empty();
 
-    void InitCounters(const NMonitoring::TDynamicCounterPtr& serviceCounters) {
-        Counters.QuoterCounters = serviceCounters->GetSubgroup(QUOTER_COUNTER_SENSOR_NAME, QuoterName);
-    }
-
-    TQuoterState(const TString& quoterName, const NMonitoring::TDynamicCounterPtr& serviceCounters)
+    void InitCounters(const NMonitoring::TDynamicCounterPtr& serviceCounters) { 
+        Counters.QuoterCounters = serviceCounters->GetSubgroup(QUOTER_COUNTER_SENSOR_NAME, QuoterName); 
+    } 
+ 
+    TQuoterState(const TString& quoterName, const NMonitoring::TDynamicCounterPtr& serviceCounters) 
         : QuoterName(quoterName)
-    {
-        if (serviceCounters) {
-            InitCounters(serviceCounters);
-        }
-    }
+    { 
+        if (serviceCounters) { 
+            InitCounters(serviceCounters); 
+        } 
+    } 
 };
 
 class TQuoterService : public TActorBootstrapped<TQuoterService> {
@@ -241,7 +241,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     TMap<ui64, TDeque<TEvQuota::TProxyStat>> StatsToPublish; // quoterId -> stats
 
     struct {
-        NMonitoring::TDynamicCounterPtr ServiceCounters;
+        NMonitoring::TDynamicCounterPtr ServiceCounters; 
         NMonitoring::TDynamicCounters::TCounterPtr ActiveQuoterProxies;
         NMonitoring::TDynamicCounters::TCounterPtr ActiveProxyResources;
         NMonitoring::TDynamicCounters::TCounterPtr KnownLocalResources;
@@ -250,7 +250,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
         NMonitoring::TDynamicCounters::TCounterPtr ResultOk;
         NMonitoring::TDynamicCounters::TCounterPtr ResultDeadline;
         NMonitoring::TDynamicCounters::TCounterPtr ResultError;
-        NMonitoring::THistogramPtr RequestLatency;
+        NMonitoring::THistogramPtr RequestLatency; 
     } Counters;
 
     enum class EInitLeafStatus {
@@ -258,17 +258,17 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
         Forbid,
         Charged,
         Wait,
-        GenericError,
+        GenericError, 
     };
 
     void ScheduleNextTick(TInstant requested, TResource &quores);
     TInstant TimeToGranularity(TInstant rawTime);
-    void TryTickSchedule(TInstant now = TInstant::Zero());
+    void TryTickSchedule(TInstant now = TInstant::Zero()); 
 
     void ReplyRequest(TRequest &request, ui32 reqIdx, TEvQuota::TEvClearance::EResult resultCode);
     void ForgetRequest(TRequest &request, ui32 reqIdx);
     void DeclineRequest(TRequest &request, ui32 reqIdx);
-    void FailRequest(TRequest &request, ui32 reqIdx);
+    void FailRequest(TRequest &request, ui32 reqIdx); 
     void AllowRequest(TRequest &request, ui32 reqIdx);
     void DeadlineRequest(TRequest &request, ui32 reqIdx);
 
@@ -297,18 +297,18 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntry &navigate, decltype(QuotersIndex)::iterator indexIt, decltype(Quoters)::iterator quoterIt);
     void BreakQuoter(decltype(QuotersIndex)::iterator indexIt, decltype(Quoters)::iterator quoterIt);
     void BreakQuoter(decltype(Quoters)::iterator quoterIt);
-
-    TString PrintEvent(const TEvQuota::TEvRequest::TPtr& ev);
+ 
+    TString PrintEvent(const TEvQuota::TEvRequest::TPtr& ev); 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::QUOTER_SERVICE_ACTOR;
     }
 
-    TQuoterService(const TQuoterServiceConfig &config);
-    ~TQuoterService();
+    TQuoterService(const TQuoterServiceConfig &config); 
+    ~TQuoterService(); 
 
-    void Bootstrap();
-
+    void Bootstrap(); 
+ 
     STFUNC(StateFunc) {
         Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {

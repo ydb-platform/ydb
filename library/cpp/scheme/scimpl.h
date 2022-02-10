@@ -280,13 +280,13 @@ namespace NSc {
 
             TDict::const_iterator it = Dict.find(key);
             return it != Dict.end() ? it->second : TValue::DefaultValue();
-        }
-
+        } 
+ 
         TValue* GetNoAdd(TStringBuf key) {
             if (!IsDict()) {
                 return nullptr;
             }
-
+ 
             return Dict.FindPtr(key);
         }
 
@@ -582,7 +582,7 @@ namespace NSc {
     TValue& TValue::Back() {
         return CoreMutable().Back();
     }
-
+ 
     const TValue& TValue::Back() const {
         const TArray& arr = GetArray();
         return arr.empty() ? DefaultValue() : arr.back();

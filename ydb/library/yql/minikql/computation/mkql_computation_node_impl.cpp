@@ -82,36 +82,36 @@ EValueRepresentation TUnboxedImmutableComputationNode::GetRepresentation() const
     return RepresentationKind;
 }
 
-template <class IComputationNodeInterface, bool SerializableState>
-TStatefulComputationNode<IComputationNodeInterface, SerializableState>::TStatefulComputationNode(TComputationMutables& mutables, EValueRepresentation kind)
+template <class IComputationNodeInterface, bool SerializableState> 
+TStatefulComputationNode<IComputationNodeInterface, SerializableState>::TStatefulComputationNode(TComputationMutables& mutables, EValueRepresentation kind) 
     : ValueIndex(mutables.CurValueIndex++), RepresentationKind(kind)
-{
-    if constexpr (SerializableState) {
-        mutables.SerializableValues.push_back(ValueIndex);
-    }
-}
+{ 
+    if constexpr (SerializableState) { 
+        mutables.SerializableValues.push_back(ValueIndex); 
+    } 
+} 
 
-template <class IComputationNodeInterface, bool SerializableState>
-IComputationNode* TStatefulComputationNode<IComputationNodeInterface, SerializableState>::AddDependence(const IComputationNode* node) {
+template <class IComputationNodeInterface, bool SerializableState> 
+IComputationNode* TStatefulComputationNode<IComputationNodeInterface, SerializableState>::AddDependence(const IComputationNode* node) { 
     Dependencies.emplace_back(node);
     return this;
 }
 
-template <class IComputationNodeInterface, bool SerializableState>
-EValueRepresentation TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetRepresentation() const {
+template <class IComputationNodeInterface, bool SerializableState> 
+EValueRepresentation TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetRepresentation() const { 
     return RepresentationKind;
 }
 
-template <class IComputationNodeInterface, bool SerializableState>
-ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetIndex() const { return ValueIndex; }
+template <class IComputationNodeInterface, bool SerializableState> 
+ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetIndex() const { return ValueIndex; } 
 
-template <class IComputationNodeInterface, bool SerializableState>
-ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetDependencesCount() const { return Dependencies.size(); }
+template <class IComputationNodeInterface, bool SerializableState> 
+ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetDependencesCount() const { return Dependencies.size(); } 
 
-template class TStatefulComputationNode<IComputationNode, false>;
-template class TStatefulComputationNode<IComputationExternalNode, false>;
-template class TStatefulComputationNode<IComputationNode, true>;
-template class TStatefulComputationNode<IComputationExternalNode, true>;
+template class TStatefulComputationNode<IComputationNode, false>; 
+template class TStatefulComputationNode<IComputationExternalNode, false>; 
+template class TStatefulComputationNode<IComputationNode, true>; 
+template class TStatefulComputationNode<IComputationExternalNode, true>; 
 
 void TExternalComputationNode::CollectDependentIndexes(const IComputationNode*, TIndexesMap& map) const {
     map.emplace(ValueIndex, RepresentationKind);

@@ -6,7 +6,7 @@
 #include "sysstat.h"
 #include "fstat.h"
 #include <util/folder/dirut.h>
-#include <util/folder/path.h>
+#include <util/folder/path.h> 
 
 //WARNING: on windows the test must be run with administative rules
 
@@ -114,7 +114,7 @@ void RunRenameTest(TFsPath src, TFsPath dst) {
         file.Write("123", 3);
     }
 
-    UNIT_ASSERT(NFs::Rename(src, dst));
+    UNIT_ASSERT(NFs::Rename(src, dst)); 
     UNIT_ASSERT(NFs::Exists(dst));
     UNIT_ASSERT(!NFs::Exists(src));
 
@@ -128,7 +128,7 @@ void RunRenameTest(TFsPath src, TFsPath dst) {
         TFile file(dir1 / src, CreateNew | WrOnly);
         file.Write("123", 3);
     }
-    UNIT_ASSERT(NFs::Rename(dir1, dir2));
+    UNIT_ASSERT(NFs::Rename(dir1, dir2)); 
     UNIT_ASSERT(NFs::Exists(dir2 / src));
     UNIT_ASSERT(!NFs::Exists(dir1));
 
@@ -137,11 +137,11 @@ void RunRenameTest(TFsPath src, TFsPath dst) {
         UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 3);
     }
 
-    UNIT_ASSERT(!NFs::Remove(src));
-    UNIT_ASSERT(NFs::Remove(dst));
-    UNIT_ASSERT(!NFs::Remove(dir1));
-    UNIT_ASSERT(NFs::Remove(dir2 / src));
-    UNIT_ASSERT(NFs::Remove(dir2));
+    UNIT_ASSERT(!NFs::Remove(src)); 
+    UNIT_ASSERT(NFs::Remove(dst)); 
+    UNIT_ASSERT(!NFs::Remove(dir1)); 
+    UNIT_ASSERT(NFs::Remove(dir2 / src)); 
+    UNIT_ASSERT(NFs::Remove(dir2)); 
 }
 
 void TFsTest::TestRename() {
@@ -182,8 +182,8 @@ static void RunHardlinkTest(const TFsPath& src, const TFsPath& dst) {
         UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 5);
     }
 
-    UNIT_ASSERT(NFs::Remove(dst));
-    UNIT_ASSERT(NFs::Remove(src));
+    UNIT_ASSERT(NFs::Remove(dst)); 
+    UNIT_ASSERT(NFs::Remove(src)); 
 }
 
 void TFsTest::TestHardlink() {
@@ -260,20 +260,20 @@ static void RunSymLinkTest(TString fileLocalName, TString symLinkName) {
         UNIT_ASSERT(fs.IsSymlink());
     }
 
-    UNIT_ASSERT(NFs::Remove(symLinkName));
+    UNIT_ASSERT(NFs::Remove(symLinkName)); 
     UNIT_ASSERT(NFs::Exists(srcFile));
 
-    UNIT_ASSERT(NFs::Remove(linkD1));
+    UNIT_ASSERT(NFs::Remove(linkD1)); 
     UNIT_ASSERT(NFs::Exists(srcFile));
 
-    UNIT_ASSERT(!NFs::Remove(subDir));
+    UNIT_ASSERT(!NFs::Remove(subDir)); 
 
-    UNIT_ASSERT(NFs::Remove(srcFile));
-    UNIT_ASSERT(NFs::Remove(linkD2));
-    UNIT_ASSERT(NFs::Remove(dangling));
-    UNIT_ASSERT(NFs::Remove(subsubDir1));
-    UNIT_ASSERT(NFs::Remove(subsubDir2));
-    UNIT_ASSERT(NFs::Remove(subDir));
+    UNIT_ASSERT(NFs::Remove(srcFile)); 
+    UNIT_ASSERT(NFs::Remove(linkD2)); 
+    UNIT_ASSERT(NFs::Remove(dangling)); 
+    UNIT_ASSERT(NFs::Remove(subsubDir1)); 
+    UNIT_ASSERT(NFs::Remove(subsubDir2)); 
+    UNIT_ASSERT(NFs::Remove(subDir)); 
 }
 
 void TFsTest::TestSymlink() {

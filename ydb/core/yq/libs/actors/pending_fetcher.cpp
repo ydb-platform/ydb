@@ -57,19 +57,19 @@
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
+#define LOG_E(stream) \ 
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream) 
+#define LOG_I(stream) \ 
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream) 
+#define LOG_D(stream) \ 
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream) 
 
 namespace NYq {
 
 using namespace NActors;
 
-namespace {
-
+namespace { 
+ 
 struct TEvGetTaskInternalResponse : public NActors::TEventLocal<TEvGetTaskInternalResponse, NActors::TEvents::TSystem::Completed> {
     bool Success = false;
     const TIssues Issues;
@@ -85,17 +85,17 @@ struct TEvGetTaskInternalResponse : public NActors::TEventLocal<TEvGetTaskIntern
     { }
 };
 
-template <class TElement>
-TVector<TElement> VectorFromProto(const ::google::protobuf::RepeatedPtrField<TElement>& field) {
-    return { field.begin(), field.end() };
-}
-
-} // namespace
-
+template <class TElement> 
+TVector<TElement> VectorFromProto(const ::google::protobuf::RepeatedPtrField<TElement>& field) { 
+    return { field.begin(), field.end() }; 
+} 
+ 
+} // namespace 
+ 
 class TYqlPendingFetcher : public NActors::TActorBootstrapped<TYqlPendingFetcher> {
 public:
     TYqlPendingFetcher(
-        const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NYq::TYqSharedResources::TPtr& yqSharedResources, 
         const ::NYq::NConfig::TCommonConfig& commonConfig,
         const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
         const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
@@ -105,13 +105,13 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
-        const ::NYq::NCommon::TServiceCounters& serviceCounters,
+        const ::NYq::NCommon::TServiceCounters& serviceCounters, 
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr s3Gateway,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const NMonitoring::TDynamicCounterPtr& clientCounters
         )
-        : YqSharedResources(yqSharedResources)
+        : YqSharedResources(yqSharedResources) 
         , CommonConfig(commonConfig)
         , CheckpointCoordinatorConfig(checkpointCoordinatorConfig)
         , PrivateApiConfig(privateApiConfig)
@@ -124,11 +124,11 @@ public:
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
-        , PqCmConnections(std::move(pqCmConnections))
+        , PqCmConnections(std::move(pqCmConnections)) 
         , Guid(CreateGuidAsString())
         , ClientCounters(clientCounters)
         , Client(
-            YqSharedResources->YdbDriver,
+            YqSharedResources->YdbDriver, 
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
@@ -177,7 +177,7 @@ private:
         HasRunningRequest = false;
         LOG_D("Got GetTask response from PrivateApi");
         if (!ev->Get()->Success) {
-            LOG_E("Error with GetTask: "<< ev->Get()->Issues.ToString());
+            LOG_E("Error with GetTask: "<< ev->Get()->Issues.ToString()); 
             return;
         }
 
@@ -192,7 +192,7 @@ private:
     }
 
     void GetPendingTask() {
-        LOG_D("Request Private::GetTask" << ", Owner: " << Guid << ", Host: " << HostName());
+        LOG_D("Request Private::GetTask" << ", Owner: " << Guid << ", Host: " << HostName()); 
         Yq::Private::GetTaskRequest request;
         request.set_owner_id(Guid);
         request.set_host(HostName());
@@ -222,7 +222,7 @@ private:
     }
 
     void RunTask(const Yq::Private::GetTaskResult::Task& task) {
-        LOG_D("NewTask:"
+        LOG_D("NewTask:" 
               << " Scope: " << task.scope()
               << " Id: " << task.query_id().value()
               << " UserId: " << task.user_id()
@@ -234,7 +234,7 @@ private:
         }
 
         TRunActorParams params(
-            YqSharedResources->YdbDriver, S3Gateway,
+            YqSharedResources->YdbDriver, S3Gateway, 
             FunctionRegistry, RandomProvider,
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
             DqCompFactory, PqCmConnections,
@@ -251,7 +251,7 @@ private:
             task.execute_mode(),
             GetEntityIdAsString(CommonConfig.GetIdsPrefix(), EEntityType::RESULT),
             task.state_load_mode(),
-            task.disposition(),
+            task.disposition(), 
             task.status(),
             task.sensor_labels().at("cloud_id"),
             VectorFromProto(task.result_set_meta()),
@@ -275,7 +275,7 @@ private:
         hFunc(TEvGetTaskInternalResponse, HandleResponse)
         );
 
-    NYq::TYqSharedResources::TPtr YqSharedResources;
+    NYq::TYqSharedResources::TPtr YqSharedResources; 
     NYq::NConfig::TCommonConfig CommonConfig;
     NYq::NConfig::TCheckpointCoordinatorConfig CheckpointCoordinatorConfig;
     NYq::NConfig::TPrivateApiConfig PrivateApiConfig;
@@ -287,7 +287,7 @@ private:
     TIntrusivePtr<IRandomProvider> RandomProvider;
     NKikimr::NMiniKQL::TComputationNodeFactory DqCompFactory;
     TIntrusivePtr<IDqGateway> DqGateway;
-    ::NYq::NCommon::TServiceCounters ServiceCounters;
+    ::NYq::NCommon::TServiceCounters ServiceCounters; 
 
     IModuleResolver::TPtr ModuleResolver;
 
@@ -298,7 +298,7 @@ private:
 
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     const IHTTPGateway::TPtr S3Gateway;
-    const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
+    const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections; 
 
     const TString Guid; //OwnerId
     const NMonitoring::TDynamicCounterPtr ClientCounters;
@@ -309,7 +309,7 @@ private:
 
 
 NActors::IActor* CreatePendingFetcher(
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NYq::TYqSharedResources::TPtr& yqSharedResources, 
     const ::NYq::NConfig::TCommonConfig& commonConfig,
     const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
     const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
@@ -319,14 +319,14 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYq::NCommon::TServiceCounters& serviceCounters, 
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const NMonitoring::TDynamicCounterPtr& clientCounters)
 {
     return new TYqlPendingFetcher(
-        yqSharedResources,
+        yqSharedResources, 
         commonConfig,
         checkpointCoordinatorConfig,
         privateApiConfig,
@@ -338,7 +338,7 @@ NActors::IActor* CreatePendingFetcher(
         dqCompFactory,
         serviceCounters,
         credentialsFactory,
-        s3Gateway,
+        s3Gateway, 
         std::move(pqCmConnections),
         clientCounters);
 }

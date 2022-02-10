@@ -716,59 +716,59 @@ TStatus AnnotateDqCrossJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateDqSource(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 2, ctx)) {
-        return TStatus::Error;
-    }
-
-    const TExprNode* dataSourceChild = input->Child(TDqSource::idx_DataSource);
-    if (!EnsureDataSource(*dataSourceChild, ctx)) {
-        return TStatus::Error;
-    }
-
-    const TExprNode* settingsChild = input->Child(TDqSource::idx_Settings);
-    if (!EnsureCallable(*settingsChild, ctx)) {
-        return TStatus::Error;
-    }
-
-    input->SetTypeAnn(settingsChild->GetTypeAnn());
-    return TStatus::Ok;
-}
-
-TStatus AnnotateDqSink(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 3, ctx)) {
-        return TStatus::Error;
-    }
-
-    const TExprNode* dataSinkChild = input->Child(TDqSink::idx_DataSink);
-    if (!EnsureDataSink(*dataSinkChild, ctx)) {
-        return TStatus::Error;
-    }
-
-    const TExprNode* settingsChild = input->Child(TDqSink::idx_Settings);
-    if (!EnsureCallable(*settingsChild, ctx)) {
-        return TStatus::Error;
-    }
-
-    const TExprNode* indexChild = input->Child(TDqSink::idx_Index);
-    if (!EnsureAtom(*indexChild, ctx)) {
-        return TStatus::Error;
-    }
-
-    input->SetTypeAnn(settingsChild->GetTypeAnn());
-    return TStatus::Ok;
-}
-
-TStatus AnnotateDqQuery(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 2, ctx)) {
-        return TStatus::Error;
-    }
-
-    TDqQuery query(input);
-    input->SetTypeAnn(query.World().Ref().GetTypeAnn());
-    return TStatus::Ok;
-}
-
+TStatus AnnotateDqSource(const TExprNode::TPtr& input, TExprContext& ctx) { 
+    if (!EnsureArgsCount(*input, 2, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    const TExprNode* dataSourceChild = input->Child(TDqSource::idx_DataSource); 
+    if (!EnsureDataSource(*dataSourceChild, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    const TExprNode* settingsChild = input->Child(TDqSource::idx_Settings); 
+    if (!EnsureCallable(*settingsChild, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    input->SetTypeAnn(settingsChild->GetTypeAnn()); 
+    return TStatus::Ok; 
+} 
+ 
+TStatus AnnotateDqSink(const TExprNode::TPtr& input, TExprContext& ctx) { 
+    if (!EnsureArgsCount(*input, 3, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    const TExprNode* dataSinkChild = input->Child(TDqSink::idx_DataSink); 
+    if (!EnsureDataSink(*dataSinkChild, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    const TExprNode* settingsChild = input->Child(TDqSink::idx_Settings); 
+    if (!EnsureCallable(*settingsChild, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    const TExprNode* indexChild = input->Child(TDqSink::idx_Index); 
+    if (!EnsureAtom(*indexChild, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    input->SetTypeAnn(settingsChild->GetTypeAnn()); 
+    return TStatus::Ok; 
+} 
+ 
+TStatus AnnotateDqQuery(const TExprNode::TPtr& input, TExprContext& ctx) { 
+    if (!EnsureArgsCount(*input, 2, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    TDqQuery query(input); 
+    input->SetTypeAnn(query.World().Ref().GetTypeAnn()); 
+    return TStatus::Ok; 
+} 
+ 
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -840,18 +840,18 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqCrossJoin(input, ctx);
             }
 
-            if (TDqSource::Match(input.Get())) {
-                return AnnotateDqSource(input, ctx);
-            }
-
-            if (TDqSink::Match(input.Get())) {
-                return AnnotateDqSink(input, ctx);
-            }
-
-            if (TDqQuery::Match(input.Get())) {
-                return AnnotateDqQuery(input, ctx);
-            }
-
+            if (TDqSource::Match(input.Get())) { 
+                return AnnotateDqSource(input, ctx); 
+            } 
+ 
+            if (TDqSink::Match(input.Get())) { 
+                return AnnotateDqSink(input, ctx); 
+            } 
+ 
+            if (TDqQuery::Match(input.Get())) { 
+                return AnnotateDqQuery(input, ctx); 
+            } 
+ 
             if (TDqPrecompute::Match(input.Get())) {
                 return AnnotateDqPrecompute(input, ctx);
             }

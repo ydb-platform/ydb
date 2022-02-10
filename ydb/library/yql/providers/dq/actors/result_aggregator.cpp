@@ -58,7 +58,7 @@ class TResultAggregator: public TSynchronizableRichActor<TResultAggregator>, NYq
     static constexpr ui32 MAX_RESULT_BATCH = 2048;
 
 public:
-    static constexpr char ActorName[] = "YQL_DQ_RESULT_AGGREGATOR";
+    static constexpr char ActorName[] = "YQL_DQ_RESULT_AGGREGATOR"; 
 
     explicit TResultAggregator(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId,
         const TDqConfiguration::TPtr& settings, const TString& resultType, NActors::TActorId graphExecutionEventsId, bool discard)
@@ -489,7 +489,7 @@ private:
 
 class TResultPrinter: public TActor<TResultPrinter> {
 public:
-    static constexpr char ActorName[] = "YQL_DQ_RESULT_PRINTER";
+    static constexpr char ActorName[] = "YQL_DQ_RESULT_PRINTER"; 
 
     TResultPrinter(IOutputStream& output, NThreading::TPromise<void>& promise)
         : TActor<TResultPrinter>(&TResultPrinter::Handler)

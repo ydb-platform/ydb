@@ -15,7 +15,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
-#include <ydb/core/yq/libs/events/event_subspace.h>
+#include <ydb/core/yq/libs/events/event_subspace.h> 
 
 namespace NYq {
 
@@ -95,7 +95,7 @@ public:
 struct TEvControlPlaneStorage {
     // Event ids.
     enum EEv : ui32 {
-        EvCreateQueryRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::ControlPlaneStorage),
+        EvCreateQueryRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::ControlPlaneStorage), 
         EvCreateQueryResponse,
         EvListQueriesRequest,
         EvListQueriesResponse,
@@ -148,7 +148,7 @@ struct TEvControlPlaneStorage {
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::ControlPlaneStorage), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::ControlPlaneStorage), "All events must be in their subspace"); 
 
     struct TEvCreateQueryRequest : NActors::TEventLocal<TEvCreateQueryRequest, EvCreateQueryRequest> {
         explicit TEvCreateQueryRequest(const TString& scope,
@@ -1010,18 +1010,18 @@ struct TEvControlPlaneStorage {
         TDebugInfoPtr DebugInfo;
     };
 
-    // Description of consumer that was created by YQ
-    struct TTopicConsumer {
-        TString DatabaseId;
-        TString Database;
-        TString TopicPath;
-        TString ConsumerName;
-        TString ClusterEndpoint;
-        bool UseSsl = false;
-        TString TokenName;
-        bool AddBearerToToken = false;
-    };
-
+    // Description of consumer that was created by YQ 
+    struct TTopicConsumer { 
+        TString DatabaseId; 
+        TString Database; 
+        TString TopicPath; 
+        TString ConsumerName; 
+        TString ClusterEndpoint; 
+        bool UseSsl = false; 
+        TString TokenName; 
+        bool AddBearerToToken = false; 
+    }; 
+ 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
         explicit TEvPingTaskRequest(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "")
             : Scope(scope)
@@ -1047,11 +1047,11 @@ struct TEvControlPlaneStorage {
         TMaybe<TInstant> StartedAt;
         TMaybe<TInstant> FinishedAt;
         bool ResignQuery = false;
-        TVector<TTopicConsumer> CreatedTopicConsumers;
+        TVector<TTopicConsumer> CreatedTopicConsumers; 
         TVector<TString> DqGraphs;
         i32 DqGraphIndex = 0;
-        YandexQuery::StateLoadMode StateLoadMode = YandexQuery::STATE_LOAD_MODE_UNSPECIFIED;
-        TMaybe<YandexQuery::StreamingDisposition> StreamingDisposition;
+        YandexQuery::StateLoadMode StateLoadMode = YandexQuery::STATE_LOAD_MODE_UNSPECIFIED; 
+        TMaybe<YandexQuery::StreamingDisposition> StreamingDisposition; 
     };
 
     struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, EvPingTaskResponse> {
@@ -1065,7 +1065,7 @@ struct TEvControlPlaneStorage {
         {
         }
 
-        YandexQuery::QueryAction Action = YandexQuery::QUERY_ACTION_UNSPECIFIED;
+        YandexQuery::QueryAction Action = YandexQuery::QUERY_ACTION_UNSPECIFIED; 
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
     };

@@ -42,18 +42,18 @@ bool TDqIntegrationBase::CanFallback() {
     return false;
 }
 
-void TDqIntegrationBase::FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) {
-    Y_UNUSED(node);
-    Y_UNUSED(settings);
-    Y_UNUSED(sourceType);
-}
-
-void TDqIntegrationBase::FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) {
-    Y_UNUSED(node);
-    Y_UNUSED(settings);
-    Y_UNUSED(sinkType);
-}
-
+void TDqIntegrationBase::FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) { 
+    Y_UNUSED(node); 
+    Y_UNUSED(settings); 
+    Y_UNUSED(sourceType); 
+} 
+ 
+void TDqIntegrationBase::FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) { 
+    Y_UNUSED(node); 
+    Y_UNUSED(settings); 
+    Y_UNUSED(sinkType); 
+} 
+ 
 void TDqIntegrationBase::Annotate(const TExprNode& node, THashMap<TString, TString>& params) {
     Y_UNUSED(node);
     Y_UNUSED(params);

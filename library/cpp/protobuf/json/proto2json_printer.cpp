@@ -1,14 +1,14 @@
-#include "proto2json_printer.h"
-#include "config.h"
+#include "proto2json_printer.h" 
+#include "config.h" 
 #include "util.h"
-
-#include <util/generic/yexception.h>
+ 
+#include <util/generic/yexception.h> 
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
-
-namespace NProtobufJson {
+ 
+namespace NProtobufJson { 
     using namespace NProtoBuf;
-
+ 
     class TJsonKeyBuilder {
     public:
         TJsonKeyBuilder(const FieldDescriptor& field, const TProto2JsonConfig& config, TString& tmpBuf)
@@ -30,7 +30,7 @@ namespace NProtobufJson {
                 NewKeyBuf = NewKeyStr;
                 return;
             }
-
+ 
             switch (config.FieldNameMode) {
                 case TProto2JsonConfig::FieldNameOriginalCase: {
                     NewKeyBuf = field.name();
@@ -43,14 +43,14 @@ namespace NProtobufJson {
                     NewKeyBuf = NewKeyStr;
                     break;
                 }
-
+ 
                 case TProto2JsonConfig::FieldNameUpperCase: {
                     NewKeyStr = field.name();
                     NewKeyStr.to_upper();
                     NewKeyBuf = NewKeyStr;
                     break;
                 }
-
+ 
                 case TProto2JsonConfig::FieldNameCamelCase: {
                     NewKeyStr = field.name();
                     if (!NewKeyStr.empty()) {
@@ -59,7 +59,7 @@ namespace NProtobufJson {
                     NewKeyBuf = NewKeyStr;
                     break;
                 }
-
+ 
                 case TProto2JsonConfig::FieldNameSnakeCase: {
                     NewKeyStr = field.name();
                     ToSnakeCase(&NewKeyStr);
@@ -81,7 +81,7 @@ namespace NProtobufJson {
 
         const TStringBuf& GetKey() const {
             return NewKeyBuf;
-        }
+        } 
 
     private:
         TStringBuf NewKeyBuf;
@@ -91,26 +91,26 @@ namespace NProtobufJson {
     TProto2JsonPrinter::TProto2JsonPrinter(const TProto2JsonConfig& cfg)
         : Config(cfg)
     {
-    }
-
+    } 
+ 
     TProto2JsonPrinter::~TProto2JsonPrinter() {
-    }
-
+    } 
+ 
     TStringBuf TProto2JsonPrinter::MakeKey(const FieldDescriptor& field) {
         return TJsonKeyBuilder(field, GetConfig(), TmpBuf).GetKey();
     }
-
+ 
     template <bool InMapContext, typename T>
     std::enable_if_t<InMapContext, void> WriteWithMaybeEmptyKey(IJsonOutput& json, const TStringBuf& key, const T& value) {
         json.WriteKey(key).Write(value);
     }
-
+ 
     template <bool InMapContext, typename T>
     std::enable_if_t<!InMapContext, void> WriteWithMaybeEmptyKey(IJsonOutput& array, const TStringBuf& key, const T& value) {
         Y_ASSERT(!key);
         array.Write(value);
     }
-
+ 
     template <bool InMapContext>
     void TProto2JsonPrinter::PrintStringValue(const FieldDescriptor& field,
                                               const TStringBuf& key, const TString& value,
@@ -131,7 +131,7 @@ namespace NProtobufJson {
             WriteWithMaybeEmptyKey<InMapContext>(json, key, value);
         }
     }
-
+ 
     template <bool InMapContext>
     void TProto2JsonPrinter::PrintEnumValue(const TStringBuf& key,
                                             const EnumValueDescriptor* value,
@@ -146,52 +146,52 @@ namespace NProtobufJson {
                 WriteWithMaybeEmptyKey<InMapContext>(json, key, value->number());
                 break;
             }
-
+ 
             case TProto2JsonConfig::EnumName: {
                 WriteWithMaybeEmptyKey<InMapContext>(json, key, value->name());
                 break;
             }
-
+ 
             case TProto2JsonConfig::EnumFullName: {
                 WriteWithMaybeEmptyKey<InMapContext>(json, key, value->full_name());
                 break;
-            }
-
+            } 
+ 
             case TProto2JsonConfig::EnumNameLowerCase: {
                 TString newName = value->name();
                 newName.to_lower();
                 WriteWithMaybeEmptyKey<InMapContext>(json, key, newName);
                 break;
             }
-
+ 
             case TProto2JsonConfig::EnumFullNameLowerCase: {
                 TString newName = value->full_name();
                 newName.to_lower();
                 WriteWithMaybeEmptyKey<InMapContext>(json, key, newName);
                 break;
             }
-
+ 
             default:
                 Y_VERIFY_DEBUG(false, "Unknown EnumMode.");
         }
-    }
-
+    } 
+ 
     void TProto2JsonPrinter::PrintSingleField(const Message& proto,
                                               const FieldDescriptor& field,
                                               IJsonOutput& json,
                                               TStringBuf key) {
         Y_VERIFY(!field.is_repeated(), "field is repeated.");
-
+ 
         if (!key) {
             key = MakeKey(field);
         }
-
+ 
 #define FIELD_TO_JSON(EProtoCppType, ProtoGet)                         \
     case FieldDescriptor::EProtoCppType: {                             \
         json.WriteKey(key).Write(reflection->ProtoGet(proto, &field)); \
         break;                                                         \
-    }
-
+    } 
+ 
 #define INT_FIELD_TO_JSON(EProtoCppType, ProtoGet)              \
     case FieldDescriptor::EProtoCppType: {                      \
         const auto value = reflection->ProtoGet(proto, &field); \
@@ -204,7 +204,7 @@ namespace NProtobufJson {
     }
 
         const Reflection* reflection = proto.GetReflection();
-
+ 
         bool shouldPrintField = reflection->HasField(proto, &field);
         if (!shouldPrintField && GetConfig().MissingSingleKeyMode == TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired) {
             if (field.has_default_value()) {
@@ -225,25 +225,25 @@ namespace NProtobufJson {
                 FIELD_TO_JSON(CPPTYPE_DOUBLE, GetDouble);
                 FIELD_TO_JSON(CPPTYPE_FLOAT, GetFloat);
                 FIELD_TO_JSON(CPPTYPE_BOOL, GetBool);
-
+ 
                 case FieldDescriptor::CPPTYPE_MESSAGE: {
                     json.WriteKey(key);
                     Print(reflection->GetMessage(proto, &field), json);
                     break;
                 }
-
+ 
                 case FieldDescriptor::CPPTYPE_ENUM: {
                     PrintEnumValue<true>(key, reflection->GetEnum(proto, &field), json);
                     break;
                 }
-
+ 
                 case FieldDescriptor::CPPTYPE_STRING: {
                     TString scratch;
                     const TString& value = reflection->GetStringReference(proto, &field, &scratch);
                     PrintStringValue<true>(field, key, value, json);
                     break;
                 }
-
+ 
                 default:
                     ythrow yexception() << "Unknown protobuf field type: "
                                         << static_cast<int>(field.cpp_type()) << ".";
@@ -254,36 +254,36 @@ namespace NProtobufJson {
                     json.WriteKey(key).WriteNull();
                     break;
                 }
-
+ 
                 case TProto2JsonConfig::MissingKeySkip:
                 case TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired:
                 default:
                     break;
             }
-        }
+        } 
 #undef FIELD_TO_JSON
     }
-
+ 
     void TProto2JsonPrinter::PrintRepeatedField(const Message& proto,
                                                 const FieldDescriptor& field,
                                                 IJsonOutput& json,
                                                 TStringBuf key) {
         Y_VERIFY(field.is_repeated(), "field isn't repeated.");
-
+ 
         const bool isMap = field.is_map() && GetConfig().MapAsObject;
         if (!key) {
             key = MakeKey(field);
-        }
-
+        } 
+ 
 #define REPEATED_FIELD_TO_JSON(EProtoCppType, ProtoGet)                                \
     case FieldDescriptor::EProtoCppType: {                                             \
-        for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) \
+        for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) \ 
             json.Write(reflection->ProtoGet(proto, &field, i));                        \
         break;                                                                         \
-    }
-
+    } 
+ 
         const Reflection* reflection = proto.GetReflection();
-
+ 
         if (reflection->FieldSize(proto, &field) > 0) {
             json.WriteKey(key);
             if (isMap) {
@@ -291,7 +291,7 @@ namespace NProtobufJson {
             } else {
                 json.BeginList();
             }
-
+ 
             switch (field.cpp_type()) {
                 REPEATED_FIELD_TO_JSON(CPPTYPE_INT32, GetRepeatedInt32);
                 REPEATED_FIELD_TO_JSON(CPPTYPE_INT64, GetRepeatedInt64);
@@ -300,7 +300,7 @@ namespace NProtobufJson {
                 REPEATED_FIELD_TO_JSON(CPPTYPE_DOUBLE, GetRepeatedDouble);
                 REPEATED_FIELD_TO_JSON(CPPTYPE_FLOAT, GetRepeatedFloat);
                 REPEATED_FIELD_TO_JSON(CPPTYPE_BOOL, GetRepeatedBool);
-
+ 
                 case FieldDescriptor::CPPTYPE_MESSAGE: {
                     if (isMap) {
                         for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
@@ -334,7 +334,7 @@ namespace NProtobufJson {
                     ythrow yexception() << "Unknown protobuf field type: "
                                         << static_cast<int>(field.cpp_type()) << ".";
             }
-
+ 
             if (isMap) {
                 json.EndObject();
             } else {
@@ -346,7 +346,7 @@ namespace NProtobufJson {
                     json.WriteKey(key).WriteNull();
                     break;
                 }
-
+ 
                 case TProto2JsonConfig::MissingKeyDefault: {
                     json.WriteKey(key);
                     if (isMap) {
@@ -361,12 +361,12 @@ namespace NProtobufJson {
                 case TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired:
                 default:
                     break;
-            }
-        }
-
+            } 
+        } 
+ 
 #undef REPEATED_FIELD_TO_JSON
     }
-
+ 
     void TProto2JsonPrinter::PrintKeyValue(const NProtoBuf::Message& proto,
                                            IJsonOutput& json) {
         const FieldDescriptor* keyField = proto.GetDescriptor()->FindFieldByName("key");
@@ -376,7 +376,7 @@ namespace NProtobufJson {
         Y_VERIFY(valueField, "Map entry value field not found.");
         PrintField(proto, *valueField, json, key);
     }
-
+ 
     TString TProto2JsonPrinter::MakeKey(const NProtoBuf::Message& proto,
                                         const NProtoBuf::FieldDescriptor& field) {
         const Reflection* reflection = proto.GetReflection();
@@ -433,11 +433,11 @@ namespace NProtobufJson {
                 break;
             default:
                 ythrow yexception() << "Unsupported key type.";
-        }
-
+        } 
+ 
         return result;
-    }
-
+    } 
+ 
     void TProto2JsonPrinter::PrintField(const Message& proto,
                                         const FieldDescriptor& field,
                                         IJsonOutput& json,
@@ -449,13 +449,13 @@ namespace NProtobufJson {
         else
             PrintSingleField(proto, field, json, key);
     }
-
+ 
     void TProto2JsonPrinter::Print(const Message& proto, IJsonOutput& json, bool closeMap) {
         const Descriptor* descriptor = proto.GetDescriptor();
         Y_ASSERT(descriptor);
-
+ 
         json.BeginObject();
-
+ 
         // Iterate over all non-extension fields
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
             const FieldDescriptor* field = descriptor->field(f);
@@ -485,8 +485,8 @@ namespace NProtobufJson {
         if (closeMap) {
             json.EndObject();
         }
-    }
-
+    } 
+ 
     template <class T, class U>
     std::enable_if_t<!std::is_unsigned<T>::value, bool> ValueInRange(T value, U range) {
         return value >= -range && value <= range;
@@ -514,4 +514,4 @@ namespace NProtobufJson {
         return false;
     }
 
-}
+} 

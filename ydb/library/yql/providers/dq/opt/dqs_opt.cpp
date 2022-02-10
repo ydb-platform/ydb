@@ -99,7 +99,7 @@ namespace NYql::NDqs {
         });
     }
 
-    THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer() {
+    THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer() { 
         return CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             TOptimizeExprSettings optSettings{nullptr};
             optSettings.VisitLambdas = true;
@@ -110,7 +110,7 @@ namespace NYql::NDqs {
                     PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteMapJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);
-                    PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx); 
                     return inputExpr;
                 }, ctx, optSettings);
         });
@@ -133,7 +133,7 @@ namespace NYql::NDqs {
                     return TStatus::Ok;
                 }
 
-                auto transformer = CreateDqsRewritePhyCallablesTransformer();
+                auto transformer = CreateDqsRewritePhyCallablesTransformer(); 
                 auto status = InstantTransform(*transformer, inputExpr, ctx);
                 if (status.Level != TStatus::Ok) {
                     ctx.AddError(TIssue(ctx.GetPosition(inputExpr->Pos()), TString("Peephole optimization failed for Dq stage")));

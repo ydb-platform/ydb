@@ -47,7 +47,7 @@ struct TDqComputeEvents {
         EvGetTaskState,
         EvGetTaskStateResult,
         EvStateRequest,
-        EvNewCheckpointCoordinatorAck,
+        EvNewCheckpointCoordinatorAck, 
 
         // place all new events here
 

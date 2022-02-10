@@ -29,8 +29,8 @@ SRCS(
     msgbus_server_persqueue.h
     msgbus_server_pq_metacache.h
     msgbus_server_pq_metacache.cpp
-    msgbus_server_pq_metarequest.h
-    msgbus_server_pq_metarequest.cpp
+    msgbus_server_pq_metarequest.h 
+    msgbus_server_pq_metarequest.cpp 
     msgbus_server_pq_read_session_info.cpp
     msgbus_server_resolve_node.cpp
     msgbus_server_ic_debug.cpp

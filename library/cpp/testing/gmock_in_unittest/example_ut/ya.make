@@ -1,13 +1,13 @@
-UNITTEST()
-
-OWNER(galaxycrab)
-
-PEERDIR(
+UNITTEST() 
+ 
+OWNER(galaxycrab) 
+ 
+PEERDIR( 
     library/cpp/testing/gmock_in_unittest
-)
-
-SRCS(
-    example_ut.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    example_ut.cpp 
+) 
+ 
+END() 

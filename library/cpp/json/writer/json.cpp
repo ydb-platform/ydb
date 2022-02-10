@@ -258,16 +258,16 @@ namespace NJsonWriter {
             } else {
                 ythrow TError() << "JSON writer: invalid float value: " << FloatToString(f);
             }
-        }
+        } 
         size_t len = FloatToString(f, buf, Y_ARRAY_SIZE(buf), mode, ndigits);
         UnsafeWriteValue(buf, len);
         return TValueContext(*this);
-    }
+    } 
 
     TValueContext TBuf::WriteFloat(float f, EFloatToStringMode mode, int ndigits) {
         return WriteFloatImpl(f, mode, ndigits);
     }
-
+ 
     TValueContext TBuf::WriteDouble(double f, EFloatToStringMode mode, int ndigits) {
         return WriteFloatImpl(f, mode, ndigits);
     }

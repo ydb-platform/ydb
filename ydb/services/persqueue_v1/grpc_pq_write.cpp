@@ -181,12 +181,12 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
     if (HaveClusters && localCluster.empty()) {
         ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
         if (LocalCluster) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled");
-            ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), grpc::Status::OK); //CANCELLED
-        } else {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - initializing");
-            ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED
-        }
+            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled"); 
+            ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), grpc::Status::OK); //CANCELLED 
+        } else { 
+            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - initializing"); 
+            ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED 
+        } 
         return;
     } else {
         TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(

@@ -176,7 +176,7 @@ namespace NLWTrace {
     inline void PreparePtr<TNil>(const TNil&, const TNil*&) {
     }
 
-#define LWTRACE_SCOPED_FUNCTION_PARAMS_I(i) (1) typename ::NLWTrace::TParamTraits<TP##i>::TFuncParam p##i = ERROR_not_enough_parameters() LWTRACE_COMMA
+#define LWTRACE_SCOPED_FUNCTION_PARAMS_I(i) (1) typename ::NLWTrace::TParamTraits<TP##i>::TFuncParam p##i = ERROR_not_enough_parameters() LWTRACE_COMMA 
 #define LWTRACE_SCOPED_FUNCTION_PARAMS LWTRACE_EXPAND(LWTRACE_EAT FOREACH_PARAMNUM(LWTRACE_SCOPED_FUNCTION_PARAMS_I)(0))
 #define LWTRACE_SCOPED_FUNCTION_PARAMS_BY_REF_I(i) (1) typename ::NLWTrace::TParamTraits<TP##i>::TStoreType& p##i = *(ERROR_not_enough_parameters*)(HidePointerOrigin(nullptr))LWTRACE_COMMA
 #define LWTRACE_SCOPED_FUNCTION_PARAMS_BY_REF LWTRACE_EXPAND(LWTRACE_EAT FOREACH_PARAMNUM(LWTRACE_SCOPED_FUNCTION_PARAMS_BY_REF_I)(0))

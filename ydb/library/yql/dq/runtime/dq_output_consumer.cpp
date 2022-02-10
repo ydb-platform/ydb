@@ -50,31 +50,31 @@ private:
 
 class TDqOutputMapConsumer : public IDqOutputConsumer {
 public:
-    TDqOutputMapConsumer(IDqOutput::TPtr output)
-        : Output(output) {}
+    TDqOutputMapConsumer(IDqOutput::TPtr output) 
+        : Output(output) {} 
 
     bool IsFull() const override {
-        return Output->IsFull();
+        return Output->IsFull(); 
     }
 
     void Consume(TUnboxedValue&& value) override {
-        Output->Push(std::move(value));
+        Output->Push(std::move(value)); 
     }
 
     void Finish() override {
-        Output->Finish();
+        Output->Finish(); 
     }
 
 private:
-    IDqOutput::TPtr Output;
+    IDqOutput::TPtr Output; 
 };
 
 class TDqOutputHashPartitionConsumer : public IDqOutputConsumer {
 public:
-    TDqOutputHashPartitionConsumer(const TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs,
+    TDqOutputHashPartitionConsumer(const TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs, 
         TVector<TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
         : TypeEnv(typeEnv)
-        , Outputs(std::move(outputs))
+        , Outputs(std::move(outputs)) 
         , KeyColumnTypes(std::move(keyColumnTypes))
         , KeyColumnIndices(std::move(keyColumnIndices))
     {
@@ -96,17 +96,17 @@ public:
     }
 
     bool IsFull() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
+        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); }); 
     }
 
     void Consume(TUnboxedValue&& value) final {
         ui32 partitionIndex = GetHashPartitionIndex(value);
-        Outputs[partitionIndex]->Push(std::move(value));
+        Outputs[partitionIndex]->Push(std::move(value)); 
     }
 
     void Finish() final {
-        for (auto& output : Outputs) {
-            output->Finish();
+        for (auto& output : Outputs) { 
+            output->Finish(); 
         }
     }
 
@@ -119,7 +119,7 @@ private:
             hash = CombineHashes(hash, HashColumn(keyId, columnValue));
         }
 
-        return hash % Outputs.size();
+        return hash % Outputs.size(); 
     }
 
     ui64 HashColumn(size_t keyId, const TUnboxedValue& value) const {
@@ -144,7 +144,7 @@ private:
 
 private:
     const TTypeEnvironment& TypeEnv;
-    TVector<IDqOutput::TPtr> Outputs;
+    TVector<IDqOutput::TPtr> Outputs; 
     TVector<TDataTypeId> KeyColumnTypes;
     TVector<ui32> KeyColumnIndices;
     TVector<TValueHasher> ValueHashers;
@@ -153,28 +153,28 @@ private:
 
 class TDqOutputBroadcastConsumer : public IDqOutputConsumer {
 public:
-    TDqOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs)
-        : Outputs(std::move(outputs)) {}
+    TDqOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs) 
+        : Outputs(std::move(outputs)) {} 
 
     bool IsFull() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
+        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); }); 
     }
 
     void Consume(TUnboxedValue&& value) final {
-        for (auto& output : Outputs) {
+        for (auto& output : Outputs) { 
             TUnboxedValue copy{ value };
-            output->Push(std::move(copy));
+            output->Push(std::move(copy)); 
         }
     }
 
     void Finish() override {
-        for (auto& output : Outputs) {
-            output->Finish();
+        for (auto& output : Outputs) { 
+            output->Finish(); 
         }
     }
 
 private:
-    TVector<IDqOutput::TPtr> Outputs;
+    TVector<IDqOutput::TPtr> Outputs; 
 };
 
 } // namespace
@@ -183,21 +183,21 @@ IDqOutputConsumer::TPtr CreateOutputMultiConsumer(TVector<IDqOutputConsumer::TPt
     return MakeIntrusive<TDqOutputMultiConsumer>(std::move(consumers));
 }
 
-IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output) {
-    return MakeIntrusive<TDqOutputMapConsumer>(output);
+IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output) { 
+    return MakeIntrusive<TDqOutputMapConsumer>(output); 
 }
 
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
-    TVector<IDqOutput::TPtr>&& outputs,
+    TVector<IDqOutput::TPtr>&& outputs, 
     TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
 {
-    return MakeIntrusive<TDqOutputHashPartitionConsumer>(typeEnv, std::move(outputs), std::move(keyColumnTypes),
+    return MakeIntrusive<TDqOutputHashPartitionConsumer>(typeEnv, std::move(outputs), std::move(keyColumnTypes), 
         std::move(keyColumnIndices));
 }
 
-IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs) {
-    return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs));
+IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs) { 
+    return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs)); 
 }
 
 } // namespace NYql::NDq

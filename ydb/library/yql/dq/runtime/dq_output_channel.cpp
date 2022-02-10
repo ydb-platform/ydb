@@ -671,8 +671,8 @@ public:
     [[nodiscard]]
     bool Pop(NDqProto::TCheckpoint& checkpoint) override {
         if (!HasData() && Checkpoint) {
-            checkpoint = std::move(*Checkpoint);
-            Checkpoint = Nothing();
+            checkpoint = std::move(*Checkpoint); 
+            Checkpoint = Nothing(); 
             return true;
         }
         return false;
@@ -747,10 +747,10 @@ public:
     }
 
     bool IsFinished() const override {
-        return Finished && !HasData();
+        return Finished && !HasData(); 
     }
 
-    ui64 Drop() override { // Drop channel data because channel was finished. Leave checkpoint because checkpoints keep going through channel after finishing channel data transfer.
+    ui64 Drop() override { // Drop channel data because channel was finished. Leave checkpoint because checkpoints keep going through channel after finishing channel data transfer. 
         ui64 rows = DataHead.size() + SpilledRows + DataTail.size();
         DataHead.clear();
         SizeHead.clear();

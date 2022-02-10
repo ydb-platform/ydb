@@ -221,7 +221,7 @@ void TProcessedRequestsAggregator::InitAddressClassifier(const NKikimrConfig::TS
 }
 
 class TMeteringActor
-    : public TActorBootstrapped<TMeteringActor>
+    : public TActorBootstrapped<TMeteringActor> 
 {
 public:
     TMeteringActor()
@@ -234,9 +234,9 @@ public:
 
         ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
 
-        Aggregator = MakeHolder<TProcessedRequestsAggregator>(Cfg());
+        Aggregator = MakeHolder<TProcessedRequestsAggregator>(Cfg()); 
 
-        FlushProcessedRequestsAttributes();
+        FlushProcessedRequestsAttributes(); 
     }
 
     void WriteLogRecord(const NSc::TValue& record, TStringBuilder& records) const {
@@ -247,15 +247,15 @@ public:
         return NKikimrServices::TActivity::SQS_METERING_ACTOR;
     }
 
-    void FlushProcessedRequestsAttributes() {
+    void FlushProcessedRequestsAttributes() { 
         Y_VERIFY(Aggregator);
 
-        Schedule(TDuration::MilliSeconds(Cfg().GetMeteringFlushingIntervalMs()), new TEvWakeup());
+        Schedule(TDuration::MilliSeconds(Cfg().GetMeteringFlushingIntervalMs()), new TEvWakeup()); 
 
-        const auto reportedTrafficRecords = Aggregator->DumpReportedTrafficAsJsonArray(HostFQDN, TActivationContext::Now());
-        const auto reportedRequestsRecords = Aggregator->DumpReportedRequestsAsJsonArray(HostFQDN, TActivationContext::Now());
+        const auto reportedTrafficRecords = Aggregator->DumpReportedTrafficAsJsonArray(HostFQDN, TActivationContext::Now()); 
+        const auto reportedRequestsRecords = Aggregator->DumpReportedRequestsAsJsonArray(HostFQDN, TActivationContext::Now()); 
 
-        if (Cfg().GetMeteringLogFilePath()) {
+        if (Cfg().GetMeteringLogFilePath()) { 
             TStringBuilder records;
 
             for (const auto& trafficRecord : reportedTrafficRecords) {
@@ -273,21 +273,21 @@ public:
         Aggregator->ResetReportsStorage();
     }
 
-    void HandleWakeup(TEvWakeup::TPtr&) {
-        FlushProcessedRequestsAttributes();
+    void HandleWakeup(TEvWakeup::TPtr&) { 
+        FlushProcessedRequestsAttributes(); 
     }
 
-    void HandleReportProcessedRequestAttributes(TSqsEvents::TEvReportProcessedRequestAttributes::TPtr& ev) {
+    void HandleReportProcessedRequestAttributes(TSqsEvents::TEvReportProcessedRequestAttributes::TPtr& ev) { 
         Y_VERIFY(Aggregator);
 
         Aggregator->Add(ev->Get()->Data);
     }
 
-    STATEFN(Work) {
+    STATEFN(Work) { 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWakeup, HandleWakeup);
+            hFunc(TEvWakeup, HandleWakeup); 
             hFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, HandleNetClassifierUpdate);
-            hFunc(TSqsEvents::TEvReportProcessedRequestAttributes, HandleReportProcessedRequestAttributes);
+            hFunc(TSqsEvents::TEvReportProcessedRequestAttributes, HandleReportProcessedRequestAttributes); 
         }
     }
 
@@ -301,6 +301,6 @@ private:
     THolder<TProcessedRequestsAggregator> Aggregator;
 };
 
-IActor* CreateSqsMeteringService() { return new TMeteringActor(); }
+IActor* CreateSqsMeteringService() { return new TMeteringActor(); } 
 
 } // namespace NKikimr::NSQS

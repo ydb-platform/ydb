@@ -4,7 +4,7 @@ OWNER(snowball)
 
 SRCS(
     main.cpp
-    registar_ut.cpp
+    registar_ut.cpp 
 )
 
 END()

@@ -26,8 +26,8 @@ SRCS(
     dq_input_producer.cpp
     dq_output_channel.cpp
     dq_output_consumer.cpp
-    dq_source.cpp
-    dq_sink.cpp
+    dq_source.cpp 
+    dq_sink.cpp 
     dq_tasks_runner.cpp
     dq_transport.cpp
 )

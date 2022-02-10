@@ -131,7 +131,7 @@ public:
             auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
             Y_VERIFY(shard.TabletType == ETabletType::Kesus);
 
-            auto event = MakeHolder<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), *kesus->AlterConfig, kesus->AlterVersion);
+            auto event = MakeHolder<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), *kesus->AlterConfig, kesus->AlterVersion); 
             event->Record.MutableConfig()->set_path(kesusPath.PathString()); // TODO: remove legacy field eventually
             event->Record.SetPath(kesusPath.PathString());
 

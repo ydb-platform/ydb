@@ -3,7 +3,7 @@
 #include "defs.h"
 
 #include "events.h"
-#include "quoter_resource_tree.h"
+#include "quoter_resource_tree.h" 
 #include "schema.h"
 
 #include <ydb/core/base/path.h>
@@ -50,14 +50,14 @@ private:
     struct TTxSemaphoreTimeout;
     struct TTxSemaphoreUpdate;
 
-    struct TTxQuoterResourceAdd;
-    struct TTxQuoterResourceUpdate;
-    struct TTxQuoterResourceDelete;
-    struct TTxQuoterResourceDescribe;
-    class TQuoterResourceSink;
-
-    static constexpr ui64 QUOTER_TICK_PROCESSING_WAKEUP_TAG = 1;
-
+    struct TTxQuoterResourceAdd; 
+    struct TTxQuoterResourceUpdate; 
+    struct TTxQuoterResourceDelete; 
+    struct TTxQuoterResourceDescribe; 
+    class TQuoterResourceSink; 
+ 
+    static constexpr ui64 QUOTER_TICK_PROCESSING_WAKEUP_TAG = 1; 
+ 
     static constexpr size_t MAX_SESSIONS_LIMIT = 1000000; // 1 million
     static constexpr size_t MAX_DESCRIPTION_SIZE = 1024;
     static constexpr size_t MAX_PROTECTION_KEY_SIZE = 16;
@@ -216,18 +216,18 @@ private:
         void NotifyWatchers(TVector<TDelayedEvent>& events, bool dataChanged, bool ownerChanged);
     };
 
-    struct TQuoterResourceSessionsAccumulator {
+    struct TQuoterResourceSessionsAccumulator { 
         void Accumulate(const TActorId& recipient, ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props);
-        void SendAll(const TActorContext& ctx, ui64 tabletId);
-
-        struct TSendInfo {
-            THolder<TEvKesus::TEvResourcesAllocated> Event;
-            THashMap<ui64, size_t> ResIdIndex;
-        };
-
+        void SendAll(const TActorContext& ctx, ui64 tabletId); 
+ 
+        struct TSendInfo { 
+            THolder<TEvKesus::TEvResourcesAllocated> Event; 
+            THashMap<ui64, size_t> ResIdIndex; 
+        }; 
+ 
         THashMap<TActorId, TSendInfo> SendInfos;
-    };
-
+    }; 
+ 
     struct TEvPrivate {
         enum EEv {
             EvSessionTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -297,15 +297,15 @@ private:
     THashMap<ui32, THashSet<TProxyInfo*>> ProxiesByNode;
     THashMap<ui64, ui64> SessionsTxCount;
 
-    // Quoter support
-    ui64 NextQuoterResourceId;
-    TQuoterResources QuoterResources;
-    TInstant NextQuoterTickTime = TInstant::Max();
-    TTickProcessorQueue QuoterTickProcessorQueue;
-    TQuoterResourceSessionsAccumulator QuoterResourceSessionsAccumulator;
-    Ydb::Coordination::RateLimiterCountersMode RateLimiterCountersMode;
-    bool QuoterTickProcessingIsScheduled = false;
-
+    // Quoter support 
+    ui64 NextQuoterResourceId; 
+    TQuoterResources QuoterResources; 
+    TInstant NextQuoterTickTime = TInstant::Max(); 
+    TTickProcessorQueue QuoterTickProcessorQueue; 
+    TQuoterResourceSessionsAccumulator QuoterResourceSessionsAccumulator; 
+    Ydb::Coordination::RateLimiterCountersMode RateLimiterCountersMode; 
+    bool QuoterTickProcessingIsScheduled = false; 
+ 
     // Counters support
     THolder<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
@@ -371,7 +371,7 @@ private:
     bool ScheduleSessionTimeout(TSessionInfo* session, const TActorContext& ctx, TDuration gracePeriod = TDuration::Zero());
     void ClearProxy(TProxyInfo* proxy, const TActorContext& ctx);
     void ForgetProxy(TProxyInfo* proxy);
-    void ScheduleQuoterTick();
+    void ScheduleQuoterTick(); 
 
 private:
     void VerifyKesusPath(const TString& kesusPath);
@@ -380,7 +380,7 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
-    void Handle(TEvents::TEvWakeup::TPtr& ev);
+    void Handle(TEvents::TEvWakeup::TPtr& ev); 
 
     void Handle(TEvKesus::TEvDummyRequest::TPtr& ev);
     void Handle(TEvKesus::TEvSetConfig::TPtr& ev);
@@ -399,20 +399,20 @@ private:
     void Handle(TEvKesus::TEvUpdateSemaphore::TPtr& ev);
     void Handle(TEvKesus::TEvDeleteSemaphore::TPtr& ev);
 
-    // Quoter API
-    void Handle(TEvKesus::TEvDescribeQuoterResources::TPtr& ev);
-    void Handle(TEvKesus::TEvAddQuoterResource::TPtr& ev);
-    void Handle(TEvKesus::TEvUpdateQuoterResource::TPtr& ev);
-    void Handle(TEvKesus::TEvDeleteQuoterResource::TPtr& ev);
-    // Quoter runtime
-    void Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev);
-    void Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev);
+    // Quoter API 
+    void Handle(TEvKesus::TEvDescribeQuoterResources::TPtr& ev); 
+    void Handle(TEvKesus::TEvAddQuoterResource::TPtr& ev); 
+    void Handle(TEvKesus::TEvUpdateQuoterResource::TPtr& ev); 
+    void Handle(TEvKesus::TEvDeleteQuoterResource::TPtr& ev); 
+    // Quoter runtime 
+    void Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev); 
+    void Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev); 
     void Handle(TEvKesus::TEvAccountResources::TPtr& ev);
-    void Handle(TEvKesus::TEvResourcesAllocatedAck::TPtr& ev);
-    void Handle(TEvKesus::TEvGetQuoterResourceCounters::TPtr& ev);
-    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
-    void HandleQuoterTick();
-
+    void Handle(TEvKesus::TEvResourcesAllocatedAck::TPtr& ev); 
+    void Handle(TEvKesus::TEvGetQuoterResourceCounters::TPtr& ev); 
+    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev); 
+    void HandleQuoterTick(); 
+ 
     void Handle(TEvPrivate::TEvSessionTimeout::TPtr& ev);
     void Handle(TEvPrivate::TEvAcquireSemaphoreTimeout::TPtr& ev);
     void Handle(TEvPrivate::TEvSelfCheckStart::TPtr& ev);

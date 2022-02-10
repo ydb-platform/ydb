@@ -227,7 +227,7 @@ public:
 
     TModifyQueryBuilder& SetState(const YandexQuery::StateLoadMode& state)
     {
-        Request.set_state_load_mode(state);
+        Request.set_state_load_mode(state); 
         return *this;
     }
 
@@ -695,9 +695,9 @@ public:
         binding.set_stream_name("my_stream");
         binding.set_format("json");
         binding.set_compression("zip");
-        auto* column = binding.mutable_schema()->add_column();
-        column->set_name("sample_column_name");
-        column->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        auto* column = binding.mutable_schema()->add_column(); 
+        column->set_name("sample_column_name"); 
+        column->mutable_type()->set_type_id(Ydb::Type::UINT64); 
         CreateDataStreams(binding);
     }
 
@@ -810,9 +810,9 @@ public:
         binding.set_stream_name("my_stream");
         binding.set_format("json");
         binding.set_compression("zip");
-        auto* column = binding.mutable_schema()->add_column();
-        column->set_name("sample_column_name");
-        column->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        auto* column = binding.mutable_schema()->add_column(); 
+        column->set_name("sample_column_name"); 
+        column->mutable_type()->set_type_id(Ydb::Type::UINT64); 
         CreateDataStreams(binding);
     }
 
@@ -1004,7 +1004,7 @@ class TPingTaskBuilder {
     TMaybe<TInstant> StartedAt;
     TMaybe<TInstant> FinishedAt;
     bool ResignQuery = false;
-    TVector<NYq::TEvControlPlaneStorage::TTopicConsumer> CreatedTopicConsumers;
+    TVector<NYq::TEvControlPlaneStorage::TTopicConsumer> CreatedTopicConsumers; 
     TVector<TString> DqGraphs;
     i32 DqGraphIndex = 0;
 
@@ -1098,18 +1098,18 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& SetResignQuery(bool resignQuery = true)
+    TPingTaskBuilder& SetResignQuery(bool resignQuery = true) 
     {
         ResignQuery = resignQuery;
         return *this;
     }
 
-    TPingTaskBuilder& AddCreatedConsumer(const TString& databaseId, const TString& database, const TString& topicPath, const TString& consumerName, const TString& clusterEndpoint, bool useSsl)
-    {
-        CreatedTopicConsumers.emplace_back(NYq::TEvControlPlaneStorage::TTopicConsumer{databaseId, database, topicPath, consumerName, clusterEndpoint, useSsl, "", false});
-        return *this;
-    }
-
+    TPingTaskBuilder& AddCreatedConsumer(const TString& databaseId, const TString& database, const TString& topicPath, const TString& consumerName, const TString& clusterEndpoint, bool useSsl) 
+    { 
+        CreatedTopicConsumers.emplace_back(NYq::TEvControlPlaneStorage::TTopicConsumer{databaseId, database, topicPath, consumerName, clusterEndpoint, useSsl, "", false}); 
+        return *this; 
+    } 
+ 
     TPingTaskBuilder& AddDqGraph(const TString& dqGraph)
     {
         DqGraphs.push_back(dqGraph);
@@ -1135,7 +1135,7 @@ public:
         request->StartedAt = StartedAt;
         request->FinishedAt = FinishedAt;
         request->ResignQuery = ResignQuery;
-        request->CreatedTopicConsumers = CreatedTopicConsumers;
+        request->CreatedTopicConsumers = CreatedTopicConsumers; 
         request->DqGraphs = DqGraphs;
         request->DqGraphIndex = DqGraphIndex;
         return request;

@@ -5,8 +5,8 @@
 #include <util/charset/wide.h>
 #include <util/system/defaults.h>
 
-#include <limits>
-
+#include <limits> 
+ 
 // positive test (return true or no exception)
 #define test1(t, v)       \
     F<t>().CheckTryOK(v); \
@@ -279,14 +279,14 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1.2345678901234567), "1.2345678901234567"); // no truncation
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(5e-324), "5e-324");                         // denormalized
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(-0.0), "-0");                               // sign must be preserved
-
-        UNIT_ASSERT_STRINGS_EQUAL(FloatToString(std::numeric_limits<double>::quiet_NaN()), "nan");
-        UNIT_ASSERT_STRINGS_EQUAL(FloatToString(std::numeric_limits<double>::infinity()), "inf");
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(FloatToString(std::numeric_limits<double>::quiet_NaN()), "nan"); 
+        UNIT_ASSERT_STRINGS_EQUAL(FloatToString(std::numeric_limits<double>::infinity()), "inf"); 
         UNIT_ASSERT_STRINGS_EQUAL(FloatToString(-std::numeric_limits<double>::infinity()), "-inf");
 
         UNIT_ASSERT_STRINGS_EQUAL(FloatToString(std::numeric_limits<float>::quiet_NaN()), "nan");
         UNIT_ASSERT_STRINGS_EQUAL(FloatToString(std::numeric_limits<float>::infinity()), "inf");
-        UNIT_ASSERT_STRINGS_EQUAL(FloatToString(-std::numeric_limits<float>::infinity()), "-inf");
+        UNIT_ASSERT_STRINGS_EQUAL(FloatToString(-std::numeric_limits<float>::infinity()), "-inf"); 
     }
 
     Y_UNIT_TEST(TestReadFloats) {

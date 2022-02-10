@@ -92,7 +92,7 @@ void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>
             if (ds.endpoint())
                 clusterCfg->SetEndpoint(ds.endpoint());
             clusterCfg->SetDatabase(ds.database());
-            clusterCfg->SetDatabaseId(ds.database_id());
+            clusterCfg->SetDatabaseId(ds.database_id()); 
             clusterCfg->SetUseSsl(ds.secure());
             clusterCfg->SetAddBearerToToken(useBearerForYdb);
             clusterCfg->SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);

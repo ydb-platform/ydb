@@ -6,15 +6,15 @@
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
 struct TParameters {
     TMaybe<TString> Action;
     TMaybe<TString> Clear;
-    TMaybe<ui64> DelaySeconds;
+    TMaybe<ui64> DelaySeconds; 
     TMaybe<TString> FolderId;
     TMaybe<TString> Id;
-    TMaybe<ui32> MaxNumberOfMessages;
+    TMaybe<ui32> MaxNumberOfMessages; 
     TMaybe<TString> MessageBody;
     TMaybe<TString> MessageDeduplicationId;
     TMaybe<TString> MessageGroupId;
@@ -28,8 +28,8 @@ struct TParameters {
     TMaybe<TString> UserName;
     TMaybe<TString> UserNamePrefix;
     TMaybe<TString> Version;
-    TMaybe<ui64> VisibilityTimeout;
-    TMaybe<ui64> WaitTimeSeconds;
+    TMaybe<ui64> VisibilityTimeout; 
+    TMaybe<ui64> WaitTimeSeconds; 
 
     TMap<int, TString> AttributeNames;
     TMap<int, TAttribute> Attributes;
@@ -42,7 +42,7 @@ public:
      TParametersParser(TParameters* params);
     ~TParametersParser();
 
-    // Throws TSQSException
+    // Throws TSQSException 
     void Append(const TString& name, const TString& value);
 
 private:
@@ -52,4 +52,4 @@ private:
     int Num_;
 };
 
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NSQS 

@@ -1,5 +1,5 @@
 #include "tests_data.h"
-#include "registar.h"
+#include "registar.h" 
 
 #include <library/cpp/testing/common/network.h>
 
@@ -35,10 +35,10 @@ public:
         return GetPort(port);
     }
 
-    ui16 GetTcpAndUdpPort(ui16 port) {
+    ui16 GetTcpAndUdpPort(ui16 port) { 
         return GetPort(port);
-    }
-
+    } 
+ 
     ui16 GetPortsRange(const ui16 startPort, const ui16 range) {
         Y_UNUSED(startPort);
         auto ports = NTesting::NLegacy::GetFreePortsRange(range);
@@ -54,16 +54,16 @@ public:
 private:
     void ReservePortForCurrentTest(const TAtomicSharedPtr<NTesting::IPort>& portGuard) {
         if (EnableReservePortsForCurrentTest) {
-            TTestBase* currentTest = NUnitTest::NPrivate::GetCurrentTest();
-            if (currentTest != nullptr) {
-                currentTest->RunAfterTest([guard = portGuard]() mutable {
-                    guard = nullptr; // remove reference for allocated port
-                });
-            }
-        }
-    }
-
-private:
+            TTestBase* currentTest = NUnitTest::NPrivate::GetCurrentTest(); 
+            if (currentTest != nullptr) { 
+                currentTest->RunAfterTest([guard = portGuard]() mutable { 
+                    guard = nullptr; // remove reference for allocated port 
+                }); 
+            } 
+        } 
+    } 
+ 
+private: 
     TMutex Lock;
     TVector<TAtomicSharedPtr<NTesting::IPort>> ReservedPorts;
     const bool EnableReservePortsForCurrentTest;
@@ -81,18 +81,18 @@ TPortManager::~TPortManager() {
 ui16 TPortManager::GetPort(ui16 port) {
     return Impl_->GetTcpPort(port);
 }
-
-ui16 TPortManager::GetTcpPort(ui16 port) {
+ 
+ui16 TPortManager::GetTcpPort(ui16 port) { 
     return Impl_->GetTcpPort(port);
-}
-
-ui16 TPortManager::GetUdpPort(ui16 port) {
+} 
+ 
+ui16 TPortManager::GetUdpPort(ui16 port) { 
     return Impl_->GetUdpPort(port);
-}
-
-ui16 TPortManager::GetTcpAndUdpPort(ui16 port) {
+} 
+ 
+ui16 TPortManager::GetTcpAndUdpPort(ui16 port) { 
     return Impl_->GetTcpAndUdpPort(port);
-}
+} 
 
 ui16 TPortManager::GetPortsRange(const ui16 startPort, const ui16 range) {
     return Impl_->GetPortsRange(startPort, range);

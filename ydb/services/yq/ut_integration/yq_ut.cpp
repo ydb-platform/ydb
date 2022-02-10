@@ -380,10 +380,10 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
         NYdb::NYq::TClient client(driver);
-        const size_t conns = 3;
+        const size_t conns = 3; 
         const auto folderId = TString(__func__) + "folder_id";
         {//CreateConnections
-            for (size_t i = 0; i < conns - 1; ++i) {
+            for (size_t i = 0; i < conns - 1; ++i) { 
                 const auto request = ::NYq::TCreateConnectionBuilder()
                     .SetName("testdb" + ToString(i))
                     .CreateYdb("FakeDatabaseId", "")
@@ -393,16 +393,16 @@ Y_UNIT_TEST_SUITE(Yq_1) {
                     .ExtractValueSync();
                 UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
             }
-
-            // yds
-            const auto request = ::NYq::TCreateConnectionBuilder()
-                .SetName("testdb2")
-                .CreateDataStreams("FakeDatabaseId", "") // We can use the same db in yds and ydb
-                .Build();
-            const auto result = client
+ 
+            // yds 
+            const auto request = ::NYq::TCreateConnectionBuilder() 
+                .SetName("testdb2") 
+                .CreateDataStreams("FakeDatabaseId", "") // We can use the same db in yds and ydb 
+                .Build(); 
+            const auto result = client 
                 .CreateConnection(request, CreateYqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+                .ExtractValueSync(); 
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString()); 
         }
 
         {
@@ -424,11 +424,11 @@ Y_UNIT_TEST_SUITE(Yq_1) {
                 UNIT_ASSERT_VALUES_EQUAL(content.name(), "testdb" + ToString(i));
                 UNIT_ASSERT_VALUES_EQUAL(meta.created_by(), "root@builtin");
                 UNIT_ASSERT_VALUES_EQUAL(meta.modified_by(), "root@builtin");
-                if (i < 2) {
-                    UNIT_ASSERT_C(content.setting().has_ydb_database(), content);
-                } else {
-                    UNIT_ASSERT_C(content.setting().has_data_streams(), content);
-                }
+                if (i < 2) { 
+                    UNIT_ASSERT_C(content.setting().has_ydb_database(), content); 
+                } else { 
+                    UNIT_ASSERT_C(content.setting().has_data_streams(), content); 
+                } 
                 i++;
             }
         }
@@ -995,4 +995,4 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
             UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
         }
     }
-}
+} 

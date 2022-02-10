@@ -23,13 +23,13 @@ public:
         return false;
     }
 
-    TCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::CountQueues, std::move(cb))
+    TCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) 
+        : TActionActor(sourceSqsRequest, EAction::CountQueues, std::move(cb)) 
     {
-        CopyAccountName(Request());
+        CopyAccountName(Request()); 
         Response_.MutableCountQueues()->SetRequestId(RequestId_);
 
-        CopySecurityToken(Request());
+        CopySecurityToken(Request()); 
     }
 
 private:
@@ -37,42 +37,42 @@ private:
         return Response_.MutableCountQueues()->MutableError();
     }
 
-    void DoAction() override {
+    void DoAction() override { 
         Become(&TThis::StateFunc);
 
-        Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvCountQueues(RequestId_, UserName_, FolderId_));
+        Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvCountQueues(RequestId_, UserName_, FolderId_)); 
     }
 
     TString DoGetQueueName() const override {
         return TString();
     }
 
-    STATEFN(StateFunc) {
+    STATEFN(StateFunc) { 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWakeup, HandleWakeup);
-            hFunc(TSqsEvents::TEvCountQueuesResponse, HandleCountQueuesResponse);
+            hFunc(TEvWakeup, HandleWakeup); 
+            hFunc(TSqsEvents::TEvCountQueuesResponse, HandleCountQueuesResponse); 
         }
     }
 
-    void HandleCountQueuesResponse(TSqsEvents::TEvCountQueuesResponse::TPtr& ev) {
+    void HandleCountQueuesResponse(TSqsEvents::TEvCountQueuesResponse::TPtr& ev) { 
         if (ev->Get()->Failed) {
-            RLOG_SQS_WARN("Count queues failed");
+            RLOG_SQS_WARN("Count queues failed"); 
             MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE);
         } else {
             auto* result = Response_.MutableCountQueues();
             result->SetCount(ev->Get()->Count);
         }
 
-        SendReplyAndDie();
+        SendReplyAndDie(); 
     }
 
-    const TCountQueuesRequest& Request() const {
-        return SourceSqsRequest_.GetCountQueues();
-    }
+    const TCountQueuesRequest& Request() const { 
+        return SourceSqsRequest_.GetCountQueues(); 
+    } 
 };
 
-IActor* CreateCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TCountQueuesActor(sourceSqsRequest, std::move(cb));
+IActor* CreateCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) { 
+    return new TCountQueuesActor(sourceSqsRequest, std::move(cb)); 
 }
 
 } // namespace NKikimr::NSQS

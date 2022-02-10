@@ -1,13 +1,13 @@
-#include "registar.h"
-
+#include "registar.h" 
+ 
 #include <library/cpp/diff/diff.h>
 #include <library/cpp/colorizer/colors.h>
 
-#include <util/generic/bt_exception.h>
-#include <util/random/fast.h>
+#include <util/generic/bt_exception.h> 
+#include <util/random/fast.h> 
 #include <util/string/printf.h>
-#include <util/system/backtrace.h>
-#include <util/system/guard.h>
+#include <util/system/backtrace.h> 
+#include <util/system/guard.h> 
 #include <util/system/tls.h>
 #include <util/system/error.h>
 #include <util/string/cast.h>
@@ -32,46 +32,46 @@ Y_POD_STATIC_THREAD(bool)
 UnittestThread;
 Y_POD_STATIC_THREAD(NUnitTest::TTestBase*)
 currentTest;
-::NUnitTest::TRaiseErrorHandler RaiseErrorHandler;
+::NUnitTest::TRaiseErrorHandler RaiseErrorHandler; 
 
 void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, bool fatalFailure) {
     Y_VERIFY(UnittestThread, "%s in non-unittest thread with message:\n%s", what, msg.data());
-    Y_VERIFY(GetCurrentTest());
-
-    if (RaiseErrorHandler) {
-        RaiseErrorHandler(what, msg, fatalFailure);
-        return;
-    }
-
-    // Default handler
-    TBackTrace bt;
-    bt.Capture();
+    Y_VERIFY(GetCurrentTest()); 
+ 
+    if (RaiseErrorHandler) { 
+        RaiseErrorHandler(what, msg, fatalFailure); 
+        return; 
+    } 
+ 
+    // Default handler 
+    TBackTrace bt; 
+    bt.Capture(); 
     GetCurrentTest()->AddError(msg.data(), bt.PrintToString());
-    if (::NUnitTest::ContinueOnFail || !fatalFailure) {
-        return;
-    }
+    if (::NUnitTest::ContinueOnFail || !fatalFailure) { 
+        return; 
+    } 
     throw TAssertException();
 }
 
-void ::NUnitTest::SetRaiseErrorHandler(::NUnitTest::TRaiseErrorHandler handler) {
-    Y_VERIFY(UnittestThread);
-    RaiseErrorHandler = std::move(handler);
-}
-
+void ::NUnitTest::SetRaiseErrorHandler(::NUnitTest::TRaiseErrorHandler handler) { 
+    Y_VERIFY(UnittestThread); 
+    RaiseErrorHandler = std::move(handler); 
+} 
+ 
 void ::NUnitTest::NPrivate::SetUnittestThread(bool unittestThread) {
     Y_VERIFY(UnittestThread != unittestThread, "state check");
     UnittestThread = unittestThread;
 }
 
-void ::NUnitTest::NPrivate::SetCurrentTest(TTestBase* test) {
-    Y_VERIFY(!test || !currentTest, "state check");
-    currentTest = test;
-}
-
-NUnitTest::TTestBase* ::NUnitTest::NPrivate::GetCurrentTest() {
-    return currentTest;
-}
-
+void ::NUnitTest::NPrivate::SetCurrentTest(TTestBase* test) { 
+    Y_VERIFY(!test || !currentTest, "state check"); 
+    currentTest = test; 
+} 
+ 
+NUnitTest::TTestBase* ::NUnitTest::NPrivate::GetCurrentTest() { 
+    return currentTest; 
+} 
+ 
 struct TDiffColorizer {
     NColorizer::TColors Colors;
     bool Reverse = false;
@@ -321,12 +321,12 @@ void NUnitTest::TTestBase::AddError(const char* msg, TTestContext* context) {
     AddError(msg, TString(), context);
 }
 
-void NUnitTest::TTestBase::RunAfterTest(std::function<void()> f) {
-    with_lock (AfterTestFunctionsLock_) {
-        AfterTestFunctions_.emplace_back(std::move(f));
-    }
-}
-
+void NUnitTest::TTestBase::RunAfterTest(std::function<void()> f) { 
+    with_lock (AfterTestFunctionsLock_) { 
+        AfterTestFunctions_.emplace_back(std::move(f)); 
+    } 
+} 
+ 
 bool NUnitTest::TTestBase::CheckAccessTest(const char* test) {
     return Processor()->CheckAccessTest(Name(), test);
 }
@@ -376,18 +376,18 @@ void NUnitTest::TTestBase::BeforeTest() {
 
 void NUnitTest::TTestBase::AfterTest() {
     TearDown();
-
-    TVector<std::function<void()>> afterTestFunctions;
-    with_lock (AfterTestFunctionsLock_) {
-        afterTestFunctions.swap(AfterTestFunctions_);
-    }
-
-    for (auto i = afterTestFunctions.rbegin(); i != afterTestFunctions.rend(); ++i) {
-        std::function<void()>& f = *i;
-        if (f) {
-            f();
-        }
-    }
+ 
+    TVector<std::function<void()>> afterTestFunctions; 
+    with_lock (AfterTestFunctionsLock_) { 
+        afterTestFunctions.swap(AfterTestFunctions_); 
+    } 
+ 
+    for (auto i = afterTestFunctions.rbegin(); i != afterTestFunctions.rend(); ++i) { 
+        std::function<void()>& f = *i; 
+        if (f) { 
+            f(); 
+        } 
+    } 
 }
 
 bool NUnitTest::TTestBase::GetIsForked() const {

@@ -1,19 +1,19 @@
-#include "yql_pq_settings.h"
-
-namespace NYql {
-
-using namespace NCommon;
-
-TPqConfiguration::TPqConfiguration() {
-    REGISTER_SETTING(*this, Consumer);
-    REGISTER_SETTING(*this, Database);
+#include "yql_pq_settings.h" 
+ 
+namespace NYql { 
+ 
+using namespace NCommon; 
+ 
+TPqConfiguration::TPqConfiguration() { 
+    REGISTER_SETTING(*this, Consumer); 
+    REGISTER_SETTING(*this, Database); 
     REGISTER_SETTING(*this, PqReadByRtmrCluster_);
-}
-
-TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {
+} 
+ 
+TPqSettings::TConstPtr TPqConfiguration::Snapshot() const { 
     return std::make_shared<const TPqSettings>(*this);
-}
-
+} 
+ 
 void TPqConfiguration::Init(
     const TPqGatewayConfig& config,
     TIntrusivePtr<TTypeAnnotationContext> typeCtx,
@@ -69,4 +69,4 @@ TString TPqConfiguration::GetDatabaseForTopic(const TString& cluster) const {
     return clusterSetting->Database;
 }
 
-} // NYql
+} // NYql 

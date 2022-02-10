@@ -137,7 +137,7 @@ public:
         }
     };
 
-    void LoadState(const NDqProto::TSinkState&) override { }
+    void LoadState(const NDqProto::TSinkState&) override { } 
 
     void CommitState(const NDqProto::TCheckpoint&) override { }
 
@@ -228,8 +228,8 @@ private:
         while (TryToSendNextBatch()) {}
     }
 
-    // IActor & IDqSinkActor
-    void PassAway() override { // Is called from Compute Actor
+    // IActor & IDqSinkActor 
+    void PassAway() override { // Is called from Compute Actor 
         for (const auto& [_, metricsInflight] : InflightBuffer) {
             Send(metricsInflight.HttpSenderId, new TEvents::TEvPoison());
         }
@@ -238,11 +238,11 @@ private:
             Send(HttpProxyId, new TEvents::TEvPoison());
         }
 
-        TActor<TDqSolomonWriteActor>::PassAway();
+        TActor<TDqSolomonWriteActor>::PassAway(); 
     }
 
 private:
-    NDqProto::TSinkState BuildState() { return {}; }
+    NDqProto::TSinkState BuildState() { return {}; } 
 
     TString GetUrl() const {
         TStringBuilder builder;
@@ -410,7 +410,7 @@ private:
     }
 
     void DoCheckpoint() {
-        Callbacks->OnSinkStateSaved(BuildState(), OutputIndex, *CheckpointInProgress);
+        Callbacks->OnSinkStateSaved(BuildState(), OutputIndex, *CheckpointInProgress); 
         CheckpointInProgress = std::nullopt;
     }
 

@@ -8,7 +8,7 @@ namespace NKqp {
 
 NYql::NDq::IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NYql::NDqProto::TTaskOutput& outputDesc,
     const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv,
-    TVector<NYql::NDq::IDqOutput::TPtr>&& outputs);
+    TVector<NYql::NDq::IDqOutput::TPtr>&& outputs); 
 
 TIntrusivePtr<NYql::NDq::IDqTaskRunner> CreateKqpTaskRunner(const NYql::NDq::TDqTaskRunnerContext& execCtx,
     const NYql::NDq::TDqTaskRunnerSettings& settings, const NYql::NDq::TLogFunc& logFunc);

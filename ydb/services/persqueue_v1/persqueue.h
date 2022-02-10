@@ -20,7 +20,7 @@ public:
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
     void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
-    void StopService() noexcept override;
+    void StopService() noexcept override; 
 
     using NGrpc::TGrpcServiceBase<Ydb::PersQueue::V1::PersQueueService>::GetService;
 
@@ -33,10 +33,10 @@ private:
     void InitNewSchemeCacheActor();
 
     NActors::TActorSystem* ActorSystem;
-    grpc::ServerCompletionQueue* CQ = nullptr;
+    grpc::ServerCompletionQueue* CQ = nullptr; 
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    NGrpc::TGlobalLimiter* Limiter = nullptr;
+    NGrpc::TGlobalLimiter* Limiter = nullptr; 
     NActors::TActorId SchemeCache;
     NActors::TActorId NewSchemeCache;
     NActors::TActorId GRpcRequestProxy;

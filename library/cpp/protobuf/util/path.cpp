@@ -1,20 +1,20 @@
-#include "path.h"
-
-#include <util/generic/yexception.h>
-
-namespace NProtoBuf {
+#include "path.h" 
+ 
+#include <util/generic/yexception.h> 
+ 
+namespace NProtoBuf { 
     TFieldPath::TFieldPath() {
     }
-
+ 
     TFieldPath::TFieldPath(const Descriptor* msgType, const TStringBuf& path) {
         Init(msgType, path);
     }
-
+ 
     TFieldPath::TFieldPath(const TVector<const FieldDescriptor*>& path)
         : Path(path)
     {
     }
-
+ 
     bool TFieldPath::InitUnsafe(const Descriptor* msgType, TStringBuf path) {
         Path.clear();
         while (path) {
@@ -23,10 +23,10 @@ namespace NProtoBuf {
                 next = path.NextTok('/');
             if (!next)
                 return true;
-
+ 
             if (!msgType) // need field but no message type
                 return false;
-
+ 
             TString nextStr(next);
             const FieldDescriptor* field = msgType->FindFieldByName(nextStr);
             if (!field) {
@@ -41,21 +41,21 @@ namespace NProtoBuf {
                             return false; // ambiguity
                         field = ext;
                     }
-                }
-            }
-
+                } 
+            } 
+ 
             if (!field)
                 return false;
-
+ 
             Path.push_back(field);
             msgType = field->type() == FieldDescriptor::TYPE_MESSAGE ? field->message_type() : nullptr;
         }
         return true;
-    }
-
+    } 
+ 
     void TFieldPath::Init(const Descriptor* msgType, const TStringBuf& path) {
         if (!InitUnsafe(msgType, path))
             ythrow yexception() << "Failed to resolve path \"" << path << "\" relative to " << msgType->full_name();
     }
 
-}
+} 

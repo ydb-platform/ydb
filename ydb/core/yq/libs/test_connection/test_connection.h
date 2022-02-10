@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/yq/libs/actors/logging/log.h>
+#include <ydb/core/yq/libs/actors/logging/log.h> 
 #include <ydb/core/yq/libs/config/protos/test_connection.pb.h>
 
 #include <library/cpp/actors/core/actor.h>

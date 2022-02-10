@@ -1,19 +1,19 @@
-syntax = "proto3";
-
-package NTestProto;
-
+syntax = "proto3"; 
+ 
+package NTestProto; 
+ 
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
-message TTestSubProto {
-    uint64 i = 1;
-}
-
-message TTestProto {
-    string s1 = 1;
-    string s2 = 2;
-    string token = 3;
-    TTestSubProto msg = 4;
-}
+message TTestSubProto { 
+    uint64 i = 1; 
+} 
+ 
+message TTestProto { 
+    string s1 = 1; 
+    string s2 = 2; 
+    string token = 3; 
+    TTestSubProto msg = 4; 
+} 
 
 message TConnection1 {
     string database_id = 1;

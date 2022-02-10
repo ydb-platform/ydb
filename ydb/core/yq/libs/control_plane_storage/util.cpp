@@ -91,7 +91,7 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
     return config;
 }
 
-bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskRequest* request) {
+bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskRequest* request) { 
     if (!request) {
         return false;
     }
@@ -103,12 +103,12 @@ bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskReq
         request->Ast ||
         request->Plan ||
         request->StartedAt ||
-        request->FinishedAt ||
+        request->FinishedAt || 
         !request->CreatedTopicConsumers.empty() ||
         !request->DqGraphs.empty() ||
-        request->DqGraphIndex ||
-        request->StateLoadMode ||
-        request->StreamingDisposition;
+        request->DqGraphIndex || 
+        request->StateLoadMode || 
+        request->StreamingDisposition; 
 }
 
 NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items) {

@@ -123,8 +123,8 @@ using TPathList = std::vector<TPath>;
     static constexpr char ActorName[] = "S3_READ_ACTOR";
 
 private:
-    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
-    void LoadState(const NDqProto::TSourceState&) final {}
+    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {} 
+    void LoadState(const NDqProto::TSourceState&) final {} 
     void CommitState(const NDqProto::TCheckpoint&) final {}
     ui64 GetInputIndex() const final { return InputIndex; }
 
@@ -193,11 +193,11 @@ private:
         Callbacks->OnSourceError(InputIndex, result->Get()->Error, true);
     }
 
-    // IActor & IDqSourceActor
-    void PassAway() override { // Is called from Compute Actor
-        TActorBootstrapped<TS3ReadActor>::PassAway();
-    }
-
+    // IActor & IDqSourceActor 
+    void PassAway() override { // Is called from Compute Actor 
+        TActorBootstrapped<TS3ReadActor>::PassAway(); 
+    } 
+ 
     static IHTTPGateway::THeaders MakeHeader(const TString& token) {
         return token.empty() ? IHTTPGateway::THeaders() : IHTTPGateway::THeaders{TString("X-YaCloud-SubjectToken:") += token};
     }

@@ -117,13 +117,13 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
     using TLargeInt = ::NPrivate::TUnderlyingTypeOrSelf<TLarge>;
 
     if (std::is_unsigned<TSmallInt>::value && std::is_signed<TLargeInt>::value) {
-        if (IsNegative(largeInt)) {
+        if (IsNegative(largeInt)) { 
             ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                        << TypeName<TSmallInt>()
                                        << "', negative value converted to unsigned";
-        }
-    }
-
+        } 
+    } 
+ 
     TSmallInt smallInt = TSmallInt(largeInt);
 
     if (std::is_signed<TSmallInt>::value && std::is_unsigned<TLargeInt>::value) {

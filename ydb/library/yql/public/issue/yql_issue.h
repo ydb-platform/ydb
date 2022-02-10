@@ -186,17 +186,17 @@ public:
     const TVector<TIntrusivePtr<TIssue>>& GetSubIssues() const {
         return Children_;
     }
-
-    void PrintTo(IOutputStream& out, bool oneLine = false) const;
-
-    TString ToString(bool oneLine = false) const {
-        TStringStream out;
-        PrintTo(out, oneLine);
-        return out.Str();
-    }
+ 
+    void PrintTo(IOutputStream& out, bool oneLine = false) const; 
+ 
+    TString ToString(bool oneLine = false) const { 
+        TStringStream out; 
+        PrintTo(out, oneLine); 
+        return out.Str(); 
+    } 
 };
 
-void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void(const TIssue&, ui16 level)> fn, std::function<void(const TIssue&, ui16 level)> afterChildrenFn = {});
+void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void(const TIssue&, ui16 level)> fn, std::function<void(const TIssue&, ui16 level)> afterChildrenFn = {}); 
 
 ///////////////////////////////////////////////////////////////////////////////
 // TIssues
@@ -278,22 +278,22 @@ public:
         return Issues_.size();
     }
 
-    void PrintTo(IOutputStream& out, bool oneLine = false) const;
+    void PrintTo(IOutputStream& out, bool oneLine = false) const; 
     void PrintWithProgramTo(
             IOutputStream& out,
             const TString& programFilename,
             const TString& programText) const;
 
-    inline TString ToString(bool oneLine = false) const {
+    inline TString ToString(bool oneLine = false) const { 
         TStringStream out;
-        PrintTo(out, oneLine);
+        PrintTo(out, oneLine); 
         return out.Str();
     }
 
-    TString ToOneLineString() const {
-        return ToString(true);
-    }
-
+    TString ToOneLineString() const { 
+        return ToString(true); 
+    } 
+ 
     inline void Clear() {
         Issues_.clear();
     }

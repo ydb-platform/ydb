@@ -3,12 +3,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace {
-    class TAssignBCalled: public yexception {
-    };
-
+    class TAssignBCalled: public yexception { 
+    }; 
+ 
     struct TB {
         inline TB& operator=(const TB&) {
-            throw TAssignBCalled();
+            throw TAssignBCalled(); 
 
             return *this;
         }
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TestMemCopy) {
         TC c1[5];
         TC c2[5];
 
-        UNIT_ASSERT_EXCEPTION(MemCopy(c2, c1, 5), TAssignBCalled);
+        UNIT_ASSERT_EXCEPTION(MemCopy(c2, c1, 5), TAssignBCalled); 
     }
 
     template <class T>

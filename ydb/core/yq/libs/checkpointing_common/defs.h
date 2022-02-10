@@ -1,11 +1,11 @@
 #pragma once
-#include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
+#include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h> 
 
 #include <util/datetime/base.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/stream/str.h>
 
-namespace NYq {
+namespace NYq { 
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,9 +85,9 @@ struct TCheckpointMetadata {
 
     TInstant Created;
     TInstant Modified;
-    TMaybe<NProto::TGraphParams> Graph;
+    TMaybe<NProto::TGraphParams> Graph; 
 };
 
 using TCheckpoints = TVector<TCheckpointMetadata>;
 
-} // namespace NYq
+} // namespace NYq 

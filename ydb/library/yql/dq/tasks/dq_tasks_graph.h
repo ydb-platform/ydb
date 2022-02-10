@@ -87,7 +87,7 @@ struct TChannel {
     ui64 DstTask = 0;
     ui32 DstInputIndex = 0;
     bool InMemory = true;
-    NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+    NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT; 
 };
 
 using TChannelList = TVector<ui64>;
@@ -120,8 +120,8 @@ template <class TInputMeta>
 struct TTaskInput {
     std::variant<std::monostate, TMergeTaskInput> ConnectionInfo;
     TChannelList Channels;
-    TMaybe<::google::protobuf::Any> SourceSettings;
-    TString SourceType;
+    TMaybe<::google::protobuf::Any> SourceSettings; 
+    TString SourceType; 
     TInputMeta Meta;
 
     TTaskInputType Type() const {
@@ -136,7 +136,7 @@ struct TTaskOutputType {
         HashPartition,
         Broadcast,
         Effects,
-        Sink,
+        Sink, 
         COMMON_TASK_OUTPUT_TYPE_END
     };
 };
@@ -147,8 +147,8 @@ struct TTaskOutput {
     NYql::NDq::TChannelList Channels;
     TVector<TString> KeyColumns;
     ui32 PartitionsCount = 0;
-    TMaybe<::google::protobuf::Any> SinkSettings;
-    TString SinkType;
+    TMaybe<::google::protobuf::Any> SinkSettings; 
+    TString SinkType; 
     TOutputMeta Meta;
 };
 
@@ -175,7 +175,7 @@ struct TTask {
     TVector<TOutputType> Outputs;
     NActors::TActorId ComputeActorId;
     TTaskMeta Meta;
-    NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+    NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT; 
     TTransform OutputTransform;
 };
 

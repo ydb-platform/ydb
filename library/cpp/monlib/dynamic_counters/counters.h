@@ -175,10 +175,10 @@ namespace NMonitoring {
         bool Derivative_;
     };
 
-    struct TExpiringHistogramCounter: public THistogramCounter {
-        using THistogramCounter::THistogramCounter;
-    };
-
+    struct TExpiringHistogramCounter: public THistogramCounter { 
+        using THistogramCounter::THistogramCounter; 
+    }; 
+ 
     using THistogramPtr = TIntrusivePtr<THistogramCounter>;
 
 #ifdef _MSC_VER
@@ -280,7 +280,7 @@ namespace NMonitoring {
             const TString& value,
             bool derivative = false,
             TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
-
+ 
         THistogramPtr GetHistogram(
             const TString& value,
             IHistogramCollectorPtr collector,
@@ -364,8 +364,8 @@ namespace NMonitoring {
         void RegisterCountable(const TString& name, const TString& value, TCountablePtr countable);
         void RemoveExpired() const;
 
-        template <bool expiring, class TCounterType, class... TArgs>
-        TCountablePtr GetNamedCounterImpl(const TString& name, const TString& value, TArgs&&... args);
+        template <bool expiring, class TCounterType, class... TArgs> 
+        TCountablePtr GetNamedCounterImpl(const TString& name, const TString& value, TArgs&&... args); 
 
         template <class TCounterType>
         TCountablePtr FindNamedCounterImpl(const TString& name, const TString& value) const;

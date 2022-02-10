@@ -50,9 +50,9 @@ void ConvertSettingsToProtoConfig(
     if (settings.AttachConsistencyMode_ != EConsistencyMode::UNSET) {
         config->set_attach_consistency_mode(static_cast<Ydb::Coordination::ConsistencyMode>(settings.AttachConsistencyMode_));
     }
-    if (settings.RateLimiterCountersMode_ != ERateLimiterCountersMode::UNSET) {
-        config->set_rate_limiter_counters_mode(static_cast<Ydb::Coordination::RateLimiterCountersMode>(settings.RateLimiterCountersMode_));
-    }
+    if (settings.RateLimiterCountersMode_ != ERateLimiterCountersMode::UNSET) { 
+        config->set_rate_limiter_counters_mode(static_cast<Ydb::Coordination::RateLimiterCountersMode>(settings.RateLimiterCountersMode_)); 
+    } 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,7 +81,7 @@ struct TNodeDescription::TImpl {
         }
         ReadConsistencyMode_ = static_cast<EConsistencyMode>(config.read_consistency_mode());
         AttachConsistencyMode_ = static_cast<EConsistencyMode>(config.attach_consistency_mode());
-        RateLimiterCountersMode_ = static_cast<ERateLimiterCountersMode>(config.rate_limiter_counters_mode());
+        RateLimiterCountersMode_ = static_cast<ERateLimiterCountersMode>(config.rate_limiter_counters_mode()); 
         Owner_ = desc.self().owner();
         PermissionToSchemeEntry(desc.self().effective_permissions(), &EffectivePermissions_);
     }
@@ -90,7 +90,7 @@ struct TNodeDescription::TImpl {
     TMaybe<TDuration> SessionGracePeriod_;
     EConsistencyMode ReadConsistencyMode_;
     EConsistencyMode AttachConsistencyMode_;
-    ERateLimiterCountersMode RateLimiterCountersMode_;
+    ERateLimiterCountersMode RateLimiterCountersMode_; 
     TString Owner_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
 };
@@ -116,10 +116,10 @@ EConsistencyMode TNodeDescription::GetAttachConsistencyMode() const {
     return Impl_->AttachConsistencyMode_;
 }
 
-ERateLimiterCountersMode TNodeDescription::GetRateLimiterCountersMode() const {
-    return Impl_->RateLimiterCountersMode_;
-}
-
+ERateLimiterCountersMode TNodeDescription::GetRateLimiterCountersMode() const { 
+    return Impl_->RateLimiterCountersMode_; 
+} 
+ 
 const TString& TNodeDescription::GetOwner() const {
     return Impl_->Owner_;
 }

@@ -21,9 +21,9 @@ message TDqPqTopicSource {
     TToken Token = 4;
     string Database = 5;
     EClusterType ClusterType = 6;
-    bool UseSsl = 7;
+    bool UseSsl = 7; 
     bool AddBearerToToken = 8;
-    string DatabaseId = 9;
+    string DatabaseId = 9; 
 }
 
 message TDqPqTopicSink {
@@ -31,7 +31,7 @@ message TDqPqTopicSink {
     string Endpoint = 2;
     TToken Token = 3;
     string Database = 4;
-    bool UseSsl = 5;
+    bool UseSsl = 5; 
     bool AddBearerToToken = 6;
     EClusterType ClusterType = 7;
 }

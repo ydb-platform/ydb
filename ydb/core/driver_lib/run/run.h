@@ -33,7 +33,7 @@ protected:
     TIntrusivePtr<NScheme::TTypeRegistry> TypeRegistry;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<TFormatFactory> FormatFactory;
-    NYq::IYqSharedResources::TPtr YqSharedResources;
+    NYq::IYqSharedResources::TPtr YqSharedResources; 
 
     TAutoPtr<TMon> Monitoring;
     NMonitoring::TDynamicCounterPtr Counters;
@@ -41,7 +41,7 @@ protected:
 
     bool EnabledGrpcService = false;
     bool GracefulShutdownSupported = false;
-    THolder<NSQS::TAsyncHttpServer> SqsHttp;
+    THolder<NSQS::TAsyncHttpServer> SqsHttp; 
 
     THolder<NYdb::TDriver> YdbDriver;
 

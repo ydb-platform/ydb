@@ -65,23 +65,23 @@ TString GetEntityIdAsString(const TString& prefix, EEntityType type, TInstant no
     return stream.Str();
 }
 
-struct TEntityIdGenerator : public IEntityIdGenerator {
-    TEntityIdGenerator(const TString& prefix)
-        : Prefix(prefix)
-    {
-        Y_VERIFY(Prefix.size() == 2);
-    }
-
-    TString Generate(EEntityType type) override {
-        return GetEntityIdAsString(Prefix, type);
-    }
-
-private:
-    TString Prefix;
-};
-
-IEntityIdGenerator::TPtr CreateEntityIdGenerator(const TString& prefix) {
-    return MakeIntrusive<TEntityIdGenerator>(prefix);
-}
-
+struct TEntityIdGenerator : public IEntityIdGenerator { 
+    TEntityIdGenerator(const TString& prefix) 
+        : Prefix(prefix) 
+    { 
+        Y_VERIFY(Prefix.size() == 2); 
+    } 
+ 
+    TString Generate(EEntityType type) override { 
+        return GetEntityIdAsString(Prefix, type); 
+    } 
+ 
+private: 
+    TString Prefix; 
+}; 
+ 
+IEntityIdGenerator::TPtr CreateEntityIdGenerator(const TString& prefix) { 
+    return MakeIntrusive<TEntityIdGenerator>(prefix); 
+} 
+ 
 } // namespace NYq

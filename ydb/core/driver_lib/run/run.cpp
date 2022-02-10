@@ -102,7 +102,7 @@
 #include <ydb/services/yq/grpc_service.h>
 
 #include <ydb/core/yq/libs/init/init.h>
-
+ 
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/monlib/messagebus/mon_messagebus.h>
 #include <library/cpp/sighandler/async_signals_handler.h>
@@ -521,7 +521,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["experimental"] = &hasExperimental;
         bool hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
-        bool hasRateLimiter = false;
+        bool hasRateLimiter = false; 
         names["rate_limiter"] = &hasRateLimiter;
         bool hasLongTx = false;
         names["long_tx"] = &hasLongTx;
@@ -696,10 +696,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasDiscovery) {
             server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
-
+ 
         if (hasRateLimiter) {
             server.AddService(new NQuoter::TRateLimiterGRpcService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-        }
+        } 
 
         if (hasMonitoring) {
             server.AddService(new NGRpcService::TGRpcMonitoringService(ActorSystem.Get(), Counters, grpcRequestProxyId));
@@ -1113,7 +1113,7 @@ void TKikimrRunner::InitializeActorSystem(
                                 AppData->UserPoolId);
         }
     }
-
+ 
     if (runConfig.AppConfig.HasGRpcConfig()) {
         if (const ui32 grpcPort = runConfig.AppConfig.GetGRpcConfig().GetPort()) {
             auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
@@ -1122,9 +1122,9 @@ void TKikimrRunner::InitializeActorSystem(
         }
     }
 
-    if (YqSharedResources) {
-        YqSharedResources->Init(ActorSystem.Get());
-    }
+    if (YqSharedResources) { 
+        YqSharedResources->Init(ActorSystem.Get()); 
+    } 
 }
 
 TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializersList(
@@ -1318,7 +1318,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetYandexQueryConfig().GetEnabled()) {
         YqSharedResources = NYq::CreateYqSharedResources(runConfig.AppConfig.GetYandexQueryConfig(),
             ModuleFactories->YdbCredentialProviderFactory, Counters->GetSubgroup("counters", "yq"));
-        sil->AddServiceInitializer(new TYandexQueryInitializer(runConfig, ModuleFactories, YqSharedResources));
+        sil->AddServiceInitializer(new TYandexQueryInitializer(runConfig, ModuleFactories, YqSharedResources)); 
     }
 
     if (serviceMask.EnableSequenceProxyService) {
@@ -1477,10 +1477,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         Bus.Drop();
     }
 
-    if (YqSharedResources) {
-        YqSharedResources->Stop();
-    }
-
+    if (YqSharedResources) { 
+        YqSharedResources->Stop(); 
+    } 
+ 
     if (ActorSystem) {
         ActorSystem->Cleanup();
     }

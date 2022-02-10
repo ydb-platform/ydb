@@ -80,20 +80,20 @@ message StreamingDisposition {
         google.protobuf.Duration duration = 1;
     }
 
-    message FromLastCheckpoint {
-        // By default if new query streams set doesn't equal to old query streams set,
-        // error will occur and query won't be allowed to load offsets for streams for the last checkpoint.
-        // If this flag is set all offsets that can be matched with previous query checkpoint will be matched.
-        // Others will use "fresh" streaming disposition.
-        bool force = 1;
-    }
-
+    message FromLastCheckpoint { 
+        // By default if new query streams set doesn't equal to old query streams set, 
+        // error will occur and query won't be allowed to load offsets for streams for the last checkpoint. 
+        // If this flag is set all offsets that can be matched with previous query checkpoint will be matched. 
+        // Others will use "fresh" streaming disposition. 
+        bool force = 1; 
+    } 
+ 
     oneof disposition {
         google.protobuf.Empty oldest = 1; // Start processing with the oldest offset
         google.protobuf.Empty fresh = 2; // Start processing with the fresh offset
         FromTime from_time = 3; // Start processing with offset from the specified time
         TimeAgo time_ago = 4; // Start processing with offset some time ago
-        FromLastCheckpoint from_last_checkpoint = 5; // Start processing with offset which corresponds to the last checkpoint
+        FromLastCheckpoint from_last_checkpoint = 5; // Start processing with offset which corresponds to the last checkpoint 
     }
 }
 
@@ -133,10 +133,10 @@ message QueryMeta {
         RESUMING = 6; // Resuming query execution from PAUSED status
         RUNNING = 7; // Query started for execution
         COMPLETED = 8; // Query completed successfully
-        COMPLETING = 12; // Finalizing query before become COMPLETED
+        COMPLETING = 12; // Finalizing query before become COMPLETED 
         FAILED = 9; // Query completed with errors
-        FAILING = 13; // Finalizing query before become FAILED
-        PAUSED = 11; // Query paused
+        FAILING = 13; // Finalizing query before become FAILED 
+        PAUSED = 11; // Query paused 
         PAUSING = 10; // Query starts pausing
     }
 
@@ -154,9 +154,9 @@ message QueryMeta {
         string aborted_by = 11;
         string paused_by = 12;
     }
-    // One of the versions of this query has fully saved checkpoint.
-    // If this flag is not set streaming disposition mode "from last checkpoint" can't be used.
-    bool has_saved_checkpoints = 13;
+    // One of the versions of this query has fully saved checkpoint. 
+    // If this flag is not set streaming disposition mode "from last checkpoint" can't be used. 
+    bool has_saved_checkpoints = 13; 
 }
 
 message BriefQuery {
@@ -201,7 +201,7 @@ message CreateQueryRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     QueryContent content = 2;
     ExecuteMode execute_mode = 3;
-    StreamingDisposition disposition = 4;
+    StreamingDisposition disposition = 4; 
     string idempotency_key = 5 [(Ydb.length).le = 1024];
 }
 
@@ -297,7 +297,7 @@ message ModifyQueryRequest {
     QueryContent content = 3;
     ExecuteMode execute_mode = 4;
     StreamingDisposition disposition = 5;
-    StateLoadMode state_load_mode = 6;
+    StateLoadMode state_load_mode = 6; 
     int64 previous_revision = 7 [(Ydb.value) = ">= 0"];
     string idempotency_key = 8 [(Ydb.length).le = 1024];
 }

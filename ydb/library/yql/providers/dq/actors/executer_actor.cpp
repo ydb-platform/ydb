@@ -35,7 +35,7 @@ using namespace NYql;
 
 class TDqExecuter: public TRichActor<TDqExecuter>, NYql::TCounters {
 public:
-    static constexpr char ActorName[] = "YQL_DQ_EXECUTER";
+    static constexpr char ActorName[] = "YQL_DQ_EXECUTER"; 
 
     TDqExecuter(
         const NActors::TActorId& gwmActorId,
@@ -135,11 +135,11 @@ private:
         ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
         ResultId = NActors::ActorIdFromProto(ev->Get()->Record.GetResultId());
         CheckPointCoordinatorId = NActors::ActorIdFromProto(ev->Get()->Record.GetCheckPointCoordinatorId());
-        // These actors will be killed at exit.
-        AddChild(ControlId);
-        AddChild(ResultId);
-        AddChild(CheckPointCoordinatorId);
-
+        // These actors will be killed at exit. 
+        AddChild(ControlId); 
+        AddChild(ResultId); 
+        AddChild(CheckPointCoordinatorId); 
+ 
         int workerCount = ev->Get()->Record.GetRequest().GetTask().size();
         YQL_LOG(INFO) << (TStringBuilder() << "Trying to allocate " << workerCount << " workers");
 
@@ -173,7 +173,7 @@ private:
             SelfId(), ResultId));
 
 
-        const bool enableComputeActor = Settings->EnableComputeActor.Get().GetOrElse(false);
+        const bool enableComputeActor = Settings->EnableComputeActor.Get().GetOrElse(false); 
         const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("old");
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(
@@ -184,7 +184,7 @@ private:
             computeActorType));
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username);
         allocateRequest->Record.SetTraceId(TraceId);
-        allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
+        allocateRequest->Record.SetCreateComputeActor(enableComputeActor); 
         allocateRequest->Record.SetComputeActorType(computeActorType);
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());

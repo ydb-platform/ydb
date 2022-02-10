@@ -16,7 +16,7 @@ private:
         virtual ~TAaa() = default;
     };
     struct TBbb: public TAaa {};
-
+ 
     inline void TestVerifyDynamicCast() {
         TBbb bbb;
         TAaa* aaa = &bbb;

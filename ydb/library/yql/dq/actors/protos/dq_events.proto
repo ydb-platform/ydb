@@ -28,7 +28,7 @@ message TChannelData {
 };
 
 message TEvRun {
-    optional TMessageTransportMeta TransportMeta = 100;
+    optional TMessageTransportMeta TransportMeta = 100; 
 }
 
 message TEvChannelsInfo {
@@ -106,19 +106,19 @@ message TComputeRuntimeSettings {
 message TEvNewCheckpointCoordinator {
     optional uint64 Generation = 1;
     optional string GraphId = 2;
-
-    optional TMessageTransportMeta TransportMeta = 100;
+ 
+    optional TMessageTransportMeta TransportMeta = 100; 
 }
 
-message TEvNewCheckpointCoordinatorAck {
-    optional TMessageTransportMeta TransportMeta = 100;
-}
-
+message TEvNewCheckpointCoordinatorAck { 
+    optional TMessageTransportMeta TransportMeta = 100; 
+} 
+ 
 message TEvInjectCheckpoint {
     optional TCheckpoint Checkpoint = 1;
     optional uint64 Generation = 2;
-
-    optional TMessageTransportMeta TransportMeta = 100;
+ 
+    optional TMessageTransportMeta TransportMeta = 100; 
 }
 
 message TEvSaveTaskStateResult {
@@ -133,32 +133,32 @@ message TEvSaveTaskStateResult {
     optional uint64 TaskId = 2;
     optional EStatus Status = 3;
     optional uint64 StateSizeBytes = 4;
-
-    optional TMessageTransportMeta TransportMeta = 100;
+ 
+    optional TMessageTransportMeta TransportMeta = 100; 
 }
 
 message TEvCommitState {
     optional TCheckpoint Checkpoint = 1;
     optional uint64 Generation = 2;
-
-    optional TMessageTransportMeta TransportMeta = 100;
+ 
+    optional TMessageTransportMeta TransportMeta = 100; 
 }
 
 message TEvStateCommitted {
     optional TCheckpoint Checkpoint = 1;
     optional uint64 TaskId = 2;
-
-    optional TMessageTransportMeta TransportMeta = 100;
+ 
+    optional TMessageTransportMeta TransportMeta = 100; 
 }
 
 message TEvRestoreFromCheckpoint {
     optional TCheckpoint Checkpoint = 1;
     optional uint64 Generation = 2;
-    optional NDqStateLoadPlan.TTaskPlan StateLoadPlan = 3;
-
-    optional TMessageTransportMeta TransportMeta = 100;
+    optional NDqStateLoadPlan.TTaskPlan StateLoadPlan = 3; 
+ 
+    optional TMessageTransportMeta TransportMeta = 100; 
 }
-
+ 
 message TEvRestoreFromCheckpointResult {
     enum ERestoreStatus {
         UNSPECIFIED = 0;
@@ -169,11 +169,11 @@ message TEvRestoreFromCheckpointResult {
     optional TCheckpoint Checkpoint = 1;
     optional uint64 TaskId = 2;
     optional ERestoreStatus Status = 3;
-
-    optional TMessageTransportMeta TransportMeta = 100;
+ 
+    optional TMessageTransportMeta TransportMeta = 100; 
 }
-
-message TMessageTransportMeta {
-    optional uint64 SeqNo = 1; // SeqNo of message
-    optional uint64 ConfirmedSeqNo = 2; // All input messages with SeqNo <= ConfirmedSeqNo are received.
-}
+ 
+message TMessageTransportMeta { 
+    optional uint64 SeqNo = 1; // SeqNo of message 
+    optional uint64 ConfirmedSeqNo = 2; // All input messages with SeqNo <= ConfirmedSeqNo are received. 
+} 

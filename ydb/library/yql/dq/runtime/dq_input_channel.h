@@ -1,5 +1,5 @@
 #pragma once
-#include "dq_input.h"
+#include "dq_input.h" 
 #include "dq_transport.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -8,7 +8,7 @@
 
 namespace NYql::NDq {
 
-struct TDqInputChannelStats : TDqInputStats {
+struct TDqInputChannelStats : TDqInputStats { 
     ui64 ChannelId = 0;
 
     // profile stats
@@ -18,7 +18,7 @@ struct TDqInputChannelStats : TDqInputStats {
         : ChannelId(channelId) {}
 };
 
-class IDqInputChannel : public IDqInput {
+class IDqInputChannel : public IDqInput { 
 public:
     using TPtr = TIntrusivePtr<IDqInputChannel>;
 

@@ -1,6 +1,6 @@
 #include "action.h"
-#include "error.h"
-#include "log.h"
+#include "error.h" 
+#include "log.h" 
 #include "params.h"
 #include "serviceid.h"
 
@@ -12,19 +12,19 @@
 
 using NKikimr::NClient::TValue;
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
 class TGetQueueUrlActor
     : public TActionActor<TGetQueueUrlActor>
 {
 public:
-    TGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::GetQueueUrl, std::move(cb))
+    TGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) 
+        : TActionActor(sourceSqsRequest, EAction::GetQueueUrl, std::move(cb)) 
     {
-        CopyAccountName(Request());
+        CopyAccountName(Request()); 
         Response_.MutableGetQueueUrl()->SetRequestId(RequestId_);
 
-        CopySecurityToken(Request());
+        CopySecurityToken(Request()); 
     }
 
     static constexpr bool NeedExistingQueue() {
@@ -34,60 +34,60 @@ public:
 private:
     bool DoValidate() override {
         if (!GetQueueName()) {
-            MakeError(MutableErrorDesc(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
+            MakeError(MutableErrorDesc(), NErrors::MISSING_PARAMETER, "No QueueName parameter."); 
             return false;
         }
 
         return true;
     }
 
-    TError* MutableErrorDesc() override {
-        return Response_.MutableGetQueueUrl()->MutableError();
-    }
-
-    void DoAction() override {
+    TError* MutableErrorDesc() override { 
+        return Response_.MutableGetQueueUrl()->MutableError(); 
+    } 
+ 
+    void DoAction() override { 
         Become(&TThis::StateFunc);
-        Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueId(RequestId_, UserName_, Request().GetQueueName(), FolderId_));
+        Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueId(RequestId_, UserName_, Request().GetQueueName(), FolderId_)); 
     }
 
     TString DoGetQueueName() const override {
-        return Request().GetQueueName();
+        return Request().GetQueueName(); 
     }
 
-    STATEFN(StateFunc) {
+    STATEFN(StateFunc) { 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWakeup,      HandleWakeup);
-            hFunc(TSqsEvents::TEvQueueId,  HandleQueueId);
+            hFunc(TEvWakeup,      HandleWakeup); 
+            hFunc(TSqsEvents::TEvQueueId,  HandleQueueId); 
         }
     }
 
-    void HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {
-        if (ev->Get()->Failed) {
-            RLOG_SQS_WARN("Get queue id failed");
-            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE);
-        } else {
-            if (ev->Get()->Exists) {
-                auto* result = Response_.MutableGetQueueUrl();
+    void HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) { 
+        if (ev->Get()->Failed) { 
+            RLOG_SQS_WARN("Get queue id failed"); 
+            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE); 
+        } else { 
+            if (ev->Get()->Exists) { 
+                auto* result = Response_.MutableGetQueueUrl(); 
                 if (IsCloud()) {
-                    result->SetQueueUrl(MakeQueueUrl(TString::Join(ev->Get()->QueueId, "/", GetQueueName())));
+                    result->SetQueueUrl(MakeQueueUrl(TString::Join(ev->Get()->QueueId, "/", GetQueueName()))); 
                 } else {
-                    result->SetQueueUrl(MakeQueueUrl(ev->Get()->QueueId));
+                    result->SetQueueUrl(MakeQueueUrl(ev->Get()->QueueId)); 
                 }
             } else {
-                MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
+                MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE); 
             }
         }
 
-        SendReplyAndDie();
+        SendReplyAndDie(); 
     }
 
-    const TGetQueueUrlRequest& Request() const {
-        return SourceSqsRequest_.GetGetQueueUrl();
-    }
+    const TGetQueueUrlRequest& Request() const { 
+        return SourceSqsRequest_.GetGetQueueUrl(); 
+    } 
 };
 
-IActor* CreateGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TGetQueueUrlActor(sourceSqsRequest, std::move(cb));
+IActor* CreateGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) { 
+    return new TGetQueueUrlActor(sourceSqsRequest, std::move(cb)); 
 }
 
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NSQS 

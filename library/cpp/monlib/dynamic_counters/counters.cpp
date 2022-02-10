@@ -19,10 +19,10 @@ namespace {
         return dynamic_cast<TExpiringCounter*>(ptr.Get());
     }
 
-    TExpiringHistogramCounter* AsExpiringHistogramCounter(const TIntrusivePtr<TCountableBase>& ptr) {
-        return dynamic_cast<TExpiringHistogramCounter*>(ptr.Get());
-    }
-
+    TExpiringHistogramCounter* AsExpiringHistogramCounter(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return dynamic_cast<TExpiringHistogramCounter*>(ptr.Get()); 
+    } 
+ 
     THistogramCounter* AsHistogram(const TIntrusivePtr<TCountableBase>& ptr) {
         return dynamic_cast<THistogramCounter*>(ptr.Get());
     }
@@ -38,10 +38,10 @@ namespace {
     THistogramPtr AsHistogramRef(const TIntrusivePtr<TCountableBase>& ptr) {
         return VerifyDynamicCast<THistogramCounter*>(ptr.Get());
     }
-
-    bool IsExpiringCounter(const TIntrusivePtr<TCountableBase>& ptr) {
-        return AsExpiringCounter(ptr) != nullptr || AsExpiringHistogramCounter(ptr) != nullptr;
-    }
+ 
+    bool IsExpiringCounter(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return AsExpiringCounter(ptr) != nullptr || AsExpiringHistogramCounter(ptr) != nullptr; 
+    } 
 }
 
 static constexpr TStringBuf INDENT = "    ";
@@ -76,11 +76,11 @@ THistogramPtr TDynamicCounters::GetHistogram(const TString& value, IHistogramCol
 
 THistogramPtr TDynamicCounters::GetNamedHistogram(const TString& name, const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
     return AsHistogramRef(GetNamedCounterImpl<false, THistogramCounter>(name, value, std::move(collector), derivative, vis));
-}
+} 
 
 THistogramPtr TDynamicCounters::GetExpiringHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
     return GetExpiringNamedHistogram("sensor", value, std::move(collector), derivative, vis);
-}
+} 
 
 THistogramPtr TDynamicCounters::GetExpiringNamedHistogram(const TString& name, const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
     return AsHistogramRef(GetNamedCounterImpl<true, TExpiringHistogramCounter>(name, value, std::move(collector), derivative, vis));
@@ -265,7 +265,7 @@ void TDynamicCounters::RemoveExpired() const {
     TAtomicBase count = 0;
 
     for (auto it = Counters.begin(); it != Counters.end();) {
-        if (IsExpiringCounter(it->second) && it->second->RefCount() == 1) {
+        if (IsExpiringCounter(it->second) && it->second->RefCount() == 1) { 
             it = Counters.erase(it);
             ++count;
         } else {
@@ -275,29 +275,29 @@ void TDynamicCounters::RemoveExpired() const {
 
     AtomicSub(ExpiringCount, count);
 }
-
-template <bool expiring, class TCounterType, class... TArgs>
-TDynamicCounters::TCountablePtr TDynamicCounters::GetNamedCounterImpl(const TString& name, const TString& value, TArgs&&... args) {
+ 
+template <bool expiring, class TCounterType, class... TArgs> 
+TDynamicCounters::TCountablePtr TDynamicCounters::GetNamedCounterImpl(const TString& name, const TString& value, TArgs&&... args) { 
     {
         TReadGuard g(Lock);
         auto it = Counters.find({name, value});
         if (it != Counters.end()) {
             return it->second;
         }
-    }
-
+    } 
+ 
     auto g = LockForUpdate("GetNamedCounterImpl", name, value);
     const TChildId key(name, value);
     auto it = Counters.lower_bound(key);
     if (it == Counters.end() || it->first != key) {
         auto value = MakeIntrusive<TCounterType>(std::forward<TArgs>(args)...);
         it = Counters.emplace_hint(it, key, value);
-        if constexpr (expiring) {
+        if constexpr (expiring) { 
             AtomicIncrement(ExpiringCount);
-        }
-    }
-    return it->second;
-}
+        } 
+    } 
+    return it->second; 
+} 
 
 template <class TCounterType>
 TDynamicCounters::TCountablePtr TDynamicCounters::FindNamedCounterImpl(const TString& name, const TString& value) const {

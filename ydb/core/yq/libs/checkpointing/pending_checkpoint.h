@@ -3,7 +3,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 
-namespace NYq {
+namespace NYq { 
 
 struct TPendingCheckpointStats {
     const TInstant CreatedAt = TInstant::Now();
@@ -51,22 +51,22 @@ private:
     THashSet<NActors::TActorId> NotYetAcknowledged;
 };
 
-class TPendingInitCoordinator {
-public:
-    explicit TPendingInitCoordinator(size_t actorsCount)
-        : ActorsCount(actorsCount)
-    {
-    }
-
-    void OnNewCheckpointCoordinatorAck();
-    bool AllNewCheckpointCoordinatorAcksProcessed() const;
-
-    bool CanInjectCheckpoint() const;
-
-public:
-    const size_t ActorsCount;
-    size_t NewCheckpointCoordinatorAcksGot = 0;
-    TMaybe<TCheckpointId> CheckpointId;
-};
-
-} // namespace NYq
+class TPendingInitCoordinator { 
+public: 
+    explicit TPendingInitCoordinator(size_t actorsCount) 
+        : ActorsCount(actorsCount) 
+    { 
+    } 
+ 
+    void OnNewCheckpointCoordinatorAck(); 
+    bool AllNewCheckpointCoordinatorAcksProcessed() const; 
+ 
+    bool CanInjectCheckpoint() const; 
+ 
+public: 
+    const size_t ActorsCount; 
+    size_t NewCheckpointCoordinatorAcksGot = 0; 
+    TMaybe<TCheckpointId> CheckpointId; 
+}; 
+ 
+} // namespace NYq 

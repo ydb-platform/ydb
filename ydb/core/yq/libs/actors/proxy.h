@@ -34,7 +34,7 @@ NActors::TActorId MakeYqlAnalyticsHttpProxyId();
 NActors::TActorId MakeYqlAnalyticsFetcherId(ui32 nodeId);
 
 NActors::IActor* CreatePendingFetcher(
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NYq::TYqSharedResources::TPtr& yqSharedResources, 
     const ::NYq::NConfig::TCommonConfig& commonConfig,
     const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
     const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
@@ -44,7 +44,7 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYq::NCommon::TServiceCounters& serviceCounters, 
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     NYql::IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,

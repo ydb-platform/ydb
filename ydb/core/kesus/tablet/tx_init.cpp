@@ -1,11 +1,11 @@
 #include "tablet_impl.h"
 
-#include "quoter_resource_tree.h"
+#include "quoter_resource_tree.h" 
 #include "schema.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/appdata.h>
-
+ 
 #include <util/string/cast.h>
 
 namespace NKikimr {
@@ -39,12 +39,12 @@ struct TKesusTablet::TTxInit : public TTxBase {
             auto sessionsRowset = db.Table<Schema::Sessions>().Range().Select();
             auto semaphoresRowset = db.Table<Schema::Semaphores>().Range().Select();
             auto sessionSemaphoresRowset = db.Table<Schema::SessionSemaphores>().Range().Select();
-            auto quoterResourcesRowset = db.Table<Schema::QuoterResources>().Range().Select();
+            auto quoterResourcesRowset = db.Table<Schema::QuoterResources>().Range().Select(); 
             if (!sysParamsRowset.IsReady() ||
                 !sessionsRowset.IsReady() ||
                 !semaphoresRowset.IsReady() ||
-                !sessionSemaphoresRowset.IsReady() ||
-                !quoterResourcesRowset.IsReady())
+                !sessionSemaphoresRowset.IsReady() || 
+                !quoterResourcesRowset.IsReady()) 
             {
                 return false;
             }
@@ -103,14 +103,14 @@ struct TKesusTablet::TTxInit : public TTxBase {
                     case Schema::SysParam_StrictMarkerCounter:
                         Self->StrictMarkerCounter = FromString<ui64>(value);
                         break;
-                    case Schema::SysParam_NextQuoterResourceId:
-                        Self->NextQuoterResourceId = FromString<ui64>(value);
-                        break;
-                    case Schema::SysParam_RateLimiterCountersMode:
-                        if (auto mode = FromString<ui64>(value)) {
-                            Self->RateLimiterCountersMode = static_cast<Ydb::Coordination::RateLimiterCountersMode>(mode);
-                        }
-                        break;
+                    case Schema::SysParam_NextQuoterResourceId: 
+                        Self->NextQuoterResourceId = FromString<ui64>(value); 
+                        break; 
+                    case Schema::SysParam_RateLimiterCountersMode: 
+                        if (auto mode = FromString<ui64>(value)) { 
+                            Self->RateLimiterCountersMode = static_cast<Ydb::Coordination::RateLimiterCountersMode>(mode); 
+                        } 
+                        break; 
                     default:
                         Y_FAIL("Unexpected SysParam value %" PRIu64, id);
                 }
@@ -207,33 +207,33 @@ struct TKesusTablet::TTxInit : public TTxBase {
             }
         }
 
-        // Read QuoterResources
-        if (Self->KesusPath) {
-            Self->QuoterResources.SetQuoterCounters(GetServiceCounters(AppData()->Counters, "quoter_service")->GetSubgroup("quoter", Self->KesusPath));
-            if (Self->RateLimiterCountersMode == Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED) {
-                Self->QuoterResources.EnableDetailedCountersMode();
-            }
-            Self->QuoterResources.SetQuoterPath(Self->KesusPath);
-        }
-
-        {
+        // Read QuoterResources 
+        if (Self->KesusPath) { 
+            Self->QuoterResources.SetQuoterCounters(GetServiceCounters(AppData()->Counters, "quoter_service")->GetSubgroup("quoter", Self->KesusPath)); 
+            if (Self->RateLimiterCountersMode == Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED) { 
+                Self->QuoterResources.EnableDetailedCountersMode(); 
+            } 
+            Self->QuoterResources.SetQuoterPath(Self->KesusPath); 
+        } 
+ 
+        { 
             Self->QuoterResources.SetupBilling(ctx.SelfID, MakeMeteringSink());
-            auto quoterResourcesRowset = db.Table<Schema::QuoterResources>().Range().Select();
-            if (!quoterResourcesRowset.IsReady())
-                return false;
-            while (!quoterResourcesRowset.EndOfSet()) {
-                const ui64 id = quoterResourcesRowset.GetValue<Schema::QuoterResources::Id>();
-                const ui64 parentId = quoterResourcesRowset.GetValue<Schema::QuoterResources::ParentId>();
-                NKikimrKesus::TStreamingQuoterResource props = quoterResourcesRowset.GetValue<Schema::QuoterResources::Props>();
-                props.SetResourcePath(CanonizeQuoterResourcePath(props.GetResourcePath()));
-                Self->QuoterResources.LoadResource(id, parentId, props);
-                Self->TabletCounters->Simple()[COUNTER_QUOTER_RESOURCE_COUNT].Add(1);
-                if (!quoterResourcesRowset.Next())
-                    return false;
-            }
-            Self->QuoterResources.ConstructTrees();
-        }
-
+            auto quoterResourcesRowset = db.Table<Schema::QuoterResources>().Range().Select(); 
+            if (!quoterResourcesRowset.IsReady()) 
+                return false; 
+            while (!quoterResourcesRowset.EndOfSet()) { 
+                const ui64 id = quoterResourcesRowset.GetValue<Schema::QuoterResources::Id>(); 
+                const ui64 parentId = quoterResourcesRowset.GetValue<Schema::QuoterResources::ParentId>(); 
+                NKikimrKesus::TStreamingQuoterResource props = quoterResourcesRowset.GetValue<Schema::QuoterResources::Props>(); 
+                props.SetResourcePath(CanonizeQuoterResourcePath(props.GetResourcePath())); 
+                Self->QuoterResources.LoadResource(id, parentId, props); 
+                Self->TabletCounters->Simple()[COUNTER_QUOTER_RESOURCE_COUNT].Add(1); 
+                if (!quoterResourcesRowset.Next()) 
+                    return false; 
+            } 
+            Self->QuoterResources.ConstructTrees(); 
+        } 
+ 
         Self->PersistSysParam(db, Schema::SysParam_LastLeaderActor, ctx.SelfID.ToString());
         return true;
     }

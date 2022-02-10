@@ -20,8 +20,8 @@ RECURSE(
     dense_hash/ut
     dictionary
     dictionary/ut
-    disjoint_interval_tree
-    disjoint_interval_tree/ut
+    disjoint_interval_tree 
+    disjoint_interval_tree/ut 
     ext_priority_queue
     ext_priority_queue/ut
     fast_trie

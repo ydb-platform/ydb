@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-
+ 
 namespace NKikimr {
 namespace NKesus {
 
@@ -46,10 +46,10 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
         NIceDb::TNiceDb db(txc.DB);
 
         if (newPath) {
-            if (Self->KesusPath != newPath) {
-                Self->QuoterResources.SetQuoterCounters(GetServiceCounters(AppData()->Counters, "quoter_service")->GetSubgroup("quoter", newPath));
-                Self->QuoterResources.SetQuoterPath(newPath);
-            }
+            if (Self->KesusPath != newPath) { 
+                Self->QuoterResources.SetQuoterCounters(GetServiceCounters(AppData()->Counters, "quoter_service")->GetSubgroup("quoter", newPath)); 
+                Self->QuoterResources.SetQuoterPath(newPath); 
+            } 
             Self->KesusPath = newPath;
             Self->PersistSysParam(db, Schema::SysParam_KesusPath, Self->KesusPath);
         }
@@ -74,14 +74,14 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
             Self->PersistSysParam(db, Schema::SysParam_AttachConsistencyMode, ToString(static_cast<ui64>(Self->AttachConsistencyMode)));
         }
 
-        if (Record.GetConfig().rate_limiter_counters_mode()) {
-            Self->RateLimiterCountersMode = Record.GetConfig().rate_limiter_counters_mode();
-            Self->PersistSysParam(db, Schema::SysParam_RateLimiterCountersMode, ToString(static_cast<ui64>(Self->RateLimiterCountersMode)));
-
-            // Apply mode to resource tree
-            Self->QuoterResources.EnableDetailedCountersMode(Self->RateLimiterCountersMode == Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED);
-        }
-
+        if (Record.GetConfig().rate_limiter_counters_mode()) { 
+            Self->RateLimiterCountersMode = Record.GetConfig().rate_limiter_counters_mode(); 
+            Self->PersistSysParam(db, Schema::SysParam_RateLimiterCountersMode, ToString(static_cast<ui64>(Self->RateLimiterCountersMode))); 
+ 
+            // Apply mode to resource tree 
+            Self->QuoterResources.EnableDetailedCountersMode(Self->RateLimiterCountersMode == Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED); 
+        } 
+ 
         Self->ConfigVersion = newVersion;
         Self->PersistSysParam(db, Schema::SysParam_ConfigVersion, ToString(Self->ConfigVersion));
 

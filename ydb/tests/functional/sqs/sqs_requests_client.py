@@ -15,7 +15,7 @@ _author__ = 'komels@yandex-team.ru'
 logger = logging.getLogger(__name__)
 
 DEFAULT_DATE = '20180101'
-REQUEST_TIMEOUT = 180  # teamcity is very slow
+REQUEST_TIMEOUT = 180  # teamcity is very slow 
 
 
 def to_bytes(v):
@@ -56,28 +56,28 @@ class SqsMessageAttribute(object):
         self.type = attr_type
 
 
-class SqsSendMessageParams(object):
-    def __init__(
-            self, message_body,
-            delay_seconds=None, attributes=None, deduplication_id=None, group_id=None
-    ):
-        self.message_body = message_body
-        self.delay_seconds = delay_seconds
-        self.attributes = attributes
-        self.deduplication_id = deduplication_id
-        self.group_id = group_id
-
-
-class SqsChangeMessageVisibilityParams(object):
-    def __init__(
-            self,
-            receipt_handle,
-            visibility_timeout
-    ):
-        self.receipt_handle = receipt_handle
-        self.visibility_timeout = visibility_timeout
-
-
+class SqsSendMessageParams(object): 
+    def __init__( 
+            self, message_body, 
+            delay_seconds=None, attributes=None, deduplication_id=None, group_id=None 
+    ): 
+        self.message_body = message_body 
+        self.delay_seconds = delay_seconds 
+        self.attributes = attributes 
+        self.deduplication_id = deduplication_id 
+        self.group_id = group_id 
+ 
+ 
+class SqsChangeMessageVisibilityParams(object): 
+    def __init__( 
+            self, 
+            receipt_handle, 
+            visibility_timeout 
+    ): 
+        self.receipt_handle = receipt_handle 
+        self.visibility_timeout = visibility_timeout 
+ 
+ 
 class SqsHttpApi(object):
     def __init__(self, server, port, user, raise_on_error=False, timeout=REQUEST_TIMEOUT, security_token=None, force_private=False, iam_token=None, folder_id=None):
         self.__auth_headers = auth_headers(user, security_token, iam_token)
@@ -88,21 +88,21 @@ class SqsHttpApi(object):
             "{}:{}".format(server, port),
             headers=auth_headers(user, security_token, iam_token)
         )
-        self.__private_request = requests.Request(
-            'POST',
-            "{}:{}/private".format(server, port),
+        self.__private_request = requests.Request( 
+            'POST', 
+            "{}:{}/private".format(server, port), 
             headers=auth_headers(user, security_token, iam_token)
-        )
+        ) 
         self.__session = requests.Session()
         self.__raise_on_error = raise_on_error
-        self.__user = user
-        self.__timeout = timeout
+        self.__user = user 
+        self.__timeout = timeout 
         self.__security_token = security_token
         assert(isinstance(force_private, bool))
         self.__force_private = force_private
         self.__folder_id = folder_id
 
-    def execute_request(self, action, extract_result_method, default=None, private=False, **params):
+    def execute_request(self, action, extract_result_method, default=None, private=False, **params): 
         if params is None:
             params = {}
         params['Action'] = action
@@ -111,22 +111,22 @@ class SqsHttpApi(object):
             params['folderId'] = self.__folder_id
 
         if self.__force_private or private:
-            request = self.__private_request
-        else:
-            request = self.__request
+            request = self.__private_request 
+        else: 
+            request = self.__request 
         request.data = urllib.parse.urlencode(params)
-        logger.debug("Execute request {} {} from user {} with params: {}".format(
-            request.method, request.url, self.__user, request.data)
+        logger.debug("Execute request {} {} from user {} with params: {}".format( 
+            request.method, request.url, self.__user, request.data) 
         )
-        prep = request.prepare()
+        prep = request.prepare() 
         try:
-            response = self.__session.send(prep, timeout=self.__timeout)
-        except (requests.ConnectionError, requests.exceptions.Timeout) as ex:
-            logging.debug("Request failed with connection exception {}: {}".format(type(ex), ex))
-            if self.__raise_on_error:
-                raise
-            else:
-                response = None
+            response = self.__session.send(prep, timeout=self.__timeout) 
+        except (requests.ConnectionError, requests.exceptions.Timeout) as ex: 
+            logging.debug("Request failed with connection exception {}: {}".format(type(ex), ex)) 
+            if self.__raise_on_error: 
+                raise 
+            else: 
+                response = None 
         return self._process_response(
             response,
             extract_result_method, default
@@ -134,13 +134,13 @@ class SqsHttpApi(object):
 
     def _process_response(self, response, extract_method, default=None):
         if response is None:
-            logging.debug('Returning {} by default'.format(default))
+            logging.debug('Returning {} by default'.format(default)) 
             return default
         if response.status_code != 200:
-            logger.warn("Last request failed with code {}, reason '{}' and text '{}'".format(
-                response.status_code, response.reason, response.text
-            ))
-            # Assert that no internal info will be given to user
+            logger.warn("Last request failed with code {}, reason '{}' and text '{}'".format( 
+                response.status_code, response.reason, response.text 
+            )) 
+            # Assert that no internal info will be given to user 
             assert response.text.find('.cpp:') == -1, 'No internal info should be given to user'
             if self.__raise_on_error:
                 raise RuntimeError(
@@ -150,16 +150,16 @@ class SqsHttpApi(object):
                 )
             return default
 
-        logging.debug('Parsing response: {}'.format(response.text))
+        logging.debug('Parsing response: {}'.format(response.text)) 
         result = xmltodict.parse(response.text)
         try:
             return extract_method(result)
-        except (KeyError, TypeError) as ex:
-            logger.error("Could not process response from SQS: {}. {}: {}".format(result, type(ex), ex))
+        except (KeyError, TypeError) as ex: 
+            logger.error("Could not process response from SQS: {}. {}: {}".format(result, type(ex), ex)) 
             return default
 
     def create_user(self, username):
-        return self.execute_request(
+        return self.execute_request( 
             action='CreateUser',
             extract_result_method=lambda x: x['CreateUserResponse']['ResponseMetadata'],
             UserName=username
@@ -173,22 +173,22 @@ class SqsHttpApi(object):
         )
 
     def list_users(self):
-        return self.execute_request(
+        return self.execute_request( 
             action='ListUsers',
-            extract_result_method=lambda x: wrap_in_list(x['ListUsersResponse']['ListUsersResult']['UserName'])
+            extract_result_method=lambda x: wrap_in_list(x['ListUsersResponse']['ListUsersResult']['UserName']) 
         )
 
     def list_queues(self, name_prefix=None):
         if name_prefix is not None:
-            return self.execute_request(
+            return self.execute_request( 
                 action='ListQueues',
-                extract_result_method=lambda x: wrap_in_list(x['ListQueuesResponse']['ListQueuesResult']['QueueUrl']), default=(),
+                extract_result_method=lambda x: wrap_in_list(x['ListQueuesResponse']['ListQueuesResult']['QueueUrl']), default=(), 
                 QueueNamePrefix=name_prefix
             )
         else:
-            return self.execute_request(
+            return self.execute_request( 
                 action='ListQueues',
-                extract_result_method=lambda x: wrap_in_list(x['ListQueuesResponse']['ListQueuesResult']['QueueUrl']), default=(),
+                extract_result_method=lambda x: wrap_in_list(x['ListQueuesResponse']['ListQueuesResult']['QueueUrl']), default=(), 
             )
 
     def private_count_queues(self):
@@ -202,16 +202,16 @@ class SqsHttpApi(object):
         # if is_fifo and not queue_name.endswith('.fifo'):
         #     return None
         if attributes is None:
-            attributes = dict()
+            attributes = dict() 
         if is_fifo:
-            attributes = dict(attributes)  # copy
+            attributes = dict(attributes)  # copy 
             attributes['FifoQueue'] = 'true'
         params = {}
         for i, (k, v) in enumerate(attributes.items()):
             params['Attribute.{id}.Name'.format(id=i+1)] = k
             params['Attribute.{id}.Value'.format(id=i + 1)] = v
 
-        return self.execute_request(
+        return self.execute_request( 
             action='CreateQueue',
             extract_result_method=lambda x: x['CreateQueueResponse']['CreateQueueResult']['QueueUrl'],
             QueueName=queue_name,
@@ -219,47 +219,47 @@ class SqsHttpApi(object):
         )
 
     def delete_queue(self, queue_url):
-        return self.execute_request(
+        return self.execute_request( 
             action='DeleteQueue',
             extract_result_method=lambda x: x['DeleteQueueResponse']['ResponseMetadata']['RequestId'],
             QueueUrl=queue_url
         )
 
-    def private_delete_queue_batch(self, queue_urls):
-        args = {}
-        for i, url in enumerate(queue_urls):
-            args["DeleteQueueBatchRequestEntry.{}.Id".format(i+1)] = i
-            args["DeleteQueueBatchRequestEntry.{}.QueueUrl".format(i+1)] = url
-
-        return self.execute_request(
-            action='DeleteQueueBatch',
-            private=True,
-            extract_result_method=lambda x: x['DeleteQueueBatchResponse']['DeleteQueueBatchResult'],
-            **args
-        )
-
-    def purge_queue(self, queue_url):
-        return self.execute_request(
-            action='PurgeQueue',
-            extract_result_method=lambda x: x['PurgeQueueResponse']['ResponseMetadata']['RequestId'],
-            QueueUrl=queue_url
-        )
-
-    def private_purge_queue_batch(self, queue_urls):
-        args = {}
-        for i, url in enumerate(queue_urls):
-            args["PurgeQueueBatchRequestEntry.{}.Id".format(i+1)] = i
-            args["PurgeQueueBatchRequestEntry.{}.QueueUrl".format(i+1)] = url
-
-        return self.execute_request(
-            action='PurgeQueueBatch',
-            private=True,
-            extract_result_method=lambda x: x['PurgeQueueBatchResponse']['PurgeQueueBatchResult'],
-            **args
-        )
-
+    def private_delete_queue_batch(self, queue_urls): 
+        args = {} 
+        for i, url in enumerate(queue_urls): 
+            args["DeleteQueueBatchRequestEntry.{}.Id".format(i+1)] = i 
+            args["DeleteQueueBatchRequestEntry.{}.QueueUrl".format(i+1)] = url 
+ 
+        return self.execute_request( 
+            action='DeleteQueueBatch', 
+            private=True, 
+            extract_result_method=lambda x: x['DeleteQueueBatchResponse']['DeleteQueueBatchResult'], 
+            **args 
+        ) 
+ 
+    def purge_queue(self, queue_url): 
+        return self.execute_request( 
+            action='PurgeQueue', 
+            extract_result_method=lambda x: x['PurgeQueueResponse']['ResponseMetadata']['RequestId'], 
+            QueueUrl=queue_url 
+        ) 
+ 
+    def private_purge_queue_batch(self, queue_urls): 
+        args = {} 
+        for i, url in enumerate(queue_urls): 
+            args["PurgeQueueBatchRequestEntry.{}.Id".format(i+1)] = i 
+            args["PurgeQueueBatchRequestEntry.{}.QueueUrl".format(i+1)] = url 
+ 
+        return self.execute_request( 
+            action='PurgeQueueBatch', 
+            private=True, 
+            extract_result_method=lambda x: x['PurgeQueueBatchResponse']['PurgeQueueBatchResult'], 
+            **args 
+        ) 
+ 
     def get_queue_url(self, queue_name):
-        return self.execute_request(
+        return self.execute_request( 
             action='GetQueueUrl',
             extract_result_method=lambda x: x['GetQueueUrlResponse']['GetQueueUrlResult']['QueueUrl'],
             QueueName=queue_name
@@ -272,47 +272,47 @@ class SqsHttpApi(object):
             QueueUrl=queue_url
         )
 
-    def get_queue_attributes(self, queue_url, attributes=['All']):
-        params = {}
+    def get_queue_attributes(self, queue_url, attributes=['All']): 
+        params = {} 
         for i in six.moves.range(len(attributes)):
-            params['AttributeName.{}'.format(i + 1)] = attributes[i]
-        attrib_list = self.execute_request(
-            action='GetQueueAttributes',
-            extract_result_method=lambda x: x['GetQueueAttributesResponse']['GetQueueAttributesResult']['Attribute'],
-            QueueUrl=queue_url,
-            **params
-        )
-        result = {}
+            params['AttributeName.{}'.format(i + 1)] = attributes[i] 
+        attrib_list = self.execute_request( 
+            action='GetQueueAttributes', 
+            extract_result_method=lambda x: x['GetQueueAttributesResponse']['GetQueueAttributesResult']['Attribute'], 
+            QueueUrl=queue_url, 
+            **params 
+        ) 
+        result = {} 
         if attrib_list is None:
             return result
 
-        for attr in wrap_in_list(attrib_list):
-            result[attr['Name']] = attr['Value']
-        return result
-
-    def private_get_queue_attributes_batch(self, queue_urls):
-        args = {
-            'AttributeName.1': 'All',
-        }
-        for i, url in enumerate(queue_urls):
-            args["GetQueueAttributesBatchRequestEntry.{}.Id".format(i+1)] = i
-            args["GetQueueAttributesBatchRequestEntry.{}.QueueUrl".format(i+1)] = url
-        result_list = self.execute_request(
-            action='GetQueueAttributesBatch',
-            private=True,
-            extract_result_method=lambda x: x['GetQueueAttributesBatchResponse']['GetQueueAttributesBatchResult'],
-            **args
-        )
-        if 'GetQueueAttributesBatchResultEntry' in result_list:
-            entries = result_list['GetQueueAttributesBatchResultEntry']
-            for entry in wrap_in_list(entries):
-                result = {}
-                for attr in wrap_in_list(entry['Attribute']):
-                    result[attr['Name']] = attr['Value']
-                entry['__AttributesDict'] = result
-
-        return result_list
-
+        for attr in wrap_in_list(attrib_list): 
+            result[attr['Name']] = attr['Value'] 
+        return result 
+ 
+    def private_get_queue_attributes_batch(self, queue_urls): 
+        args = { 
+            'AttributeName.1': 'All', 
+        } 
+        for i, url in enumerate(queue_urls): 
+            args["GetQueueAttributesBatchRequestEntry.{}.Id".format(i+1)] = i 
+            args["GetQueueAttributesBatchRequestEntry.{}.QueueUrl".format(i+1)] = url 
+        result_list = self.execute_request( 
+            action='GetQueueAttributesBatch', 
+            private=True, 
+            extract_result_method=lambda x: x['GetQueueAttributesBatchResponse']['GetQueueAttributesBatchResult'], 
+            **args 
+        ) 
+        if 'GetQueueAttributesBatchResultEntry' in result_list: 
+            entries = result_list['GetQueueAttributesBatchResultEntry'] 
+            for entry in wrap_in_list(entries): 
+                result = {} 
+                for attr in wrap_in_list(entry['Attribute']): 
+                    result[attr['Name']] = attr['Value'] 
+                entry['__AttributesDict'] = result 
+ 
+        return result_list 
+ 
     def modify_permissions(self, action, subject, path, permissions):
         args = {
             'Path': path,
@@ -337,20 +337,20 @@ class SqsHttpApi(object):
             **args
         )
 
-    def set_queue_attributes(self, queue_url, attributes):
-        params = {}
-        i = 1
-        for attr in attributes:
-            params['Attribute.{}.Name'.format(i)] = attr
-            params['Attribute.{}.Value'.format(i)] = attributes[attr]
-            i += 1
-        return self.execute_request(
-            action='SetQueueAttributes',
-            extract_result_method=lambda x: x['SetQueueAttributesResponse']['ResponseMetadata']['RequestId'],
-            QueueUrl=queue_url,
-            **params
-        )
-
+    def set_queue_attributes(self, queue_url, attributes): 
+        params = {} 
+        i = 1 
+        for attr in attributes: 
+            params['Attribute.{}.Name'.format(i)] = attr 
+            params['Attribute.{}.Value'.format(i)] = attributes[attr] 
+            i += 1 
+        return self.execute_request( 
+            action='SetQueueAttributes', 
+            extract_result_method=lambda x: x['SetQueueAttributesResponse']['ResponseMetadata']['RequestId'], 
+            QueueUrl=queue_url, 
+            **params 
+        ) 
+ 
     def send_message(
             self, queue_url, message_body,
             delay_seconds=None, attributes=None, deduplication_id=None, group_id=None
@@ -363,11 +363,11 @@ class SqsHttpApi(object):
             'MessageBody': message_body,
         }
         if delay_seconds is not None:
-            params['DelaySeconds'] = str(delay_seconds)
+            params['DelaySeconds'] = str(delay_seconds) 
         if deduplication_id is not None:
-            params['MessageDeduplicationId'] = str(deduplication_id)
+            params['MessageDeduplicationId'] = str(deduplication_id) 
         if group_id is not None:
-            params['MessageGroupId'] = str(group_id)
+            params['MessageGroupId'] = str(group_id) 
 
         if attributes is not None:
             attr_id_counter = itertools.count()
@@ -376,75 +376,75 @@ class SqsHttpApi(object):
                     raise ValueError("Unknown attribute type: {}".format(attr.type))
 
                 _id = next(attr_id_counter)
-                params['MessageAttribute.{id}.Name'.format(id=_id)] = attr.name
-                params['MessageAttribute.{id}.Value.DataType'.format(id=_id)] = attr.type
-                params['MessageAttribute.{id}.Value.{value_type}'.format(
+                params['MessageAttribute.{id}.Name'.format(id=_id)] = attr.name 
+                params['MessageAttribute.{id}.Value.DataType'.format(id=_id)] = attr.type 
+                params['MessageAttribute.{id}.Value.{value_type}'.format( 
                     id=_id, value_type=SQS_ATTRIBUTE_TYPES[attr.type]
                 )] = attr.value
 
-        return self.execute_request(
+        return self.execute_request( 
             action='SendMessage',
             extract_result_method=lambda x: x['SendMessageResponse']['SendMessageResult']['MessageId'],
             **params
         )
 
-    def send_message_batch(self, queue_url, send_message_params_list):
-        params = {
-            'QueueUrl': queue_url,
-        }
-        for i, entry in enumerate(send_message_params_list):
-            params['SendMessageBatchRequestEntry.{i}.Id'.format(i=i+1)] = str(i)
-            params['SendMessageBatchRequestEntry.{i}.MessageBody'.format(i=i+1)] = entry.message_body
-            if entry.delay_seconds is not None:
-                params['SendMessageBatchRequestEntry.{i}.DelaySeconds'.format(i=i+1)] = str(entry.delay_seconds)
-            if entry.deduplication_id is not None:
-                params['SendMessageBatchRequestEntry.{i}.MessageDeduplicationId'.format(i=i+1)] = str(entry.deduplication_id)
-            if entry.group_id is not None:
-                params['SendMessageBatchRequestEntry.{i}.MessageGroupId'.format(i=i+1)] = str(entry.group_id)
-
-            if entry.attributes is not None:
-                attr_id_counter = itertools.count()
-                for attr in entry.attributes:
-                    if attr.type not in SQS_ATTRIBUTE_TYPES:
-                        raise ValueError("Unknown attribute type: {}".format(attr.type))
-
+    def send_message_batch(self, queue_url, send_message_params_list): 
+        params = { 
+            'QueueUrl': queue_url, 
+        } 
+        for i, entry in enumerate(send_message_params_list): 
+            params['SendMessageBatchRequestEntry.{i}.Id'.format(i=i+1)] = str(i) 
+            params['SendMessageBatchRequestEntry.{i}.MessageBody'.format(i=i+1)] = entry.message_body 
+            if entry.delay_seconds is not None: 
+                params['SendMessageBatchRequestEntry.{i}.DelaySeconds'.format(i=i+1)] = str(entry.delay_seconds) 
+            if entry.deduplication_id is not None: 
+                params['SendMessageBatchRequestEntry.{i}.MessageDeduplicationId'.format(i=i+1)] = str(entry.deduplication_id) 
+            if entry.group_id is not None: 
+                params['SendMessageBatchRequestEntry.{i}.MessageGroupId'.format(i=i+1)] = str(entry.group_id) 
+ 
+            if entry.attributes is not None: 
+                attr_id_counter = itertools.count() 
+                for attr in entry.attributes: 
+                    if attr.type not in SQS_ATTRIBUTE_TYPES: 
+                        raise ValueError("Unknown attribute type: {}".format(attr.type)) 
+ 
                     _id = next(attr_id_counter)
-                    params['SendMessageBatchRequestEntry.{i}.MessageAttribute.{id}.Name'.format(i=i+1, id=_id)] = attr.name
-                    params['SendMessageBatchRequestEntry.{i}.MessageAttribute.{id}.Value.DataType'.format(i=i+1, id=_id)] = attr.type
-                    params['SendMessageBatchRequestEntry.{i}.MessageAttribute.{id}.Value.{value_type}'.format(
-                        i=i+1, id=_id, value_type=SQS_ATTRIBUTE_TYPES[attr.type]
-                    )] = attr.value
-
-        resp = self.execute_request(
-            action='SendMessageBatch',
-            extract_result_method=lambda x: x['SendMessageBatchResponse'],
-            **params
-        )
+                    params['SendMessageBatchRequestEntry.{i}.MessageAttribute.{id}.Name'.format(i=i+1, id=_id)] = attr.name 
+                    params['SendMessageBatchRequestEntry.{i}.MessageAttribute.{id}.Value.DataType'.format(i=i+1, id=_id)] = attr.type 
+                    params['SendMessageBatchRequestEntry.{i}.MessageAttribute.{id}.Value.{value_type}'.format( 
+                        i=i+1, id=_id, value_type=SQS_ATTRIBUTE_TYPES[attr.type] 
+                    )] = attr.value 
+ 
+        resp = self.execute_request( 
+            action='SendMessageBatch', 
+            extract_result_method=lambda x: x['SendMessageBatchResponse'], 
+            **params 
+        ) 
         result = [dict() for i in six.moves.range(len(send_message_params_list))]
-        results = resp.get('SendMessageBatchResult')
-        logging.debug('results: {}'.format(results))
-        if results:
-            entries = results.get('SendMessageBatchResultEntry')
-            logging.debug('entries: {}'.format(entries))
-            if entries:
-                for res in wrap_in_list(entries):
-                    i = int(res['Id'])
-                    assert i < len(result) and i >= 0
-                    result[i]['SendMessageBatchResultEntry'] = res
-
-            errors = results.get('BatchResultErrorEntry')
-            logging.debug('errors: {}'.format(errors))
-            if errors:
-                for err in wrap_in_list(errors):
-                    i = int(err['Id'])
-                    assert i < len(result) and i >= 0
-                    result[i]['BatchResultErrorEntry'] = err
-        return result
-
+        results = resp.get('SendMessageBatchResult') 
+        logging.debug('results: {}'.format(results)) 
+        if results: 
+            entries = results.get('SendMessageBatchResultEntry') 
+            logging.debug('entries: {}'.format(entries)) 
+            if entries: 
+                for res in wrap_in_list(entries): 
+                    i = int(res['Id']) 
+                    assert i < len(result) and i >= 0 
+                    result[i]['SendMessageBatchResultEntry'] = res 
+ 
+            errors = results.get('BatchResultErrorEntry') 
+            logging.debug('errors: {}'.format(errors)) 
+            if errors: 
+                for err in wrap_in_list(errors): 
+                    i = int(err['Id']) 
+                    assert i < len(result) and i >= 0 
+                    result[i]['BatchResultErrorEntry'] = err 
+        return result 
+ 
     def receive_message(
             self, queue_url, max_number_of_messages=None, wait_timeout=None,
-            visibility_timeout=None, meta_attributes=None, message_attributes=None,
-            receive_request_attempt_id=None
+            visibility_timeout=None, meta_attributes=None, message_attributes=None, 
+            receive_request_attempt_id=None 
     ):
         params = {'QueueUrl': queue_url}
         if max_number_of_messages is not None:
@@ -466,10 +466,10 @@ class SqsHttpApi(object):
                 _id = next(attr_id_counter)
                 params['MessageAttributeName.{}'.format(_id)] = attr
 
-        if receive_request_attempt_id is not None:
-            params['ReceiveRequestAttemptId'] = receive_request_attempt_id
-
-        return self.execute_request(
+        if receive_request_attempt_id is not None: 
+            params['ReceiveRequestAttemptId'] = receive_request_attempt_id 
+ 
+        return self.execute_request( 
             action='ReceiveMessage',
             extract_result_method=lambda x: wrap_in_list(
                 x['ReceiveMessageResponse']['ReceiveMessageResult']['Message']
@@ -478,7 +478,7 @@ class SqsHttpApi(object):
         )
 
     def delete_message(self, queue_url, handle):
-        return self.execute_request(
+        return self.execute_request( 
             action='DeleteMessage',
             extract_result_method=lambda x: x['DeleteMessageResponse']['ResponseMetadata']['RequestId'],
             QueueUrl=queue_url, ReceiptHandle=handle
@@ -487,76 +487,76 @@ class SqsHttpApi(object):
     def delete_message_batch(self, queue_url, message_handles):
         args = {}
         for i, handle in enumerate(message_handles):
-            args["DeleteMessageBatchRequestEntry.{}.Id".format(i+1)] = str(i)
+            args["DeleteMessageBatchRequestEntry.{}.Id".format(i+1)] = str(i) 
             args["DeleteMessageBatchRequestEntry.{}.ReceiptHandle".format(i+1)] = handle
 
-        resp = self.execute_request(
+        resp = self.execute_request( 
             action='DeleteMessageBatch',
-            extract_result_method=lambda x: x['DeleteMessageBatchResponse'],
+            extract_result_method=lambda x: x['DeleteMessageBatchResponse'], 
             QueueUrl=queue_url, **args
         )
         result = [dict() for i in six.moves.range(len(message_handles))]
-        results = resp.get('DeleteMessageBatchResult')
-        logging.debug('results: {}'.format(results))
-        if results:
-            entries = results.get('DeleteMessageBatchResultEntry')
-            logging.debug('entries: {}'.format(entries))
-            if entries:
-                for res in wrap_in_list(entries):
-                    i = int(res['Id'])
-                    assert i < len(result) and i >= 0
-                    result[i]['DeleteMessageBatchResultEntry'] = res
+        results = resp.get('DeleteMessageBatchResult') 
+        logging.debug('results: {}'.format(results)) 
+        if results: 
+            entries = results.get('DeleteMessageBatchResultEntry') 
+            logging.debug('entries: {}'.format(entries)) 
+            if entries: 
+                for res in wrap_in_list(entries): 
+                    i = int(res['Id']) 
+                    assert i < len(result) and i >= 0 
+                    result[i]['DeleteMessageBatchResultEntry'] = res 
 
-            errors = results.get('BatchResultErrorEntry')
-            logging.debug('errors: {}'.format(errors))
-            if errors:
-                for err in wrap_in_list(errors):
-                    i = int(err['Id'])
-                    assert i < len(result) and i >= 0
-                    result[i]['BatchResultErrorEntry'] = err
-        return result
+            errors = results.get('BatchResultErrorEntry') 
+            logging.debug('errors: {}'.format(errors)) 
+            if errors: 
+                for err in wrap_in_list(errors): 
+                    i = int(err['Id']) 
+                    assert i < len(result) and i >= 0 
+                    result[i]['BatchResultErrorEntry'] = err 
+        return result 
 
-    def change_message_visibility(self, queue_url, handle, visibility_timeout):
-        return self.execute_request(
-            action='ChangeMessageVisibility',
-            extract_result_method=lambda x: x['ChangeMessageVisibilityResponse']['ResponseMetadata']['RequestId'],
-            QueueUrl=queue_url, ReceiptHandle=handle, VisibilityTimeout=visibility_timeout
-        )
-
-    def change_message_visibility_batch(self, queue_url, change_message_visibility_params_list):
-        args = {}
-        for i, params in enumerate(change_message_visibility_params_list):
-            args["ChangeMessageVisibilityBatchRequestEntry.{}.Id".format(i+1)] = str(i)
-            args["ChangeMessageVisibilityBatchRequestEntry.{}.ReceiptHandle".format(i+1)] = params.receipt_handle
-            args["ChangeMessageVisibilityBatchRequestEntry.{}.VisibilityTimeout".format(i+1)] = params.visibility_timeout
-
-        resp = self.execute_request(
-            action='ChangeMessageVisibilityBatch',
-            extract_result_method=lambda x: x['ChangeMessageVisibilityBatchResponse'],
-            QueueUrl=queue_url, **args
-        )
+    def change_message_visibility(self, queue_url, handle, visibility_timeout): 
+        return self.execute_request( 
+            action='ChangeMessageVisibility', 
+            extract_result_method=lambda x: x['ChangeMessageVisibilityResponse']['ResponseMetadata']['RequestId'], 
+            QueueUrl=queue_url, ReceiptHandle=handle, VisibilityTimeout=visibility_timeout 
+        ) 
+ 
+    def change_message_visibility_batch(self, queue_url, change_message_visibility_params_list): 
+        args = {} 
+        for i, params in enumerate(change_message_visibility_params_list): 
+            args["ChangeMessageVisibilityBatchRequestEntry.{}.Id".format(i+1)] = str(i) 
+            args["ChangeMessageVisibilityBatchRequestEntry.{}.ReceiptHandle".format(i+1)] = params.receipt_handle 
+            args["ChangeMessageVisibilityBatchRequestEntry.{}.VisibilityTimeout".format(i+1)] = params.visibility_timeout 
+ 
+        resp = self.execute_request( 
+            action='ChangeMessageVisibilityBatch', 
+            extract_result_method=lambda x: x['ChangeMessageVisibilityBatchResponse'], 
+            QueueUrl=queue_url, **args 
+        ) 
         result = [dict() for i in six.moves.range(len(change_message_visibility_params_list))]
-        results = resp.get('ChangeMessageVisibilityBatchResult')
-        logging.debug('results: {}'.format(results))
-        if results:
-            entries = results.get('ChangeMessageVisibilityBatchResultEntry')
-            logging.debug('entries: {}'.format(entries))
-            if entries:
-                for res in wrap_in_list(entries):
-                    i = int(res['Id'])
-                    assert i < len(result) and i >= 0
-                    result[i]['ChangeMessageVisibilityBatchResultEntry'] = res
-
-            errors = results.get('BatchResultErrorEntry')
-            logging.debug('errors: {}'.format(errors))
-            if errors:
-                for err in wrap_in_list(errors):
-                    i = int(err['Id'])
-                    assert i < len(result) and i >= 0
-                    result[i]['BatchResultErrorEntry'] = err
-        return result
-
-
+        results = resp.get('ChangeMessageVisibilityBatchResult') 
+        logging.debug('results: {}'.format(results)) 
+        if results: 
+            entries = results.get('ChangeMessageVisibilityBatchResultEntry') 
+            logging.debug('entries: {}'.format(entries)) 
+            if entries: 
+                for res in wrap_in_list(entries): 
+                    i = int(res['Id']) 
+                    assert i < len(result) and i >= 0 
+                    result[i]['ChangeMessageVisibilityBatchResultEntry'] = res 
+ 
+            errors = results.get('BatchResultErrorEntry') 
+            logging.debug('errors: {}'.format(errors)) 
+            if errors: 
+                for err in wrap_in_list(errors): 
+                    i = int(err['Id']) 
+                    assert i < len(result) and i >= 0 
+                    result[i]['BatchResultErrorEntry'] = err 
+        return result 
+ 
+ 
 class SqsHttpMinigunApi(SqsHttpApi):
     def _process_response(self, response, extract_method, default=None):
         if response is None:

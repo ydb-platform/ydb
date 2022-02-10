@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/public/api/protos/yq.pb.h>
-#include <ydb/core/yq/libs/events/event_subspace.h>
+#include <ydb/core/yq/libs/events/event_subspace.h> 
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
@@ -16,12 +16,12 @@ namespace NYq {
 struct TEvTestConnection {
     // Event ids.
     enum EEv : ui32 {
-        EvTestConnectionRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::TestConnection),
+        EvTestConnectionRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::TestConnection), 
         EvTestConnectionResponse,
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::TestConnection), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::TestConnection), "All events must be in their subspace"); 
 
     struct TEvTestConnectionRequest : NActors::TEventLocal<TEvTestConnectionRequest, EvTestConnectionRequest> {
         explicit TEvTestConnectionRequest(const TString& scope,

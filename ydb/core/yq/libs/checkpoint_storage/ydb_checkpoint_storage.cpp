@@ -6,12 +6,12 @@
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 #include <util/stream/str.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 #include <util/string/printf.h>
 
-#include <fmt/format.h>
-
-namespace NYq {
+#include <fmt/format.h> 
+ 
+namespace NYq { 
 
 using namespace NThreading;
 using namespace NYdb;
@@ -23,39 +23,39 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char* const CoordinatorsSyncTable = "coordinators_sync";
-const char* const CheckpointsMetadataTable = "checkpoints_metadata";
-const char* const CheckpointsGraphsDescriptionTable = "checkpoints_graphs_description";
+const char* const CoordinatorsSyncTable = "coordinators_sync"; 
+const char* const CheckpointsMetadataTable = "checkpoints_metadata"; 
+const char* const CheckpointsGraphsDescriptionTable = "checkpoints_graphs_description"; 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TCheckpointGraphDescriptionContext : public TThrRefBase {
-    TString GraphDescId;
-    const TMaybe<NProto::TCheckpointGraphDescription> NewGraphDescription;
-
-    explicit TCheckpointGraphDescriptionContext(const TString& graphDescId)
-        : GraphDescId(graphDescId)
-    {
-    }
-
-    explicit TCheckpointGraphDescriptionContext(const NProto::TCheckpointGraphDescription& desc)
-        : NewGraphDescription(desc)
-    {
-    }
-};
-
-using TCheckpointGraphDescriptionContextPtr = TIntrusivePtr<TCheckpointGraphDescriptionContext>;
-
-////////////////////////////////////////////////////////////////////////////////
-
+struct TCheckpointGraphDescriptionContext : public TThrRefBase { 
+    TString GraphDescId; 
+    const TMaybe<NProto::TCheckpointGraphDescription> NewGraphDescription; 
+ 
+    explicit TCheckpointGraphDescriptionContext(const TString& graphDescId) 
+        : GraphDescId(graphDescId) 
+    { 
+    } 
+ 
+    explicit TCheckpointGraphDescriptionContext(const NProto::TCheckpointGraphDescription& desc) 
+        : NewGraphDescription(desc) 
+    { 
+    } 
+}; 
+ 
+using TCheckpointGraphDescriptionContextPtr = TIntrusivePtr<TCheckpointGraphDescriptionContext>; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 struct TCheckpointContext : public TThrRefBase {
     const TCheckpointId CheckpointId;
     const ECheckpointStatus Status; // optional new status
     const ECheckpointStatus ExpectedStatus; // optional expecrted current status, used only in some operations
 
     TGenerationContextPtr GenerationContext;
-    TCheckpointGraphDescriptionContextPtr CheckpointGraphDescriptionContext;
-    IEntityIdGenerator::TPtr EntityIdGenerator;
+    TCheckpointGraphDescriptionContextPtr CheckpointGraphDescriptionContext; 
+    IEntityIdGenerator::TPtr EntityIdGenerator; 
 
     TCheckpointContext(const TCheckpointId& id,
                        ECheckpointStatus status,
@@ -140,88 +140,88 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
     // TODO: use prepared query
 
     const auto& generationContext = context->GenerationContext;
-    const auto& graphDescContext = context->CheckpointGraphDescriptionContext;
+    const auto& graphDescContext = context->CheckpointGraphDescriptionContext; 
 
-    TStringBuilder query;
-    using namespace fmt::literals;
-    const TString firstPart = fmt::format(R"sql(
+    TStringBuilder query; 
+    using namespace fmt::literals; 
+    const TString firstPart = fmt::format(R"sql( 
         --!syntax_v1
-        PRAGMA TablePathPrefix("{table_path_prefix}");
-        DECLARE $ts AS Timestamp;
-        DECLARE $graph_id AS String;
-        DECLARE $graph_desc_id AS String;
-        DECLARE $coordinator_generation AS Uint64;
-        DECLARE $seq_no AS Uint64;
-        DECLARE $status AS Uint8;
-        {optional_graph_description_declaration}
-        INSERT INTO {checkpoints_metadata_table_name}
-          (graph_id, coordinator_generation, seq_no, status, created_by, modified_by, state_size, graph_description_id)
-          VALUES ($graph_id, $coordinator_generation, $seq_no, $status, $ts, $ts, 0, $graph_desc_id);
-    )sql",
-    "table_path_prefix"_a = generationContext->TablePathPrefix,
-    "checkpoints_metadata_table_name"_a = CheckpointsMetadataTable,
-    "optional_graph_description_declaration"_a = graphDescContext->NewGraphDescription ? "DECLARE $graph_description AS String;" : ""
-    );
+        PRAGMA TablePathPrefix("{table_path_prefix}"); 
+        DECLARE $ts AS Timestamp; 
+        DECLARE $graph_id AS String; 
+        DECLARE $graph_desc_id AS String; 
+        DECLARE $coordinator_generation AS Uint64; 
+        DECLARE $seq_no AS Uint64; 
+        DECLARE $status AS Uint8; 
+        {optional_graph_description_declaration} 
+        INSERT INTO {checkpoints_metadata_table_name} 
+          (graph_id, coordinator_generation, seq_no, status, created_by, modified_by, state_size, graph_description_id) 
+          VALUES ($graph_id, $coordinator_generation, $seq_no, $status, $ts, $ts, 0, $graph_desc_id); 
+    )sql", 
+    "table_path_prefix"_a = generationContext->TablePathPrefix, 
+    "checkpoints_metadata_table_name"_a = CheckpointsMetadataTable, 
+    "optional_graph_description_declaration"_a = graphDescContext->NewGraphDescription ? "DECLARE $graph_description AS String;" : "" 
+    ); 
 
-    query << firstPart;
+    query << firstPart; 
 
-    NYdb::TParamsBuilder params;
-    params
-        .AddParam("$graph_id")
-            .String(generationContext->PrimaryKey)
-            .Build()
-        .AddParam("$graph_desc_id")
-            .String(graphDescContext->GraphDescId)
-            .Build()
-        .AddParam("$coordinator_generation")
-            .Uint64(context->CheckpointId.CoordinatorGeneration)
-            .Build()
-        .AddParam("$seq_no")
-            .Uint64(context->CheckpointId.SeqNo)
-            .Build()
-        .AddParam("$status")
-            .Uint8((ui8)context->Status)
-            .Build()
-        .AddParam("$ts")
-            .Timestamp(TInstant::Now())
-            .Build();
-
-    if (graphDescContext->NewGraphDescription) {
-        const TString graphDescriptionPart = fmt::format(R"sql(
-            INSERT INTO {checkpoints_graphs_description_table_name}
-                (id, ref_count, graph_description)
-                VALUES ($graph_desc_id, 1, $graph_description);
-        )sql",
-        "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable
-        );
-
-        query << graphDescriptionPart;
-
-        TString serializedGraphDescription;
-        if (!graphDescContext->NewGraphDescription->SerializeToString(&serializedGraphDescription)) {
-            NYql::TIssues issues;
-            issues.AddIssue("Failed to serialize graph description proto");
-            return MakeFuture(TStatus(EStatus::BAD_REQUEST, std::move(issues)));
-        }
-
-        params
-            .AddParam("$graph_description")
-                .String(serializedGraphDescription)
-                .Build();
-    } else {
-        const TString graphDescriptionPart = fmt::format(R"sql(
-            UPDATE {checkpoints_graphs_description_table_name}
-                SET ref_count = ref_count + 1
-                WHERE id = $graph_desc_id;
-        )sql",
-        "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable
-        );
-
-        query << graphDescriptionPart;
-    }
-
+    NYdb::TParamsBuilder params; 
+    params 
+        .AddParam("$graph_id") 
+            .String(generationContext->PrimaryKey) 
+            .Build() 
+        .AddParam("$graph_desc_id") 
+            .String(graphDescContext->GraphDescId) 
+            .Build() 
+        .AddParam("$coordinator_generation") 
+            .Uint64(context->CheckpointId.CoordinatorGeneration) 
+            .Build() 
+        .AddParam("$seq_no") 
+            .Uint64(context->CheckpointId.SeqNo) 
+            .Build() 
+        .AddParam("$status") 
+            .Uint8((ui8)context->Status) 
+            .Build() 
+        .AddParam("$ts") 
+            .Timestamp(TInstant::Now()) 
+            .Build(); 
+ 
+    if (graphDescContext->NewGraphDescription) { 
+        const TString graphDescriptionPart = fmt::format(R"sql( 
+            INSERT INTO {checkpoints_graphs_description_table_name} 
+                (id, ref_count, graph_description) 
+                VALUES ($graph_desc_id, 1, $graph_description); 
+        )sql", 
+        "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable 
+        ); 
+ 
+        query << graphDescriptionPart; 
+ 
+        TString serializedGraphDescription; 
+        if (!graphDescContext->NewGraphDescription->SerializeToString(&serializedGraphDescription)) { 
+            NYql::TIssues issues; 
+            issues.AddIssue("Failed to serialize graph description proto"); 
+            return MakeFuture(TStatus(EStatus::BAD_REQUEST, std::move(issues))); 
+        } 
+ 
+        params 
+            .AddParam("$graph_description") 
+                .String(serializedGraphDescription) 
+                .Build(); 
+    } else { 
+        const TString graphDescriptionPart = fmt::format(R"sql( 
+            UPDATE {checkpoints_graphs_description_table_name} 
+                SET ref_count = ref_count + 1 
+                WHERE id = $graph_desc_id; 
+        )sql", 
+        "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable 
+        ); 
+ 
+        query << graphDescriptionPart; 
+    } 
+ 
     auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
-    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build()).Apply(
+    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build()).Apply( 
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -257,50 +257,50 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
         });
 }
 
-TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context) {
-    const auto& generationContext = context->GenerationContext;
-    const auto& graphDescContext = context->CheckpointGraphDescriptionContext;
-
-    auto query = Sprintf(R"(
-        --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
-
-        SELECT ref_count
-        FROM %s
-        WHERE id = "%s";
-    )", generationContext->TablePathPrefix.c_str(),
-        CheckpointsGraphsDescriptionTable,
-        graphDescContext->GraphDescId.c_str());
-
-    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction));
-}
-
-bool GraphDescIdExists(const TFuture<TDataQueryResult>& result) {
-    return result.GetValue().GetResultSet(0).RowsCount() != 0;
-}
-
-TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
-    if (context->CheckpointGraphDescriptionContext->GraphDescId) { // already given
-        return MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
-    }
-
-    Y_VERIFY(context->EntityIdGenerator);
-    context->CheckpointGraphDescriptionContext->GraphDescId = context->EntityIdGenerator->Generate(EEntityType::CHECKPOINT_GRAPH_DESCRIPTION);
-    return SelectGraphDescId(context)
-        .Apply(
-            [context](const TFuture<TDataQueryResult>& result) {
-                if (!result.GetValue().IsSuccess()) {
-                    return MakeFuture<TStatus>(result.GetValue());
-                }
-                if (!GraphDescIdExists(result)) {
-                    return MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
-                } else {
-                    context->CheckpointGraphDescriptionContext->GraphDescId = {}; // Regenerate
-                    return GenerateGraphDescId(context);
-                }
-            });
-}
-
+TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context) { 
+    const auto& generationContext = context->GenerationContext; 
+    const auto& graphDescContext = context->CheckpointGraphDescriptionContext; 
+ 
+    auto query = Sprintf(R"( 
+        --!syntax_v1 
+        PRAGMA TablePathPrefix("%s"); 
+ 
+        SELECT ref_count 
+        FROM %s 
+        WHERE id = "%s"; 
+    )", generationContext->TablePathPrefix.c_str(), 
+        CheckpointsGraphsDescriptionTable, 
+        graphDescContext->GraphDescId.c_str()); 
+ 
+    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction)); 
+} 
+ 
+bool GraphDescIdExists(const TFuture<TDataQueryResult>& result) { 
+    return result.GetValue().GetResultSet(0).RowsCount() != 0; 
+} 
+ 
+TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) { 
+    if (context->CheckpointGraphDescriptionContext->GraphDescId) { // already given 
+        return MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues())); 
+    } 
+ 
+    Y_VERIFY(context->EntityIdGenerator); 
+    context->CheckpointGraphDescriptionContext->GraphDescId = context->EntityIdGenerator->Generate(EEntityType::CHECKPOINT_GRAPH_DESCRIPTION); 
+    return SelectGraphDescId(context) 
+        .Apply( 
+            [context](const TFuture<TDataQueryResult>& result) { 
+                if (!result.GetValue().IsSuccess()) { 
+                    return MakeFuture<TStatus>(result.GetValue()); 
+                } 
+                if (!GraphDescIdExists(result)) { 
+                    return MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues())); 
+                } else { 
+                    context->CheckpointGraphDescriptionContext->GraphDescId = {}; // Regenerate 
+                    return GenerateGraphDescId(context); 
+                } 
+            }); 
+} 
+ 
 TFuture<TStatus> CreateCheckpointWrapper(
     const TFuture<TStatus>& generationFuture,
     const TCheckpointContextPtr& context)
@@ -312,18 +312,18 @@ TFuture<TStatus> CreateCheckpointWrapper(
                 return MakeFuture(generationSelect);
             }
 
-            return GenerateGraphDescId(context)
-                .Apply(
-                    [context](const TFuture<TStatus>& result) {
-                        if (!result.GetValue().IsSuccess()) {
-                            return MakeFuture(result.GetValue());
-                        }
-                        return CreateCheckpoint(context);
-                    });
+            return GenerateGraphDescId(context) 
+                .Apply( 
+                    [context](const TFuture<TStatus>& result) { 
+                        if (!result.GetValue().IsSuccess()) { 
+                            return MakeFuture(result.GetValue()); 
+                        } 
+                        return CreateCheckpoint(context); 
+                    }); 
         });
 }
 
-TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& context, const TVector<ECheckpointStatus>& statuses, ui64 limit, TExecDataQuerySettings settings, bool loadGraphDescription)
+TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& context, const TVector<ECheckpointStatus>& statuses, ui64 limit, TExecDataQuerySettings settings, bool loadGraphDescription) 
 {
     NYdb::TParamsBuilder paramsBuilder;
     if (statuses) {
@@ -335,55 +335,55 @@ TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& co
     }
 
     paramsBuilder.AddParam("$graph_id").String(context->PrimaryKey).Build();
-    if (limit < std::numeric_limits<ui64>::max()) {
-        paramsBuilder.AddParam("$limit").Uint64(limit).Build();
-    }
+    if (limit < std::numeric_limits<ui64>::max()) { 
+        paramsBuilder.AddParam("$limit").Uint64(limit).Build(); 
+    } 
 
     auto params = paramsBuilder.Build();
 
-    using namespace fmt::literals;
-    TString join;
-    if (loadGraphDescription) {
-        join = fmt::format(R"sql(
-            INNER JOIN {checkpoints_graphs_description_table_name} AS desc
-                ON metadata.graph_description_id = desc.id
-        )sql",
-        "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable
-        );
-    }
-
-    const TString query = fmt::format(R"sql(
+    using namespace fmt::literals; 
+    TString join; 
+    if (loadGraphDescription) { 
+        join = fmt::format(R"sql( 
+            INNER JOIN {checkpoints_graphs_description_table_name} AS desc 
+                ON metadata.graph_description_id = desc.id 
+        )sql", 
+        "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable 
+        ); 
+    } 
+ 
+    const TString query = fmt::format(R"sql( 
         --!syntax_v1
-        PRAGMA TablePathPrefix("{table_path_prefix}");
+        PRAGMA TablePathPrefix("{table_path_prefix}"); 
         PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
-        DECLARE $graph_id AS String;
-        {optional_statuses_declaration}
-        {optional_limit_declaration}
+        DECLARE $graph_id AS String; 
+        {optional_statuses_declaration} 
+        {optional_limit_declaration} 
 
-        SELECT
-            {graph_description_field}
-            metadata.coordinator_generation AS coordinator_generation,
-            metadata.seq_no AS seq_no,
-            metadata.status AS status,
-            metadata.created_by AS created_by,
-            metadata.modified_by AS modified_by
-        FROM {checkpoints_metadata_table_name} AS metadata
-            {join}
-        WHERE metadata.graph_id = $graph_id
-            {statuses_condition}
+        SELECT 
+            {graph_description_field} 
+            metadata.coordinator_generation AS coordinator_generation, 
+            metadata.seq_no AS seq_no, 
+            metadata.status AS status, 
+            metadata.created_by AS created_by, 
+            metadata.modified_by AS modified_by 
+        FROM {checkpoints_metadata_table_name} AS metadata 
+            {join} 
+        WHERE metadata.graph_id = $graph_id 
+            {statuses_condition} 
         ORDER BY coordinator_generation, seq_no DESC
-        {limit_condition};
-    )sql",
-    "table_path_prefix"_a = context->TablePathPrefix,
-    "optional_statuses_declaration"_a = statuses ? "DECLARE $statuses AS List<Uint8>;" : "",
-    "statuses_condition"_a = statuses ? "AND metadata.status IN $statuses" : "",
-    "optional_limit_declaration"_a = limit < std::numeric_limits<ui64>::max() ? "DECLARE $limit AS Uint64;" : "",
-    "limit_condition"_a = limit < std::numeric_limits<ui64>::max() ? "LIMIT $limit" : "",
-    "checkpoints_metadata_table_name"_a = CheckpointsMetadataTable,
-    "graph_description_field"_a = loadGraphDescription ? "desc.graph_description AS graph_description," : "",
-    "join"_a = join
-    );
+        {limit_condition}; 
+    )sql", 
+    "table_path_prefix"_a = context->TablePathPrefix, 
+    "optional_statuses_declaration"_a = statuses ? "DECLARE $statuses AS List<Uint8>;" : "", 
+    "statuses_condition"_a = statuses ? "AND metadata.status IN $statuses" : "", 
+    "optional_limit_declaration"_a = limit < std::numeric_limits<ui64>::max() ? "DECLARE $limit AS Uint64;" : "", 
+    "limit_condition"_a = limit < std::numeric_limits<ui64>::max() ? "LIMIT $limit" : "", 
+    "checkpoints_metadata_table_name"_a = CheckpointsMetadataTable, 
+    "graph_description_field"_a = loadGraphDescription ? "desc.graph_description AS graph_description," : "", 
+    "join"_a = join 
+    ); 
 
     return context->Session.ExecuteDataQuery(
         query,
@@ -395,8 +395,8 @@ TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& co
 TFuture<TStatus> ProcessCheckpoints(
     const TDataQueryResult& selectResult,
     const TGenerationContextPtr& context,
-    const TGetCheckpointsContextPtr& getContext,
-    bool loadGraphDescription)
+    const TGetCheckpointsContextPtr& getContext, 
+    bool loadGraphDescription) 
 {
     if (!selectResult.IsSuccess()) {
         return MakeFuture<TStatus>(selectResult);
@@ -415,20 +415,20 @@ TFuture<TStatus> ProcessCheckpoints(
             ECheckpointStatus(*parser.ColumnParser("status").GetOptionalUint8()),
             *parser.ColumnParser("created_by").GetOptionalTimestamp(),
             *parser.ColumnParser("modified_by").GetOptionalTimestamp());
-
-        if (loadGraphDescription) {
-            if (const TMaybe<TString> graphDescription = parser.ColumnParser("graph_description").GetOptionalString(); graphDescription && *graphDescription) {
-                NProto::TCheckpointGraphDescription graphDesc;
-                if (!graphDesc.ParseFromString(*graphDescription)) {
-                    NYql::TIssues issues;
-                    issues.AddIssue("Failed to deserialize graph description proto");
-                    return MakeFuture(TStatus(EStatus::INTERNAL_ERROR, std::move(issues)));
-                }
-
-                NProto::TGraphParams& graphParams = getContext->Checkpoints.back().Graph.ConstructInPlace();
-                graphParams.Swap(graphDesc.MutableGraph());
-            }
-        }
+ 
+        if (loadGraphDescription) { 
+            if (const TMaybe<TString> graphDescription = parser.ColumnParser("graph_description").GetOptionalString(); graphDescription && *graphDescription) { 
+                NProto::TCheckpointGraphDescription graphDesc; 
+                if (!graphDesc.ParseFromString(*graphDescription)) { 
+                    NYql::TIssues issues; 
+                    issues.AddIssue("Failed to deserialize graph description proto"); 
+                    return MakeFuture(TStatus(EStatus::INTERNAL_ERROR, std::move(issues))); 
+                } 
+ 
+                NProto::TGraphParams& graphParams = getContext->Checkpoints.back().Graph.ConstructInPlace(); 
+                graphParams.Swap(graphDesc.MutableGraph()); 
+            } 
+        } 
     }
 
     return MakeFuture<TStatus>(selectResult);
@@ -554,9 +554,9 @@ class TCheckpointStorage : public ICheckpointStorage {
 public:
     explicit TCheckpointStorage(
         const NConfig::TYdbStorageConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const IEntityIdGenerator::TPtr& entityIdGenerator);
-
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
+        const IEntityIdGenerator::TPtr& entityIdGenerator); 
+ 
     ~TCheckpointStorage() = default;
 
     TFuture<TIssues> Init() override;
@@ -565,18 +565,18 @@ public:
 
     TFuture<TGetCoordinatorsResult> GetCoordinators() override;
 
-    TFuture<TCreateCheckpointResult> CreateCheckpoint(
+    TFuture<TCreateCheckpointResult> CreateCheckpoint( 
         const TCoordinatorId& coordinator,
         const TCheckpointId& checkpointId,
-        const TString& graphDescId,
+        const TString& graphDescId, 
         ECheckpointStatus status) override;
 
-    TFuture<TCreateCheckpointResult> CreateCheckpoint(
-        const TCoordinatorId& coordinator,
-        const TCheckpointId& checkpointId,
-        const NProto::TCheckpointGraphDescription& graphDesc,
-        ECheckpointStatus status) override;
-
+    TFuture<TCreateCheckpointResult> CreateCheckpoint( 
+        const TCoordinatorId& coordinator, 
+        const TCheckpointId& checkpointId, 
+        const NProto::TCheckpointGraphDescription& graphDesc, 
+        ECheckpointStatus status) override; 
+ 
     TFuture<TIssues> UpdateCheckpointStatus(
         const TCoordinatorId& coordinator,
         const TCheckpointId& checkpointId,
@@ -591,7 +591,7 @@ public:
         const TString& graph) override;
 
     TFuture<TGetCheckpointsResult> GetCheckpoints(
-        const TString& graph, const TVector<ECheckpointStatus>& statuses, ui64 limit, bool loadGraphDescription) override;
+        const TString& graph, const TVector<ECheckpointStatus>& statuses, ui64 limit, bool loadGraphDescription) override; 
 
     TFuture<TIssues> DeleteGraph(
         const TString& graphId) override;
@@ -611,23 +611,23 @@ public:
 
     TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> GetTotalCheckpointsStateSize(const TString& graphId) override;
     TExecDataQuerySettings DefaultExecDataQuerySettings();
-
-private:
-    TFuture<TCreateCheckpointResult> CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& context);
-
-private:
-    IEntityIdGenerator::TPtr EntityIdGenerator;
+ 
+private: 
+    TFuture<TCreateCheckpointResult> CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& context); 
+ 
+private: 
+    IEntityIdGenerator::TPtr EntityIdGenerator; 
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStorage::TCheckpointStorage(
     const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const IEntityIdGenerator::TPtr& entityIdGenerator)
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
+    const IEntityIdGenerator::TPtr& entityIdGenerator) 
     : YdbConnection(NewYdbConnection(config, credentialsProviderFactory))
     , Config(config)
-    , EntityIdGenerator(entityIdGenerator)
+    , EntityIdGenerator(entityIdGenerator) 
 {
 }
 
@@ -653,33 +653,33 @@ TFuture<TIssues> TCheckpointStorage::Init()
         }
     }
 
-#define RUN_CREATE_TABLE(tableName, desc)                           \
-    {                                                               \
-        auto status = CreateTable(YdbConnection,                    \
-                                  tableName,                        \
-                                  std::move(desc)).GetValueSync();  \
-        if (!IsTableCreated(status)) {                              \
-            issues = status.GetIssues();                            \
-                                                                    \
-            TStringStream ss;                                       \
-            ss << "Failed to create " << tableName                  \
-               << " table: " << status.GetStatus();                 \
-            if (issues) {                                           \
-                ss << ", issues: ";                                 \
-                issues.PrintTo(ss);                                 \
-            }                                                       \
-                                                                    \
-            return MakeFuture(std::move(issues));                   \
-        }                                                           \
-    }
-
+#define RUN_CREATE_TABLE(tableName, desc)                           \ 
+    {                                                               \ 
+        auto status = CreateTable(YdbConnection,                    \ 
+                                  tableName,                        \ 
+                                  std::move(desc)).GetValueSync();  \ 
+        if (!IsTableCreated(status)) {                              \ 
+            issues = status.GetIssues();                            \ 
+                                                                    \ 
+            TStringStream ss;                                       \ 
+            ss << "Failed to create " << tableName                  \ 
+               << " table: " << status.GetStatus();                 \ 
+            if (issues) {                                           \ 
+                ss << ", issues: ";                                 \ 
+                issues.PrintTo(ss);                                 \ 
+            }                                                       \ 
+                                                                    \ 
+            return MakeFuture(std::move(issues));                   \ 
+        }                                                           \ 
+    } 
+ 
     auto graphDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("generation", EPrimitiveType::Uint64)
         .SetPrimaryKeyColumn("graph_id")
         .Build();
 
-    RUN_CREATE_TABLE(CoordinatorsSyncTable, graphDesc);
+    RUN_CREATE_TABLE(CoordinatorsSyncTable, graphDesc); 
 
     // TODO: graph_id could be just secondary index, but API forbids it,
     // so we set it primary key column to have index
@@ -691,23 +691,23 @@ TFuture<TIssues> TCheckpointStorage::Init()
         .AddNullableColumn("created_by", EPrimitiveType::Timestamp)
         .AddNullableColumn("modified_by", EPrimitiveType::Timestamp)
         .AddNullableColumn("state_size", EPrimitiveType::Uint64)
-        .AddNullableColumn("graph_description_id", EPrimitiveType::String)
+        .AddNullableColumn("graph_description_id", EPrimitiveType::String) 
         .SetPrimaryKeyColumns({"graph_id", "coordinator_generation", "seq_no"})
         .Build();
 
-    RUN_CREATE_TABLE(CheckpointsMetadataTable, checkpointDesc);
+    RUN_CREATE_TABLE(CheckpointsMetadataTable, checkpointDesc); 
 
-    auto checkpointGraphsDescDesc = TTableBuilder()
-        .AddNullableColumn("id", EPrimitiveType::String)
-        .AddNullableColumn("ref_count", EPrimitiveType::Uint64)
-        .AddNullableColumn("graph_description", EPrimitiveType::String)
-        .SetPrimaryKeyColumn("id")
-        .Build();
+    auto checkpointGraphsDescDesc = TTableBuilder() 
+        .AddNullableColumn("id", EPrimitiveType::String) 
+        .AddNullableColumn("ref_count", EPrimitiveType::Uint64) 
+        .AddNullableColumn("graph_description", EPrimitiveType::String) 
+        .SetPrimaryKeyColumn("id") 
+        .Build(); 
 
-    RUN_CREATE_TABLE(CheckpointsGraphsDescriptionTable, checkpointGraphsDescDesc);
-
-#undef RUN_CREATE_TABLE
-
+    RUN_CREATE_TABLE(CheckpointsGraphsDescriptionTable, checkpointGraphsDescDesc); 
+ 
+#undef RUN_CREATE_TABLE 
+ 
     return MakeFuture(std::move(issues));
 }
 
@@ -762,32 +762,32 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
         });
 }
 
-TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpoint(
+TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpoint( 
     const TCoordinatorId& coordinator,
     const TCheckpointId& checkpointId,
-    const TString& graphDescId,
+    const TString& graphDescId, 
     ECheckpointStatus status)
 {
-    Y_VERIFY(graphDescId);
+    Y_VERIFY(graphDescId); 
     auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status);
-    checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDescId);
-    return CreateCheckpointImpl(coordinator, checkpointContext);
-}
-
-TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpoint(
-    const TCoordinatorId& coordinator,
-    const TCheckpointId& checkpointId,
-    const NProto::TCheckpointGraphDescription& graphDesc,
-    ECheckpointStatus status)
-{
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status);
-    checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDesc);
-    checkpointContext->EntityIdGenerator = EntityIdGenerator;
-    return CreateCheckpointImpl(coordinator, checkpointContext);
-}
-
-TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& checkpointContext) {
-    Y_VERIFY(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId || checkpointContext->EntityIdGenerator);
+    checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDescId); 
+    return CreateCheckpointImpl(coordinator, checkpointContext); 
+} 
+ 
+TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpoint( 
+    const TCoordinatorId& coordinator, 
+    const TCheckpointId& checkpointId, 
+    const NProto::TCheckpointGraphDescription& graphDesc, 
+    ECheckpointStatus status) 
+{ 
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status); 
+    checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDesc); 
+    checkpointContext->EntityIdGenerator = EntityIdGenerator; 
+    return CreateCheckpointImpl(coordinator, checkpointContext); 
+} 
+ 
+TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& checkpointContext) { 
+    Y_VERIFY(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId || checkpointContext->EntityIdGenerator); 
     auto future = YdbConnection->Client.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
@@ -806,14 +806,14 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
             return CreateCheckpointWrapper(future, checkpointContext);
         });
 
-    return future.Apply(
-        [checkpointContext](const TFuture<NYdb::TStatus>& future) {
-            if (NYql::TIssues issues = StatusToIssues(future.GetValue())) {
-                return TCreateCheckpointResult(TString(), std::move(issues));
-            } else {
-                return TCreateCheckpointResult(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId, NYql::TIssues());
-            }
-        });
+    return future.Apply( 
+        [checkpointContext](const TFuture<NYdb::TStatus>& future) { 
+            if (NYql::TIssues issues = StatusToIssues(future.GetValue())) { 
+                return TCreateCheckpointResult(TString(), std::move(issues)); 
+            } else { 
+                return TCreateCheckpointResult(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId, NYql::TIssues()); 
+            } 
+        }); 
 }
 
 TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
@@ -871,16 +871,16 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
 }
 
 TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckpoints(const TString& graph) {
-    return GetCheckpoints(graph, TVector<ECheckpointStatus>(), std::numeric_limits<ui64>::max(), true);
+    return GetCheckpoints(graph, TVector<ECheckpointStatus>(), std::numeric_limits<ui64>::max(), true); 
 }
 
 TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckpoints(
-    const TString& graph, const TVector<ECheckpointStatus>& statuses, ui64 limit, bool loadGraphDescription)
+    const TString& graph, const TVector<ECheckpointStatus>& statuses, ui64 limit, bool loadGraphDescription) 
 {
     auto getContext = MakeIntrusive<TGetCheckpointsContext>();
 
     auto future = YdbConnection->Client.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graph, getContext, statuses, limit, loadGraphDescription, settings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, graph, getContext, statuses, limit, loadGraphDescription, settings = DefaultExecDataQuerySettings()] (TSession session) { 
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -891,10 +891,10 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
                 graph,
                 0UL);
 
-            auto future = SelectGraphCheckpoints(generationContext, statuses, limit, settings, loadGraphDescription);
+            auto future = SelectGraphCheckpoints(generationContext, statuses, limit, settings, loadGraphDescription); 
             return future.Apply(
-                [generationContext, getContext, loadGraphDescription] (const TFuture<TDataQueryResult>& future) {
-                    return ProcessCheckpoints(future.GetValue(), generationContext, getContext, loadGraphDescription);
+                [generationContext, getContext, loadGraphDescription] (const TFuture<TDataQueryResult>& future) { 
+                    return ProcessCheckpoints(future.GetValue(), generationContext, getContext, loadGraphDescription); 
                 });
         });
 
@@ -987,64 +987,64 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
     auto future = YdbConnection->Client.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound] (TSession session) {
             // TODO: use prepared queries
-            using namespace fmt::literals;
-            const TString query = fmt::format(R"sql(
+            using namespace fmt::literals; 
+            const TString query = fmt::format(R"sql( 
                 --!syntax_v1
-                PRAGMA TablePathPrefix("{table_path_prefix}");
-                DECLARE $graph_id AS String;
-                DECLARE $coordinator_generation AS Uint64;
-                DECLARE $seq_no AS Uint64;
+                PRAGMA TablePathPrefix("{table_path_prefix}"); 
+                DECLARE $graph_id AS String; 
+                DECLARE $coordinator_generation AS Uint64; 
+                DECLARE $seq_no AS Uint64; 
 
-                $refs =
-                  SELECT
-                    COUNT(*) AS refs, graph_description_id
-                  FROM {checkpoints_metadata_table_name}
-                  WHERE graph_id = $graph_id AND status = {gc_status}
-                    AND (coordinator_generation < $coordinator_generation OR
-                      (coordinator_generation = $coordinator_generation AND seq_no < $seq_no))
-                    AND graph_description_id != "" -- legacy condition (excludes old records without graph description)
-                  GROUP BY graph_description_id;
+                $refs = 
+                  SELECT 
+                    COUNT(*) AS refs, graph_description_id 
+                  FROM {checkpoints_metadata_table_name} 
+                  WHERE graph_id = $graph_id AND status = {gc_status} 
+                    AND (coordinator_generation < $coordinator_generation OR 
+                      (coordinator_generation = $coordinator_generation AND seq_no < $seq_no)) 
+                    AND graph_description_id != "" -- legacy condition (excludes old records without graph description) 
+                  GROUP BY graph_description_id; 
 
-                $update =
-                  SELECT
-                    checkpoints_graphs_description.id AS id,
-                    checkpoints_graphs_description.ref_count - refs.refs AS ref_count
-                  FROM {checkpoints_graphs_description_table_name}
-                    INNER JOIN (SELECT * FROM $refs) AS refs
-                      ON refs.graph_description_id = checkpoints_graphs_description.id;
+                $update = 
+                  SELECT 
+                    checkpoints_graphs_description.id AS id, 
+                    checkpoints_graphs_description.ref_count - refs.refs AS ref_count 
+                  FROM {checkpoints_graphs_description_table_name} 
+                    INNER JOIN (SELECT * FROM $refs) AS refs 
+                      ON refs.graph_description_id = checkpoints_graphs_description.id; 
 
-                UPDATE {checkpoints_graphs_description_table_name}
-                  ON SELECT * FROM $update WHERE ref_count > 0;
-
-                DELETE FROM {checkpoints_graphs_description_table_name}
-                  ON SELECT * FROM $update WHERE ref_count = 0;
-
-                DELETE FROM {checkpoints_metadata_table_name}
-                WHERE graph_id = $graph_id AND status = {gc_status}
-                  AND (coordinator_generation < $coordinator_generation OR
-                    (coordinator_generation = $coordinator_generation AND seq_no < $seq_no));
-            )sql",
-            "table_path_prefix"_a = prefix,
-            "checkpoints_metadata_table_name"_a = CheckpointsMetadataTable,
-            "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable,
-            "gc_status"_a = static_cast<ui32>(ECheckpointStatus::GC)
-            );
-
-            NYdb::TParamsBuilder params;
-            params
-                .AddParam("$graph_id")
-                    .String(graphId)
-                    .Build()
-                .AddParam("$coordinator_generation")
-                    .Uint64(checkpointUpperBound.CoordinatorGeneration)
-                    .Build()
-                .AddParam("$seq_no")
-                    .Uint64(checkpointUpperBound.SeqNo)
-                    .Build();
-
+                UPDATE {checkpoints_graphs_description_table_name} 
+                  ON SELECT * FROM $update WHERE ref_count > 0; 
+ 
+                DELETE FROM {checkpoints_graphs_description_table_name} 
+                  ON SELECT * FROM $update WHERE ref_count = 0; 
+ 
+                DELETE FROM {checkpoints_metadata_table_name} 
+                WHERE graph_id = $graph_id AND status = {gc_status} 
+                  AND (coordinator_generation < $coordinator_generation OR 
+                    (coordinator_generation = $coordinator_generation AND seq_no < $seq_no)); 
+            )sql", 
+            "table_path_prefix"_a = prefix, 
+            "checkpoints_metadata_table_name"_a = CheckpointsMetadataTable, 
+            "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable, 
+            "gc_status"_a = static_cast<ui32>(ECheckpointStatus::GC) 
+            ); 
+ 
+            NYdb::TParamsBuilder params; 
+            params 
+                .AddParam("$graph_id") 
+                    .String(graphId) 
+                    .Build() 
+                .AddParam("$coordinator_generation") 
+                    .Uint64(checkpointUpperBound.CoordinatorGeneration) 
+                    .Build() 
+                .AddParam("$seq_no") 
+                    .Uint64(checkpointUpperBound.SeqNo) 
+                    .Build(); 
+ 
             auto future = session.ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params.Build());
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params.Build()); 
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -1055,7 +1055,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
 
     return StatusToIssues(future);
 }
-TFuture<ICheckpointStorage::TAddToStateSizeResult> NYq::TCheckpointStorage::AddToStateSize(const TString& graphId, const TCheckpointId& checkpointId, ui64 size) {
+TFuture<ICheckpointStorage::TAddToStateSizeResult> NYq::TCheckpointStorage::AddToStateSize(const TString& graphId, const TCheckpointId& checkpointId, ui64 size) { 
     auto result = MakeIntrusive<TAddToStateSizeContext>();
     auto future = YdbConnection->Client.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, checkpointId, size, result, thisPtr = TIntrusivePtr(this)](TSession session) {
@@ -1120,7 +1120,7 @@ TFuture<ICheckpointStorage::TAddToStateSizeResult> NYq::TCheckpointStorage::AddT
         });
 }
 
-TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> NYq::TCheckpointStorage::GetTotalCheckpointsStateSize(const TString& graphId) {
+TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> NYq::TCheckpointStorage::GetTotalCheckpointsStateSize(const TString& graphId) { 
     auto result = MakeIntrusive<TGetTotalCheckpointsStateSizeContext>();
     auto future = YdbConnection->Client.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, thisPtr = TIntrusivePtr(this), result](TSession session) {
@@ -1169,7 +1169,7 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> NYq::TCheckpoin
         });
 }
 
-TExecDataQuerySettings NYq::TCheckpointStorage::DefaultExecDataQuerySettings() {
+TExecDataQuerySettings NYq::TCheckpointStorage::DefaultExecDataQuerySettings() { 
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
         .ClientTimeout(TDuration::Seconds(Config.GetClientTimeoutSec()))
@@ -1183,11 +1183,11 @@ TExecDataQuerySettings NYq::TCheckpointStorage::DefaultExecDataQuerySettings() {
 
 TCheckpointStoragePtr NewYdbCheckpointStorage(
     const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const IEntityIdGenerator::TPtr& entityIdGenerator)
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
+    const IEntityIdGenerator::TPtr& entityIdGenerator) 
 {
-    Y_VERIFY(entityIdGenerator);
-    return new TCheckpointStorage(config, credentialsProviderFactory, entityIdGenerator);
+    Y_VERIFY(entityIdGenerator); 
+    return new TCheckpointStorage(config, credentialsProviderFactory, entityIdGenerator); 
 }
 
-} // namespace NYq
+} // namespace NYq 

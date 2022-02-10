@@ -43,15 +43,15 @@ namespace NBus {
     // For lwtrace
     struct TMessageStatusField {
         typedef int TStoreType;
-        typedef int TFuncParam;
-
+        typedef int TFuncParam; 
+ 
         static void ToString(int value, TString* out) {
             *out = GetMessageStatus((NBus::EMessageStatus)value);
         }
-
-        static int ToStoreType(int value) {
-            return value;
-        }
+ 
+        static int ToStoreType(int value) { 
+            return value; 
+        } 
     };
 
 } // ns

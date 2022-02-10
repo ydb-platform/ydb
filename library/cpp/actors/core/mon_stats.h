@@ -79,7 +79,7 @@ namespace NActors {
         TVector<NHPTimer::STime> ElapsedTicksByActivity;
         TVector<ui64> ReceivedEventsByActivity;
         TVector<i64> ActorsAliveByActivity; // the sum should be positive, but per-thread might be negative
-        TVector<ui64> ScheduledEventsByActivity;
+        TVector<ui64> ScheduledEventsByActivity; 
         ui64 PoolActorRegistrations = 0;
         ui64 PoolDestroyedActors = 0;
         ui64 PoolAllocatedMailboxes = 0;
@@ -91,7 +91,7 @@ namespace NActors {
             : ElapsedTicksByActivity(activityVecSize)
             , ReceivedEventsByActivity(activityVecSize)
             , ActorsAliveByActivity(activityVecSize)
-            , ScheduledEventsByActivity(activityVecSize)
+            , ScheduledEventsByActivity(activityVecSize) 
         {}
 
         template <typename T>
@@ -126,7 +126,7 @@ namespace NActors {
             AggregateOne(ElapsedTicksByActivity, other.ElapsedTicksByActivity);
             AggregateOne(ReceivedEventsByActivity, other.ReceivedEventsByActivity);
             AggregateOne(ActorsAliveByActivity, other.ActorsAliveByActivity);
-            AggregateOne(ScheduledEventsByActivity, other.ScheduledEventsByActivity);
+            AggregateOne(ScheduledEventsByActivity, other.ScheduledEventsByActivity); 
 
             RelaxedStore(
                 &PoolActorRegistrations,

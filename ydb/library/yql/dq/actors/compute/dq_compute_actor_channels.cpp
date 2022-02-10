@@ -32,8 +32,8 @@ TString InFlightMessagesStr(const TCollection& inFlight) {
 } // anonymous namespace
 
 TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& txId, const NDqProto::TDqTask& task,
-    bool retryOnUndelivery, NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType)
-    : TActor(&TDqComputeActorChannels::WorkState, actorActivityType)
+    bool retryOnUndelivery, NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType) 
+    : TActor(&TDqComputeActorChannels::WorkState, actorActivityType) 
     , Owner(owner)
     , TxId(txId)
     , TaskId(task.GetId())
@@ -102,7 +102,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
         << ", seqNo: " << record.GetSeqNo()
         << ", size: " << channelData.GetData().GetRaw().size()
         << ", rows: " << channelData.GetData().GetRows()
-        << ", checkpoint: " << channelData.HasCheckpoint()
+        << ", checkpoint: " << channelData.HasCheckpoint() 
         << ", finished: " << channelData.GetFinished()
         << ", from: " << ev->Sender
         << ", expected seqNo: " << (inputChannel.LastRecvSeqNo + 1));
@@ -178,12 +178,12 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     // remove all messages with seqNo <= ackSeqNo
     auto it = outputChannel.InFlight.begin();
     while (it != outputChannel.InFlight.end() && it->first <= record.GetSeqNo()) {
-        Y_VERIFY_DEBUG(outputChannel.PeerState.InFlightBytes >= it->second.Data.GetData().GetRaw().size());
-        Y_VERIFY_DEBUG(outputChannel.PeerState.InFlightRows >= it->second.Data.GetData().GetRows());
+        Y_VERIFY_DEBUG(outputChannel.PeerState.InFlightBytes >= it->second.Data.GetData().GetRaw().size()); 
+        Y_VERIFY_DEBUG(outputChannel.PeerState.InFlightRows >= it->second.Data.GetData().GetRows()); 
         Y_VERIFY_DEBUG(outputChannel.PeerState.InFlightCount >= 1);
 
-        outputChannel.PeerState.InFlightBytes -= it->second.Data.GetData().GetRaw().size();
-        outputChannel.PeerState.InFlightRows -= it->second.Data.GetData().GetRows();
+        outputChannel.PeerState.InFlightBytes -= it->second.Data.GetData().GetRaw().size(); 
+        outputChannel.PeerState.InFlightRows -= it->second.Data.GetData().GetRows(); 
         outputChannel.PeerState.InFlightCount -= 1;
         it = outputChannel.InFlight.erase(it);
     }
@@ -248,7 +248,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
         retryEv->Record.SetSendTime(now.MilliSeconds());
 
         auto* data = retryEv->Record.MutableChannelData();
-        data->CopyFrom(inFlight.second.Data);
+        data->CopyFrom(inFlight.second.Data); 
         data->SetChannelId(msg->ChannelId);
         data->SetFinished(inFlight.second.Finished);
 
@@ -385,7 +385,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, TEv
 
     TOutputChannelState& outputChannel = OutCh(channelId);
 
-    if (outputChannel.Finished && outputChannel.EarlyFinish && !SupportCheckpoints) {
+    if (outputChannel.Finished && outputChannel.EarlyFinish && !SupportCheckpoints) { 
         LOG_E("Ignore undelivered TEvChannelData event due to early finish, channelId: " << channelId);
         outputChannel.InFlight.clear();
         Cbs->ResumeExecution();
@@ -409,7 +409,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, 
     TInputChannelState& inputChannel = InCh(channelId);
     inputChannel.PollRequest.reset();
 
-    if (inputChannel.Finished && !SupportCheckpoints) {
+    if (inputChannel.Finished && !SupportCheckpoints) { 
         LOG_I("Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason
             << ". Ignore, channel is finished.");
         inputChannel.InFlight.clear();
@@ -510,13 +510,13 @@ void TDqComputeActorChannels::SetOutputChannelPeer(ui64 channelId, const TActorI
 
 bool TDqComputeActorChannels::CanSendChannelData(ui64 channelId) {
     TOutputChannelState& outputChannel = OutCh(channelId);
-    return outputChannel.Peer && (!outputChannel.Finished || SupportCheckpoints) && !outputChannel.RetryState;
+    return outputChannel.Peer && (!outputChannel.Finished || SupportCheckpoints) && !outputChannel.RetryState; 
 }
 
 void TDqComputeActorChannels::SendChannelData(NDqProto::TChannelData&& channelData) {
     TOutputChannelState& outputChannel = OutCh(channelData.GetChannelId());
 
-    YQL_ENSURE(!outputChannel.Finished || SupportCheckpoints);
+    YQL_ENSURE(!outputChannel.Finished || SupportCheckpoints); 
     YQL_ENSURE(!outputChannel.RetryState);
 
     ui64 seqNo = ++outputChannel.LastSentSeqNo;
@@ -528,7 +528,7 @@ void TDqComputeActorChannels::SendChannelData(NDqProto::TChannelData&& channelDa
         << ", peer: " << *outputChannel.Peer
         << ", rows: " << chunkRows
         << ", bytes: " << chunkBytes
-        << ", checkpoint: " << channelData.HasCheckpoint()
+        << ", checkpoint: " << channelData.HasCheckpoint() 
         << ", seqNo: " << seqNo
         << ", finished: " << finished);
 
@@ -541,7 +541,7 @@ void TDqComputeActorChannels::SendChannelData(NDqProto::TChannelData&& channelDa
         seqNo,
         TOutputChannelState::TInFlightMessage(
             seqNo,
-            NYql::NDqProto::TChannelData(dataEv->Record.GetChannelData()),
+            NYql::NDqProto::TChannelData(dataEv->Record.GetChannelData()), 
             finished
         )
     );
@@ -558,7 +558,7 @@ void TDqComputeActorChannels::SendChannelData(NDqProto::TChannelData&& channelDa
 bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
     TInputChannelState& inputChannel = InCh(channelId);
 
-    if (!inputChannel.Peer || (inputChannel.Finished && !SupportCheckpoints) || inputChannel.RetryState ||
+    if (!inputChannel.Peer || (inputChannel.Finished && !SupportCheckpoints) || inputChannel.RetryState || 
         inputChannel.LastRecvSeqNo == 0 || freeSpace <= 0)
     {
         LOG_D("no poll, channelId: " << channelId << ", hasPeer: " << inputChannel.Peer.has_value()
@@ -663,7 +663,7 @@ bool TDqComputeActorChannels::FinishInputChannels() {
         ackEv->Record.SetFreeSpace(0);
         ackEv->Record.SetFinish(true);
 
-        ui32 flags = (inputChannel.Finished && !SupportCheckpoints) ? 0 : CalcMessageFlags(*inputChannel.Peer);
+        ui32 flags = (inputChannel.Finished && !SupportCheckpoints) ? 0 : CalcMessageFlags(*inputChannel.Peer); 
         Send(*inputChannel.Peer, ackEv.Release(), flags, /* cookie */ inputChannel.ChannelId);
     }
 
@@ -710,7 +710,7 @@ void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChanne
     ackEv->Record.SetChannelId(inputChannel.ChannelId);
     ackEv->Record.SetFreeSpace(freeSpace);
 
-    ui32 flags = (inputChannel.Finished && !SupportCheckpoints) ? 0 : CalcMessageFlags(*inputChannel.Peer);
+    ui32 flags = (inputChannel.Finished && !SupportCheckpoints) ? 0 : CalcMessageFlags(*inputChannel.Peer); 
     Send(*inputChannel.Peer, ackEv.Release(), flags, /* cookie */ inputChannel.ChannelId);
 }
 
@@ -734,8 +734,8 @@ TDqComputeActorChannels::TOutputChannelState& TDqComputeActorChannels::OutCh(ui6
     return *ch;
 }
 
-void TDqComputeActorChannels::SetCheckpointsSupport() {
-    SupportCheckpoints = true;
-}
-
+void TDqComputeActorChannels::SetCheckpointsSupport() { 
+    SupportCheckpoints = true; 
+} 
+ 
 } // namespace NYql::NDq

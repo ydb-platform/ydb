@@ -21,7 +21,7 @@ message TError {
 
     optional uint32 Status = 1;
     optional string Message = 2;
-    optional string ErrorCode = 4; // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList - list of error codes
+    optional string ErrorCode = 4; // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList - list of error codes 
     optional TDebug Debug = 3;
 }
 
@@ -86,12 +86,12 @@ message TCreateQueueRequest {
     optional uint64 Shards = 4 [default = 4];
     /// Number of partitions of data table.
     optional uint64 Partitions = 5 [default = 8];
-    /// Autosplit partitions with data
-    optional bool EnableAutosplit = 8;
-    /// Size in bytes when partition will be splitted on two parts.
-    optional uint64 SizeToSplit = 9 [default = 1073741824]; // 1GB
+    /// Autosplit partitions with data 
+    optional bool EnableAutosplit = 8; 
+    /// Size in bytes when partition will be splitted on two parts. 
+    optional uint64 SizeToSplit = 9 [default = 1073741824]; // 1GB 
     /// Enable internal tables' transactions out of order execution.
-    optional bool EnableOutOfOrderTransactionsExecution = 6 [default = true];
+    optional bool EnableOutOfOrderTransactionsExecution = 6 [default = true]; 
 }
 
 message TCreateQueueResponse {
@@ -106,7 +106,7 @@ message TCreateUserRequest {
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// Then user name we want to create.
-    optional string UserName = 2;
+    optional string UserName = 2; 
 }
 
 message TCreateUserResponse {
@@ -121,15 +121,15 @@ message TGetQueueAttributesRequest {
     optional string QueueName = 2;
     /// List of attribute's names to return.
     repeated string Names = 3;
-    /// Batch Id. Available only in case of batch request.
-    optional string Id = 4;
+    /// Batch Id. Available only in case of batch request. 
+    optional string Id = 4; 
 }
 
 message TGetQueueAttributesResponse {
     optional TError Error = 1;
     optional string RequestId = 2;
-    /// Batch Id. Available only in case of batch request.
-    optional string Id = 15;
+    /// Batch Id. Available only in case of batch request. 
+    optional string Id = 15; 
     /// The approximate number of visible messages in a queue.
     optional uint64 ApproximateNumberOfMessages = 3;
     /// The approximate number of messages that are waiting
@@ -163,21 +163,21 @@ message TGetQueueAttributesResponse {
     optional string QueueArn = 17;
 }
 
-message TGetQueueAttributesBatchRequest {
-    optional TCredentials Credentials = 100;
-    /// Sender's authentification.
-    optional TAuthentification Auth = 1;
-    /// List of attribute's names to return.
-    repeated string Names = 3;
-    repeated TGetQueueAttributesRequest Entries = 4;
-}
-
-message TGetQueueAttributesBatchResponse {
-    optional TError Error = 1;
-    optional string RequestId = 2;
-    repeated TGetQueueAttributesResponse Entries = 3;
-}
-
+message TGetQueueAttributesBatchRequest { 
+    optional TCredentials Credentials = 100; 
+    /// Sender's authentification. 
+    optional TAuthentification Auth = 1; 
+    /// List of attribute's names to return. 
+    repeated string Names = 3; 
+    repeated TGetQueueAttributesRequest Entries = 4; 
+} 
+ 
+message TGetQueueAttributesBatchResponse { 
+    optional TError Error = 1; 
+    optional string RequestId = 2; 
+    repeated TGetQueueAttributesResponse Entries = 3; 
+} 
+ 
 message TGetQueueUrlRequest {
     optional TCredentials Credentials = 100;
     /// Sender's authentification.
@@ -228,36 +228,36 @@ message TDeleteQueueRequest {
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
-    /// Batch Id. Available only in case of batch response.
-    optional string Id = 3;
+    /// Batch Id. Available only in case of batch response. 
+    optional string Id = 3; 
 }
 
 message TDeleteQueueResponse {
     optional TError Error = 1;
     optional string RequestId = 2;
-    /// Batch Id. Available only in case of batch response.
-    optional string Id = 3;
+    /// Batch Id. Available only in case of batch response. 
+    optional string Id = 3; 
 }
 
-message TDeleteQueueBatchRequest {
-    optional TCredentials Credentials = 100;
-    /// Sender's authentification.
-    optional TAuthentification Auth = 1;
-    repeated TDeleteQueueRequest Entries = 2;
-}
-
-message TDeleteQueueBatchResponse {
-    optional TError Error = 1;
-    optional string RequestId = 2;
-    repeated TDeleteQueueResponse Entries = 3;
-}
-
+message TDeleteQueueBatchRequest { 
+    optional TCredentials Credentials = 100; 
+    /// Sender's authentification. 
+    optional TAuthentification Auth = 1; 
+    repeated TDeleteQueueRequest Entries = 2; 
+} 
+ 
+message TDeleteQueueBatchResponse { 
+    optional TError Error = 1; 
+    optional string RequestId = 2; 
+    repeated TDeleteQueueResponse Entries = 3; 
+} 
+ 
 message TDeleteUserRequest {
     optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// Then user name we want to delete.
-    optional string UserName = 2;
+    optional string UserName = 2; 
 }
 
 message TDeleteUserResponse {
@@ -306,30 +306,30 @@ message TPurgeQueueRequest {
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
-    /// Batch Id. Available only in case of batch response.
-    optional string Id = 3;
+    /// Batch Id. Available only in case of batch response. 
+    optional string Id = 3; 
 }
 
 message TPurgeQueueResponse {
     optional TError Error = 1;
     optional string RequestId = 3;
-    /// Batch Id. Available only in case of batch response.
-    optional string Id = 4;
+    /// Batch Id. Available only in case of batch response. 
+    optional string Id = 4; 
 }
 
-message TPurgeQueueBatchRequest {
-    optional TCredentials Credentials = 100;
-    /// Sender's authentification.
-    optional TAuthentification Auth = 1;
-    repeated TPurgeQueueRequest Entries = 2;
-}
-
-message TPurgeQueueBatchResponse {
-    optional TError Error = 1;
-    optional string RequestId = 2;
-    repeated TPurgeQueueResponse Entries = 3;
-}
-
+message TPurgeQueueBatchRequest { 
+    optional TCredentials Credentials = 100; 
+    /// Sender's authentification. 
+    optional TAuthentification Auth = 1; 
+    repeated TPurgeQueueRequest Entries = 2; 
+} 
+ 
+message TPurgeQueueBatchResponse { 
+    optional TError Error = 1; 
+    optional string RequestId = 2; 
+    repeated TPurgeQueueResponse Entries = 3; 
+} 
+ 
 message TReceiveMessageRequest {
     optional TCredentials Credentials = 100;
     /// Sender's authentification.
@@ -370,9 +370,9 @@ message TReceiveMessageResponse {
         optional string MessageGroupId = 5;
         /// An MD5 digest of the message body string.
         optional string MD5OfMessageBody = 6;
-        /// An MD5 digest of the non-URL-encoded message attribute string.
-        /// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-message-attributes.html#sqs-attributes-md5-message-digest-calculation
-        optional string MD5OfMessageAttributes = 12;
+        /// An MD5 digest of the non-URL-encoded message attribute string. 
+        /// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-message-attributes.html#sqs-attributes-md5-message-digest-calculation 
+        optional string MD5OfMessageAttributes = 12; 
         /// Message's attributes.
         repeated TMessageAttribute MessageAttributes = 7;
         /// Message's data itself.
@@ -421,7 +421,7 @@ message TSendMessageResponse {
     optional TError Error = 1;
     optional string RequestId = 2;
     /// An MD5 digest of the non-URL-encoded message attribute string.
-    /// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-message-attributes.html#sqs-attributes-md5-message-digest-calculation
+    /// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-message-attributes.html#sqs-attributes-md5-message-digest-calculation 
     optional string MD5OfMessageAttributes = 3;
     /// An MD5 digest of the non-URL-encoded message body string.
     optional string MD5OfMessageBody = 4;
@@ -525,7 +525,7 @@ message TListDeadLetterSourceQueuesRequest {
     optional TCredentials Credentials = 100;
     /// The name of the queue.
     optional string QueueName = 1;
-    optional TAuthentification Auth = 2;
+    optional TAuthentification Auth = 2; 
 }
 
 message TListDeadLetterSourceQueuesResponse {

@@ -366,7 +366,7 @@ public:
         }
         else if (node->IsCallable("DqStage") ||
             node->IsCallable("DqPhyStage") ||
-            node->IsCallable("DqQuery!") ||
+            node->IsCallable("DqQuery!") || 
             node->ChildrenSize() >= 1 && node->Child(0)->IsCallable("TDqOutput")) {
             auto provider = Types_.DataSinkMap.FindPtr(DqProviderName);
             YQL_ENSURE(provider);

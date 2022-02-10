@@ -381,7 +381,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
                 "Actor# " << ctx.SelfID.ToString() <<
                 " Handle TEvDescribeSchemeResult" <<
                 " Forward to# " << Source.ToString() <<
-                " Cookie: " << ev->Cookie <<
+                " Cookie: " << ev->Cookie << 
                 " TEvDescribeSchemeResult: " << ev->Get()->ToString());
 
     TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());

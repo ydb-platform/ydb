@@ -118,8 +118,8 @@ RESOURCE(
     ydb/core/base/kikimr_issue.txt kikimr_issue.txt
 )
 
-GENERATE_ENUM_SERIALIZATION(quoter.h)
-
+GENERATE_ENUM_SERIALIZATION(quoter.h) 
+ 
 END()
 
 RECURSE_FOR_TESTS(

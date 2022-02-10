@@ -36,7 +36,7 @@ namespace {
 
 class TResultReceiver: public TRichActor<TResultReceiver> {
 public:
-    static constexpr char ActorName[] = "YQL_DQ_RESULT_RECEIVER";
+    static constexpr char ActorName[] = "YQL_DQ_RESULT_RECEIVER"; 
 
     explicit TResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings,
         const THashMap<TString, TString>& secureParams, const TString& resultType, bool discard)

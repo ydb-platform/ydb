@@ -172,7 +172,7 @@ public:
     }
 
 protected:
-    TValue Value_; // microseconds count
+    TValue Value_; // microseconds count 
 };
 
 namespace NDateTimeHelpers {

@@ -84,8 +84,8 @@ public:
         Become(&TKqpLocalFileSpillingActor::WorkState);
     }
 
-    static constexpr char ActorName[] = "KQP_LOCAL_FILE_SPILLING";
-
+    static constexpr char ActorName[] = "KQP_LOCAL_FILE_SPILLING"; 
+ 
 private:
     STRICT_STFUNC(WorkState,
         hFunc(TEvKqpSpilling::TEvWrite, HandleWork)
@@ -229,8 +229,8 @@ public:
         Become(&TKqpLocalFileSpillingService::WorkState);
     }
 
-    static constexpr char ActorName[] = "KQP_LOCAL_FILE_SPILLING_SERVICE";
-
+    static constexpr char ActorName[] = "KQP_LOCAL_FILE_SPILLING_SERVICE"; 
+ 
 protected:
     void PassAway() override {
         IoThreadPool->Stop();

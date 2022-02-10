@@ -218,7 +218,7 @@ private:
     bool QuoteArguments = false;
     bool DetachSession = false;
     bool CloseStreams = false;
-    TAtomic ShouldCloseInput;
+    TAtomic ShouldCloseInput; 
     TShellCommandOptions::EHandleMode InputMode = TShellCommandOptions::HANDLE_STREAM;
     TShellCommandOptions::EHandleMode OutputMode = TShellCommandOptions::HANDLE_STREAM;
     TShellCommandOptions::EHandleMode ErrorMode = TShellCommandOptions::HANDLE_STREAM;
@@ -415,7 +415,7 @@ public:
     }
 
     inline void CloseInput() {
-        AtomicSet(ShouldCloseInput, true);
+        AtomicSet(ShouldCloseInput, true); 
     }
 
     inline static bool TerminateIsRequired(void* processInfo) {
@@ -1035,7 +1035,7 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
                 if (!bytesToWrite) {
                     bytesToWrite = input->Read(inputBuffer.Data(), inputBuffer.Capacity());
                     if (bytesToWrite == 0) {
-                        if (AtomicGet(pi->Parent->ShouldCloseInput)) {
+                        if (AtomicGet(pi->Parent->ShouldCloseInput)) { 
                             input = nullptr;
                         }
                         continue;

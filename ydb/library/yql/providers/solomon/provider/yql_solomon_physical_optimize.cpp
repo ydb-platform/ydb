@@ -64,8 +64,8 @@ public:
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TSoPhysicalOptProposalTransformer::name)
         AddHandler(0, &TSoWriteToShard::Match, HNDL(SoWriteToShard));
 #undef HNDL
-
-        SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
+ 
+        SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes. 
     }
 
     TMaybeNode<TExprBase> SoWriteToShard(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
@@ -98,23 +98,23 @@ public:
 
         TDqStage inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
 
-        auto sinksBuilder = Build<TDqSinksList>(ctx, inputStage.Pos());
-        if (inputStage.Sinks()) {
-            sinksBuilder.InitFrom(inputStage.Sinks().Cast());
-        }
-        sinksBuilder.Add(dqSink);
+        auto sinksBuilder = Build<TDqSinksList>(ctx, inputStage.Pos()); 
+        if (inputStage.Sinks()) { 
+            sinksBuilder.InitFrom(inputStage.Sinks().Cast()); 
+        } 
+        sinksBuilder.Add(dqSink); 
 
-        auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
-            .InitFrom(inputStage)
-            .Sinks(sinksBuilder.Done())
-            .Done();
+        auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos()) 
+            .InitFrom(inputStage) 
+            .Sinks(sinksBuilder.Done()) 
+            .Done(); 
 
         auto dqQueryBuilder = Build<TDqQuery>(ctx, write.Pos());
         dqQueryBuilder.World(write.World());
         dqQueryBuilder.SinkStages().Add(dqStageWithSink).Build();
-
-        optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
-
+ 
+        optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr()); 
+ 
         return dqQueryBuilder.Done();
     }
 

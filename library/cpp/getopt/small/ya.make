@@ -2,9 +2,9 @@ LIBRARY()
 
 OWNER(pg)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/colorizer
-)
+) 
 
 SRCS(
     completer.cpp

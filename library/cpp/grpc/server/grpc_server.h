@@ -105,7 +105,7 @@ class IQueueEvent {
 public:
     virtual ~IQueueEvent() = default;
 
-    //! Execute an action defined by implementation.
+    //! Execute an action defined by implementation. 
     virtual bool Execute(bool ok) = 0;
 
     //! It is time to perform action requested by AcquireToken server method. It will be called under lock which is also

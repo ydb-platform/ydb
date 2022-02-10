@@ -223,14 +223,14 @@ public:
             return true;
         }
 
-        if (TDqQuery::Match(&node)) {
-            auto stagesList = node.ChildPtr(TDqQuery::idx_SinkStages);
-            for (size_t i = 0; i < stagesList->ChildrenSize(); ++i) {
-                children.push_back(stagesList->ChildPtr(i));
-            }
-            return true;
-        }
-
+        if (TDqQuery::Match(&node)) { 
+            auto stagesList = node.ChildPtr(TDqQuery::idx_SinkStages); 
+            for (size_t i = 0; i < stagesList->ChildrenSize(); ++i) { 
+                children.push_back(stagesList->ChildPtr(i)); 
+            } 
+            return true; 
+        } 
+ 
         return false;
     }
 

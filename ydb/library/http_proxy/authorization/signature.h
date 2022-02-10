@@ -8,7 +8,7 @@
 class THttpInput;
 struct TParsedHttpFull;
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
 class TAwsRequestSignV4 {
 public:
@@ -49,4 +49,4 @@ private:
     TString AwsRequest_ = "aws4_request";
 };
 
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NSQS 

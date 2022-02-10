@@ -30,4 +30,4 @@ namespace NProtoBuf {
     // Returned bool defines if we should walk down deeper to current node children (true), or not (false)
     void WalkSchema(const Descriptor* descriptor, 
                     std::function<bool(const FieldDescriptor*)> onField);
-}
+} 

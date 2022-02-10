@@ -14,7 +14,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
-namespace NYq {
+namespace NYq { 
 
 using namespace NActors;
 using namespace NThreading;
@@ -72,10 +72,10 @@ private:
     TMockLocation Location;
 };
 
-void InitTest(NActors::TTestActorRuntime* runtime, int httpPort, int grpcPort, const IYqSharedResources::TPtr& yqSharedResources)
+void InitTest(NActors::TTestActorRuntime* runtime, int httpPort, int grpcPort, const IYqSharedResources::TPtr& yqSharedResources) 
 {
-    yqSharedResources->Init(runtime->GetAnyNodeActorSystem());
-
+    yqSharedResources->Init(runtime->GetAnyNodeActorSystem()); 
+ 
     auto httpProxyId = NYq::MakeYqlAnalyticsHttpProxyId();
 
     TActorId mockActorId = runtime->Register(CreateYqlMockActor(grpcPort));
@@ -94,4 +94,4 @@ NActors::IActor* CreateYqlMockActor(int grpcPort) {
     return new TYqlMockActor(grpcPort);
 }
 
-} // namespace NYq
+} // namespace NYq 

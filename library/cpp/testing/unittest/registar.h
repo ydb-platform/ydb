@@ -2,41 +2,41 @@
 
 #include <library/cpp/dbg_output/dump.h>
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/bt_exception.h> 
 #include <util/generic/hash.h>
-#include <util/generic/intrlist.h>
+#include <util/generic/intrlist.h> 
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 #include <util/system/type_name.h>
-#include <util/system/spinlock.h>
-#include <util/system/src_location.h>
-
+#include <util/system/spinlock.h> 
+#include <util/system/src_location.h> 
+ 
 #include <util/system/rusage.h>
 
 #include <cmath>
 #include <cstdio>
-#include <functional>
-
+#include <functional> 
+ 
 extern bool CheckExceptionMessage(const char*, TString&);
 
 namespace NUnitTest {
     class TTestBase;
-
+ 
     namespace NPrivate {
         void RaiseError(const char* what, const TString& msg, bool fatalFailure);
         void SetUnittestThread(bool);
-        void SetCurrentTest(TTestBase*);
-        TTestBase* GetCurrentTest();
+        void SetCurrentTest(TTestBase*); 
+        TTestBase* GetCurrentTest(); 
     }
 
     extern bool ShouldColorizeDiff;
@@ -45,21 +45,21 @@ namespace NUnitTest {
     TString GetFormatTag(const char* name);
     TString GetResetTag();
 
-    // Raise error handler
+    // Raise error handler 
     // Used for testing library/cpp/testing/unittest macroses
-    // and unittest helpers.
-    // For all other unittests standard handler is used
-    using TRaiseErrorHandler = std::function<void(const char*, const TString&, bool)>;
-
-    void SetRaiseErrorHandler(TRaiseErrorHandler handler);
-
-    inline void ClearRaiseErrorHandler() {
-        SetRaiseErrorHandler(TRaiseErrorHandler());
-    }
-
-    class TAssertException: public yexception {
-    };
-
+    // and unittest helpers. 
+    // For all other unittests standard handler is used 
+    using TRaiseErrorHandler = std::function<void(const char*, const TString&, bool)>; 
+ 
+    void SetRaiseErrorHandler(TRaiseErrorHandler handler); 
+ 
+    inline void ClearRaiseErrorHandler() { 
+        SetRaiseErrorHandler(TRaiseErrorHandler()); 
+    } 
+ 
+    class TAssertException: public yexception { 
+    }; 
+ 
     class ITestSuiteProcessor;
 
     struct TTestContext {
@@ -97,10 +97,10 @@ namespace NUnitTest {
             TTestContext* Context;
         };
 
-        struct TFinish {
+        struct TFinish { 
             const TTest* test;
             TTestContext* Context;
-            bool Success;
+            bool Success; 
         };
 
         ITestSuiteProcessor();
@@ -159,9 +159,9 @@ namespace NUnitTest {
         virtual void OnBeforeTest(const TTest* /*test*/);
 
         void AddTestError(const TTest& test);
-
+ 
         void AddTestFinish(const TTest& test);
-
+ 
     private:
         TMap<TString, size_t> TestErrors_;
         TMap<TString, size_t> CurTestErrors_;
@@ -203,11 +203,11 @@ namespace NUnitTest {
         virtual void TearDown();
 
         void AddError(const char* msg, const TString& backtrace = TString(), TTestContext* context = nullptr);
-
+ 
         void AddError(const char* msg, TTestContext* context);
-
-        void RunAfterTest(std::function<void()> f); // function like atexit to run after current unit test
-
+ 
+        void RunAfterTest(std::function<void()> f); // function like atexit to run after current unit test 
+ 
     protected:
         bool CheckAccessTest(const char* test);
 
@@ -243,10 +243,10 @@ namespace NUnitTest {
 
     private:
         TTestFactory* Parent_;
-        size_t TestErrors_;
-        const char* CurrentSubtest_;
-        TAdaptiveLock AfterTestFunctionsLock_;
-        TVector<std::function<void()>> AfterTestFunctions_;
+        size_t TestErrors_; 
+        const char* CurrentSubtest_; 
+        TAdaptiveLock AfterTestFunctionsLock_; 
+        TVector<std::function<void()>> AfterTestFunctions_; 
     };
 
 #define UNIT_TEST_SUITE(N)                           \
@@ -304,8 +304,8 @@ private:                                                   \
                 thiz->F();                                                                        \
             }                                                                                     \
         };                                                                                        \
-        this->TTestBase::Run(std::bind(&T##F##Caller::X, this, context), StaticName(), (#F), FF); \
-    }
+        this->TTestBase::Run(std::bind(&T##F##Caller::X, this, context), StaticName(), (#F), FF); \ 
+    } 
 
 #define UNIT_TEST_IMPL(F, FF)                                          \
     UNIT_TEST_CHECK_TEST_IS_DECLARED_ONLY_ONCE(F) {                    \
@@ -336,20 +336,20 @@ private:                                                   \
         /* forked process (or main without "--fork-tests") treats some exceptions as success - it's exception test! */ \
     } else {                                                                                                           \
         NUnitTest::TTestContext context(this->TTestBase::Processor());                                                 \
-        if (this->CheckAccessTest((#F))) {                                                                             \
-            try {                                                                                                      \
-                UNIT_TEST_RUN(F, false, context)                                                                       \
-                this->AddError("exception expected", &context);                                                        \
-            } catch (const ::NUnitTest::TAssertException&) {                                                           \
-            } catch (const E& e) {                                                                                     \
+        if (this->CheckAccessTest((#F))) {                                                                             \ 
+            try {                                                                                                      \ 
+                UNIT_TEST_RUN(F, false, context)                                                                       \ 
+                this->AddError("exception expected", &context);                                                        \ 
+            } catch (const ::NUnitTest::TAssertException&) {                                                           \ 
+            } catch (const E& e) {                                                                                     \ 
                 TString err;                                                                                           \
-                if (!CheckExceptionMessage(e.what(), err))                                                             \
-                    this->AddError(err.c_str(), &context);                                                             \
-            } catch (const std::exception& e) {                                                                        \
-                this->AddError(e.what(), &context);                                                                    \
-            } catch (...) {                                                                                            \
-                this->AddError("non-std exception!", &context);                                                        \
-            }                                                                                                          \
+                if (!CheckExceptionMessage(e.what(), err))                                                             \ 
+                    this->AddError(err.c_str(), &context);                                                             \ 
+            } catch (const std::exception& e) {                                                                        \ 
+                this->AddError(e.what(), &context);                                                                    \ 
+            } catch (...) {                                                                                            \ 
+                this->AddError("non-std exception!", &context);                                                        \ 
+            }                                                                                                          \ 
             this->Finish((#F), &context);                                                                              \
         }                                                                                                              \
     }
@@ -366,13 +366,13 @@ public:                       \
         ::NUnitTest::NPrivate::RaiseError(R, ::TStringBuilder() << R << " at " << __LOCATION__ << ", " << __PRETTY_FUNCTION__ << ": " << M, true); \
     } while (false)
 
-#define UNIT_FAIL_NONFATAL_IMPL(R, M)                                                                                                             \
-    do {                                                                                                                                          \
+#define UNIT_FAIL_NONFATAL_IMPL(R, M)                                                                                                             \ 
+    do {                                                                                                                                          \ 
         ::NUnitTest::NPrivate::RaiseError(R, ::TStringBuilder() << R << " at " << __LOCATION__ << ", " << __PRETTY_FUNCTION__ << ": " << M, false); \
-    } while (false)
-
+    } while (false) 
+ 
 #define UNIT_FAIL(M) UNIT_FAIL_IMPL("forced failure", M)
-#define UNIT_FAIL_NONFATAL(M) UNIT_FAIL_NONFATAL_IMPL("forced failure", M)
+#define UNIT_FAIL_NONFATAL(M) UNIT_FAIL_NONFATAL_IMPL("forced failure", M) 
 
 //types
 #define UNIT_ASSERT_TYPES_EQUAL(A, B)                                                                                                                                  \
@@ -536,20 +536,20 @@ public:                       \
 
 #define UNIT_ASSERT_GE(A, B) UNIT_ASSERT_GE_C(A, B, "")
 
-#define UNIT_CHECK_GENERATED_EXCEPTION_C(A, E, C)                                            \
+#define UNIT_CHECK_GENERATED_EXCEPTION_C(A, E, C)                                            \ 
     do {                                                                                     \
-        try {                                                                                \
-            (void)(A);                                                                       \
-        } catch (const ::NUnitTest::TAssertException&) {                                     \
-            throw;                                                                           \
-        } catch (const E&) {                                                                 \
-            break;                                                                           \
-        }                                                                                    \
-        UNIT_ASSERT_C(0, "Exception hasn't been thrown, but it should have happened " << C); \
+        try {                                                                                \ 
+            (void)(A);                                                                       \ 
+        } catch (const ::NUnitTest::TAssertException&) {                                     \ 
+            throw;                                                                           \ 
+        } catch (const E&) {                                                                 \ 
+            break;                                                                           \ 
+        }                                                                                    \ 
+        UNIT_ASSERT_C(0, "Exception hasn't been thrown, but it should have happened " << C); \ 
     } while (false)
 
-#define UNIT_CHECK_GENERATED_EXCEPTION(A, E) UNIT_CHECK_GENERATED_EXCEPTION_C(A, E, "")
-
+#define UNIT_CHECK_GENERATED_EXCEPTION(A, E) UNIT_CHECK_GENERATED_EXCEPTION_C(A, E, "") 
+ 
 #define UNIT_CHECK_GENERATED_NO_EXCEPTION_C(A, E, C)                                             \
     do {                                                                                         \
         try {                                                                                    \
@@ -562,7 +562,7 @@ public:                       \
     } while (false)
 
 #define UNIT_CHECK_GENERATED_NO_EXCEPTION(A, E) UNIT_CHECK_GENERATED_NO_EXCEPTION_C(A, E, "and exception message is:\n" << CurrentExceptionMessage())
-
+ 
 // Same as UNIT_ASSERT_EXCEPTION_SATISFIES but prints additional string C when nothing was thrown
 #define UNIT_ASSERT_EXCEPTION_SATISFIES_C(A, E, pred, C)   \
     do {                                                                        \
@@ -588,7 +588,7 @@ public:                       \
                            #A << " did not throw any exception"                 \
                               << " (expected " << #E << ") " << C);             \
         }                                                                       \
-    } while (false)
+    } while (false) 
 
 // Assert that a specific exception is thrown and satisfies predicate pred(e), where e is the exception instance.
 // Example:
@@ -618,15 +618,15 @@ public:                       \
     } while (false)
 
 // Assert that a specific exception is thrown and CurrentExceptionMessage() contains substr
-#define UNIT_ASSERT_EXCEPTION_CONTAINS(A, E, substr) \
-    UNIT_ASSERT_EXCEPTION_CONTAINS_C(A, E, substr, "")
-
+#define UNIT_ASSERT_EXCEPTION_CONTAINS(A, E, substr) \ 
+    UNIT_ASSERT_EXCEPTION_CONTAINS_C(A, E, substr, "") 
+ 
 // Same as UNIT_ASSERT_EXCEPTION but prints additional string C when nothing was thrown
 #define UNIT_ASSERT_EXCEPTION_C(A, E, C) UNIT_ASSERT_EXCEPTION_SATISFIES_C(A, E, [](const E&){ return true; }, C)
-
+ 
 // Assert that a specific exception is thrown
-#define UNIT_ASSERT_EXCEPTION(A, E) UNIT_ASSERT_EXCEPTION_C(A, E, "")
-
+#define UNIT_ASSERT_EXCEPTION(A, E) UNIT_ASSERT_EXCEPTION_C(A, E, "") 
+ 
 #define UNIT_ASSERT_NO_EXCEPTION_RESULT_C(A, C)                 \
     [&] () mutable -> decltype(A) {                             \
         static_assert(!std::is_void_v<decltype(A)>);            \
@@ -653,10 +653,10 @@ public:                       \
         } catch (...) {                                                                                                                                                  \
             UNIT_FAIL_IMPL("exception-free assertion failed", Sprintf("%s throws %s\nException message: %s", #A, (::TStringBuilder() << C).data(), CurrentExceptionMessage().data())); \
         }                                                                                                                                                                \
-    } while (false)
+    } while (false) 
 
-#define UNIT_ASSERT_NO_EXCEPTION(A) UNIT_ASSERT_NO_EXCEPTION_C(A, "")
-
+#define UNIT_ASSERT_NO_EXCEPTION(A) UNIT_ASSERT_NO_EXCEPTION_C(A, "") 
+ 
     namespace NPrivate {
         template <class T, class U, bool Integers>
         struct TCompareValuesImpl {
@@ -719,7 +719,7 @@ public:                       \
             }                                                                                                                          \
             UNIT_FAIL_IMPL("assertion failed", failMsg);                                                                               \
         }                                                                                                                              \
-    } while (false)
+    } while (false) 
 
 #define UNIT_ASSERT_VALUES_EQUAL_C(A, B, C) \
     UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, true, "==", "!=")
@@ -730,28 +730,28 @@ public:                       \
 #define UNIT_ASSERT_VALUES_EQUAL(A, B) UNIT_ASSERT_VALUES_EQUAL_C(A, B, "")
 #define UNIT_ASSERT_VALUES_UNEQUAL(A, B) UNIT_ASSERT_VALUES_UNEQUAL_C(A, B, "")
 
-// Checks that test will fail while executing given expression
-// Macro for using in unitests for ut helpers
-#define UNIT_ASSERT_TEST_FAILS_C(A, C)                                   \
-    do {                                                                 \
-        ::NUnitTest::TUnitTestFailChecker checker;                       \
-        try {                                                            \
-            auto guard = checker.InvokeGuard();                          \
-            (void)(A);                                                   \
-        } catch (...) {                                                  \
-            UNIT_FAIL_IMPL("fail test assertion failure",                \
-                           "code is expected to generate test failure, " \
-                           "but it throws exception with message: "      \
+// Checks that test will fail while executing given expression 
+// Macro for using in unitests for ut helpers 
+#define UNIT_ASSERT_TEST_FAILS_C(A, C)                                   \ 
+    do {                                                                 \ 
+        ::NUnitTest::TUnitTestFailChecker checker;                       \ 
+        try {                                                            \ 
+            auto guard = checker.InvokeGuard();                          \ 
+            (void)(A);                                                   \ 
+        } catch (...) {                                                  \ 
+            UNIT_FAIL_IMPL("fail test assertion failure",                \ 
+                           "code is expected to generate test failure, " \ 
+                           "but it throws exception with message: "      \ 
                                << CurrentExceptionMessage());            \
-        }                                                                \
-        if (!checker.Failed()) {                                         \
-            UNIT_FAIL_IMPL("fail test assertion failure",                \
-                           "code is expected to generate test failure"); \
-        }                                                                \
-    } while (false)
-
-#define UNIT_ASSERT_TEST_FAILS(A) UNIT_ASSERT_TEST_FAILS_C(A, "")
-
+        }                                                                \ 
+        if (!checker.Failed()) {                                         \ 
+            UNIT_FAIL_IMPL("fail test assertion failure",                \ 
+                           "code is expected to generate test failure"); \ 
+        }                                                                \ 
+    } while (false) 
+ 
+#define UNIT_ASSERT_TEST_FAILS(A) UNIT_ASSERT_TEST_FAILS_C(A, "") 
+ 
 #define UNIT_ADD_METRIC(name, value) ut_context.Metrics[name] = value
 
     class TTestFactory {
@@ -840,77 +840,77 @@ public:                       \
 
     using TBaseFixture = TBaseTestCase;
 
-    // Class for checking that code raises unittest failure
-    class TUnitTestFailChecker {
-    public:
-        struct TInvokeGuard {
-            explicit TInvokeGuard(TUnitTestFailChecker& parent)
-                : Parent(&parent)
-            {
-                Parent->SetHandler();
-            }
-
+    // Class for checking that code raises unittest failure 
+    class TUnitTestFailChecker { 
+    public: 
+        struct TInvokeGuard { 
+            explicit TInvokeGuard(TUnitTestFailChecker& parent) 
+                : Parent(&parent) 
+            { 
+                Parent->SetHandler(); 
+            } 
+ 
             TInvokeGuard(TInvokeGuard&& guard) noexcept
-                : Parent(guard.Parent)
-            {
-                guard.Parent = nullptr;
-            }
-
-            ~TInvokeGuard() {
-                if (Parent) {
-                    ClearRaiseErrorHandler();
-                }
-            }
-
-            TUnitTestFailChecker* Parent;
-        };
-
-        TUnitTestFailChecker() = default;
-        TUnitTestFailChecker(const TUnitTestFailChecker&) = delete;
-        TUnitTestFailChecker(TUnitTestFailChecker&&) = delete;
-
-        TInvokeGuard InvokeGuard() {
-            return TInvokeGuard(*this);
-        }
-
-        const TString& What() const {
-            return What_;
-        }
-
-        const TString& Msg() const {
-            return Msg_;
-        }
-
-        bool FatalFailure() const {
-            return FatalFailure_;
-        }
-
-        bool Failed() const {
-            return Failed_;
-        }
-
-    private:
-        void Handler(const char* what, const TString& msg, bool fatalFailure) {
-            What_ = what;
-            Msg_ = msg;
-            FatalFailure_ = fatalFailure;
-            Failed_ = true;
-        }
-
-        void SetHandler() {
-            TRaiseErrorHandler handler = [this](const char* what, const TString& msg, bool fatalFailure) {
-                Handler(what, msg, fatalFailure);
-            };
-            SetRaiseErrorHandler(std::move(handler));
-        }
-
-    private:
-        TString What_;
-        TString Msg_;
-        bool FatalFailure_ = false;
-        bool Failed_ = false;
-    };
-
+                : Parent(guard.Parent) 
+            { 
+                guard.Parent = nullptr; 
+            } 
+ 
+            ~TInvokeGuard() { 
+                if (Parent) { 
+                    ClearRaiseErrorHandler(); 
+                } 
+            } 
+ 
+            TUnitTestFailChecker* Parent; 
+        }; 
+ 
+        TUnitTestFailChecker() = default; 
+        TUnitTestFailChecker(const TUnitTestFailChecker&) = delete; 
+        TUnitTestFailChecker(TUnitTestFailChecker&&) = delete; 
+ 
+        TInvokeGuard InvokeGuard() { 
+            return TInvokeGuard(*this); 
+        } 
+ 
+        const TString& What() const { 
+            return What_; 
+        } 
+ 
+        const TString& Msg() const { 
+            return Msg_; 
+        } 
+ 
+        bool FatalFailure() const { 
+            return FatalFailure_; 
+        } 
+ 
+        bool Failed() const { 
+            return Failed_; 
+        } 
+ 
+    private: 
+        void Handler(const char* what, const TString& msg, bool fatalFailure) { 
+            What_ = what; 
+            Msg_ = msg; 
+            FatalFailure_ = fatalFailure; 
+            Failed_ = true; 
+        } 
+ 
+        void SetHandler() { 
+            TRaiseErrorHandler handler = [this](const char* what, const TString& msg, bool fatalFailure) { 
+                Handler(what, msg, fatalFailure); 
+            }; 
+            SetRaiseErrorHandler(std::move(handler)); 
+        } 
+ 
+    private: 
+        TString What_; 
+        TString Msg_; 
+        bool FatalFailure_ = false; 
+        bool Failed_ = false; 
+    }; 
+ 
 #define UNIT_TEST_SUITE_REGISTRATION(T) \
     static const ::NUnitTest::TTestBaseFactory<T> Y_GENERATE_UNIQUE_ID(UTREG_);
 

@@ -157,7 +157,7 @@ private:
     void HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx); 
     bool DropOldStuff(TEvKeyValue::TEvRequest* request, bool hasWrites, const TActorContext& ctx);
 
     //will fill sourceIds, request and NewHead
@@ -245,8 +245,8 @@ private:
     template <typename TEv>
     TString EventStr(const char * func, const TEv& ev) {
         TStringStream ss;
-        ss << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetBase()->ToStringHeader() << "), Tablet " << Tablet << ", Partition " << Partition
-           << ", Sender " << ev->Sender.ToString() << ", Recipient " << ev->Recipient.ToString() << ", Cookie: " << ev->Cookie;
+        ss << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetBase()->ToStringHeader() << "), Tablet " << Tablet << ", Partition " << Partition 
+           << ", Sender " << ev->Sender.ToString() << ", Recipient " << ev->Recipient.ToString() << ", Cookie: " << ev->Cookie; 
         return ss.Str();
     }
 
@@ -311,7 +311,7 @@ private:
             HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
             HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
-            HFuncTraced(TEvQuota::TEvClearance, Handle);
+            HFuncTraced(TEvQuota::TEvClearance, Handle); 
             HFuncTraced(TEvPQ::TEvQuotaDeadlineCheck, Handle);
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
@@ -360,7 +360,7 @@ private:
             HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
             HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvQuotaDeadlineCheck, Handle);
-            HFuncTraced(TEvQuota::TEvClearance, Handle);
+            HFuncTraced(TEvQuota::TEvClearance, Handle); 
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
@@ -387,11 +387,11 @@ private:
     void WriteBlobWithQuota(THolder<TEvKeyValue::TEvRequest>&& request);
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
 
-    size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
-    void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
-    void CalcTopicWriteQuotaParams();
-    bool WaitingForPreviousBlobQuota() const;
-
+    size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request); 
+    void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie); 
+    void CalcTopicWriteQuotaParams(); 
+    bool WaitingForPreviousBlobQuota() const; 
+ 
 private:
     void UpdateUserInfoEndOffset(const TInstant& now);
 
@@ -615,10 +615,10 @@ private:
     ui64 HasDataReqNum;
 
     TQuotaTracker WriteQuota;
-    THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter;
+    THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter; 
     TInstant QuotaDeadline = TInstant::Zero();
-
-    TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
+ 
+    TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes; 
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgQuotaBytes;
 
 
@@ -644,18 +644,18 @@ private:
     NKikimr::NPQ::TMultiCounter BytesWrittenUncompressed;
     NKikimr::NPQ::TMultiCounter BytesWrittenComp;
     NKikimr::NPQ::TMultiCounter MsgsWritten;
-
-    // Writing blob with topic quota variables
-    ui64 TopicQuotaRequestCookie = 0;
-    // Wait topic quota metrics
-    THolder<TPercentileCounter> TopicWriteQuotaWaitCounter;
-    TInstant StartTopicQuotaWaitTimeForCurrentBlob;
+ 
+    // Writing blob with topic quota variables 
+    ui64 TopicQuotaRequestCookie = 0; 
+    // Wait topic quota metrics 
+    THolder<TPercentileCounter> TopicWriteQuotaWaitCounter; 
+    TInstant StartTopicQuotaWaitTimeForCurrentBlob; 
     TInstant WriteStartTime;
-    TDuration TopicQuotaWaitTimeForCurrentBlob;
-    // Topic quota parameters
-    TString TopicWriteQuoterPath;
-    TString TopicWriteQuotaResourcePath;
-    ui64 NextTopicWriteQuotaRequestCookie = 1;
+    TDuration TopicQuotaWaitTimeForCurrentBlob; 
+    // Topic quota parameters 
+    TString TopicWriteQuoterPath; 
+    TString TopicWriteQuotaResourcePath; 
+    ui64 NextTopicWriteQuotaRequestCookie = 1; 
 
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 

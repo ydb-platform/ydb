@@ -15,7 +15,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
-
+ 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/events.h>
@@ -25,7 +25,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 
 #include <algorithm>
 #include <queue>
@@ -94,9 +94,9 @@ public:
         ui64 outputIndex,
         const TString& txId,
         NPq::NProto::TDqPqTopicSink&& sinkParams,
-        NYdb::TDriver driver,
+        NYdb::TDriver driver, 
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        IDqSinkActor::ICallbacks* callbacks,
+        IDqSinkActor::ICallbacks* callbacks, 
         i64 freeSpace)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
@@ -106,37 +106,37 @@ public:
         , CredentialsProviderFactory(credentialsProviderFactory)
         , Callbacks(callbacks)
         , FreeSpace(freeSpace)
-        , PersQueueClient(Driver, GetPersQueueClientSettings())
+        , PersQueueClient(Driver, GetPersQueueClientSettings()) 
     { }
 
     static constexpr char ActorName[] = "DQ_PQ_WRITE_ACTOR";
 
 public:
-    void SendData(
+    void SendData( 
         NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
-        i64 dataSize,
-        const TMaybe<NDqProto::TCheckpoint>& checkpoint,
-        bool finished) override
+        i64 dataSize, 
+        const TMaybe<NDqProto::TCheckpoint>& checkpoint, 
+        bool finished) override 
     {
-        Y_UNUSED(finished);
+        Y_UNUSED(finished); 
         Y_UNUSED(dataSize);
 
         CreateSessionIfNotExists();
 
-        for (const NUdf::TUnboxedValue& item : batch) {
+        for (const NUdf::TUnboxedValue& item : batch) { 
             if (!item.IsBoxed()) {
                 Fail("Struct with single field was expected");
                 return;
             }
 
-            const NUdf::TUnboxedValue dataCol = item.GetElement(0);
+            const NUdf::TUnboxedValue dataCol = item.GetElement(0); 
 
             if (!dataCol.IsString() && !dataCol.IsEmbedded()) {
                 Fail(TStringBuilder() << "Non string value could not be written to YDS stream");
                 return;
             }
 
-            TString data(dataCol.AsStringRef());
+            TString data(dataCol.AsStringRef()); 
 
             LWPROBE(PqWriteDataToSend, TxId, SinkParams.GetTopicPath(), data);
             SINK_LOG_T("Received data for sending: " << data);
@@ -154,7 +154,7 @@ public:
 
         if (checkpoint) {
             if (Buffer.empty()) {
-                Callbacks->OnSinkStateSaved(BuildState(), OutputIndex, *checkpoint);
+                Callbacks->OnSinkStateSaved(BuildState(), OutputIndex, *checkpoint); 
             } else {
                 DeferredCheckpoints.emplace(NextSeqNo + Buffer.size() - 1, *checkpoint);
             }
@@ -172,18 +172,18 @@ public:
         }
     };
 
-    void LoadState(const NDqProto::TSinkState& state) override {
-        Y_VERIFY(NextSeqNo == 1);
-        const auto& data = state.GetData().GetStateData();
-        if (data.GetVersion() == StateVersion) { // Current version
-            NPq::NProto::TDqPqTopicSinkState stateProto;
-            YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted");
-            SourceId = stateProto.GetSourceId();
-            ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
+    void LoadState(const NDqProto::TSinkState& state) override { 
+        Y_VERIFY(NextSeqNo == 1); 
+        const auto& data = state.GetData().GetStateData(); 
+        if (data.GetVersion() == StateVersion) { // Current version 
+            NPq::NProto::TDqPqTopicSinkState stateProto; 
+            YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted"); 
+            SourceId = stateProto.GetSourceId(); 
+            ConfirmedSeqNo = stateProto.GetConfirmedSeqNo(); 
             NextSeqNo = ConfirmedSeqNo + 1;
-            return;
+            return; 
         }
-        ythrow yexception() << "Invalid state version " << data.GetVersion();
+        ythrow yexception() << "Invalid state version " << data.GetVersion(); 
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
@@ -208,12 +208,12 @@ private:
         SubscribeOnNextEvent();
     }
 
-    // IActor & IDqSinkActor
-    void PassAway() override { // Is called from Compute Actor
+    // IActor & IDqSinkActor 
+    void PassAway() override { // Is called from Compute Actor 
         if (WriteSession) {
             WriteSession->Close(TDuration::Zero());
         }
-        TActor<TDqPqWriteActor>::PassAway();
+        TActor<TDqPqWriteActor>::PassAway(); 
     }
 
 private:
@@ -270,8 +270,8 @@ private:
 
         auto events = WriteSession->GetEvents();
         for (auto& event : events) {
-            auto issues = std::visit(TPQEventProcessor{*this}, event);
-            if (issues) {
+            auto issues = std::visit(TPQEventProcessor{*this}, event); 
+            if (issues) { 
                 WriteSession->Close(TDuration::Zero());
                 WriteSession.reset();
                 Callbacks->OnSinkError(OutputIndex, *issues, true);
@@ -286,18 +286,18 @@ private:
         return !events.empty();
     }
 
-    NDqProto::TSinkState BuildState() {
-        NPq::NProto::TDqPqTopicSinkState stateProto;
-        stateProto.SetSourceId(GetSourceId());
-        stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
-        TString serializedState;
-        YQL_ENSURE(stateProto.SerializeToString(&serializedState));
-
-        NDqProto::TSinkState sinkState;
-        auto* data = sinkState.MutableData()->MutableStateData();
-        data->SetVersion(StateVersion);
-        data->SetBlob(serializedState);
-        return sinkState;
+    NDqProto::TSinkState BuildState() { 
+        NPq::NProto::TDqPqTopicSinkState stateProto; 
+        stateProto.SetSourceId(GetSourceId()); 
+        stateProto.SetConfirmedSeqNo(ConfirmedSeqNo); 
+        TString serializedState; 
+        YQL_ENSURE(stateProto.SerializeToString(&serializedState)); 
+ 
+        NDqProto::TSinkState sinkState; 
+        auto* data = sinkState.MutableData()->MutableStateData(); 
+        data->SetVersion(StateVersion); 
+        data->SetBlob(serializedState); 
+        return sinkState; 
     }
 
     void WriteNextMessage(NYdb::NPersQueue::TContinuationToken&& token) {
@@ -314,13 +314,13 @@ private:
     }
 
     struct TPQEventProcessor {
-        std::optional<TIssues> operator()(NYdb::NPersQueue::TSessionClosedEvent& ev) {
-            TIssues issues;
+        std::optional<TIssues> operator()(NYdb::NPersQueue::TSessionClosedEvent& ev) { 
+            TIssues issues; 
             issues.AddIssue(TStringBuilder() << "Write session to topic \"" << Self.SinkParams.GetTopicPath() << "\" was closed: " << ev.DebugString());
-            return issues;
+            return issues; 
         }
 
-        std::optional<TIssues> operator()(NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent& ev) {
+        std::optional<TIssues> operator()(NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent& ev) { 
             if (ev.Acks.empty()) {
                 return std::nullopt;
             }
@@ -331,9 +331,9 @@ private:
                 //Y_VERIFY(it == ev.Acks.begin() || it->SeqNo == std::prev(it)->SeqNo + 1);
 
                 if (it->State == NYdb::NPersQueue::TWriteSessionEvent::TWriteAck::EEventState::EES_DISCARDED) {
-                    TIssues issues;
-                    issues.AddIssue(TStringBuilder() << "Message with seqNo " << it->SeqNo << " was discarded");
-                    return issues;
+                    TIssues issues; 
+                    issues.AddIssue(TStringBuilder() << "Message with seqNo " << it->SeqNo << " was discarded"); 
+                    return issues; 
                 }
 
                 Self.FreeSpace += Self.WaitingAcks.front();
@@ -341,7 +341,7 @@ private:
 
                 if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == it->SeqNo) {
                     Self.ConfirmedSeqNo = it->SeqNo;
-                    Self.Callbacks->OnSinkStateSaved(Self.BuildState(), Self.OutputIndex, std::get<1>(Self.DeferredCheckpoints.front()));
+                    Self.Callbacks->OnSinkStateSaved(Self.BuildState(), Self.OutputIndex, std::get<1>(Self.DeferredCheckpoints.front())); 
                     Self.DeferredCheckpoints.pop();
                 }
             }
@@ -350,8 +350,8 @@ private:
             return std::nullopt;
         }
 
-        std::optional<TIssues> operator()(NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
-            //Y_VERIFY(!Self.ContinuationToken);
+        std::optional<TIssues> operator()(NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent& ev) { 
+            //Y_VERIFY(!Self.ContinuationToken); 
 
             if (!Self.Buffer.empty()) {
                 Self.WriteNextMessage(std::move(ev.ContinuationToken));
@@ -369,9 +369,9 @@ private:
     const ui64 OutputIndex;
     const TString TxId;
     const NPq::NProto::TDqPqTopicSink SinkParams;
-    NYdb::TDriver Driver;
+    NYdb::TDriver Driver; 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    IDqSinkActor::ICallbacks* const Callbacks;
+    IDqSinkActor::ICallbacks* const Callbacks; 
     i64 FreeSpace = 0;
 
     NYdb::NPersQueue::TPersQueueClient PersQueueClient;
@@ -388,14 +388,14 @@ private:
     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
 };
 
-std::pair<IDqSinkActor*, NActors::IActor*> CreateDqPqWriteActor(
-    NPq::NProto::TDqPqTopicSink&& settings,
+std::pair<IDqSinkActor*, NActors::IActor*> CreateDqPqWriteActor( 
+    NPq::NProto::TDqPqTopicSink&& settings, 
     ui64 outputIndex,
     TTxId txId,
     const THashMap<TString, TString>& secureParams,
-    NYdb::TDriver driver,
+    NYdb::TDriver driver, 
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    IDqSinkActor::ICallbacks* callbacks,
+    IDqSinkActor::ICallbacks* callbacks, 
     i64 freeSpace)
 {
     const TString& tokenName = settings.GetToken().GetName();
@@ -413,15 +413,15 @@ std::pair<IDqSinkActor*, NActors::IActor*> CreateDqPqWriteActor(
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqSinkFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
-    factory.Register<NPq::NProto::TDqPqTopicSink>("PqSink",
+void RegisterDqPqWriteActorFactory(TDqSinkFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { 
+    factory.Register<NPq::NProto::TDqPqTopicSink>("PqSink", 
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqSinkActorFactory::TArguments&& args)
         {
             NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
-            return CreateDqPqWriteActor(
-                std::move(settings),
+            return CreateDqPqWriteActor( 
+                std::move(settings), 
                 args.OutputIndex,
                 args.TxId,
                 args.SecureParams,
@@ -430,6 +430,6 @@ void RegisterDqPqWriteActorFactory(TDqSinkFactory& factory, NYdb::TDriver driver
                 args.Callback
             );
         });
-}
-
+} 
+ 
 } // namespace NYql::NDq

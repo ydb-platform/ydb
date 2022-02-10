@@ -57,7 +57,7 @@ public:
     {
     }
 
-    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE";
+    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE"; 
 
 private:
     STRICT_STFUNC(StateFunc,
@@ -107,7 +107,7 @@ private:
         if (issues) {
             CPS_LOG_D("CreateQueryRequest, validation failed: " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneStorage::TEvCreateQueryResponse(issues), 0, ev->Cookie);
-            return;
+            return; 
         }
 
         const TString user = ev->Get()->User;
@@ -371,7 +371,7 @@ private:
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Request size exceeded " + ToString(request.ByteSize()) + " out of " + ToString(Config.Proto.GetMaxRequestSize()) + " bytes"));
         }
 
-        const uint64_t countQueries = count_if(Queries.begin(), Queries.end(), [scope](const auto& item) {
+        const uint64_t countQueries = count_if(Queries.begin(), Queries.end(), [scope](const auto& item) { 
             const auto& [key, value] = item;
             return key.Scope == scope;
         });

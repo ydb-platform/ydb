@@ -2,10 +2,10 @@ LIBRARY()
 
 PROVIDES(test_framework)
 
-OWNER(
-    pg
-    galaxycrab
-)
+OWNER( 
+    pg 
+    galaxycrab 
+) 
 
 PEERDIR(
     library/cpp/colorizer
@@ -19,7 +19,7 @@ PEERDIR(
 SRCS(
     gtest.cpp
     checks.cpp
-    plugin.cpp
+    plugin.cpp 
     registar.cpp
     tests_data.cpp
     utmain.cpp

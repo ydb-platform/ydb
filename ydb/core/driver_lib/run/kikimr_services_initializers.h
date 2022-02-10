@@ -15,7 +15,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 
 #include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
-
+ 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/log_settings.h>
@@ -488,14 +488,14 @@ public:
 
 class TYandexQueryInitializer : public IKikimrServicesInitializer {
 public:
-    TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources);
+    TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources); 
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 
     static void SetIcPort(ui32 icPort);
-private:
-    std::shared_ptr<TModuleFactories> Factories;
-    NYq::IYqSharedResources::TPtr YqSharedResources;
+private: 
+    std::shared_ptr<TModuleFactories> Factories; 
+    NYq::IYqSharedResources::TPtr YqSharedResources; 
     static ui32 IcPort;
 };
 

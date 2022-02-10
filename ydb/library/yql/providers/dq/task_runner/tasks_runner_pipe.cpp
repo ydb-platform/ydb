@@ -102,9 +102,9 @@ void FromProto(TDqTaskRunnerStats* s, const T& f)
     //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
     s->BuildCpuTime = TDuration::MicroSeconds(f.GetBuildCpuTimeUs());
     s->ComputeCpuTime = TDuration::MicroSeconds(f.GetComputeCpuTimeUs());
-    s->RunStatusTimeMetrics.Load(ERunStatus::PendingInput, TDuration::MicroSeconds(f.GetPendingInputTimeUs()));
-    s->RunStatusTimeMetrics.Load(ERunStatus::PendingOutput, TDuration::MicroSeconds(f.GetPendingOutputTimeUs()));
-    s->RunStatusTimeMetrics.Load(ERunStatus::Finished, TDuration::MicroSeconds(f.GetFinishTimeUs()));
+    s->RunStatusTimeMetrics.Load(ERunStatus::PendingInput, TDuration::MicroSeconds(f.GetPendingInputTimeUs())); 
+    s->RunStatusTimeMetrics.Load(ERunStatus::PendingOutput, TDuration::MicroSeconds(f.GetPendingOutputTimeUs())); 
+    s->RunStatusTimeMetrics.Load(ERunStatus::Finished, TDuration::MicroSeconds(f.GetFinishTimeUs())); 
     //s->TotalTime = TDuration::MilliSeconds(f.GetTotalTime());
     s->WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs());
     s->WaitOutputTime = TDuration::MicroSeconds(f.GetWaitOutputTimeUs());
@@ -669,18 +669,18 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void Pause() override {
-        Y_FAIL("Checkpoints are not supported");
-    }
-
-    void Resume() override {
-        Y_FAIL("Checkpoints are not supported");
-    }
-
-    bool IsPaused() const override {
-        return false;
-    }
-
+    void Pause() override { 
+        Y_FAIL("Checkpoints are not supported"); 
+    } 
+ 
+    void Resume() override { 
+        Y_FAIL("Checkpoints are not supported"); 
+    } 
+ 
+    bool IsPaused() const override { 
+        return false; 
+    } 
+ 
 private:
     IInputChannel::TPtr Delegate;
     ui64 TaskId;
@@ -846,18 +846,18 @@ public:
         return InputType;
     }
 
-    void Pause() override {
-        Y_FAIL("Checkpoints are not supported");
-    }
-
-    void Resume() override {
-        Y_FAIL("Checkpoints are not supported");
-    }
-
-    bool IsPaused() const override {
-        return false;
-    }
-
+    void Pause() override { 
+        Y_FAIL("Checkpoints are not supported"); 
+    } 
+ 
+    void Resume() override { 
+        Y_FAIL("Checkpoints are not supported"); 
+    } 
+ 
+    bool IsPaused() const override { 
+        return false; 
+    } 
+ 
 private:
     ui64 TaskId;
     ui64 InputIndex;
@@ -950,7 +950,7 @@ public:
         ythrow yexception() << "unimplemented";
     };
 
-    // can throw TDqChannelStorageException
+    // can throw TDqChannelStorageException 
     void Push(NUdf::TUnboxedValue&& value) override {
         Y_UNUSED(value);
         ythrow yexception() << "unimplemented";
@@ -988,7 +988,7 @@ public:
             TaskRunner->RaiseException();
         }
     }
-    // can throw TDqChannelStorageException
+    // can throw TDqChannelStorageException 
     [[nodiscard]]
     bool Pop(NDqProto::TData& data, ui64 bytes) override {
         try {
@@ -1007,7 +1007,7 @@ public:
     // TODO: remove this method and create independent Data- and Stream-query implementations.
     //       Stream-query implementation should be without PopAll method.
     //       Data-query implementation should be one-shot for Pop (a-la PopAll) call and without ChannelStorage.
-    // can throw TDqChannelStorageException
+    // can throw TDqChannelStorageException 
     [[nodiscard]]
     bool PopAll(NDqProto::TData& data) override {
         Y_UNUSED(data);
@@ -1282,7 +1282,7 @@ public:
     {
         Alloc.Release();
         StderrReader->Start();
-        InitTaskMeta();
+        InitTaskMeta(); 
     }
 
     ~TTaskRunner() {
@@ -1372,16 +1372,16 @@ public:
 
     const NMiniKQL::THolderFactory& GetHolderFactory() const override {
         return HolderFactory;
-    }
-
+    } 
+ 
     const THashMap<TString, TString>& GetSecureParams() const override {
-        return SecureParams;
-    }
-
+        return SecureParams; 
+    } 
+ 
     const THashMap<TString, TString>& GetTaskParams() const override {
-        return TaskParams;
-    }
-
+        return TaskParams; 
+    } 
+ 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
         auto guard = TypeEnv.BindAllocator();
         if (memoryLimit) {
@@ -1440,24 +1440,24 @@ public:
     }
 
 private:
-    void InitTaskMeta() {
-        Yql::DqsProto::TTaskMeta taskMeta;
-        Task.GetMeta().UnpackTo(&taskMeta);
-
-        for (const auto& x : taskMeta.GetSecureParams()) {
-            SecureParams[x.first] = x.second;
-        }
-
-        for (const auto& x : taskMeta.GetTaskParams()) {
-            TaskParams[x.first] = x.second;
-        }
-    }
-
-private:
+    void InitTaskMeta() { 
+        Yql::DqsProto::TTaskMeta taskMeta; 
+        Task.GetMeta().UnpackTo(&taskMeta); 
+ 
+        for (const auto& x : taskMeta.GetSecureParams()) { 
+            SecureParams[x.first] = x.second; 
+        } 
+ 
+        for (const auto& x : taskMeta.GetTaskParams()) { 
+            TaskParams[x.first] = x.second; 
+        } 
+    } 
+ 
+private: 
     const TString TraceId;
     NDqProto::TDqTask Task;
-    THashMap<TString, TString> SecureParams;
-    THashMap<TString, TString> TaskParams;
+    THashMap<TString, TString> SecureParams; 
+    THashMap<TString, TString> TaskParams; 
 
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
@@ -1535,7 +1535,7 @@ public:
         return channel;
     }
 
-    IDqSource::TPtr GetSource(ui64 inputIndex) override {
+    IDqSource::TPtr GetSource(ui64 inputIndex) override { 
         auto& source = Sources[inputIndex];
         if (!source) {
             source = new TDqSource(
@@ -1545,8 +1545,8 @@ public:
             Stats.Sources[inputIndex] = source->GetStats();
         }
         return source;
-    }
-
+    } 
+ 
     IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) override
     {
         auto& channel = OutputChannels[channelId];
@@ -1561,7 +1561,7 @@ public:
         return channel;
     }
 
-    IDqSink::TPtr GetSink(ui64 outputIndex) override {
+    IDqSink::TPtr GetSink(ui64 outputIndex) override { 
         auto& sink = Sinks[outputIndex];
         if (!sink) {
             sink = new TDqSink(
@@ -1571,24 +1571,24 @@ public:
             // Stats.Sinks[outputIndex] = sink->GetStats();
         }
         return sink;
-    }
-
+    } 
+ 
     const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
         return Delegate->GetTypeEnv();
     }
 
-    const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
-        return Delegate->GetHolderFactory();
-    }
-
-    const THashMap<TString, TString>& GetSecureParams() const override {
-        return Delegate->GetSecureParams();
-    }
-
-    const THashMap<TString, TString>& GetTaskParams() const override {
-        return Delegate->GetTaskParams();
-    }
-
+    const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override { 
+        return Delegate->GetHolderFactory(); 
+    } 
+ 
+    const THashMap<TString, TString>& GetSecureParams() const override { 
+        return Delegate->GetSecureParams(); 
+    } 
+ 
+    const THashMap<TString, TString>& GetTaskParams() const override { 
+        return Delegate->GetTaskParams(); 
+    } 
+ 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
         return Delegate->BindAllocator(memoryLimit);
     }
@@ -1597,9 +1597,9 @@ public:
         return Delegate->IsAllocatorAttached();
     }
 
-    void UpdateStats() override {
-    }
-
+    void UpdateStats() override { 
+    } 
+ 
     const TDqTaskRunnerStats* GetStats() const override
     {
         try {

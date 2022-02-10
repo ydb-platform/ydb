@@ -8,7 +8,7 @@
 
 #include <winioctl.h>
 
-namespace NFsPrivate {
+namespace NFsPrivate { 
     static LPCWSTR UTF8ToWCHAR(const TStringBuf str, TUtf16String& wstr) {
         wstr.resize(str.size());
         size_t written = 0;
@@ -41,31 +41,31 @@ namespace NFsPrivate {
 
     bool WinRename(const TString& oldPath, const TString& newPath) {
         TUtf16String op, np;
-        LPCWSTR opPtr = UTF8ToWCHAR(oldPath, op);
-        LPCWSTR npPtr = UTF8ToWCHAR(newPath, np);
+        LPCWSTR opPtr = UTF8ToWCHAR(oldPath, op); 
+        LPCWSTR npPtr = UTF8ToWCHAR(newPath, np); 
         if (!opPtr || !npPtr) {
             ::SetLastError(ERROR_INVALID_NAME);
-            return false;
+            return false; 
         }
 
-        return MoveFileExW(opPtr, npPtr, MOVEFILE_REPLACE_EXISTING) != 0;
+        return MoveFileExW(opPtr, npPtr, MOVEFILE_REPLACE_EXISTING) != 0; 
     }
 
     bool WinRemove(const TString& path) {
         TUtf16String wstr;
-        LPCWSTR wname = UTF8ToWCHAR(path, wstr);
+        LPCWSTR wname = UTF8ToWCHAR(path, wstr); 
         if (!wname) {
             ::SetLastError(ERROR_INVALID_NAME);
-            return false;
+            return false; 
         }
         WIN32_FILE_ATTRIBUTE_DATA fad;
         if (::GetFileAttributesExW(wname, GetFileExInfoStandard, &fad)) {
             if (fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-                return ::RemoveDirectoryW(wname) != 0;
-            return ::DeleteFileW(wname) != 0;
+                return ::RemoveDirectoryW(wname) != 0; 
+            return ::DeleteFileW(wname) != 0; 
         }
 
-        return false;
+        return false; 
     }
 
     bool WinSymLink(const TString& targetName, const TString& linkName) {
@@ -78,7 +78,7 @@ namespace NFsPrivate {
         TUtf16String tstr;
         LPCWSTR wname = UTF8ToWCHAR(tName, tstr);
         TUtf16String lstr;
-        LPCWSTR lname = UTF8ToWCHAR(linkName, lstr);
+        LPCWSTR lname = UTF8ToWCHAR(linkName, lstr); 
 
         // we can't create a dangling link to a dir in this way
         ui32 attr = ::GetFileAttributesW(wname);
@@ -103,8 +103,8 @@ namespace NFsPrivate {
 
     bool WinHardLink(const TString& existingPath, const TString& newPath) {
         TUtf16String ep, np;
-        LPCWSTR epPtr = UTF8ToWCHAR(existingPath, ep);
-        LPCWSTR npPtr = UTF8ToWCHAR(newPath, np);
+        LPCWSTR epPtr = UTF8ToWCHAR(existingPath, ep); 
+        LPCWSTR npPtr = UTF8ToWCHAR(newPath, np); 
         if (!epPtr || !npPtr) {
             ::SetLastError(ERROR_INVALID_NAME);
             return false;
@@ -115,7 +115,7 @@ namespace NFsPrivate {
 
     bool WinExists(const TString& path) {
         TUtf16String buf;
-        LPCWSTR ptr = UTF8ToWCHAR(path, buf);
+        LPCWSTR ptr = UTF8ToWCHAR(path, buf); 
         return ::GetFileAttributesW(ptr) != INVALID_FILE_ATTRIBUTES;
     }
 
@@ -181,7 +181,7 @@ namespace NFsPrivate {
     // the end of edited part of <Ntifs.h>
 
     TString WinReadLink(const TString& name) {
-        TFileHandle h = CreateFileWithUtf8Name(name, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING,
+        TFileHandle h = CreateFileWithUtf8Name(name, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, 
                                                FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, true);
         TTempBuf buf;
         while (true) {
@@ -204,7 +204,7 @@ namespace NFsPrivate {
                 if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
                     buf = TTempBuf(buf.Size() * 2);
                 } else {
-                    ythrow yexception() << "can't read link " << name;
+                    ythrow yexception() << "can't read link " << name; 
                 }
             }
         }

@@ -602,17 +602,17 @@ private:
     mutable T* T_;
 };
 
-template <class T, class Ops>
+template <class T, class Ops> 
 struct THash<TIntrusivePtr<T, Ops>>: THash<const T*> {
-    using THash<const T*>::operator();
-    inline size_t operator()(const TIntrusivePtr<T, Ops>& ptr) const {
-        return THash<const T*>::operator()(ptr.Get());
-    }
-};
-
+    using THash<const T*>::operator(); 
+    inline size_t operator()(const TIntrusivePtr<T, Ops>& ptr) const { 
+        return THash<const T*>::operator()(ptr.Get()); 
+    } 
+}; 
+ 
 // Behaves like TIntrusivePtr but returns const T* to prevent user from accidentally modifying the referenced object.
 template <class T, class Ops>
-class TIntrusiveConstPtr: public TPointerBase<TIntrusiveConstPtr<T, Ops>, const T> {
+class TIntrusiveConstPtr: public TPointerBase<TIntrusiveConstPtr<T, Ops>, const T> { 
 public:
     inline TIntrusiveConstPtr(T* t = nullptr) noexcept // we need a non-const pointer to Ref(), UnRef() and eventually delete it.
         : T_(t)
@@ -718,13 +718,13 @@ private:
 
 template <class T, class Ops>
 struct THash<TIntrusiveConstPtr<T, Ops>>: THash<const T*> {
-    using THash<const T*>::operator();
-    inline size_t operator()(const TIntrusiveConstPtr<T, Ops>& ptr) const {
-        return THash<const T*>::operator()(ptr.Get());
-    }
-};
-
-template <class T, class Ops>
+    using THash<const T*>::operator(); 
+    inline size_t operator()(const TIntrusiveConstPtr<T, Ops>& ptr) const { 
+        return THash<const T*>::operator()(ptr.Get()); 
+    } 
+}; 
+ 
+template <class T, class Ops> 
 class TSimpleIntrusiveOps {
     using TFunc = void (*)(T*)
 #if __cplusplus >= 201703
@@ -932,14 +932,14 @@ private:
     C* C_;
 };
 
-template <class T, class C, class D>
+template <class T, class C, class D> 
 struct THash<TSharedPtr<T, C, D>>: THash<const T*> {
-    using THash<const T*>::operator();
-    inline size_t operator()(const TSharedPtr<T, C, D>& ptr) const {
-        return THash<const T*>::operator()(ptr.Get());
-    }
-};
-
+    using THash<const T*>::operator(); 
+    inline size_t operator()(const TSharedPtr<T, C, D>& ptr) const { 
+        return THash<const T*>::operator()(ptr.Get()); 
+    } 
+}; 
+ 
 template <class T, class D = TDelete>
 using TAtomicSharedPtr = TSharedPtr<T, TAtomicCounter, D>;
 

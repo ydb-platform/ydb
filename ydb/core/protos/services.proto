@@ -278,12 +278,12 @@ enum EServiceKikimr {
     BUILD_INDEX = 1000;
 
     METERING_WRITER = 1010;
-
-    // Streaming
-    STREAMS = 1011;
-    STREAMS_SERVICE = 1012;
-    STREAMS_STORAGE_SERVICE = 1013;
-    STREAMS_SCHEDULER_SERVICE = 1014;
+ 
+    // Streaming 
+    STREAMS = 1011; 
+    STREAMS_SERVICE = 1012; 
+    STREAMS_STORAGE_SERVICE = 1013; 
+    STREAMS_SCHEDULER_SERVICE = 1014; 
     STREAMS_RESOURCE_SERVICE = 1015;
     STREAMS_CHECKPOINT_COORDINATOR = 1016;
     STREAMS_CONTROL_PLANE_SERVICE = 1017;
@@ -298,8 +298,8 @@ enum EServiceKikimr {
 
     // Change exchange (async indexes & CDC)
     CHANGE_EXCHANGE = 1100;
-
-    YDB_SDK = 1101; // Log component for logger in YDB SDK driver.
+ 
+    YDB_SDK = 1101; // Log component for logger in YDB SDK driver. 
 
     // Replication
     REPLICATION_CONTROLLER = 1200;

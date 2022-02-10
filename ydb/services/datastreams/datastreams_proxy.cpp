@@ -1334,8 +1334,8 @@ namespace NKikimr::NDataStreams::V1 {
         ui32 MaxResults = DEFAULT_MAX_RESULTS;
         std::map<ui64, std::pair<ui64, ui64>> StartEndOffsetsPerPartition;
         std::vector<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> Shards;
-        ui32 LeftToRead = 0;
-        ui32 AllShardsCount = 0;
+        ui32 LeftToRead = 0; 
+        ui32 AllShardsCount = 0; 
         std::atomic<ui32> GotOffsetResponds;
         std::vector<TActorId> Pipes;
     };
@@ -1368,7 +1368,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         MaxResults = MaxResults == 0 ? DEFAULT_MAX_RESULTS : MaxResults;
-        if (MaxResults > MAX_MAX_RESULTS) {
+        if (MaxResults > MAX_MAX_RESULTS) { 
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
                                   TStringBuilder() << "Max results '" << MaxResults <<
                                   "' is out of bound [" << MIN_MAX_RESULTS << "; " <<

@@ -1,37 +1,37 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
-package Ydb.RateLimiter;
-
-option java_package = "com.yandex.ydb.rate_limiter";
-option java_outer_classname = "RateLimiterProtos";
-option java_multiple_files = true;
-
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
+package Ydb.RateLimiter; 
+ 
+option java_package = "com.yandex.ydb.rate_limiter"; 
+option java_outer_classname = "RateLimiterProtos"; 
+option java_multiple_files = true; 
+ 
 import "ydb/public/api/protos/ydb_operation.proto";
-
-//
-// Rate Limiter control API.
-//
-
-//
-// Resource properties.
-//
-
-// Settings for hierarchical deficit round robin (HDRR) algorithm.
-message HierarchicalDrrSettings {
-    // Resource consumption speed limit.
-    // Value is required for root resource.
-    // 0 is equivalent to not set.
-    // Must be nonnegative.
-    double max_units_per_second = 1;
-
-    // Maximum burst size of resource consumption across the whole cluster
-    // divided by max_units_per_second.
-    // Default value is 1.
-    // This means that maximum burst size might be equal to max_units_per_second.
-    // 0 is equivalent to not set.
-    // Must be nonnegative.
-    double max_burst_size_coefficient = 2;
+ 
+// 
+// Rate Limiter control API. 
+// 
+ 
+// 
+// Resource properties. 
+// 
+ 
+// Settings for hierarchical deficit round robin (HDRR) algorithm. 
+message HierarchicalDrrSettings { 
+    // Resource consumption speed limit. 
+    // Value is required for root resource. 
+    // 0 is equivalent to not set. 
+    // Must be nonnegative. 
+    double max_units_per_second = 1; 
+ 
+    // Maximum burst size of resource consumption across the whole cluster 
+    // divided by max_units_per_second. 
+    // Default value is 1. 
+    // This means that maximum burst size might be equal to max_units_per_second. 
+    // 0 is equivalent to not set. 
+    // Must be nonnegative. 
+    double max_burst_size_coefficient = 2; 
 
     // Prefetch in local bucket up to prefetch_coefficient*max_units_per_second units (full size).
     // Default value is inherited from parent or 0.2 for root.
@@ -43,138 +43,138 @@ message HierarchicalDrrSettings {
     // Default value is inherited from parent or 0.75 for root.
     // Must be nonnegative and less than or equal to 1.
     double prefetch_watermark = 4;
-}
-
-// Rate limiter resource description.
-message Resource {
-    // Resource path. Elements are separated by slash.
-    // The first symbol is not slash.
-    // The first element is root resource name.
-    // Resource path is the path of resource inside coordination node.
-    string resource_path = 1;
-
-    oneof type {
-        // Settings for Hierarchical DRR algorithm.
-        HierarchicalDrrSettings hierarchical_drr = 2;
-    }
-}
-
-//
-// CreateResource method.
-//
-
-message CreateResourceRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    // Path of a coordination node.
-    string coordination_node_path = 2;
-
-    // Resource properties.
-    Resource resource = 3;
-}
-
-message CreateResourceResponse {
-    // Holds CreateResourceResult in case of successful call.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message CreateResourceResult {
-}
-
-//
-// AlterResource method.
-//
-
-message AlterResourceRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    // Path of a coordination node.
-    string coordination_node_path = 2;
-
-    // New resource properties.
-    Resource resource = 3;
-}
-
-message AlterResourceResponse {
-    // Holds AlterResourceResult in case of successful call.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message AlterResourceResult {
-}
-
-//
-// DropResource method.
-//
-
-message DropResourceRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    // Path of a coordination node.
-    string coordination_node_path = 2;
-
-    // Path of resource inside a coordination node.
-    string resource_path = 3;
-}
-
-message DropResourceResponse {
-    // Holds DropResourceResult in case of successful call.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message DropResourceResult {
-}
-
-//
-// ListResources method.
-//
-
-message ListResourcesRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    // Path of a coordination node.
-    string coordination_node_path = 2;
-
-    // Path of resource inside a coordination node.
-    // May be empty.
-    // In that case all root resources will be listed.
-    string resource_path = 3;
-
-    // List resources recursively.
-    bool recursive = 4;
-}
-
-message ListResourcesResponse {
-    // Holds ListResourcesResult in case of successful call.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message ListResourcesResult {
-    repeated string resource_paths = 1;
-}
-
-//
-// DescribeResource method.
-//
-
-message DescribeResourceRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    // Path of a coordination node.
-    string coordination_node_path = 2;
-
-    // Path of resource inside a coordination node.
-    string resource_path = 3;
-}
-
-message DescribeResourceResponse {
-    // Holds DescribeResourceResult in case of successful call.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message DescribeResourceResult {
-    Resource resource = 1;
-}
+} 
+ 
+// Rate limiter resource description. 
+message Resource { 
+    // Resource path. Elements are separated by slash. 
+    // The first symbol is not slash. 
+    // The first element is root resource name. 
+    // Resource path is the path of resource inside coordination node. 
+    string resource_path = 1; 
+ 
+    oneof type { 
+        // Settings for Hierarchical DRR algorithm. 
+        HierarchicalDrrSettings hierarchical_drr = 2; 
+    } 
+} 
+ 
+// 
+// CreateResource method. 
+// 
+ 
+message CreateResourceRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+ 
+    // Path of a coordination node. 
+    string coordination_node_path = 2; 
+ 
+    // Resource properties. 
+    Resource resource = 3; 
+} 
+ 
+message CreateResourceResponse { 
+    // Holds CreateResourceResult in case of successful call. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+message CreateResourceResult { 
+} 
+ 
+// 
+// AlterResource method. 
+// 
+ 
+message AlterResourceRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+ 
+    // Path of a coordination node. 
+    string coordination_node_path = 2; 
+ 
+    // New resource properties. 
+    Resource resource = 3; 
+} 
+ 
+message AlterResourceResponse { 
+    // Holds AlterResourceResult in case of successful call. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+message AlterResourceResult { 
+} 
+ 
+// 
+// DropResource method. 
+// 
+ 
+message DropResourceRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+ 
+    // Path of a coordination node. 
+    string coordination_node_path = 2; 
+ 
+    // Path of resource inside a coordination node. 
+    string resource_path = 3; 
+} 
+ 
+message DropResourceResponse { 
+    // Holds DropResourceResult in case of successful call. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+message DropResourceResult { 
+} 
+ 
+// 
+// ListResources method. 
+// 
+ 
+message ListResourcesRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+ 
+    // Path of a coordination node. 
+    string coordination_node_path = 2; 
+ 
+    // Path of resource inside a coordination node. 
+    // May be empty. 
+    // In that case all root resources will be listed. 
+    string resource_path = 3; 
+ 
+    // List resources recursively. 
+    bool recursive = 4; 
+} 
+ 
+message ListResourcesResponse { 
+    // Holds ListResourcesResult in case of successful call. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+message ListResourcesResult { 
+    repeated string resource_paths = 1; 
+} 
+ 
+// 
+// DescribeResource method. 
+// 
+ 
+message DescribeResourceRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+ 
+    // Path of a coordination node. 
+    string coordination_node_path = 2; 
+ 
+    // Path of resource inside a coordination node. 
+    string resource_path = 3; 
+} 
+ 
+message DescribeResourceResponse { 
+    // Holds DescribeResourceResult in case of successful call. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+message DescribeResourceResult { 
+    Resource resource = 1; 
+} 
 
 //
 // AcquireResource method.

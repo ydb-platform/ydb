@@ -42,57 +42,57 @@ class PortManager(object):
         self.release()
 
     def get_port(self, port=0):
-        '''
-        Gets free TCP port
-        '''
-        return self.get_tcp_port(port)
-
-    def get_tcp_port(self, port=0):
-        '''
-        Gets free TCP port
-        '''
-        return self._get_port(port, socket.SOCK_STREAM)
-
-    def get_udp_port(self, port=0):
-        '''
-        Gets free UDP port
-        '''
-        return self._get_port(port, socket.SOCK_DGRAM)
-
-    def get_tcp_and_udp_port(self, port=0):
-        '''
-        Gets one free port for use in both TCP and UDP protocols
-        '''
-        if port and self._no_random_ports():
+        ''' 
+        Gets free TCP port 
+        ''' 
+        return self.get_tcp_port(port) 
+ 
+    def get_tcp_port(self, port=0): 
+        ''' 
+        Gets free TCP port 
+        ''' 
+        return self._get_port(port, socket.SOCK_STREAM) 
+ 
+    def get_udp_port(self, port=0): 
+        ''' 
+        Gets free UDP port 
+        ''' 
+        return self._get_port(port, socket.SOCK_DGRAM) 
+ 
+    def get_tcp_and_udp_port(self, port=0): 
+        ''' 
+        Gets one free port for use in both TCP and UDP protocols 
+        ''' 
+        if port and self._no_random_ports(): 
             return port
 
-        retries = 20
-        while retries > 0:
-            retries -= 1
-
-            result_port = self.get_tcp_port()
+        retries = 20 
+        while retries > 0: 
+            retries -= 1 
+ 
+            result_port = self.get_tcp_port() 
             if not self.is_port_free(result_port, socket.SOCK_DGRAM):
-                self.release_port(result_port)
+                self.release_port(result_port) 
             # Don't try to _capture_port(), it's already captured in the get_tcp_port()
-            return result_port
-        raise Exception('Failed to find port')
-
-    def release_port(self, port):
+            return result_port 
+        raise Exception('Failed to find port') 
+ 
+    def release_port(self, port): 
         with self._lock:
             self._release_port_no_lock(port)
-
+ 
     def _release_port_no_lock(self, port):
         filelock = self._filelocks.pop(port, None)
         if filelock:
             filelock.release()
 
-    def release(self):
+    def release(self): 
         with self._lock:
             while self._filelocks:
                 _, filelock = self._filelocks.popitem()
                 if filelock:
                     filelock.release()
-
+ 
     def get_port_range(self, start_port, count, random_start=True):
         assert count > 0
         if start_port and self._no_random_ports():
@@ -136,17 +136,17 @@ class PortManager(object):
         assert res, ('There are no available valid ports', self._valid_range)
         return res
 
-    def _get_port(self, port, sock_type):
-        if port and self._no_random_ports():
-            return port
-
+    def _get_port(self, port, sock_type): 
+        if port and self._no_random_ports(): 
+            return port 
+ 
         if len(self._filelocks) >= self._valid_port_count:
             raise PortManagerException("All valid ports are taken ({}): {}".format(self._valid_range, self._filelocks))
 
         salt = random.randint(0, UI16MAXVAL)
         for attempt in six.moves.range(self._valid_port_count):
             probe_port = (salt + attempt) % self._valid_port_count
-
+ 
             for left, right in self._valid_range:
                 if probe_port >= (right - left):
                     probe_port -= right - left
@@ -203,8 +203,8 @@ class PortManager(object):
             filelock.release()
         return False
 
-    def _no_random_ports(self):
-        return os.environ.get("NO_RANDOM_PORTS")
+    def _no_random_ports(self): 
+        return os.environ.get("NO_RANDOM_PORTS") 
 
 
 def get_valid_port_range():

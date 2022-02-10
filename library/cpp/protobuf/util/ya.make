@@ -10,14 +10,14 @@ PEERDIR(
 )
 
 SRCS(
-    is_equal.cpp
+    is_equal.cpp 
     iterators.h
     merge.cpp
-    path.cpp
-    pb_io.cpp
+    path.cpp 
+    pb_io.cpp 
     pb_utils.h
     repeated_field_utils.h
-    simple_reflection.cpp
+    simple_reflection.cpp 
     walk.cpp
 )
 

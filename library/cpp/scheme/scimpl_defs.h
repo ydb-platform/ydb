@@ -74,7 +74,7 @@ namespace NSc {
             JO_PARSER_STRICT_JSON = 16, // strict standard json
             JO_PARSER_STRICT_UTF8 = 32, // strict utf8
             JO_PARSER_DISALLOW_COMMENTS = 64,
-            JO_PARSER_DISALLOW_DUPLICATE_KEYS = 128,
+            JO_PARSER_DISALLOW_DUPLICATE_KEYS = 128, 
 
             JO_PRETTY = JO_FORMAT | JO_SORT_KEYS,    // pretty print json
             JO_SAFE = JO_SKIP_UNSAFE | JO_SORT_KEYS, // ensure standard parser-safe json
@@ -85,8 +85,8 @@ namespace NSc {
 
     public:
         TJsonOpts(int opts = JO_SORT_KEYS)
-            : Opts(opts)
-            , SortKeys(opts & JO_SORT_KEYS)
+            : Opts(opts) 
+            , SortKeys(opts & JO_SORT_KEYS) 
             , FormatJson(opts & JO_FORMAT)
             , StringPolicy((opts & JO_SKIP_UNSAFE) ? StringPolicySafe : StringPolicyUnsafe)
         {
@@ -97,7 +97,7 @@ namespace NSc {
 
     public:
         bool RelaxedJson = false;
-        int Opts = 0;
+        int Opts = 0; 
         bool SortKeys = true;
         bool FormatJson = false;
 

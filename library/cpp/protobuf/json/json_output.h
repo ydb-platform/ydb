@@ -1,9 +1,9 @@
-#pragma once
-
-#include <util/generic/ptr.h>
-#include <util/generic/strbuf.h>
-
-namespace NProtobufJson {
+#pragma once 
+ 
+#include <util/generic/ptr.h> 
+#include <util/generic/strbuf.h> 
+ 
+namespace NProtobufJson { 
     class IJsonOutput {
     public:
         template <typename T>
@@ -15,7 +15,7 @@ namespace NProtobufJson {
             DoWriteNull();
             return *this;
         }
-
+ 
         IJsonOutput& BeginList() {
             DoBeginList();
             return *this;
@@ -24,7 +24,7 @@ namespace NProtobufJson {
             DoEndList();
             return *this;
         }
-
+ 
         IJsonOutput& BeginObject() {
             DoBeginObject();
             return *this;
@@ -37,15 +37,15 @@ namespace NProtobufJson {
             DoEndObject();
             return *this;
         }
-
+ 
         IJsonOutput& WriteRawJson(const TStringBuf& str) {
             DoWriteRawJson(str);
             return *this;
         }
-
+ 
         virtual ~IJsonOutput() {
         }
-
+ 
     protected:
         virtual void DoWrite(const TStringBuf& s) = 0;
         virtual void DoWrite(const TString& s) = 0;
@@ -63,17 +63,17 @@ namespace NProtobufJson {
         virtual void DoWrite(double f) = 0;
         virtual void DoWrite(bool b) = 0;
         virtual void DoWriteNull() = 0;
-
+ 
         virtual void DoBeginList() = 0;
         virtual void DoEndList() = 0;
-
+ 
         virtual void DoBeginObject() = 0;
         virtual void DoWriteKey(const TStringBuf& key) = 0;
         virtual void DoEndObject() = 0;
-
+ 
         virtual void DoWriteRawJson(const TStringBuf& str) = 0;
     };
-
+ 
     using TJsonMapOutputPtr = THolder<IJsonOutput>;
-
+ 
 }

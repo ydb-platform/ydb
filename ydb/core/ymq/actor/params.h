@@ -1,47 +1,47 @@
 #pragma once
-#include "defs.h"
+#include "defs.h" 
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <util/generic/maybe.h>
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
-class TExecutorBuilder;
-
+class TExecutorBuilder; 
+ 
 class TParameters {
 public:
-    explicit TParameters(NKikimrMiniKQL::TParams* params, TExecutorBuilder* parent = nullptr)
+    explicit TParameters(NKikimrMiniKQL::TParams* params, TExecutorBuilder* parent = nullptr) 
         : Params_(params)
-        , Parent(parent)
+        , Parent(parent) 
     {
         Params_->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
     }
 
-    explicit TParameters(NKikimrMiniKQL::TParams& params, TExecutorBuilder* parent = nullptr)
-        : TParameters(&params, parent)
+    explicit TParameters(NKikimrMiniKQL::TParams& params, TExecutorBuilder* parent = nullptr) 
+        : TParameters(&params, parent) 
     {
     }
 
-    TExecutorBuilder& ParentBuilder() {
-        Y_VERIFY(Parent);
-        return *Parent;
-    }
-
-    TParameters& Bool(const TString& name, const bool value) {
+    TExecutorBuilder& ParentBuilder() { 
+        Y_VERIFY(Parent); 
+        return *Parent; 
+    } 
+ 
+    TParameters& Bool(const TString& name, const bool value) { 
         DataType(name, NScheme::NTypeIds::Bool);
         Params_->MutableValue()->AddStruct()->SetBool(value);
         return *this;
     }
 
-    TParameters& String(const TString& name, const TString& value) {
+    TParameters& String(const TString& name, const TString& value) { 
         DataType(name, NScheme::NTypeIds::String);
         Params_->MutableValue()->AddStruct()->SetBytes(value);
         return *this;
     }
 
-    TParameters& Uint64(const TString& name, ui64 value) {
+    TParameters& Uint64(const TString& name, ui64 value) { 
         DataType(name, NScheme::NTypeIds::Uint64);
         Params_->MutableValue()->AddStruct()->SetUint64(value);
         return *this;
@@ -53,7 +53,7 @@ public:
         return *this;
     }
 
-    TParameters& OptionalBool(const TString& name, const TMaybe<bool>& value) {
+    TParameters& OptionalBool(const TString& name, const TMaybe<bool>& value) { 
         OptionalDataType(name, NScheme::NTypeIds::Bool);
         if (value) {
             Params_->MutableValue()->AddStruct()->MutableOptional()->SetBool(*value);
@@ -63,7 +63,7 @@ public:
         return *this;
     }
 
-    TParameters& OptionalUint64(const TString& name, const TMaybe<ui64>& value) {
+    TParameters& OptionalUint64(const TString& name, const TMaybe<ui64>& value) { 
         OptionalDataType(name, NScheme::NTypeIds::Uint64);
         if (value) {
             Params_->MutableValue()->AddStruct()->MutableOptional()->SetUint64(*value);
@@ -73,7 +73,7 @@ public:
         return *this;
     }
 
-    TParameters& Utf8(const TString& name, const TString& value) {
+    TParameters& Utf8(const TString& name, const TString& value) { 
         DataType(name, NScheme::NTypeIds::Utf8);
         Params_->MutableValue()->AddStruct()->SetText(value);
         return *this;
@@ -91,15 +91,15 @@ public:
     }
 
 private:
-    void DataType(const TString& name, NScheme::TTypeId typeId) {
-        auto* member = Params_->MutableType()->MutableStruct()->AddMember();
+    void DataType(const TString& name, NScheme::TTypeId typeId) { 
+        auto* member = Params_->MutableType()->MutableStruct()->AddMember(); 
         member->SetName(name);
         member->MutableType()->SetKind(NKikimrMiniKQL::Data);
         member->MutableType()->MutableData()->SetScheme(typeId);
     }
 
-    void OptionalDataType(const TString& name, NScheme::TTypeId typeId) {
-        auto* member = Params_->MutableType()->MutableStruct()->AddMember();
+    void OptionalDataType(const TString& name, NScheme::TTypeId typeId) { 
+        auto* member = Params_->MutableType()->MutableStruct()->AddMember(); 
         member->SetName(name);
         member->MutableType()->SetKind(NKikimrMiniKQL::Optional);
         member->MutableType()->MutableOptional()->MutableItem()->SetKind(NKikimrMiniKQL::Data);
@@ -108,7 +108,7 @@ private:
 
 private:
     NKikimrMiniKQL::TParams* const Params_;
-    TExecutorBuilder* Parent = nullptr;
+    TExecutorBuilder* Parent = nullptr; 
 };
 
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NSQS 

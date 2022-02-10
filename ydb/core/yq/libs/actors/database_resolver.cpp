@@ -2,18 +2,18 @@
 
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/common/cache.h>
-
+ 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/http/http.h>
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/protos/services.pb.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "DatabaseResolver - TraceId: " << TraceId << ": " << stream)
+#define LOG_E(stream) \ 
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "DatabaseResolver - TraceId: " << TraceId << ": " << stream) 
 
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "DatabaseResolver - TraceId: " << TraceId << ": " << stream)
+#define LOG_D(stream) \ 
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "DatabaseResolver - TraceId: " << TraceId << ": " << stream) 
 
 namespace NYq {
 
@@ -115,7 +115,7 @@ private:
             NJson::TJsonValue databaseInfo;
             auto it = Requests.find(ev->Get()->Request);
 
-            LOG_D("Got databaseId response " << ev->Get()->Response->Body);
+            LOG_D("Got databaseId response " << ev->Get()->Response->Body); 
             if (it == Requests.end()) {
                 errorMessage = "Unknown databaseId";
             } else {
@@ -125,7 +125,7 @@ private:
                 if (parseJsonOk && (parserIt = Parsers.find(databaseType)) != Parsers.end()) {
                     try {
                         auto res = parserIt->second(databaseInfo, MdbTransformHost);
-                        LOG_D("Got " << databaseId << " " << databaseType << " endpoint " << res.Endpoint << " " << res.Database);
+                        LOG_D("Got " << databaseId << " " << databaseType << " endpoint " << res.Endpoint << " " << res.Database); 
                         DatabaseId2Endpoint[std::make_pair(databaseId, databaseType)] = res;
                         result.ConstructInPlace(res);
                     } catch (...) {
@@ -151,7 +151,7 @@ private:
         }
 
         if (errorMessage) {
-            LOG_E("Error on response parsing: " << errorMessage);
+            LOG_E("Error on response parsing: " << errorMessage); 
             Success = false;
         }
 
@@ -259,7 +259,7 @@ private:
     void Handle(TEvents::TEvEndpointRequest::TPtr ev, const TActorContext& ctx)
     {
         TraceId = ev->Get()->TraceId;
-        LOG_D("Start databaseId resolver for " << ev->Get()->DatabaseIds.size() << " ids");
+        LOG_D("Start databaseId resolver for " << ev->Get()->DatabaseIds.size() << " ids"); 
         THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>> requests; // request, (dbId, type, info)
         THashMap<std::pair<TString, DatabaseType>, TEndpoint> ready;
         for (const auto& [p, info] : ev->Get()->DatabaseIds) {

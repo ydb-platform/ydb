@@ -12,7 +12,7 @@ namespace NYdb::NPersQueue::NTests {
 
 class TPersQueueYdbSdkTestSetup : public ::NPersQueue::SDKTestSetup {
     THolder<NYdb::TDriver> Driver;
-    THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
+    THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient; 
 
     TAdaptiveLock Lock;
 public:
@@ -20,17 +20,17 @@ public:
         : SDKTestSetup(testCaseName, start)
     {}
 
-    ~TPersQueueYdbSdkTestSetup() {
-        if (PersQueueClient) {
-            PersQueueClient = nullptr;
-        }
-
-        if (Driver) {
-            Driver->Stop(true);
-            Driver = nullptr;
-        }
-    }
-
+    ~TPersQueueYdbSdkTestSetup() { 
+        if (PersQueueClient) { 
+            PersQueueClient = nullptr; 
+        } 
+ 
+        if (Driver) { 
+            Driver->Stop(true); 
+            Driver = nullptr; 
+        } 
+    } 
+ 
     NYdb::TDriver& GetDriver() {
         if (!Driver) {
             NYdb::TDriverConfig cfg;
@@ -42,10 +42,10 @@ public:
         return *Driver;
     }
 
-    NYdb::NPersQueue::TPersQueueClient& GetPersQueueClient() {
+    NYdb::NPersQueue::TPersQueueClient& GetPersQueueClient() { 
         with_lock(Lock) {
             if (!PersQueueClient) {
-                PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(GetDriver());
+                PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(GetDriver()); 
             }
             return *PersQueueClient;
         }
@@ -76,15 +76,15 @@ public:
     TYDBClientEventLoop(
             std::shared_ptr<TPersQueueYdbSdkTestSetup> setup,
             IRetryPolicy::TPtr retryPolicy = nullptr,
-            IExecutor::TPtr compressExecutor = nullptr,
-            const TString& preferredCluster = TString(),
+            IExecutor::TPtr compressExecutor = nullptr, 
+            const TString& preferredCluster = TString(), 
             const TString& sourceId = TString()
     )
         : IClientEventLoop()
         , Setup(setup)
     {
         Log = Setup->GetLog();
-        Thread = std::make_unique<TThread>([setup, retryPolicy, compressExecutor, preferredCluster, sourceId, this]() {
+        Thread = std::make_unique<TThread>([setup, retryPolicy, compressExecutor, preferredCluster, sourceId, this]() { 
             auto writerConfig = Setup->GetWriteSessionSettings();
             writerConfig.MaxMemoryUsage(100_MB);
             if (!sourceId.empty()) {
@@ -94,8 +94,8 @@ public:
                 writerConfig.RetryPolicy(retryPolicy);
             if (compressExecutor != nullptr)
                 writerConfig.CompressionExecutor(compressExecutor);
-            if (preferredCluster)
-                writerConfig.PreferredCluster(preferredCluster);
+            if (preferredCluster) 
+                writerConfig.PreferredCluster(preferredCluster); 
             auto writer = setup->GetPersQueueClient().CreateWriteSession(writerConfig);
 
             TMaybe<TContinuationToken> continueToken;
@@ -172,7 +172,7 @@ struct TYdbPqTestRetryState : IRetryState {
         , Delay(delay)
     {}
 
-    TMaybe<TDuration> GetNextRetryDelay(const TStatus&) override {
+    TMaybe<TDuration> GetNextRetryDelay(const TStatus&) override { 
         Cerr << "Test retry state: get retry delay\n";
         RetryDone();
         return Delay;
@@ -187,7 +187,7 @@ struct TYdbPqTestRetryState : IRetryState {
 };
 struct TYdbPqNoRetryState : IRetryState {
     TAtomic DelayCalled = 0;
-    TMaybe<TDuration> GetNextRetryDelay(const TStatus&) override {
+    TMaybe<TDuration> GetNextRetryDelay(const TStatus&) override { 
         auto res = AtomicSwap(&DelayCalled, 0);
         UNIT_ASSERT(!res);
         return Nothing();
@@ -338,10 +338,10 @@ public:
         TasksQueue.Enqueue(std::move(f));
     }
 
-    void DoStart() override {
-        Thread.Start();
-    }
-
+    void DoStart() override { 
+        Thread.Start(); 
+    } 
+ 
 private:
     std::atomic_bool Stop;
     TLockFreeQueue<TFunction> TasksQueue;
@@ -367,7 +367,7 @@ public:
     TYdbPqWriterTestHelper(
             const TString& name,
             std::shared_ptr<TLockFreeQueue<ui64>> executorQueue = nullptr,
-            const TString& preferredCluster = TString(),
+            const TString& preferredCluster = TString(), 
             std::shared_ptr<TPersQueueYdbSdkTestSetup> setup = nullptr,
             const TString& sourceId = TString()
     )
@@ -376,7 +376,7 @@ public:
     {
         if (executorQueue)
             CompressExecutor = MakeIntrusive<TYdbPqTestExecutor>(executorQueue);
-        EventLoop = std::make_unique<TYDBClientEventLoop>(Setup, Policy, CompressExecutor, preferredCluster, sourceId);
+        EventLoop = std::make_unique<TYDBClientEventLoop>(Setup, Policy, CompressExecutor, preferredCluster, sourceId); 
     }
 
     NThreading::TFuture<::NPersQueue::TWriteResult> Write(bool doWait = false, const TString& message = TString()) {

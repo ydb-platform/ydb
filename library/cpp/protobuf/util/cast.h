@@ -1,11 +1,11 @@
 #pragma once
 
-#include "traits.h"
+#include "traits.h" 
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 
-#include <util/generic/cast.h>
+#include <util/generic/cast.h> 
 
 namespace NProtoBuf {
     // C++ compatible conversions of FieldDescriptor::CppType's

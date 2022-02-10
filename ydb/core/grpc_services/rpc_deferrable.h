@@ -188,12 +188,12 @@ protected:
         this->Die(ctx);
     }
 
-    void Reply(Ydb::StatusIds::StatusCode status, const TString& message, NKikimrIssues::TIssuesIds::EIssueCode issueCode, const TActorContext& ctx) {
-        NYql::TIssues issues;
-        issues.AddIssue(MakeIssue(issueCode, message));
-        Reply(status, issues, ctx);
-    }
-
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& message, NKikimrIssues::TIssuesIds::EIssueCode issueCode, const TActorContext& ctx) { 
+        NYql::TIssues issues; 
+        issues.AddIssue(MakeIssue(issueCode, message)); 
+        Reply(status, issues, ctx); 
+    } 
+ 
     void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
         Request_->ReplyWithYdbStatus(status);
         this->Die(ctx);

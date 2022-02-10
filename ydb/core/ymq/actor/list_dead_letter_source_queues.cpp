@@ -18,13 +18,13 @@ class TListDeadLetterSourceQueuesActor
     : public TActionActor<TListDeadLetterSourceQueuesActor>
 {
 public:
-    TListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::ListDeadLetterSourceQueues, std::move(cb))
+    TListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) 
+        : TActionActor(sourceSqsRequest, EAction::ListDeadLetterSourceQueues, std::move(cb)) 
     {
-        CopyAccountName(Request());
+        CopyAccountName(Request()); 
         Response_.MutableListDeadLetterSourceQueues()->SetRequestId(RequestId_);
 
-        CopySecurityToken(Request());
+        CopySecurityToken(Request()); 
     }
 
     static constexpr bool NeedExistingQueue() {
@@ -32,14 +32,14 @@ public:
     }
 
     TString DoGetQueueName() const override {
-        return Request().GetQueueName();
+        return Request().GetQueueName(); 
     }
 
 private:
-    STATEFN(StateFunc) {
+    STATEFN(StateFunc) { 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWakeup,      HandleWakeup);
-            hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
+            hFunc(TEvWakeup,      HandleWakeup); 
+            hFunc(TSqsEvents::TEvExecuted, HandleExecuted); 
         }
     }
 
@@ -56,10 +56,10 @@ private:
         return Response_.MutableListDeadLetterSourceQueues()->MutableError();
     }
 
-    void DoAction() override {
+    void DoAction() override { 
         Become(&TThis::StateFunc);
 
-        TExecutorBuilder builder(SelfId(), RequestId_);
+        TExecutorBuilder builder(SelfId(), RequestId_); 
         builder
             .User(UserName_)
             .Queue(GetQueueName())
@@ -68,13 +68,13 @@ private:
             .Counters(QueueCounters_)
             .RetryOnTimeout()
             .Params()
-                .Utf8("USER_NAME", UserName_)
+                .Utf8("USER_NAME", UserName_) 
                 .Utf8("FOLDERID", FolderId_);
 
         builder.Start();
     }
 
-    void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
+    void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) { 
         const auto& record = ev->Get()->Record;
         auto* result = Response_.MutableListDeadLetterSourceQueues();
 
@@ -95,20 +95,20 @@ private:
                 }
             }
         } else {
-            RLOG_SQS_WARN("Request failed: " << record);
-            MakeError(result, NErrors::INTERNAL_FAILURE);
+            RLOG_SQS_WARN("Request failed: " << record); 
+            MakeError(result, NErrors::INTERNAL_FAILURE); 
         }
 
-        SendReplyAndDie();
+        SendReplyAndDie(); 
     }
 
-    const TListDeadLetterSourceQueuesRequest& Request() const {
-        return SourceSqsRequest_.GetListDeadLetterSourceQueues();
-    }
+    const TListDeadLetterSourceQueuesRequest& Request() const { 
+        return SourceSqsRequest_.GetListDeadLetterSourceQueues(); 
+    } 
 };
 
-IActor* CreateListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TListDeadLetterSourceQueuesActor(sourceSqsRequest, std::move(cb));
+IActor* CreateListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) { 
+    return new TListDeadLetterSourceQueuesActor(sourceSqsRequest, std::move(cb)); 
 }
 
 } // namespace NKikimr::NSQS

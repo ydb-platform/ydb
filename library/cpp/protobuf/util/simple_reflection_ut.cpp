@@ -7,8 +7,8 @@
 using namespace NProtoBuf;
 
 Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
-    static TSample GenSampleForMergeFrom() {
-        TSample smf;
+    static TSample GenSampleForMergeFrom() { 
+        TSample smf; 
         smf.SetOneStr("one str");
         smf.MutableOneMsg()->AddRepInt(1);
         smf.AddRepMsg()->AddRepInt(2);
@@ -20,8 +20,8 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
     }
 
     Y_UNIT_TEST(MergeFromGeneric) {
-        const TSample src(GenSampleForMergeFrom());
-        TSample dst;
+        const TSample src(GenSampleForMergeFrom()); 
+        TSample dst; 
         const Descriptor* descr = dst.GetDescriptor();
 
         {
@@ -52,8 +52,8 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
     }
 
     Y_UNIT_TEST(MergeFromSelf) {
-        const TSample sample(GenSampleForMergeFrom());
-        TSample msg(sample);
+        const TSample sample(GenSampleForMergeFrom()); 
+        TSample msg(sample); 
         const Descriptor* descr = msg.GetDescriptor();
 
         TMutableField oneStr(msg, descr->FindFieldByName("OneStr"));
@@ -66,8 +66,8 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
     }
 
     Y_UNIT_TEST(MergeFromAnotherFD) {
-        const TSample sample(GenSampleForMergeFrom());
-        TSample msg(GenSampleForMergeFrom());
+        const TSample sample(GenSampleForMergeFrom()); 
+        TSample msg(GenSampleForMergeFrom()); 
         const Descriptor* descr = msg.GetDescriptor();
 
         { // string
@@ -95,205 +95,205 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             UNIT_ASSERT_VALUES_EQUAL(msg.RepMsgSize(), sample.RepMsgSize() + 1);
         }
     }
-
+ 
     Y_UNIT_TEST(RemoveByIndex) {
-        TSample msg;
-
-        const Descriptor* descr = msg.GetDescriptor();
-        {
-            TMutableField fld(msg, descr->FindFieldByName("RepMsg"));
-            msg.AddRepMsg()->AddRepInt(1);
-            msg.AddRepMsg()->AddRepInt(2);
-            msg.AddRepMsg()->AddRepInt(3);
-
-            UNIT_ASSERT_VALUES_EQUAL(3, msg.RepMsgSize()); // 1, 2, 3
+        TSample msg; 
+ 
+        const Descriptor* descr = msg.GetDescriptor(); 
+        { 
+            TMutableField fld(msg, descr->FindFieldByName("RepMsg")); 
+            msg.AddRepMsg()->AddRepInt(1); 
+            msg.AddRepMsg()->AddRepInt(2); 
+            msg.AddRepMsg()->AddRepInt(3); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(3, msg.RepMsgSize()); // 1, 2, 3 
             fld.Remove(1);                                 // from middle
-            UNIT_ASSERT_VALUES_EQUAL(2, msg.RepMsgSize());
-            UNIT_ASSERT_VALUES_EQUAL(1, msg.GetRepMsg(0).GetRepInt(0));
-            UNIT_ASSERT_VALUES_EQUAL(3, msg.GetRepMsg(1).GetRepInt(0));
-
-            msg.AddRepMsg()->AddRepInt(5);
-            UNIT_ASSERT_VALUES_EQUAL(3, msg.RepMsgSize()); // 1, 3, 5
+            UNIT_ASSERT_VALUES_EQUAL(2, msg.RepMsgSize()); 
+            UNIT_ASSERT_VALUES_EQUAL(1, msg.GetRepMsg(0).GetRepInt(0)); 
+            UNIT_ASSERT_VALUES_EQUAL(3, msg.GetRepMsg(1).GetRepInt(0)); 
+ 
+            msg.AddRepMsg()->AddRepInt(5); 
+            UNIT_ASSERT_VALUES_EQUAL(3, msg.RepMsgSize()); // 1, 3, 5 
             fld.Remove(2);                                 // from end
-            UNIT_ASSERT_VALUES_EQUAL(2, msg.RepMsgSize());
-            UNIT_ASSERT_VALUES_EQUAL(1, msg.GetRepMsg(0).GetRepInt(0));
-            UNIT_ASSERT_VALUES_EQUAL(3, msg.GetRepMsg(1).GetRepInt(0));
-            msg.ClearRepMsg();
-        }
-
-        {
-            TMutableField fld(msg, descr->FindFieldByName("RepStr"));
-            msg.AddRepStr("1");
-            msg.AddRepStr("2");
-            msg.AddRepStr("3");
-            UNIT_ASSERT_VALUES_EQUAL(3, msg.RepStrSize()); // "1", "2", "3"
+            UNIT_ASSERT_VALUES_EQUAL(2, msg.RepMsgSize()); 
+            UNIT_ASSERT_VALUES_EQUAL(1, msg.GetRepMsg(0).GetRepInt(0)); 
+            UNIT_ASSERT_VALUES_EQUAL(3, msg.GetRepMsg(1).GetRepInt(0)); 
+            msg.ClearRepMsg(); 
+        } 
+ 
+        { 
+            TMutableField fld(msg, descr->FindFieldByName("RepStr")); 
+            msg.AddRepStr("1"); 
+            msg.AddRepStr("2"); 
+            msg.AddRepStr("3"); 
+            UNIT_ASSERT_VALUES_EQUAL(3, msg.RepStrSize()); // "1", "2", "3" 
             fld.Remove(0);                                 // from begin
-            UNIT_ASSERT_VALUES_EQUAL(2, msg.RepStrSize());
-            UNIT_ASSERT_VALUES_EQUAL("2", msg.GetRepStr(0));
-            UNIT_ASSERT_VALUES_EQUAL("3", msg.GetRepStr(1));
-        }
-
-        {
-            TMutableField fld(msg, descr->FindFieldByName("OneStr"));
-            msg.SetOneStr("1");
-            UNIT_ASSERT(msg.HasOneStr());
-            fld.Remove(0); // not repeated
-            UNIT_ASSERT(!msg.HasOneStr());
-        }
-    }
-
+            UNIT_ASSERT_VALUES_EQUAL(2, msg.RepStrSize()); 
+            UNIT_ASSERT_VALUES_EQUAL("2", msg.GetRepStr(0)); 
+            UNIT_ASSERT_VALUES_EQUAL("3", msg.GetRepStr(1)); 
+        } 
+ 
+        { 
+            TMutableField fld(msg, descr->FindFieldByName("OneStr")); 
+            msg.SetOneStr("1"); 
+            UNIT_ASSERT(msg.HasOneStr()); 
+            fld.Remove(0); // not repeated 
+            UNIT_ASSERT(!msg.HasOneStr()); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(GetFieldByPath) {
-        // Simple get by path
-        {
-            TSample msg;
-            msg.SetOneStr("1");
-            msg.MutableOneMsg()->AddRepInt(2);
-            msg.MutableOneMsg()->AddRepInt(3);
-            msg.AddRepMsg()->AddRepInt(4);
-            msg.MutableRepMsg(0)->AddRepInt(5);
-            msg.AddRepMsg()->AddRepInt(6);
-
-            {
-                TMaybe<TConstField> field = TConstField::ByPath(msg, "OneStr");
-                UNIT_ASSERT(field);
+        // Simple get by path 
+        { 
+            TSample msg; 
+            msg.SetOneStr("1"); 
+            msg.MutableOneMsg()->AddRepInt(2); 
+            msg.MutableOneMsg()->AddRepInt(3); 
+            msg.AddRepMsg()->AddRepInt(4); 
+            msg.MutableRepMsg(0)->AddRepInt(5); 
+            msg.AddRepMsg()->AddRepInt(6); 
+ 
+            { 
+                TMaybe<TConstField> field = TConstField::ByPath(msg, "OneStr"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(field->HasValue());
                 UNIT_ASSERT_VALUES_EQUAL("1", (field->Get<TString>()));
-            }
-
-            {
-                TMaybe<TConstField> field = TConstField::ByPath(msg, "OneMsg");
-                UNIT_ASSERT(field);
+            } 
+ 
+            { 
+                TMaybe<TConstField> field = TConstField::ByPath(msg, "OneMsg"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(field->HasValue());
-                UNIT_ASSERT(field->IsMessageInstance<TInnerSample>());
-            }
-
-            {
-                TMaybe<TConstField> field = TConstField::ByPath(msg, "/OneMsg/RepInt");
-                UNIT_ASSERT(field);
+                UNIT_ASSERT(field->IsMessageInstance<TInnerSample>()); 
+            } 
+ 
+            { 
+                TMaybe<TConstField> field = TConstField::ByPath(msg, "/OneMsg/RepInt"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(field->HasValue());
-                UNIT_ASSERT_VALUES_EQUAL(2, field->Size());
-                UNIT_ASSERT_VALUES_EQUAL(2, field->Get<int>(0));
-                UNIT_ASSERT_VALUES_EQUAL(3, field->Get<int>(1));
-            }
-
-            {
-                TMaybe<TConstField> field = TConstField::ByPath(msg, "RepMsg/RepInt");
-                UNIT_ASSERT(field);
+                UNIT_ASSERT_VALUES_EQUAL(2, field->Size()); 
+                UNIT_ASSERT_VALUES_EQUAL(2, field->Get<int>(0)); 
+                UNIT_ASSERT_VALUES_EQUAL(3, field->Get<int>(1)); 
+            } 
+ 
+            { 
+                TMaybe<TConstField> field = TConstField::ByPath(msg, "RepMsg/RepInt"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(field->HasValue());
-                UNIT_ASSERT_VALUES_EQUAL(2, field->Size());
-                UNIT_ASSERT_VALUES_EQUAL(4, field->Get<int>(0));
-                UNIT_ASSERT_VALUES_EQUAL(5, field->Get<int>(1));
-            }
-        }
-
-        // get of unset fields
-        {
-            TSample msg;
-            msg.MutableOneMsg();
-
-            {
-                TMaybe<TConstField> field = TConstField::ByPath(msg, "OneStr");
-                UNIT_ASSERT(field);
+                UNIT_ASSERT_VALUES_EQUAL(2, field->Size()); 
+                UNIT_ASSERT_VALUES_EQUAL(4, field->Get<int>(0)); 
+                UNIT_ASSERT_VALUES_EQUAL(5, field->Get<int>(1)); 
+            } 
+        } 
+ 
+        // get of unset fields 
+        { 
+            TSample msg; 
+            msg.MutableOneMsg(); 
+ 
+            { 
+                TMaybe<TConstField> field = TConstField::ByPath(msg, "OneStr"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(!field->HasValue());
-            }
-
-            {
-                TMaybe<TConstField> field = TConstField::ByPath(msg, "OneMsg/RepInt");
-                UNIT_ASSERT(field);
+            } 
+ 
+            { 
+                TMaybe<TConstField> field = TConstField::ByPath(msg, "OneMsg/RepInt"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(!field->HasValue());
-            }
-
-            {
-                TMaybe<TConstField> field = TConstField::ByPath(msg, "RepMsg/RepInt");
-                UNIT_ASSERT(!field);
-            }
-        }
-
-        // mutable
-        {
-            TSample msg;
-            msg.MutableOneMsg();
-
-            {
-                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr");
-                UNIT_ASSERT(field);
+            } 
+ 
+            { 
+                TMaybe<TConstField> field = TConstField::ByPath(msg, "RepMsg/RepInt"); 
+                UNIT_ASSERT(!field); 
+            } 
+        } 
+ 
+        // mutable 
+        { 
+            TSample msg; 
+            msg.MutableOneMsg(); 
+ 
+            { 
+                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(!field->HasValue());
                 field->Set(TString("zz"));
                 UNIT_ASSERT(field->HasValue());
-                UNIT_ASSERT_VALUES_EQUAL("zz", msg.GetOneStr());
-            }
-
-            {
-                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr");
-                UNIT_ASSERT(field);
+                UNIT_ASSERT_VALUES_EQUAL("zz", msg.GetOneStr()); 
+            } 
+ 
+            { 
+                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(field->HasValue());
                 field->Set(TString("dd"));
                 UNIT_ASSERT(field->HasValue());
-                UNIT_ASSERT_VALUES_EQUAL("dd", msg.GetOneStr());
-            }
-
-            {
-                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneMsg/RepInt");
-                UNIT_ASSERT(field);
+                UNIT_ASSERT_VALUES_EQUAL("dd", msg.GetOneStr()); 
+            } 
+ 
+            { 
+                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneMsg/RepInt"); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(!field->HasValue());
-                field->Add(10);
-                UNIT_ASSERT_VALUES_EQUAL(10, msg.GetOneMsg().GetRepInt(0));
-            }
-
-            {
-                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "RepMsg/RepInt");
-                UNIT_ASSERT(!field);
-            }
-        }
-
-        // mutable with path creation
-        {
-            TSample msg;
-
-            {
-                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr", true);
-                UNIT_ASSERT(field);
+                field->Add(10); 
+                UNIT_ASSERT_VALUES_EQUAL(10, msg.GetOneMsg().GetRepInt(0)); 
+            } 
+ 
+            { 
+                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "RepMsg/RepInt"); 
+                UNIT_ASSERT(!field); 
+            } 
+        } 
+ 
+        // mutable with path creation 
+        { 
+            TSample msg; 
+ 
+            { 
+                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr", true); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(!field->HasValue());
-            }
-
-            {
-                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneMsg/RepInt", true);
-                UNIT_ASSERT(field);
+            } 
+ 
+            { 
+                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneMsg/RepInt", true); 
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(!field->HasValue());
-                UNIT_ASSERT(msg.HasOneMsg());
-                field->Add(10);
-                UNIT_ASSERT_VALUES_EQUAL(10, msg.GetOneMsg().GetRepInt(0));
-            }
-
-            {
-                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "RepMsg/RepInt", true);
-                TMaybe<TMutableField> fieldCopy = TMutableField::ByPath(msg, "RepMsg/RepInt", true);
+                UNIT_ASSERT(msg.HasOneMsg()); 
+                field->Add(10); 
+                UNIT_ASSERT_VALUES_EQUAL(10, msg.GetOneMsg().GetRepInt(0)); 
+            } 
+ 
+            { 
+                TMaybe<TMutableField> field = TMutableField::ByPath(msg, "RepMsg/RepInt", true); 
+                TMaybe<TMutableField> fieldCopy = TMutableField::ByPath(msg, "RepMsg/RepInt", true); 
                 Y_UNUSED(fieldCopy);
-                UNIT_ASSERT(field);
+                UNIT_ASSERT(field); 
                 UNIT_ASSERT(!field->HasValue());
-                UNIT_ASSERT_VALUES_EQUAL(1, msg.RepMsgSize());
-                field->Add(12);
-                UNIT_ASSERT_VALUES_EQUAL(12, field->Get<int>());
-            }
-        }
-
-        // error
-        {
+                UNIT_ASSERT_VALUES_EQUAL(1, msg.RepMsgSize()); 
+                field->Add(12); 
+                UNIT_ASSERT_VALUES_EQUAL(12, field->Get<int>()); 
+            } 
+        } 
+ 
+        // error 
+        { 
             {TSample msg;
         UNIT_ASSERT(!TConstField::ByPath(msg, "SomeField"));
     }
-
+ 
     {
         TSample msg;
         UNIT_ASSERT(!TMutableField::ByPath(msg, "SomeField/FieldSome"));
     }
-
+ 
     {
         TSample msg;
         UNIT_ASSERT(!TMutableField::ByPath(msg, "SomeField/FieldSome", true));
     }
 }
-
+ 
 // extension
 {
     TSample msg;
@@ -303,13 +303,13 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
     TInnerSample* subMsg = msg.MutableExtension(NExt::SubMsgExt);
     subMsg->AddRepInt(20);
     subMsg->SetExtension(NExt::Ext3Field, 54);
-
+ 
     {
         TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.TTestExt.ExtField");
         UNIT_ASSERT(field);
         UNIT_ASSERT(field->HasValue());
         UNIT_ASSERT_VALUES_EQUAL("ext", field->Get<TString>());
-    }
+    } 
     {
         TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.ExtField");
         UNIT_ASSERT(field);

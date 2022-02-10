@@ -12,7 +12,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/sliding_window/sliding_window.h>
-
+ 
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -194,7 +194,7 @@ struct TUserInfo {
     ui32 Subscriptions;
     i64 EndOffset;
 
-    TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgReadBytes;
+    TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgReadBytes; 
 
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
 
@@ -277,7 +277,7 @@ struct TUserInfo {
         }
         ReadQuota.Exaust(readSize, now);
         for (auto& avg : AvgReadBytes) {
-            avg.Update(readSize, now);
+            avg.Update(readSize, now); 
         }
         Y_VERIFY(ActiveReads > 0);
         --ActiveReads;

@@ -11,7 +11,7 @@ namespace NYql::NDqs {
 
 class TGraphExecutionEventsActor : public TRichActor<TGraphExecutionEventsActor> {
 public:
-    static constexpr const char ActorName[] = "YQL_DQ_GRAPH_EXECUTION_EVENTS_ACTOR";
+    static constexpr const char ActorName[] = "YQL_DQ_GRAPH_EXECUTION_EVENTS_ACTOR"; 
 
     TGraphExecutionEventsActor(const TString& traceID, std::vector<IDqTaskPreprocessor::TPtr>&& taskPreprocessors)
         : TRichActor<TGraphExecutionEventsActor>(&TGraphExecutionEventsActor::Handler)

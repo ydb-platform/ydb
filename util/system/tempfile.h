@@ -14,7 +14,7 @@ public:
     }
 
     inline ~TTempFile() {
-        NFs::Remove(Name());
+        NFs::Remove(Name()); 
     }
 
     inline const TString& Name() const noexcept {

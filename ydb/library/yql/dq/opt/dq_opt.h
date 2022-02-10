@@ -54,7 +54,7 @@ bool IsSingleConsumer(const NNodes::TExprBase& node, const TParentsMap& parentsM
 
 bool IsSingleConsumerConnection(const NNodes::TDqConnection& node, const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
-ui32 GetStageOutputsCount(const NNodes::TDqStageBase& stage, bool includingSinks);
+ui32 GetStageOutputsCount(const NNodes::TDqStageBase& stage, bool includingSinks); 
 
 TVector<NNodes::TDqConnection> FindDqConnections(const NNodes::TExprBase& node);
 bool IsDqPureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true);

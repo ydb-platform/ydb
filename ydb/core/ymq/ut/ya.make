@@ -1,8 +1,8 @@
-OWNER(
+OWNER( 
     g:kikimr
-    g:sqs
-)
-
+    g:sqs 
+) 
+ 
 UNITTEST()
 
 SRCS(

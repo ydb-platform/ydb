@@ -1,42 +1,42 @@
-#pragma once
-#include <library/cpp/actors/core/actorid.h>
+#pragma once 
+#include <library/cpp/actors/core/actorid.h> 
 #include <library/cpp/lwtrace/all.h>
-
-#include <util/string/builder.h>
-
-#include <type_traits>
-#include <limits>
-
-struct TActorIdParam {
-    using TStoreType = TString;
+ 
+#include <util/string/builder.h> 
+ 
+#include <type_traits> 
+#include <limits> 
+ 
+struct TActorIdParam { 
+    using TStoreType = TString; 
     using TFuncParam = typename TTypeTraits<NActors::TActorId>::TFuncParam;
-
-    inline static void ToString(typename TTypeTraits<TStoreType>::TFuncParam stored, TString* out) {
-        *out = stored;
-    }
-
-    inline static TStoreType ToStoreType(TFuncParam v) {
-        return TStringBuilder() << v;
-    }
-};
-
-#define KESUS_QUOTER_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)       \
-    PROBE(ResourceProcess, GROUPS("QuoterResource"),                    \
-          TYPES(TString, TString, TInstant, bool, size_t),              \
-          NAMES("quoter", "resource", "timestampSec", "active", "activeChildren")) \
-    PROBE(ResourceAccumulateResource, GROUPS("QuoterResource"),         \
-          TYPES(TString, TString, TInstant, bool, double),              \
-          NAMES("quoter", "resource", "timestampSec", "active", "spent")) \
-    PROBE(ResourceActivate, GROUPS("QuoterResource"),                   \
-          TYPES(TString, TString),                                      \
-          NAMES("quoter", "resource"))                                  \
-    PROBE(ResourceDeactivate, GROUPS("QuoterResource"),                 \
-          TYPES(TString, TString),                                      \
-          NAMES("quoter", "resource"))                                  \
-    PROBE(ResourceGiveToChild, GROUPS("QuoterResource"),                \
-          TYPES(TString, TString, TInstant, double, ui32),              \
-          NAMES("quoter", "resource", "timestampSec", "giveAmount", "childWeight")) \
-                                                                        \
+ 
+    inline static void ToString(typename TTypeTraits<TStoreType>::TFuncParam stored, TString* out) { 
+        *out = stored; 
+    } 
+ 
+    inline static TStoreType ToStoreType(TFuncParam v) { 
+        return TStringBuilder() << v; 
+    } 
+}; 
+ 
+#define KESUS_QUOTER_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)       \ 
+    PROBE(ResourceProcess, GROUPS("QuoterResource"),                    \ 
+          TYPES(TString, TString, TInstant, bool, size_t),              \ 
+          NAMES("quoter", "resource", "timestampSec", "active", "activeChildren")) \ 
+    PROBE(ResourceAccumulateResource, GROUPS("QuoterResource"),         \ 
+          TYPES(TString, TString, TInstant, bool, double),              \ 
+          NAMES("quoter", "resource", "timestampSec", "active", "spent")) \ 
+    PROBE(ResourceActivate, GROUPS("QuoterResource"),                   \ 
+          TYPES(TString, TString),                                      \ 
+          NAMES("quoter", "resource"))                                  \ 
+    PROBE(ResourceDeactivate, GROUPS("QuoterResource"),                 \ 
+          TYPES(TString, TString),                                      \ 
+          NAMES("quoter", "resource"))                                  \ 
+    PROBE(ResourceGiveToChild, GROUPS("QuoterResource"),                \ 
+          TYPES(TString, TString, TInstant, double, ui32),              \ 
+          NAMES("quoter", "resource", "timestampSec", "giveAmount", "childWeight")) \ 
+                                                                        \ 
     PROBE(ResourceBillSend, GROUPS("QuoterResource", "RateAccounting"), \
           TYPES(TString, TString, TString, ui64, TInstant, TInstant, TString, TString, TString, TString, TString, TString), \
           NAMES("quoter", "resource", "category", "quantity", "billStartSec", "billEndSec", "version", "schema", "cloudId", "folderId", "resourceId", "sourceId")) \
@@ -68,24 +68,24 @@ struct TActorIdParam {
           TYPES(TString, TString, TInstant, TInstant), \
           NAMES("quoter", "resource", "accountTillSec", "accountedSec")) \
                                                                         \
-    PROBE(SessionProcess, GROUPS("QuoterSession"),                      \
-          TYPES(TString, TString, TActorIdParam, TInstant, bool),       \
-          NAMES("quoter", "resource", "session", "timestampSec", "active")) \
-    PROBE(SessionAccumulateResource, GROUPS("QuoterSession"),           \
-          TYPES(TString, TString, TActorIdParam, TInstant, bool, double), \
-          NAMES("quoter", "resource", "session", "timestampSec", "active", "spent")) \
-    PROBE(SessionActivate, GROUPS("QuoterSession"),                     \
-          TYPES(TString, TString, TActorIdParam),                       \
-          NAMES("quoter", "resource", "session"))                       \
-    PROBE(SessionDeactivate, GROUPS("QuoterSession"),                   \
-          TYPES(TString, TString, TActorIdParam),                       \
-          NAMES("quoter", "resource", "session"))                       \
-    PROBE(SessionUpdateConsumptionState, GROUPS("QuoterSession"),       \
-          TYPES(TString, TString, TActorIdParam, bool, double),         \
-          NAMES("quoter", "resource", "session", "consume", "amount"))  \
-    PROBE(SessionSend, GROUPS("QuoterSession"),                         \
-          TYPES(TString, TString, TActorIdParam, double),               \
-          NAMES("quoter", "resource", "session", "amount"))             \
-    /**/
-
-LWTRACE_DECLARE_PROVIDER(KESUS_QUOTER_PROVIDER)
+    PROBE(SessionProcess, GROUPS("QuoterSession"),                      \ 
+          TYPES(TString, TString, TActorIdParam, TInstant, bool),       \ 
+          NAMES("quoter", "resource", "session", "timestampSec", "active")) \ 
+    PROBE(SessionAccumulateResource, GROUPS("QuoterSession"),           \ 
+          TYPES(TString, TString, TActorIdParam, TInstant, bool, double), \ 
+          NAMES("quoter", "resource", "session", "timestampSec", "active", "spent")) \ 
+    PROBE(SessionActivate, GROUPS("QuoterSession"),                     \ 
+          TYPES(TString, TString, TActorIdParam),                       \ 
+          NAMES("quoter", "resource", "session"))                       \ 
+    PROBE(SessionDeactivate, GROUPS("QuoterSession"),                   \ 
+          TYPES(TString, TString, TActorIdParam),                       \ 
+          NAMES("quoter", "resource", "session"))                       \ 
+    PROBE(SessionUpdateConsumptionState, GROUPS("QuoterSession"),       \ 
+          TYPES(TString, TString, TActorIdParam, bool, double),         \ 
+          NAMES("quoter", "resource", "session", "consume", "amount"))  \ 
+    PROBE(SessionSend, GROUPS("QuoterSession"),                         \ 
+          TYPES(TString, TString, TActorIdParam, double),               \ 
+          NAMES("quoter", "resource", "session", "amount"))             \ 
+    /**/ 
+ 
+LWTRACE_DECLARE_PROVIDER(KESUS_QUOTER_PROVIDER) 

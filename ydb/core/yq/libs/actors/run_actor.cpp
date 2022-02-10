@@ -67,15 +67,15 @@
 #include <util/string/split.h>
 #include <ydb/core/yq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
-#include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/yq/libs/checkpoint_storage/storage_service.h> 
 #include <ydb/core/yq/libs/db_resolver/db_async_resolver_impl.h>
 #include <ydb/core/yq/libs/common/database_token_builder.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
-#define LOG_E(stream) \
+#define LOG_E(stream) \ 
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Params.QueryId << " RunActor : " << stream)
 
-#define LOG_D(stream) \
+#define LOG_D(stream) \ 
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Params.QueryId << " RunActor : " << stream)
 
 namespace NYq {
@@ -87,10 +87,10 @@ using namespace NDqs;
 class TDeferredCountersCleanupActor : public NActors::TActorBootstrapped<TDeferredCountersCleanupActor> {
 public:
      TDeferredCountersCleanupActor(
-         const NMonitoring::TDynamicCounterPtr& rootCountersParent,
-         const NMonitoring::TDynamicCounterPtr& publicCountersParent,
-         const TString& queryId)
-        : RootCountersParent(rootCountersParent)
+         const NMonitoring::TDynamicCounterPtr& rootCountersParent, 
+         const NMonitoring::TDynamicCounterPtr& publicCountersParent, 
+         const TString& queryId) 
+        : RootCountersParent(rootCountersParent) 
         , PublicCountersParent(publicCountersParent)
         , QueryId(queryId)
     {
@@ -98,8 +98,8 @@ public:
 
     static constexpr char ActorName[] = "YQ_DEFERRED_COUNTERS_CLEANUP";
 
-    void Bootstrap() {
-        Become(&TDeferredCountersCleanupActor::StateFunc, TDuration::Seconds(60), new NActors::TEvents::TEvWakeup());
+    void Bootstrap() { 
+        Become(&TDeferredCountersCleanupActor::StateFunc, TDuration::Seconds(60), new NActors::TEvents::TEvWakeup()); 
     }
 
     STRICT_STFUNC(StateFunc,
@@ -115,7 +115,7 @@ public:
         }
         PassAway();
     }
-
+ 
 private:
     const NMonitoring::TDynamicCounterPtr RootCountersParent;
     const NMonitoring::TDynamicCounterPtr PublicCountersParent;
@@ -138,9 +138,9 @@ public:
 
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
-    void Bootstrap() {
-        LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status));
-        LogReceivedParams();
+    void Bootstrap() { 
+        LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status)); 
+        LogReceivedParams(); 
         Pinger = Register(
             CreatePingerActor(
                 Params.Scope,
@@ -159,7 +159,7 @@ public:
                 Params.PingerConfig,
                 Params.Deadline
                 ));
-        Become(&TRunActor::StateFuncWrapper<&TRunActor::StateFunc>);
+        Become(&TRunActor::StateFuncWrapper<&TRunActor::StateFunc>); 
         try {
             Run();
         } catch (const std::exception&) {
@@ -168,96 +168,96 @@ public:
     }
 
 private:
-    template <void (TRunActor::* DelegatedStateFunc)(STFUNC_SIG)>
+    template <void (TRunActor::* DelegatedStateFunc)(STFUNC_SIG)> 
     STFUNC(StateFuncWrapper) {
         try {
-            (this->*DelegatedStateFunc)(ev, ctx);
-        } catch (...) {
+            (this->*DelegatedStateFunc)(ev, ctx); 
+        } catch (...) { 
             FailOnException();
         }
     }
 
     STRICT_STFUNC(StateFunc,
         HFunc(TEvents::TEvAsyncContinue, Handle);
-        hFunc(NActors::TEvents::TEvUndelivered, Handle);
-        hFunc(NYq::TEvents::TEvGraphParams, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle); 
+        hFunc(NYq::TEvents::TEvGraphParams, Handle); 
         hFunc(NYq::TEvents::TEvDataStreamsReadRulesCreationResult, Handle);
         hFunc(NYql::NDqs::TEvQueryResponse, Handle);
-        hFunc(TEvents::TEvQueryActionResult, Handle);
-        hFunc(TEvents::TEvForwardPingResponse, Handle);
-        hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
+        hFunc(TEvents::TEvQueryActionResult, Handle); 
+        hFunc(TEvents::TEvForwardPingResponse, Handle); 
+        hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle); 
     )
 
-    STRICT_STFUNC(FinishStateFunc,
+    STRICT_STFUNC(FinishStateFunc, 
         hFunc(NYq::TEvents::TEvDataStreamsReadRulesCreationResult, HandleFinish);
-        hFunc(TEvents::TEvDataStreamsReadRulesDeletionResult, HandleFinish);
-        hFunc(NYql::NDqs::TEvQueryResponse, HandleFinish);
-        hFunc(TEvents::TEvForwardPingResponse, HandleFinish);
-
-        // Ignore tail of action events after normal work.
-        IgnoreFunc(TEvents::TEvAsyncContinue);
-        IgnoreFunc(NActors::TEvents::TEvUndelivered);
-        IgnoreFunc(NYq::TEvents::TEvGraphParams);
-        IgnoreFunc(TEvents::TEvQueryActionResult);
-        IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
-    )
-
-    void KillExecuter() {
-        if (ExecuterId) {
-            Send(ExecuterId, new NActors::TEvents::TEvPoison());
-
-            // Clear finished actors ids
-            ExecuterId = {};
-            CheckpointCoordinatorId = {};
-            ControlId = {};
-        }
-    }
-
-    void KillChildrenActors() {
-        if (ReadRulesCreatorId) {
-            Send(ReadRulesCreatorId, new NActors::TEvents::TEvPoison());
-        }
-
-        KillExecuter();
-    }
-
-    void CancelRunningQuery() {
-        if (ReadRulesCreatorId) {
-            LOG_D("Cancel read rules creation");
-            Send(ReadRulesCreatorId, new NActors::TEvents::TEvPoison());
-        }
-
-        if (ControlId) {
-            LOG_D("Cancel running query");
-            Send(ControlId, new NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::ABORTED, YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus)));
-        } else {
-            QueryResponseArrived = true;
-        }
-    }
-
-    void PassAway() override {
+        hFunc(TEvents::TEvDataStreamsReadRulesDeletionResult, HandleFinish); 
+        hFunc(NYql::NDqs::TEvQueryResponse, HandleFinish); 
+        hFunc(TEvents::TEvForwardPingResponse, HandleFinish); 
+ 
+        // Ignore tail of action events after normal work. 
+        IgnoreFunc(TEvents::TEvAsyncContinue); 
+        IgnoreFunc(NActors::TEvents::TEvUndelivered); 
+        IgnoreFunc(NYq::TEvents::TEvGraphParams); 
+        IgnoreFunc(TEvents::TEvQueryActionResult); 
+        IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone); 
+    ) 
+ 
+    void KillExecuter() { 
+        if (ExecuterId) { 
+            Send(ExecuterId, new NActors::TEvents::TEvPoison()); 
+ 
+            // Clear finished actors ids 
+            ExecuterId = {}; 
+            CheckpointCoordinatorId = {}; 
+            ControlId = {}; 
+        } 
+    } 
+ 
+    void KillChildrenActors() { 
+        if (ReadRulesCreatorId) { 
+            Send(ReadRulesCreatorId, new NActors::TEvents::TEvPoison()); 
+        } 
+ 
+        KillExecuter(); 
+    } 
+ 
+    void CancelRunningQuery() { 
+        if (ReadRulesCreatorId) { 
+            LOG_D("Cancel read rules creation"); 
+            Send(ReadRulesCreatorId, new NActors::TEvents::TEvPoison()); 
+        } 
+ 
+        if (ControlId) { 
+            LOG_D("Cancel running query"); 
+            Send(ControlId, new NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::ABORTED, YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus))); 
+        } else { 
+            QueryResponseArrived = true; 
+        } 
+    } 
+ 
+    void PassAway() override { 
         if (!Params.Automatic) {
             // Cleanup non-automatic counters only
             Register(new TDeferredCountersCleanupActor(RootCountersParent, PublicCountersParent, Params.QueryId));
         }
-
-        KillChildrenActors();
-
-        NActors::TActorBootstrapped<TRunActor>::PassAway();
-    }
-
+ 
+        KillChildrenActors(); 
+ 
+        NActors::TActorBootstrapped<TRunActor>::PassAway(); 
+    } 
+ 
     void Run() {
-        if (!Params.DqGraphs.empty() && Params.Status != YandexQuery::QueryMeta::STARTING) {
-            FillDqGraphParams();
-        }
-
+        if (!Params.DqGraphs.empty() && Params.Status != YandexQuery::QueryMeta::STARTING) { 
+            FillDqGraphParams(); 
+        } 
+ 
         switch (Params.Status) {
         case YandexQuery::QueryMeta::ABORTING_BY_USER:
         case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM:
-        case YandexQuery::QueryMeta::FAILING:
-        case YandexQuery::QueryMeta::COMPLETING:
-            FinalizingStatusIsWritten = true;
-            Finish(GetFinalStatusFromFinalizingStatus(Params.Status));
+        case YandexQuery::QueryMeta::FAILING: 
+        case YandexQuery::QueryMeta::COMPLETING: 
+            FinalizingStatusIsWritten = true; 
+            Finish(GetFinalStatusFromFinalizingStatus(Params.Status)); 
             break;
         case YandexQuery::QueryMeta::STARTING:
             HandleConnections();
@@ -268,7 +268,7 @@ private:
             ReRunQuery();
             break;
         default:
-            Abort("Fail to start query from unexpected status " + YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status), YandexQuery::QueryMeta::FAILED);
+            Abort("Fail to start query from unexpected status " + YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status), YandexQuery::QueryMeta::FAILED); 
             break;
         }
     }
@@ -279,7 +279,7 @@ private:
         THashMap<std::pair<TString, DatabaseType>, TEvents::TDatabaseAuth> databaseIds;
         for (const auto& connection : Params.Connections) {
             if (!connection.content().name()) {
-                LOG_D("Connection with empty name " << connection.meta().id());
+                LOG_D("Connection with empty name " << connection.meta().id()); 
                 continue;
             }
             Connections[connection.content().name()] = connection; // Necessary for TDatabaseAsyncResolverWithMeta
@@ -290,7 +290,7 @@ private:
     void RunProgram() {
         LOG_D("RunProgram");
         if (!CompileQuery()) {
-            Abort("Failed to compile query", YandexQuery::QueryMeta::FAILED);
+            Abort("Failed to compile query", YandexQuery::QueryMeta::FAILED); 
         }
     }
 
@@ -300,104 +300,104 @@ private:
 
     void Fail(const TString& errorMessage) {
         LOG_E("Fail for query " << Params.QueryId << ", finishing: " << Finishing << ", details: " << errorMessage);
-
+ 
         if (YqConnections.empty()) {
             Issues.AddIssue("YqConnections array is empty");
         }
-
-        if (!Finishing) {
-            Abort("Internal Error", YandexQuery::QueryMeta::FAILED);
-            return;
+ 
+        if (!Finishing) { 
+            Abort("Internal Error", YandexQuery::QueryMeta::FAILED); 
+            return; 
         }
 
-        // Already finishing. Fail instantly.
-        Issues.AddIssue("Internal Error");
-
-        if (!ConsumersAreDeleted) {
+        // Already finishing. Fail instantly. 
+        Issues.AddIssue("Internal Error"); 
+ 
+        if (!ConsumersAreDeleted) { 
             for (const Yq::Private::TopicConsumer& c : Params.CreatedTopicConsumers) {
-                TransientIssues.AddIssue(TStringBuilder() << "Created read rule `" << c.consumer_name() << "` for topic `" << c.topic_path() << "` (database id " << c.database_id() << ") maybe was left undeleted: internal error occurred");
-                TransientIssues.back().Severity = NYql::TSeverityIds::S_WARNING;
-            }
-        }
-
-        // If target status was successful, change it to failed because we are in internal error handler.
-        if (QueryStateUpdateRequest.status() == YandexQuery::QueryMeta::COMPLETED || QueryStateUpdateRequest.status() == YandexQuery::QueryMeta::PAUSED) {
-            QueryStateUpdateRequest.set_status(YandexQuery::QueryMeta::FAILED);
-        }
-
-        SendPingAndPassAway();
+                TransientIssues.AddIssue(TStringBuilder() << "Created read rule `" << c.consumer_name() << "` for topic `" << c.topic_path() << "` (database id " << c.database_id() << ") maybe was left undeleted: internal error occurred"); 
+                TransientIssues.back().Severity = NYql::TSeverityIds::S_WARNING; 
+            } 
+        } 
+ 
+        // If target status was successful, change it to failed because we are in internal error handler. 
+        if (QueryStateUpdateRequest.status() == YandexQuery::QueryMeta::COMPLETED || QueryStateUpdateRequest.status() == YandexQuery::QueryMeta::PAUSED) { 
+            QueryStateUpdateRequest.set_status(YandexQuery::QueryMeta::FAILED); 
+        } 
+ 
+        SendPingAndPassAway(); 
     }
 
-    void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
+    void Handle(TEvents::TEvQueryActionResult::TPtr& ev) { 
         Action = ev->Get()->Action;
-        LOG_D("New query action received: " << YandexQuery::QueryAction_Name(Action));
+        LOG_D("New query action received: " << YandexQuery::QueryAction_Name(Action)); 
         switch (Action) {
         case YandexQuery::ABORT:
-        case YandexQuery::ABORT_GRACEFULLY: // not fully implemented
-            Abort("Aborted by user", YandexQuery::QueryMeta::ABORTED_BY_USER);
+        case YandexQuery::ABORT_GRACEFULLY: // not fully implemented 
+            Abort("Aborted by user", YandexQuery::QueryMeta::ABORTED_BY_USER); 
             break;
-        case YandexQuery::PAUSE: // not implemented
-        case YandexQuery::PAUSE_GRACEFULLY: // not implemented
-        case YandexQuery::RESUME: // not implemented
-            Abort(TStringBuilder() << "Unsupported query action: " << YandexQuery::QueryAction_Name(Action), YandexQuery::QueryMeta::FAILED);
-            break;
+        case YandexQuery::PAUSE: // not implemented 
+        case YandexQuery::PAUSE_GRACEFULLY: // not implemented 
+        case YandexQuery::RESUME: // not implemented 
+            Abort(TStringBuilder() << "Unsupported query action: " << YandexQuery::QueryAction_Name(Action), YandexQuery::QueryMeta::FAILED); 
+            break; 
         default:
-            Abort(TStringBuilder() << "Unknown query action: " << YandexQuery::QueryAction_Name(Action), YandexQuery::QueryMeta::FAILED);
+            Abort(TStringBuilder() << "Unknown query action: " << YandexQuery::QueryAction_Name(Action), YandexQuery::QueryMeta::FAILED); 
             break;
         }
     }
 
     void CheckForConsumers() {
-        struct TTopicIndependentConsumers {
-            struct TTopicIndependentConsumer {
-                TString ConsumerName;
-                std::vector<NYql::NPq::TTopicPartitionsSet> PartitionsSets;
-            };
-
-            std::pair<TString, bool> AddPartitionsSet(const TMaybe<NYql::NPq::TTopicPartitionsSet>& set, const TString& consumerNamePrefix) {
-                if (!ConsumerNamePrefix) { // Init
-                    ConsumerNamePrefix = consumerNamePrefix;
-                }
-
-                if (!set) {
-                    return {AddNewConsumer(set), true};
-                }
-
-                for (TTopicIndependentConsumer& consumer : IndependentConsumers) {
-                    if (!consumer.PartitionsSets.empty()) {
-                        bool intersects = false;
-                        for (const NYql::NPq::TTopicPartitionsSet& consumerSet : consumer.PartitionsSets) {
-                            if (consumerSet.Intersects(*set)) {
-                                intersects = true;
-                                break;
-                            }
-                        }
-                        if (!intersects) {
-                            consumer.PartitionsSets.push_back(*set);
-                            return {consumer.ConsumerName, false};
-                        }
-                    }
-                }
-                return {AddNewConsumer(set), true};
-            }
-
-            TString AddNewConsumer(const TMaybe<NYql::NPq::TTopicPartitionsSet>& set) {
-                TTopicIndependentConsumer& c = IndependentConsumers.emplace_back();
-                c.ConsumerName = IndependentConsumers.size() == 1 ? ConsumerNamePrefix : TStringBuilder() << ConsumerNamePrefix << '-' << IndependentConsumers.size();
-                if (set) {
-                    c.PartitionsSets.push_back(*set);
-                }
-                return c.ConsumerName;
-            }
-
-            TString ConsumerNamePrefix;
-            std::vector<TTopicIndependentConsumer> IndependentConsumers;
-        };
-
-        THashMap<TString, TTopicIndependentConsumers> topicToIndependentConsumers;
+        struct TTopicIndependentConsumers { 
+            struct TTopicIndependentConsumer { 
+                TString ConsumerName; 
+                std::vector<NYql::NPq::TTopicPartitionsSet> PartitionsSets; 
+            }; 
+ 
+            std::pair<TString, bool> AddPartitionsSet(const TMaybe<NYql::NPq::TTopicPartitionsSet>& set, const TString& consumerNamePrefix) { 
+                if (!ConsumerNamePrefix) { // Init 
+                    ConsumerNamePrefix = consumerNamePrefix; 
+                } 
+ 
+                if (!set) { 
+                    return {AddNewConsumer(set), true}; 
+                } 
+ 
+                for (TTopicIndependentConsumer& consumer : IndependentConsumers) { 
+                    if (!consumer.PartitionsSets.empty()) { 
+                        bool intersects = false; 
+                        for (const NYql::NPq::TTopicPartitionsSet& consumerSet : consumer.PartitionsSets) { 
+                            if (consumerSet.Intersects(*set)) { 
+                                intersects = true; 
+                                break; 
+                            } 
+                        } 
+                        if (!intersects) { 
+                            consumer.PartitionsSets.push_back(*set); 
+                            return {consumer.ConsumerName, false}; 
+                        } 
+                    } 
+                } 
+                return {AddNewConsumer(set), true}; 
+            } 
+ 
+            TString AddNewConsumer(const TMaybe<NYql::NPq::TTopicPartitionsSet>& set) { 
+                TTopicIndependentConsumer& c = IndependentConsumers.emplace_back(); 
+                c.ConsumerName = IndependentConsumers.size() == 1 ? ConsumerNamePrefix : TStringBuilder() << ConsumerNamePrefix << '-' << IndependentConsumers.size(); 
+                if (set) { 
+                    c.PartitionsSets.push_back(*set); 
+                } 
+                return c.ConsumerName; 
+            } 
+ 
+            TString ConsumerNamePrefix; 
+            std::vector<TTopicIndependentConsumer> IndependentConsumers; 
+        }; 
+ 
+        THashMap<TString, TTopicIndependentConsumers> topicToIndependentConsumers; 
         ui32 graphIndex = 0;
         for (auto& graphParams : DqGraphParams) {
-            LOG_D("Graph " << graphIndex);
+            LOG_D("Graph " << graphIndex); 
             graphIndex++;
             const TString consumerNamePrefix = graphIndex == 1 ? Params.QueryId : TStringBuilder() << Params.QueryId << '-' << graphIndex; // Simple name in simple case
             const auto& secureParams = graphParams.GetSecureParams();
@@ -408,48 +408,48 @@ private:
                         YQL_ENSURE(settingsAny.Is<NYql::NPq::NProto::TDqPqTopicSource>());
                         NYql::NPq::NProto::TDqPqTopicSource srcDesc;
                         YQL_ENSURE(settingsAny.UnpackTo(&srcDesc));
-
+ 
                         if (!srcDesc.GetConsumerName()) {
                             const auto [consumerName, isNewConsumer] =
                                 topicToIndependentConsumers[srcDesc.GetTopicPath()]
-                                    .AddPartitionsSet(NYql::NPq::GetTopicPartitionsSet(task.GetMeta()), consumerNamePrefix);
+                                    .AddPartitionsSet(NYql::NPq::GetTopicPartitionsSet(task.GetMeta()), consumerNamePrefix); 
                             srcDesc.SetConsumerName(consumerName);
                             settingsAny.PackFrom(srcDesc);
-                            if (isNewConsumer) {
-                                auto s = consumerName;
-                                LOG_D("Create consumer \"" << s << "\" for topic \"" << srcDesc.GetTopicPath() << "\"");
-                                if (const TString& tokenName = srcDesc.GetToken().GetName()) {
-                                    const auto token = secureParams.find(tokenName);
-                                    YQL_ENSURE(token != secureParams.end(), "Token " << tokenName << " was not found in secure params");
-                                    CredentialsForConsumersCreation.emplace_back(
-                                        CreateCredentialsProviderFactoryForStructuredToken(Params.CredentialsFactory, token->second, srcDesc.GetAddBearerToToken()));
-                                } else {
-                                    CredentialsForConsumersCreation.emplace_back(NYdb::CreateInsecureCredentialsProviderFactory());
-                                }
+                            if (isNewConsumer) { 
+                                auto s = consumerName; 
+                                LOG_D("Create consumer \"" << s << "\" for topic \"" << srcDesc.GetTopicPath() << "\""); 
+                                if (const TString& tokenName = srcDesc.GetToken().GetName()) { 
+                                    const auto token = secureParams.find(tokenName); 
+                                    YQL_ENSURE(token != secureParams.end(), "Token " << tokenName << " was not found in secure params"); 
+                                    CredentialsForConsumersCreation.emplace_back( 
+                                        CreateCredentialsProviderFactoryForStructuredToken(Params.CredentialsFactory, token->second, srcDesc.GetAddBearerToToken())); 
+                                } else { 
+                                    CredentialsForConsumersCreation.emplace_back(NYdb::CreateInsecureCredentialsProviderFactory()); 
+                                } 
 
                                 TopicsForConsumersCreation.emplace_back(std::move(srcDesc));
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    void Handle(TEvents::TEvForwardPingResponse::TPtr& ev) {
-        LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
-        if (!ev->Get()->Success) { // Failed setting new status or lease was lost
-            ResignQuery();
-            return;
-        }
-
+                        } 
+                    } 
+                } 
+            } 
+        } 
+    } 
+ 
+    void Handle(TEvents::TEvForwardPingResponse::TPtr& ev) { 
+        LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie); 
+        if (!ev->Get()->Success) { // Failed setting new status or lease was lost 
+            ResignQuery(); 
+            return; 
+        } 
+ 
         if (ev->Cookie == SaveQueryInfoCookie) {
             if (TopicsForConsumersCreation.size()) {
                 ReadRulesCreatorId = Register(
                     ::NYq::MakeReadRuleCreatorActor(
                         SelfId(),
                         Params.QueryId,
-                        Params.Driver,
+                        Params.Driver, 
                         std::move(TopicsForConsumersCreation),
                         std::move(CredentialsForConsumersCreation)
                     )
@@ -457,24 +457,24 @@ private:
             } else {
                 RunDqGraphs();
             }
-        } else if (ev->Cookie == SetLoadFromCheckpointModeCookie) {
-            Send(CheckpointCoordinatorId, new TEvCheckpointCoordinator::TEvRunGraph());
-        }
-    }
-
-    void HandleFinish(TEvents::TEvForwardPingResponse::TPtr& ev) {
-        LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
-        if (!ev->Get()->Success) { // Failed setting new status or lease was lost
-            Fail("Failed to write finalizing status");
-            return;
-        }
-
-        if (ev->Cookie == SaveFinalizingStatusCookie) {
-            FinalizingStatusIsWritten = true;
-            ContinueFinish();
-        }
-    }
-
+        } else if (ev->Cookie == SetLoadFromCheckpointModeCookie) { 
+            Send(CheckpointCoordinatorId, new TEvCheckpointCoordinator::TEvRunGraph()); 
+        } 
+    } 
+ 
+    void HandleFinish(TEvents::TEvForwardPingResponse::TPtr& ev) { 
+        LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie); 
+        if (!ev->Get()->Success) { // Failed setting new status or lease was lost 
+            Fail("Failed to write finalizing status"); 
+            return; 
+        } 
+ 
+        if (ev->Cookie == SaveFinalizingStatusCookie) { 
+            FinalizingStatusIsWritten = true; 
+            ContinueFinish(); 
+        } 
+    } 
+ 
     TString CheckLimitsOfDqGraphs() {
         size_t dqTasks = 0;
         for (const auto& dqGraph : DqGraphParams) {
@@ -496,17 +496,17 @@ private:
         return false;
     }
 
-    void Handle(NYq::TEvents::TEvGraphParams::TPtr& ev) {
+    void Handle(NYq::TEvents::TEvGraphParams::TPtr& ev) { 
         LOG_D("Graph params with tasks: " << ev->Get()->GraphParams.TasksSize());
-        DqGraphParams.push_back(ev->Get()->GraphParams);
+        DqGraphParams.push_back(ev->Get()->GraphParams); 
     }
 
-    void Handle(TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) {
-        LOG_D("Coordinator saved zero checkpoint");
-        Y_VERIFY(CheckpointCoordinatorId);
-        SetLoadFromCheckpointMode();
-    }
-
+    void Handle(TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) { 
+        LOG_D("Coordinator saved zero checkpoint"); 
+        Y_VERIFY(CheckpointCoordinatorId); 
+        SetLoadFromCheckpointMode(); 
+    } 
+ 
     i32 UpdateResultIndices() {
         i32 count = 0;
         for (const auto& graphParams : DqGraphParams) {
@@ -542,21 +542,21 @@ private:
 
         CheckForConsumers();
 
-        Params.CreatedTopicConsumers.clear();
-        Params.CreatedTopicConsumers.reserve(TopicsForConsumersCreation.size());
+        Params.CreatedTopicConsumers.clear(); 
+        Params.CreatedTopicConsumers.reserve(TopicsForConsumersCreation.size()); 
         for (const NYql::NPq::NProto::TDqPqTopicSource& src : TopicsForConsumersCreation) {
             auto& consumer = *request.add_created_topic_consumers();
             consumer.set_database_id(src.GetDatabaseId());
             consumer.set_database(src.GetDatabase());
             consumer.set_topic_path(src.GetTopicPath());
             consumer.set_consumer_name(src.GetConsumerName());
-            consumer.set_cluster_endpoint(src.GetEndpoint());
-            consumer.set_use_ssl(src.GetUseSsl());
-            consumer.set_token_name(src.GetToken().GetName());
-            consumer.set_add_bearer_to_token(src.GetAddBearerToToken());
-
-            // Save for deletion
-            Params.CreatedTopicConsumers.push_back(consumer);
+            consumer.set_cluster_endpoint(src.GetEndpoint()); 
+            consumer.set_use_ssl(src.GetUseSsl()); 
+            consumer.set_token_name(src.GetToken().GetName()); 
+            consumer.set_add_bearer_to_token(src.GetAddBearerToToken()); 
+ 
+            // Save for deletion 
+            Params.CreatedTopicConsumers.push_back(consumer); 
         }
 
         for (const auto& graphParams : DqGraphParams) {
@@ -566,14 +566,14 @@ private:
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SaveQueryInfoCookie);
     }
 
-    void SetLoadFromCheckpointMode() {
-        Yq::Private::PingTaskRequest request;
-        request.set_state_load_mode(YandexQuery::FROM_LAST_CHECKPOINT);
-        request.mutable_disposition()->mutable_from_last_checkpoint();
-
-        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SetLoadFromCheckpointModeCookie);
-    }
-
+    void SetLoadFromCheckpointMode() { 
+        Yq::Private::PingTaskRequest request; 
+        request.set_state_load_mode(YandexQuery::FROM_LAST_CHECKPOINT); 
+        request.mutable_disposition()->mutable_from_last_checkpoint(); 
+ 
+        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SetLoadFromCheckpointModeCookie); 
+    } 
+ 
     TString BuildNormalizedStatistics(const NDqProto::TQueryResponse& response) {
 
         struct TStatisticsNode {
@@ -645,7 +645,7 @@ private:
         return out.Str();
     }
 
-    void SaveStatistics(const NYql::NDqProto::TQueryResponse& result) {
+    void SaveStatistics(const NYql::NDqProto::TQueryResponse& result) { 
         // Yson routines are very strict, so it's better to try-catch them
         try {
             Statistics.push_back(BuildNormalizedStatistics(result));
@@ -662,149 +662,149 @@ private:
         } catch (NYson::TYsonException& ex) {
             LOG_E(ex.what());
         }
-    }
+    } 
 
-    void AddIssues(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issuesProto) {
-        TIssues issues;
-        IssuesFromMessage(issuesProto, issues);
-        Issues.AddIssues(issues);
-    }
+    void AddIssues(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issuesProto) { 
+        TIssues issues; 
+        IssuesFromMessage(issuesProto, issues); 
+        Issues.AddIssues(issues); 
+    } 
 
-    void SaveQueryResponse(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
-        auto& result = ev->Get()->Record;
-        LOG_D("Query response. Retryable: " << result.GetRetriable()
-            << ". Result set index: " << DqGraphIndex
-            << ". Issues count: " << result.IssuesSize()
-            << ". Rows count: " << result.GetRowsCount());
-
-        AddIssues(result.issues());
-        RetryNeeded |= result.GetRetriable();
-
-        if (Finishing && !result.issues_size()) { // Race between abort and successful finishing. Override with success and provide results to user.
-            FinalQueryStatus = YandexQuery::QueryMeta::COMPLETED;
-            Issues.Clear();
+    void SaveQueryResponse(NYql::NDqs::TEvQueryResponse::TPtr& ev) { 
+        auto& result = ev->Get()->Record; 
+        LOG_D("Query response. Retryable: " << result.GetRetriable() 
+            << ". Result set index: " << DqGraphIndex 
+            << ". Issues count: " << result.IssuesSize() 
+            << ". Rows count: " << result.GetRowsCount()); 
+ 
+        AddIssues(result.issues()); 
+        RetryNeeded |= result.GetRetriable(); 
+ 
+        if (Finishing && !result.issues_size()) { // Race between abort and successful finishing. Override with success and provide results to user. 
+            FinalQueryStatus = YandexQuery::QueryMeta::COMPLETED; 
+            Issues.Clear(); 
+        } 
+ 
+        auto resultSetIndex = DqGrapResultIndices.at(DqGraphIndex); 
+        if (resultSetIndex >= 0) { 
+            auto& header = *QueryStateUpdateRequest.mutable_result_set_meta(resultSetIndex); 
+            header.set_truncated(result.GetTruncated()); 
+            header.set_rows_count(result.GetRowsCount()); 
+        } 
+ 
+        QueryStateUpdateRequest.mutable_result_id()->set_value(Params.ResultId); 
+ 
+        SaveStatistics(result); 
+ 
+        KillExecuter(); 
+    } 
+ 
+    void Handle(NYql::NDqs::TEvQueryResponse::TPtr& ev) { 
+        SaveQueryResponse(ev); 
+ 
+        const bool failure = Issues.Size() > 0; 
+        const bool finalize = failure || DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size()); 
+        if (finalize) { 
+            if (RetryNeeded) { 
+                ResignQuery(); 
+                return; 
+            } 
+ 
+            Finish(GetFinishStatus(!failure)); 
+            return; 
         }
-
-        auto resultSetIndex = DqGrapResultIndices.at(DqGraphIndex);
-        if (resultSetIndex >= 0) {
-            auto& header = *QueryStateUpdateRequest.mutable_result_set_meta(resultSetIndex);
-            header.set_truncated(result.GetTruncated());
-            header.set_rows_count(result.GetRowsCount());
-        }
-
-        QueryStateUpdateRequest.mutable_result_id()->set_value(Params.ResultId);
-
-        SaveStatistics(result);
-
-        KillExecuter();
+ 
+        // Continue with the next graph 
+        QueryStateUpdateRequest.set_dq_graph_index(++DqGraphIndex); 
+        RunNextDqGraph(); 
+        LOG_D("Send save query response request to pinger"); 
+        Send(Pinger, new TEvents::TEvForwardPingRequest(QueryStateUpdateRequest)); 
     }
 
-    void Handle(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
-        SaveQueryResponse(ev);
-
-        const bool failure = Issues.Size() > 0;
-        const bool finalize = failure || DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size());
-        if (finalize) {
-            if (RetryNeeded) {
-                ResignQuery();
-                return;
-            }
-
-            Finish(GetFinishStatus(!failure));
-            return;
-        }
-
-        // Continue with the next graph
-        QueryStateUpdateRequest.set_dq_graph_index(++DqGraphIndex);
-        RunNextDqGraph();
-        LOG_D("Send save query response request to pinger");
-        Send(Pinger, new TEvents::TEvForwardPingRequest(QueryStateUpdateRequest));
-    }
-
-    void HandleFinish(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
-        // In this case we can have race between normal finishing of running query and aborting it.
-        // If query is finished with success error code or failure != abort, we override abort with this result.
-        // This logic is located in SaveQueryResponse() method.
-        ev->Get()->Record.SetRetriable(false); // User aborted => don't retry, only show issues
-
-        QueryResponseArrived = true;
-        SaveQueryResponse(ev);
-
-        ContinueFinish();
-    }
-
+    void HandleFinish(NYql::NDqs::TEvQueryResponse::TPtr& ev) { 
+        // In this case we can have race between normal finishing of running query and aborting it. 
+        // If query is finished with success error code or failure != abort, we override abort with this result. 
+        // This logic is located in SaveQueryResponse() method. 
+        ev->Get()->Record.SetRetriable(false); // User aborted => don't retry, only show issues 
+ 
+        QueryResponseArrived = true; 
+        SaveQueryResponse(ev); 
+ 
+        ContinueFinish(); 
+    } 
+ 
     void Handle(NYq::TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
-        LOG_D("Read rules creation finished. Issues: " << ev->Get()->Issues.Size());
-        ReadRulesCreatorId = {};
-        if (ev->Get()->Issues) {
-            AddIssueWithSubIssues("Problems with read rules creation", ev->Get()->Issues);
-            LOG_D(Issues.ToOneLineString());
-            Finish(YandexQuery::QueryMeta::FAILED);
+        LOG_D("Read rules creation finished. Issues: " << ev->Get()->Issues.Size()); 
+        ReadRulesCreatorId = {}; 
+        if (ev->Get()->Issues) { 
+            AddIssueWithSubIssues("Problems with read rules creation", ev->Get()->Issues); 
+            LOG_D(Issues.ToOneLineString()); 
+            Finish(YandexQuery::QueryMeta::FAILED); 
         } else {
             RunDqGraphs();
         }
     }
 
     void HandleFinish(NYq::TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
-        ReadRulesCreatorId = {};
-        if (ev->Get()->Issues) {
-            TransientIssues.AddIssues(ev->Get()->Issues);
-            LOG_D(TransientIssues.ToOneLineString());
-        }
-        if (CanRunReadRulesDeletionActor()) {
-            RunReadRulesDeletionActor();
-        }
-    }
-
-    void HandleFinish(TEvents::TEvDataStreamsReadRulesDeletionResult::TPtr& ev) {
-        ConsumersAreDeleted = true; // Don't print extra warnings.
-
-        if (ev->Get()->TransientIssues) {
-            for (const auto& issue : ev->Get()->TransientIssues) {
-                TransientIssues.AddIssue(issue);
-            }
-        }
-
-        ContinueFinish();
-    }
-
-    bool NeedDeleteReadRules() const {
-        return !Params.CreatedTopicConsumers.empty();
-    }
-
-    bool CanRunReadRulesDeletionActor() const {
-        return !ReadRulesCreatorId && FinalizingStatusIsWritten && QueryResponseArrived;
-    }
-
-    void RunReadRulesDeletionActor() {
-        TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials;
+        ReadRulesCreatorId = {}; 
+        if (ev->Get()->Issues) { 
+            TransientIssues.AddIssues(ev->Get()->Issues); 
+            LOG_D(TransientIssues.ToOneLineString()); 
+        } 
+        if (CanRunReadRulesDeletionActor()) { 
+            RunReadRulesDeletionActor(); 
+        } 
+    } 
+ 
+    void HandleFinish(TEvents::TEvDataStreamsReadRulesDeletionResult::TPtr& ev) { 
+        ConsumersAreDeleted = true; // Don't print extra warnings. 
+ 
+        if (ev->Get()->TransientIssues) { 
+            for (const auto& issue : ev->Get()->TransientIssues) { 
+                TransientIssues.AddIssue(issue); 
+            } 
+        } 
+ 
+        ContinueFinish(); 
+    } 
+ 
+    bool NeedDeleteReadRules() const { 
+        return !Params.CreatedTopicConsumers.empty(); 
+    } 
+ 
+    bool CanRunReadRulesDeletionActor() const { 
+        return !ReadRulesCreatorId && FinalizingStatusIsWritten && QueryResponseArrived; 
+    } 
+ 
+    void RunReadRulesDeletionActor() { 
+        TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials; 
         credentials.reserve(Params.CreatedTopicConsumers.size());
         for (const Yq::Private::TopicConsumer& c : Params.CreatedTopicConsumers) {
-            if (const TString& tokenName = c.token_name()) {
-                credentials.emplace_back(
-                    CreateCredentialsProviderFactoryForStructuredToken(Params.CredentialsFactory, FindTokenByName(tokenName), c.add_bearer_to_token()));
-            } else {
-                credentials.emplace_back(NYdb::CreateInsecureCredentialsProviderFactory());
-            }
-        }
-
-        Register(
-            ::NYq::MakeReadRuleDeleterActor(
-                SelfId(),
+            if (const TString& tokenName = c.token_name()) { 
+                credentials.emplace_back( 
+                    CreateCredentialsProviderFactoryForStructuredToken(Params.CredentialsFactory, FindTokenByName(tokenName), c.add_bearer_to_token())); 
+            } else { 
+                credentials.emplace_back(NYdb::CreateInsecureCredentialsProviderFactory()); 
+            } 
+        } 
+ 
+        Register( 
+            ::NYq::MakeReadRuleDeleterActor( 
+                SelfId(), 
                 Params.QueryId,
-                Params.Driver,
-                Params.CreatedTopicConsumers,
-                std::move(credentials)
-            )
-        );
-    }
-
+                Params.Driver, 
+                Params.CreatedTopicConsumers, 
+                std::move(credentials) 
+            ) 
+        ); 
+    } 
+ 
     void RunDqGraphs() {
         if (DqGraphParams.empty()) {
             *QueryStateUpdateRequest.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(CreatedAt.MilliSeconds());
             QueryStateUpdateRequest.set_resign_query(false);
             const bool isOk = Issues.Size() == 0;
-            Finish(GetFinishStatus(isOk));
+            Finish(GetFinishStatus(isOk)); 
             return;
         }
 
@@ -884,16 +884,16 @@ private:
 
         ControlId = NActors::TActivationContext::Register(NYql::MakeTaskController(SessionId, ExecuterId, resultId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
         if (EnableCheckpointCoordinator) {
-            CheckpointCoordinatorId = NActors::TActivationContext::Register(MakeCheckpointCoordinator(
-                ::NYq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
-                ControlId,
-                NYql::NDq::MakeCheckpointStorageID(),
-                SelfId(),
-                Params.CheckpointCoordinatorConfig,
-                QueryCounters.Counters,
-                dqGraphParams,
-                Params.StateLoadMode,
-                Params.StreamingDisposition).Release());
+            CheckpointCoordinatorId = NActors::TActivationContext::Register(MakeCheckpointCoordinator( 
+                ::NYq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision), 
+                ControlId, 
+                NYql::NDq::MakeCheckpointStorageID(), 
+                SelfId(), 
+                Params.CheckpointCoordinatorConfig, 
+                QueryCounters.Counters, 
+                dqGraphParams, 
+                Params.StateLoadMode, 
+                Params.StreamingDisposition).Release()); 
         }
 
         Yql::DqsProto::ExecuteGraphRequest request;
@@ -904,8 +904,8 @@ private:
         *request.MutableSecureParams() = dqGraphParams.GetSecureParams();
         *request.MutableColumns() = dqGraphParams.GetColumns();
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
-        NActors::TActivationContext::Send(new IEventHandle(ExecuterId, SelfId(), new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId, CheckpointCoordinatorId)));
-        LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId << ", CheckPointCoordinatior " << CheckpointCoordinatorId);
+        NActors::TActivationContext::Send(new IEventHandle(ExecuterId, SelfId(), new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId, CheckpointCoordinatorId))); 
+        LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId << ", CheckPointCoordinatior " << CheckpointCoordinatorId); 
     }
 
     void SetupDqSettings(::google::protobuf::RepeatedPtrField< ::NYql::TAttr>& dqSettings) const {
@@ -959,7 +959,7 @@ private:
         }
     }
 
-    YandexQuery::QueryMeta::ComputeStatus GetFinishStatus(bool isOk) const {
+    YandexQuery::QueryMeta::ComputeStatus GetFinishStatus(bool isOk) const { 
         if (isOk) {
             return YandexQuery::QueryMeta::COMPLETED;
         }
@@ -979,115 +979,115 @@ private:
         }
     }
 
-    YandexQuery::QueryMeta::ComputeStatus GetFinalizingStatus() { // Status before final. "*ING" one.
-        switch (FinalQueryStatus) {
-        case YandexQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case YandexQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
-        case YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED:
-        case YandexQuery::QueryMeta::STARTING:
-        case YandexQuery::QueryMeta::ABORTING_BY_USER:
-        case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM:
-        case YandexQuery::QueryMeta::RESUMING:
-        case YandexQuery::QueryMeta::RUNNING:
-        case YandexQuery::QueryMeta::COMPLETING:
-        case YandexQuery::QueryMeta::FAILING:
-        case YandexQuery::QueryMeta::PAUSING: {
-            TStringBuilder msg;
-            msg << "\"" << YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus) << "\" is not a final status for query";
-            Issues.AddIssue(msg);
-            throw yexception() << msg;
-        }
-
-        case YandexQuery::QueryMeta::ABORTED_BY_USER:
-            return YandexQuery::QueryMeta::ABORTING_BY_USER;
-        case YandexQuery::QueryMeta::ABORTED_BY_SYSTEM:
-            return YandexQuery::QueryMeta::ABORTING_BY_SYSTEM;
-        case YandexQuery::QueryMeta::COMPLETED:
-            return YandexQuery::QueryMeta::COMPLETING;
-        case YandexQuery::QueryMeta::FAILED:
-            return YandexQuery::QueryMeta::FAILING;
-        case YandexQuery::QueryMeta::PAUSED:
-            return YandexQuery::QueryMeta::PAUSING;
-        }
-    }
-
-    static YandexQuery::QueryMeta::ComputeStatus GetFinalStatusFromFinalizingStatus(YandexQuery::QueryMeta::ComputeStatus status) {
-        switch (status) {
-        case YandexQuery::QueryMeta::ABORTING_BY_USER:
-            return YandexQuery::QueryMeta::ABORTED_BY_USER;
-        case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM:
-            return YandexQuery::QueryMeta::ABORTED_BY_SYSTEM;
-        case YandexQuery::QueryMeta::COMPLETING:
-            return YandexQuery::QueryMeta::COMPLETED;
-        case YandexQuery::QueryMeta::FAILING:
-            return YandexQuery::QueryMeta::FAILED;
-        default:
-            return YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
-        }
-    }
-
-    void WriteFinalizingStatus() {
-        const YandexQuery::QueryMeta::ComputeStatus finalizingStatus = GetFinalizingStatus();
-        Params.Status = finalizingStatus;
-        LOG_D("Write finalizing status: " << YandexQuery::QueryMeta::ComputeStatus_Name(finalizingStatus));
-        Yq::Private::PingTaskRequest request;
-        request.set_status(finalizingStatus);
-        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SaveFinalizingStatusCookie);
-    }
-
-    void Finish(YandexQuery::QueryMeta::ComputeStatus status) {
+    YandexQuery::QueryMeta::ComputeStatus GetFinalizingStatus() { // Status before final. "*ING" one. 
+        switch (FinalQueryStatus) { 
+        case YandexQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MIN_SENTINEL_DO_NOT_USE_: 
+        case YandexQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MAX_SENTINEL_DO_NOT_USE_: 
+        case YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED: 
+        case YandexQuery::QueryMeta::STARTING: 
+        case YandexQuery::QueryMeta::ABORTING_BY_USER: 
+        case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM: 
+        case YandexQuery::QueryMeta::RESUMING: 
+        case YandexQuery::QueryMeta::RUNNING: 
+        case YandexQuery::QueryMeta::COMPLETING: 
+        case YandexQuery::QueryMeta::FAILING: 
+        case YandexQuery::QueryMeta::PAUSING: { 
+            TStringBuilder msg; 
+            msg << "\"" << YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus) << "\" is not a final status for query"; 
+            Issues.AddIssue(msg); 
+            throw yexception() << msg; 
+        } 
+ 
+        case YandexQuery::QueryMeta::ABORTED_BY_USER: 
+            return YandexQuery::QueryMeta::ABORTING_BY_USER; 
+        case YandexQuery::QueryMeta::ABORTED_BY_SYSTEM: 
+            return YandexQuery::QueryMeta::ABORTING_BY_SYSTEM; 
+        case YandexQuery::QueryMeta::COMPLETED: 
+            return YandexQuery::QueryMeta::COMPLETING; 
+        case YandexQuery::QueryMeta::FAILED: 
+            return YandexQuery::QueryMeta::FAILING; 
+        case YandexQuery::QueryMeta::PAUSED: 
+            return YandexQuery::QueryMeta::PAUSING; 
+        } 
+    } 
+ 
+    static YandexQuery::QueryMeta::ComputeStatus GetFinalStatusFromFinalizingStatus(YandexQuery::QueryMeta::ComputeStatus status) { 
+        switch (status) { 
+        case YandexQuery::QueryMeta::ABORTING_BY_USER: 
+            return YandexQuery::QueryMeta::ABORTED_BY_USER; 
+        case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM: 
+            return YandexQuery::QueryMeta::ABORTED_BY_SYSTEM; 
+        case YandexQuery::QueryMeta::COMPLETING: 
+            return YandexQuery::QueryMeta::COMPLETED; 
+        case YandexQuery::QueryMeta::FAILING: 
+            return YandexQuery::QueryMeta::FAILED; 
+        default: 
+            return YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED; 
+        } 
+    } 
+ 
+    void WriteFinalizingStatus() { 
+        const YandexQuery::QueryMeta::ComputeStatus finalizingStatus = GetFinalizingStatus(); 
+        Params.Status = finalizingStatus; 
+        LOG_D("Write finalizing status: " << YandexQuery::QueryMeta::ComputeStatus_Name(finalizingStatus)); 
+        Yq::Private::PingTaskRequest request; 
+        request.set_status(finalizingStatus); 
+        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SaveFinalizingStatusCookie); 
+    } 
+ 
+    void Finish(YandexQuery::QueryMeta::ComputeStatus status) { 
         LOG_D("Is about to finish query with status " << YandexQuery::QueryMeta::ComputeStatus_Name(status));;
-        Finishing = true;
-        RetryNeeded = false;
-        FinalQueryStatus = status;
-        QueryStateUpdateRequest.set_status(FinalQueryStatus); // Can be changed later.
+        Finishing = true; 
+        RetryNeeded = false; 
+        FinalQueryStatus = status; 
+        QueryStateUpdateRequest.set_status(FinalQueryStatus); // Can be changed later. 
         *QueryStateUpdateRequest.mutable_finished_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
-        Become(&TRunActor::StateFuncWrapper<&TRunActor::FinishStateFunc>);
+        Become(&TRunActor::StateFuncWrapper<&TRunActor::FinishStateFunc>); 
 
-        if (!FinalizingStatusIsWritten) {
-            WriteFinalizingStatus();
-        }
+        if (!FinalizingStatusIsWritten) { 
+            WriteFinalizingStatus(); 
+        } 
 
-        CancelRunningQuery();
-        ContinueFinish();
-    }
+        CancelRunningQuery(); 
+        ContinueFinish(); 
+    } 
 
-    void ContinueFinish() {
-        if (NeedDeleteReadRules() && !ConsumersAreDeleted) {
-            if (CanRunReadRulesDeletionActor()) {
-                RunReadRulesDeletionActor();
+    void ContinueFinish() { 
+        if (NeedDeleteReadRules() && !ConsumersAreDeleted) { 
+            if (CanRunReadRulesDeletionActor()) { 
+                RunReadRulesDeletionActor(); 
             }
-            return;
-        }
+            return; 
+        } 
 
-        SendPingAndPassAway();
-    }
-
-    void ResignQuery() {
-        QueryStateUpdateRequest.set_resign_query(true);
-        SendPingAndPassAway();
-    }
-
-    void SendPingAndPassAway() {
-        // Run ping.
-        if (QueryStateUpdateRequest.resign_query()) { // Retry state => all issues are not fatal.
-            TransientIssues.AddIssues(Issues);
-            Issues.Clear();
-        }
-
-        NYql::IssuesToMessage(TransientIssues, QueryStateUpdateRequest.mutable_transient_issues());
-        NYql::IssuesToMessage(Issues, QueryStateUpdateRequest.mutable_issues());
-
-        Send(Pinger, new TEvents::TEvForwardPingRequest(QueryStateUpdateRequest, true));
-
+        SendPingAndPassAway(); 
+    } 
+ 
+    void ResignQuery() { 
+        QueryStateUpdateRequest.set_resign_query(true); 
+        SendPingAndPassAway(); 
+    } 
+ 
+    void SendPingAndPassAway() { 
+        // Run ping. 
+        if (QueryStateUpdateRequest.resign_query()) { // Retry state => all issues are not fatal. 
+            TransientIssues.AddIssues(Issues); 
+            Issues.Clear(); 
+        } 
+ 
+        NYql::IssuesToMessage(TransientIssues, QueryStateUpdateRequest.mutable_transient_issues()); 
+        NYql::IssuesToMessage(Issues, QueryStateUpdateRequest.mutable_issues()); 
+ 
+        Send(Pinger, new TEvents::TEvForwardPingRequest(QueryStateUpdateRequest, true)); 
+ 
         PassAway();
     }
 
-    void Abort(const TString& message, YandexQuery::QueryMeta::ComputeStatus status, const NYql::TIssues& issues = {}) {
-        AddIssueWithSubIssues(message, issues);
-        Finish(status);
-    }
-
+    void Abort(const TString& message, YandexQuery::QueryMeta::ComputeStatus status, const NYql::TIssues& issues = {}) { 
+        AddIssueWithSubIssues(message, issues); 
+        Finish(status); 
+    } 
+ 
     void FillDqGraphParams() {
         for (const auto& s : Params.DqGraphs) {
             NYq::NProto::TGraphParams dqGraphParams;
@@ -1152,13 +1152,13 @@ private:
         }
 
         {
-            NYql::TPqGatewayServices pqServices(
-                Params.Driver,
-                Params.PqCmConnections,
-                Params.CredentialsFactory,
-                std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()),
-                Params.FunctionRegistry
-            );
+            NYql::TPqGatewayServices pqServices( 
+                Params.Driver, 
+                Params.PqCmConnections, 
+                Params.CredentialsFactory, 
+                std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()), 
+                Params.FunctionRegistry 
+            ); 
             const auto pqGateway = NYql::CreatePqNativeGateway(pqServices);
             dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
         }
@@ -1267,61 +1267,61 @@ private:
         if (status == TProgram::TStatus::Ok || (DqGraphParams.size() > 0 && !DqGraphParams[0].GetResultType())) {
             PrepareGraphs();
         } else {
-            Abort(TStringBuilder() << "Run query failed: " << ToString(status), YandexQuery::QueryMeta::FAILED, Program->Issues());
+            Abort(TStringBuilder() << "Run query failed: " << ToString(status), YandexQuery::QueryMeta::FAILED, Program->Issues()); 
         }
     }
 
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr&) {
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr&) { 
         Fail("TRunActor::OnUndelivered");
     }
 
-    TString FindTokenByName(const TString& tokenName) const {
-        for (auto& graphParams : DqGraphParams) {
-            const auto& secureParams = graphParams.GetSecureParams();
-            const auto token = secureParams.find(tokenName);
-            if (token != secureParams.end()) {
-                return token->second;
-            }
-        }
+    TString FindTokenByName(const TString& tokenName) const { 
+        for (auto& graphParams : DqGraphParams) { 
+            const auto& secureParams = graphParams.GetSecureParams(); 
+            const auto token = secureParams.find(tokenName); 
+            if (token != secureParams.end()) { 
+                return token->second; 
+            } 
+        } 
         throw yexception() << "Token " << tokenName << " was not found in secure params";
-    }
-
-    void AddIssueWithSubIssues(const TString& message, const NYql::TIssues& issues) {
-        NYql::TIssue issue(message);
-        for (const NYql::TIssue& i : issues) {
-            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-        }
-        Issues.AddIssue(std::move(issue));
-    }
-
-    void LogReceivedParams() {
-        LOG_D("Run actors params: { QueryId: " << Params.QueryId
-            << " CloudId: " << Params.CloudId
-            << " UserId: " << Params.UserId
-            << " Owner: " << Params.Owner
-            << " PreviousQueryRevision: " << Params.PreviousQueryRevision
-            << " Connections: " << Params.Connections.size()
-            << " Bindings: " << Params.Bindings.size()
-            << " AccountIdSignatures: " << Params.AccountIdSignatures.size()
-            << " QueryType: " << YandexQuery::QueryContent::QueryType_Name(Params.QueryType)
-            << " ExecuteMode: " << YandexQuery::ExecuteMode_Name(Params.ExecuteMode)
-            << " ResultId: " << Params.ResultId
-            << " StateLoadMode: " << YandexQuery::StateLoadMode_Name(Params.StateLoadMode)
-            << " StreamingDisposition: " << Params.StreamingDisposition
-            << " Status: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status)
-            << " DqGraphs: " << Params.DqGraphs.size()
-            << " DqGraphIndex: " << Params.DqGraphIndex
-            << " CreatedTopicConsumers: " << Params.CreatedTopicConsumers.size()
-            << " }");
-    }
-
+    } 
+ 
+    void AddIssueWithSubIssues(const TString& message, const NYql::TIssues& issues) { 
+        NYql::TIssue issue(message); 
+        for (const NYql::TIssue& i : issues) { 
+            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i)); 
+        } 
+        Issues.AddIssue(std::move(issue)); 
+    } 
+ 
+    void LogReceivedParams() { 
+        LOG_D("Run actors params: { QueryId: " << Params.QueryId 
+            << " CloudId: " << Params.CloudId 
+            << " UserId: " << Params.UserId 
+            << " Owner: " << Params.Owner 
+            << " PreviousQueryRevision: " << Params.PreviousQueryRevision 
+            << " Connections: " << Params.Connections.size() 
+            << " Bindings: " << Params.Bindings.size() 
+            << " AccountIdSignatures: " << Params.AccountIdSignatures.size() 
+            << " QueryType: " << YandexQuery::QueryContent::QueryType_Name(Params.QueryType) 
+            << " ExecuteMode: " << YandexQuery::ExecuteMode_Name(Params.ExecuteMode) 
+            << " ResultId: " << Params.ResultId 
+            << " StateLoadMode: " << YandexQuery::StateLoadMode_Name(Params.StateLoadMode) 
+            << " StreamingDisposition: " << Params.StreamingDisposition 
+            << " Status: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status) 
+            << " DqGraphs: " << Params.DqGraphs.size() 
+            << " DqGraphIndex: " << Params.DqGraphIndex 
+            << " CreatedTopicConsumers: " << Params.CreatedTopicConsumers.size() 
+            << " }"); 
+    } 
+ 
 private:
-    TRunActorParams Params;
+    TRunActorParams Params; 
     THashMap<TString, YandexQuery::Connection> YqConnections;
 
     TProgramPtr Program;
     TIssues Issues;
-    TIssues TransientIssues;
+    TIssues TransientIssues; 
     TQueryResult QueryResult;
     TInstant Deadline;
     TActorId Pinger;
@@ -1334,37 +1334,37 @@ private:
     NMonitoring::TDynamicCounterPtr PublicCountersParent;
     NActors::TActorId ExecuterId;
     NActors::TActorId ControlId;
-    NActors::TActorId CheckpointCoordinatorId;
+    NActors::TActorId CheckpointCoordinatorId; 
     TString SessionId;
     ::NYq::NCommon::TServiceCounters ServiceCounters;
     ::NYq::NCommon::TServiceCounters QueryCounters;
     bool EnableCheckpointCoordinator = false;
     bool RetryNeeded = false;
     Yq::Private::PingTaskRequest QueryStateUpdateRequest;
-    THashMap<TString, YandexQuery::Connection> Connections; // Necessary for DbAsyncResolver
-
+    THashMap<TString, YandexQuery::Connection> Connections; // Necessary for DbAsyncResolver 
+ 
     const ui64 MaxTasksPerOperation = 100;
 
-    // Consumers creation
-    TVector<NYql::NPq::NProto::TDqPqTopicSource> TopicsForConsumersCreation;
-    TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> CredentialsForConsumersCreation;
+    // Consumers creation 
+    TVector<NYql::NPq::NProto::TDqPqTopicSource> TopicsForConsumersCreation; 
+    TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> CredentialsForConsumersCreation; 
     TVector<TString> Statistics;
-    NActors::TActorId ReadRulesCreatorId;
-
-    // Finish
-    bool Finishing = false;
-    bool ConsumersAreDeleted = false;
-    bool FinalizingStatusIsWritten = false;
-    bool QueryResponseArrived = false;
-    YandexQuery::QueryMeta::ComputeStatus FinalQueryStatus = YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED; // Status that will be assigned to query after it finishes.
-
-    // Cookies for pings
-    enum : ui64 {
+    NActors::TActorId ReadRulesCreatorId; 
+ 
+    // Finish 
+    bool Finishing = false; 
+    bool ConsumersAreDeleted = false; 
+    bool FinalizingStatusIsWritten = false; 
+    bool QueryResponseArrived = false; 
+    YandexQuery::QueryMeta::ComputeStatus FinalQueryStatus = YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED; // Status that will be assigned to query after it finishes. 
+ 
+    // Cookies for pings 
+    enum : ui64 { 
         SaveQueryInfoCookie = 1,
-        UpdateQueryInfoCookie,
-        SaveFinalizingStatusCookie,
-        SetLoadFromCheckpointModeCookie,
-    };
+        UpdateQueryInfoCookie, 
+        SaveFinalizingStatusCookie, 
+        SetLoadFromCheckpointModeCookie, 
+    }; 
 };
 
 

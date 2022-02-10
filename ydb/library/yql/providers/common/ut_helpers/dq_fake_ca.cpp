@@ -50,7 +50,7 @@ void TFakeActor::InitSource(IDqSourceActor* dqSource, IActor* dqSourceAsActor) {
 
 void TFakeActor::Terminate() {
     if (DqSourceActorId) {
-        DqSourceActor->PassAway();
+        DqSourceActor->PassAway(); 
 
         DqSourceActorId = std::nullopt;
         DqSourceActor = nullptr;
@@ -58,7 +58,7 @@ void TFakeActor::Terminate() {
     }
 
     if (DqSinkActorId) {
-        DqSinkActor->PassAway();
+        DqSinkActor->PassAway(); 
 
         DqSinkActorId = std::nullopt;
         DqSinkActor = nullptr;
@@ -107,21 +107,21 @@ void TFakeCASetup::SinkWrite(const TWriteValueProducer valueProducer, TMaybe<NDq
     });
 }
 
-void TFakeCASetup::SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) {
+void TFakeCASetup::SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) { 
     Execute([&state, &checkpoint](TFakeActor& actor) {
         Y_ASSERT(actor.DqSourceActor);
-        actor.DqSourceActor->SaveState(checkpoint, state);
+        actor.DqSourceActor->SaveState(checkpoint, state); 
     });
 }
 
-void TFakeCASetup::LoadSource(const NDqProto::TSourceState& state) {
+void TFakeCASetup::LoadSource(const NDqProto::TSourceState& state) { 
     Execute([&state](TFakeActor& actor) {
         Y_ASSERT(actor.DqSourceActor);
         actor.DqSourceActor->LoadState(state);
     });
 }
 
-void TFakeCASetup::LoadSink(const NDqProto::TSinkState& state) {
+void TFakeCASetup::LoadSink(const NDqProto::TSinkState& state) { 
     Execute([&state](TFakeActor& actor) {
         Y_ASSERT(actor.DqSinkActor);
         actor.DqSinkActor->LoadState(state);

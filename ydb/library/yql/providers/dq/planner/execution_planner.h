@@ -58,8 +58,8 @@ namespace NYql::NDqs {
         void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
 
         void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables);
-        void BuildCheckpointingMode();
-        bool IsEgressTask(const TDqsTasksGraph::TTaskType& task) const;
+        void BuildCheckpointingMode(); 
+        bool IsEgressTask(const TDqsTasksGraph::TTaskType& task) const; 
 
     private:
         TIntrusivePtr<TTypeAnnotationContext> TypeContext;
@@ -124,7 +124,7 @@ namespace NYql::NDqs {
 
     private:
         TVector<NDqProto::TDqTask> Tasks;
-        ui64 SourceId = 0;
+        ui64 SourceId = 0; 
         TString ResultType;
 
         NActors::TActorId ExecuterID;

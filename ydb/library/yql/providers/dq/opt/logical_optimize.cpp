@@ -53,7 +53,7 @@ public:
         AddHandler(0, &TCoCalcOverWindow::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
-        AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks));
+        AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks)); 
         AddHandler(0, &TDqStageBase::Match, HNDL(UnorderedInStage));
 #undef HNDL
     }
@@ -118,10 +118,10 @@ protected:
         return node;
     }
 
-    TMaybeNode<TExprBase> MergeQueriesWithSinks(TExprBase node, TExprContext& ctx) {
-        return DqMergeQueriesWithSinks(node, ctx);
-    }
-
+    TMaybeNode<TExprBase> MergeQueriesWithSinks(TExprBase node, TExprContext& ctx) { 
+        return DqMergeQueriesWithSinks(node, ctx); 
+    } 
+ 
     TMaybeNode<TExprBase> UnorderedInStage(TExprBase node, TExprContext& ctx) const {
         return DqUnorderedInStage(node, TDqReadWrapBase::Match, ctx, Types);
     }

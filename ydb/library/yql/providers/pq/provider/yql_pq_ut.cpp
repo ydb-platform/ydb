@@ -108,8 +108,8 @@ bool RunPqProgram(
         NYql::CreateCommonDqTaskTransformFactory()
     });
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
-    NYdb::TDriver driver(driverConfig);
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")); 
+    NYdb::TDriver driver(driverConfig); 
     auto dqGateway = CreateLocalDqGateway(driver, functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {});
 
     auto storage = NYql::CreateFileStorage({});
@@ -169,8 +169,8 @@ bool RunPqProgram(
         return false;
     }
 
-    driver.Stop(true);
-
+    driver.Stop(true); 
+ 
     Cerr << "Done." << Endl;
     return true;
 }

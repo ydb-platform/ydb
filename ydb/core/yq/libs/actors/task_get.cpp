@@ -18,10 +18,10 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/library/security/util.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", "<< stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", " << stream)
+#define LOG_E(stream) \ 
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", "<< stream) 
+#define LOG_D(stream) \ 
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", " << stream) 
 
 namespace NYq {
 
@@ -162,8 +162,8 @@ private:
                 newTask->mutable_sensor_labels()->insert({"cloud_id", task.Internal.cloud_id()});
                 newTask->set_automatic(task.Query.content().automatic());
                 newTask->set_query_name(task.Query.content().name());
-                *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline);
-                newTask->mutable_disposition()->CopyFrom(task.Internal.disposition());
+                *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline); 
+                newTask->mutable_disposition()->CopyFrom(task.Internal.disposition()); 
 
                 THashMap<TString, TString> accountIdSignatures;
                 for (const auto& connection: task.Internal.connection()) {
@@ -212,7 +212,7 @@ private:
     const THistogramPtr RequestedMBytes;
     const TInstant StartTime;
 
-    ::NYq::TSigner::TPtr Signer;
+    ::NYq::TSigner::TPtr Signer; 
 
     NYql::TIssues Issues;
     TString OwnerId;

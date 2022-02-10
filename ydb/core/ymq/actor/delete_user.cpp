@@ -1,7 +1,7 @@
 #include "action.h"
-#include "error.h"
-#include "executor.h"
-#include "log.h"
+#include "error.h" 
+#include "executor.h" 
+#include "log.h" 
 #include "queue_schema.h"
 
 #include <ydb/public/lib/value/value.h>
@@ -10,51 +10,51 @@
 
 using NKikimr::NClient::TValue;
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
 class TDeleteUserActor
     : public TActionActor<TDeleteUserActor>
 {
 public:
-    static constexpr bool NeedExistingQueue() {
-        return false;
-    }
-
-    TDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::DeleteUser, std::move(cb))
+    static constexpr bool NeedExistingQueue() { 
+        return false; 
+    } 
+ 
+    TDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) 
+        : TActionActor(sourceSqsRequest, EAction::DeleteUser, std::move(cb)) 
     {
-        CopyAccountName(Request());
+        CopyAccountName(Request()); 
         Response_.MutableDeleteUser()->SetRequestId(RequestId_);
 
-        CopySecurityToken(Request());
+        CopySecurityToken(Request()); 
     }
 
 private:
     bool DoValidate() override {
-        if (!Request().GetUserName()) {
-            MakeError(Response_.MutableDeleteUser(), NErrors::MISSING_PARAMETER, "No user name parameter.");
+        if (!Request().GetUserName()) { 
+            MakeError(Response_.MutableDeleteUser(), NErrors::MISSING_PARAMETER, "No user name parameter."); 
             return false;
         }
 
         return true;
     }
 
-    TError* MutableErrorDesc() override {
-        return Response_.MutableDeleteUser()->MutableError();
-    }
-
-    void DoAction() override {
+    TError* MutableErrorDesc() override { 
+        return Response_.MutableDeleteUser()->MutableError(); 
+    } 
+ 
+    void DoAction() override { 
         Become(&TThis::StateFunc);
 
-        TExecutorBuilder(SelfId(), RequestId_)
-            .User(Request().GetUserName())
-            .QueryId(LIST_QUEUES_ID)
-            .Counters(QueueCounters_)
-            .RetryOnTimeout()
+        TExecutorBuilder(SelfId(), RequestId_) 
+            .User(Request().GetUserName()) 
+            .QueryId(LIST_QUEUES_ID) 
+            .Counters(QueueCounters_) 
+            .RetryOnTimeout() 
             .Params()
                 .Utf8("FOLDERID", "")
-                .Utf8("USER_NAME", UserName_)
-            .ParentBuilder().Start();
+                .Utf8("USER_NAME", UserName_) 
+            .ParentBuilder().Start(); 
     }
 
     TString DoGetQueueName() const override {
@@ -62,28 +62,28 @@ private:
     }
 
 private:
-    STATEFN(StateFunc) {
+    STATEFN(StateFunc) { 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWakeup,          HandleWakeup);
-            hFunc(TSqsEvents::TEvExecuted,     HandleExecuted);
-            hFunc(TSqsEvents::TEvQueueDeleted, HandleQueueDeleted);
-            hFunc(TSqsEvents::TEvUserDeleted,  HandleUserDeleted);
+            hFunc(TEvWakeup,          HandleWakeup); 
+            hFunc(TSqsEvents::TEvExecuted,     HandleExecuted); 
+            hFunc(TSqsEvents::TEvQueueDeleted, HandleQueueDeleted); 
+            hFunc(TSqsEvents::TEvUserDeleted,  HandleUserDeleted); 
         }
     }
 
-    void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
+    void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) { 
+        const auto& record = ev->Get()->Record; 
         ui32 status = record.GetStatus();
-        auto* result = Response_.MutableDeleteUser();
+        auto* result = Response_.MutableDeleteUser(); 
 
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
             const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
             const TValue queues(val["queues"]);
 
             if (queues.Size() == 0) {
-                Register(
+                Register( 
                     new TDeleteUserSchemaActor(
-                        Cfg().GetRoot(), Request().GetUserName(), SelfId(), RequestId_, UserCounters_)
+                        Cfg().GetRoot(), Request().GetUserName(), SelfId(), RequestId_, UserCounters_) 
                 );
                 return;
             }
@@ -93,59 +93,59 @@ private:
 
                 Queues_.insert(name);
 
-                Register(
+                Register( 
                     new TDeleteQueueSchemaActorV2(
-                        TQueuePath(Cfg().GetRoot(), Request().GetUserName(), name), SelfId(), RequestId_, UserCounters_)
+                        TQueuePath(Cfg().GetRoot(), Request().GetUserName(), name), SelfId(), RequestId_, UserCounters_) 
                 );
             }
 
             return;
         } else {
-            RLOG_SQS_WARN("Request failed: " << record);
-            MakeError(result, NErrors::INTERNAL_FAILURE);
+            RLOG_SQS_WARN("Request failed: " << record); 
+            MakeError(result, NErrors::INTERNAL_FAILURE); 
         }
 
-        SendReplyAndDie();
+        SendReplyAndDie(); 
     }
 
-    void HandleQueueDeleted(TSqsEvents::TEvQueueDeleted::TPtr& ev) {
+    void HandleQueueDeleted(TSqsEvents::TEvQueueDeleted::TPtr& ev) { 
         if (ev->Get()->Success) {
             Queues_.erase(ev->Get()->QueuePath.QueueName);
 
             if (Queues_.empty()) {
-                Register(
+                Register( 
                     new TDeleteUserSchemaActor(
-                        Cfg().GetRoot(), Request().GetUserName(), SelfId(), RequestId_, UserCounters_)
+                        Cfg().GetRoot(), Request().GetUserName(), SelfId(), RequestId_, UserCounters_) 
                 );
             }
 
             return;
         } else {
-            MakeError(Response_.MutableDeleteUser(), NErrors::INTERNAL_FAILURE, ev->Get()->Message);
+            MakeError(Response_.MutableDeleteUser(), NErrors::INTERNAL_FAILURE, ev->Get()->Message); 
         }
 
-        SendReplyAndDie();
+        SendReplyAndDie(); 
     }
 
-    void HandleUserDeleted(TSqsEvents::TEvUserDeleted::TPtr& ev) {
+    void HandleUserDeleted(TSqsEvents::TEvUserDeleted::TPtr& ev) { 
         if (ev->Get()->Success) {
         } else {
-            MakeError(Response_.MutableDeleteUser(), NErrors::INTERNAL_FAILURE, "Can't delete user: " + ev->Get()->Error);
+            MakeError(Response_.MutableDeleteUser(), NErrors::INTERNAL_FAILURE, "Can't delete user: " + ev->Get()->Error); 
         }
 
-        SendReplyAndDie();
+        SendReplyAndDie(); 
     }
 
-    const TDeleteUserRequest& Request() const {
-        return SourceSqsRequest_.GetDeleteUser();
-    }
-
+    const TDeleteUserRequest& Request() const { 
+        return SourceSqsRequest_.GetDeleteUser(); 
+    } 
+ 
 private:
     TSet<TString> Queues_;
 };
 
-IActor* CreateDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TDeleteUserActor(sourceSqsRequest, std::move(cb));
+IActor* CreateDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) { 
+    return new TDeleteUserActor(sourceSqsRequest, std::move(cb)); 
 }
 
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NSQS 

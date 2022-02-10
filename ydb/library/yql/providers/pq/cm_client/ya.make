@@ -1,9 +1,9 @@
-OWNER(
-    galaxycrab
-    g:yq
-    g:yql
-)
-
+OWNER( 
+    galaxycrab 
+    g:yq 
+    g:yql 
+) 
+ 
 IF (NOT OPENSOURCE)
     RECURSE(
         interface

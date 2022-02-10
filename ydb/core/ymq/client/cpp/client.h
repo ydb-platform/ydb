@@ -4,14 +4,14 @@
 
 #include <util/generic/yexception.h>
 #include <util/generic/vector.h>
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
 struct TClientOptions {
 #define DECLARE_FIELD(name, type, default) \
     type name{default}; \
-    TClientOptions& Y_CAT(Set, name)(const type& value) {   \
+    TClientOptions& Y_CAT(Set, name)(const type& value) {   \ 
         name = value; \
         return *this; \
     }
@@ -31,32 +31,32 @@ public:
     TQueueException()
     { }
 
-    TQueueException(const TError& error, const TString& requestId)
+    TQueueException(const TError& error, const TString& requestId) 
         : Error_(error)
-        , RequestId(requestId)
+        , RequestId(requestId) 
     {
         Append(error.GetMessage());
     }
 
-    TString Message() const {
+    TString Message() const { 
         return Error_.GetMessage();
     }
 
-    int Status() const {
+    int Status() const { 
         return Error_.GetStatus();
     }
 
-    const TError& Error() const {
+    const TError& Error() const { 
         return Error_;
     }
 
-    const TString& GetRequestId() const {
-        return RequestId;
-    }
-
+    const TString& GetRequestId() const { 
+        return RequestId; 
+    } 
+ 
 private:
     TError Error_;
-    TString RequestId;
+    TString RequestId; 
 };
 
 class TQueueClient {
@@ -92,10 +92,10 @@ public:
 
     TModifyPermissionsResponse ModifyPermissions(const TModifyPermissionsRequest& req);
 
-    TGetQueueAttributesResponse GetQueueAttributes(const TGetQueueAttributesRequest& req);
-
-    TSetQueueAttributesResponse SetQueueAttributes(const TSetQueueAttributesRequest& req);
-
+    TGetQueueAttributesResponse GetQueueAttributes(const TGetQueueAttributesRequest& req); 
+ 
+    TSetQueueAttributesResponse SetQueueAttributes(const TSetQueueAttributesRequest& req); 
+ 
     TListPermissionsResponse ListPermissions(const TListPermissionsRequest& req);
 
 private:
@@ -103,4 +103,4 @@ private:
     THolder<TImpl> Impl_;
 };
 
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NSQS 

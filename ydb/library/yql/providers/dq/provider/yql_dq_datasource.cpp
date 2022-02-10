@@ -162,7 +162,7 @@ public:
     }
 
     bool CanExecute(const TExprNode& node) override {
-        return TDqCnResult::Match(&node) || TDqQuery::Match(&node);
+        return TDqCnResult::Match(&node) || TDqQuery::Match(&node); 
     }
 
     bool CanParse(const TExprNode& node) override {

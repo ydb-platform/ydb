@@ -2,23 +2,23 @@
 
 #include "msgbus_server_persqueue.h"
 #include "msgbus_server_pq_metacache.h"
-#include "msgbus_server_pq_metarequest.h"
+#include "msgbus_server_pq_metarequest.h" 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-#include <util/generic/is_in.h>
-
+#include <util/generic/is_in.h> 
+ 
 namespace NKikimr {
 namespace NMsgBusProxy {
 
 using namespace NSchemeCache;
 using namespace NPqMetaCacheV2;
 
-const TDuration TPersQueueBaseRequestProcessor::TIMEOUT = TDuration::MilliSeconds(90000);
-
+const TDuration TPersQueueBaseRequestProcessor::TIMEOUT = TDuration::MilliSeconds(90000); 
+ 
 namespace {
     const ui32 DefaultTimeout = 90000;
     const TDuration CHECK_INFLY_SEMAPHORE_DURATION = TDuration::Seconds(1);
@@ -131,12 +131,12 @@ TProcessingResult ProcessMetaCacheSingleTopicsResponse(
 }
 
 NKikimrClient::TResponse CreateErrorReply(EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) {
-    NKikimrClient::TResponse rec;
-    rec.SetStatus(status);
-    rec.SetErrorCode(code);
-    rec.SetErrorReason(errorReason);
-    return rec;
-}
+    NKikimrClient::TResponse rec; 
+    rec.SetStatus(status); 
+    rec.SetErrorCode(code); 
+    rec.SetErrorReason(errorReason); 
+    return rec; 
+} 
 
 struct TTopicInfo {
     TVector<ui64> Tablets;
@@ -165,90 +165,90 @@ struct TTabletInfo {
 };
 
 TPersQueueBaseRequestProcessor::TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes)
-    : RequestProto(new NKikimrClient::TPersQueueRequest(request))
-    , RequestId(RequestProto->HasRequestId() ? RequestProto->GetRequestId() : "<none>")
+    : RequestProto(new NKikimrClient::TPersQueueRequest(request)) 
+    , RequestId(RequestProto->HasRequestId() ? RequestProto->GetRequestId() : "<none>") 
     , PqMetaCache(pqMetaCacheId)
-    , ListNodes(listNodes)
-{
-}
+    , ListNodes(listNodes) 
+{ 
+} 
 
 void TPersQueueBaseRequestProcessor::SendErrorReplyAndDie(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) {
-    SendReplyAndDie(CreateErrorReply(status, code, errorReason), ctx);
-}
+    SendReplyAndDie(CreateErrorReply(status, code, errorReason), ctx); 
+} 
 
 bool TPersQueueBaseRequestProcessor::ReadyForAnswer(const TActorContext& ) {
     return ReadyToCreateChildren() && NeedChildrenCreation == false && ChildrenAnswered == Children.size();
-}
-
-void TPersQueueBaseRequestProcessor::AnswerAndDie(const TActorContext& ctx) {
-    try {
-        SendReplyAndDie(MergeSubactorReplies(), ctx);
-    } catch (const std::exception& ex) {
+} 
+ 
+void TPersQueueBaseRequestProcessor::AnswerAndDie(const TActorContext& ctx) { 
+    try { 
+        SendReplyAndDie(MergeSubactorReplies(), ctx); 
+    } catch (const std::exception& ex) { 
         SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::ERROR, ex.what());
-    }
-}
-
-void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy got request " << RequestId);
-
+    } 
+} 
+ 
+void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) { 
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy got request " << RequestId); 
+ 
     StartTimestamp = ctx.Now();
     ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest(TopicPrefix(ctx)));
 
-    if (ListNodes) {
+    if (ListNodes) { 
         const TActorId nameserviceId = GetNameserviceActorId();
-        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-    }
-
+        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes()); 
+    } 
+ 
     Become(&TPersQueueBaseRequestProcessor::StateFunc, ctx, CHECK_INFLY_SEMAPHORE_DURATION, new TEvents::TEvWakeup());
-}
-
-void TPersQueueBaseRequestProcessor::Die(const TActorContext& ctx) {
-    // Clear children
-    for (const auto& child : Children) {
-        ctx.Send(child.first, new TEvents::TEvPoisonPill());
-    }
-    TActorBootstrapped::Die(ctx);
-}
-
-STFUNC(TPersQueueBaseRequestProcessor::StateFunc) {
-    switch (ev->GetTypeRewrite()) {
-        HFunc(TEvInterconnect::TEvNodesInfo, Handle);
+} 
+ 
+void TPersQueueBaseRequestProcessor::Die(const TActorContext& ctx) { 
+    // Clear children 
+    for (const auto& child : Children) { 
+        ctx.Send(child.first, new TEvents::TEvPoisonPill()); 
+    } 
+    TActorBootstrapped::Die(ctx); 
+} 
+ 
+STFUNC(TPersQueueBaseRequestProcessor::StateFunc) { 
+    switch (ev->GetTypeRewrite()) { 
+        HFunc(TEvInterconnect::TEvNodesInfo, Handle); 
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse, Handle);
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse, Handle);
-        HFunc(TEvPersQueue::TEvResponse, Handle);
-        CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
-    }
-}
-
-void TPersQueueBaseRequestProcessor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Get()->Record.GetStatus() != MSTATUS_OK) {
-        return SendReplyAndDie(std::move(ev->Get()->Record), ctx);
-    }
-    auto answeredChild = Children.find(ev->Sender);
-    Y_VERIFY(answeredChild != Children.end());
-    Y_VERIFY(!answeredChild->second->ActorAnswered);
-    answeredChild->second->Response.Swap(&ev->Get()->Record);
-    answeredChild->second->ActorAnswered = true;
-    ++ChildrenAnswered;
-    Y_VERIFY(ChildrenAnswered <= Children.size());
-
+        HFunc(TEvPersQueue::TEvResponse, Handle); 
+        CFunc(TEvents::TSystem::Wakeup, HandleTimeout); 
+        CFunc(NActors::TEvents::TSystem::PoisonPill, Die); 
+    } 
+} 
+ 
+void TPersQueueBaseRequestProcessor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) { 
+    if (ev->Get()->Record.GetStatus() != MSTATUS_OK) { 
+        return SendReplyAndDie(std::move(ev->Get()->Record), ctx); 
+    } 
+    auto answeredChild = Children.find(ev->Sender); 
+    Y_VERIFY(answeredChild != Children.end()); 
+    Y_VERIFY(!answeredChild->second->ActorAnswered); 
+    answeredChild->second->Response.Swap(&ev->Get()->Record); 
+    answeredChild->second->ActorAnswered = true; 
+    ++ChildrenAnswered; 
+    Y_VERIFY(ChildrenAnswered <= Children.size()); 
+ 
     if (ReadyForAnswer(ctx)) {
-        return AnswerAndDie(ctx);
-    }
-}
-
-void TPersQueueBaseRequestProcessor::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ListNodes);
+        return AnswerAndDie(ctx); 
+    } 
+} 
+ 
+void TPersQueueBaseRequestProcessor::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) { 
+    Y_VERIFY(ListNodes); 
     NodesInfo.reset(new TNodesInfo(ev->Release()));
-    if (ReadyToCreateChildren()) {
-        if (CreateChildren(ctx)) {
-            return;
-        }
-    }
-}
-
-void TPersQueueBaseRequestProcessor::HandleTimeout(const TActorContext& ctx) {
+    if (ReadyToCreateChildren()) { 
+        if (CreateChildren(ctx)) { 
+            return; 
+        } 
+    } 
+} 
+ 
+void TPersQueueBaseRequestProcessor::HandleTimeout(const TActorContext& ctx) { 
     if (ctx.Now() - StartTimestamp > TIMEOUT) {
         SendErrorReplyAndDie(ctx, MSTATUS_TIMEOUT, NPersQueue::NErrorCode::ERROR, "Timeout while waiting for response, may be just slow, Marker# PQ16");
         return;
@@ -257,70 +257,70 @@ void TPersQueueBaseRequestProcessor::HandleTimeout(const TActorContext& ctx) {
         CreateChildrenIfNeeded(ctx);
     }
     ctx.Schedule(CHECK_INFLY_SEMAPHORE_DURATION, new TEvents::TEvWakeup());
-}
-
+} 
+ 
 
 void TPersQueueBaseRequestProcessor::GetTopicsListOrThrow(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests, THashMap<TString, std::shared_ptr<THashSet<ui64>>>& partitionsToRequest) {
-    for (const auto& topicRequest : requests) {
-        if (topicRequest.GetTopic().empty()) {
-            throw std::runtime_error("TopicRequest must have Topic field.");
-        }
+    for (const auto& topicRequest : requests) { 
+        if (topicRequest.GetTopic().empty()) { 
+            throw std::runtime_error("TopicRequest must have Topic field."); 
+        } 
         std::shared_ptr<THashSet<ui64>> partitionsToRequestOnTopic(new THashSet<ui64>()); // nonconst
-        partitionsToRequest[topicRequest.GetTopic()] = partitionsToRequestOnTopic;
-        for (ui32 partition : topicRequest.GetPartition()) {
-            const bool inserted = partitionsToRequestOnTopic->insert(partition).second;
-            if (!inserted) {
-                TStringBuilder desc;
-                desc << "multiple partition " << partition
-                     << " in TopicRequest for topic '" << topicRequest.GetTopic() << "'";
-                throw std::runtime_error(desc);
-            }
-        }
+        partitionsToRequest[topicRequest.GetTopic()] = partitionsToRequestOnTopic; 
+        for (ui32 partition : topicRequest.GetPartition()) { 
+            const bool inserted = partitionsToRequestOnTopic->insert(partition).second; 
+            if (!inserted) { 
+                TStringBuilder desc; 
+                desc << "multiple partition " << partition 
+                     << " in TopicRequest for topic '" << topicRequest.GetTopic() << "'"; 
+                throw std::runtime_error(desc); 
+            } 
+        } 
+ 
+        const bool res = TopicsToRequest.insert(topicRequest.GetTopic()).second; 
+        if (!res) { 
+            TStringBuilder desc; 
+            desc << "multiple TopicRequest for topic '" << topicRequest.GetTopic() << "'"; 
+            throw std::runtime_error(desc); 
+        } 
+    } 
 
-        const bool res = TopicsToRequest.insert(topicRequest.GetTopic()).second;
-        if (!res) {
-            TStringBuilder desc;
-            desc << "multiple TopicRequest for topic '" << topicRequest.GetTopic() << "'";
-            throw std::runtime_error(desc);
-        }
-    }
-
-}
-
+} 
+ 
 void TPersQueueBaseRequestProcessor::Handle(
         NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr&, const TActorContext&
 ) {
     Y_FAIL();
 }
-
+ 
 void TPersQueueBaseRequestProcessor::Handle(
         NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx
 ) {
     auto& path = ev->Get()->Path;
     if (!ev->Get()->Success) {
         return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
-                                    TStringBuilder() << "no path '" << path << "', Marker# PQ17");
-    }
-
+                                    TStringBuilder() << "no path '" << path << "', Marker# PQ17"); 
+    } 
+ 
     if (path != TopicPrefix(ctx)) {
         return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                                     TStringBuilder() << "path '" << path << "' has no correct root prefix '" << TopicPrefix(ctx)
-                                    << "', Marker# PQ18");
-    }
-
+                                    << "', Marker# PQ18"); 
+    } 
+ 
     SchemeCacheResponse = std::move(ev->Get()->Result);
-    if (ReadyToCreateChildren()) {
-        if (CreateChildren(ctx)) {
-            return;
-        }
-    }
-}
-
-bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
+    if (ReadyToCreateChildren()) { 
+        if (CreateChildren(ctx)) { 
+            return; 
+        } 
+    } 
+} 
+ 
+bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const { 
     return SchemeCacheResponse && (!ListNodes || NodesInfo.get() != nullptr);
-}
-
-bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
+} 
+ 
+bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) { 
     for (const auto& child : SchemeCacheResponse->ResultSet) {
         if (child.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
             TString name = child.PQGroupInfo->Description.GetName();
@@ -328,11 +328,11 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
                 name = child.Path.back();
             }
             if (!TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
-                continue;
-            }
+                continue; 
+            } 
             ChildrenToCreate.emplace_back(new TPerTopicInfo(child));
-        }
-    }
+        } 
+    } 
     NeedChildrenCreation = true;
     return CreateChildrenIfNeeded(ctx);
 }
@@ -367,74 +367,74 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
         }
     }
 
-    Y_VERIFY(topics.size() == Children.size());
-
-    if (!TopicsToRequest.empty() && TopicsToRequest.size() != topics.size()) {
-        // Write helpful error description
-        Y_VERIFY(topics.size() < TopicsToRequest.size());
-        TStringBuilder errorDesc;
-        errorDesc << "the following topics are not created: ";
-        for (const TString& topic : TopicsToRequest) {
-            if (!IsIn(topics, topic)) {
-                errorDesc << topic << ", ";
-            }
-        }
+    Y_VERIFY(topics.size() == Children.size()); 
+ 
+    if (!TopicsToRequest.empty() && TopicsToRequest.size() != topics.size()) { 
+        // Write helpful error description 
+        Y_VERIFY(topics.size() < TopicsToRequest.size()); 
+        TStringBuilder errorDesc; 
+        errorDesc << "the following topics are not created: "; 
+        for (const TString& topic : TopicsToRequest) { 
+            if (!IsIn(topics, topic)) { 
+                errorDesc << topic << ", "; 
+            } 
+        } 
         SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
-                             errorDesc << "Marker# PQ95");
-        return true;
-    }
+                             errorDesc << "Marker# PQ95"); 
+        return true; 
+    } 
     if (ReadyForAnswer(ctx)) {
-        AnswerAndDie(ctx);
-        return true;
-    }
-    return false;
-}
-
-NKikimrClient::TResponse TPersQueueBaseRequestProcessor::MergeSubactorReplies() {
-    NKikimrClient::TResponse response;
-    response.SetStatus(MSTATUS_OK); // We need to have status event if we have no children
+        AnswerAndDie(ctx); 
+        return true; 
+    } 
+    return false; 
+} 
+ 
+NKikimrClient::TResponse TPersQueueBaseRequestProcessor::MergeSubactorReplies() { 
+    NKikimrClient::TResponse response; 
+    response.SetStatus(MSTATUS_OK); // We need to have status event if we have no children 
     response.SetErrorCode(NPersQueue::NErrorCode::OK);
-    for (const auto& child : Children) {
-        response.MergeFrom(child.second->Response);
-    }
-    return response;
-}
-
-TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply)
-    : NodesInfoReply(std::move(nodesInfoReply))
-{
-    HostNames.reserve(NodesInfoReply->Nodes.size());
-    for (const NActors::TEvInterconnect::TNodeInfo& info : NodesInfoReply->Nodes) {
-        HostNames.emplace(info.NodeId, info.Host);
-    }
-}
-
+    for (const auto& child : Children) { 
+        response.MergeFrom(child.second->Response); 
+    } 
+    return response; 
+} 
+ 
+TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply) 
+    : NodesInfoReply(std::move(nodesInfoReply)) 
+{ 
+    HostNames.reserve(NodesInfoReply->Nodes.size()); 
+    for (const NActors::TEvInterconnect::TNodeInfo& info : NodesInfoReply->Nodes) { 
+        HostNames.emplace(info.NodeId, info.Host); 
+    } 
+} 
+ 
 TTopicInfoBasedActor::TTopicInfoBasedActor(const TSchemeEntry& topicEntry, const TString& topicName)
     : TActorBootstrapped<TTopicInfoBasedActor>()
     , SchemeEntry(topicEntry)
     , Name(topicName)
     , ProcessingResult(ProcessMetaCacheSingleTopicsResponse(SchemeEntry))
-{
-}
-
+{ 
+} 
+ 
 void TTopicInfoBasedActor::Bootstrap(const TActorContext &ctx) {
     Become(&TTopicInfoBasedActor::StateFunc);
     BootstrapImpl(ctx);
-}
-
+} 
+ 
 STFUNC(TTopicInfoBasedActor::StateFunc) {
-    switch (ev->GetTypeRewrite()) {
-        CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
-    default:
-        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << (ev->HasEvent() ? ev->GetBase()->ToString() : "<no data>"));
-    }
-}
-
-
+    switch (ev->GetTypeRewrite()) { 
+        CFunc(NActors::TEvents::TSystem::PoisonPill, Die); 
+    default: 
+        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << (ev->HasEvent() ? ev->GetBase()->ToString() : "<no data>")); 
+    } 
+} 
+ 
+ 
 class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServerPersQueueImpl> {
     using TEvAllTopicsDescribeRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest;
     using TEvAllTopicsDescribeResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse;
-
+ 
 protected:
     NKikimrClient::TPersQueueRequest RequestProto;
     const TString RequestId;
@@ -456,7 +456,7 @@ protected:
     THashMap<ui64, TTabletInfo> TabletInfo;
 
     ui32 TopicsAnswered;
-    THashSet<ui64> TabletsDiscovered;
+    THashSet<ui64> TabletsDiscovered; 
     THashSet<ui64> TabletsAnswered;
     ui32 AclRequests;
     ui32 DescribeRequests;
@@ -471,7 +471,7 @@ public:
 
     virtual ~TMessageBusServerPersQueueImpl() {}
 
-    virtual void SendReplyAndDie(NKikimrClient::TResponse&& response, const TActorContext& ctx) = 0;
+    virtual void SendReplyAndDie(NKikimrClient::TResponse&& response, const TActorContext& ctx) = 0; 
 
     TMessageBusServerPersQueueImpl(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache)
         : RequestProto(request)
@@ -527,7 +527,7 @@ public:
                 auto& d = meta.GetCmdGetReadSessionsInfo();
                 for (ui32 i = 0; i < d.TopicSize(); ++i) {
                     if (d.GetTopic(i).empty()) {
-                        ErrorReason = "empty topic in GetReadSessionsInfo request";
+                        ErrorReason = "empty topic in GetReadSessionsInfo request"; 
                         return;
                     }
                     TopicInfo[d.GetTopic(i)];
@@ -619,7 +619,7 @@ public:
                 }
             }
         }
-        SendReplyAndDie(std::move(record), ctx);
+        SendReplyAndDie(std::move(record), ctx); 
     }
 
     void AnswerGetTopicMetadata(const TActorContext& ctx)
@@ -640,7 +640,7 @@ public:
             }
 
         }
-        SendReplyAndDie(std::move(record), ctx);
+        SendReplyAndDie(std::move(record), ctx); 
     }
 
     void AnswerGetPartitionOffsets(const TActorContext& ctx)
@@ -676,7 +676,7 @@ public:
                 res->SetErrorReason("partition is not ready yet");
             }
         }
-        SendReplyAndDie(std::move(record), ctx);
+        SendReplyAndDie(std::move(record), ctx); 
     }
 
     void AnswerGetPartitionStatus(const TActorContext& ctx)
@@ -712,7 +712,7 @@ public:
                 res->SetStatus(NKikimrPQ::TStatusResponse::STATUS_UNKNOWN);
             }
         }
-        SendReplyAndDie(std::move(record), ctx);
+        SendReplyAndDie(std::move(record), ctx); 
     }
 
     void AnswerGetReadSessionsInfo(const TActorContext& ctx)
@@ -772,7 +772,7 @@ public:
             }
         }
 
-        SendReplyAndDie(std::move(record), ctx);
+        SendReplyAndDie(std::move(record), ctx); 
     }
 
 
@@ -785,7 +785,7 @@ public:
             return false;
         const auto& meta = RequestProto.GetMetaRequest();
         if (meta.HasCmdGetPartitionLocations()) {
-            if (TopicsAnswered != TopicInfo.size() || TabletInfo.size() != TabletsDiscovered.size() || !NodesInfo)
+            if (TopicsAnswered != TopicInfo.size() || TabletInfo.size() != TabletsDiscovered.size() || !NodesInfo) 
                 return false;
             AnswerGetPartitionLocations(ctx);
             return true;
@@ -822,7 +822,7 @@ public:
             ProcessFetchRequestResult(ev, ctx);
             return;
         }
-        SendReplyAndDie(std::move(ev->Get()->Record), ctx);
+        SendReplyAndDie(std::move(ev->Get()->Record), ctx); 
     }
 
     void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
@@ -899,7 +899,7 @@ public:
             const TString& topic = p.first;
 
             if (!p.second.BalancerTabletId) {
-                ErrorReason = Sprintf("topic '%s' is not created, Marker# PQ94", topic.c_str());
+                ErrorReason = Sprintf("topic '%s' is not created, Marker# PQ94", topic.c_str()); 
                 return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx), ctx);
             }
             ProcessMetadata(p.first, p.second, ctx);
@@ -1111,7 +1111,7 @@ public:
             if (it != TabletInfo.end()) {
                 TabletsAnswered.insert(tabletId);
                 if (RequestProto.HasMetaRequest() && (RequestProto.GetMetaRequest().HasCmdGetPartitionLocations() || RequestProto.GetMetaRequest().HasCmdGetReadSessionsInfo())) {
-                    TabletsDiscovered.insert(tabletId); // Disconnect event can arrive after connect event and this hash set will take it into account.
+                    TabletsDiscovered.insert(tabletId); // Disconnect event can arrive after connect event and this hash set will take it into account. 
                 }
                 AnswerIfCanForMeta(ctx);
                 return true;
@@ -1133,7 +1133,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        const ui64 tabletId = ev->Get()->TabletId;
+        const ui64 tabletId = ev->Get()->TabletId; 
         if (msg->Status != NKikimrProto::OK) {
 
             if (HandlePipeError(tabletId, ctx))
@@ -1151,7 +1151,7 @@ public:
             if (it != TabletInfo.end()) {
                 ui32 nodeId = ev->Get()->ServerId.NodeId();
                 it->second.NodeId = nodeId;
-                TabletsDiscovered.insert(tabletId);
+                TabletsDiscovered.insert(tabletId); 
 
                 AnswerIfCanForMeta(ctx);
             }
@@ -1201,7 +1201,7 @@ public:
             record.MutableFetchResponse()->Swap(&FetchResponse);
             record.SetStatus(MSTATUS_OK);
             record.SetErrorCode(NPersQueue::NErrorCode::OK);
-            return SendReplyAndDie(std::move(record), ctx);
+            return SendReplyAndDie(std::move(record), ctx); 
         }
         const auto& clientId = fetch.GetClientId();
         Y_VERIFY(FetchRequestReadsDone < fetch.PartitionSize());
@@ -1335,7 +1335,7 @@ public:
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
             HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-            CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
+            CFunc(NActors::TEvents::TSystem::PoisonPill, Die); 
     )
 private:
     bool GetTopicsList(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests) {
@@ -1367,25 +1367,25 @@ private:
     }
 };
 
-class TErrorReplier : public TActorBootstrapped<TErrorReplier> {
+class TErrorReplier : public TActorBootstrapped<TErrorReplier> { 
 public:
     TErrorReplier(const NKikimrClient::TPersQueueRequest& request, const TActorId& /*schemeCache*/)
-        : RequestId(request.HasRequestId() ? request.GetRequestId() : "<none>")
-    {
-    }
+        : RequestId(request.HasRequestId() ? request.GetRequestId() : "<none>") 
+    { 
+    } 
 
-    virtual void SendReplyAndDie(NKikimrClient::TResponse&& response, const TActorContext& ctx) = 0;
+    virtual void SendReplyAndDie(NKikimrClient::TResponse&& response, const TActorContext& ctx) = 0; 
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap(const TActorContext& ctx) { 
         SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::BAD_REQUEST, ErrorText), ctx);
-    }
+    } 
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR;
-    }
+    } 
 
-    TString ErrorText;
-    TString RequestId;
+    TString ErrorText; 
+    TString RequestId; 
 };
 
 template <template <class TImpl, class... TArgs> class TSenderImpl, class... T>
@@ -1394,67 +1394,67 @@ IActor* CreatePersQueueRequestProcessor(
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory,
     T&&... constructorParams
 ) {
-    try {
-        if (request.HasMetaRequest() + request.HasPartitionRequest() + request.HasFetchRequest() > 1) {
-            throw std::runtime_error("only one from meta partition or fetch requests must be filled");
-        }
-        if (request.HasMetaRequest()) {
-            auto& meta = request.GetMetaRequest();
-            const size_t count = meta.HasCmdGetPartitionLocations() + meta.HasCmdGetPartitionOffsets() +
-                meta.HasCmdGetTopicMetadata() + meta.HasCmdGetPartitionStatus() + meta.HasCmdGetReadSessionsInfo();
-            if (count != 1) {
-                throw std::runtime_error("multiple or none requests in MetaRequest");
-            }
-            if (meta.HasCmdGetPartitionLocations()) {
-                return new TSenderImpl<TPersQueueGetPartitionLocationsProcessor>(std::forward<T>(constructorParams)...);
-            } else if (meta.HasCmdGetPartitionOffsets()) {
-                return new TSenderImpl<TPersQueueGetPartitionOffsetsProcessor>(std::forward<T>(constructorParams)...);
-            } else if (meta.HasCmdGetTopicMetadata()) {
-                return new TSenderImpl<TPersQueueGetTopicMetadataProcessor>(std::forward<T>(constructorParams)...);
-            } else if (meta.HasCmdGetPartitionStatus()) {
-                return new TSenderImpl<TPersQueueGetPartitionStatusProcessor>(std::forward<T>(constructorParams)...);
-            } else if (meta.HasCmdGetReadSessionsInfo()) {
+    try { 
+        if (request.HasMetaRequest() + request.HasPartitionRequest() + request.HasFetchRequest() > 1) { 
+            throw std::runtime_error("only one from meta partition or fetch requests must be filled"); 
+        } 
+        if (request.HasMetaRequest()) { 
+            auto& meta = request.GetMetaRequest(); 
+            const size_t count = meta.HasCmdGetPartitionLocations() + meta.HasCmdGetPartitionOffsets() + 
+                meta.HasCmdGetTopicMetadata() + meta.HasCmdGetPartitionStatus() + meta.HasCmdGetReadSessionsInfo(); 
+            if (count != 1) { 
+                throw std::runtime_error("multiple or none requests in MetaRequest"); 
+            } 
+            if (meta.HasCmdGetPartitionLocations()) { 
+                return new TSenderImpl<TPersQueueGetPartitionLocationsProcessor>(std::forward<T>(constructorParams)...); 
+            } else if (meta.HasCmdGetPartitionOffsets()) { 
+                return new TSenderImpl<TPersQueueGetPartitionOffsetsProcessor>(std::forward<T>(constructorParams)...); 
+            } else if (meta.HasCmdGetTopicMetadata()) { 
+                return new TSenderImpl<TPersQueueGetTopicMetadataProcessor>(std::forward<T>(constructorParams)...); 
+            } else if (meta.HasCmdGetPartitionStatus()) { 
+                return new TSenderImpl<TPersQueueGetPartitionStatusProcessor>(std::forward<T>(constructorParams)...); 
+            } else if (meta.HasCmdGetReadSessionsInfo()) { 
                 return new TSenderImpl<TPersQueueGetReadSessionsInfoProcessor>(
                     std::forward<T>(constructorParams)...,
                     pqReadSessionsInfoWorkerFactory
                 );
-            } else {
-                throw std::runtime_error("Not implemented yet");
-            }
-        } else if (request.HasPartitionRequest()) {
-            return new TSenderImpl<TMessageBusServerPersQueueImpl>(std::forward<T>(constructorParams)...);
-        } else if (request.HasFetchRequest()) {
-            return new TSenderImpl<TMessageBusServerPersQueueImpl>(std::forward<T>(constructorParams)...);
-        } else {
-            throw std::runtime_error("empty request");
-        }
-    } catch (const std::exception& ex) {
-        auto* replier = new TSenderImpl<TErrorReplier>(std::forward<T>(constructorParams)...);
-        replier->ErrorText = ex.what();
-        return replier;
-    }
+            } else { 
+                throw std::runtime_error("Not implemented yet"); 
+            } 
+        } else if (request.HasPartitionRequest()) { 
+            return new TSenderImpl<TMessageBusServerPersQueueImpl>(std::forward<T>(constructorParams)...); 
+        } else if (request.HasFetchRequest()) { 
+            return new TSenderImpl<TMessageBusServerPersQueueImpl>(std::forward<T>(constructorParams)...); 
+        } else { 
+            throw std::runtime_error("empty request"); 
+        } 
+    } catch (const std::exception& ex) { 
+        auto* replier = new TSenderImpl<TErrorReplier>(std::forward<T>(constructorParams)...); 
+        replier->ErrorText = ex.what(); 
+        return replier; 
+    } 
 }
 
 
-template <class TImplActor>
-class TMessageBusServerPersQueue : public TImplActor, TMessageBusSessionIdentHolder {
+template <class TImplActor> 
+class TMessageBusServerPersQueue : public TImplActor, TMessageBusSessionIdentHolder { 
 public:
     template <class... T>
     TMessageBusServerPersQueue(TBusMessageContext& msg, T&&... constructorParams)
         : TImplActor(static_cast<TBusPersQueue*>(msg.GetMessage())->Record, std::forward<T>(constructorParams)...)
-        , TMessageBusSessionIdentHolder(msg)
+        , TMessageBusSessionIdentHolder(msg) 
     {}
 
-    virtual ~TMessageBusServerPersQueue() = default;
+    virtual ~TMessageBusServerPersQueue() = default; 
 
-    void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) override {
-        THolder<TBusResponse> result(new TBusResponse());
-        result->Record.Swap(&record);
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy answer " << TImplActor::RequestId);
+    void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) override { 
+        THolder<TBusResponse> result(new TBusResponse()); 
+        result->Record.Swap(&record); 
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy answer " << TImplActor::RequestId); 
 
-        SendReplyMove(result.Release());
-
-        TImplActor::Die(ctx);
+        SendReplyMove(result.Release()); 
+ 
+        TImplActor::Die(ctx); 
     }
 };
 
@@ -1464,15 +1464,15 @@ IActor* CreateMessageBusServerPersQueue(
     const TActorId& schemeCache,
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
 ) {
-    const NKikimrClient::TPersQueueRequest& request = static_cast<TBusPersQueue*>(msg.GetMessage())->Record;
+    const NKikimrClient::TPersQueueRequest& request = static_cast<TBusPersQueue*>(msg.GetMessage())->Record; 
     return CreatePersQueueRequestProcessor<TMessageBusServerPersQueue>(
         request,
         pqReadSessionsInfoWorkerFactory,
         msg,
         schemeCache
     );
-}
-
+} 
+ 
 IActor* CreateActorServerPersQueue(
     const TActorId& parentId,
     const NKikimrClient::TPersQueueRequest& request,

@@ -142,50 +142,50 @@ TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, bool enforc
     }
 }
 
-static void CollectSinkStages(const NNodes::TDqQuery& dqQuery, THashSet<TExprNode::TPtr, TExprNode::TPtrHash>& sinkStages) {
-    for (const auto& stage : dqQuery.SinkStages()) {
-        sinkStages.insert(stage.Ptr());
-    }
+static void CollectSinkStages(const NNodes::TDqQuery& dqQuery, THashSet<TExprNode::TPtr, TExprNode::TPtrHash>& sinkStages) { 
+    for (const auto& stage : dqQuery.SinkStages()) { 
+        sinkStages.insert(stage.Ptr()); 
+    } 
 }
-
-NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx) {
-    NNodes::TDqQuery dqQuery = dqQueryNode.Cast<NNodes::TDqQuery>();
-
-    THashSet<TExprNode::TPtr, TExprNode::TPtrHash> sinkStages;
-    CollectSinkStages(dqQuery, sinkStages);
-    TOptimizeExprSettings settings{nullptr};
-    settings.VisitLambdas = false;
-    bool deletedDqQueryChild = false;
-    TExprNode::TPtr newDqQueryNode;
-    auto status = OptimizeExpr(dqQueryNode.Ptr(), newDqQueryNode, [&sinkStages, &deletedDqQueryChild](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        for (ui32 childIndex = 0; childIndex < node->ChildrenSize(); ++childIndex) {
-            TExprNode* child = node->Child(childIndex);
-            if (child->IsCallable(NNodes::TDqQuery::CallableName())) {
-                NNodes::TDqQuery dqQueryChild(child);
-                CollectSinkStages(dqQueryChild, sinkStages);
-                deletedDqQueryChild = true;
-                return ctx.ChangeChild(*node, childIndex, dqQueryChild.World().Ptr());
-            }
-        }
-        return node;
-    }, ctx, settings);
-    YQL_ENSURE(status != IGraphTransformer::TStatus::Error, "Failed to merge DqQuery nodes: " << status);
-
-    if (deletedDqQueryChild) {
-        auto dqQueryBuilder = Build<TDqQuery>(ctx, dqQuery.Pos());
-        dqQueryBuilder.World(newDqQueryNode->ChildPtr(TDqQuery::idx_World));
-
-        auto sinkStagesBuilder = dqQueryBuilder.SinkStages();
-        for (const TExprNode::TPtr& stage : sinkStages) {
-            sinkStagesBuilder.Add(stage);
-        }
-        sinkStagesBuilder.Build();
-
-        return dqQueryBuilder.Done();
-    }
-    return dqQueryNode;
-}
-
+ 
+NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx) { 
+    NNodes::TDqQuery dqQuery = dqQueryNode.Cast<NNodes::TDqQuery>(); 
+ 
+    THashSet<TExprNode::TPtr, TExprNode::TPtrHash> sinkStages; 
+    CollectSinkStages(dqQuery, sinkStages); 
+    TOptimizeExprSettings settings{nullptr}; 
+    settings.VisitLambdas = false; 
+    bool deletedDqQueryChild = false; 
+    TExprNode::TPtr newDqQueryNode; 
+    auto status = OptimizeExpr(dqQueryNode.Ptr(), newDqQueryNode, [&sinkStages, &deletedDqQueryChild](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr { 
+        for (ui32 childIndex = 0; childIndex < node->ChildrenSize(); ++childIndex) { 
+            TExprNode* child = node->Child(childIndex); 
+            if (child->IsCallable(NNodes::TDqQuery::CallableName())) { 
+                NNodes::TDqQuery dqQueryChild(child); 
+                CollectSinkStages(dqQueryChild, sinkStages); 
+                deletedDqQueryChild = true; 
+                return ctx.ChangeChild(*node, childIndex, dqQueryChild.World().Ptr()); 
+            } 
+        } 
+        return node; 
+    }, ctx, settings); 
+    YQL_ENSURE(status != IGraphTransformer::TStatus::Error, "Failed to merge DqQuery nodes: " << status); 
+ 
+    if (deletedDqQueryChild) { 
+        auto dqQueryBuilder = Build<TDqQuery>(ctx, dqQuery.Pos()); 
+        dqQueryBuilder.World(newDqQueryNode->ChildPtr(TDqQuery::idx_World)); 
+ 
+        auto sinkStagesBuilder = dqQueryBuilder.SinkStages(); 
+        for (const TExprNode::TPtr& stage : sinkStages) { 
+            sinkStagesBuilder.Add(stage); 
+        } 
+        sinkStagesBuilder.Build(); 
+ 
+        return dqQueryBuilder.Done(); 
+    } 
+    return dqQueryNode; 
+} 
+ 
 NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedInStage(NNodes::TExprBase node,
     const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx)
 {
@@ -202,7 +202,7 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedInStage(NNodes::TExprBase node,
     }
 
     return node;
-}
+} 
 
 NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx)
 {

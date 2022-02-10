@@ -3,7 +3,7 @@
 #include <util/generic/string.h>
 
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
 template <typename TReq, typename TCreds>
 TString ExtractSecurityToken(const TReq& request) {
@@ -27,4 +27,4 @@ TString ExtractSecurityToken(const TReq& request) {
     return {};
 }
 
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NSQS 

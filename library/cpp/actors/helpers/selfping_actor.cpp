@@ -64,7 +64,7 @@ private:
     const NMonitoring::TDynamicCounters::TCounterPtr Counter;
     const NMonitoring::TDynamicCounters::TCounterPtr CalculationTimeCounter;
 
-    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> SlidingWindow;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> SlidingWindow; 
     NSlidingWindow::TSlidingWindow<TAvgOperation<ui64>> CalculationSlidingWindow;
 
     THPTimer Timer;

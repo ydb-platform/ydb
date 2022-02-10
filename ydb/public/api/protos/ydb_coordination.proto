@@ -34,20 +34,20 @@ enum ConsistencyMode {
 }
 
 /**
- * Counters mode
- */
-enum RateLimiterCountersMode {
-    // The default or current value
-    RATE_LIMITER_COUNTERS_MODE_UNSET = 0;
-
-    // Aggregated counters for resource tree
-    RATE_LIMITER_COUNTERS_MODE_AGGREGATED = 1;
-
-    // Counters on every resource
-    RATE_LIMITER_COUNTERS_MODE_DETAILED = 2;
-}
-
-/**
+ * Counters mode 
+ */ 
+enum RateLimiterCountersMode { 
+    // The default or current value 
+    RATE_LIMITER_COUNTERS_MODE_UNSET = 0; 
+ 
+    // Aggregated counters for resource tree 
+    RATE_LIMITER_COUNTERS_MODE_AGGREGATED = 1; 
+ 
+    // Counters on every resource 
+    RATE_LIMITER_COUNTERS_MODE_DETAILED = 2; 
+} 
+ 
+/** 
  * Configuration settings for a coordination node
  */
 message Config {
@@ -65,9 +65,9 @@ message Config {
 
     // Consistency mode for attach operations
     ConsistencyMode attach_consistency_mode = 5;
-
-    // Rate limiter counters mode
-    RateLimiterCountersMode rate_limiter_counters_mode = 6;
+ 
+    // Rate limiter counters mode 
+    RateLimiterCountersMode rate_limiter_counters_mode = 6; 
 }
 
 /**

@@ -230,15 +230,15 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
 
         {
             auto c = rootGroup->GetExpiringCounter("foo");
-            auto h = rootGroup->GetExpiringHistogram("bar", ExplicitHistogram({1, 42}));
-            h->Collect(15);
+            auto h = rootGroup->GetExpiringHistogram("bar", ExplicitHistogram({1, 42})); 
+            h->Collect(15); 
 
             TStringStream ss;
             TCountersPrinter printer(&ss);
             rootGroup->Accept("root", "counters", printer);
             UNIT_ASSERT_STRINGS_EQUAL(ss.Str(),
                                       "root:counters {\n"
-                                      "  sensor:bar = {1: 0, 42: 1, inf: 0}\n"
+                                      "  sensor:bar = {1: 0, 42: 1, inf: 0}\n" 
                                       "  sensor:foo = 0\n"
                                       "}\n");
         }

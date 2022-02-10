@@ -7,17 +7,17 @@
 #include <util/generic/cast.h>
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/generated_enum_reflection.h>
-
+ 
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
-#include <type_traits>
-
+#include <type_traits> 
+ 
 namespace NLWTrace {
     // Class to hold parameter values parsed from trace query predicate operators
     template <class T>
@@ -465,76 +465,76 @@ namespace NLWTrace {
 #undef FOREACH_PARAMTYPE_MACRO
 
     template <class T>
-    struct TParamTraits;
-
-    // Enum types traits impl.
-    template <class TEnum, class = std::enable_if_t<std::is_enum_v<TEnum>>>
-    struct TEnumParamTraitsImpl {
-        using TStoreType = typename TParamTraits<std::underlying_type_t<TEnum>>::TStoreType;
-        using TFuncParam = TEnum;
-
+    struct TParamTraits; 
+ 
+    // Enum types traits impl. 
+    template <class TEnum, class = std::enable_if_t<std::is_enum_v<TEnum>>> 
+    struct TEnumParamTraitsImpl { 
+        using TStoreType = typename TParamTraits<std::underlying_type_t<TEnum>>::TStoreType; 
+        using TFuncParam = TEnum; 
+ 
         inline static void ToString(typename TTypeTraits<TStoreType>::TFuncParam stored, TString* out) {
-            if constexpr (google::protobuf::is_proto_enum<TEnum>::value) {
-                const google::protobuf::EnumValueDescriptor* valueDescriptor = google::protobuf::GetEnumDescriptor<TEnum>()->FindValueByNumber(stored);
-                if (valueDescriptor) {
-                    *out = TStringBuilder() << valueDescriptor->name() << " (" << stored << ")";
-                } else {
-                    *out = TParamConv<TStoreType>::ToString(stored);
-                }
-            } else {
-                *out = TParamConv<TStoreType>::ToString(stored);
-            }
+            if constexpr (google::protobuf::is_proto_enum<TEnum>::value) { 
+                const google::protobuf::EnumValueDescriptor* valueDescriptor = google::protobuf::GetEnumDescriptor<TEnum>()->FindValueByNumber(stored); 
+                if (valueDescriptor) { 
+                    *out = TStringBuilder() << valueDescriptor->name() << " (" << stored << ")"; 
+                } else { 
+                    *out = TParamConv<TStoreType>::ToString(stored); 
+                } 
+            } else { 
+                *out = TParamConv<TStoreType>::ToString(stored); 
+            } 
         }
-
-        inline static TStoreType ToStoreType(TFuncParam v) {
-            return static_cast<TStoreType>(v);
-        }
+ 
+        inline static TStoreType ToStoreType(TFuncParam v) { 
+            return static_cast<TStoreType>(v); 
+        } 
     };
 
-    template <class TCustomType>
-    struct TCustomTraitsImpl {
-        using TStoreType = typename TParamTraits<typename TCustomType::TStoreType>::TStoreType; //see STORE_TYPE_AS
-        using TFuncParam = typename TCustomType::TFuncParam;
-
-        inline static void ToString(typename TTypeTraits<TStoreType>::TFuncParam stored, TString* out) {
-            TCustomType::ToString(stored, out);
-        }
-
-        inline static TStoreType ToStoreType(TFuncParam v) {
-            return TCustomType::ToStoreType(v);
-        }
-    };
-
-    template <class T, bool isEnum>
-    struct TParamTraitsImpl;
-
-    template <class TEnum>
-    struct TParamTraitsImpl<TEnum, true> : TEnumParamTraitsImpl<TEnum> {
-    };
-
-    template <class TCustomType>
-    struct TParamTraitsImpl<TCustomType, false> : TCustomTraitsImpl<TCustomType> {
-    };
-
-    template <class T>
-    struct TParamTraits : TParamTraitsImpl<T, std::is_enum_v<T>> {
-    };
-
-    // Standard stored types traits.
-
+    template <class TCustomType> 
+    struct TCustomTraitsImpl { 
+        using TStoreType = typename TParamTraits<typename TCustomType::TStoreType>::TStoreType; //see STORE_TYPE_AS 
+        using TFuncParam = typename TCustomType::TFuncParam; 
+ 
+        inline static void ToString(typename TTypeTraits<TStoreType>::TFuncParam stored, TString* out) { 
+            TCustomType::ToString(stored, out); 
+        } 
+ 
+        inline static TStoreType ToStoreType(TFuncParam v) { 
+            return TCustomType::ToStoreType(v); 
+        } 
+    }; 
+ 
+    template <class T, bool isEnum> 
+    struct TParamTraitsImpl; 
+ 
+    template <class TEnum> 
+    struct TParamTraitsImpl<TEnum, true> : TEnumParamTraitsImpl<TEnum> { 
+    }; 
+ 
+    template <class TCustomType> 
+    struct TParamTraitsImpl<TCustomType, false> : TCustomTraitsImpl<TCustomType> { 
+    }; 
+ 
+    template <class T> 
+    struct TParamTraits : TParamTraitsImpl<T, std::is_enum_v<T>> { 
+    }; 
+ 
+    // Standard stored types traits. 
+ 
 #define STORE_TYPE_AS(input_t, store_as_t)                                                      \
     template <>                                                                                 \
     struct TParamTraits<input_t> {                                                              \
-        using TStoreType = store_as_t;                                                          \
-        using TFuncParam = typename TTypeTraits<input_t>::TFuncParam;                           \
-                                                                                                \
-        inline static void ToString(typename TTypeTraits<TStoreType>::TFuncParam stored, TString* out) { \
+        using TStoreType = store_as_t;                                                          \ 
+        using TFuncParam = typename TTypeTraits<input_t>::TFuncParam;                           \ 
+                                                                                                \ 
+        inline static void ToString(typename TTypeTraits<TStoreType>::TFuncParam stored, TString* out) { \ 
             *out = TParamConv<TStoreType>::ToString(stored);                                    \
         }                                                                                       \
-                                                                                                \
-        inline static TStoreType ToStoreType(TFuncParam v) {                                    \
-            return v;                                                                           \
-        }                                                                                       \
+                                                                                                \ 
+        inline static TStoreType ToStoreType(TFuncParam v) {                                    \ 
+            return v;                                                                           \ 
+        }                                                                                       \ 
     };                                                                                          \
     /**/
     STORE_TYPE_AS(ui8, ui64);
@@ -550,18 +550,18 @@ namespace NLWTrace {
 #undef STORE_TYPE_AS
 #undef FOREACH_PARAMTYPE_MACRO
 
-    // Nil type staits.
+    // Nil type staits. 
     template <>
     struct TParamTraits<TNil> {
-        using TStoreType = TNil;
-        using TFuncParam = TTypeTraits<TNil>::TFuncParam;
-
-        inline static void ToString(typename TTypeTraits<TNil>::TFuncParam, TString*) {
+        using TStoreType = TNil; 
+        using TFuncParam = TTypeTraits<TNil>::TFuncParam; 
+ 
+        inline static void ToString(typename TTypeTraits<TNil>::TFuncParam, TString*) { 
         }
-
-        inline static TNil ToStoreType(TFuncParam v) {
-            return v;
-        }
+ 
+        inline static TNil ToStoreType(TFuncParam v) { 
+            return v; 
+        } 
     };
 
     inline EParamTypePb ParamTypeToProtobuf(const char* paramType) {

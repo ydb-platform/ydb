@@ -32,19 +32,19 @@ NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic) {
     return settings;
 }
 
-TPqIoTestFixture::TPqIoTestFixture() {
-}
-
-TPqIoTestFixture::~TPqIoTestFixture() {
-    CaSetup = nullptr;
-    Driver.Stop(true);
-}
-
-void TPqIoTestFixture::InitSource(
+TPqIoTestFixture::TPqIoTestFixture() { 
+} 
+ 
+TPqIoTestFixture::~TPqIoTestFixture() { 
+    CaSetup = nullptr; 
+    Driver.Stop(true); 
+} 
+ 
+void TPqIoTestFixture::InitSource( 
     NYql::NPq::NProto::TDqPqTopicSource&& settings,
     i64 freeSpace)
 {
-    CaSetup->Execute([&](TFakeActor& actor) {
+    CaSetup->Execute([&](TFakeActor& actor) { 
         NPq::NProto::TDqReadTaskParams params;
         auto* partitioninigParams = params.MutablePartitioningParams();
         partitioninigParams->SetTopicPartitionsCount(1);
@@ -63,7 +63,7 @@ void TPqIoTestFixture::InitSource(
             "query_1",
             secureParams,
             taskParams,
-            Driver,
+            Driver, 
             nullptr,
             &actor.GetSourceCallbacks(),
             actor.GetHolderFactory(),
@@ -73,19 +73,19 @@ void TPqIoTestFixture::InitSource(
     });
 }
 
-void TPqIoTestFixture::InitSink(
+void TPqIoTestFixture::InitSink( 
     NPq::NProto::TDqPqTopicSink&& settings,
     i64 freeSpace)
 {
     const THashMap<TString, TString> secureParams;
 
-    CaSetup->Execute([&](TFakeActor& actor) {
+    CaSetup->Execute([&](TFakeActor& actor) { 
         auto [dqSink, dqSinkAsActor] = CreateDqPqWriteActor(
             std::move(settings),
             0,
             "query_1",
             secureParams,
-            Driver,
+            Driver, 
             nullptr,
             &actor.GetSinkCallbacks(),
             freeSpace);
@@ -119,7 +119,7 @@ void PQWrite(
         .MessageGroupId("src_id");
     auto session = client.CreateSimpleBlockingWriteSession(sessionSettings);
     for (const TString& data : sequence) {
-        UNIT_ASSERT_C(session->Write(data), "Failed to write message with body \"" << data << "\" to topic " << topic);
+        UNIT_ASSERT_C(session->Write(data), "Failed to write message with body \"" << data << "\" to topic " << topic); 
         Cerr << "Message '" << data << "' was written into topic '" << topic << "'" << Endl;
     }
     session->Close(); // Wait until all data would be written into PQ.
@@ -168,14 +168,14 @@ std::vector<TString> UVParser(const NUdf::TUnboxedValue& item) {
     return { TString(item.AsStringRef()) };
 }
 
-void TPqIoTestFixture::SinkWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint) {
-    CaSetup->SinkWrite([data](NKikimr::NMiniKQL::THolderFactory& factory) {
+void TPqIoTestFixture::SinkWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint) { 
+    CaSetup->SinkWrite([data](NKikimr::NMiniKQL::THolderFactory& factory) { 
         NKikimr::NMiniKQL::TUnboxedValueVector batch;
         batch.reserve(data.size());
         for (const auto& item : data) {
-            NUdf::TUnboxedValue* unboxedValueForData = nullptr;
+            NUdf::TUnboxedValue* unboxedValueForData = nullptr; 
             batch.emplace_back(factory.CreateDirectArrayHolder(1, unboxedValueForData));
-            unboxedValueForData[0] = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(item.Data(), item.Size()));
+            unboxedValueForData[0] = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(item.Data(), item.Size())); 
         }
 
         return batch;

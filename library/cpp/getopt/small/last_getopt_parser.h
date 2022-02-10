@@ -3,7 +3,7 @@
 #include "last_getopt_opts.h"
 
 #include <library/cpp/colorizer/fwd.h>
-
+ 
 #include <util/generic/hash_set.h>
 #include <util/generic/list.h>
 
@@ -146,9 +146,9 @@ namespace NLastGetopt {
         const TString& ProgramName() const {
             return ProgramName_;
         }
-
+ 
         void PrintUsage(IOutputStream& os = Cout) const;
-
+ 
         void PrintUsage(IOutputStream& os, const NColorizer::TColors& colors) const;
     };
 } //namespace NLastGetopt

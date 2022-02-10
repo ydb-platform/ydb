@@ -1,11 +1,11 @@
 #include "yexception.h"
 
 static inline void Throw1DontMove() {
-    ythrow yexception() << "blabla"; // don't move this line
+    ythrow yexception() << "blabla"; // don't move this line 
 }
 
 static inline void Throw2DontMove() {
-    ythrow yexception() << 1 << " qw " << 12.1; // don't move this line
+    ythrow yexception() << 1 << " qw " << 12.1; // don't move this line 
 }
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -14,7 +14,7 @@ static inline void Throw2DontMove() {
 #include <util/memory/tempbuf.h>
 #include <util/random/mersenne.h>
 #include <util/stream/output.h>
-#include <util/string/subst.h>
+#include <util/string/subst.h> 
 
 #include "yexception_ut.h"
 #include "bt_exception.h"
@@ -218,18 +218,18 @@ private:
         }
     }
 
-    static inline void CheckCurrentExceptionContains(const char* message) {
+    static inline void CheckCurrentExceptionContains(const char* message) { 
         TString err = CurrentExceptionMessage();
-        SubstGlobal(err, '\\', '/'); // remove backslashes from path in message
-        UNIT_ASSERT(err.Contains(message));
-    }
-
+        SubstGlobal(err, '\\', '/'); // remove backslashes from path in message 
+        UNIT_ASSERT(err.Contains(message)); 
+    } 
+ 
     inline void TestRaise1() {
         try {
             Throw2DontMove();
             UNIT_ASSERT(false);
         } catch (...) {
-            CheckCurrentExceptionContains("util/generic/yexception_ut.cpp:8: 1 qw 12.1");
+            CheckCurrentExceptionContains("util/generic/yexception_ut.cpp:8: 1 qw 12.1"); 
         }
     }
 
@@ -240,9 +240,9 @@ private:
     inline void TestLineInfo() {
         try {
             Throw1DontMove();
-            UNIT_ASSERT(false);
+            UNIT_ASSERT(false); 
         } catch (...) {
-            CheckCurrentExceptionContains("util/generic/yexception_ut.cpp:4: blabla");
+            CheckCurrentExceptionContains("util/generic/yexception_ut.cpp:4: blabla"); 
 
             throw;
         }

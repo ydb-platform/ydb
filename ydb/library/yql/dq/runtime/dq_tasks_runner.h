@@ -27,40 +27,40 @@ enum class ERunStatus : ui32 {
     PendingOutput
 };
 
-class TRunStatusTimeMetrics {
-public:
-    void UpdateStatusTime(TDuration computeCpuTime = TDuration::Zero()) {
-        auto now = TInstant::Now();
-        StatusTime[ui32(CurrentStatus)] += now - StatusStartTime - computeCpuTime;
-        StatusStartTime = now;
-    }
-
-    void SetCurrentStatus(ERunStatus status, TDuration computeCpuTime) {
-        Y_VERIFY(ui32(status) < StatusesCount);
-        UpdateStatusTime(computeCpuTime);
-        CurrentStatus = status;
-    }
-
-    TDuration operator[](ERunStatus status) const {
-        const ui32 index = ui32(status);
-        Y_VERIFY(index < StatusesCount);
-        return StatusTime[index];
-    }
-
-    void Load(ERunStatus status, TDuration d) {
-        const ui32 index = ui32(status);
-        Y_VERIFY(index < StatusesCount);
-        StatusTime[index] = d;
-    }
-
-    static constexpr ui32 StatusesCount = 3;
-
-private:
-    TInstant StatusStartTime = TInstant::Now();
-    ERunStatus CurrentStatus = ERunStatus::PendingInput;
-    TDuration StatusTime[StatusesCount];
-};
-
+class TRunStatusTimeMetrics { 
+public: 
+    void UpdateStatusTime(TDuration computeCpuTime = TDuration::Zero()) { 
+        auto now = TInstant::Now(); 
+        StatusTime[ui32(CurrentStatus)] += now - StatusStartTime - computeCpuTime; 
+        StatusStartTime = now; 
+    } 
+ 
+    void SetCurrentStatus(ERunStatus status, TDuration computeCpuTime) { 
+        Y_VERIFY(ui32(status) < StatusesCount); 
+        UpdateStatusTime(computeCpuTime); 
+        CurrentStatus = status; 
+    } 
+ 
+    TDuration operator[](ERunStatus status) const { 
+        const ui32 index = ui32(status); 
+        Y_VERIFY(index < StatusesCount); 
+        return StatusTime[index]; 
+    } 
+ 
+    void Load(ERunStatus status, TDuration d) { 
+        const ui32 index = ui32(status); 
+        Y_VERIFY(index < StatusesCount); 
+        StatusTime[index] = d; 
+    } 
+ 
+    static constexpr ui32 StatusesCount = 3; 
+ 
+private: 
+    TInstant StatusStartTime = TInstant::Now(); 
+    ERunStatus CurrentStatus = ERunStatus::PendingInput; 
+    TDuration StatusTime[StatusesCount]; 
+}; 
+ 
 struct TMkqlStat {
     NKikimr::NMiniKQL::TStatKey Key;
     i64 Value = 0;
@@ -71,18 +71,18 @@ struct TDqTaskRunnerStats {
     TDuration BuildCpuTime;
     TInstant FinishTs;
 
-    TDuration ComputeCpuTime;
-    TRunStatusTimeMetrics RunStatusTimeMetrics; // ComputeCpuTime + RunStatusTimeMetrics == 100% time
-
+    TDuration ComputeCpuTime; 
+    TRunStatusTimeMetrics RunStatusTimeMetrics; // ComputeCpuTime + RunStatusTimeMetrics == 100% time 
+ 
     // profile stats
     TDuration WaitTime; // wall time of waiting for input, scans & output
     TDuration WaitOutputTime;
 
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
-    THashMap<ui64, const TDqInputChannelStats*> InputChannels; // Channel id -> Channel stats
-    THashMap<ui64, const TDqSourceStats*> Sources; // Input index -> Source stats
-    THashMap<ui64, const TDqOutputChannelStats*> OutputChannels; // Channel id -> Channel stats
+    THashMap<ui64, const TDqInputChannelStats*> InputChannels; // Channel id -> Channel stats 
+    THashMap<ui64, const TDqSourceStats*> Sources; // Input index -> Source stats 
+    THashMap<ui64, const TDqOutputChannelStats*> OutputChannels; // Channel id -> Channel stats 
 
     TVector<TMkqlStat> MkqlStats;
 };
@@ -105,7 +105,7 @@ public:
 
     virtual IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs) const = 0;
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs) const = 0; 
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const = 0;
 };
@@ -114,7 +114,7 @@ class TDqTaskRunnerExecutionContext : public IDqTaskRunnerExecutionContext {
 public:
     IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs) const override;
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs) const override; 
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const override;
 };
@@ -126,7 +126,7 @@ struct TDqTaskRunnerSettings {
     bool AllowGeneratorsInUnboxedValues = true;
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
-    THashMap<TString, TString> TaskParams;
+    THashMap<TString, TString> TaskParams; 
 };
 
 struct TDqTaskRunnerMemoryLimits {
@@ -138,7 +138,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
     TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
-    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& channels);
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& channels); 
 
 using TDqTaskRunnerParameterProvider = std::function<
     bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -159,9 +159,9 @@ public:
     virtual bool HasEffects() const = 0;
 
     virtual IDqInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
-    virtual IDqSource::TPtr GetSource(ui64 inputIndex) = 0;
+    virtual IDqSource::TPtr GetSource(ui64 inputIndex) = 0; 
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
-    virtual IDqSink::TPtr GetSink(ui64 outputIndex) = 0;
+    virtual IDqSink::TPtr GetSink(ui64 outputIndex) = 0; 
 
     // if memoryLimit = Nothing()  then don't set memory limit, use existing one (if any)
     // if memoryLimit = 0          then set unlimited
@@ -169,12 +169,12 @@ public:
     virtual TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit = Nothing()) = 0;
     virtual bool IsAllocatorAttached() = 0;
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
-    virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
+    virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0; 
 
-    virtual const THashMap<TString, TString>& GetSecureParams() const = 0;
-    virtual const THashMap<TString, TString>& GetTaskParams() const = 0;
-
-    virtual void UpdateStats() = 0;
+    virtual const THashMap<TString, TString>& GetSecureParams() const = 0; 
+    virtual const THashMap<TString, TString>& GetTaskParams() const = 0; 
+ 
+    virtual void UpdateStats() = 0; 
     virtual const TDqTaskRunnerStats* GetStats() const = 0;
 
     [[nodiscard]]

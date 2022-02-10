@@ -13,12 +13,12 @@ namespace NFlatTests {
 
 class TFlatMsgBusClient : public Tests::TClient {
 public:
-    TFlatMsgBusClient(const Tests::TServerSettings& settings)
-        : TClient(settings)
-    {}
-
+    TFlatMsgBusClient(const Tests::TServerSettings& settings) 
+        : TClient(settings) 
+    {} 
+ 
     TFlatMsgBusClient(ui16 port)
-        : TFlatMsgBusClient(Tests::TServerSettings(port))
+        : TFlatMsgBusClient(Tests::TServerSettings(port)) 
     {}
 
     void InitRoot() {

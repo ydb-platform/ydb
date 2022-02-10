@@ -22,13 +22,13 @@ namespace NSc {
             {
             }
 
-            bool Add(TStringBuf v, bool allowDuplicated) {
-                if (!ExpectKey || Y_UNLIKELY(!Container->IsDict()))
+            bool Add(TStringBuf v, bool allowDuplicated) { 
+                if (!ExpectKey || Y_UNLIKELY(!Container->IsDict())) 
                     return false;
 
-                if (!allowDuplicated && Y_UNLIKELY(Container->Has(v)))
-                    return false;
-
+                if (!allowDuplicated && Y_UNLIKELY(Container->Has(v))) 
+                    return false; 
+ 
                 LastValue = &Container->GetOrAdd(v);
                 ExpectKey = false;
                 return true;
@@ -62,16 +62,16 @@ namespace NSc {
     public:
         TValue& Root;
         TJsonError& Error;
-        const TJsonOpts& Cfg;
+        const TJsonOpts& Cfg; 
 
         TStackType Stack;
         bool Virgin = true;
 
     public:
-        TJsonDeserializer(TValue& root, TJsonError& err, const TJsonOpts& cfg)
+        TJsonDeserializer(TValue& root, TJsonError& err, const TJsonOpts& cfg) 
             : Root(root)
             , Error(err)
-            , Cfg(cfg)
+            , Cfg(cfg) 
         {
             Root.SetNull();
             Stack.reserve(10);
@@ -143,7 +143,7 @@ namespace NSc {
         bool OnMapKey(const TStringBuf& k) override {
             if (Y_UNLIKELY(Stack.empty()))
                 return false;
-            return Stack.back().Add(k, !(Cfg.Opts & TJsonOpts::JO_PARSER_DISALLOW_DUPLICATE_KEYS));
+            return Stack.back().Add(k, !(Cfg.Opts & TJsonOpts::JO_PARSER_DISALLOW_DUPLICATE_KEYS)); 
         }
 
         bool OnOpenMap() override {
@@ -180,8 +180,8 @@ namespace NSc {
         }
     };
 
-    static bool DoParseFromJson(TValue& res, TJsonError& err, TStringBuf json, const TJsonOpts& cfg) {
-        TJsonDeserializer d(res, err, cfg);
+    static bool DoParseFromJson(TValue& res, TJsonError& err, TStringBuf json, const TJsonOpts& cfg) { 
+        TJsonDeserializer d(res, err, cfg); 
 
         if (cfg.RelaxedJson) {
             return NJson::ReadJsonFast(json, &d);
@@ -191,7 +191,7 @@ namespace NSc {
         }
     }
 
-    static bool DoParseFromJson(TValue& res, TStringBuf json, const TJsonOpts& cfg) {
+    static bool DoParseFromJson(TValue& res, TStringBuf json, const TJsonOpts& cfg) { 
         TJsonError err;
         return DoParseFromJson(res, err, json, cfg);
     }

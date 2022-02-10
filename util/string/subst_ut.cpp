@@ -130,8 +130,8 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
         s = "aaa";
         SubstGlobal(s, "a", "");
         UNIT_ASSERT_EQUAL(s, TString(""));
-        s = "abcdefbcbcdfb";
-        SubstGlobal(s, "bc", "bbc", 2);
+        s = "abcdefbcbcdfb"; 
+        SubstGlobal(s, "bc", "bbc", 2); 
         UNIT_ASSERT_EQUAL(s, TString("abcdefbbcbbcdfb"));
         s = "Москва ~ Париж";
         SubstGlobal(s, " ~ ", " ");
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
         UNIT_ASSERT_EQUAL(w, u"abcdaBcd");
 
         TString s = "aaa";
-        SubstGlobal(s, 'a', 'b', 1);
+        SubstGlobal(s, 'a', 'b', 1); 
         UNIT_ASSERT_EQUAL(s, TString("abb"));
     }
 

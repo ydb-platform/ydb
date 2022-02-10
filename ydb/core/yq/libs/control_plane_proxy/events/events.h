@@ -15,7 +15,7 @@ namespace NYq {
 struct TEvControlPlaneProxy {
     // Event ids.
     enum EEv : ui32 {
-        EvCreateQueryRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::ControlPlaneProxy),
+        EvCreateQueryRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::ControlPlaneProxy), 
         EvCreateQueryResponse,
         EvListQueriesRequest,
         EvListQueriesResponse,
@@ -60,7 +60,7 @@ struct TEvControlPlaneProxy {
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::ControlPlaneProxy), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::ControlPlaneProxy), "All events must be in their subspace"); 
 
     struct TEvCreateQueryRequest : NActors::TEventLocal<TEvCreateQueryRequest, EvCreateQueryRequest> {
         explicit TEvCreateQueryRequest(const TString& folderId,

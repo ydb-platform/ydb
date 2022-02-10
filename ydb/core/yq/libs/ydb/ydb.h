@@ -5,7 +5,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-namespace NYq {
+namespace NYq { 
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -103,8 +103,8 @@ NYdb::TStatus MakeErrorStatus(
     const TString& msg,
     NYql::ESeverity severity = NYql::TSeverityIds::S_WARNING);
 
-NYql::TIssues StatusToIssues(const NYdb::TStatus& status);
-
+NYql::TIssues StatusToIssues(const NYdb::TStatus& status); 
+ 
 NThreading::TFuture<NYql::TIssues> StatusToIssues(
     const NThreading::TFuture<NYdb::TStatus>& future);
 
@@ -126,4 +126,4 @@ NThreading::TFuture<NYdb::TStatus> CheckGeneration(const TGenerationContextPtr& 
 
 NThreading::TFuture<NYdb::TStatus> RollbackTransaction(const TGenerationContextPtr& context);
 
-} // namespace NYq
+} // namespace NYq 

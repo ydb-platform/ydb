@@ -24,12 +24,12 @@ namespace NKikimr::NGRpcService {
         void InitNewSchemeCache();
 
         NActors::TActorSystem* ActorSystem_;
-        grpc::ServerCompletionQueue* CQ_ = nullptr;
+        grpc::ServerCompletionQueue* CQ_ = nullptr; 
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
         NActors::TActorId GRpcRequestProxyId_;
         NActors::TActorId NewSchemeCache;
-        NGrpc::TGlobalLimiter* Limiter_ = nullptr;
+        NGrpc::TGlobalLimiter* Limiter_ = nullptr; 
     };
 
 }

@@ -40,7 +40,7 @@ static_assert(sizeof(TDqLocalResourceId) == 8);
 class TLocalWorkerManager: public TWorkerManagerCommon<TLocalWorkerManager> {
 
 public:
-    static constexpr char ActorName[] = "YQL_DQ_LWM";
+    static constexpr char ActorName[] = "YQL_DQ_LWM"; 
 
     TLocalWorkerManager(const TLocalWorkerManagerOptions& options)
         : TWorkerManagerCommon<TLocalWorkerManager>(&TLocalWorkerManager::Handler)

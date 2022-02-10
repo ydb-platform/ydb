@@ -6,16 +6,16 @@
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <util/generic/scope.h>
-
+#include <util/generic/scope.h> 
+ 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-const TStatKey Hop_NewHopsCount("Hop_NewHopsCount", true);
-const TStatKey Hop_ThrownEventsCount("Hop_ThrownEventsCount", true);
-
+const TStatKey Hop_NewHopsCount("Hop_NewHopsCount", true); 
+const TStatKey Hop_ThrownEventsCount("Hop_ThrownEventsCount", true); 
+ 
 class THoppingCoreWrapper : public TMutableComputationNode<THoppingCoreWrapper> {
     typedef TMutableComputationNode<THoppingCoreWrapper> TBaseComputation;
 public:
@@ -106,17 +106,17 @@ public:
                 return NUdf::EFetchStatus::Finish;
             }
 
-            i64 thrownEvents = 0;
-            i64 newHops = 0;
-            Y_DEFER {
-                if (thrownEvents) {
-                    MKQL_ADD_STAT(Ctx.Stats, Hop_ThrownEventsCount, thrownEvents);
-                }
-                if (newHops) {
-                    MKQL_ADD_STAT(Ctx.Stats, Hop_NewHopsCount, newHops);
-                }
-            };
-
+            i64 thrownEvents = 0; 
+            i64 newHops = 0; 
+            Y_DEFER { 
+                if (thrownEvents) { 
+                    MKQL_ADD_STAT(Ctx.Stats, Hop_ThrownEventsCount, thrownEvents); 
+                } 
+                if (newHops) { 
+                    MKQL_ADD_STAT(Ctx.Stats, Hop_NewHopsCount, newHops); 
+                } 
+            }; 
+ 
             for (NUdf::TUnboxedValue item;;) {
                 if (!Ready.empty()) {
                     result = std::move(Ready.front());
@@ -179,7 +179,7 @@ public:
                         Ready.emplace_back(Self->OutFinish->GetValue(Ctx));
                     }
 
-                    ++newHops;
+                    ++newHops; 
                     ++HopIndex;
                 }
 
@@ -192,8 +192,8 @@ public:
                         Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
                         bucket.Value = Self->OutUpdate->GetValue(Ctx);
                     }
-                } else {
-                    ++thrownEvents;
+                } else { 
+                    ++thrownEvents; 
                 }
             }
         }

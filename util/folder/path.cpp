@@ -289,7 +289,7 @@ void TFsPath::RenameTo(const TString& newPath) const {
         ythrow TIoException() << "bad new file name";
     }
     if (!NFs::Rename(Path_, newPath)) {
-        ythrow TIoSystemError() << "failed to rename " << Path_ << " to " << newPath;
+        ythrow TIoSystemError() << "failed to rename " << Path_ << " to " << newPath; 
     }
 }
 
@@ -326,7 +326,7 @@ TFsPath TFsPath::ReadLink() const {
         ythrow TIoException() << "not a symlink " << *this;
     }
 
-    return NFs::ReadLink(*this);
+    return NFs::ReadLink(*this); 
 }
 
 bool TFsPath::Exists() const {

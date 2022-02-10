@@ -46,7 +46,7 @@ def join(a, b):
 
 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
-    def __init__(self, node_idx, config_path, port_allocator, cluster_name, configurator,
+    def __init__(self, node_idx, config_path, port_allocator, cluster_name, configurator, 
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
@@ -71,7 +71,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__node_broker_port = node_broker_port
         self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
         self.__cms_config_cache_file = tempfile.NamedTemporaryFile(
-            dir=self.cwd,
+            dir=self.cwd, 
             prefix="cms_config_cache_",
             delete=False
         )
@@ -212,7 +212,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.__common_udfs_dir = None
         self.__cluster_name = cluster_name
         self.__configurator = kikimr_config.KikimrConfigGenerator() if configurator is None else configurator
-        self.__port_allocator = self.__configurator.port_allocator
+        self.__port_allocator = self.__configurator.port_allocator 
         self._nodes = {}
         self._slots = {}
         self.__server = 'localhost'
@@ -327,7 +327,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._nodes[node_index] = KiKiMRNode(
             node_index,
             self.config_path,
-            port_allocator=self.__port_allocator.get_node_port_allocator(node_index),
+            port_allocator=self.__port_allocator.get_node_port_allocator(node_index), 
             cluster_name=self.__cluster_name,
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
@@ -355,7 +355,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._slots[slot_index] = KiKiMRNode(
             slot_index,
             self.config_path,
-            port_allocator=self.__port_allocator.get_slot_port_allocator(slot_index),
+            port_allocator=self.__port_allocator.get_slot_port_allocator(slot_index), 
             cluster_name=self.__cluster_name,
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
@@ -392,7 +392,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             if exception is not None:
                 saved_exceptions.append(exception)
 
-        self.__port_allocator.release_ports()
+        self.__port_allocator.release_ports() 
 
         if saved_exceptions:
             raise daemon.SeveralDaemonErrors(saved_exceptions)

@@ -949,11 +949,11 @@ void TLocalServiceInitializer::InitializeServices(
         TActorId(),
         TActorSetupCmd(CreateLabelsMaintainer(Config.GetMonitoringConfig()),
                        TMailboxType::ReadAsFilled, 0)));
-
+ 
     setup->LocalServices.emplace_back(NTestShard::MakeStateServerInterfaceActorId(), TActorSetupCmd(
         NTestShard::CreateStateServerInterfaceActor(), TMailboxType::ReadAsFilled, 0));
 
-    NKesus::AddKesusProbesList();
+    NKesus::AddKesusProbesList(); 
 }
 
 // TSharedCacheInitializer
@@ -1493,17 +1493,17 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             NMsgBusProxy::CreateMsgBusProxyId(),
             TActorSetupCmd(proxy, TMailboxType::ReadAsFilled, appData->UserPoolId));
 
-        if (appData->PQConfig.GetEnabled()) {
-
-            TDuration pqMetaRefresh = TDuration::Seconds(NMsgBusProxy::PQ_METACACHE_REFRESH_INTERVAL_SECONDS);
+        if (appData->PQConfig.GetEnabled()) { 
+ 
+            TDuration pqMetaRefresh = TDuration::Seconds(NMsgBusProxy::PQ_METACACHE_REFRESH_INTERVAL_SECONDS); 
             IActor * cache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
                     appData->Counters, pqMetaRefresh
             );
-            Y_VERIFY(cache);
-            setup->LocalServices.emplace_back(
-                NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
-                TActorSetupCmd(cache, TMailboxType::ReadAsFilled, appData->UserPoolId));
-        }
+            Y_VERIFY(cache); 
+            setup->LocalServices.emplace_back( 
+                NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), 
+                TActorSetupCmd(cache, TMailboxType::ReadAsFilled, appData->UserPoolId)); 
+        } 
     }
 
     if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId())) {
@@ -2091,27 +2091,27 @@ TSqsServiceInitializer::TSqsServiceInitializer(const TKikimrRunConfig& runConfig
 }
 
 void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    if (Config.GetSqsConfig().GetEnableSqs()) {
+    if (Config.GetSqsConfig().GetEnableSqs()) { 
         ui32 grpcPort = 0;
         if (Config.HasGRpcConfig())
             grpcPort = Config.GetGRpcConfig().GetPort();
-        {
+        { 
             IActor* actor = NSQS::CreateSqsService(grpcPort);
-            setup->LocalServices.emplace_back(
-                NSQS::MakeSqsServiceID(NodeId),
-                TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
-        }
-
-        {
-            IActor* actor = NSQS::CreateSqsProxyService();
-            setup->LocalServices.emplace_back(
-                NSQS::MakeSqsProxyServiceID(NodeId),
-                TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
-        }
+            setup->LocalServices.emplace_back( 
+                NSQS::MakeSqsServiceID(NodeId), 
+                TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)); 
+        } 
+ 
+        { 
+            IActor* actor = NSQS::CreateSqsProxyService(); 
+            setup->LocalServices.emplace_back( 
+                NSQS::MakeSqsProxyServiceID(NodeId), 
+                TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)); 
+        } 
 
         Factories->SqsAuthFactory->Initialize(
             setup->LocalServices, *appData, Config.GetSqsConfig());
-    }
+    } 
 }
 
 TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig)
@@ -2250,10 +2250,10 @@ void THealthCheckInitializer::InitializeServices(TActorSystemSetup* setup, const
         TActorSetupCmd(NHealthCheck::CreateHealthCheckService(), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-TYandexQueryInitializer::TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources)
+TYandexQueryInitializer::TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources) 
     : IKikimrServicesInitializer(runConfig)
-    , Factories(std::move(factories))
-    , YqSharedResources(std::move(yqSharedResources))
+    , Factories(std::move(factories)) 
+    , YqSharedResources(std::move(yqSharedResources)) 
 {
 }
 

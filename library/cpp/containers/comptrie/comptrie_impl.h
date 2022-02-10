@@ -180,7 +180,7 @@ namespace NCompactTrie {
     // Advances the data pointer to the root of the subtrie beginning after the symbol,
     // zeroes it if this subtrie is empty.
     // If there is a value associated with the symbol, makes the value pointer point to it,
-    // otherwise sets it to nullptr.
+    // otherwise sets it to nullptr. 
     // Returns true if the symbol was succesfully found in the trie, false otherwise.
     template <typename TSymbol, class TPacker>
     Y_FORCE_INLINE bool Advance(const char*& datapos, const char* const dataend, const char*& value,
@@ -193,7 +193,7 @@ namespace NCompactTrie {
                 return false; // no such arc
             }
 
-            value = nullptr;
+            value = nullptr; 
 
             Y_ASSERT(datapos <= dataend);
             if ((flags & MT_FINAL)) {
@@ -203,7 +203,7 @@ namespace NCompactTrie {
 
             if (!(flags & MT_NEXT)) {
                 if (i == 0) {
-                    datapos = nullptr;
+                    datapos = nullptr; 
                     return true;
                 }
                 return false; // no further way

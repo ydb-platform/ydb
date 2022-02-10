@@ -5,7 +5,7 @@
 #include "modchooser.h"
 
 #include <library/cpp/colorizer/colors.h>
-
+ 
 #include <util/stream/output.h>
 #include <util/stream/format.h>
 #include <util/generic/yexception.h>
@@ -279,9 +279,9 @@ TString TModChooser::TMode::FormatFullName(size_t pad) const {
 
 void TModChooser::PrintHelp(const TString& progName) const {
     Cerr << Description << Endl << Endl;
-    Cerr << NColorizer::StdErr().BoldColor() << "Usage" << NColorizer::StdErr().OldColor() << ": " << progName << " MODE [MODE_OPTIONS]" << Endl;
+    Cerr << NColorizer::StdErr().BoldColor() << "Usage" << NColorizer::StdErr().OldColor() << ": " << progName << " MODE [MODE_OPTIONS]" << Endl; 
     Cerr << Endl;
-    Cerr << NColorizer::StdErr().BoldColor() << "Modes" << NColorizer::StdErr().OldColor() << ":" << Endl;
+    Cerr << NColorizer::StdErr().BoldColor() << "Modes" << NColorizer::StdErr().OldColor() << ":" << Endl; 
     size_t maxModeLen = 0;
     for (const auto& [name, mode] : Modes) {
         if (name != mode->Name)

@@ -679,30 +679,30 @@ message TFeatureFlags {
 }
 
 message TSqsConfig {
-    optional bool EnableSqs = 5;
+    optional bool EnableSqs = 5; 
     optional string Root = 1 [default = "/Root/SQS"];
-    // optional uint32 HttpPort = 2 [default = 8771]; // moved to HttpServerConfig
-
+    // optional uint32 HttpPort = 2 [default = 8771]; // moved to HttpServerConfig 
+ 
     // URL that must be specified as an entry point to SQS cluster.
     // It must be used if SQS nodes are placed behind the balancer.
     // If this field is not specified, every node uses its own
     // fqdn here.
     optional string Endpoint = 3;
-
-    optional THttpServerConfig HttpServerConfig = 4;
-
+ 
+    optional THttpServerConfig HttpServerConfig = 4; 
+ 
     // Turn on queue leaders option
     optional bool EnableQueueMaster = 6 [default = true]; // TODO: remove
     optional bool EnableQueueLeader = 68 [default = true];
-
+ 
     // Time to live for queue attributes cache
-    optional uint64 QueueAttributesCacheTimeMs = 8 [default = 60000];
-
+    optional uint64 QueueAttributesCacheTimeMs = 8 [default = 60000]; 
+ 
     // Effective query execution time that is treated as slow query
-    optional uint64 SlowRequestTimeMs = 9 [default = 2500];
-
+    optional uint64 SlowRequestTimeMs = 9 [default = 2500]; 
+ 
     // Max time value for long polling (param WaitTimeSeconds for ReceiveMessage)
-    optional uint64 MaxWaitTimeoutMs = 10 [default = 20000];
+    optional uint64 MaxWaitTimeoutMs = 10 [default = 20000]; 
 
     optional uint32 SchemeCacheSoftRefreshTimeSeconds = 11 [default = 5];
     optional uint32 SchemeCacheHardRefreshTimeSeconds = 12 [default = 10];
@@ -715,7 +715,7 @@ message TSqsConfig {
     optional string YandexCloudAccessServiceAddress = 29; // host:port
     optional string YandexCloudFolderServiceAddress = 30; // host:port
     optional string YandexCloudServiceRegion = 39 [default = "ru-central1"];
-
+ 
     optional uint32 MeteringFlushingIntervalMs = 51 [default = 5000];
     optional string MeteringLogFilePath = 52;
 
@@ -723,120 +723,120 @@ message TSqsConfig {
     repeated string MeteringYandexNetCidr = 54;
 
     // TODO: remove both
-    optional uint32 MastersDescriberUpdateTimeMs = 17 [default = 10000];
-    optional uint32 MasterConnectTimeoutMs = 18 [default = 10000];
-
+    optional uint32 MastersDescriberUpdateTimeMs = 17 [default = 10000]; 
+    optional uint32 MasterConnectTimeoutMs = 18 [default = 10000]; 
+ 
     optional uint32 LeadersDescriberUpdateTimeMs = 69 [default = 10000];
     optional uint32 LeaderConnectTimeoutMs = 70 [default = 10000];
 
-    optional uint64 MinMessageRetentionPeriodMs = 19 [default = 60000];
-
-    // DB requests retries
-    optional uint64 TransactionTimeoutMs = 20 [default = 20000]; // If this amount of time elapsed, we don't retry
-    optional uint64 TransactionRetryWaitDurationMs = 21 [default = 500]; // First wait time before next retry (+ random component). Then - 2 * TransactionRetryWaitDurationMs and etc
-    optional uint64 TransactionMaxRetryWaitDurationMs = 22 [default = 2500]; // Max wait before next retry
-
-    optional uint64 BackgroundMetricsUpdateTimeMs = 23 [default = 10000];
-
-    optional uint64 MaxNumberOfReceiveMessages = 24 [default = 10]; // MaxNumberOfMessages parameter in ReceiveMessage
-
-    optional uint64 RequestTimeoutMs = 25 [default = 600000];
+    optional uint64 MinMessageRetentionPeriodMs = 19 [default = 60000]; 
+ 
+    // DB requests retries 
+    optional uint64 TransactionTimeoutMs = 20 [default = 20000]; // If this amount of time elapsed, we don't retry 
+    optional uint64 TransactionRetryWaitDurationMs = 21 [default = 500]; // First wait time before next retry (+ random component). Then - 2 * TransactionRetryWaitDurationMs and etc 
+    optional uint64 TransactionMaxRetryWaitDurationMs = 22 [default = 2500]; // Max wait before next retry 
+ 
+    optional uint64 BackgroundMetricsUpdateTimeMs = 23 [default = 10000]; 
+ 
+    optional uint64 MaxNumberOfReceiveMessages = 24 [default = 10]; // MaxNumberOfMessages parameter in ReceiveMessage 
+ 
+    optional uint64 RequestTimeoutMs = 25 [default = 600000]; 
 
     optional bool ForceQueueCreationV2 = 26 [default = true]; // deprecated, TODO: remove from config
     optional bool ForceQueueDeletionV2 = 27 [default = true]; // deprecated, TODO: remove from config
     optional bool EnableDeadLetterQueues = 41 [default = false];
-
-    optional bool CreateLegacyDurationCounters = 28;
-
-    optional uint64 MinTimeLeftForReceiveMessageWaitMs = 31 [default = 64]; // if wait deadline - now is less than this time, we don't wait in receive message
-
-    optional bool CheckAllShardsInReceiveMessage = 32; // Check all shards in receive message event if deadline is expired now (setting for test)
-
-    optional uint64 CleanupPeriodMs = 33 [default = 150000];
-    optional uint64 CleanupBatchSize = 34 [default = 1000]; // Batch size for cleanup queries // Don't set big values
-
-    optional uint64 DeduplicationPeriodMs = 35 [default = 300000]; // Period of time for which deduplication in fifo queues acts
-    optional uint64 GroupsReadAttemptIdsPeriodMs = 36 [default = 300000]; // Period of time for which group read attempt ids in fifo queues act
-    optional uint64 GroupSelectionBatchSize = 38 [default = 1000];
-
-    optional bool DoAutomaticMigration = 37 [default = true]; // Check and add new columns to queue tables during queue master start
-
-    optional uint64 AddMesagesToInflyBatchSize = 40 [default = 2000];
-
-    message TBatchingPolicy {
-        // Optimal parameters: SQS-479
-        optional uint64 BatchSize = 1 [default = 200];
-        optional uint64 TransactionsMaxInflyPerShard = 2 [default = 20];
-    }
-
-    optional TBatchingPolicy StdQueueSendBatchingPolicy = 42;
-    optional TBatchingPolicy FifoQueueSendBatchingPolicy = 43;
-    optional TBatchingPolicy StdQueueDeleteBatchingPolicy = 44;
-    optional TBatchingPolicy FifoQueueDeleteBatchingPolicy = 45;
-    optional TBatchingPolicy StdQueueLoadBatchingPolicy = 46;
-
-    message TQuotingConfig {
-        // Settings for quoting.
-        optional bool EnableQuoting = 1;
-        optional uint64 QuotaDeadlineMs = 2;
-
-        message TDefaultActionsRates {
-            // Per queue
-            optional uint32 StdSendMessageRate = 1; // send message (+batch)
-            optional uint32 StdReceiveMessageRate = 2; // receive message
-            optional uint32 StdDeleteMessageRate = 3; // delete message (+batch)
-            optional uint32 StdChangeMessageVisibilityRate = 4; // change message visibility (+batch)
-
-            optional uint32 FifoSendMessageRate = 5; // send message (+batch)
-            optional uint32 FifoReceiveMessageRate = 6; // receive message
-            optional uint32 FifoDeleteMessageRate = 7; // delete message (+batch)
-            optional uint32 FifoChangeMessageVisibilityRate = 8; // change message visibility (+batch)
-
-            // Per user
-            optional uint32 CreateObjectsRate = 9; // create queue, create user
-            optional uint32 DeleteObjectsRate = 10; // delete queue, delete user
-
-            optional uint32 OtherRequestsRate = 11; // control requests: get/set queue attributes, list queues, permissions modification, etc
-        }
-
-        message TLocalRateLimiterConfig {
-            optional TDefaultActionsRates Rates = 1;
-        }
-
-        message TKesusQuoterConfig {
-            // Not implemented
-            optional TDefaultActionsRates DefaultLimits = 1;
-        }
-
-        // Only one of quoter configs could be set
-        optional TLocalRateLimiterConfig LocalRateLimiterConfig = 3;
-        optional TKesusQuoterConfig KesusQuoterConfig = 4;
-    }
-
-    optional TQuotingConfig QuotingConfig = 47;
+ 
+    optional bool CreateLegacyDurationCounters = 28; 
+ 
+    optional uint64 MinTimeLeftForReceiveMessageWaitMs = 31 [default = 64]; // if wait deadline - now is less than this time, we don't wait in receive message 
+ 
+    optional bool CheckAllShardsInReceiveMessage = 32; // Check all shards in receive message event if deadline is expired now (setting for test) 
+ 
+    optional uint64 CleanupPeriodMs = 33 [default = 150000]; 
+    optional uint64 CleanupBatchSize = 34 [default = 1000]; // Batch size for cleanup queries // Don't set big values 
+ 
+    optional uint64 DeduplicationPeriodMs = 35 [default = 300000]; // Period of time for which deduplication in fifo queues acts 
+    optional uint64 GroupsReadAttemptIdsPeriodMs = 36 [default = 300000]; // Period of time for which group read attempt ids in fifo queues act 
+    optional uint64 GroupSelectionBatchSize = 38 [default = 1000]; 
+ 
+    optional bool DoAutomaticMigration = 37 [default = true]; // Check and add new columns to queue tables during queue master start 
+ 
+    optional uint64 AddMesagesToInflyBatchSize = 40 [default = 2000]; 
+ 
+    message TBatchingPolicy { 
+        // Optimal parameters: SQS-479 
+        optional uint64 BatchSize = 1 [default = 200]; 
+        optional uint64 TransactionsMaxInflyPerShard = 2 [default = 20]; 
+    } 
+ 
+    optional TBatchingPolicy StdQueueSendBatchingPolicy = 42; 
+    optional TBatchingPolicy FifoQueueSendBatchingPolicy = 43; 
+    optional TBatchingPolicy StdQueueDeleteBatchingPolicy = 44; 
+    optional TBatchingPolicy FifoQueueDeleteBatchingPolicy = 45; 
+    optional TBatchingPolicy StdQueueLoadBatchingPolicy = 46; 
+ 
+    message TQuotingConfig { 
+        // Settings for quoting. 
+        optional bool EnableQuoting = 1; 
+        optional uint64 QuotaDeadlineMs = 2; 
+ 
+        message TDefaultActionsRates { 
+            // Per queue 
+            optional uint32 StdSendMessageRate = 1; // send message (+batch) 
+            optional uint32 StdReceiveMessageRate = 2; // receive message 
+            optional uint32 StdDeleteMessageRate = 3; // delete message (+batch) 
+            optional uint32 StdChangeMessageVisibilityRate = 4; // change message visibility (+batch) 
+ 
+            optional uint32 FifoSendMessageRate = 5; // send message (+batch) 
+            optional uint32 FifoReceiveMessageRate = 6; // receive message 
+            optional uint32 FifoDeleteMessageRate = 7; // delete message (+batch) 
+            optional uint32 FifoChangeMessageVisibilityRate = 8; // change message visibility (+batch) 
+ 
+            // Per user 
+            optional uint32 CreateObjectsRate = 9; // create queue, create user 
+            optional uint32 DeleteObjectsRate = 10; // delete queue, delete user 
+ 
+            optional uint32 OtherRequestsRate = 11; // control requests: get/set queue attributes, list queues, permissions modification, etc 
+        } 
+ 
+        message TLocalRateLimiterConfig { 
+            optional TDefaultActionsRates Rates = 1; 
+        } 
+ 
+        message TKesusQuoterConfig { 
+            // Not implemented 
+            optional TDefaultActionsRates DefaultLimits = 1; 
+        } 
+ 
+        // Only one of quoter configs could be set 
+        optional TLocalRateLimiterConfig LocalRateLimiterConfig = 3; 
+        optional TKesusQuoterConfig KesusQuoterConfig = 4; 
+    } 
+ 
+    optional TQuotingConfig QuotingConfig = 47; 
     optional bool EnableQueueAttributesValidation = 48 [default = true];
-
-    message TAccountSettingsDefaults {
-        optional int64 MaxQueuesCount = 1 [default = 50];
-    }
-
-    optional TAccountSettingsDefaults AccountSettingsDefaults = 49;
-
-    optional bool AllowYandexAttributePrefix = 50;
-
-    optional uint64 QueueCountersExportDelayMs = 55; // Export queue counters after queue creation with delay (milliseconds).
-    optional bool CreateLazyCounters = 56 [default = true];
-
-    optional uint64 UserSettingsUpdateTimeMs = 57 [default = 60000];
-    optional uint64 UserSettingsReadBatchSize = 58 [default = 1000];
-    optional uint64 QueuesListReadBatchSize = 59 [default = 1000];
-
-    optional bool ValidateMessageBody = 60;
+ 
+    message TAccountSettingsDefaults { 
+        optional int64 MaxQueuesCount = 1 [default = 50]; 
+    } 
+ 
+    optional TAccountSettingsDefaults AccountSettingsDefaults = 49; 
+ 
+    optional bool AllowYandexAttributePrefix = 50; 
+ 
+    optional uint64 QueueCountersExportDelayMs = 55; // Export queue counters after queue creation with delay (milliseconds). 
+    optional bool CreateLazyCounters = 56 [default = true]; 
+ 
+    optional uint64 UserSettingsUpdateTimeMs = 57 [default = 60000]; 
+    optional uint64 UserSettingsReadBatchSize = 58 [default = 1000]; 
+    optional uint64 QueuesListReadBatchSize = 59 [default = 1000]; 
+ 
+    optional bool ValidateMessageBody = 60; 
 
     optional uint64 DlqNotificationGracePeriodMs = 61 [default = 60000];
-
-    optional uint64 AddMessagesToInflyCheckPeriodMs = 62 [default = 30000];
-    optional uint64 AddMessagesToInflyMinCheckAttempts = 63 [default = 10];
+ 
+    optional uint64 AddMessagesToInflyCheckPeriodMs = 62 [default = 30000]; 
+    optional uint64 AddMessagesToInflyMinCheckAttempts = 63 [default = 10]; 
 
     optional uint64 MinimumGarbageAgeSeconds = 64 [default = 3600];
 

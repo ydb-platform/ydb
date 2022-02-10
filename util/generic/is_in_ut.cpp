@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include "algorithm.h"
 #include "hash.h"
 #include "hash_set.h"
@@ -8,68 +8,68 @@
 #include "set.h"
 #include "strbuf.h"
 #include "string.h"
-
+ 
 Y_UNIT_TEST_SUITE(TIsIn) {
     template <class TCont, class T>
-    void TestIsInWithCont(const T& elem) {
+    void TestIsInWithCont(const T& elem) { 
         class TMapMock: public TCont {
-        public:
-            typename TCont::const_iterator find(const typename TCont::key_type& k) const {
-                ++FindCalled;
-                return TCont::find(k);
-            }
-
-            typename TCont::iterator find(const typename TCont::key_type& k) {
-                ++FindCalled;
-                return TCont::find(k);
-            }
-
-            mutable size_t FindCalled = 1;
-        };
-
-        TMapMock m;
-        m.insert(elem);
-
-        // use more effective find method
-        UNIT_ASSERT(IsIn(m, "found"));
-        UNIT_ASSERT(m.FindCalled);
-        m.FindCalled = 0;
-
-        UNIT_ASSERT(!IsIn(m, "not found"));
-        UNIT_ASSERT(m.FindCalled);
-        m.FindCalled = 0;
-    }
-
+        public: 
+            typename TCont::const_iterator find(const typename TCont::key_type& k) const { 
+                ++FindCalled; 
+                return TCont::find(k); 
+            } 
+ 
+            typename TCont::iterator find(const typename TCont::key_type& k) { 
+                ++FindCalled; 
+                return TCont::find(k); 
+            } 
+ 
+            mutable size_t FindCalled = 1; 
+        }; 
+ 
+        TMapMock m; 
+        m.insert(elem); 
+ 
+        // use more effective find method 
+        UNIT_ASSERT(IsIn(m, "found")); 
+        UNIT_ASSERT(m.FindCalled); 
+        m.FindCalled = 0; 
+ 
+        UNIT_ASSERT(!IsIn(m, "not found")); 
+        UNIT_ASSERT(m.FindCalled); 
+        m.FindCalled = 0; 
+    } 
+ 
     Y_UNIT_TEST(IsInTest) {
         TestIsInWithCont<TMap<TString, TString>>(std::make_pair("found", "1"));
         TestIsInWithCont<TMultiMap<TString, TString>>(std::make_pair("found", "1"));
         TestIsInWithCont<THashMap<TString, TString>>(std::make_pair("found", "1"));
         TestIsInWithCont<THashMultiMap<TString, TString>>(std::make_pair("found", "1"));
-
+ 
         TestIsInWithCont<TSet<TString>>("found");
         TestIsInWithCont<TMultiSet<TString>>("found");
         TestIsInWithCont<THashSet<TString>>("found");
         TestIsInWithCont<THashMultiSet<TString>>("found");
-
-        // vector also compiles and works
+ 
+        // vector also compiles and works 
         TVector<TString> v;
-        v.push_back("found");
-        UNIT_ASSERT(IsIn(v, "found"));
-        UNIT_ASSERT(!IsIn(v, "not found"));
-
-        // iterators interface
-        UNIT_ASSERT(IsIn(v.begin(), v.end(), "found"));
-        UNIT_ASSERT(!IsIn(v.begin(), v.end(), "not found"));
-
+        v.push_back("found"); 
+        UNIT_ASSERT(IsIn(v, "found")); 
+        UNIT_ASSERT(!IsIn(v, "not found")); 
+ 
+        // iterators interface 
+        UNIT_ASSERT(IsIn(v.begin(), v.end(), "found")); 
+        UNIT_ASSERT(!IsIn(v.begin(), v.end(), "not found")); 
+ 
         // Works with TString (it has find, but find is not used)
         TString s = "found";
-        UNIT_ASSERT(IsIn(s, 'f'));
-        UNIT_ASSERT(!IsIn(s, 'z'));
-
-        TStringBuf b = "found";
-        UNIT_ASSERT(IsIn(b, 'f'));
-        UNIT_ASSERT(!IsIn(b, 'z'));
-    }
+        UNIT_ASSERT(IsIn(s, 'f')); 
+        UNIT_ASSERT(!IsIn(s, 'z')); 
+ 
+        TStringBuf b = "found"; 
+        UNIT_ASSERT(IsIn(b, 'f')); 
+        UNIT_ASSERT(!IsIn(b, 'z')); 
+    } 
 
     Y_UNIT_TEST(IsInInitListTest) {
         const char* abc = "abc";
@@ -113,4 +113,4 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         UNIT_ASSERT(!IsIn(array, "c"));
         UNIT_ASSERT(IsIn(array, TStringBuf("d")));
     }
-}
+} 

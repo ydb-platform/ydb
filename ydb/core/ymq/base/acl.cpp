@@ -6,8 +6,8 @@
 
 #include <map>
 
-namespace NKikimr::NSQS {
-
+namespace NKikimr::NSQS { 
+ 
 class TSQSACLMappings {
 public:
     TSQSACLMappings() {
@@ -137,5 +137,5 @@ TString GetActionMatchingACE(const TString& actionName) {
 TVector<TStringBuf> GetAccessMatchingACE(const ui32 access) {
     return Mappings().GetAccessMatchingACEImpl(access);
 }
-
-} // namespace NKikimr::NSQS
+ 
+} // namespace NKikimr::NSQS 

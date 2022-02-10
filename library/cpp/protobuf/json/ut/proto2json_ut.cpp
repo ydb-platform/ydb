@@ -20,8 +20,8 @@
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
 
-#include <limits>
-
+#include <limits> 
+ 
 using namespace NProtobufJson;
 using namespace NProtobufJsonTest;
 
@@ -887,18 +887,18 @@ Y_UNIT_TEST(TestFieldNameMode) {
 
     /// TODO: test missing keys
 } // TestFieldNameMode
-
+ 
 Y_UNIT_TEST(TestNan) {
     TFlatOptional proto;
     proto.SetDouble(std::numeric_limits<double>::quiet_NaN());
-
+ 
     UNIT_ASSERT_EXCEPTION(Proto2Json(proto, TProto2JsonConfig()), yexception);
 } // TestNan
-
+ 
 Y_UNIT_TEST(TestInf) {
     TFlatOptional proto;
     proto.SetFloat(std::numeric_limits<float>::infinity());
-
+ 
     UNIT_ASSERT_EXCEPTION(Proto2Json(proto, TProto2JsonConfig()), yexception);
 } // TestInf
 

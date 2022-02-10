@@ -2,17 +2,17 @@ UNITTEST_FOR(ydb/library/yql/providers/pq/async_io)
 
 OWNER(
     d-mokhnatkin
-    g:yq
+    g:yq 
     g:yql
 )
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
-ENV(LOGBROKER_CREATE_TOPICS=ReadFromTopic,ReadWithFreeSpace,SaveLoadPqRead,WriteToTopic,WriteToTopicMultiBatch,DeferredWriteToTopic,SaveLoadPqWrite,Checkpoints,LoadFromSeveralStates)
+ENV(LOGBROKER_CREATE_TOPICS=ReadFromTopic,ReadWithFreeSpace,SaveLoadPqRead,WriteToTopic,WriteToTopicMultiBatch,DeferredWriteToTopic,SaveLoadPqWrite,Checkpoints,LoadFromSeveralStates) 
 
 ENV(LOGBROKER_TOPICS_PARTITIONS=1)
 
-INCLUDE(${ARCADIA_ROOT}/kikimr/yq/tools/lbk_recipe_with_dummy_cm/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/kikimr/yq/tools/lbk_recipe_with_dummy_cm/recipe.inc) 
 
 SRCS(
     dq_pq_read_actor_ut.cpp

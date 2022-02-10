@@ -1,11 +1,11 @@
 #pragma once
 #include "event_ids.h"
-
+ 
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
+#include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h> 
 #include <ydb/public/api/protos/draft/yq_private.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yq/scope.h>
@@ -21,7 +21,7 @@ using NYdb::NYq::TScope;
 enum class DatabaseType {
     Ydb,
     ClickHouse,
-    DataStreams,
+    DataStreams, 
     ObjectStorage
 };
 
@@ -176,22 +176,22 @@ struct TEvents {
 
     struct TEvDataStreamsReadRulesCreationResult : NActors::TEventLocal<TEvDataStreamsReadRulesCreationResult, TEventIds::EvDataStreamsReadRulesCreationResult> {
         explicit TEvDataStreamsReadRulesCreationResult(NYql::TIssues issues)
-            : Issues(std::move(issues))
-        {
-        }
-
-        NYql::TIssues Issues;
-    };
+            : Issues(std::move(issues)) 
+        { 
+        } 
+ 
+        NYql::TIssues Issues; 
+    }; 
 
     struct TEvDataStreamsReadRulesDeletionResult : NActors::TEventLocal<TEvDataStreamsReadRulesDeletionResult, TEventIds::EvDataStreamsReadRulesDeletionResult> {
-        explicit TEvDataStreamsReadRulesDeletionResult(NYql::TIssues transientIssues)
-            : TransientIssues(std::move(transientIssues))
-        {
-        }
-
-        NYql::TIssues TransientIssues;
-    };
-
+        explicit TEvDataStreamsReadRulesDeletionResult(NYql::TIssues transientIssues) 
+            : TransientIssues(std::move(transientIssues)) 
+        { 
+        } 
+ 
+        NYql::TIssues TransientIssues; 
+    }; 
+ 
     struct TEvQueryActionResult : NActors::TEventLocal<TEvQueryActionResult, TEventIds::EvQueryActionResult> {
         explicit TEvQueryActionResult(YandexQuery::QueryAction action)
             : Action(action)
@@ -204,35 +204,35 @@ struct TEvents {
     struct TEvForwardPingRequest : NActors::TEventLocal<TEvForwardPingRequest, TEventIds::EvForwardPingRequest> {
         explicit TEvForwardPingRequest(const Yq::Private::PingTaskRequest& request, bool final = false)
             : Request(request)
-            , Final(final)
+            , Final(final) 
         { }
 
         Yq::Private::PingTaskRequest Request;
-        bool Final; // Is this the last ping request.
+        bool Final; // Is this the last ping request. 
     };
-
+ 
     struct TEvForwardPingResponse : NActors::TEventLocal<TEvForwardPingResponse, TEventIds::EvForwardPingResponse> {
-        TEvForwardPingResponse(bool success, YandexQuery::QueryAction action)
-            : Success(success)
-            , Action(action)
-        { }
-
-        bool Success;
-        YandexQuery::QueryAction Action;
-    };
-
-    struct TEvGraphParams : public NActors::TEventLocal<TEvGraphParams, TEventIds::EvGraphParams> {
-        explicit TEvGraphParams(const NProto::TGraphParams& params)
-            : GraphParams(params)
-        { }
-
-        explicit TEvGraphParams(NProto::TGraphParams&& params)
-            : GraphParams(std::move(params))
-        { }
-
-        NProto::TGraphParams GraphParams;
-        NThreading::TPromise<NYql::IDqGateway::TResult> Result;
-    };
+        TEvForwardPingResponse(bool success, YandexQuery::QueryAction action) 
+            : Success(success) 
+            , Action(action) 
+        { } 
+ 
+        bool Success; 
+        YandexQuery::QueryAction Action; 
+    }; 
+ 
+    struct TEvGraphParams : public NActors::TEventLocal<TEvGraphParams, TEventIds::EvGraphParams> { 
+        explicit TEvGraphParams(const NProto::TGraphParams& params) 
+            : GraphParams(params) 
+        { } 
+ 
+        explicit TEvGraphParams(NProto::TGraphParams&& params) 
+            : GraphParams(std::move(params)) 
+        { } 
+ 
+        NProto::TGraphParams GraphParams; 
+        NThreading::TPromise<NYql::IDqGateway::TResult> Result; 
+    }; 
 };
 
 } // namespace NYq

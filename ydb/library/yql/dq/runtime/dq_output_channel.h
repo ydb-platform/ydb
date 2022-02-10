@@ -1,6 +1,6 @@
 #pragma once
-#include "dq_output.h"
-#include "dq_channel_storage.h"
+#include "dq_output.h" 
+#include "dq_channel_storage.h" 
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
@@ -28,7 +28,7 @@ struct TDqOutputChannelStats : TDqOutputStats {
         : ChannelId(channelId) {}
 };
 
-class IDqOutputChannel : public IDqOutput {
+class IDqOutputChannel : public IDqOutput { 
 public:
     using TPtr = TIntrusivePtr<IDqOutputChannel>;
 
@@ -36,17 +36,17 @@ public:
     virtual ui64 GetValuesCount(bool inMemoryOnly = true) const = 0;
 
     // <| consumer methods
-    // can throw TDqChannelStorageException
+    // can throw TDqChannelStorageException 
     [[nodiscard]]
     virtual bool Pop(NDqProto::TData& data, ui64 bytes) = 0;
-    // Pop chechpoint. Checkpoints may be taken from channel even after it is finished.
+    // Pop chechpoint. Checkpoints may be taken from channel even after it is finished. 
     [[nodiscard]]
     virtual bool Pop(NDqProto::TCheckpoint& checkpoint) = 0;
     // Only for data-queries
     // TODO: remove this method and create independent Data- and Stream-query implementations.
     //       Stream-query implementation should be without PopAll method.
     //       Data-query implementation should be one-shot for Pop (a-la PopAll) call and without ChannelStorage.
-    // can throw TDqChannelStorageException
+    // can throw TDqChannelStorageException 
     [[nodiscard]]
     virtual bool PopAll(NDqProto::TData& data) = 0;
     virtual bool PopAll(NKikimr::NMiniKQL::TUnboxedValueVector& rows) = 0;

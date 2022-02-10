@@ -10,7 +10,7 @@ namespace NActors {
 class TDestructActor: public TActor<TDestructActor> {
 public:
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::INTERCONNECT_DESTRUCT_ACTOR;
+        return NKikimrServices::TActivity::INTERCONNECT_DESTRUCT_ACTOR; 
     }
 
     TDestructActor() noexcept
@@ -19,7 +19,7 @@ public:
 
 
 private:
-    STATEFN(WorkingState) {
+    STATEFN(WorkingState) { 
         /* Destroy event and eventhandle */
         ev.Reset();
     }

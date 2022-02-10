@@ -80,8 +80,8 @@ public:
     bool IsInitialized() const;
     bool IsEmpty() const;
 
-    bool Find(const TSymbol* key, size_t keylen, TData* value = nullptr) const;
-    bool Find(const TKeyBuf& key, TData* value = nullptr) const {
+    bool Find(const TSymbol* key, size_t keylen, TData* value = nullptr) const; 
+    bool Find(const TKeyBuf& key, TData* value = nullptr) const { 
         return Find(key.data(), key.size(), value);
     }
 
@@ -122,8 +122,8 @@ public:
     void FindPhrases(const TKeyBuf& key, TPhraseMatchVector& matches, TSymbol separator = TSymbol(' ')) const {
         return FindPhrases(key.data(), key.size(), matches, separator);
     }
-    bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value = nullptr, bool* hasNext = nullptr) const;
-    bool FindLongestPrefix(const TKeyBuf& key, size_t* prefixLen, TData* value = nullptr, bool* hasNext = nullptr) const {
+    bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value = nullptr, bool* hasNext = nullptr) const; 
+    bool FindLongestPrefix(const TKeyBuf& key, size_t* prefixLen, TData* value = nullptr, bool* hasNext = nullptr) const { 
         return FindLongestPrefix(key.data(), key.size(), prefixLen, value, hasNext);
     }
 
@@ -315,18 +315,18 @@ void TCompactTrie<T, D, S>::Init(const TBlob& data, TPacker packer) {
 
 template <class T, class D, class S>
 bool TCompactTrie<T, D, S>::IsInitialized() const {
-    return DataHolder.Data() != nullptr;
+    return DataHolder.Data() != nullptr; 
 }
 
 template <class T, class D, class S>
 bool TCompactTrie<T, D, S>::IsEmpty() const {
-    return DataHolder.Size() == 0 && EmptyValue == nullptr;
+    return DataHolder.Size() == 0 && EmptyValue == nullptr; 
 }
 
 template <class T, class D, class S>
-bool TCompactTrie<T, D, S>::Find(const TSymbol* key, size_t keylen, TData* value) const {
+bool TCompactTrie<T, D, S>::Find(const TSymbol* key, size_t keylen, TData* value) const { 
     size_t prefixLen = 0;
-    const char* valuepos = nullptr;
+    const char* valuepos = nullptr; 
     bool hasNext;
     if (!LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext) || prefixLen != keylen)
         return false;
@@ -366,7 +366,7 @@ bool TCompactTrie<T, D, S>::FindTails(const TSymbol* key, size_t keylen, TCompac
     const char* const dataend = datapos + len;
 
     const TSymbol* keyend = key + keylen;
-    const char* value = nullptr;
+    const char* value = nullptr; 
 
     while (key != keyend) {
         T label = *(key++);
@@ -400,7 +400,7 @@ inline bool TCompactTrie<T, D, S>::FindTails(TSymbol label, TCompactTrie<T, D, S
     const char* datastart = DataHolder.AsCharPtr();
     const char* dataend = datastart + len;
     const char* datapos = datastart;
-    const char* value = nullptr;
+    const char* value = nullptr; 
 
     if (!NCompactTrie::Advance(datapos, dataend, value, label, Packer))
         return false;
@@ -460,8 +460,8 @@ void TCompactTrie<T, D, S>::Print(IOutputStream& os) {
 }
 
 template <class T, class D, class S>
-bool TCompactTrie<T, D, S>::FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value, bool* hasNext) const {
-    const char* valuepos = nullptr;
+bool TCompactTrie<T, D, S>::FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value, bool* hasNext) const { 
+    const char* valuepos = nullptr; 
     size_t tempPrefixLen = 0;
     bool tempHasNext;
     bool found = LookupLongestPrefix(key, keylen, tempPrefixLen, valuepos, tempHasNext);
@@ -475,7 +475,7 @@ bool TCompactTrie<T, D, S>::FindLongestPrefix(const TSymbol* key, size_t keylen,
 }
 
 template <class T, class D, class S>
-bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keylen, size_t& prefixLen, const char*& valuepos, bool& hasNext) const {
+bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keylen, size_t& prefixLen, const char*& valuepos, bool& hasNext) const { 
     using namespace NCompactTrie;
 
     const char* datapos = DataHolder.AsCharPtr();

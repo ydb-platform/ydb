@@ -44,11 +44,11 @@ TRedrivePolicy TRedrivePolicy::FromJson(const TString& json, const NKikimrConfig
         size_t maxReceiveCountValue = 0;
         if (TryFromString(validatedRedrivePolicy[maxReceiveCount].ForceString(), maxReceiveCountValue)) {
             if (maxReceiveCountValue < TLimits::MinMaxReceiveCount || maxReceiveCountValue > TLimits::MaxMaxReceiveCount) {
-                policy.ErrorText = "maxReceiveCount must be greater than 0 and less than 1001.";
+                policy.ErrorText = "maxReceiveCount must be greater than 0 and less than 1001."; 
                 return policy;
             }
         } else {
-            policy.ErrorText = "Failed to parse maxReceiveCount as an integer.";
+            policy.ErrorText = "Failed to parse maxReceiveCount as an integer."; 
             return policy;
         }
 
@@ -64,7 +64,7 @@ TRedrivePolicy TRedrivePolicy::FromJson(const TString& json, const NKikimrConfig
         }
 
         if (!queueName) {
-            policy.ErrorText = "Empty dead letter target queue name.";
+            policy.ErrorText = "Empty dead letter target queue name."; 
             return policy;
         }
 
@@ -77,7 +77,7 @@ TRedrivePolicy TRedrivePolicy::FromJson(const TString& json, const NKikimrConfig
         policy.TargetQueueName = "";
         policy.TargetArn = "";
     } else {
-        policy.ErrorText = "RedrivePolicy attribute is ill-constructed.";
+        policy.ErrorText = "RedrivePolicy attribute is ill-constructed."; 
     }
 
     return policy;

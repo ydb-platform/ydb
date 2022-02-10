@@ -20,7 +20,7 @@ PEERDIR(
     library/cpp/protobuf/interop
     ydb/core/base
     ydb/core/mon
-    ydb/core/yq/libs/actors/logging
+    ydb/core/yq/libs/actors/logging 
     ydb/core/yq/libs/common
     ydb/core/yq/libs/config
     ydb/core/yq/libs/config/protos

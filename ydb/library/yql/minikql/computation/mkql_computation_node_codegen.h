@@ -45,8 +45,8 @@ using TStatelessFlowCodegeneratorNode = TStatelessFlowComputationNode<TDerived>;
 template <typename TDerived>
 using TStatelessWideFlowCodegeneratorNode = TStatelessWideFlowComputationNode<TDerived>;
 
-template <typename TDerived, bool SerializableState = false>
-using TStatefulWideFlowCodegeneratorNode = TStatefulWideFlowComputationNode<TDerived, SerializableState>;
+template <typename TDerived, bool SerializableState = false> 
+using TStatefulWideFlowCodegeneratorNode = TStatefulWideFlowComputationNode<TDerived, SerializableState>; 
 
 template <typename TDerived>
 using TPairStateWideFlowCodegeneratorNode = TPairStateWideFlowComputationNode<TDerived>;
@@ -54,8 +54,8 @@ using TPairStateWideFlowCodegeneratorNode = TPairStateWideFlowComputationNode<TD
 template <typename TDerived>
 using TStatelessFlowCodegeneratorRootNode = TStatelessFlowComputationNode<TDerived>;
 
-template <typename TDerived, bool SerializableState = false>
-using TStatefulFlowCodegeneratorNode = TStatefulFlowComputationNode<TDerived, SerializableState>;
+template <typename TDerived, bool SerializableState = false> 
+using TStatefulFlowCodegeneratorNode = TStatefulFlowComputationNode<TDerived, SerializableState>; 
 
 template <typename TDerived>
 using TPairStateFlowCodegeneratorNode = TPairStateFlowComputationNode<TDerived>;
@@ -490,10 +490,10 @@ protected:
     }
 };
 
-template <typename TDerived, bool SerializableState = false>
-class TStatefulFlowCodegeneratorNode: public TStatefulFlowComputationNode<TDerived, SerializableState>, public ICodegeneratorInlineNode
+template <typename TDerived, bool SerializableState = false> 
+class TStatefulFlowCodegeneratorNode: public TStatefulFlowComputationNode<TDerived, SerializableState>, public ICodegeneratorInlineNode 
 {
-using TBase = TStatefulFlowComputationNode<TDerived, SerializableState>;
+using TBase = TStatefulFlowComputationNode<TDerived, SerializableState>; 
 protected:
     TStatefulFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation kind, EValueRepresentation stateKind = EValueRepresentation::Any)
         : TBase(mutables, source, kind, stateKind)
@@ -514,10 +514,10 @@ protected:
     }
 };
 
-template <typename TDerived, bool SerializableState = false>
-class TStatefulWideFlowCodegeneratorNode: public TStatefulWideFlowComputationNode<TDerived, SerializableState>, public ICodegeneratorInlineWideNode
+template <typename TDerived, bool SerializableState = false> 
+class TStatefulWideFlowCodegeneratorNode: public TStatefulWideFlowComputationNode<TDerived, SerializableState>, public ICodegeneratorInlineWideNode 
 {
-using TBase = TStatefulWideFlowComputationNode<TDerived, SerializableState>;
+using TBase = TStatefulWideFlowComputationNode<TDerived, SerializableState>; 
 protected:
     TStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation stateKind)
         : TBase(mutables, source, stateKind)

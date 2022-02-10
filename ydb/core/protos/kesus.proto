@@ -3,7 +3,7 @@ syntax = "proto3";
 package NKikimrKesus;
 
 option java_package = "ru.yandex.kikimr.proto";
-option cc_enable_arenas = true;
+option cc_enable_arenas = true; 
 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
@@ -244,9 +244,9 @@ message TEvSessionStolen {
     uint64 SessionId = 2;
 }
 
-//
-// Quoter control API.
-//
+// 
+// Quoter control API. 
+// 
 message TAccountingConfig {
     // Account consumed resources and send billing metrics.
     // Default value is false (not inherited).
@@ -312,172 +312,172 @@ message TAccountingConfig {
     TMetric Overshoot = 10;
 }
 
-message THierarchicalDRRResourceConfig {
-    // Resource consumption speed limit.
-    // Value is required for root resource.
+message THierarchicalDRRResourceConfig { 
+    // Resource consumption speed limit. 
+    // Value is required for root resource. 
     // 0 is equivalent to not set (inherit value from parent).
-    // Must be nonnegative.
-    double MaxUnitsPerSecond = 3;
-
-    // Maximum burst size of resource consumption across the whole cluster
-    // divided by max_units_per_second.
-    // Default value is 1.
-    // This means that maximum burst size might be equal to max_units_per_second.
-    // 0 is equivalent to not set.
-    // Must be nonnegative.
-    double MaxBurstSizeCoefficient = 4;
-
-    // Weight of this resource among resource siblings in current resource tree branch.
-    // This weight is applied during starvation to share resource among all resource siblings.
-    // Default value is 1.
-    uint32 Weight = 5;
-
+    // Must be nonnegative. 
+    double MaxUnitsPerSecond = 3; 
+ 
+    // Maximum burst size of resource consumption across the whole cluster 
+    // divided by max_units_per_second. 
+    // Default value is 1. 
+    // This means that maximum burst size might be equal to max_units_per_second. 
+    // 0 is equivalent to not set. 
+    // Must be nonnegative. 
+    double MaxBurstSizeCoefficient = 4; 
+ 
+    // Weight of this resource among resource siblings in current resource tree branch. 
+    // This weight is applied during starvation to share resource among all resource siblings. 
+    // Default value is 1. 
+    uint32 Weight = 5; 
+ 
     // Prefetch in local bucket up to PrefetchCoefficient*MaxUnitsPerSecond units (full size).
     // Default value is inherited from parent or equals 0.2 for root.
     // Disables prefetching if any negative value is set
     // (It is useful to avoid bursts in case of large number of local buckets).
     double PrefetchCoefficient = 6;
-
+ 
     // Prefetching starts if there is less than PrefetchWatermark fraction of full local bucket left.
     // Default value is inherited from parent or equals 0.75 for root.
     // Must be nonnegative and less than or equal to 1.
     double PrefetchWatermark = 7;
-
-    // deprecated settings {
-    message TSpeedSettings {
-        double MaxUnitsPerSecond = 1; // Max resource consuming speed (== quota).
-    }
-    TSpeedSettings SpeedSettings = 1; // If not set, value is inherited from parent's limit. Must be set in root node of the tree.
-    // deprecated settings }
-}
-
-message TStreamingQuoterResource {
-    uint64 ResourceId = 1; // For describe request.
-
-    // Resource path. Elements are separated by slash.
-    // The first symbol is not slash.
-    // The first element is root resource name.
-    // Resource path is the path of resource inside coordination node.
-    string ResourcePath = 2;
-
-    oneof AlgorithmSpecificConfig {
-        // For Hierarhical DRR algorithm.
-        THierarchicalDRRResourceConfig HierarhicalDRRResourceConfig = 3;
-    }
+ 
+    // deprecated settings { 
+    message TSpeedSettings { 
+        double MaxUnitsPerSecond = 1; // Max resource consuming speed (== quota). 
+    } 
+    TSpeedSettings SpeedSettings = 1; // If not set, value is inherited from parent's limit. Must be set in root node of the tree. 
+    // deprecated settings } 
+} 
+ 
+message TStreamingQuoterResource { 
+    uint64 ResourceId = 1; // For describe request. 
+ 
+    // Resource path. Elements are separated by slash. 
+    // The first symbol is not slash. 
+    // The first element is root resource name. 
+    // Resource path is the path of resource inside coordination node. 
+    string ResourcePath = 2; 
+ 
+    oneof AlgorithmSpecificConfig { 
+        // For Hierarhical DRR algorithm. 
+        THierarchicalDRRResourceConfig HierarhicalDRRResourceConfig = 3; 
+    } 
     TAccountingConfig AccountingConfig = 4;
-}
-
-message TEvDescribeQuoterResources {
-    // Specify ResourceId or ResourcePath to describe resources.
-    repeated uint64 ResourceIds = 1;
-    repeated string ResourcePaths = 2;
-    bool Recursive = 3;
-}
-
-message TEvDescribeQuoterResourcesResult {
-    repeated TStreamingQuoterResource Resources = 2;
-    TKesusError Error = 3;
-}
-
-message TEvAddQuoterResource {
-    TStreamingQuoterResource Resource = 3;
-}
-
-message TEvAddQuoterResourceResult {
-    uint64 ResourceId = 1;
-    TKesusError Error = 2;
-}
-
-message TEvUpdateQuoterResource {
-    TStreamingQuoterResource Resource = 3;
-}
-
-message TEvUpdateQuoterResourceResult {
-    uint64 ResourceId = 1;
-    TKesusError Error = 2;
-}
-
-message TEvDeleteQuoterResource {
-    // Specify ResourceId or ResourcePath.
-    uint64 ResourceId = 3;
-    string ResourcePath = 4;
-}
-
-message TEvDeleteQuoterResourceResult {
-    TKesusError Error = 1;
-}
-
-//
-// Quoter runtime API.
-//
-
-// The first event that is sent to Kesus for given resource.
-// This creates session for specified resource if it is not created.
-// Kesus will start allocating resource for this client (if Amount > 0).
-message TEvSubscribeOnResources {
-    message TResourceSubscribeInfo {
-        string ResourcePath = 1;
-        bool StartConsuming = 2; // In case of StartConsuming == false this will create session, but doesn't start consuming of resource.
-        double InitialAmount = 3;
-    }
-    repeated TResourceSubscribeInfo Resources = 1;
+} 
+ 
+message TEvDescribeQuoterResources { 
+    // Specify ResourceId or ResourcePath to describe resources. 
+    repeated uint64 ResourceIds = 1; 
+    repeated string ResourcePaths = 2; 
+    bool Recursive = 3; 
+} 
+ 
+message TEvDescribeQuoterResourcesResult { 
+    repeated TStreamingQuoterResource Resources = 2; 
+    TKesusError Error = 3; 
+} 
+ 
+message TEvAddQuoterResource { 
+    TStreamingQuoterResource Resource = 3; 
+} 
+ 
+message TEvAddQuoterResourceResult { 
+    uint64 ResourceId = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvUpdateQuoterResource { 
+    TStreamingQuoterResource Resource = 3; 
+} 
+ 
+message TEvUpdateQuoterResourceResult { 
+    uint64 ResourceId = 1; 
+    TKesusError Error = 2; 
+} 
+ 
+message TEvDeleteQuoterResource { 
+    // Specify ResourceId or ResourcePath. 
+    uint64 ResourceId = 3; 
+    string ResourcePath = 4; 
+} 
+ 
+message TEvDeleteQuoterResourceResult { 
+    TKesusError Error = 1; 
+} 
+ 
+// 
+// Quoter runtime API. 
+// 
+ 
+// The first event that is sent to Kesus for given resource. 
+// This creates session for specified resource if it is not created. 
+// Kesus will start allocating resource for this client (if Amount > 0). 
+message TEvSubscribeOnResources { 
+    message TResourceSubscribeInfo { 
+        string ResourcePath = 1; 
+        bool StartConsuming = 2; // In case of StartConsuming == false this will create session, but doesn't start consuming of resource. 
+        double InitialAmount = 3; 
+    } 
+    repeated TResourceSubscribeInfo Resources = 1; 
     NActorsProto.TActorId ActorID = 2;
-}
-
-message TEvSubscribeOnResourcesResult {
-    message TResourceSubscribeResult {
-        uint64 ResourceId = 1;
-        TKesusError Error = 2;
-        TStreamingQuoterResource EffectiveProps = 3;
-    }
+} 
+ 
+message TEvSubscribeOnResourcesResult { 
+    message TResourceSubscribeResult { 
+        uint64 ResourceId = 1; 
+        TKesusError Error = 2; 
+        TStreamingQuoterResource EffectiveProps = 3; 
+    } 
     repeated TResourceSubscribeResult Results = 1; // Resources are in the same order that they were specified in request.
-}
-
-// Notification about resources consumption state update.
-// Event is sent from client to Kesus.
-// Has no result message.
-message TEvUpdateConsumptionState {
-    message TResourceInfo {
-        uint64 ResourceId = 1;
-        bool ConsumeResource = 2;
-        double Amount = 3;
-    }
-    repeated TResourceInfo ResourcesInfo = 1;
+} 
+ 
+// Notification about resources consumption state update. 
+// Event is sent from client to Kesus. 
+// Has no result message. 
+message TEvUpdateConsumptionState { 
+    message TResourceInfo { 
+        uint64 ResourceId = 1; 
+        bool ConsumeResource = 2; 
+        double Amount = 3; 
+    } 
+    repeated TResourceInfo ResourcesInfo = 1; 
     NActorsProto.TActorId ActorID = 2;
-}
-
-// Ack for TEvUpdateConsumptionState event.
-message TEvUpdateConsumptionStateAck {
-}
-
-// Notification about new resource allocation.
-// Event is sent from Kesus to client.
-// Has no result message.
-message TEvResourcesAllocated {
-    message TResourceInfo {
-        uint64 ResourceId = 1;
-        double Amount = 2;
-        TStreamingQuoterResource EffectiveProps = 3; // Props for resource if they has been changed
-        TKesusError StateNotification = 4; // Resource can be deleted during consuming. In this case Kesus will send an error for resource.
-    }
-    repeated TResourceInfo ResourcesInfo = 1;
-}
-
-// Ack for TEvResourcesAllocated event.
-message TEvResourcesAllocatedAck {
-}
-
-message TEvGetQuoterResourceCounters {
-}
-
-message TEvGetQuoterResourceCountersResult {
-    message TResourceCounters {
-        string ResourcePath = 1;
-        uint64 Allocated = 2; // Allocated amount from tablet start/resource creation for this resource and all its children.
-    }
-
-    repeated TResourceCounters ResourceCounters = 1;
-}
+} 
+ 
+// Ack for TEvUpdateConsumptionState event. 
+message TEvUpdateConsumptionStateAck { 
+} 
+ 
+// Notification about new resource allocation. 
+// Event is sent from Kesus to client. 
+// Has no result message. 
+message TEvResourcesAllocated { 
+    message TResourceInfo { 
+        uint64 ResourceId = 1; 
+        double Amount = 2; 
+        TStreamingQuoterResource EffectiveProps = 3; // Props for resource if they has been changed 
+        TKesusError StateNotification = 4; // Resource can be deleted during consuming. In this case Kesus will send an error for resource. 
+    } 
+    repeated TResourceInfo ResourcesInfo = 1; 
+} 
+ 
+// Ack for TEvResourcesAllocated event. 
+message TEvResourcesAllocatedAck { 
+} 
+ 
+message TEvGetQuoterResourceCounters { 
+} 
+ 
+message TEvGetQuoterResourceCountersResult { 
+    message TResourceCounters { 
+        string ResourcePath = 1; 
+        uint64 Allocated = 2; // Allocated amount from tablet start/resource creation for this resource and all its children. 
+    } 
+ 
+    repeated TResourceCounters ResourceCounters = 1; 
+} 
 
 // Account consumed resources into metering.
 // Event is sent from client to Kesus.

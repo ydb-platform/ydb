@@ -88,12 +88,12 @@ enum class EConsistencyMode {
     RELAXED_MODE = 2,
 };
 
-enum class ERateLimiterCountersMode {
-    UNSET = 0,
-    AGGREGATED = 1,
-    DETAILED = 2,
-};
-
+enum class ERateLimiterCountersMode { 
+    UNSET = 0, 
+    AGGREGATED = 1, 
+    DETAILED = 2, 
+}; 
+ 
 //! Represents coordination node description
 class TNodeDescription {
 public:
@@ -103,7 +103,7 @@ public:
     const TMaybe<TDuration>& GetSessionGracePeriod() const;
     EConsistencyMode GetReadConsistencyMode() const;
     EConsistencyMode GetAttachConsistencyMode() const;
-    ERateLimiterCountersMode GetRateLimiterCountersMode() const;
+    ERateLimiterCountersMode GetRateLimiterCountersMode() const; 
 
     const TString& GetOwner() const;
     const TVector<NScheme::TPermissions>& GetEffectivePermissions() const;
@@ -186,8 +186,8 @@ struct TNodeSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_DEFAULT(EConsistencyMode, ReadConsistencyMode, EConsistencyMode::UNSET);
 
     FLUENT_SETTING_DEFAULT(EConsistencyMode, AttachConsistencyMode, EConsistencyMode::UNSET);
-
-    FLUENT_SETTING_DEFAULT(ERateLimiterCountersMode, RateLimiterCountersMode, ERateLimiterCountersMode::UNSET);
+ 
+    FLUENT_SETTING_DEFAULT(ERateLimiterCountersMode, RateLimiterCountersMode, ERateLimiterCountersMode::UNSET); 
 };
 
 struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> { };

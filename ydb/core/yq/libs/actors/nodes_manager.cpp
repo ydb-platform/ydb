@@ -15,12 +15,12 @@
 #include <ydb/core/protos/services.pb.h>
 
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
+#define LOG_E(stream) \ 
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream) 
+#define LOG_I(stream) \ 
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream) 
+#define LOG_D(stream) \ 
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream) 
 
 namespace NYq {
 
@@ -53,7 +53,7 @@ public:
     };
 
     TYqlNodesManagerActor(
-        const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NYq::TYqSharedResources::TPtr& yqSharedResources, 
         const NDqs::TWorkerManagerCounters& workerManagerCounters,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -71,16 +71,16 @@ public:
         , PrivateApiConfig(privateApiConfig)
         , Tenant(tenant)
         , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
-        , YqSharedResources(yqSharedResources)
+        , YqSharedResources(yqSharedResources) 
         , IcPort(icPort)
         , Address(address)
         , Client(
-            YqSharedResources->YdbDriver,
+            YqSharedResources->YdbDriver, 
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             clientCounters)
-
+ 
     {
         InstanceId = GetGuidAsString(RandomProvider->GenUuid4());
     }
@@ -261,8 +261,8 @@ private:
     TString Tenant;
     ui64 MkqlInitialMemoryLimit;
 
-    NYq::TYqSharedResources::TPtr YqSharedResources;
-
+    NYq::TYqSharedResources::TPtr YqSharedResources; 
+ 
     const ui32 IcPort; // Interconnect Port
     const TString Address;
 
@@ -297,13 +297,13 @@ IActor* CreateYqlNodesManager(
     TIntrusivePtr<IRandomProvider> randomProvider,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NYq::TYqSharedResources::TPtr& yqSharedResources, 
     const ui32& icPort,
     const TString& address,
     const TString& tenant,
     ui64 mkqlInitialMemoryLimit,
     const NMonitoring::TDynamicCounterPtr& clientCounters) {
-    return new TYqlNodesManagerActor(yqSharedResources, workerManagerCounters,
+    return new TYqlNodesManagerActor(yqSharedResources, workerManagerCounters, 
         timeProvider, randomProvider,
         serviceCounters, privateApiConfig, icPort, address, tenant, mkqlInitialMemoryLimit, clientCounters);
 }

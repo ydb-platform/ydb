@@ -76,7 +76,7 @@ TYdbControlPlaneStorageActor::TConfig::TConfig(const NConfig::TControlPlaneStora
 */
 TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
 {
-    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, QUERIES_TABLE_NAME);
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, QUERIES_TABLE_NAME); 
 
     auto description = TTableBuilder()
         .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
@@ -107,7 +107,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
         })
         .Apply([=](const auto& future) {
             auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
+            if (!IsTableCreated(status)) { 
                 CPS_LOG_AS_E(*as, "create quries table error: " << status.GetIssues().ToString());
                 return CreateQueriesTable(as);
             }
@@ -138,7 +138,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem*
         })
         .Apply([=](const auto& future) {
             auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
+            if (!IsTableCreated(status)) { 
                 CPS_LOG_AS_E(*as, "create pending table error: " << status.GetIssues().ToString());
                 return CreatePendingSmallTable(as);
             }
@@ -148,7 +148,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem*
 
 TAsyncStatus TYdbControlPlaneStorageActor::CreateConnectionsTable(TActorSystem* as)
 {
-    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, CONNECTIONS_TABLE_NAME);
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, CONNECTIONS_TABLE_NAME); 
 
     auto description = TTableBuilder()
         .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
@@ -169,7 +169,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateConnectionsTable(TActorSystem* 
         })
         .Apply([=](const auto& future) {
             auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
+            if (!IsTableCreated(status)) { 
                 CPS_LOG_AS_E(*as, "create connections table error: " << status.GetIssues().ToString());
                 return CreateConnectionsTable(as);
             }
@@ -182,7 +182,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateDirectory(TActorSystem* as)
     auto schemeClient = NYdb::NScheme::TSchemeClient(YdbConnection->Driver);
     return schemeClient.MakeDirectory(YdbConnection->TablePathPrefix).Apply([=](const auto& future) {
         auto status = future.GetValue();
-        if (!IsTableCreated(status)) {
+        if (!IsTableCreated(status)) { 
             CPS_LOG_AS_E(*as, "create directory error: " << status.GetIssues().ToString());
             return CreateDirectory(as);
         }
@@ -192,7 +192,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateDirectory(TActorSystem* as)
 
 TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
 {
-    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, JOBS_TABLE_NAME);
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, JOBS_TABLE_NAME); 
 
     auto description = TTableBuilder()
         .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
@@ -212,7 +212,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
         })
         .Apply([=](const auto& future) {
             auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
+            if (!IsTableCreated(status)) { 
                 CPS_LOG_AS_E(*as, "create jobs table error: " << status.GetIssues().ToString());
                 return CreateJobsTable(as);
             }
@@ -222,7 +222,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
 
 TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as)
 {
-    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, NODES_TABLE_NAME);
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, NODES_TABLE_NAME); 
 
     auto description = TTableBuilder()
         .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
@@ -245,7 +245,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as)
         })
         .Apply([=](const auto& future) {
             auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
+            if (!IsTableCreated(status)) { 
                 CPS_LOG_AS_E(*as, "create nodes table error: " << status.GetIssues().ToString());
                 return CreateNodesTable(as);
             }
@@ -255,7 +255,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as)
 
 TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as)
 {
-    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, BINDINGS_TABLE_NAME);
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, BINDINGS_TABLE_NAME); 
 
     auto description = TTableBuilder()
         .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
@@ -276,7 +276,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as)
         })
         .Apply([=](const auto& future) {
             auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
+            if (!IsTableCreated(status)) { 
                 CPS_LOG_AS_E(*as, "create bindings table error: " << status.GetIssues().ToString());
                 return CreateBindingsTable(as);
             }
@@ -287,7 +287,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as)
 TAsyncStatus TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable(TActorSystem* as)
 {
 
-    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, IDEMPOTENCY_KEYS_TABLE_NAME);
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, IDEMPOTENCY_KEYS_TABLE_NAME); 
 
     auto description = TTableBuilder()
         .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
@@ -304,7 +304,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable(TActorSyst
         })
         .Apply([=](const auto& future) {
             auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
+            if (!IsTableCreated(status)) { 
                 CPS_LOG_AS_E(*as, "create idempotency keys table error: " << status.GetIssues().ToString());
                 return CreateIdempotencyKeysTable(as);
             }
@@ -314,7 +314,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable(TActorSyst
 
 TAsyncStatus TYdbControlPlaneStorageActor::CreateResultSetsTable(TActorSystem* as)
 {
-    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, RESULT_SETS_TABLE_NAME);
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, RESULT_SETS_TABLE_NAME); 
 
     auto description = TTableBuilder()
         .AddNullableColumn(RESULT_ID_COLUMN_NAME, EPrimitiveType::String)
@@ -332,7 +332,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateResultSetsTable(TActorSystem* a
         })
         .Apply([=](const auto& future) {
             auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
+            if (!IsTableCreated(status)) { 
                 CPS_LOG_AS_E(*as, "create result sets table error: " << status.GetIssues().ToString());
                 return CreateResultSetsTable(as);
             }
@@ -384,7 +384,7 @@ public:
         , Handler(handler)
     {}
 
-    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE_DB_REQUEST";
+    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE_DB_REQUEST"; 
 
     void Bootstrap() {
         CPS_LOG_T("DbRequest actor request. Actor id: " << SelfId());
@@ -679,4 +679,4 @@ NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     return new TYdbControlPlaneStorageActor(config, common, counters, yqSharedResources, credentialsProviderFactory);
 }
 
-} // NYq
+} // NYq 

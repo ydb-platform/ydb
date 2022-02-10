@@ -22,7 +22,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     tablet_ut.cpp
-    quoter_resource_tree_ut.cpp
+    quoter_resource_tree_ut.cpp 
     ut_helpers.cpp
 )
 

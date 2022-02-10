@@ -1,5 +1,5 @@
 #include "http.h"
-#include "http_ex.h" 
+#include "http_ex.h"
 
 #include <library/cpp/threading/equeue/equeue.h>
 
@@ -243,17 +243,17 @@ public:
     }
 
     void AddRequest(TAutoPtr<TClientRequest> req, bool fail) {
-        struct TFailRequest: public THttpClientRequestEx { 
+        struct TFailRequest: public THttpClientRequestEx {
             inline TFailRequest(TAutoPtr<TClientRequest> parent) {
                 Conn_.Reset(parent->Conn_.Release());
                 HttpConn_.Reset(parent->HttpConn_.Release());
             }
 
             bool Reply(void*) override {
-                if (!ProcessHeaders()) { 
+                if (!ProcessHeaders()) {
                     return true;
-                } 
- 
+                }
+
                 ProcessFailRequest(0);
                 return true;
             }
@@ -558,11 +558,11 @@ TClientConnection::TClientConnection(const TSocket& s, THttpServer::TImpl* serv,
 {
     SetNoDelay(Socket_, true);
 
-    const TDuration& clientTimeout = HttpServ_->Options().ClientTimeout; 
-    if (clientTimeout != TDuration::Zero()) { 
+    const TDuration& clientTimeout = HttpServ_->Options().ClientTimeout;
+    if (clientTimeout != TDuration::Zero()) {
         SetSocketTimeout(Socket_, (long)clientTimeout.Seconds(), clientTimeout.MilliSecondsOfSecond());
-    } 
- 
+    }
+
     HttpServ_->IncreaseConnections();
 }
 
@@ -679,16 +679,16 @@ void TClientRequest::ResetConnection() {
 void TClientRequest::Process(void* ThreadSpecificResource) {
     THolder<TClientRequest> this_(this);
 
-    auto* serverImpl = Conn_->HttpServ_; 
- 
+    auto* serverImpl = Conn_->HttpServ_;
+
     try {
         if (!HttpConn_) {
-            const size_t outputBufferSize = HttpServ()->Options().OutputBufferSize; 
-            if (outputBufferSize) { 
-                HttpConn_.Reset(new THttpServerConn(Socket(), outputBufferSize)); 
-            } else { 
-                HttpConn_.Reset(new THttpServerConn(Socket())); 
-            } 
+            const size_t outputBufferSize = HttpServ()->Options().OutputBufferSize;
+            if (outputBufferSize) {
+                HttpConn_.Reset(new THttpServerConn(Socket(), outputBufferSize));
+            } else {
+                HttpConn_.Reset(new THttpServerConn(Socket()));
+            }
 
             auto maxRequestsPerConnection = HttpServ()->Options().MaxRequestsPerConnection;
             HttpConn_->Output()->EnableKeepAlive(HttpServ()->Options().KeepAliveEnabled && (!maxRequestsPerConnection || Conn_->ReceivedRequests < maxRequestsPerConnection));
@@ -715,7 +715,7 @@ void TClientRequest::Process(void* ThreadSpecificResource) {
             return;
         }
     } catch (...) {
-        serverImpl->Cb_->OnException(); 
+        serverImpl->Cb_->OnException();
 
         throw;
     }

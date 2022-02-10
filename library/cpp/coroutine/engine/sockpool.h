@@ -93,7 +93,7 @@ public:
         : Impl_(nullptr)
     {
     }
- 
+
     TPooledSocket(TImpl* impl)
         : Impl_(impl)
     {
@@ -178,7 +178,7 @@ public:
         } else {
             ret = AllocateMore(conn);
         }
- 
+
         ret.Impl_->Touch();
 
         return ret;
@@ -189,10 +189,10 @@ public:
             alive->Touch();
             socket = TPooledSocket(alive);
             return true;
-        } 
+        }
         return false;
     }
- 
+
 private:
     TPooledSocket::TImpl* GetImpl() {
         TGuard<TMutex> guard(Mutex_);

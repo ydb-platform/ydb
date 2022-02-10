@@ -143,13 +143,13 @@ namespace NCoro {
             auto* lst = Lists_.Get(event->Fd());
             const ui16 oldFlags = Flags(*lst);
             lst->PushFront(event);
-            ui16 newFlags = Flags(*lst); 
+            ui16 newFlags = Flags(*lst);
 
             if (newFlags != oldFlags) {
-                if (oldFlags) { 
-                    newFlags |= CONT_POLL_MODIFY; 
-                } 
- 
+                if (oldFlags) {
+                    newFlags |= CONT_POLL_MODIFY;
+                }
+
                 P_->Set(lst, event->Fd(), newFlags);
             }
         }
@@ -158,13 +158,13 @@ namespace NCoro {
             auto* lst = Lists_.Get(event->Fd());
             const ui16 oldFlags = Flags(*lst);
             event->Unlink();
-            ui16 newFlags = Flags(*lst); 
+            ui16 newFlags = Flags(*lst);
 
             if (newFlags != oldFlags) {
-                if (newFlags) { 
-                    newFlags |= CONT_POLL_MODIFY; 
-                } 
- 
+                if (newFlags) {
+                    newFlags |= CONT_POLL_MODIFY;
+                }
+
                 P_->Set(lst, event->Fd(), newFlags);
             }
         }
@@ -174,9 +174,9 @@ namespace NCoro {
             P_->Wait(events, deadLine);
         }
 
-        EContPoller PollEngine() const { 
-            return P_->PollEngine(); 
-        } 
+        EContPoller PollEngine() const {
+            return P_->PollEngine();
+        }
     private:
         static ui16 Flags(TIntrusiveList<IPollEvent>& lst)  noexcept {
             ui16 ret = 0;

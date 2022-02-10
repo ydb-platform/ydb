@@ -286,7 +286,7 @@ private:
         TParsedHeaders p;
 
         size_t pos = FirstLine_.rfind(' ');
-        // In HTTP/1.1 Keep-Alive is turned on by default 
+        // In HTTP/1.1 Keep-Alive is turned on by default
         if (pos != TString::npos && strcmp(FirstLine_.c_str() + pos + 1, "HTTP/1.1") == 0) {
             p.KeepAlive = true; //request
         } else if (strnicmp(FirstLine_.data(), "HTTP/1.1", 8) == 0) {
@@ -428,12 +428,12 @@ bool THttpInput::AcceptEncoding(const TString& coding) const {
 }
 
 TString THttpInput::BestCompressionScheme(TArrayRef<const TStringBuf> codings) const {
-    return NHttp::ChooseBestCompressionScheme( 
-        [this](const TString& coding) { 
-            return AcceptEncoding(coding); 
-        }, 
-        codings 
-    ); 
+    return NHttp::ChooseBestCompressionScheme(
+        [this](const TString& coding) {
+            return AcceptEncoding(coding);
+        },
+        codings
+    );
 }
 
 TString THttpInput::BestCompressionScheme() const {

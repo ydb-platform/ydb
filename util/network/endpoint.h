@@ -54,7 +54,7 @@ struct THash<TEndpoint> {
 
 inline bool operator==(const TEndpoint& l, const TEndpoint& r) {
     try {
-        return NAddr::IsSame(*l.Addr(), *r.Addr()) && l.Port() == r.Port(); 
+        return NAddr::IsSame(*l.Addr(), *r.Addr()) && l.Port() == r.Port();
     } catch (...) {
         return false;
     }

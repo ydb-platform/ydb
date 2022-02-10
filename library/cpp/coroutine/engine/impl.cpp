@@ -3,8 +3,8 @@
 #include "stack/stack_allocator.h"
 #include "stack/stack_guards.h"
 
-#include <util/generic/scope.h> 
-#include <util/thread/singleton.h> 
+#include <util/generic/scope.h>
+#include <util/thread/singleton.h>
 #include <util/stream/format.h>
 #include <util/stream/output.h>
 #include <util/system/yassert.h>
@@ -157,47 +157,47 @@ void TContExecutor::WaitForIO() {
         // Waking a coroutine puts it into ReadyNext_ list
         const auto next = WaitQueue_.WakeTimedout(now);
 
-        if (!UserEvents_.Empty()) { 
-            TIntrusiveList<IUserEvent> userEvents; 
-            userEvents.Swap(UserEvents_); 
-            do { 
-                userEvents.PopFront()->Execute(); 
-            } while (!userEvents.Empty()); 
-        } 
- 
+        if (!UserEvents_.Empty()) {
+            TIntrusiveList<IUserEvent> userEvents;
+            userEvents.Swap(UserEvents_);
+            do {
+                userEvents.PopFront()->Execute();
+            } while (!userEvents.Empty());
+        }
+
         // Polling will return as soon as there is an event to process or a timeout.
         // If there are woken coroutines we do not want to sleep in the poller
         //      yet still we want to check for new io
         //      to prevent ourselves from locking out of io by constantly waking coroutines.
 
-        if (ReadyNext_.Empty()) { 
+        if (ReadyNext_.Empty()) {
             if (EnterPollerCallback_) {
                 EnterPollerCallback_->OnEnterPoller();
             }
-            Poll(next); 
+            Poll(next);
             if (EnterPollerCallback_) {
                 EnterPollerCallback_->OnExitPoller();
             }
-        } else if (LastPoll_ + TDuration::MilliSeconds(5) < now) { 
+        } else if (LastPoll_ + TDuration::MilliSeconds(5) < now) {
             if (EnterPollerCallback_) {
                 EnterPollerCallback_->OnEnterPoller();
             }
-            Poll(now); 
+            Poll(now);
             if (EnterPollerCallback_) {
                 EnterPollerCallback_->OnExitPoller();
             }
-        } 
+        }
 
         Ready_.Append(ReadyNext_);
     }
 }
 
-void TContExecutor::Poll(TInstant deadline) { 
-    Poller_.Wait(PollerEvents_, deadline); 
-    LastPoll_ = Now(); 
- 
-    // Waking a coroutine puts it into ReadyNext_ list 
-    for (auto event : PollerEvents_) { 
+void TContExecutor::Poll(TInstant deadline) {
+    Poller_.Wait(PollerEvents_, deadline);
+    LastPoll_ = Now();
+
+    // Waking a coroutine puts it into ReadyNext_ list
+    for (auto event : PollerEvents_) {
         auto* lst = (NCoro::TPollEventList*)event.Data;
         const int status = event.Status;
 
@@ -276,36 +276,36 @@ void TContExecutor::ScheduleExecutionNow(TCont* cont) noexcept {
     Ready_.PushBack(cont);
 }
 
-namespace { 
+namespace {
     inline TContExecutor*& ThisThreadExecutor() {
         struct TThisThreadExecutorHolder {
-            TContExecutor* Executor = nullptr; 
+            TContExecutor* Executor = nullptr;
         };
         return FastTlsSingletonWithPriority<TThisThreadExecutorHolder, 0>()->Executor;
     }
-} 
- 
+}
+
 void TContExecutor::DeleteScheduled() noexcept {
     ToDelete_.ForEach([this](TCont* c) {
         Release(c);
     });
 }
 
-TCont* RunningCont() { 
+TCont* RunningCont() {
     TContExecutor* thisThreadExecutor = ThisThreadExecutor();
-    return thisThreadExecutor ? thisThreadExecutor->Running() : nullptr; 
-} 
- 
+    return thisThreadExecutor ? thisThreadExecutor->Running() : nullptr;
+}
+
 void TContExecutor::RunScheduler() noexcept {
     try {
-        TContExecutor* const prev = ThisThreadExecutor(); 
+        TContExecutor* const prev = ThisThreadExecutor();
         ThisThreadExecutor() = this;
         TCont* caller = Current_;
         TExceptionSafeContext* context = caller ? caller->Trampoline_.Context() : &SchedContext_;
-        Y_DEFER { 
-            ThisThreadExecutor() = prev; 
-        }; 
- 
+        Y_DEFER {
+            ThisThreadExecutor() = prev;
+        };
+
         while (true) {
             if (ScheduleCallback_ && Current_) {
                 ScheduleCallback_->OnUnschedule(*this);
@@ -345,7 +345,7 @@ void TContExecutor::RunScheduler() noexcept {
             }
         }
     } catch (...) {
-        TBackTrace::FromCurrentException().PrintTo(Cerr); 
+        TBackTrace::FromCurrentException().PrintTo(Cerr);
         Y_FAIL("Uncaught exception in the scheduler: %s", CurrentExceptionMessage().c_str());
     }
 }

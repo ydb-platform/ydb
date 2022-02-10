@@ -46,25 +46,25 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
                                   EXPECTED);
     }
 
-    Y_UNIT_TEST(TestGetHeaders) { 
-        THttpResponse resp(HTTP_FORBIDDEN); 
- 
-        THttpHeaders headers; 
-        headers.AddHeader(THttpInputHeader("X-Header-1", "ValueOne")); 
-        headers.AddHeader(THttpInputHeader("X-Header-2", "ValueTwo")); 
-        headers.AddHeader(THttpInputHeader("X-Header-3", "ValueThree")); 
-        resp.AddMultipleHeaders(headers); 
-        resp.AddHeader("X-Header-4", "ValueFour"); 
- 
-        const THttpHeaders& gotHeaders = resp.GetHeaders(); 
-        UNIT_ASSERT_VALUES_EQUAL(gotHeaders.Count(), 4); 
-        UNIT_ASSERT(gotHeaders.HasHeader("X-Header-1")); 
-        UNIT_ASSERT_STRINGS_EQUAL(gotHeaders.FindHeader("X-Header-1")->Value(), "ValueOne"); 
-        UNIT_ASSERT(gotHeaders.HasHeader("X-Header-4")); 
-        UNIT_ASSERT_STRINGS_EQUAL(gotHeaders.FindHeader("X-Header-4")->Value(), "ValueFour"); 
-    } 
- 
- 
+    Y_UNIT_TEST(TestGetHeaders) {
+        THttpResponse resp(HTTP_FORBIDDEN);
+
+        THttpHeaders headers;
+        headers.AddHeader(THttpInputHeader("X-Header-1", "ValueOne"));
+        headers.AddHeader(THttpInputHeader("X-Header-2", "ValueTwo"));
+        headers.AddHeader(THttpInputHeader("X-Header-3", "ValueThree"));
+        resp.AddMultipleHeaders(headers);
+        resp.AddHeader("X-Header-4", "ValueFour");
+
+        const THttpHeaders& gotHeaders = resp.GetHeaders();
+        UNIT_ASSERT_VALUES_EQUAL(gotHeaders.Count(), 4);
+        UNIT_ASSERT(gotHeaders.HasHeader("X-Header-1"));
+        UNIT_ASSERT_STRINGS_EQUAL(gotHeaders.FindHeader("X-Header-1")->Value(), "ValueOne");
+        UNIT_ASSERT(gotHeaders.HasHeader("X-Header-4"));
+        UNIT_ASSERT_STRINGS_EQUAL(gotHeaders.FindHeader("X-Header-4")->Value(), "ValueFour");
+    }
+
+
     Y_UNIT_TEST(TestSetContent) {
         const char* EXPECTED = "HTTP/1.1 200 Ok\r\n"
                                "Content-Length: 10\r\n"

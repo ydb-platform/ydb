@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/output.h>
-#include <util/system/atomic.h> 
+#include <util/system/atomic.h>
 #include <util/generic/vector.h>
 
 #include "task_scheduler.h"
@@ -12,13 +12,13 @@ class TTaskSchedulerTest: public TTestBase {
             UNIT_TEST(Test);
         UNIT_TEST_SUITE_END();
 
-        class TCheckTask: public TTaskScheduler::IRepeatedTask { 
+        class TCheckTask: public TTaskScheduler::IRepeatedTask {
             public:
                 TCheckTask(const TDuration& delay)
                     : Start_(Now())
                     , Delay_(delay)
                 {
-                    AtomicIncrement(ScheduledTaskCounter_); 
+                    AtomicIncrement(ScheduledTaskCounter_);
                 }
 
                 ~TCheckTask() override {
@@ -28,28 +28,28 @@ class TTaskSchedulerTest: public TTestBase {
                     const TDuration delay = Now() - Start_;
 
                     if (delay < Delay_) {
-                        AtomicIncrement(BadTimeoutCounter_); 
+                        AtomicIncrement(BadTimeoutCounter_);
                     }
 
-                    AtomicIncrement(ExecutedTaskCounter_); 
+                    AtomicIncrement(ExecutedTaskCounter_);
 
                     return false;
                 }
 
                 static bool AllTaskExecuted() {
-                    return AtomicGet(ScheduledTaskCounter_) == AtomicGet(ExecutedTaskCounter_); 
+                    return AtomicGet(ScheduledTaskCounter_) == AtomicGet(ExecutedTaskCounter_);
                 }
 
                 static size_t BadTimeoutCount() {
-                    return AtomicGet(BadTimeoutCounter_); 
+                    return AtomicGet(BadTimeoutCounter_);
                 }
 
             private:
                 TInstant Start_;
                 TDuration Delay_;
-                static TAtomic BadTimeoutCounter_; 
-                static TAtomic ScheduledTaskCounter_; 
-                static TAtomic ExecutedTaskCounter_; 
+                static TAtomic BadTimeoutCounter_;
+                static TAtomic ScheduledTaskCounter_;
+                static TAtomic ExecutedTaskCounter_;
         };
 
     public:
@@ -72,15 +72,15 @@ class TTaskSchedulerTest: public TTestBase {
         void ScheduleCheckTask(size_t delay) {
             TDuration d = TDuration::MicroSeconds(delay);
 
-            Scheduler_.Add(new TCheckTask(d), d); 
+            Scheduler_.Add(new TCheckTask(d), d);
         }
 
     private:
-        TTaskScheduler Scheduler_; 
+        TTaskScheduler Scheduler_;
 };
 
-TAtomic TTaskSchedulerTest::TCheckTask::BadTimeoutCounter_ = 0; 
-TAtomic TTaskSchedulerTest::TCheckTask::ScheduledTaskCounter_ = 0; 
-TAtomic TTaskSchedulerTest::TCheckTask::ExecutedTaskCounter_ = 0; 
+TAtomic TTaskSchedulerTest::TCheckTask::BadTimeoutCounter_ = 0;
+TAtomic TTaskSchedulerTest::TCheckTask::ScheduledTaskCounter_ = 0;
+TAtomic TTaskSchedulerTest::TCheckTask::ExecutedTaskCounter_ = 0;
 
 UNIT_TEST_SUITE_REGISTRATION(TTaskSchedulerTest);

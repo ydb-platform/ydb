@@ -139,7 +139,7 @@ IRemoteAddrPtr NAddr::GetSockAddr(SOCKET s) {
 
     return addr;
 }
- 
+
 IRemoteAddrPtr NAddr::GetPeerAddr(SOCKET s) {
     auto addr = MakeHolder<TOpaqueAddr>();
 
@@ -150,41 +150,41 @@ IRemoteAddrPtr NAddr::GetPeerAddr(SOCKET s) {
     return addr;
 }
 
-static const in_addr& InAddr(const IRemoteAddr& addr) { 
-    return ((const sockaddr_in*)addr.Addr())->sin_addr; 
-} 
- 
-static const in6_addr& In6Addr(const IRemoteAddr& addr) { 
-    return ((const sockaddr_in6*)addr.Addr())->sin6_addr; 
-} 
- 
-bool NAddr::IsLoopback(const IRemoteAddr& addr) { 
-    if (addr.Addr()->sa_family == AF_INET) { 
+static const in_addr& InAddr(const IRemoteAddr& addr) {
+    return ((const sockaddr_in*)addr.Addr())->sin_addr;
+}
+
+static const in6_addr& In6Addr(const IRemoteAddr& addr) {
+    return ((const sockaddr_in6*)addr.Addr())->sin6_addr;
+}
+
+bool NAddr::IsLoopback(const IRemoteAddr& addr) {
+    if (addr.Addr()->sa_family == AF_INET) {
         return ((ntohl(InAddr(addr).s_addr) >> 24) & 0xff) == 127;
     }
 
     if (addr.Addr()->sa_family == AF_INET6) {
-        return 0 == memcmp(&In6Addr(addr), &in6addr_loopback, sizeof(in6_addr)); 
-    } 
+        return 0 == memcmp(&In6Addr(addr), &in6addr_loopback, sizeof(in6_addr));
+    }
 
     return false;
-} 
- 
-bool NAddr::IsSame(const IRemoteAddr& lhs, const IRemoteAddr& rhs) { 
-    if (lhs.Addr()->sa_family != rhs.Addr()->sa_family) { 
-        return false; 
+}
+
+bool NAddr::IsSame(const IRemoteAddr& lhs, const IRemoteAddr& rhs) {
+    if (lhs.Addr()->sa_family != rhs.Addr()->sa_family) {
+        return false;
     }
 
     if (lhs.Addr()->sa_family == AF_INET) {
-        return InAddr(lhs).s_addr == InAddr(rhs).s_addr; 
+        return InAddr(lhs).s_addr == InAddr(rhs).s_addr;
     }
 
     if (lhs.Addr()->sa_family == AF_INET6) {
-        return 0 == memcmp(&In6Addr(lhs), &In6Addr(rhs), sizeof(in6_addr)); 
-    } 
- 
-    ythrow yexception() << "unsupported addr family: " << lhs.Addr()->sa_family; 
-} 
+        return 0 == memcmp(&In6Addr(lhs), &In6Addr(rhs), sizeof(in6_addr));
+    }
+
+    ythrow yexception() << "unsupported addr family: " << lhs.Addr()->sa_family;
+}
 
 socklen_t NAddr::SockAddrLength(const sockaddr* addr) {
     switch (addr->sa_family) {

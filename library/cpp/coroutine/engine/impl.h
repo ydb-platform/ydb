@@ -121,9 +121,9 @@ private:
     bool Scheduled_ = false;
 };
 
-TCont* RunningCont(); 
+TCont* RunningCont();
 
- 
+
 template <class Functor>
 static void ContHelperFunc(TCont* cont, void* arg) {
     (*((Functor*)(arg)))(cont);
@@ -134,15 +134,15 @@ static void ContHelperMemberFunc(TCont* c, void* arg) {
     ((reinterpret_cast<T*>(arg))->*M)(c);
 }
 
-class IUserEvent 
-    : public TIntrusiveListItem<IUserEvent> 
-{ 
-public: 
-    virtual ~IUserEvent() = default; 
- 
-    virtual void Execute() = 0; 
-}; 
- 
+class IUserEvent
+    : public TIntrusiveListItem<IUserEvent>
+{
+public:
+    virtual ~IUserEvent() = default;
+
+    virtual void Execute() = 0;
+};
+
 /// Central coroutine class.
 /// Note, coroutines are single-threaded, and all methods must be called from the single thread
 class TContExecutor {
@@ -249,22 +249,22 @@ public:
         return FailOnError_;
     }
 
-    void RegisterInWaitQueue(NCoro::TContPollEvent* event) { 
-        WaitQueue_.Register(event); 
-    } 
- 
+    void RegisterInWaitQueue(NCoro::TContPollEvent* event) {
+        WaitQueue_.Register(event);
+    }
+
     void ScheduleIoWait(TFdEvent* event) {
-        RegisterInWaitQueue(event); 
+        RegisterInWaitQueue(event);
         Poller_.Schedule(event);
     }
 
     void ScheduleIoWait(TTimerEvent* event) noexcept {
-        RegisterInWaitQueue(event); 
+        RegisterInWaitQueue(event);
     }
 
-    void ScheduleUserEvent(IUserEvent* event) { 
-        UserEvents_.PushBack(event); 
-    } 
+    void ScheduleUserEvent(IUserEvent* event) {
+        UserEvents_.PushBack(event);
+    }
 
     void Pause();
     TInstant Now();
@@ -285,7 +285,7 @@ private:
 
     void WaitForIO();
 
-    void Poll(TInstant deadline); 
+    void Poll(TInstant deadline);
 
 private:
     NCoro::IScheduleCallback* const ScheduleCallback_ = nullptr;
@@ -300,11 +300,11 @@ private:
     TContList ReadyNext_;
     NCoro::TEventWaitQueue WaitQueue_;
     NCoro::TContPoller Poller_;
-    NCoro::TContPoller::TEvents PollerEvents_; 
-    TInstant LastPoll_; 
+    NCoro::TContPoller::TEvents PollerEvents_;
+    TInstant LastPoll_;
 
-    TIntrusiveList<IUserEvent> UserEvents_; 
- 
+    TIntrusiveList<IUserEvent> UserEvents_;
+
     size_t Allocated_ = 0;
     TCont* Current_ = nullptr;
     bool FailOnError_ = false;

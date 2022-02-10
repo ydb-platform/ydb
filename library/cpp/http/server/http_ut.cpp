@@ -456,31 +456,31 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         server.Stop();
     }
 
-    class TReleaseConnectionServer: public THttpServer::ICallBack { 
-        class TRequest: public THttpClientRequestEx { 
-        public: 
-            bool Reply(void* /*tsr*/) override { 
-                Output() << "HTTP/1.1 200 Ok\r\n\r\n"; 
-                Output() << "reply"; 
-                Output().Finish(); 
- 
-                ReleaseConnection(); 
- 
-                throw yexception() << "some error"; 
- 
-                return true; 
-            } 
-        }; 
+    class TReleaseConnectionServer: public THttpServer::ICallBack {
+        class TRequest: public THttpClientRequestEx {
+        public:
+            bool Reply(void* /*tsr*/) override {
+                Output() << "HTTP/1.1 200 Ok\r\n\r\n";
+                Output() << "reply";
+                Output().Finish();
 
-    public: 
-        TClientRequest* CreateClient() override { 
-            return new TRequest(); 
-        } 
- 
-        void OnException() override { 
-            ExceptionMessage = CurrentExceptionMessage(); 
-        } 
- 
+                ReleaseConnection();
+
+                throw yexception() << "some error";
+
+                return true;
+            }
+        };
+
+    public:
+        TClientRequest* CreateClient() override {
+            return new TRequest();
+        }
+
+        void OnException() override {
+            ExceptionMessage = CurrentExceptionMessage();
+        }
+
         TString ExceptionMessage;
     };
 
@@ -495,7 +495,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             }
         };
 
-    public: 
+    public:
         TClientRequest* CreateClient() override {
             return new TRequest();
         }
@@ -504,9 +504,9 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             ExceptionMessage = CurrentExceptionMessage();
         }
 
-        TString ExceptionMessage; 
-    }; 
- 
+        TString ExceptionMessage;
+    };
+
     class TListenerSockAddrReplyServer: public THttpServer::ICallBack {
         class TRequest: public TClientRequest {
         public:
@@ -542,22 +542,22 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     };
 
     Y_UNIT_TEST(TTestReleaseConnection) {
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(); 
- 
-        TReleaseConnectionServer serverImpl; 
-        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true)); 
-        UNIT_ASSERT(server.Start()); 
- 
-        TTestRequest r(port, "request"); 
-        r.KeepAliveConnection = true; 
- 
-        UNIT_ASSERT_C(r.Execute() == "reply", "diff echo response for request:\n" + r.GetDescription()); 
- 
-        server.Stop(); 
- 
-        UNIT_ASSERT_STRINGS_EQUAL(serverImpl.ExceptionMessage, "(yexception) some error"); 
-    }; 
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+
+        TReleaseConnectionServer serverImpl;
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true));
+        UNIT_ASSERT(server.Start());
+
+        TTestRequest r(port, "request");
+        r.KeepAliveConnection = true;
+
+        UNIT_ASSERT_C(r.Execute() == "reply", "diff echo response for request:\n" + r.GetDescription());
+
+        server.Stop();
+
+        UNIT_ASSERT_STRINGS_EQUAL(serverImpl.ExceptionMessage, "(yexception) some error");
+    };
 
     THttpInput SendRequest(TSocket& socket, ui16 port) {
         TSocketInput si(socket);

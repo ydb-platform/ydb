@@ -6,7 +6,7 @@
 #include <util/generic/size_literals.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 
 class THttpServerOptions {
 public:
@@ -93,10 +93,10 @@ public:
 
         return *this;
     }
- 
+
     inline THttpServerOptions& SetClientTimeout(const TDuration& timeout) noexcept {
         ClientTimeout = timeout;
- 
+
         return *this;
     }
 
@@ -107,11 +107,11 @@ public:
     }
 
     inline THttpServerOptions& SetOutputBufferSize(size_t val) noexcept {
-        OutputBufferSize = val; 
- 
-        return *this; 
-    } 
- 
+        OutputBufferSize = val;
+
+        return *this;
+    }
+
     inline THttpServerOptions& SetMaxInputContentLength(ui64 val) noexcept {
         MaxInputContentLength = val;
 
@@ -162,7 +162,7 @@ public:
     ui32 MaxConnections = 100;
     int ListenBacklog = SOMAXCONN;
     TDuration ClientTimeout;
-    size_t OutputBufferSize = 0; 
+    size_t OutputBufferSize = 0;
     ui64 MaxInputContentLength = sizeof(size_t) <= 4 ? 2_GB : 64_GB;
     size_t MaxRequestsPerConnection = 0;  // If keep-alive is enabled, request limit before connection is closed
     bool UseElasticQueues = false;

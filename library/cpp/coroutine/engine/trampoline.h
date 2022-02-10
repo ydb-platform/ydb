@@ -39,8 +39,8 @@ namespace NCoro {
         }
 
         void SwitchTo(TExceptionSafeContext* ctx) noexcept {
-            Y_VERIFY(Stack_.LowerCanaryOk(), "Stack overflow (%s)", ContName()); 
-            Y_VERIFY(Stack_.UpperCanaryOk(), "Stack override (%s)", ContName()); 
+            Y_VERIFY(Stack_.LowerCanaryOk(), "Stack overflow (%s)", ContName());
+            Y_VERIFY(Stack_.UpperCanaryOk(), "Stack override (%s)", ContName());
             Ctx_.SwitchTo(ctx);
         }
 
@@ -49,8 +49,8 @@ namespace NCoro {
         void DoRunNaked() override;
 
     private:
-        const char* ContName() const noexcept; 
-    private: 
+        const char* ContName() const noexcept;
+    private:
         NStack::TStackHolder Stack_;
         const TContClosure Clo_;
         TExceptionSafeContext Ctx_;

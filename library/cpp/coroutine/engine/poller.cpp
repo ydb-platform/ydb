@@ -46,11 +46,11 @@ namespace {
     template <class T>
     class TVirtualize: public IPollerFace {
     public:
-        TVirtualize(EContPoller pollerEngine) 
-            : PollerEngine_(pollerEngine) 
-        { 
-        } 
- 
+        TVirtualize(EContPoller pollerEngine)
+            : PollerEngine_(pollerEngine)
+        {
+        }
+
         void Set(const TChange& c) override {
             P_.Set(c);
         }
@@ -59,12 +59,12 @@ namespace {
             P_.Wait(events, deadLine);
         }
 
-        EContPoller PollEngine() const override { 
-            return PollerEngine_; 
-        } 
+        EContPoller PollEngine() const override {
+            return PollerEngine_;
+        }
     private:
         T P_;
-        const EContPoller PollerEngine_; 
+        const EContPoller PollerEngine_;
     };
 
 
@@ -366,21 +366,21 @@ THolder<IPollerFace> IPollerFace::Construct(TStringBuf name) {
 THolder<IPollerFace> IPollerFace::Construct(EContPoller poller) {
     switch (poller) {
     case EContPoller::Default:
-    case EContPoller::Combined: 
-        return MakeHolder<TVirtualize<TCombinedPoller>>(EContPoller::Combined); 
+    case EContPoller::Combined:
+        return MakeHolder<TVirtualize<TCombinedPoller>>(EContPoller::Combined);
     case EContPoller::Select:
-        return MakeHolder<TVirtualize<TPoller<TGenericPoller<TSelectPoller<TWithoutLocking>>>>>(poller); 
+        return MakeHolder<TVirtualize<TPoller<TGenericPoller<TSelectPoller<TWithoutLocking>>>>>(poller);
     case EContPoller::Poll:
-        return MakeHolder<TVirtualize<TPollPoller>>(poller); 
+        return MakeHolder<TVirtualize<TPollPoller>>(poller);
     case EContPoller::Epoll:
 #if defined(HAVE_EPOLL_POLLER)
-        return MakeHolder<TVirtualize<TPoller<TGenericPoller<TEpollPoller<TWithoutLocking>>>>>(poller); 
+        return MakeHolder<TVirtualize<TPoller<TGenericPoller<TEpollPoller<TWithoutLocking>>>>>(poller);
 #else
         return nullptr;
 #endif
     case EContPoller::Kqueue:
 #if defined(HAVE_KQUEUE_POLLER)
-        return MakeHolder<TVirtualize<TPoller<TGenericPoller<TKqueuePoller<TWithoutLocking>>>>>(poller); 
+        return MakeHolder<TVirtualize<TPoller<TGenericPoller<TKqueuePoller<TWithoutLocking>>>>>(poller);
 #else
         return nullptr;
 #endif

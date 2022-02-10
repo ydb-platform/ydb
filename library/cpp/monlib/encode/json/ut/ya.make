@@ -25,7 +25,7 @@ RESOURCE(
     int_gauge.json /int_gauge.json
     sensors.json /sensors.json
     metrics.json /metrics.json
-    named_metrics.json /named_metrics.json 
+    named_metrics.json /named_metrics.json
     test_decode_to_encode.json /test_decode_to_encode.json
     crash.json /crash.json
     hist_crash.json /hist_crash.json

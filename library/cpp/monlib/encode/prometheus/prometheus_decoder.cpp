@@ -518,7 +518,7 @@ namespace NMonitoring {
             void ConsumeLabels(TStringBuf name, const TLabelsMap& labels) {
                 Y_PARSER_ENSURE(labels.count(MetricNameLabel_) == 0,
                     "label name '" << MetricNameLabel_ <<
-                    "' is reserved, but is used with metric: " << name << LabelsToStr(labels)); 
+                    "' is reserved, but is used with metric: " << name << LabelsToStr(labels));
 
                 Consumer_->OnLabelsBegin();
                 Consumer_->OnLabel(MetricNameLabel_, TString(name)); // TODO: remove this string allocation

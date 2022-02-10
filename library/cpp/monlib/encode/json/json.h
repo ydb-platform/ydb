@@ -24,6 +24,6 @@ namespace NMonitoring {
                                                int indentation = 0,
                                                TStringBuf metricNameLabel = "name");
 
-    void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel = "name"); 
+    void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel = "name");
 
 }

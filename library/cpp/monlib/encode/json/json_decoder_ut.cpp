@@ -73,10 +73,10 @@ void ValidateMetrics(const TVector<TMetricData>& metrics) {
     UNIT_ASSERT_VALUES_EQUAL((*m.Values)[0].GetValue().AsDouble(), 123);
 }
 
-void CheckCommonPartsCollector(TString data, bool shouldBeStopped, bool checkLabels = true, bool checkTs = true, TStringBuf metricNameLabel = "name") { 
+void CheckCommonPartsCollector(TString data, bool shouldBeStopped, bool checkLabels = true, bool checkTs = true, TStringBuf metricNameLabel = "name") {
     TCommonPartsCollector commonPartsCollector;
     TMemoryInput memIn(data);
-    TDecoderJson decoder(data, &commonPartsCollector, metricNameLabel); 
+    TDecoderJson decoder(data, &commonPartsCollector, metricNameLabel);
 
     bool isOk{false};
     UNIT_ASSERT_NO_EXCEPTION(isOk = NJson::ReadJson(&memIn, &decoder));

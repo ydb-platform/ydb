@@ -308,39 +308,39 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Index, Timestamp, Request, Response, ExecutionTime>;
     };
 
-    struct MigrationPlan : Table<126> { 
-        enum EState : ui32 { 
-            CREATED, 
-            ACTIVE, 
-            PAUSED, 
-            FINISHED 
-        }; 
- 
-        struct Name : Column<1, NScheme::NTypeIds::String> {}; 
-        struct State : Column<2, NScheme::NTypeIds::Uint32> { using Type = EState; }; 
-        struct Size : Column<3, NScheme::NTypeIds::Uint64> {}; 
-        struct Done : Column<4, NScheme::NTypeIds::Uint64> {}; 
- 
-        using TKey = TableKey<Name>; 
-        using TColumns = TableColumns<Name, State, Size, Done>; 
-    }; 
- 
-    struct MigrationEntry : Table<127> { 
-        struct PlanName : Column<1, MigrationPlan::Name::ColumnType> {}; 
-        struct EntryIndex : Column<2, NScheme::NTypeIds::Uint64> {}; 
-        struct GroupId : Column<3, NScheme::NTypeIds::Uint32> {}; 
-        struct OriginNodeId : Column<4, NScheme::NTypeIds::Uint32> {}; 
-        struct OriginPDiskId : Column<5, NScheme::NTypeIds::Uint32> {}; 
-        struct OriginVSlotId : Column<6, NScheme::NTypeIds::Uint32> {}; 
-        struct TargetNodeId : Column<7, NScheme::NTypeIds::Uint32> {}; 
-        struct TargetPDiskId : Column<8, NScheme::NTypeIds::Uint32> {}; 
-        struct Done : Column<9, NScheme::NTypeIds::Bool> {}; 
- 
-        using TKey = TableKey<PlanName, EntryIndex>; 
-        using TColumns = TableColumns<PlanName, EntryIndex, GroupId, OriginNodeId, 
-                OriginPDiskId, OriginVSlotId, TargetNodeId, TargetPDiskId, Done>; 
-    }; 
- 
+    struct MigrationPlan : Table<126> {
+        enum EState : ui32 {
+            CREATED,
+            ACTIVE,
+            PAUSED,
+            FINISHED
+        };
+
+        struct Name : Column<1, NScheme::NTypeIds::String> {};
+        struct State : Column<2, NScheme::NTypeIds::Uint32> { using Type = EState; };
+        struct Size : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Done : Column<4, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<Name, State, Size, Done>;
+    };
+
+    struct MigrationEntry : Table<127> {
+        struct PlanName : Column<1, MigrationPlan::Name::ColumnType> {};
+        struct EntryIndex : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct GroupId : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct OriginNodeId : Column<4, NScheme::NTypeIds::Uint32> {};
+        struct OriginPDiskId : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct OriginVSlotId : Column<6, NScheme::NTypeIds::Uint32> {};
+        struct TargetNodeId : Column<7, NScheme::NTypeIds::Uint32> {};
+        struct TargetPDiskId : Column<8, NScheme::NTypeIds::Uint32> {};
+        struct Done : Column<9, NScheme::NTypeIds::Bool> {};
+
+        using TKey = TableKey<PlanName, EntryIndex>;
+        using TColumns = TableColumns<PlanName, EntryIndex, GroupId, OriginNodeId,
+                OriginPDiskId, OriginVSlotId, TargetNodeId, TargetPDiskId, Done>;
+    };
+
     struct ScrubState : Table<128> {
         struct NodeId : Column<1, VSlot::NodeID::ColumnType> {};
         struct PDiskId : Column<2, VSlot::PDiskID::ColumnType> {};
@@ -387,8 +387,8 @@ struct Schema : NIceDb::Schema {
                                 BoxStoragePoolUser,
                                 BoxStoragePoolPDiskFilter,
                                 GroupStoragePool,
-                                OperationLog, 
-                                MigrationPlan, 
+                                OperationLog,
+                                MigrationPlan,
                                 MigrationEntry,
                                 ScrubState,
                                 DriveSerial

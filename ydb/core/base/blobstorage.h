@@ -792,13 +792,13 @@ struct TEvBlobStorage {
         EvControllerNodeReport,
         EvControllerScrubStartQuantum,
 
-        EvControllerMigrationPause, 
-        EvControllerMigrationContinue, 
-        EvControllerMigrationFinished, 
-        EvControllerMigrationBatch, 
-        EvControllerMigrationBatchRequest, 
-        EvControllerMigrationDone, 
- 
+        EvControllerMigrationPause,
+        EvControllerMigrationContinue,
+        EvControllerMigrationFinished,
+        EvControllerMigrationBatch,
+        EvControllerMigrationBatchRequest,
+        EvControllerMigrationDone,
+
         EvControllerUpdateSystemViews,
 
         // proxy - node controller interface

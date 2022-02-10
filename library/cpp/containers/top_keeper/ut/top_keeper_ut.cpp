@@ -2,43 +2,43 @@
 #include <library/cpp/containers/top_keeper/top_keeper.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/random.h>
- 
-static ui32 seed = 3; 
-ui32 Rnd() { 
-    seed = seed * 5 + 1; 
-    return seed; 
-} 
- 
-/* 
- * Tests for TTopKeeper 
- */ 
+
+static ui32 seed = 3;
+ui32 Rnd() {
+    seed = seed * 5 + 1;
+    return seed;
+}
+
+/*
+ * Tests for TTopKeeper
+ */
 Y_UNIT_TEST_SUITE(TTopKeeperTest) {
-    // Tests correctness on usual examples 
+    // Tests correctness on usual examples
     Y_UNIT_TEST(CorrectnessTest) {
-        int m = 20000; 
- 
+        int m = 20000;
+
         TLimitedHeap<std::pair<int, int>> h1(m);
         TTopKeeper<std::pair<int, int>> h2(m);
 
-        int n = 20000000; 
-        while (n--) { 
-            int r = int(Rnd()); 
- 
+        int n = 20000000;
+        while (n--) {
+            int r = int(Rnd());
+
             h1.Insert({r, -r});
             h2.Emplace(r, -r);
-        } 
- 
-        h2.Finalize(); 
- 
-        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize()); 
- 
-        while (!h1.IsEmpty()) { 
-            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext()); 
-            h1.PopMin(); 
-            h2.Pop(); 
-        } 
-    } 
- 
+        }
+
+        h2.Finalize();
+
+        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize());
+
+        while (!h1.IsEmpty()) {
+            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext());
+            h1.PopMin();
+            h2.Pop();
+        }
+    }
+
     // Tests on zero-size correctness
     Y_UNIT_TEST(ZeroSizeCorrectnes) {
         TTopKeeper<int> h(0);
@@ -49,115 +49,115 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
         UNIT_ASSERT(h.IsEmpty());
     }
 
-    // Tests SetMaxSize behaviour 
+    // Tests SetMaxSize behaviour
     Y_UNIT_TEST(SetMaxSizeTest) {
-        int m = 20000; 
-        TLimitedHeap<int> h1(m); 
-        TTopKeeper<int> h2(m); 
- 
-        int n = 20000000; 
-        while (n--) { 
-            int r = int(Rnd()); 
- 
-            h1.Insert(r); 
-            h2.Insert(r); 
-        } 
- 
-        h1.SetMaxSize(m / 3); 
-        h2.SetMaxSize(m / 3); 
-        h2.Finalize(); 
- 
-        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize()); 
- 
-        while (!h1.IsEmpty()) { 
-            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext()); 
-            h1.PopMin(); 
-            h2.Pop(); 
-        } 
-    } 
- 
-    // Tests reuse behavior 
+        int m = 20000;
+        TLimitedHeap<int> h1(m);
+        TTopKeeper<int> h2(m);
+
+        int n = 20000000;
+        while (n--) {
+            int r = int(Rnd());
+
+            h1.Insert(r);
+            h2.Insert(r);
+        }
+
+        h1.SetMaxSize(m / 3);
+        h2.SetMaxSize(m / 3);
+        h2.Finalize();
+
+        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize());
+
+        while (!h1.IsEmpty()) {
+            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext());
+            h1.PopMin();
+            h2.Pop();
+        }
+    }
+
+    // Tests reuse behavior
     Y_UNIT_TEST(ReuseTest) {
-        int m = 20000; 
-        TLimitedHeap<int> h1(m); 
-        TTopKeeper<int> h2(m); 
- 
-        int n = 20000000; 
-        while (n--) { 
-            int r = int(Rnd()); 
- 
-            h1.Insert(r); 
-            h2.Insert(r); 
-        } 
- 
-        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize()); 
- 
-        while (!h1.IsEmpty()) { 
-            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext()); 
-            h1.PopMin(); 
-            h2.Pop(); 
-        } 
- 
-        n = 20000000; 
-        while (n--) { 
-            int r = int(Rnd()); 
- 
-            h1.Insert(r); 
-            h2.Insert(r); 
-        } 
- 
-        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize()); 
- 
-        while (!h1.IsEmpty()) { 
-            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext()); 
-            h1.PopMin(); 
-            h2.Pop(); 
-        } 
-    } 
- 
-    // Tests reset behavior 
+        int m = 20000;
+        TLimitedHeap<int> h1(m);
+        TTopKeeper<int> h2(m);
+
+        int n = 20000000;
+        while (n--) {
+            int r = int(Rnd());
+
+            h1.Insert(r);
+            h2.Insert(r);
+        }
+
+        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize());
+
+        while (!h1.IsEmpty()) {
+            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext());
+            h1.PopMin();
+            h2.Pop();
+        }
+
+        n = 20000000;
+        while (n--) {
+            int r = int(Rnd());
+
+            h1.Insert(r);
+            h2.Insert(r);
+        }
+
+        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize());
+
+        while (!h1.IsEmpty()) {
+            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext());
+            h1.PopMin();
+            h2.Pop();
+        }
+    }
+
+    // Tests reset behavior
     Y_UNIT_TEST(ResetTest) {
-        int m = 20000; 
-        TLimitedHeap<int> h1(m); 
-        TTopKeeper<int> h2(m); 
- 
-        int n = 20000000; 
-        while (n--) { 
-            int r = int(Rnd()); 
- 
-            h1.Insert(r); 
-            h2.Insert(r); 
-        } 
- 
-        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize()); 
- 
-        for (int i = 0; i < m / 2; ++i) { 
-            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext()); 
-            h1.PopMin(); 
-            h2.Pop(); 
-        } 
- 
-        h2.Reset(); 
-        while (!h1.IsEmpty()) { 
-            h1.PopMin(); 
-        } 
- 
-        n = 20000000; 
-        while (n--) { 
-            int r = int(Rnd()); 
- 
-            h1.Insert(r); 
-            h2.Insert(r); 
-        } 
- 
-        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize()); 
- 
-        while (!h1.IsEmpty()) { 
-            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext()); 
-            h1.PopMin(); 
-            h2.Pop(); 
-        } 
-    } 
+        int m = 20000;
+        TLimitedHeap<int> h1(m);
+        TTopKeeper<int> h2(m);
+
+        int n = 20000000;
+        while (n--) {
+            int r = int(Rnd());
+
+            h1.Insert(r);
+            h2.Insert(r);
+        }
+
+        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize());
+
+        for (int i = 0; i < m / 2; ++i) {
+            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext());
+            h1.PopMin();
+            h2.Pop();
+        }
+
+        h2.Reset();
+        while (!h1.IsEmpty()) {
+            h1.PopMin();
+        }
+
+        n = 20000000;
+        while (n--) {
+            int r = int(Rnd());
+
+            h1.Insert(r);
+            h2.Insert(r);
+        }
+
+        UNIT_ASSERT_EQUAL(h1.GetSize(), h2.GetSize());
+
+        while (!h1.IsEmpty()) {
+            UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext());
+            h1.PopMin();
+            h2.Pop();
+        }
+    }
 
     Y_UNIT_TEST(PreRegressionTest) {
         typedef std::pair<float, unsigned int> TElementType;
@@ -219,4 +219,4 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
 
         UNIT_ASSERT(keeper.IsEmpty());
     }
-} 
+}

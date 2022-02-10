@@ -46,7 +46,7 @@ RECURSE(
     cpp_test
     cppdemangle
     cqueue
-    crowd-kit 
+    crowd-kit
     cyson
     cyson/pymodule
     cyson/ut
@@ -186,10 +186,10 @@ RECURSE(
     symbols
     testing
     tmp
-    toloka_client 
+    toloka_client
     toloka-kit
-    toloka-airflow 
-    toloka-prefect 
+    toloka-airflow
+    toloka-prefect
     tools_structured_logs
     thread
     thread/test

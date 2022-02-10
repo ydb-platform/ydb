@@ -131,7 +131,7 @@ RECURSE(
     cachelib
     cachetools
     catalogue
-    cattrs 
+    cattrs
     cbor2
     cchardet
     celery
@@ -363,7 +363,7 @@ RECURSE(
     fastapi-utils
     fastdtw
     fasteners
-    fastjsonschema 
+    fastjsonschema
     fastsnmp
     faulthandler
     fbprophet
@@ -867,7 +867,7 @@ RECURSE(
     pytest-falcon
     pytest-falcon-client
     pytest-fixture-config
-    pytest-flake8 
+    pytest-flake8
     pytest-flakes
     pytest-flask
     pytest-forked

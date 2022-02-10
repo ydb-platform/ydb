@@ -51,7 +51,7 @@ SRCS(
     ybus.h
 )
 
-PEERDIR( 
+PEERDIR(
     contrib/libs/sparsehash
     library/cpp/codecs
     library/cpp/deprecated/enum_codegen
@@ -63,6 +63,6 @@ PEERDIR(
     library/cpp/messagebus/scheduler
     library/cpp/string_utils/indent_text
     library/cpp/threading/future
-) 
- 
+)
+
 END()

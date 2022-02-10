@@ -98,7 +98,7 @@ namespace NBus {
             return NCodecs::ICodec::GetInstance("snappy");
         }
     };
- 
+
     class TBusSyncSourceSession: public TAtomicRefCount<TBusSyncSourceSession> {
         friend class TBusMessageQueue;
 

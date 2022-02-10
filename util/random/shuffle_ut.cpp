@@ -1,6 +1,6 @@
 #include "fast.h"
 #include "shuffle.h"
-#include "mersenne.h" 
+#include "mersenne.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -32,18 +32,18 @@ Y_UNIT_TEST_SUITE(TRandUtilsTest) {
             Shuffle(b, e, args...);
         };
 
-        s1 = "0"; 
+        s1 = "0";
         f();
 
-        s1 = "01"; 
+        s1 = "01";
         f();
 
-        s1 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"; 
-        s0 = s1.copy(); 
+        s1 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        s0 = s1.copy();
         f();
 
-        UNIT_ASSERT(s0 != s1); // if shuffle does work, chances it will fail are 1 to 64!. 
-    } 
+        UNIT_ASSERT(s0 != s1); // if shuffle does work, chances it will fail are 1 to 64!.
+    }
 
     Y_UNIT_TEST(TestShuffle) {
         TestRange();
@@ -56,10 +56,10 @@ Y_UNIT_TEST_SUITE(TRandUtilsTest) {
     }
 
     Y_UNIT_TEST(TestShuffleMersenne32) {
-        TMersenne<ui32> prng(24); 
+        TMersenne<ui32> prng(24);
 
         TestIter(prng);
-    } 
+    }
 
     Y_UNIT_TEST(TestShuffleFast32) {
         TFastRng32 prng(24, 0);

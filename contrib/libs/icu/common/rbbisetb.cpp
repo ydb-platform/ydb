@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 //
 //  rbbisetb.cpp
@@ -35,7 +35,7 @@
 #if !UCONFIG_NO_BREAK_ITERATION
 
 #include "unicode/uniset.h"
-#include "utrie2.h"
+#include "utrie2.h" 
 #include "uvector.h"
 #include "uassert.h"
 #include "cmemory.h"
@@ -79,7 +79,7 @@ RBBISetBuilder::~RBBISetBuilder()
         delete r;
     }
 
-    utrie2_close(fTrie);
+    utrie2_close(fTrie); 
 }
 
 
@@ -91,7 +91,7 @@ RBBISetBuilder::~RBBISetBuilder()
 //                  from the Unicode Sets.
 //
 //------------------------------------------------------------------------
-void RBBISetBuilder::buildRanges() {
+void RBBISetBuilder::buildRanges() { 
     RBBINode        *usetNode;
     RangeDescriptor *rlRange;
 
@@ -245,64 +245,64 @@ void RBBISetBuilder::buildRanges() {
 
     if (fRB->fDebugEnv && uprv_strstr(fRB->fDebugEnv, "rgroup")) {printRangeGroups();}
     if (fRB->fDebugEnv && uprv_strstr(fRB->fDebugEnv, "esets")) {printSets();}
-}
+} 
 
 
-//
-// Build the Trie table for mapping UChar32 values to the corresponding
-// range group number.
-//
-void RBBISetBuilder::buildTrie() {
-    RangeDescriptor *rlRange;
+// 
+// Build the Trie table for mapping UChar32 values to the corresponding 
+// range group number. 
+// 
+void RBBISetBuilder::buildTrie() { 
+    RangeDescriptor *rlRange; 
 
-    fTrie = utrie2_open(0,       //  Initial value for all code points.
-                        0,       //  Error value for out-of-range input.
-                        fStatus);
-
-    for (rlRange = fRangeList; rlRange!=0 && U_SUCCESS(*fStatus); rlRange=rlRange->fNext) {
-        utrie2_setRange32(fTrie,
-                          rlRange->fStartChar,     // Range start
-                          rlRange->fEndChar,       // Range end (inclusive)
-                          rlRange->fNum,           // value for range
-                          TRUE,                    // Overwrite previously written values
-                          fStatus);
+    fTrie = utrie2_open(0,       //  Initial value for all code points. 
+                        0,       //  Error value for out-of-range input. 
+                        fStatus); 
+ 
+    for (rlRange = fRangeList; rlRange!=0 && U_SUCCESS(*fStatus); rlRange=rlRange->fNext) { 
+        utrie2_setRange32(fTrie, 
+                          rlRange->fStartChar,     // Range start 
+                          rlRange->fEndChar,       // Range end (inclusive) 
+                          rlRange->fNum,           // value for range 
+                          TRUE,                    // Overwrite previously written values 
+                          fStatus); 
     }
 }
 
 
-void RBBISetBuilder::mergeCategories(IntPair categories) {
-    U_ASSERT(categories.first >= 1);
-    U_ASSERT(categories.second > categories.first);
-    for (RangeDescriptor *rd = fRangeList; rd != nullptr; rd = rd->fNext) {
-        int32_t rangeNum = rd->fNum & ~DICT_BIT;
-        int32_t rangeDict = rd->fNum & DICT_BIT;
-        if (rangeNum == categories.second) {
-            rd->fNum = categories.first | rangeDict;
-        } else if (rangeNum > categories.second) {
-            rd->fNum--;
-        }
-    }
-    --fGroupCount;
-}
+void RBBISetBuilder::mergeCategories(IntPair categories) { 
+    U_ASSERT(categories.first >= 1); 
+    U_ASSERT(categories.second > categories.first); 
+    for (RangeDescriptor *rd = fRangeList; rd != nullptr; rd = rd->fNext) { 
+        int32_t rangeNum = rd->fNum & ~DICT_BIT; 
+        int32_t rangeDict = rd->fNum & DICT_BIT; 
+        if (rangeNum == categories.second) { 
+            rd->fNum = categories.first | rangeDict; 
+        } else if (rangeNum > categories.second) { 
+            rd->fNum--; 
+        } 
+    } 
+    --fGroupCount; 
+} 
 
-
+ 
 //-----------------------------------------------------------------------------------
 //
 //  getTrieSize()    Return the size that will be required to serialize the Trie.
 //
 //-----------------------------------------------------------------------------------
-int32_t RBBISetBuilder::getTrieSize()  {
-    if (U_FAILURE(*fStatus)) {
-        return 0;
-    }
-    utrie2_freeze(fTrie, UTRIE2_16_VALUE_BITS, fStatus);
-    fTrieSize  = utrie2_serialize(fTrie,
-                                  NULL,                // Buffer
-                                  0,                   // Capacity
-                                  fStatus);
-    if (*fStatus == U_BUFFER_OVERFLOW_ERROR) {
-        *fStatus = U_ZERO_ERROR;
-    }
+int32_t RBBISetBuilder::getTrieSize()  { 
+    if (U_FAILURE(*fStatus)) { 
+        return 0; 
+    } 
+    utrie2_freeze(fTrie, UTRIE2_16_VALUE_BITS, fStatus); 
+    fTrieSize  = utrie2_serialize(fTrie, 
+                                  NULL,                // Buffer 
+                                  0,                   // Capacity 
+                                  fStatus); 
+    if (*fStatus == U_BUFFER_OVERFLOW_ERROR) { 
+        *fStatus = U_ZERO_ERROR; 
+    } 
     // RBBIDebugPrintf("Trie table size is %d\n", trieSize);
     return fTrieSize;
 }
@@ -316,10 +316,10 @@ int32_t RBBISetBuilder::getTrieSize()  {
 //
 //-----------------------------------------------------------------------------------
 void RBBISetBuilder::serializeTrie(uint8_t *where) {
-    utrie2_serialize(fTrie,
-                     where,                   // Buffer
-                     fTrieSize,               // Capacity
-                     fStatus);
+    utrie2_serialize(fTrie, 
+                     where,                   // Buffer 
+                     fTrieSize,               // Capacity 
+                     fStatus); 
 }
 
 //------------------------------------------------------------------------
@@ -467,7 +467,7 @@ void RBBISetBuilder::printRangeGroups() {
             lastPrintedGroupNum = groupNum;
             RBBIDebugPrintf("%2i  ", groupNum);
 
-            if (rlRange->fNum & DICT_BIT) { RBBIDebugPrintf(" <DICT> ");}
+            if (rlRange->fNum & DICT_BIT) { RBBIDebugPrintf(" <DICT> ");} 
 
             for (i=0; i<rlRange->fIncludesSets->size(); i++) {
                 RBBINode       *usetNode    = (RBBINode *)rlRange->fIncludesSets->elementAt(i);
@@ -660,18 +660,18 @@ void RangeDescriptor::split(UChar32 where, UErrorCode &status) {
 void RangeDescriptor::setDictionaryFlag() {
     int i;
 
-    static const char16_t *dictionary = u"dictionary";
-    for (i=0; i<fIncludesSets->size(); i++) {
-        RBBINode *usetNode  = (RBBINode *)fIncludesSets->elementAt(i);
-        RBBINode *setRef = usetNode->fParent;
-        if (setRef != nullptr) {
+    static const char16_t *dictionary = u"dictionary"; 
+    for (i=0; i<fIncludesSets->size(); i++) { 
+        RBBINode *usetNode  = (RBBINode *)fIncludesSets->elementAt(i); 
+        RBBINode *setRef = usetNode->fParent; 
+        if (setRef != nullptr) { 
             RBBINode *varRef = setRef->fParent;
-            if (varRef && varRef->fType == RBBINode::varRef) {
-                const UnicodeString *setName = &varRef->fText;
-                if (setName->compare(dictionary, -1) == 0) {
-                    fNum |= RBBISetBuilder::DICT_BIT;
-                    break;
-                }
+            if (varRef && varRef->fType == RBBINode::varRef) { 
+                const UnicodeString *setName = &varRef->fText; 
+                if (setName->compare(dictionary, -1) == 0) { 
+                    fNum |= RBBISetBuilder::DICT_BIT; 
+                    break; 
+                } 
             }
         }
     }

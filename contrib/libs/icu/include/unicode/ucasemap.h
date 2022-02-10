@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  ucasemap.h
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -22,8 +22,8 @@
 #define __UCASEMAP_H__
 
 #include "unicode/utypes.h"
-#include "unicode/localpointer.h"
-#include "unicode/stringoptions.h"
+#include "unicode/localpointer.h" 
+#include "unicode/stringoptions.h" 
 #include "unicode/ustring.h"
 
 /**
@@ -202,7 +202,7 @@ ucasemap_setBreakIterator(UCaseMap *csm, UBreakIterator *iterToAdopt, UErrorCode
  * The standard titlecase iterator for the root locale implements the
  * algorithm of Unicode TR 21.
  *
- * This function uses only the setText(), first() and next() methods of the
+ * This function uses only the setText(), first() and next() methods of the 
  * provided break iterator.
  *
  * The result may be longer or shorter than the original.
@@ -213,7 +213,7 @@ ucasemap_setBreakIterator(UCaseMap *csm, UBreakIterator *iterToAdopt, UErrorCode
  * @param dest      A buffer for the result string. The result will be NUL-terminated if
  *                  the buffer is large enough.
  *                  The contents is undefined in case of failure.
- * @param destCapacity The size of the buffer (number of UChars). If it is 0, then
+ * @param destCapacity The size of the buffer (number of UChars). If it is 0, then 
  *                  dest may be NULL and the function will only return the length of the result
  *                  without writing any of the result string.
  * @param src       The original string.
@@ -232,7 +232,7 @@ ucasemap_toTitle(UCaseMap *csm,
                  const UChar *src, int32_t srcLength,
                  UErrorCode *pErrorCode);
 
-#endif  // UCONFIG_NO_BREAK_ITERATION
+#endif  // UCONFIG_NO_BREAK_ITERATION 
 
 /**
  * Lowercase the characters in a UTF-8 string.

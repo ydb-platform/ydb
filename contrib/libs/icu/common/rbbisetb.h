@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 //
 //  rbbisetb.h
@@ -13,12 +13,12 @@
 #define RBBISETB_H
 
 #include "unicode/utypes.h"
-
-#if !UCONFIG_NO_BREAK_ITERATION
-
+ 
+#if !UCONFIG_NO_BREAK_ITERATION 
+ 
 #include "unicode/uobject.h"
 #include "rbbirb.h"
-#include "utrie2.h"
+#include "utrie2.h" 
 #include "uvector.h"
 
 U_NAMESPACE_BEGIN
@@ -82,8 +82,8 @@ public:
     RBBISetBuilder(RBBIRuleBuilder *rb);
     ~RBBISetBuilder();
 
-    void     buildRanges();
-    void     buildTrie();
+    void     buildRanges(); 
+    void     buildTrie(); 
     void     addValToSets(UVector *sets,      uint32_t val);
     void     addValToSet (RBBINode *usetNode, uint32_t val);
     int32_t  getNumCharCategories() const;   // CharCategories are the same as input symbol set to the
@@ -94,15 +94,15 @@ public:
     UChar32  getFirstChar(int32_t  val) const;
     UBool    sawBOF() const;                 // Indicate whether any references to the {bof} pseudo
                                              //   character were encountered.
-    /**
-     * Merge two character categories that have been identified as having equivalent behavior.
-     * The ranges belonging to the second category (table column) will be added to the first.
-     * @param categories the pair of categories to be merged.
-     */
-    void     mergeCategories(IntPair categories);
-
-    static constexpr int32_t DICT_BIT = 0x4000;
-
+    /** 
+     * Merge two character categories that have been identified as having equivalent behavior. 
+     * The ranges belonging to the second category (table column) will be added to the first. 
+     * @param categories the pair of categories to be merged. 
+     */ 
+    void     mergeCategories(IntPair categories); 
+ 
+    static constexpr int32_t DICT_BIT = 0x4000; 
+ 
 #ifdef RBBI_DEBUG
     void     printSets();
     void     printRanges();
@@ -121,8 +121,8 @@ private:
 
     RangeDescriptor       *fRangeList;      // Head of the linked list of RangeDescriptors
 
-    UTrie2                *fTrie;           // The mapping TRIE that is the end result of processing
-    uint32_t               fTrieSize;       //  the Unicode Sets.
+    UTrie2                *fTrie;           // The mapping TRIE that is the end result of processing 
+    uint32_t               fTrieSize;       //  the Unicode Sets. 
 
     // Groups correspond to character categories -
     //       groups of ranges that are in the same original UnicodeSets.
@@ -141,7 +141,7 @@ private:
 
 
 U_NAMESPACE_END
-
-#endif /* #if !UCONFIG_NO_BREAK_ITERATION */
-
+ 
+#endif /* #if !UCONFIG_NO_BREAK_ITERATION */ 
+ 
 #endif

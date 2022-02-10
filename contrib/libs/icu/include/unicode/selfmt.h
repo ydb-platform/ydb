@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /********************************************************************
  * COPYRIGHT:
@@ -18,10 +18,10 @@
 #ifndef SELFMT
 #define SELFMT
 
-#include "unicode/utypes.h"
-
-#if U_SHOW_CPLUSPLUS_API
-
+#include "unicode/utypes.h" 
+ 
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #include "unicode/messagepattern.h"
 #include "unicode/numfmt.h"
 
@@ -275,7 +275,7 @@ public:
      * result and should delete it when done.
      * @stable ICU 4.4
      */
-    virtual SelectFormat* clone() const;
+    virtual SelectFormat* clone() const; 
 
     /**
      * Format an object to produce a string.
@@ -368,7 +368,7 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif // _SELFMT
 //eof

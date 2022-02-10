@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ********************************************************************************
@@ -16,7 +16,7 @@
 
 #include "unicode/utypes.h"
 
-#if U_PLATFORM_USES_ONLY_WIN32_API
+#if U_PLATFORM_USES_ONLY_WIN32_API 
 
 #if !UCONFIG_NO_FORMATTING
 
@@ -48,7 +48,7 @@ public:
 
     virtual ~Win32DateFormat();
 
-    virtual Win32DateFormat *clone() const;
+    virtual Win32DateFormat *clone() const; 
 
     Win32DateFormat &operator=(const Win32DateFormat &other);
 
@@ -95,7 +95,7 @@ public:
      * <pre>
      * .   Base* polymorphic_pointer = createPolymorphicObject();
      * .   if (polymorphic_pointer->getDynamicClassID() ==
-     * .       derived::getStaticClassID()) ...
+     * .       derived::getStaticClassID()) ... 
      * </pre>
      * @return          The class ID for all objects of this class.
      */
@@ -126,14 +126,14 @@ private:
     Locale fLocale;
     UnicodeString fZoneID;
     TIME_ZONE_INFORMATION *fTZI;
-
-    UnicodeString* fWindowsLocaleName; // Stores the equivalent Windows locale name.
+ 
+    UnicodeString* fWindowsLocaleName; // Stores the equivalent Windows locale name. 
 };
 
 U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif // U_PLATFORM_USES_ONLY_WIN32_API
+#endif // U_PLATFORM_USES_ONLY_WIN32_API 
 
 #endif // __WINDTFMT

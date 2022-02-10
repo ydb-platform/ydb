@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -18,7 +18,7 @@
 #include "unicode/udata.h"
 #include "unicode/localpointer.h"
 #include "unicode/normalizer2.h"
-#include "unicode/ucptrie.h"
+#include "unicode/ucptrie.h" 
 #include "unicode/unistr.h"
 #include "unicode/unorm.h"
 #include "cstring.h"
@@ -43,12 +43,12 @@ private:
     isAcceptable(void *context, const char *type, const char *name, const UDataInfo *pInfo);
 
     UDataMemory *memory;
-    UCPTrie *ownedTrie;
+    UCPTrie *ownedTrie; 
 };
 
 LoadedNormalizer2Impl::~LoadedNormalizer2Impl() {
     udata_close(memory);
-    ucptrie_close(ownedTrie);
+    ucptrie_close(ownedTrie); 
 }
 
 UBool U_CALLCONV
@@ -63,7 +63,7 @@ LoadedNormalizer2Impl::isAcceptable(void * /*context*/,
         pInfo->dataFormat[1]==0x72 &&
         pInfo->dataFormat[2]==0x6d &&
         pInfo->dataFormat[3]==0x32 &&
-        pInfo->formatVersion[0]==4
+        pInfo->formatVersion[0]==4 
     ) {
         // Normalizer2Impl *me=(Normalizer2Impl *)context;
         // uprv_memcpy(me->dataVersion, pInfo->dataVersion, 4);
@@ -85,16 +85,16 @@ LoadedNormalizer2Impl::load(const char *packageName, const char *name, UErrorCod
     const uint8_t *inBytes=(const uint8_t *)udata_getMemory(memory);
     const int32_t *inIndexes=(const int32_t *)inBytes;
     int32_t indexesLength=inIndexes[IX_NORM_TRIE_OFFSET]/4;
-    if(indexesLength<=IX_MIN_LCCC_CP) {
+    if(indexesLength<=IX_MIN_LCCC_CP) { 
         errorCode=U_INVALID_FORMAT_ERROR;  // Not enough indexes.
         return;
     }
 
     int32_t offset=inIndexes[IX_NORM_TRIE_OFFSET];
     int32_t nextOffset=inIndexes[IX_EXTRA_DATA_OFFSET];
-    ownedTrie=ucptrie_openFromBinary(UCPTRIE_TYPE_FAST, UCPTRIE_VALUE_BITS_16,
-                                     inBytes+offset, nextOffset-offset, NULL,
-                                     &errorCode);
+    ownedTrie=ucptrie_openFromBinary(UCPTRIE_TYPE_FAST, UCPTRIE_VALUE_BITS_16, 
+                                     inBytes+offset, nextOffset-offset, NULL, 
+                                     &errorCode); 
     if(U_FAILURE(errorCode)) {
         return;
     }
@@ -132,32 +132,32 @@ U_CDECL_BEGIN
 static UBool U_CALLCONV uprv_loaded_normalizer2_cleanup();
 U_CDECL_END
 
-#if !NORM2_HARDCODE_NFC_DATA
-static Norm2AllModes *nfcSingleton;
-static icu::UInitOnce nfcInitOnce = U_INITONCE_INITIALIZER;
-#endif
-
+#if !NORM2_HARDCODE_NFC_DATA 
+static Norm2AllModes *nfcSingleton; 
+static icu::UInitOnce nfcInitOnce = U_INITONCE_INITIALIZER; 
+#endif 
+ 
 static Norm2AllModes *nfkcSingleton;
-static icu::UInitOnce nfkcInitOnce = U_INITONCE_INITIALIZER;
-
+static icu::UInitOnce nfkcInitOnce = U_INITONCE_INITIALIZER; 
+ 
 static Norm2AllModes *nfkc_cfSingleton;
-static icu::UInitOnce nfkc_cfInitOnce = U_INITONCE_INITIALIZER;
-
+static icu::UInitOnce nfkc_cfInitOnce = U_INITONCE_INITIALIZER; 
+ 
 static UHashtable    *cache=NULL;
 
 // UInitOnce singleton initialization function
 static void U_CALLCONV initSingletons(const char *what, UErrorCode &errorCode) {
-#if !NORM2_HARDCODE_NFC_DATA
-    if (uprv_strcmp(what, "nfc") == 0) {
-        nfcSingleton    = Norm2AllModes::createInstance(NULL, "nfc", errorCode);
-    } else
-#endif
+#if !NORM2_HARDCODE_NFC_DATA 
+    if (uprv_strcmp(what, "nfc") == 0) { 
+        nfcSingleton    = Norm2AllModes::createInstance(NULL, "nfc", errorCode); 
+    } else 
+#endif 
     if (uprv_strcmp(what, "nfkc") == 0) {
         nfkcSingleton    = Norm2AllModes::createInstance(NULL, "nfkc", errorCode);
     } else if (uprv_strcmp(what, "nfkc_cf") == 0) {
         nfkc_cfSingleton = Norm2AllModes::createInstance(NULL, "nfkc_cf", errorCode);
     } else {
-        UPRV_UNREACHABLE;   // Unknown singleton
+        UPRV_UNREACHABLE;   // Unknown singleton 
     }
     ucln_common_registerCleanup(UCLN_COMMON_LOADED_NORMALIZER2, uprv_loaded_normalizer2_cleanup);
 }
@@ -169,20 +169,20 @@ static void U_CALLCONV deleteNorm2AllModes(void *allModes) {
 }
 
 static UBool U_CALLCONV uprv_loaded_normalizer2_cleanup() {
-#if !NORM2_HARDCODE_NFC_DATA
-    delete nfcSingleton;
-    nfcSingleton = NULL;
-    nfcInitOnce.reset();
-#endif
-
+#if !NORM2_HARDCODE_NFC_DATA 
+    delete nfcSingleton; 
+    nfcSingleton = NULL; 
+    nfcInitOnce.reset(); 
+#endif 
+ 
     delete nfkcSingleton;
     nfkcSingleton = NULL;
-    nfkcInitOnce.reset();
-
+    nfkcInitOnce.reset(); 
+ 
     delete nfkc_cfSingleton;
     nfkc_cfSingleton = NULL;
-    nfkc_cfInitOnce.reset();
-
+    nfkc_cfInitOnce.reset(); 
+ 
     uhash_close(cache);
     cache=NULL;
     return TRUE;
@@ -190,16 +190,16 @@ static UBool U_CALLCONV uprv_loaded_normalizer2_cleanup() {
 
 U_CDECL_END
 
-#if !NORM2_HARDCODE_NFC_DATA
+#if !NORM2_HARDCODE_NFC_DATA 
 const Norm2AllModes *
-Norm2AllModes::getNFCInstance(UErrorCode &errorCode) {
-    if(U_FAILURE(errorCode)) { return NULL; }
-    umtx_initOnce(nfcInitOnce, &initSingletons, "nfc", errorCode);
-    return nfcSingleton;
-}
-#endif
-
-const Norm2AllModes *
+Norm2AllModes::getNFCInstance(UErrorCode &errorCode) { 
+    if(U_FAILURE(errorCode)) { return NULL; } 
+    umtx_initOnce(nfcInitOnce, &initSingletons, "nfc", errorCode); 
+    return nfcSingleton; 
+} 
+#endif 
+ 
+const Norm2AllModes * 
 Norm2AllModes::getNFKCInstance(UErrorCode &errorCode) {
     if(U_FAILURE(errorCode)) { return NULL; }
     umtx_initOnce(nfkcInitOnce, &initSingletons, "nfkc", errorCode);
@@ -213,37 +213,37 @@ Norm2AllModes::getNFKC_CFInstance(UErrorCode &errorCode) {
     return nfkc_cfSingleton;
 }
 
-#if !NORM2_HARDCODE_NFC_DATA
+#if !NORM2_HARDCODE_NFC_DATA 
 const Normalizer2 *
-Normalizer2::getNFCInstance(UErrorCode &errorCode) {
-    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode);
-    return allModes!=NULL ? &allModes->comp : NULL;
-}
-
-const Normalizer2 *
-Normalizer2::getNFDInstance(UErrorCode &errorCode) {
-    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode);
-    return allModes!=NULL ? &allModes->decomp : NULL;
-}
-
-const Normalizer2 *Normalizer2Factory::getFCDInstance(UErrorCode &errorCode) {
-    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode);
-    return allModes!=NULL ? &allModes->fcd : NULL;
-}
-
-const Normalizer2 *Normalizer2Factory::getFCCInstance(UErrorCode &errorCode) {
-    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode);
-    return allModes!=NULL ? &allModes->fcc : NULL;
-}
-
-const Normalizer2Impl *
-Normalizer2Factory::getNFCImpl(UErrorCode &errorCode) {
-    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode);
-    return allModes!=NULL ? allModes->impl : NULL;
-}
-#endif
-
-const Normalizer2 *
+Normalizer2::getNFCInstance(UErrorCode &errorCode) { 
+    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode); 
+    return allModes!=NULL ? &allModes->comp : NULL; 
+} 
+ 
+const Normalizer2 * 
+Normalizer2::getNFDInstance(UErrorCode &errorCode) { 
+    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode); 
+    return allModes!=NULL ? &allModes->decomp : NULL; 
+} 
+ 
+const Normalizer2 *Normalizer2Factory::getFCDInstance(UErrorCode &errorCode) { 
+    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode); 
+    return allModes!=NULL ? &allModes->fcd : NULL; 
+} 
+ 
+const Normalizer2 *Normalizer2Factory::getFCCInstance(UErrorCode &errorCode) { 
+    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode); 
+    return allModes!=NULL ? &allModes->fcc : NULL; 
+} 
+ 
+const Normalizer2Impl * 
+Normalizer2Factory::getNFCImpl(UErrorCode &errorCode) { 
+    const Norm2AllModes *allModes=Norm2AllModes::getNFCInstance(errorCode); 
+    return allModes!=NULL ? allModes->impl : NULL; 
+} 
+#endif 
+ 
+const Normalizer2 * 
 Normalizer2::getNFKCInstance(UErrorCode &errorCode) {
     const Norm2AllModes *allModes=Norm2AllModes::getNFKCInstance(errorCode);
     return allModes!=NULL ? &allModes->comp : NULL;
@@ -291,7 +291,7 @@ Normalizer2::getInstance(const char *packageName,
             }
         }
         if(allModes==NULL) {
-            ucln_common_registerCleanup(UCLN_COMMON_LOADED_NORMALIZER2, uprv_loaded_normalizer2_cleanup);
+            ucln_common_registerCleanup(UCLN_COMMON_LOADED_NORMALIZER2, uprv_loaded_normalizer2_cleanup); 
             LocalPointer<Norm2AllModes> localAllModes(
                 Norm2AllModes::createInstance(packageName, name, errorCode));
             if(U_SUCCESS(errorCode)) {
@@ -306,7 +306,7 @@ Normalizer2::getInstance(const char *packageName,
                 }
                 void *temp=uhash_get(cache, name);
                 if(temp==NULL) {
-                    int32_t keyLength= static_cast<int32_t>(uprv_strlen(name)+1);
+                    int32_t keyLength= static_cast<int32_t>(uprv_strlen(name)+1); 
                     char *nameCopy=(char *)uprv_malloc(keyLength);
                     if(nameCopy==NULL) {
                         errorCode=U_MEMORY_ALLOCATION_ERROR;

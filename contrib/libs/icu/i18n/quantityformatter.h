@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -26,7 +26,7 @@ class PluralRules;
 class NumberFormat;
 class Formattable;
 class FieldPosition;
-class FormattedStringBuilder;
+class FormattedStringBuilder; 
 
 /**
  * A plural aware formatter that is good for expressing a single quantity and
@@ -112,7 +112,7 @@ public:
 
     /**
      * Selects the standard plural form for the number/formatter/rules.
-     * TODO(13591): Remove this method.
+     * TODO(13591): Remove this method. 
      */
     static StandardPlural::Form selectPlural(
             const Formattable &number,
@@ -123,29 +123,29 @@ public:
             UErrorCode &status);
 
     /**
-     * Formats a quantity and selects its plural form. The output is appended
-     * to a FormattedStringBuilder in order to retain field information.
-     *
-     * @param quantity The number to format.
-     * @param fmt The formatter to use to format the number.
-     * @param rules The rules to use to select the plural form of the
-     *              formatted number.
-     * @param output Where to append the result of the format operation.
-     * @param pluralForm Output variable populated with the plural form of the
-     *                   formatted number.
-     * @param status Set if an error occurs.
-     */
-    static void formatAndSelect(
-            double quantity,
-            const NumberFormat& fmt,
-            const PluralRules& rules,
-            FormattedStringBuilder& output,
-            StandardPlural::Form& pluralForm,
-            UErrorCode& status);
-
-    /**
+     * Formats a quantity and selects its plural form. The output is appended 
+     * to a FormattedStringBuilder in order to retain field information. 
+     * 
+     * @param quantity The number to format. 
+     * @param fmt The formatter to use to format the number. 
+     * @param rules The rules to use to select the plural form of the 
+     *              formatted number. 
+     * @param output Where to append the result of the format operation. 
+     * @param pluralForm Output variable populated with the plural form of the 
+     *                   formatted number. 
+     * @param status Set if an error occurs. 
+     */ 
+    static void formatAndSelect( 
+            double quantity, 
+            const NumberFormat& fmt, 
+            const PluralRules& rules, 
+            FormattedStringBuilder& output, 
+            StandardPlural::Form& pluralForm, 
+            UErrorCode& status); 
+ 
+    /** 
      * Formats the pattern with the value and adjusts the FieldPosition.
-     * TODO: Remove?
+     * TODO: Remove? 
      */
     static UnicodeString &format(
             const SimpleFormatter &pattern,

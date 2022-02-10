@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **************************************************************************
@@ -16,10 +16,10 @@
 #ifndef REP_H
 #define REP_H
 
-#include "unicode/utypes.h"
-
-#if U_SHOW_CPLUSPLUS_API
-
+#include "unicode/utypes.h" 
+ 
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #include "unicode/uobject.h"
 
 /**
@@ -97,7 +97,7 @@ public:
      * @return 16-bit code unit of text at given offset
      * @stable ICU 1.8
      */
-    inline char16_t charAt(int32_t offset) const;
+    inline char16_t charAt(int32_t offset) const; 
 
     /**
      * Returns the 32-bit code point at the given 16-bit offset into
@@ -231,7 +231,7 @@ protected:
      * Virtual version of charAt().
      * @stable ICU 2.4
      */
-    virtual char16_t getCharAt(int32_t offset) const = 0;
+    virtual char16_t getCharAt(int32_t offset) const = 0; 
 
     /**
      * Virtual version of char32At().
@@ -247,7 +247,7 @@ Replaceable::length() const {
     return getLength();
 }
 
-inline char16_t
+inline char16_t 
 Replaceable::charAt(int32_t offset) const {
     return getCharAt(offset);
 }
@@ -261,6 +261,6 @@ Replaceable::char32At(int32_t offset) const {
 
 U_NAMESPACE_END
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif

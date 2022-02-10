@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -288,9 +288,9 @@ ucnv_swap(const UDataSwapper *ds,
           const void *inData, int32_t length, void *outData,
           UErrorCode *pErrorCode);
 
-U_CAPI void U_EXPORT2
-ucnv_enableCleanup();
-
+U_CAPI void U_EXPORT2 
+ucnv_enableCleanup(); 
+ 
 #endif
 
 #endif /* _UCNV_BLD */

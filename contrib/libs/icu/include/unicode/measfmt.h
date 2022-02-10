@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -15,8 +15,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #if !UCONFIG_NO_FORMATTING
 
 #include "unicode/format.h"
@@ -24,7 +24,7 @@
 
 /**
  * \file 
- * \brief C++ API: Compatibility APIs for measure formatting.
+ * \brief C++ API: Compatibility APIs for measure formatting. 
  */
 
 /**
@@ -89,9 +89,9 @@ class ListFormatter;
 class DateFormat;
 
 /**
- * <p><strong>IMPORTANT:</strong> New users are strongly encouraged to see if
- * numberformatter.h fits their use case.  Although not deprecated, this header
- * is provided for backwards compatibility only.
+ * <p><strong>IMPORTANT:</strong> New users are strongly encouraged to see if 
+ * numberformatter.h fits their use case.  Although not deprecated, this header 
+ * is provided for backwards compatibility only. 
  *
  * @see Format
  * @author Alan Liu
@@ -104,9 +104,9 @@ class U_I18N_API MeasureFormat : public Format {
 
     /**
      * Constructor.
-     * <p>
-     * <strong>NOTE:</strong> New users are strongly encouraged to use
-     * {@link icu::number::NumberFormatter} instead of NumberFormat.
+     * <p> 
+     * <strong>NOTE:</strong> New users are strongly encouraged to use 
+     * {@link icu::number::NumberFormatter} instead of NumberFormat. 
      * @stable ICU 53
      */
     MeasureFormat(
@@ -114,9 +114,9 @@ class U_I18N_API MeasureFormat : public Format {
 
     /**
      * Constructor.
-     * <p>
-     * <strong>NOTE:</strong> New users are strongly encouraged to use
-     * {@link icu::number::NumberFormatter} instead of NumberFormat.
+     * <p> 
+     * <strong>NOTE:</strong> New users are strongly encouraged to use 
+     * {@link icu::number::NumberFormatter} instead of NumberFormat. 
      * @stable ICU 53
      */
     MeasureFormat(
@@ -153,7 +153,7 @@ class U_I18N_API MeasureFormat : public Format {
      * Clones this object polymorphically.
      * @stable ICU 53
      */
-    virtual MeasureFormat *clone() const;
+    virtual MeasureFormat *clone() const; 
 
     /**
      * Formats object to produce a string.
@@ -165,7 +165,7 @@ class U_I18N_API MeasureFormat : public Format {
             FieldPosition &pos,
             UErrorCode &status) const;
 
-#ifndef U_FORCE_HIDE_DRAFT_API
+#ifndef U_FORCE_HIDE_DRAFT_API 
     /**
      * Parse a string to produce an object. This implementation sets
      * status to U_UNSUPPORTED_ERROR.
@@ -176,7 +176,7 @@ class U_I18N_API MeasureFormat : public Format {
             const UnicodeString &source,
             Formattable &reslt,
             ParsePosition &pos) const;
-#endif  // U_FORCE_HIDE_DRAFT_API
+#endif  // U_FORCE_HIDE_DRAFT_API 
 
     /**
      * Formats measure objects to produce a string. An example of such a
@@ -206,7 +206,7 @@ class U_I18N_API MeasureFormat : public Format {
      * formatted string is 3.5 meters per second.
      * @param measure The measure object. In above example, 3.5 meters.
      * @param perUnit The per unit. In above example, it is
-     *        `*%MeasureUnit::createSecond(status)`.
+     *        `*%MeasureUnit::createSecond(status)`. 
      * @param appendTo formatted string appended here.
      * @param pos the field position.
      * @param status the error.
@@ -227,10 +227,10 @@ class U_I18N_API MeasureFormat : public Format {
      * @param unit  The unit for which to get a display name.
      * @param status the error.
      * @return  The display name in the locale and width specified in
-     *          the MeasureFormat constructor, or null if there is no display name available
+     *          the MeasureFormat constructor, or null if there is no display name available 
      *          for the specified unit.
      *
-     * @stable ICU 58
+     * @stable ICU 58 
      */
     UnicodeString getUnitDisplayName(const MeasureUnit& unit, UErrorCode &status) const;
 
@@ -238,9 +238,9 @@ class U_I18N_API MeasureFormat : public Format {
     /**
      * Return a formatter for CurrencyAmount objects in the given
      * locale.
-     * <p>
-     * <strong>NOTE:</strong> New users are strongly encouraged to use
-     * {@link icu::number::NumberFormatter} instead of NumberFormat.
+     * <p> 
+     * <strong>NOTE:</strong> New users are strongly encouraged to use 
+     * {@link icu::number::NumberFormatter} instead of NumberFormat. 
      * @param locale desired locale
      * @param ec input-output error code
      * @return a formatter object, or NULL upon error
@@ -252,9 +252,9 @@ class U_I18N_API MeasureFormat : public Format {
     /**
      * Return a formatter for CurrencyAmount objects in the default
      * locale.
-     * <p>
-     * <strong>NOTE:</strong> New users are strongly encouraged to use
-     * {@link icu::number::NumberFormatter} instead of NumberFormat.
+     * <p> 
+     * <strong>NOTE:</strong> New users are strongly encouraged to use 
+     * {@link icu::number::NumberFormatter} instead of NumberFormat. 
      * @param ec input-output error code
      * @return a formatter object, or NULL upon error
      * @stable ICU 3.0
@@ -326,19 +326,19 @@ class U_I18N_API MeasureFormat : public Format {
      * ICU use only.
      * @internal.
      */
-    const NumberFormat &getNumberFormatInternal() const;
+    const NumberFormat &getNumberFormatInternal() const; 
 
     /**
      * ICU use only.
-     * Always returns the short form currency formatter.
+     * Always returns the short form currency formatter. 
      * @internal.
      */
-    const NumberFormat& getCurrencyFormatInternal() const;
-
-    /**
-     * ICU use only.
-     * @internal.
-     */
+    const NumberFormat& getCurrencyFormatInternal() const; 
+ 
+    /** 
+     * ICU use only. 
+     * @internal. 
+     */ 
     const PluralRules &getPluralRules() const;
 
     /**
@@ -359,7 +359,7 @@ class U_I18N_API MeasureFormat : public Format {
     const MeasureFormatCacheData *cache;
     const SharedNumberFormat *numberFormat;
     const SharedPluralRules *pluralRules;
-    UMeasureFormatWidth fWidth;    
+    UMeasureFormatWidth fWidth;     
 
     // Declared outside of MeasureFormatSharedData because ListFormatter
     // objects are relatively cheap to copy; therefore, they don't need to be
@@ -391,7 +391,7 @@ class U_I18N_API MeasureFormat : public Format {
 U_NAMESPACE_END
 
 #endif // #if !UCONFIG_NO_FORMATTING
-
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+ 
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif // #ifndef MEASUREFORMAT_H

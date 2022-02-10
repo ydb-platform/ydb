@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -222,12 +222,12 @@ const char *IslamicCalendar::getType() const {
         sType = "islamic-umalqura";
         break;
     default:
-        UPRV_UNREACHABLE; // out of range
+        UPRV_UNREACHABLE; // out of range 
     }
     return sType;
 }
 
-IslamicCalendar* IslamicCalendar::clone() const {
+IslamicCalendar* IslamicCalendar::clone() const { 
     return new IslamicCalendar(*this);
 }
 
@@ -470,7 +470,7 @@ double IslamicCalendar::moonAge(UDate time, UErrorCode &status)
 {
     double age = 0;
 
-    static UMutex astroLock;      // pod bay door lock
+    static UMutex astroLock;      // pod bay door lock 
     umtx_lock(&astroLock);
     if(gIslamicCalendarAstro == NULL) {
         gIslamicCalendarAstro = new CalendarAstronomer();
@@ -612,7 +612,7 @@ void IslamicCalendar::handleComputeFields(int32_t julianDay, UErrorCode &status)
             days = julianDay - ASTRONOMICAL_EPOC;
         }
         // Use the civil calendar approximation, which is just arithmetic
-        year  = (int32_t)ClockMath::floorDivide(30 * (int64_t)days + 10646, (int64_t)10631);
+        year  = (int32_t)ClockMath::floorDivide(30 * (int64_t)days + 10646, (int64_t)10631); 
         month = (int32_t)uprv_ceil((days - 29 - yearStart(year)) / 29.5 );
         month = month<11?month:11;
         startDate = monthStart(year, month);
@@ -673,7 +673,7 @@ void IslamicCalendar::handleComputeFields(int32_t julianDay, UErrorCode &status)
                 month = m;
             }
     } else { // invalid 'civil'
-      UPRV_UNREACHABLE; // should not get here, out of range
+      UPRV_UNREACHABLE; // should not get here, out of range 
     }
 
     dayOfMonth = (days - monthStart(year, month)) + 1;

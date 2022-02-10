@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -246,24 +246,24 @@ UnicodeString &SimpleFormatter::formatAndReplace(
 }
 
 UnicodeString SimpleFormatter::getTextWithNoArguments(
-        const UChar *compiledPattern,
-        int32_t compiledPatternLength,
-        int32_t* offsets,
-        int32_t offsetsLength) {
-    for (int32_t i = 0; i < offsetsLength; i++) {
-        offsets[i] = -1;
-    }
+        const UChar *compiledPattern, 
+        int32_t compiledPatternLength, 
+        int32_t* offsets, 
+        int32_t offsetsLength) { 
+    for (int32_t i = 0; i < offsetsLength; i++) { 
+        offsets[i] = -1; 
+    } 
     int32_t capacity = compiledPatternLength - 1 -
             getArgumentLimit(compiledPattern, compiledPatternLength);
     UnicodeString sb(capacity, 0, 0);  // Java: StringBuilder
     for (int32_t i = 1; i < compiledPatternLength;) {
-        int32_t n = compiledPattern[i++];
-        if (n > ARG_NUM_LIMIT) {
-            n -= ARG_NUM_LIMIT;
-            sb.append(compiledPattern + i, n);
-            i += n;
-        } else if (n < offsetsLength) {
-            offsets[n] = sb.length();
+        int32_t n = compiledPattern[i++]; 
+        if (n > ARG_NUM_LIMIT) { 
+            n -= ARG_NUM_LIMIT; 
+            sb.append(compiledPattern + i, n); 
+            i += n; 
+        } else if (n < offsetsLength) { 
+            offsets[n] = sb.length(); 
         }
     }
     return sb;

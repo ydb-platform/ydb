@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -100,7 +100,7 @@ NameUnicodeTransliterator::NameUnicodeTransliterator(const NameUnicodeTransliter
 /**
  * Transliterator API.
  */
-NameUnicodeTransliterator* NameUnicodeTransliterator::clone() const {
+NameUnicodeTransliterator* NameUnicodeTransliterator::clone() const { 
     return new NameUnicodeTransliterator(*this);
 }
 
@@ -190,7 +190,7 @@ void NameUnicodeTransliterator::handleTransliterate(Replaceable& text, UTransPos
                 }
 
                 if (uprv_isInvariantUString(name.getBuffer(), len)) {
-                    cbuf[0] = 0;
+                    cbuf[0] = 0; 
                     name.extract(0, len, cbuf, maxLen, US_INV);
 
                     UErrorCode status = U_ZERO_ERROR;

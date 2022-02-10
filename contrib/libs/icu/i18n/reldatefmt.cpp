@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -14,10 +14,10 @@
 
 #if !UCONFIG_NO_FORMATTING && !UCONFIG_NO_BREAK_ITERATION
 
-#include <cmath>
-#include <functional>
+#include <cmath> 
+#include <functional> 
 #include "unicode/dtfmtsym.h"
-#include "unicode/ucasemap.h"
+#include "unicode/ucasemap.h" 
 #include "unicode/ureldatefmt.h"
 #include "unicode/udisplaycontext.h"
 #include "unicode/unum.h"
@@ -42,12 +42,12 @@
 #include "sharednumberformat.h"
 #include "standardplural.h"
 #include "unifiedcache.h"
-#include "util.h"
-#include "formatted_string_builder.h"
-#include "number_utypes.h"
-#include "number_modifiers.h"
-#include "formattedval_impl.h"
-#include "number_utils.h"
+#include "util.h" 
+#include "formatted_string_builder.h" 
+#include "number_utypes.h" 
+#include "number_modifiers.h" 
+#include "formattedval_impl.h" 
+#include "number_utils.h" 
 
 // Copied from uscript_props.cpp
 
@@ -56,13 +56,13 @@ U_NAMESPACE_BEGIN
 // RelativeDateTimeFormatter specific data for a single locale
 class RelativeDateTimeCacheData: public SharedObject {
 public:
-    RelativeDateTimeCacheData() : combinedDateAndTime(nullptr) {
+    RelativeDateTimeCacheData() : combinedDateAndTime(nullptr) { 
         // Initialize the cache arrays
         for (int32_t style = 0; style < UDAT_STYLE_COUNT; ++style) {
-            for (int32_t relUnit = 0; relUnit < UDAT_REL_UNIT_COUNT; ++relUnit) {
+            for (int32_t relUnit = 0; relUnit < UDAT_REL_UNIT_COUNT; ++relUnit) { 
                 for (int32_t pl = 0; pl < StandardPlural::COUNT; ++pl) {
-                    relativeUnitsFormatters[style][relUnit][0][pl] = nullptr;
-                    relativeUnitsFormatters[style][relUnit][1][pl] = nullptr;
+                    relativeUnitsFormatters[style][relUnit][0][pl] = nullptr; 
+                    relativeUnitsFormatters[style][relUnit][1][pl] = nullptr; 
                 }
             }
         }
@@ -79,7 +79,7 @@ public:
     // e.g., Next Tuesday; Yesterday; etc. For third index, 0
     // means past, e.g., 5 days ago; 1 means future, e.g., in 5 days.
     SimpleFormatter *relativeUnitsFormatters[UDAT_STYLE_COUNT]
-        [UDAT_REL_UNIT_COUNT][2][StandardPlural::COUNT];
+        [UDAT_REL_UNIT_COUNT][2][StandardPlural::COUNT]; 
 
     const UnicodeString& getAbsoluteUnitString(int32_t fStyle,
                                                UDateAbsoluteUnit unit,
@@ -88,10 +88,10 @@ public:
                                                     UDateRelativeUnit unit,
                                                     int32_t pastFutureIndex,
                                                     int32_t pluralUnit) const;
-    const SimpleFormatter* getRelativeDateTimeUnitFormatter(int32_t fStyle,
-                                                    URelativeDateTimeUnit unit,
-                                                    int32_t pastFutureIndex,
-                                                    int32_t pluralUnit) const;
+    const SimpleFormatter* getRelativeDateTimeUnitFormatter(int32_t fStyle, 
+                                                    URelativeDateTimeUnit unit, 
+                                                    int32_t pastFutureIndex, 
+                                                    int32_t pluralUnit) const; 
 
     const UnicodeString emptyString;
 
@@ -116,7 +116,7 @@ private:
 RelativeDateTimeCacheData::~RelativeDateTimeCacheData() {
     // clear out the cache arrays
     for (int32_t style = 0; style < UDAT_STYLE_COUNT; ++style) {
-        for (int32_t relUnit = 0; relUnit < UDAT_REL_UNIT_COUNT; ++relUnit) {
+        for (int32_t relUnit = 0; relUnit < UDAT_REL_UNIT_COUNT; ++relUnit) { 
             for (int32_t pl = 0; pl < StandardPlural::COUNT; ++pl) {
                 delete relativeUnitsFormatters[style][relUnit][0][pl];
                 delete relativeUnitsFormatters[style][relUnit][1][pl];
@@ -145,43 +145,43 @@ const UnicodeString& RelativeDateTimeCacheData::getAbsoluteUnitString(
         UDateRelativeUnit unit,
         int32_t pastFutureIndex,
         int32_t pluralUnit) const {
-   URelativeDateTimeUnit rdtunit = UDAT_REL_UNIT_COUNT;
-   switch (unit) {
-       case UDAT_RELATIVE_YEARS:   rdtunit = UDAT_REL_UNIT_YEAR; break;
-       case UDAT_RELATIVE_MONTHS:  rdtunit = UDAT_REL_UNIT_MONTH; break;
-       case UDAT_RELATIVE_WEEKS:   rdtunit = UDAT_REL_UNIT_WEEK; break;
-       case UDAT_RELATIVE_DAYS:    rdtunit = UDAT_REL_UNIT_DAY; break;
-       case UDAT_RELATIVE_HOURS:   rdtunit = UDAT_REL_UNIT_HOUR; break;
-       case UDAT_RELATIVE_MINUTES: rdtunit = UDAT_REL_UNIT_MINUTE; break;
-       case UDAT_RELATIVE_SECONDS: rdtunit = UDAT_REL_UNIT_SECOND; break;
-       default: // a unit that the above method does not handle
-            return nullptr;
-   }
-
-   return getRelativeDateTimeUnitFormatter(fStyle, rdtunit, pastFutureIndex, pluralUnit);
- }
-
- // Use fallback cache for SimpleFormatter relativeUnits.
- const SimpleFormatter* RelativeDateTimeCacheData::getRelativeDateTimeUnitFormatter(
-        int32_t fStyle,
-        URelativeDateTimeUnit unit,
-        int32_t pastFutureIndex,
-        int32_t pluralUnit) const {
-    while (true) {
-        int32_t style = fStyle;
-        do {
-            if (relativeUnitsFormatters[style][unit][pastFutureIndex][pluralUnit] != nullptr) {
-                return relativeUnitsFormatters[style][unit][pastFutureIndex][pluralUnit];
-            }
-            style = fallBackCache[style];
-        } while (style != -1);
-
-        if (pluralUnit == StandardPlural::OTHER) {
-            break;
+   URelativeDateTimeUnit rdtunit = UDAT_REL_UNIT_COUNT; 
+   switch (unit) { 
+       case UDAT_RELATIVE_YEARS:   rdtunit = UDAT_REL_UNIT_YEAR; break; 
+       case UDAT_RELATIVE_MONTHS:  rdtunit = UDAT_REL_UNIT_MONTH; break; 
+       case UDAT_RELATIVE_WEEKS:   rdtunit = UDAT_REL_UNIT_WEEK; break; 
+       case UDAT_RELATIVE_DAYS:    rdtunit = UDAT_REL_UNIT_DAY; break; 
+       case UDAT_RELATIVE_HOURS:   rdtunit = UDAT_REL_UNIT_HOUR; break; 
+       case UDAT_RELATIVE_MINUTES: rdtunit = UDAT_REL_UNIT_MINUTE; break; 
+       case UDAT_RELATIVE_SECONDS: rdtunit = UDAT_REL_UNIT_SECOND; break; 
+       default: // a unit that the above method does not handle 
+            return nullptr; 
+   } 
+ 
+   return getRelativeDateTimeUnitFormatter(fStyle, rdtunit, pastFutureIndex, pluralUnit); 
+ } 
+ 
+ // Use fallback cache for SimpleFormatter relativeUnits. 
+ const SimpleFormatter* RelativeDateTimeCacheData::getRelativeDateTimeUnitFormatter( 
+        int32_t fStyle, 
+        URelativeDateTimeUnit unit, 
+        int32_t pastFutureIndex, 
+        int32_t pluralUnit) const { 
+    while (true) { 
+        int32_t style = fStyle; 
+        do { 
+            if (relativeUnitsFormatters[style][unit][pastFutureIndex][pluralUnit] != nullptr) { 
+                return relativeUnitsFormatters[style][unit][pastFutureIndex][pluralUnit]; 
+            } 
+            style = fallBackCache[style]; 
+        } while (style != -1); 
+ 
+        if (pluralUnit == StandardPlural::OTHER) { 
+            break; 
         }
-        pluralUnit = StandardPlural::OTHER;
-    }
-    return nullptr;  // No formatter found.
+        pluralUnit = StandardPlural::OTHER; 
+    } 
+    return nullptr;  // No formatter found. 
  }
 
 static UBool getStringWithFallback(
@@ -254,35 +254,35 @@ struct RelDateTimeFmtDataSink : public ResourceSink {
         // Converts the generic units to UDAT_RELATIVE version.
         switch (genUnit) {
             case SECOND:
-                return UDAT_REL_UNIT_SECOND;
+                return UDAT_REL_UNIT_SECOND; 
             case MINUTE:
-                return UDAT_REL_UNIT_MINUTE;
+                return UDAT_REL_UNIT_MINUTE; 
             case HOUR:
-                return UDAT_REL_UNIT_HOUR;
+                return UDAT_REL_UNIT_HOUR; 
             case DAY:
-                return UDAT_REL_UNIT_DAY;
+                return UDAT_REL_UNIT_DAY; 
             case WEEK:
-                return UDAT_REL_UNIT_WEEK;
+                return UDAT_REL_UNIT_WEEK; 
             case MONTH:
-                return UDAT_REL_UNIT_MONTH;
-            case QUARTER:
-                return UDAT_REL_UNIT_QUARTER;
+                return UDAT_REL_UNIT_MONTH; 
+            case QUARTER: 
+                return UDAT_REL_UNIT_QUARTER; 
             case YEAR:
-                return UDAT_REL_UNIT_YEAR;
-            case SUNDAY:
-                return UDAT_REL_UNIT_SUNDAY;
-            case MONDAY:
-                return UDAT_REL_UNIT_MONDAY;
-            case TUESDAY:
-                return UDAT_REL_UNIT_TUESDAY;
-            case WEDNESDAY:
-                return UDAT_REL_UNIT_WEDNESDAY;
-            case THURSDAY:
-                return UDAT_REL_UNIT_THURSDAY;
-            case FRIDAY:
-                return UDAT_REL_UNIT_FRIDAY;
-            case SATURDAY:
-                return UDAT_REL_UNIT_SATURDAY;
+                return UDAT_REL_UNIT_YEAR; 
+            case SUNDAY: 
+                return UDAT_REL_UNIT_SUNDAY; 
+            case MONDAY: 
+                return UDAT_REL_UNIT_MONDAY; 
+            case TUESDAY: 
+                return UDAT_REL_UNIT_TUESDAY; 
+            case WEDNESDAY: 
+                return UDAT_REL_UNIT_WEDNESDAY; 
+            case THURSDAY: 
+                return UDAT_REL_UNIT_THURSDAY; 
+            case FRIDAY: 
+                return UDAT_REL_UNIT_FRIDAY; 
+            case SATURDAY: 
+                return UDAT_REL_UNIT_SATURDAY; 
             default:
                 return -1;
         }
@@ -297,8 +297,8 @@ struct RelDateTimeFmtDataSink : public ResourceSink {
                 return UDAT_ABSOLUTE_WEEK;
             case MONTH:
                 return UDAT_ABSOLUTE_MONTH;
-            case QUARTER:
-                return UDAT_ABSOLUTE_QUARTER;
+            case QUARTER: 
+                return UDAT_ABSOLUTE_QUARTER; 
             case YEAR:
                 return UDAT_ABSOLUTE_YEAR;
             case SUNDAY:
@@ -315,10 +315,10 @@ struct RelDateTimeFmtDataSink : public ResourceSink {
                 return UDAT_ABSOLUTE_FRIDAY;
             case SATURDAY:
                 return UDAT_ABSOLUTE_SATURDAY;
-            case HOUR:
-                return UDAT_ABSOLUTE_HOUR;
-            case MINUTE:
-                return UDAT_ABSOLUTE_MINUTE;
+            case HOUR: 
+                return UDAT_ABSOLUTE_HOUR; 
+            case MINUTE: 
+                return UDAT_ABSOLUTE_MINUTE; 
             default:
                 return -1;
         }
@@ -363,7 +363,7 @@ struct RelDateTimeFmtDataSink : public ResourceSink {
 
     // Utility functions
     static UDateRelativeDateTimeFormatterStyle styleFromString(const char *s) {
-        int32_t len = static_cast<int32_t>(uprv_strlen(s));
+        int32_t len = static_cast<int32_t>(uprv_strlen(s)); 
         if (len >= 7 && uprv_strcmp(s + len - 7, "-narrow") == 0) {
             return UDAT_STYLE_NARROW;
         }
@@ -481,7 +481,7 @@ struct RelDateTimeFmtDataSink : public ResourceSink {
                 }
 
                 int32_t relUnitIndex = relUnitFromGeneric(genericUnit);
-                if (relUnitIndex == UDAT_REL_UNIT_SECOND && uprv_strcmp(key, "0") == 0 &&
+                if (relUnitIndex == UDAT_REL_UNIT_SECOND && uprv_strcmp(key, "0") == 0 && 
                     outputData.absoluteUnits[style][UDAT_ABSOLUTE_NOW][UDAT_DIRECTION_PLAIN].isEmpty()) {
                     // Handle "NOW"
                     outputData.absoluteUnits[style][UDAT_ABSOLUTE_NOW]
@@ -514,10 +514,10 @@ struct RelDateTimeFmtDataSink : public ResourceSink {
                         outputData.relativeUnitsFormatters[style][relUnitIndex]
                         [pastFutureIndex];
                     // Only set if not already established.
-                    if (patterns[pluralIndex] == nullptr) {
+                    if (patterns[pluralIndex] == nullptr) { 
                         patterns[pluralIndex] = new SimpleFormatter(
                             value.getUnicodeString(errorCode), 0, 1, errorCode);
-                        if (patterns[pluralIndex] == nullptr) {
+                        if (patterns[pluralIndex] == nullptr) { 
                             errorCode = U_MEMORY_ALLOCATION_ERROR;
                         }
                     }
@@ -597,7 +597,7 @@ struct RelDateTimeFmtDataSink : public ResourceSink {
                 consumeAlias(key, value, errorCode);
             } else {
                 style = styleFromString(key);
-                int32_t unitSize = static_cast<int32_t>(uprv_strlen(key)) - styleSuffixLength(style);
+                int32_t unitSize = static_cast<int32_t>(uprv_strlen(key)) - styleSuffixLength(style); 
                 genericUnit = unitOrNegativeFromString(key, unitSize);
                 if (style >= 0 && genericUnit != INVALID_UNIT) {
                     consumeTimeUnit(key, value, errorCode);
@@ -612,7 +612,7 @@ struct RelDateTimeFmtDataSink : public ResourceSink {
 RelDateTimeFmtDataSink::~RelDateTimeFmtDataSink() {}
 } // namespace
 
-static const DateFormatSymbols::DtWidthType styleToDateFormatSymbolWidth[UDAT_STYLE_COUNT] = {
+static const DateFormatSymbols::DtWidthType styleToDateFormatSymbolWidth[UDAT_STYLE_COUNT] = { 
   DateFormatSymbols::WIDE, DateFormatSymbols::SHORT, DateFormatSymbols::NARROW
 };
 
@@ -621,14 +621,14 @@ static void loadWeekdayNames(UnicodeString absoluteUnits[UDAT_STYLE_COUNT]
                                  [UDAT_ABSOLUTE_UNIT_COUNT][UDAT_DIRECTION_COUNT],
                              const char* localeId,
                              UErrorCode& status) {
-    if (U_FAILURE(status)) {
-        return;
-    }
+    if (U_FAILURE(status)) { 
+        return; 
+    } 
     Locale locale(localeId);
     DateFormatSymbols dfSym(locale, status);
-    if (U_FAILURE(status)) {
-        return;
-    }
+    if (U_FAILURE(status)) { 
+        return; 
+    } 
     for (int32_t style = 0; style < UDAT_STYLE_COUNT; ++style) {
         DateFormatSymbols::DtWidthType dtfmtWidth = styleToDateFormatSymbolWidth[style];
         int32_t count;
@@ -652,9 +652,9 @@ static UBool loadUnitData(
     RelDateTimeFmtDataSink sink(cacheData);
 
     ures_getAllItemsWithFallback(resource, "fields", sink, status);
-    if (U_FAILURE(status)) {
-        return false;
-    }
+    if (U_FAILURE(status)) { 
+        return false; 
+    } 
 
     // Get the weekday names from DateFormatSymbols.
     loadWeekdayNames(cacheData.absoluteUnits, localeId, status);
@@ -679,7 +679,7 @@ static UBool getDateTimePattern(
             .append("/DateTimePatterns", status);
     LocalUResourceBundlePointer topLevel(
             ures_getByKeyWithFallback(
-                    resource, pathBuffer.data(), nullptr, &status));
+                    resource, pathBuffer.data(), nullptr, &status)); 
     if (U_FAILURE(status)) {
         return FALSE;
     }
@@ -696,88 +696,88 @@ static UBool getDateTimePattern(
 template<> U_I18N_API
 const RelativeDateTimeCacheData *LocaleCacheKey<RelativeDateTimeCacheData>::createObject(const void * /*unused*/, UErrorCode &status) const {
     const char *localeId = fLoc.getName();
-    LocalUResourceBundlePointer topLevel(ures_open(nullptr, localeId, &status));
+    LocalUResourceBundlePointer topLevel(ures_open(nullptr, localeId, &status)); 
     if (U_FAILURE(status)) {
-        return nullptr;
+        return nullptr; 
     }
     LocalPointer<RelativeDateTimeCacheData> result(
             new RelativeDateTimeCacheData());
     if (result.isNull()) {
         status = U_MEMORY_ALLOCATION_ERROR;
-        return nullptr;
+        return nullptr; 
     }
     if (!loadUnitData(
             topLevel.getAlias(),
             *result,
             localeId,
             status)) {
-        return nullptr;
+        return nullptr; 
     }
     UnicodeString dateTimePattern;
     if (!getDateTimePattern(topLevel.getAlias(), dateTimePattern, status)) {
-        return nullptr;
+        return nullptr; 
     }
     result->adoptCombinedDateAndTime(
             new SimpleFormatter(dateTimePattern, 2, 2, status));
     if (U_FAILURE(status)) {
-        return nullptr;
+        return nullptr; 
     }
     result->addRef();
     return result.orphan();
 }
 
-
-
-static constexpr FormattedStringBuilder::Field kRDTNumericField
-    = {UFIELD_CATEGORY_RELATIVE_DATETIME, UDAT_REL_NUMERIC_FIELD};
-
-static constexpr FormattedStringBuilder::Field kRDTLiteralField
-    = {UFIELD_CATEGORY_RELATIVE_DATETIME, UDAT_REL_LITERAL_FIELD};
-
-class FormattedRelativeDateTimeData : public FormattedValueStringBuilderImpl {
-public:
-    FormattedRelativeDateTimeData() : FormattedValueStringBuilderImpl(kRDTNumericField) {}
-    virtual ~FormattedRelativeDateTimeData();
-};
-
-FormattedRelativeDateTimeData::~FormattedRelativeDateTimeData() = default;
-
-
-UPRV_FORMATTED_VALUE_SUBCLASS_AUTO_IMPL(FormattedRelativeDateTime)
-
-
+ 
+ 
+static constexpr FormattedStringBuilder::Field kRDTNumericField 
+    = {UFIELD_CATEGORY_RELATIVE_DATETIME, UDAT_REL_NUMERIC_FIELD}; 
+ 
+static constexpr FormattedStringBuilder::Field kRDTLiteralField 
+    = {UFIELD_CATEGORY_RELATIVE_DATETIME, UDAT_REL_LITERAL_FIELD}; 
+ 
+class FormattedRelativeDateTimeData : public FormattedValueStringBuilderImpl { 
+public: 
+    FormattedRelativeDateTimeData() : FormattedValueStringBuilderImpl(kRDTNumericField) {} 
+    virtual ~FormattedRelativeDateTimeData(); 
+}; 
+ 
+FormattedRelativeDateTimeData::~FormattedRelativeDateTimeData() = default; 
+ 
+ 
+UPRV_FORMATTED_VALUE_SUBCLASS_AUTO_IMPL(FormattedRelativeDateTime) 
+ 
+ 
 RelativeDateTimeFormatter::RelativeDateTimeFormatter(UErrorCode& status) :
-        fCache(nullptr),
-        fNumberFormat(nullptr),
-        fPluralRules(nullptr),
+        fCache(nullptr), 
+        fNumberFormat(nullptr), 
+        fPluralRules(nullptr), 
         fStyle(UDAT_STYLE_LONG),
         fContext(UDISPCTX_CAPITALIZATION_NONE),
-        fOptBreakIterator(nullptr) {
-    init(nullptr, nullptr, status);
+        fOptBreakIterator(nullptr) { 
+    init(nullptr, nullptr, status); 
 }
 
 RelativeDateTimeFormatter::RelativeDateTimeFormatter(
         const Locale& locale, UErrorCode& status) :
-        fCache(nullptr),
-        fNumberFormat(nullptr),
-        fPluralRules(nullptr),
+        fCache(nullptr), 
+        fNumberFormat(nullptr), 
+        fPluralRules(nullptr), 
         fStyle(UDAT_STYLE_LONG),
         fContext(UDISPCTX_CAPITALIZATION_NONE),
-        fOptBreakIterator(nullptr),
+        fOptBreakIterator(nullptr), 
         fLocale(locale) {
-    init(nullptr, nullptr, status);
+    init(nullptr, nullptr, status); 
 }
 
 RelativeDateTimeFormatter::RelativeDateTimeFormatter(
         const Locale& locale, NumberFormat *nfToAdopt, UErrorCode& status) :
-        fCache(nullptr),
-        fNumberFormat(nullptr),
-        fPluralRules(nullptr),
+        fCache(nullptr), 
+        fNumberFormat(nullptr), 
+        fPluralRules(nullptr), 
         fStyle(UDAT_STYLE_LONG),
         fContext(UDISPCTX_CAPITALIZATION_NONE),
-        fOptBreakIterator(nullptr),
+        fOptBreakIterator(nullptr), 
         fLocale(locale) {
-    init(nfToAdopt, nullptr, status);
+    init(nfToAdopt, nullptr, status); 
 }
 
 RelativeDateTimeFormatter::RelativeDateTimeFormatter(
@@ -786,12 +786,12 @@ RelativeDateTimeFormatter::RelativeDateTimeFormatter(
         UDateRelativeDateTimeFormatterStyle styl,
         UDisplayContext capitalizationContext,
         UErrorCode& status) :
-        fCache(nullptr),
-        fNumberFormat(nullptr),
-        fPluralRules(nullptr),
+        fCache(nullptr), 
+        fNumberFormat(nullptr), 
+        fPluralRules(nullptr), 
         fStyle(styl),
         fContext(capitalizationContext),
-        fOptBreakIterator(nullptr),
+        fOptBreakIterator(nullptr), 
         fLocale(locale) {
     if (U_FAILURE(status)) {
         return;
@@ -807,7 +807,7 @@ RelativeDateTimeFormatter::RelativeDateTimeFormatter(
         }
         init(nfToAdopt, bi, status);
     } else {
-        init(nfToAdopt, nullptr, status);
+        init(nfToAdopt, nullptr, status); 
     }
 }
 
@@ -824,7 +824,7 @@ RelativeDateTimeFormatter::RelativeDateTimeFormatter(
     fCache->addRef();
     fNumberFormat->addRef();
     fPluralRules->addRef();
-    if (fOptBreakIterator != nullptr) {
+    if (fOptBreakIterator != nullptr) { 
       fOptBreakIterator->addRef();
     }
 }
@@ -844,16 +844,16 @@ RelativeDateTimeFormatter& RelativeDateTimeFormatter::operator=(
 }
 
 RelativeDateTimeFormatter::~RelativeDateTimeFormatter() {
-    if (fCache != nullptr) {
+    if (fCache != nullptr) { 
         fCache->removeRef();
     }
-    if (fNumberFormat != nullptr) {
+    if (fNumberFormat != nullptr) { 
         fNumberFormat->removeRef();
     }
-    if (fPluralRules != nullptr) {
+    if (fPluralRules != nullptr) { 
         fPluralRules->removeRef();
     }
-    if (fOptBreakIterator != nullptr) {
+    if (fOptBreakIterator != nullptr) { 
         fOptBreakIterator->removeRef();
     }
 }
@@ -870,254 +870,254 @@ UDateRelativeDateTimeFormatterStyle RelativeDateTimeFormatter::getFormatStyle() 
     return fStyle;
 }
 
-
-// To reduce boilerplate code, we use a helper function that forwards variadic
-// arguments to the formatImpl function.
-
-template<typename F, typename... Args>
-UnicodeString& RelativeDateTimeFormatter::doFormat(
-        F callback,
-        UnicodeString& appendTo,
-        UErrorCode& status,
-        Args... args) const {
-    FormattedRelativeDateTimeData output;
-    (this->*callback)(std::forward<Args>(args)..., output, status);
+ 
+// To reduce boilerplate code, we use a helper function that forwards variadic 
+// arguments to the formatImpl function. 
+ 
+template<typename F, typename... Args> 
+UnicodeString& RelativeDateTimeFormatter::doFormat( 
+        F callback, 
+        UnicodeString& appendTo, 
+        UErrorCode& status, 
+        Args... args) const { 
+    FormattedRelativeDateTimeData output; 
+    (this->*callback)(std::forward<Args>(args)..., output, status); 
     if (U_FAILURE(status)) {
         return appendTo;
     }
-    UnicodeString result = output.getStringRef().toUnicodeString();
-    return appendTo.append(adjustForContext(result));
-}
-
-template<typename F, typename... Args>
-FormattedRelativeDateTime RelativeDateTimeFormatter::doFormatToValue(
-        F callback,
-        UErrorCode& status,
-        Args... args) const {
-    if (!checkNoAdjustForContext(status)) {
-        return FormattedRelativeDateTime(status);
-    }
-    LocalPointer<FormattedRelativeDateTimeData> output(
-        new FormattedRelativeDateTimeData(), status);
-    if (U_FAILURE(status)) {
-        return FormattedRelativeDateTime(status);
-    }
-    (this->*callback)(std::forward<Args>(args)..., *output, status);
-    output->getStringRef().writeTerminator(status);
-    return FormattedRelativeDateTime(output.orphan());
-}
-
-UnicodeString& RelativeDateTimeFormatter::format(
-        double quantity,
-        UDateDirection direction,
-        UDateRelativeUnit unit,
-        UnicodeString& appendTo,
-        UErrorCode& status) const {
-    return doFormat(
-        &RelativeDateTimeFormatter::formatImpl,
-        appendTo,
-        status,
-        quantity,
-        direction,
-        unit);
-}
-
-FormattedRelativeDateTime RelativeDateTimeFormatter::formatToValue(
-        double quantity,
-        UDateDirection direction,
-        UDateRelativeUnit unit,
-        UErrorCode& status) const {
-    return doFormatToValue(
-        &RelativeDateTimeFormatter::formatImpl,
-        status,
-        quantity,
-        direction,
-        unit);
-}
-
-void RelativeDateTimeFormatter::formatImpl(
-        double quantity,
-        UDateDirection direction,
-        UDateRelativeUnit unit,
-        FormattedRelativeDateTimeData& output,
-        UErrorCode& status) const {
-    if (U_FAILURE(status)) {
-        return;
-    }
+    UnicodeString result = output.getStringRef().toUnicodeString(); 
+    return appendTo.append(adjustForContext(result)); 
+} 
+ 
+template<typename F, typename... Args> 
+FormattedRelativeDateTime RelativeDateTimeFormatter::doFormatToValue( 
+        F callback, 
+        UErrorCode& status, 
+        Args... args) const { 
+    if (!checkNoAdjustForContext(status)) { 
+        return FormattedRelativeDateTime(status); 
+    } 
+    LocalPointer<FormattedRelativeDateTimeData> output( 
+        new FormattedRelativeDateTimeData(), status); 
+    if (U_FAILURE(status)) { 
+        return FormattedRelativeDateTime(status); 
+    } 
+    (this->*callback)(std::forward<Args>(args)..., *output, status); 
+    output->getStringRef().writeTerminator(status); 
+    return FormattedRelativeDateTime(output.orphan()); 
+} 
+ 
+UnicodeString& RelativeDateTimeFormatter::format( 
+        double quantity, 
+        UDateDirection direction, 
+        UDateRelativeUnit unit, 
+        UnicodeString& appendTo, 
+        UErrorCode& status) const { 
+    return doFormat( 
+        &RelativeDateTimeFormatter::formatImpl, 
+        appendTo, 
+        status, 
+        quantity, 
+        direction, 
+        unit); 
+} 
+ 
+FormattedRelativeDateTime RelativeDateTimeFormatter::formatToValue( 
+        double quantity, 
+        UDateDirection direction, 
+        UDateRelativeUnit unit, 
+        UErrorCode& status) const { 
+    return doFormatToValue( 
+        &RelativeDateTimeFormatter::formatImpl, 
+        status, 
+        quantity, 
+        direction, 
+        unit); 
+} 
+ 
+void RelativeDateTimeFormatter::formatImpl( 
+        double quantity, 
+        UDateDirection direction, 
+        UDateRelativeUnit unit, 
+        FormattedRelativeDateTimeData& output, 
+        UErrorCode& status) const { 
+    if (U_FAILURE(status)) { 
+        return; 
+    } 
     if (direction != UDAT_DIRECTION_LAST && direction != UDAT_DIRECTION_NEXT) {
         status = U_ILLEGAL_ARGUMENT_ERROR;
-        return;
+        return; 
     }
     int32_t bFuture = direction == UDAT_DIRECTION_NEXT ? 1 : 0;
 
-    StandardPlural::Form pluralForm;
-    QuantityFormatter::formatAndSelect(
-        quantity,
-        **fNumberFormat,
-        **fPluralRules,
-        output.getStringRef(),
-        pluralForm,
+    StandardPlural::Form pluralForm; 
+    QuantityFormatter::formatAndSelect( 
+        quantity, 
+        **fNumberFormat, 
+        **fPluralRules, 
+        output.getStringRef(), 
+        pluralForm, 
         status);
-    if (U_FAILURE(status)) {
-        return;
-    }
+    if (U_FAILURE(status)) { 
+        return; 
+    } 
 
     const SimpleFormatter* formatter =
-        fCache->getRelativeUnitFormatter(fStyle, unit, bFuture, pluralForm);
-    if (formatter == nullptr) {
+        fCache->getRelativeUnitFormatter(fStyle, unit, bFuture, pluralForm); 
+    if (formatter == nullptr) { 
         // TODO: WARN - look at quantity formatter's action with an error.
         status = U_INVALID_FORMAT_ERROR;
-        return;
+        return; 
     }
-
-    number::impl::SimpleModifier modifier(*formatter, kRDTLiteralField, false);
-    modifier.formatAsPrefixSuffix(
-        output.getStringRef(), 0, output.getStringRef().length(), status);
+ 
+    number::impl::SimpleModifier modifier(*formatter, kRDTLiteralField, false); 
+    modifier.formatAsPrefixSuffix( 
+        output.getStringRef(), 0, output.getStringRef().length(), status); 
 }
 
 UnicodeString& RelativeDateTimeFormatter::formatNumeric(
-        double offset,
-        URelativeDateTimeUnit unit,
-        UnicodeString& appendTo,
-        UErrorCode& status) const {
-    return doFormat(
-        &RelativeDateTimeFormatter::formatNumericImpl,
-        appendTo,
-        status,
-        offset,
-        unit);
-}
-
-FormattedRelativeDateTime RelativeDateTimeFormatter::formatNumericToValue(
-        double offset,
-        URelativeDateTimeUnit unit,
-        UErrorCode& status) const {
-    return doFormatToValue(
-        &RelativeDateTimeFormatter::formatNumericImpl,
-        status,
-        offset,
-        unit);
-}
-
-void RelativeDateTimeFormatter::formatNumericImpl(
-        double offset,
-        URelativeDateTimeUnit unit,
-        FormattedRelativeDateTimeData& output,
-        UErrorCode& status) const {
+        double offset, 
+        URelativeDateTimeUnit unit, 
+        UnicodeString& appendTo, 
+        UErrorCode& status) const { 
+    return doFormat( 
+        &RelativeDateTimeFormatter::formatNumericImpl, 
+        appendTo, 
+        status, 
+        offset, 
+        unit); 
+} 
+ 
+FormattedRelativeDateTime RelativeDateTimeFormatter::formatNumericToValue( 
+        double offset, 
+        URelativeDateTimeUnit unit, 
+        UErrorCode& status) const { 
+    return doFormatToValue( 
+        &RelativeDateTimeFormatter::formatNumericImpl, 
+        status, 
+        offset, 
+        unit); 
+} 
+ 
+void RelativeDateTimeFormatter::formatNumericImpl( 
+        double offset, 
+        URelativeDateTimeUnit unit, 
+        FormattedRelativeDateTimeData& output, 
+        UErrorCode& status) const { 
     if (U_FAILURE(status)) {
-        return;
+        return; 
     }
     UDateDirection direction = UDAT_DIRECTION_NEXT;
-    if (std::signbit(offset)) { // needed to handle -0.0
+    if (std::signbit(offset)) { // needed to handle -0.0 
         direction = UDAT_DIRECTION_LAST;
         offset = -offset;
     }
-    if (direction != UDAT_DIRECTION_LAST && direction != UDAT_DIRECTION_NEXT) {
-        status = U_ILLEGAL_ARGUMENT_ERROR;
-        return;
-    }
-    int32_t bFuture = direction == UDAT_DIRECTION_NEXT ? 1 : 0;
-
-    StandardPlural::Form pluralForm;
-    QuantityFormatter::formatAndSelect(
-        offset,
-        **fNumberFormat,
-        **fPluralRules,
-        output.getStringRef(),
-        pluralForm,
-        status);
-    if (U_FAILURE(status)) {
-        return;
-    }
-
-    const SimpleFormatter* formatter =
-        fCache->getRelativeDateTimeUnitFormatter(fStyle, unit, bFuture, pluralForm);
-    if (formatter == nullptr) {
-        // TODO: WARN - look at quantity formatter's action with an error.
-        status = U_INVALID_FORMAT_ERROR;
-        return;
-    }
-
-    number::impl::SimpleModifier modifier(*formatter, kRDTLiteralField, false);
-    modifier.formatAsPrefixSuffix(
-        output.getStringRef(), 0, output.getStringRef().length(), status);
+    if (direction != UDAT_DIRECTION_LAST && direction != UDAT_DIRECTION_NEXT) { 
+        status = U_ILLEGAL_ARGUMENT_ERROR; 
+        return; 
+    } 
+    int32_t bFuture = direction == UDAT_DIRECTION_NEXT ? 1 : 0; 
+ 
+    StandardPlural::Form pluralForm; 
+    QuantityFormatter::formatAndSelect( 
+        offset, 
+        **fNumberFormat, 
+        **fPluralRules, 
+        output.getStringRef(), 
+        pluralForm, 
+        status); 
+    if (U_FAILURE(status)) { 
+        return; 
+    } 
+ 
+    const SimpleFormatter* formatter = 
+        fCache->getRelativeDateTimeUnitFormatter(fStyle, unit, bFuture, pluralForm); 
+    if (formatter == nullptr) { 
+        // TODO: WARN - look at quantity formatter's action with an error. 
+        status = U_INVALID_FORMAT_ERROR; 
+        return; 
+    } 
+ 
+    number::impl::SimpleModifier modifier(*formatter, kRDTLiteralField, false); 
+    modifier.formatAsPrefixSuffix( 
+        output.getStringRef(), 0, output.getStringRef().length(), status); 
 }
 
 UnicodeString& RelativeDateTimeFormatter::format(
-        UDateDirection direction,
-        UDateAbsoluteUnit unit,
-        UnicodeString& appendTo,
-        UErrorCode& status) const {
-    return doFormat(
-        &RelativeDateTimeFormatter::formatAbsoluteImpl,
-        appendTo,
-        status,
-        direction,
-        unit);
-}
-
-FormattedRelativeDateTime RelativeDateTimeFormatter::formatToValue(
-        UDateDirection direction,
-        UDateAbsoluteUnit unit,
-        UErrorCode& status) const {
-    return doFormatToValue(
-        &RelativeDateTimeFormatter::formatAbsoluteImpl,
-        status,
-        direction,
-        unit);
-}
-
-void RelativeDateTimeFormatter::formatAbsoluteImpl(
-        UDateDirection direction,
-        UDateAbsoluteUnit unit,
-        FormattedRelativeDateTimeData& output,
-        UErrorCode& status) const {
+        UDateDirection direction, 
+        UDateAbsoluteUnit unit, 
+        UnicodeString& appendTo, 
+        UErrorCode& status) const { 
+    return doFormat( 
+        &RelativeDateTimeFormatter::formatAbsoluteImpl, 
+        appendTo, 
+        status, 
+        direction, 
+        unit); 
+} 
+ 
+FormattedRelativeDateTime RelativeDateTimeFormatter::formatToValue( 
+        UDateDirection direction, 
+        UDateAbsoluteUnit unit, 
+        UErrorCode& status) const { 
+    return doFormatToValue( 
+        &RelativeDateTimeFormatter::formatAbsoluteImpl, 
+        status, 
+        direction, 
+        unit); 
+} 
+ 
+void RelativeDateTimeFormatter::formatAbsoluteImpl( 
+        UDateDirection direction, 
+        UDateAbsoluteUnit unit, 
+        FormattedRelativeDateTimeData& output, 
+        UErrorCode& status) const { 
     if (U_FAILURE(status)) {
-        return;
+        return; 
     }
     if (unit == UDAT_ABSOLUTE_NOW && direction != UDAT_DIRECTION_PLAIN) {
         status = U_ILLEGAL_ARGUMENT_ERROR;
-        return;
+        return; 
     }
 
     // Get string using fallback.
-    output.getStringRef().append(
-        fCache->getAbsoluteUnitString(fStyle, unit, direction),
-        kRDTLiteralField,
-        status);
+    output.getStringRef().append( 
+        fCache->getAbsoluteUnitString(fStyle, unit, direction), 
+        kRDTLiteralField, 
+        status); 
 }
 
 UnicodeString& RelativeDateTimeFormatter::format(
-        double offset,
-        URelativeDateTimeUnit unit,
-        UnicodeString& appendTo,
-        UErrorCode& status) const {
-    return doFormat(
-        &RelativeDateTimeFormatter::formatRelativeImpl,
-        appendTo,
-        status,
-        offset,
-        unit);
-}
-
-FormattedRelativeDateTime RelativeDateTimeFormatter::formatToValue(
-        double offset,
-        URelativeDateTimeUnit unit,
-        UErrorCode& status) const {
-    return doFormatToValue(
-        &RelativeDateTimeFormatter::formatRelativeImpl,
-        status,
-        offset,
-        unit);
-}
-
-void RelativeDateTimeFormatter::formatRelativeImpl(
-        double offset,
-        URelativeDateTimeUnit unit,
-        FormattedRelativeDateTimeData& output,
-        UErrorCode& status) const {
+        double offset, 
+        URelativeDateTimeUnit unit, 
+        UnicodeString& appendTo, 
+        UErrorCode& status) const { 
+    return doFormat( 
+        &RelativeDateTimeFormatter::formatRelativeImpl, 
+        appendTo, 
+        status, 
+        offset, 
+        unit); 
+} 
+ 
+FormattedRelativeDateTime RelativeDateTimeFormatter::formatToValue( 
+        double offset, 
+        URelativeDateTimeUnit unit, 
+        UErrorCode& status) const { 
+    return doFormatToValue( 
+        &RelativeDateTimeFormatter::formatRelativeImpl, 
+        status, 
+        offset, 
+        unit); 
+} 
+ 
+void RelativeDateTimeFormatter::formatRelativeImpl( 
+        double offset, 
+        URelativeDateTimeUnit unit, 
+        FormattedRelativeDateTimeData& output, 
+        UErrorCode& status) const { 
     if (U_FAILURE(status)) {
-        return;
+        return; 
     }
     // TODO:
     // The full implementation of this depends on CLDR data that is not yet available,
@@ -1144,7 +1144,7 @@ void RelativeDateTimeFormatter::formatRelativeImpl(
     UDateAbsoluteUnit absunit = UDAT_ABSOLUTE_UNIT_COUNT;
     switch (unit) {
         case UDAT_REL_UNIT_YEAR:    absunit = UDAT_ABSOLUTE_YEAR; break;
-        case UDAT_REL_UNIT_QUARTER: absunit = UDAT_ABSOLUTE_QUARTER; break;
+        case UDAT_REL_UNIT_QUARTER: absunit = UDAT_ABSOLUTE_QUARTER; break; 
         case UDAT_REL_UNIT_MONTH:   absunit = UDAT_ABSOLUTE_MONTH; break;
         case UDAT_REL_UNIT_WEEK:    absunit = UDAT_ABSOLUTE_WEEK; break;
         case UDAT_REL_UNIT_DAY:     absunit = UDAT_ABSOLUTE_DAY; break;
@@ -1161,18 +1161,18 @@ void RelativeDateTimeFormatter::formatRelativeImpl(
         case UDAT_REL_UNIT_THURSDAY:  absunit = UDAT_ABSOLUTE_THURSDAY; break;
         case UDAT_REL_UNIT_FRIDAY:  absunit = UDAT_ABSOLUTE_FRIDAY; break;
         case UDAT_REL_UNIT_SATURDAY:  absunit = UDAT_ABSOLUTE_SATURDAY; break;
-        case UDAT_REL_UNIT_HOUR:  absunit = UDAT_ABSOLUTE_HOUR; break;
-        case UDAT_REL_UNIT_MINUTE:  absunit = UDAT_ABSOLUTE_MINUTE; break;
+        case UDAT_REL_UNIT_HOUR:  absunit = UDAT_ABSOLUTE_HOUR; break; 
+        case UDAT_REL_UNIT_MINUTE:  absunit = UDAT_ABSOLUTE_MINUTE; break; 
         default: break;
     }
     if (direction != UDAT_DIRECTION_COUNT && absunit != UDAT_ABSOLUTE_UNIT_COUNT) {
-        formatAbsoluteImpl(direction, absunit, output, status);
-        if (output.getStringRef().length() != 0) {
-            return;
+        formatAbsoluteImpl(direction, absunit, output, status); 
+        if (output.getStringRef().length() != 0) { 
+            return; 
         }
     }
     // otherwise fallback to formatNumeric
-    formatNumericImpl(offset, unit, output, status);
+    formatNumericImpl(offset, unit, output, status); 
 }
 
 UnicodeString& RelativeDateTimeFormatter::combineDateAndTime(
@@ -1182,33 +1182,33 @@ UnicodeString& RelativeDateTimeFormatter::combineDateAndTime(
             timeString, relativeDateString, appendTo, status);
 }
 
-UnicodeString& RelativeDateTimeFormatter::adjustForContext(UnicodeString &str) const {
-    if (fOptBreakIterator == nullptr
+UnicodeString& RelativeDateTimeFormatter::adjustForContext(UnicodeString &str) const { 
+    if (fOptBreakIterator == nullptr 
         || str.length() == 0 || !u_islower(str.char32At(0))) {
-        return str;
+        return str; 
     }
 
     // Must guarantee that one thread at a time accesses the shared break
     // iterator.
-    static UMutex gBrkIterMutex;
+    static UMutex gBrkIterMutex; 
     Mutex lock(&gBrkIterMutex);
     str.toTitle(
             fOptBreakIterator->get(),
             fLocale,
             U_TITLECASE_NO_LOWERCASE | U_TITLECASE_NO_BREAK_ADJUSTMENT);
-    return str;
+    return str; 
 }
 
-UBool RelativeDateTimeFormatter::checkNoAdjustForContext(UErrorCode& status) const {
-    // This is unsupported because it's hard to keep fields in sync with title
-    // casing. The code could be written and tested if there is demand.
-    if (fOptBreakIterator != nullptr) {
-        status = U_UNSUPPORTED_ERROR;
-        return FALSE;
-    }
-    return TRUE;
-}
-
+UBool RelativeDateTimeFormatter::checkNoAdjustForContext(UErrorCode& status) const { 
+    // This is unsupported because it's hard to keep fields in sync with title 
+    // casing. The code could be written and tested if there is demand. 
+    if (fOptBreakIterator != nullptr) { 
+        status = U_UNSUPPORTED_ERROR; 
+        return FALSE; 
+    } 
+    return TRUE; 
+} 
+ 
 void RelativeDateTimeFormatter::init(
         NumberFormat *nfToAdopt,
         BreakIterator *biToAdopt,
@@ -1236,7 +1236,7 @@ void RelativeDateTimeFormatter::init(
         shared->removeRef();
     } else {
         SharedNumberFormat *shared = new SharedNumberFormat(nf.getAlias());
-        if (shared == nullptr) {
+        if (shared == nullptr) { 
             status = U_MEMORY_ALLOCATION_ERROR;
             return;
         }
@@ -1247,7 +1247,7 @@ void RelativeDateTimeFormatter::init(
         SharedObject::clearPtr(fOptBreakIterator);
     } else {
         SharedBreakIterator *shared = new SharedBreakIterator(bi.getAlias());
-        if (shared == nullptr) {
+        if (shared == nullptr) { 
             status = U_MEMORY_ALLOCATION_ERROR;
             return;
         }
@@ -1262,17 +1262,17 @@ U_NAMESPACE_END
 
 U_NAMESPACE_USE
 
-
-// Magic number: "FRDT" (FormattedRelativeDateTime) in ASCII
-UPRV_FORMATTED_VALUE_CAPI_AUTO_IMPL(
-    FormattedRelativeDateTime,
-    UFormattedRelativeDateTime,
-    UFormattedRelativeDateTimeImpl,
-    UFormattedRelativeDateTimeApiHelper,
-    ureldatefmt,
-    0x46524454)
-
-
+ 
+// Magic number: "FRDT" (FormattedRelativeDateTime) in ASCII 
+UPRV_FORMATTED_VALUE_CAPI_AUTO_IMPL( 
+    FormattedRelativeDateTime, 
+    UFormattedRelativeDateTime, 
+    UFormattedRelativeDateTimeImpl, 
+    UFormattedRelativeDateTimeApiHelper, 
+    ureldatefmt, 
+    0x46524454) 
+ 
+ 
 U_CAPI URelativeDateTimeFormatter* U_EXPORT2
 ureldatefmt_open( const char*          locale,
                   UNumberFormat*       nfToAdopt,
@@ -1281,13 +1281,13 @@ ureldatefmt_open( const char*          locale,
                   UErrorCode*          status )
 {
     if (U_FAILURE(*status)) {
-        return nullptr;
+        return nullptr; 
     }
     LocalPointer<RelativeDateTimeFormatter> formatter(new RelativeDateTimeFormatter(Locale(locale),
                                                               (NumberFormat*)nfToAdopt, width,
                                                               capitalizationContext, *status), *status);
     if (U_FAILURE(*status)) {
-        return nullptr;
+        return nullptr; 
     }
     return (URelativeDateTimeFormatter*)formatter.orphan();
 }
@@ -1309,13 +1309,13 @@ ureldatefmt_formatNumeric( const URelativeDateTimeFormatter* reldatefmt,
     if (U_FAILURE(*status)) {
         return 0;
     }
-    if (result == nullptr ? resultCapacity != 0 : resultCapacity < 0) {
+    if (result == nullptr ? resultCapacity != 0 : resultCapacity < 0) { 
         *status = U_ILLEGAL_ARGUMENT_ERROR;
         return 0;
     }
     UnicodeString res;
-    if (result != nullptr) {
-        // nullptr destination for pure preflighting: empty dummy string
+    if (result != nullptr) { 
+        // nullptr destination for pure preflighting: empty dummy string 
         // otherwise, alias the destination buffer (copied from udat_format)
         res.setTo(result, 0, resultCapacity);
     }
@@ -1326,21 +1326,21 @@ ureldatefmt_formatNumeric( const URelativeDateTimeFormatter* reldatefmt,
     return res.extract(result, resultCapacity, *status);
 }
 
-U_STABLE void U_EXPORT2
-ureldatefmt_formatNumericToResult(
-        const URelativeDateTimeFormatter* reldatefmt,
-        double                            offset,
-        URelativeDateTimeUnit             unit,
-        UFormattedRelativeDateTime*       result,
-        UErrorCode*                       status) {
-    if (U_FAILURE(*status)) {
-        return;
-    }
-    auto* fmt = reinterpret_cast<const RelativeDateTimeFormatter*>(reldatefmt);
-    auto* resultImpl = UFormattedRelativeDateTimeApiHelper::validate(result, *status);
-    resultImpl->fImpl = fmt->formatNumericToValue(offset, unit, *status);
-}
-
+U_STABLE void U_EXPORT2 
+ureldatefmt_formatNumericToResult( 
+        const URelativeDateTimeFormatter* reldatefmt, 
+        double                            offset, 
+        URelativeDateTimeUnit             unit, 
+        UFormattedRelativeDateTime*       result, 
+        UErrorCode*                       status) { 
+    if (U_FAILURE(*status)) { 
+        return; 
+    } 
+    auto* fmt = reinterpret_cast<const RelativeDateTimeFormatter*>(reldatefmt); 
+    auto* resultImpl = UFormattedRelativeDateTimeApiHelper::validate(result, *status); 
+    resultImpl->fImpl = fmt->formatNumericToValue(offset, unit, *status); 
+} 
+ 
 U_CAPI int32_t U_EXPORT2
 ureldatefmt_format( const URelativeDateTimeFormatter* reldatefmt,
                     double                offset,
@@ -1352,13 +1352,13 @@ ureldatefmt_format( const URelativeDateTimeFormatter* reldatefmt,
     if (U_FAILURE(*status)) {
         return 0;
     }
-    if (result == nullptr ? resultCapacity != 0 : resultCapacity < 0) {
+    if (result == nullptr ? resultCapacity != 0 : resultCapacity < 0) { 
         *status = U_ILLEGAL_ARGUMENT_ERROR;
         return 0;
     }
     UnicodeString res;
-    if (result != nullptr) {
-        // nullptr destination for pure preflighting: empty dummy string
+    if (result != nullptr) { 
+        // nullptr destination for pure preflighting: empty dummy string 
         // otherwise, alias the destination buffer (copied from udat_format)
         res.setTo(result, 0, resultCapacity);
     }
@@ -1369,21 +1369,21 @@ ureldatefmt_format( const URelativeDateTimeFormatter* reldatefmt,
     return res.extract(result, resultCapacity, *status);
 }
 
-U_DRAFT void U_EXPORT2
-ureldatefmt_formatToResult(
-        const URelativeDateTimeFormatter* reldatefmt,
-        double                            offset,
-        URelativeDateTimeUnit             unit,
-        UFormattedRelativeDateTime*       result,
-        UErrorCode*                       status) {
-    if (U_FAILURE(*status)) {
-        return;
-    }
-    auto* fmt = reinterpret_cast<const RelativeDateTimeFormatter*>(reldatefmt);
-    auto* resultImpl = UFormattedRelativeDateTimeApiHelper::validate(result, *status);
-    resultImpl->fImpl = fmt->formatToValue(offset, unit, *status);
-}
-
+U_DRAFT void U_EXPORT2 
+ureldatefmt_formatToResult( 
+        const URelativeDateTimeFormatter* reldatefmt, 
+        double                            offset, 
+        URelativeDateTimeUnit             unit, 
+        UFormattedRelativeDateTime*       result, 
+        UErrorCode*                       status) { 
+    if (U_FAILURE(*status)) { 
+        return; 
+    } 
+    auto* fmt = reinterpret_cast<const RelativeDateTimeFormatter*>(reldatefmt); 
+    auto* resultImpl = UFormattedRelativeDateTimeApiHelper::validate(result, *status); 
+    resultImpl->fImpl = fmt->formatToValue(offset, unit, *status); 
+} 
+ 
 U_CAPI int32_t U_EXPORT2
 ureldatefmt_combineDateAndTime( const URelativeDateTimeFormatter* reldatefmt,
                     const UChar *     relativeDateString,
@@ -1397,9 +1397,9 @@ ureldatefmt_combineDateAndTime( const URelativeDateTimeFormatter* reldatefmt,
     if (U_FAILURE(*status)) {
         return 0;
     }
-    if (result == nullptr ? resultCapacity != 0 : resultCapacity < 0 ||
-            (relativeDateString == nullptr ? relativeDateStringLen != 0 : relativeDateStringLen < -1) ||
-            (timeString == nullptr ? timeStringLen != 0 : timeStringLen < -1)) {
+    if (result == nullptr ? resultCapacity != 0 : resultCapacity < 0 || 
+            (relativeDateString == nullptr ? relativeDateStringLen != 0 : relativeDateStringLen < -1) || 
+            (timeString == nullptr ? timeStringLen != 0 : timeStringLen < -1)) { 
         *status = U_ILLEGAL_ARGUMENT_ERROR;
         return 0;
     }

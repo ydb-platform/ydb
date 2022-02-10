@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -14,8 +14,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 /**
  * \file 
  * \brief C++ API: Service for searching text based on RuleBasedCollator.
@@ -121,7 +121,7 @@ U_NAMESPACE_BEGIN
  *      pos != USEARCH_DONE; 
  *      pos = iter.next(error))
  * {
- *     printf("Found match at %d pos, length is %d\n", pos, iter.getMatchedLength());
+ *     printf("Found match at %d pos, length is %d\n", pos, iter.getMatchedLength()); 
  * }
  * </code></pre>
  * <p>
@@ -413,7 +413,7 @@ public:
      * @return cloned object
      * @stable ICU 2.0
      */
-    virtual StringSearch * safeClone() const;
+    virtual StringSearch * safeClone() const; 
     
     /**
      * ICU "poor man's RTTI", returns a UClassID for the actual class.
@@ -503,7 +503,7 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_COLLATION */
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif
 

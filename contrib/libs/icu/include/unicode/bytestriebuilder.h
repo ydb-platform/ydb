@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 *******************************************************************************
 *   file name:  bytestriebuilder.h
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -23,9 +23,9 @@
 #define __BYTESTRIEBUILDER_H__
 
 #include "unicode/utypes.h"
-
-#if U_SHOW_CPLUSPLUS_API
-
+ 
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #include "unicode/bytestrie.h"
 #include "unicode/stringpiece.h"
 #include "unicode/stringtriebuilder.h"
@@ -130,14 +130,14 @@ private:
     void buildBytes(UStringTrieBuildOption buildOption, UErrorCode &errorCode);
 
     virtual int32_t getElementStringLength(int32_t i) const;
-    virtual char16_t getElementUnit(int32_t i, int32_t byteIndex) const;
+    virtual char16_t getElementUnit(int32_t i, int32_t byteIndex) const; 
     virtual int32_t getElementValue(int32_t i) const;
 
     virtual int32_t getLimitOfLinearMatch(int32_t first, int32_t last, int32_t byteIndex) const;
 
     virtual int32_t countElementUnits(int32_t start, int32_t limit, int32_t byteIndex) const;
     virtual int32_t skipElementsBySomeUnits(int32_t i, int32_t byteIndex, int32_t count) const;
-    virtual int32_t indexOfElementWithNextUnit(int32_t i, int32_t byteIndex, char16_t byte) const;
+    virtual int32_t indexOfElementWithNextUnit(int32_t i, int32_t byteIndex, char16_t byte) const; 
 
     virtual UBool matchNodesCanHaveValues() const { return FALSE; }
 
@@ -146,7 +146,7 @@ private:
     virtual int32_t getMaxLinearMatchLength() const { return BytesTrie::kMaxLinearMatchLength; }
 
     /**
-     * @internal (private)
+     * @internal (private) 
      */
     class BTLinearMatchNode : public LinearMatchNode {
     public:
@@ -182,6 +182,6 @@ private:
 
 U_NAMESPACE_END
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif  // __BYTESTRIEBUILDER_H__

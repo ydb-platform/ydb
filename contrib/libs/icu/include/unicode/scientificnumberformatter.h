@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -11,8 +11,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #if !UCONFIG_NO_FORMATTING
 
 
@@ -159,7 +159,7 @@ public:
 
     class U_I18N_API SuperscriptStyle : public Style {
     public:
-        virtual SuperscriptStyle *clone() const;
+        virtual SuperscriptStyle *clone() const; 
     protected:
         virtual UnicodeString &format(
                 const UnicodeString &original,
@@ -177,7 +177,7 @@ public:
                 : Style(),
                   fBeginMarkup(beginMarkup),
                   fEndMarkup(endMarkup) { }
-        virtual MarkupStyle *clone() const;
+        virtual MarkupStyle *clone() const; 
     protected:
         virtual UnicodeString &format(
                 const UnicodeString &original,
@@ -216,7 +216,7 @@ U_NAMESPACE_END
 
 
 #endif /* !UCONFIG_NO_FORMATTING */
-
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+ 
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif 

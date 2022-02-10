@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -8,7 +8,7 @@
 *
 ******************************************************************************
 *   file name:  utrie2.cpp
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -24,9 +24,9 @@
 *   This file contains only the runtime and enumeration code, for read-only access.
 *   See utrie2_builder.c for the builder code.
 */
-#include "unicode/utypes.h"
-#ifdef UCPTRIE_DEBUG
-#include "unicode/umutablecptrie.h"
+#include "unicode/utypes.h" 
+#ifdef UCPTRIE_DEBUG 
+#include "unicode/umutablecptrie.h" 
 #endif
 #include "unicode/utf.h"
 #include "unicode/utf8.h"
@@ -201,9 +201,9 @@ utrie2_openFromSerialized(UTrie2ValueBits valueBits,
     trie->memory=(uint32_t *)data;
     trie->length=actualLength;
     trie->isMemoryOwned=FALSE;
-#ifdef UTRIE2_DEBUG
-    trie->name="fromSerialized";
-#endif
+#ifdef UTRIE2_DEBUG 
+    trie->name="fromSerialized"; 
+#endif 
 
     /* set the pointers to its index and data arrays */
     p16=(const uint16_t *)(header+1);
@@ -296,9 +296,9 @@ utrie2_openDummy(UTrie2ValueBits valueBits,
     trie->errorValue=errorValue;
     trie->highStart=0;
     trie->highValueIndex=dataMove+UTRIE2_DATA_START_OFFSET;
-#ifdef UTRIE2_DEBUG
-    trie->name="dummy";
-#endif
+#ifdef UTRIE2_DEBUG 
+    trie->name="dummy"; 
+#endif 
 
     /* set the header fields */
     header=(UTrie2Header *)trie->memory;
@@ -378,9 +378,9 @@ utrie2_close(UTrie2 *trie) {
         }
         if(trie->newTrie!=NULL) {
             uprv_free(trie->newTrie->data);
-#ifdef UCPTRIE_DEBUG
-            umutablecptrie_close(trie->newTrie->t3);
-#endif
+#ifdef UCPTRIE_DEBUG 
+            umutablecptrie_close(trie->newTrie->t3); 
+#endif 
             uprv_free(trie->newTrie);
         }
         uprv_free(trie);
@@ -642,7 +642,7 @@ uint16_t BackwardUTrie2StringIterator::previous16() {
     codePointLimit=codePointStart;
     if(start>=codePointStart) {
         codePoint=U_SENTINEL;
-        return static_cast<uint16_t>(trie->errorValue);
+        return static_cast<uint16_t>(trie->errorValue); 
     }
     uint16_t result;
     UTRIE2_U16_PREV16(trie, start, codePointStart, codePoint, result);
@@ -653,7 +653,7 @@ uint16_t ForwardUTrie2StringIterator::next16() {
     codePointStart=codePointLimit;
     if(codePointLimit==limit) {
         codePoint=U_SENTINEL;
-        return static_cast<uint16_t>(trie->errorValue);
+        return static_cast<uint16_t>(trie->errorValue); 
     }
     uint16_t result;
     UTRIE2_U16_NEXT16(trie, codePointLimit, limit, codePoint, result);

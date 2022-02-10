@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 // Copyright (C) 2009-2012, International Business Machines
 // Corporation and others. All Rights Reserved.
@@ -38,9 +38,9 @@
  */
 
 #include "unicode/utypes.h"
-
-#if U_SHOW_CPLUSPLUS_API
-
+ 
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #include "unicode/uobject.h"
 #include "unicode/std_string.h"
 
@@ -71,41 +71,41 @@ public:
    */
   virtual void Append(const char* bytes, int32_t n) = 0;
 
-#ifndef U_HIDE_DRAFT_API
+#ifndef U_HIDE_DRAFT_API 
   /**
-   * Appends n bytes to this. Same as Append().
-   * Call AppendU8() with u8"string literals" which are const char * in C++11
-   * but const char8_t * in C++20.
-   * If the compiler does support char8_t as a distinct type,
-   * then an AppendU8() overload for that is defined and will be chosen.
-   *
-   * @param bytes the pointer to the bytes
-   * @param n the number of bytes; must be non-negative
-   * @draft ICU 67
-   */
-  inline void AppendU8(const char* bytes, int32_t n) {
-    Append(bytes, n);
-  }
-
-#if defined(__cpp_char8_t) || defined(U_IN_DOXYGEN)
-  /**
-   * Appends n bytes to this. Same as Append() but for a const char8_t * pointer.
-   * Call AppendU8() with u8"string literals" which are const char * in C++11
-   * but const char8_t * in C++20.
-   * If the compiler does support char8_t as a distinct type,
-   * then this AppendU8() overload for that is defined and will be chosen.
-   *
-   * @param bytes the pointer to the bytes
-   * @param n the number of bytes; must be non-negative
-   * @draft ICU 67
-   */
-  inline void AppendU8(const char8_t* bytes, int32_t n) {
-    Append(reinterpret_cast<const char*>(bytes), n);
-  }
-#endif
-#endif  // U_HIDE_DRAFT_API
-
-  /**
+   * Appends n bytes to this. Same as Append(). 
+   * Call AppendU8() with u8"string literals" which are const char * in C++11 
+   * but const char8_t * in C++20. 
+   * If the compiler does support char8_t as a distinct type, 
+   * then an AppendU8() overload for that is defined and will be chosen. 
+   * 
+   * @param bytes the pointer to the bytes 
+   * @param n the number of bytes; must be non-negative 
+   * @draft ICU 67 
+   */ 
+  inline void AppendU8(const char* bytes, int32_t n) { 
+    Append(bytes, n); 
+  } 
+ 
+#if defined(__cpp_char8_t) || defined(U_IN_DOXYGEN) 
+  /** 
+   * Appends n bytes to this. Same as Append() but for a const char8_t * pointer. 
+   * Call AppendU8() with u8"string literals" which are const char * in C++11 
+   * but const char8_t * in C++20. 
+   * If the compiler does support char8_t as a distinct type, 
+   * then this AppendU8() overload for that is defined and will be chosen. 
+   * 
+   * @param bytes the pointer to the bytes 
+   * @param n the number of bytes; must be non-negative 
+   * @draft ICU 67 
+   */ 
+  inline void AppendU8(const char8_t* bytes, int32_t n) { 
+    Append(reinterpret_cast<const char*>(bytes), n); 
+  } 
+#endif 
+#endif  // U_HIDE_DRAFT_API 
+ 
+  /** 
    * Returns a writable buffer for appending and writes the buffer's capacity to
    * *result_capacity. Guarantees *result_capacity>=min_capacity.
    * May return a pointer to the caller-owned scratch buffer which must have
@@ -163,8 +163,8 @@ public:
   virtual void Flush();
 
 private:
-  ByteSink(const ByteSink &) = delete;
-  ByteSink &operator=(const ByteSink &) = delete;
+  ByteSink(const ByteSink &) = delete; 
+  ByteSink &operator=(const ByteSink &) = delete; 
 };
 
 // -------------------------------------------------------------
@@ -254,10 +254,10 @@ private:
   int32_t size_;
   int32_t appended_;
   UBool overflowed_;
-
-  CheckedArrayByteSink() = delete;
-  CheckedArrayByteSink(const CheckedArrayByteSink &) = delete;
-  CheckedArrayByteSink &operator=(const CheckedArrayByteSink &) = delete;
+ 
+  CheckedArrayByteSink() = delete; 
+  CheckedArrayByteSink(const CheckedArrayByteSink &) = delete; 
+  CheckedArrayByteSink &operator=(const CheckedArrayByteSink &) = delete; 
 };
 
 /** 
@@ -275,19 +275,19 @@ class StringByteSink : public ByteSink {
    */
   StringByteSink(StringClass* dest) : dest_(dest) { }
   /**
-   * Constructs a ByteSink that reserves append capacity and will append bytes to the dest string.
-   * 
-   * @param dest pointer to string object to append to
-   * @param initialAppendCapacity capacity beyond dest->length() to be reserve()d
-   * @stable ICU 60
-   */
-  StringByteSink(StringClass* dest, int32_t initialAppendCapacity) : dest_(dest) {
-    if (initialAppendCapacity > 0 &&
-        (uint32_t)initialAppendCapacity > (dest->capacity() - dest->length())) {
-      dest->reserve(dest->length() + initialAppendCapacity);
-    }
-  }
-  /**
+   * Constructs a ByteSink that reserves append capacity and will append bytes to the dest string. 
+   *  
+   * @param dest pointer to string object to append to 
+   * @param initialAppendCapacity capacity beyond dest->length() to be reserve()d 
+   * @stable ICU 60 
+   */ 
+  StringByteSink(StringClass* dest, int32_t initialAppendCapacity) : dest_(dest) { 
+    if (initialAppendCapacity > 0 && 
+        (uint32_t)initialAppendCapacity > (dest->capacity() - dest->length())) { 
+      dest->reserve(dest->length() + initialAppendCapacity); 
+    } 
+  } 
+  /** 
    * Append "bytes[0,n-1]" to this.
    * @param data the pointer to the bytes
    * @param n the number of bytes; must be non-negative
@@ -296,14 +296,14 @@ class StringByteSink : public ByteSink {
   virtual void Append(const char* data, int32_t n) { dest_->append(data, n); }
  private:
   StringClass* dest_;
-
-  StringByteSink() = delete;
-  StringByteSink(const StringByteSink &) = delete;
-  StringByteSink &operator=(const StringByteSink &) = delete;
+ 
+  StringByteSink() = delete; 
+  StringByteSink(const StringByteSink &) = delete; 
+  StringByteSink &operator=(const StringByteSink &) = delete; 
 };
 
 U_NAMESPACE_END
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif  // __BYTESTREAM_H__

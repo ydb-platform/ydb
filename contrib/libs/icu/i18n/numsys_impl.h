@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -26,14 +26,14 @@ U_NAMESPACE_BEGIN
 
 class NumsysNameEnumeration : public StringEnumeration {
 public:
-    NumsysNameEnumeration(UErrorCode& status);
+    NumsysNameEnumeration(UErrorCode& status); 
 
     virtual ~NumsysNameEnumeration();
     static UClassID U_EXPORT2 getStaticClassID(void);
-    virtual UClassID getDynamicClassID(void) const override;
-    virtual const UnicodeString* snext(UErrorCode& status) override;
-    virtual void reset(UErrorCode& status) override;
-    virtual int32_t count(UErrorCode& status) const override;
+    virtual UClassID getDynamicClassID(void) const override; 
+    virtual const UnicodeString* snext(UErrorCode& status) override; 
+    virtual void reset(UErrorCode& status) override; 
+    virtual int32_t count(UErrorCode& status) const override; 
 private:
     int32_t pos;
 };

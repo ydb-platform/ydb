@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -135,7 +135,7 @@ static UnicodeString& appendAsciiDigits(int32_t number, uint8_t length, UnicodeS
             digits[i++] = number % 10;
             number /= 10;
         } while (number != 0);
-        length = static_cast<uint8_t>(i);
+        length = static_cast<uint8_t>(i); 
     } else {
         // fixed digits
         for (i = 0; i < length; i++) {
@@ -358,7 +358,7 @@ static void millisToOffset(int32_t millis, UnicodeString& str) {
 /*
  * Create a default TZNAME from TZID
  */
-static void getDefaultTZName(const UnicodeString &tzid, UBool isDST, UnicodeString& zonename) {
+static void getDefaultTZName(const UnicodeString &tzid, UBool isDST, UnicodeString& zonename) { 
     zonename = tzid;
     if (isDST) {
         zonename += UNICODE_STRING_SIMPLE("(DST)");
@@ -526,15 +526,15 @@ rruleParseError:
 static TimeZoneRule* createRuleByRRULE(const UnicodeString& zonename, int rawOffset, int dstSavings, UDate start,
                                        UVector* dates, int fromOffset, UErrorCode& status) {
     if (U_FAILURE(status)) {
-        return nullptr;
+        return nullptr; 
     }
-    if (dates == nullptr || dates->size() == 0) {
+    if (dates == nullptr || dates->size() == 0) { 
         status = U_ILLEGAL_ARGUMENT_ERROR;
-        return nullptr;
+        return nullptr; 
     }
 
     int32_t i, j;
-    DateTimeRule *adtr = nullptr;
+    DateTimeRule *adtr = nullptr; 
 
     // Parse the first rule
     UnicodeString rrule = *((UnicodeString*)dates->elementAt(0));
@@ -545,7 +545,7 @@ static TimeZoneRule* createRuleByRRULE(const UnicodeString& zonename, int rawOff
 
     parseRRULE(rrule, month, dayOfWeek, nthDayOfWeek, days, daysCount, until, status);
     if (U_FAILURE(status)) {
-        return nullptr;
+        return nullptr; 
     }
 
     if (dates->size() == 1) {
@@ -620,7 +620,7 @@ static TimeZoneRule* createRuleByRRULE(const UnicodeString& zonename, int rawOff
             int32_t tmp_daysCount = UPRV_LENGTHOF(tmp_days);
             parseRRULE(rrule, tmp_month, tmp_dayOfWeek, tmp_nthDayOfWeek, tmp_days, tmp_daysCount, tmp_until, status);
             if (U_FAILURE(status)) {
-                return nullptr;
+                return nullptr; 
             }
             // If UNTIL is newer than previous one, use the one
             if (tmp_until > until) {
@@ -713,14 +713,14 @@ static TimeZoneRule* createRuleByRRULE(const UnicodeString& zonename, int rawOff
         // first Sunday after 15th day in the month
         adtr = new DateTimeRule(month, dayOfMonth, dayOfWeek, TRUE, startMID, DateTimeRule::WALL_TIME);
     }
-    if (adtr == nullptr) {
+    if (adtr == nullptr) { 
         goto unsupportedRRule;
     }
     return new AnnualTimeZoneRule(zonename, rawOffset, dstSavings, adtr, startYear, endYear);
 
 unsupportedRRule:
     status = U_INVALID_STATE_ERROR;
-    return nullptr;
+    return nullptr; 
 }
 
 /*
@@ -729,35 +729,35 @@ unsupportedRRule:
 static TimeZoneRule* createRuleByRDATE(const UnicodeString& zonename, int32_t rawOffset, int32_t dstSavings,
                                        UDate start, UVector* dates, int32_t fromOffset, UErrorCode& status) {
     if (U_FAILURE(status)) {
-        return nullptr;
+        return nullptr; 
     }
-    TimeArrayTimeZoneRule *retVal = nullptr;
-    if (dates == nullptr || dates->size() == 0) {
+    TimeArrayTimeZoneRule *retVal = nullptr; 
+    if (dates == nullptr || dates->size() == 0) { 
         // When no RDATE line is provided, use start (DTSTART)
         // as the transition time
-        retVal = new TimeArrayTimeZoneRule(zonename, rawOffset, dstSavings, &start, 1, DateTimeRule::UTC_TIME);
+        retVal = new TimeArrayTimeZoneRule(zonename, rawOffset, dstSavings, &start, 1, DateTimeRule::UTC_TIME); 
     } else {
         // Create an array of transition times
         int32_t size = dates->size();
         UDate* times = (UDate*)uprv_malloc(sizeof(UDate) * size);
-        if (times == nullptr) {
+        if (times == nullptr) { 
             status = U_MEMORY_ALLOCATION_ERROR;
-            return nullptr;
+            return nullptr; 
         }
         for (int32_t i = 0; i < size; i++) {
             UnicodeString *datestr = (UnicodeString*)dates->elementAt(i);
             times[i] = parseDateTimeString(*datestr, fromOffset, status);
             if (U_FAILURE(status)) {
                 uprv_free(times);
-                return nullptr;
+                return nullptr; 
             }
         }
-        retVal = new TimeArrayTimeZoneRule(zonename, rawOffset, dstSavings, times, size, DateTimeRule::UTC_TIME);
+        retVal = new TimeArrayTimeZoneRule(zonename, rawOffset, dstSavings, times, size, DateTimeRule::UTC_TIME); 
         uprv_free(times);
     }
-    if (retVal == nullptr) {
-        status = U_MEMORY_ALLOCATION_ERROR;
-    }
+    if (retVal == nullptr) { 
+        status = U_MEMORY_ALLOCATION_ERROR; 
+    } 
     return retVal;
 }
 
@@ -801,15 +801,15 @@ static UBool isEquivalentDateRule(int32_t month, int32_t weekInMonth, int32_t da
 
 /*
  * Convert the rule to its equivalent rule using WALL_TIME mode.
- * This function returns nullptr when the specified DateTimeRule is already
+ * This function returns nullptr when the specified DateTimeRule is already 
  * using WALL_TIME mode.
  */
-static DateTimeRule *toWallTimeRule(const DateTimeRule *rule, int32_t rawOffset, int32_t dstSavings, UErrorCode &status) {
-    if (U_FAILURE(status)) {
-        return nullptr;
-    }
+static DateTimeRule *toWallTimeRule(const DateTimeRule *rule, int32_t rawOffset, int32_t dstSavings, UErrorCode &status) { 
+    if (U_FAILURE(status)) { 
+        return nullptr; 
+    } 
     if (rule->getTimeRuleType() == DateTimeRule::WALL_TIME) {
-        return nullptr;
+        return nullptr; 
     }
     int32_t wallt = rule->getRuleMillisInDay();
     if (rule->getTimeRuleType() == DateTimeRule::UTC_TIME) {
@@ -868,15 +868,15 @@ static DateTimeRule *toWallTimeRule(const DateTimeRule *rule, int32_t rawOffset,
         }
     }
     // Create a new rule
-    DateTimeRule *modifiedRule = nullptr;
+    DateTimeRule *modifiedRule = nullptr; 
     if (dtype == DateTimeRule::DOM) {
         modifiedRule = new DateTimeRule(month, dom, wallt, DateTimeRule::WALL_TIME);
     } else {
-        modifiedRule = new DateTimeRule(month, dom, dow, (dtype == DateTimeRule::DOW_GEQ_DOM), wallt, DateTimeRule::WALL_TIME);
+        modifiedRule = new DateTimeRule(month, dom, dow, (dtype == DateTimeRule::DOW_GEQ_DOM), wallt, DateTimeRule::WALL_TIME); 
     }
-    if (modifiedRule == nullptr) {
-        status = U_MEMORY_ALLOCATION_ERROR;
-    }
+    if (modifiedRule == nullptr) { 
+        status = U_MEMORY_ALLOCATION_ERROR; 
+    } 
     return modifiedRule;
 }
 
@@ -962,24 +962,24 @@ VTZReader::read(void) {
 UOBJECT_DEFINE_RTTI_IMPLEMENTATION(VTimeZone)
 
 VTimeZone::VTimeZone()
-:   BasicTimeZone(), tz(nullptr), vtzlines(nullptr),
+:   BasicTimeZone(), tz(nullptr), vtzlines(nullptr), 
     lastmod(MAX_MILLIS) {
 }
 
 VTimeZone::VTimeZone(const VTimeZone& source)
-:   BasicTimeZone(source), tz(nullptr), vtzlines(nullptr),
+:   BasicTimeZone(source), tz(nullptr), vtzlines(nullptr), 
     tzurl(source.tzurl), lastmod(source.lastmod),
     olsonzid(source.olsonzid), icutzver(source.icutzver) {
-    if (source.tz != nullptr) {
-        tz = source.tz->clone();
+    if (source.tz != nullptr) { 
+        tz = source.tz->clone(); 
     }
-    if (source.vtzlines != nullptr) {
+    if (source.vtzlines != nullptr) { 
         UErrorCode status = U_ZERO_ERROR;
         int32_t size = source.vtzlines->size();
         vtzlines = new UVector(uprv_deleteUObject, uhash_compareUnicodeString, size, status);
-        if (vtzlines == nullptr) {
-            return;
-        }
+        if (vtzlines == nullptr) { 
+            return; 
+        } 
         if (U_SUCCESS(status)) {
             for (int32_t i = 0; i < size; i++) {
                 UnicodeString *line = (UnicodeString*)source.vtzlines->elementAt(i);
@@ -989,17 +989,17 @@ VTimeZone::VTimeZone(const VTimeZone& source)
                 }
             }
         }
-        if (U_FAILURE(status) && vtzlines != nullptr) {
+        if (U_FAILURE(status) && vtzlines != nullptr) { 
             delete vtzlines;
         }
     }
 }
 
 VTimeZone::~VTimeZone() {
-    if (tz != nullptr) {
+    if (tz != nullptr) { 
         delete tz;
     }
-    if (vtzlines != nullptr) {
+    if (vtzlines != nullptr) { 
         delete vtzlines;
     }
 }
@@ -1011,21 +1011,21 @@ VTimeZone::operator=(const VTimeZone& right) {
     }
     if (*this != right) {
         BasicTimeZone::operator=(right);
-        if (tz != nullptr) {
+        if (tz != nullptr) { 
             delete tz;
-            tz = nullptr;
+            tz = nullptr; 
         }
-        if (right.tz != nullptr) {
-            tz = right.tz->clone();
+        if (right.tz != nullptr) { 
+            tz = right.tz->clone(); 
         }
-        if (vtzlines != nullptr) {
+        if (vtzlines != nullptr) { 
             delete vtzlines;
         }
-        if (right.vtzlines != nullptr) {
+        if (right.vtzlines != nullptr) { 
             UErrorCode status = U_ZERO_ERROR;
             int32_t size = right.vtzlines->size();
             vtzlines = new UVector(uprv_deleteUObject, uhash_compareUnicodeString, size, status);
-            if (vtzlines != nullptr && U_SUCCESS(status)) {
+            if (vtzlines != nullptr && U_SUCCESS(status)) { 
                 for (int32_t i = 0; i < size; i++) {
                     UnicodeString *line = (UnicodeString*)right.vtzlines->elementAt(i);
                     vtzlines->addElement(line->clone(), status);
@@ -1034,9 +1034,9 @@ VTimeZone::operator=(const VTimeZone& right) {
                     }
                 }
             }
-            if (U_FAILURE(status) && vtzlines != nullptr) {
+            if (U_FAILURE(status) && vtzlines != nullptr) { 
                 delete vtzlines;
-                vtzlines = nullptr;
+                vtzlines = nullptr; 
             }
         }
         tzurl = right.tzurl;
@@ -1076,18 +1076,18 @@ VTimeZone::operator!=(const TimeZone& that) const {
 VTimeZone*
 VTimeZone::createVTimeZoneByID(const UnicodeString& ID) {
     VTimeZone *vtz = new VTimeZone();
-    if (vtz == nullptr) {
-        return nullptr;
-    }
+    if (vtz == nullptr) { 
+        return nullptr; 
+    } 
     vtz->tz = (BasicTimeZone*)TimeZone::createTimeZone(ID);
     vtz->tz->getID(vtz->olsonzid);
 
     // Set ICU tzdata version
     UErrorCode status = U_ZERO_ERROR;
-    UResourceBundle *bundle = nullptr;
-    const UChar* versionStr = nullptr;
+    UResourceBundle *bundle = nullptr; 
+    const UChar* versionStr = nullptr; 
     int32_t len = 0;
-    bundle = ures_openDirect(nullptr, "zoneinfo64", &status);
+    bundle = ures_openDirect(nullptr, "zoneinfo64", &status); 
     versionStr = ures_getStringByKey(bundle, "TZVersion", &len, &status);
     if (U_SUCCESS(status)) {
         vtz->icutzver.setTo(versionStr, len);
@@ -1099,26 +1099,26 @@ VTimeZone::createVTimeZoneByID(const UnicodeString& ID) {
 VTimeZone*
 VTimeZone::createVTimeZoneFromBasicTimeZone(const BasicTimeZone& basic_time_zone, UErrorCode &status) {
     if (U_FAILURE(status)) {
-        return nullptr;
+        return nullptr; 
     }
     VTimeZone *vtz = new VTimeZone();
-    if (vtz == nullptr) {
+    if (vtz == nullptr) { 
         status = U_MEMORY_ALLOCATION_ERROR;
-        return nullptr;
+        return nullptr; 
     }
-    vtz->tz = basic_time_zone.clone();
-    if (vtz->tz == nullptr) {
+    vtz->tz = basic_time_zone.clone(); 
+    if (vtz->tz == nullptr) { 
         status = U_MEMORY_ALLOCATION_ERROR;
         delete vtz;
-        return nullptr;
+        return nullptr; 
     }
     vtz->tz->getID(vtz->olsonzid);
 
     // Set ICU tzdata version
-    UResourceBundle *bundle = nullptr;
-    const UChar* versionStr = nullptr;
+    UResourceBundle *bundle = nullptr; 
+    const UChar* versionStr = nullptr; 
     int32_t len = 0;
-    bundle = ures_openDirect(nullptr, "zoneinfo64", &status);
+    bundle = ures_openDirect(nullptr, "zoneinfo64", &status); 
     versionStr = ures_getStringByKey(bundle, "TZVersion", &len, &status);
     if (U_SUCCESS(status)) {
         vtz->icutzver.setTo(versionStr, len);
@@ -1130,18 +1130,18 @@ VTimeZone::createVTimeZoneFromBasicTimeZone(const BasicTimeZone& basic_time_zone
 VTimeZone*
 VTimeZone::createVTimeZone(const UnicodeString& vtzdata, UErrorCode& status) {
     if (U_FAILURE(status)) {
-        return nullptr;
+        return nullptr; 
     }
     VTZReader reader(vtzdata);
     VTimeZone *vtz = new VTimeZone();
-    if (vtz == nullptr) {
-        status = U_MEMORY_ALLOCATION_ERROR;
-        return nullptr;
-    }
+    if (vtz == nullptr) { 
+        status = U_MEMORY_ALLOCATION_ERROR; 
+        return nullptr; 
+    } 
     vtz->load(reader, status);
     if (U_FAILURE(status)) {
         delete vtz;
-        return nullptr;
+        return nullptr; 
     }
     return vtz;
 }
@@ -1195,8 +1195,8 @@ VTimeZone::writeSimple(UDate time, UnicodeString& result, UErrorCode& status) co
     writeSimple(time, writer, status);
 }
 
-VTimeZone*
-VTimeZone::clone() const {
+VTimeZone* 
+VTimeZone::clone() const { 
     return new VTimeZone(*this);
 }
 
@@ -1269,9 +1269,9 @@ VTimeZone::getTimeZoneRules(const InitialTimeZoneRule*& initial,
 void
 VTimeZone::load(VTZReader& reader, UErrorCode& status) {
     vtzlines = new UVector(uprv_deleteUObject, uhash_compareUnicodeString, DEFAULT_VTIMEZONE_LINES, status);
-    if (vtzlines == nullptr) {
-        status = U_MEMORY_ALLOCATION_ERROR;
-    }
+    if (vtzlines == nullptr) { 
+        status = U_MEMORY_ALLOCATION_ERROR; 
+    } 
     if (U_FAILURE(status)) {
         return;
     }
@@ -1285,15 +1285,15 @@ VTimeZone::load(VTZReader& reader, UErrorCode& status) {
         if (ch == 0xFFFF) {
             // end of file
             if (start && line.startsWith(ICAL_END_VTIMEZONE, -1)) {
-                LocalPointer<UnicodeString> element(new UnicodeString(line), status);
+                LocalPointer<UnicodeString> element(new UnicodeString(line), status); 
                 if (U_FAILURE(status)) {
                     goto cleanupVtzlines;
                 }
-                vtzlines->addElement(element.getAlias(), status);
-                if (U_FAILURE(status)) {
-                    goto cleanupVtzlines;
-                }
-                element.orphan(); // on success, vtzlines owns the object.
+                vtzlines->addElement(element.getAlias(), status); 
+                if (U_FAILURE(status)) { 
+                    goto cleanupVtzlines; 
+                } 
+                element.orphan(); // on success, vtzlines owns the object. 
                 success = TRUE;
             }
             break;
@@ -1307,15 +1307,15 @@ VTimeZone::load(VTZReader& reader, UErrorCode& status) {
                 // NOT followed by TAB/SP -> new line
                 if (start) {
                     if (line.length() > 0) {
-                        LocalPointer<UnicodeString> element(new UnicodeString(line), status);
+                        LocalPointer<UnicodeString> element(new UnicodeString(line), status); 
                         if (U_FAILURE(status)) {
                             goto cleanupVtzlines;
                         }
-                        vtzlines->addElement(element.getAlias(), status);
-                        if (U_FAILURE(status)) {
-                            goto cleanupVtzlines;
-                        }
-                        element.orphan(); // on success, vtzlines owns the object.
+                        vtzlines->addElement(element.getAlias(), status); 
+                        if (U_FAILURE(status)) { 
+                            goto cleanupVtzlines; 
+                        } 
+                        element.orphan(); // on success, vtzlines owns the object. 
                     }
                 }
                 line.remove();
@@ -1330,29 +1330,29 @@ VTimeZone::load(VTZReader& reader, UErrorCode& status) {
                 eol = TRUE;
                 if (start) {
                     if (line.startsWith(ICAL_END_VTIMEZONE, -1)) {
-                        LocalPointer<UnicodeString> element(new UnicodeString(line), status);
+                        LocalPointer<UnicodeString> element(new UnicodeString(line), status); 
                         if (U_FAILURE(status)) {
                             goto cleanupVtzlines;
                         }
-                        vtzlines->addElement(element.getAlias(), status);
-                        if (U_FAILURE(status)) {
-                            goto cleanupVtzlines;
-                        }
-                        element.orphan(); // on success, vtzlines owns the object.
+                        vtzlines->addElement(element.getAlias(), status); 
+                        if (U_FAILURE(status)) { 
+                            goto cleanupVtzlines; 
+                        } 
+                        element.orphan(); // on success, vtzlines owns the object. 
                         success = TRUE;
                         break;
                     }
                 } else {
                     if (line.startsWith(ICAL_BEGIN_VTIMEZONE, -1)) {
-                        LocalPointer<UnicodeString> element(new UnicodeString(line), status);
+                        LocalPointer<UnicodeString> element(new UnicodeString(line), status); 
                         if (U_FAILURE(status)) {
                             goto cleanupVtzlines;
                         }
-                        vtzlines->addElement(element.getAlias(), status);
-                        if (U_FAILURE(status)) {
-                            goto cleanupVtzlines;
-                        }
-                        element.orphan(); // on success, vtzlines owns the object.
+                        vtzlines->addElement(element.getAlias(), status); 
+                        if (U_FAILURE(status)) { 
+                            goto cleanupVtzlines; 
+                        } 
+                        element.orphan(); // on success, vtzlines owns the object. 
                         line.remove();
                         start = TRUE;
                         eol = FALSE;
@@ -1374,7 +1374,7 @@ VTimeZone::load(VTZReader& reader, UErrorCode& status) {
 
 cleanupVtzlines:
     delete vtzlines;
-    vtzlines = nullptr;
+    vtzlines = nullptr; 
 }
 
 // parser state
@@ -1390,12 +1390,12 @@ VTimeZone::parse(UErrorCode& status) {
     if (U_FAILURE(status)) {
         return;
     }
-    if (vtzlines == nullptr || vtzlines->size() == 0) {
+    if (vtzlines == nullptr || vtzlines->size() == 0) { 
         status = U_INVALID_STATE_ERROR;
         return;
     }
-    InitialTimeZoneRule *initialRule = nullptr;
-    RuleBasedTimeZone *rbtz = nullptr;
+    InitialTimeZoneRule *initialRule = nullptr; 
+    RuleBasedTimeZone *rbtz = nullptr; 
 
     // timezone ID
     UnicodeString tzid;
@@ -1414,16 +1414,16 @@ VTimeZone::parse(UErrorCode& status) {
     UnicodeString name;     // RFC2445 prop name
     UnicodeString value;    // RFC2445 prop value
 
-    UVector *dates = nullptr;  // list of RDATE or RRULE strings
-    UVector *rules = nullptr;  // list of TimeZoneRule instances
+    UVector *dates = nullptr;  // list of RDATE or RRULE strings 
+    UVector *rules = nullptr;  // list of TimeZoneRule instances 
 
     int32_t finalRuleIdx = -1;
     int32_t finalRuleCount = 0;
 
     rules = new UVector(status);
-    if (rules == nullptr) {
-        status = U_MEMORY_ALLOCATION_ERROR;
-    }
+    if (rules == nullptr) { 
+        status = U_MEMORY_ALLOCATION_ERROR; 
+    } 
     if (U_FAILURE(status)) {
         goto cleanupParse;
     }
@@ -1431,13 +1431,13 @@ VTimeZone::parse(UErrorCode& status) {
     rules->setDeleter(deleteTimeZoneRule);
     
     dates = new UVector(uprv_deleteUObject, uhash_compareUnicodeString, status);
-    if (dates == nullptr) {
-        status = U_MEMORY_ALLOCATION_ERROR;
-    }
+    if (dates == nullptr) { 
+        status = U_MEMORY_ALLOCATION_ERROR; 
+    } 
     if (U_FAILURE(status)) {
         goto cleanupParse;
     }
-    
+     
     for (n = 0; n < vtzlines->size(); n++) {
         UnicodeString *line = (UnicodeString*)vtzlines->elementAt(n);
         int32_t valueSep = line->indexOf(COLON);
@@ -1511,7 +1511,7 @@ VTimeZone::parse(UErrorCode& status) {
                 // by comma
                 UBool nextDate = TRUE;
                 int32_t dstart = 0;
-                UnicodeString *dstr = nullptr;
+                UnicodeString *dstr = nullptr; 
                 while (nextDate) {
                     int32_t dend = value.indexOf(COMMA, dstart);
                     if (dend == -1) {
@@ -1520,11 +1520,11 @@ VTimeZone::parse(UErrorCode& status) {
                     } else {
                         dstr = new UnicodeString(value, dstart, dend - dstart);
                     }
-                    if (dstr == nullptr) {
-                        status = U_MEMORY_ALLOCATION_ERROR;
-                    } else {
-                        dates->addElement(dstr, status);
-                    }
+                    if (dstr == nullptr) { 
+                        status = U_MEMORY_ALLOCATION_ERROR; 
+                    } else { 
+                        dates->addElement(dstr, status); 
+                    } 
                     if (U_FAILURE(status)) {
                         goto cleanupParse;
                     }
@@ -1536,15 +1536,15 @@ VTimeZone::parse(UErrorCode& status) {
                     goto cleanupParse;
                 }
                 isRRULE = true;
-                LocalPointer<UnicodeString> element(new UnicodeString(value), status);
+                LocalPointer<UnicodeString> element(new UnicodeString(value), status); 
                 if (U_FAILURE(status)) {
                     goto cleanupParse;
                 }
-                dates->addElement(element.getAlias(), status);
-                if (U_FAILURE(status)) {
-                    goto cleanupParse;
-                }
-                element.orphan(); // on success, dates owns the object.
+                dates->addElement(element.getAlias(), status); 
+                if (U_FAILURE(status)) { 
+                    goto cleanupParse; 
+                } 
+                element.orphan(); // on success, dates owns the object. 
             } else if (name.compare(ICAL_END, -1) == 0) {
                 // Mandatory properties
                 if (dtstart.length() == 0 || from.length() == 0 || to.length() == 0) {
@@ -1556,7 +1556,7 @@ VTimeZone::parse(UErrorCode& status) {
                 }
 
                 // create a time zone rule
-                TimeZoneRule *rule = nullptr;
+                TimeZoneRule *rule = nullptr; 
                 int32_t fromOffset = 0;
                 int32_t toOffset = 0;
                 int32_t rawOffset = 0;
@@ -1598,7 +1598,7 @@ VTimeZone::parse(UErrorCode& status) {
                 } else {
                     rule = createRuleByRDATE(zonename, rawOffset, dstSavings, start, dates, fromOffset, status);
                 }
-                if (U_FAILURE(status) || rule == nullptr) {
+                if (U_FAILURE(status) || rule == nullptr) { 
                     goto cleanupParse;
                 } else {
                     UBool startAvail = rule->getFirstStart(fromOffset, 0, actualStart);
@@ -1638,24 +1638,24 @@ VTimeZone::parse(UErrorCode& status) {
 
     // Create a initial rule
     getDefaultTZName(tzid, FALSE, zonename);
-    initialRule = new InitialTimeZoneRule(zonename, initialRawOffset, initialDSTSavings);
-    if (initialRule == nullptr) {
+    initialRule = new InitialTimeZoneRule(zonename, initialRawOffset, initialDSTSavings); 
+    if (initialRule == nullptr) { 
         status = U_MEMORY_ALLOCATION_ERROR;
         goto cleanupParse;
     }
 
     // Finally, create the RuleBasedTimeZone
     rbtz = new RuleBasedTimeZone(tzid, initialRule);
-    if (rbtz == nullptr) {
+    if (rbtz == nullptr) { 
         status = U_MEMORY_ALLOCATION_ERROR;
         goto cleanupParse;
     }
-    initialRule = nullptr; // already adopted by RBTZ, no need to delete
+    initialRule = nullptr; // already adopted by RBTZ, no need to delete 
 
     for (n = 0; n < rules->size(); n++) {
         TimeZoneRule *r = (TimeZoneRule*)rules->elementAt(n);
         AnnualTimeZoneRule *atzrule = dynamic_cast<AnnualTimeZoneRule *>(r);
-        if (atzrule != nullptr) {
+        if (atzrule != nullptr) { 
             if (atzrule->getEndYear() == AnnualTimeZoneRule::MAX_YEAR) {
                 finalRuleCount++;
                 finalRuleIdx = n;
@@ -1700,7 +1700,7 @@ VTimeZone::parse(UErrorCode& status) {
                 }
             }
 
-            TimeZoneRule *newRule = nullptr;
+            TimeZoneRule *newRule = nullptr; 
             UnicodeString tznam;
             if (start == finalStart) {
                 // Transform this into a single transition
@@ -1723,7 +1723,7 @@ VTimeZone::parse(UErrorCode& status) {
                         finalRule->getStartYear(),
                         y);
             }
-            if (newRule == nullptr) {
+            if (newRule == nullptr) { 
                 status = U_MEMORY_ALLOCATION_ERROR;
                 goto cleanupParse;
             }
@@ -1755,20 +1755,20 @@ VTimeZone::parse(UErrorCode& status) {
     return;
 
 cleanupParse:
-    if (rules != nullptr) {
+    if (rules != nullptr) { 
         while (!rules->isEmpty()) {
             TimeZoneRule *r = (TimeZoneRule*)rules->orphanElementAt(0);
             delete r;
         }
         delete rules;
     }
-    if (dates != nullptr) {
+    if (dates != nullptr) { 
         delete dates;
     }
-    if (initialRule != nullptr) {
+    if (initialRule != nullptr) { 
         delete initialRule;
     }
-    if (rbtz != nullptr) {
+    if (rbtz != nullptr) { 
         delete rbtz;
     }
     return;
@@ -1776,7 +1776,7 @@ cleanupParse:
 
 void
 VTimeZone::write(VTZWriter& writer, UErrorCode& status) const {
-    if (vtzlines != nullptr) {
+    if (vtzlines != nullptr) { 
         for (int32_t i = 0; i < vtzlines->size(); i++) {
             UnicodeString *line = (UnicodeString*)vtzlines->elementAt(i);
             if (line->startsWith(ICAL_TZURL, -1)
@@ -1798,16 +1798,16 @@ VTimeZone::write(VTZWriter& writer, UErrorCode& status) const {
             }
         }
     } else {
-        UnicodeString icutzprop;
-        UVector customProps(nullptr, uhash_compareUnicodeString, status);
+        UnicodeString icutzprop; 
+        UVector customProps(nullptr, uhash_compareUnicodeString, status); 
         if (olsonzid.length() > 0 && icutzver.length() > 0) {
-            icutzprop.append(olsonzid);
-            icutzprop.append(u'[');
-            icutzprop.append(icutzver);
-            icutzprop.append(u']');
-            customProps.addElement(&icutzprop, status);
+            icutzprop.append(olsonzid); 
+            icutzprop.append(u'['); 
+            icutzprop.append(icutzver); 
+            icutzprop.append(u']'); 
+            customProps.addElement(&icutzprop, status); 
         }
-        writeZone(writer, *tz, &customProps, status);
+        writeZone(writer, *tz, &customProps, status); 
     }
 }
 
@@ -1816,8 +1816,8 @@ VTimeZone::write(UDate start, VTZWriter& writer, UErrorCode& status) const {
     if (U_FAILURE(status)) {
         return;
     }
-    InitialTimeZoneRule *initial = nullptr;
-    UVector *transitionRules = nullptr;
+    InitialTimeZoneRule *initial = nullptr; 
+    UVector *transitionRules = nullptr; 
     UVector customProps(uprv_deleteUObject, uhash_compareUnicodeString, status);
     UnicodeString tzid;
 
@@ -1830,7 +1830,7 @@ VTimeZone::write(UDate start, VTZWriter& writer, UErrorCode& status) const {
     // Create a RuleBasedTimeZone with the subset rule
     getID(tzid);
     RuleBasedTimeZone rbtz(tzid, initial);
-    if (transitionRules != nullptr) {
+    if (transitionRules != nullptr) { 
         while (!transitionRules->isEmpty()) {
             TimeZoneRule *tr = (TimeZoneRule*)transitionRules->orphanElementAt(0);
             rbtz.addTransitionRule(tr, status);
@@ -1839,7 +1839,7 @@ VTimeZone::write(UDate start, VTZWriter& writer, UErrorCode& status) const {
             }
         }
         delete transitionRules;
-        transitionRules = nullptr;
+        transitionRules = nullptr; 
     }
     rbtz.complete(status);
     if (U_FAILURE(status)) {
@@ -1848,10 +1848,10 @@ VTimeZone::write(UDate start, VTZWriter& writer, UErrorCode& status) const {
 
     if (olsonzid.length() > 0 && icutzver.length() > 0) {
         UnicodeString *icutzprop = new UnicodeString(ICU_TZINFO_PROP);
-        if (icutzprop == nullptr) {
-            status = U_MEMORY_ALLOCATION_ERROR;
-            goto cleanupWritePartial;
-        }
+        if (icutzprop == nullptr) { 
+            status = U_MEMORY_ALLOCATION_ERROR; 
+            goto cleanupWritePartial; 
+        } 
         icutzprop->append(olsonzid);
         icutzprop->append((UChar)0x005B/*'['*/);
         icutzprop->append(icutzver);
@@ -1868,10 +1868,10 @@ VTimeZone::write(UDate start, VTZWriter& writer, UErrorCode& status) const {
     return;
 
 cleanupWritePartial:
-    if (initial != nullptr) {
+    if (initial != nullptr) { 
         delete initial;
     }
-    if (transitionRules != nullptr) {
+    if (transitionRules != nullptr) { 
         while (!transitionRules->isEmpty()) {
             TimeZoneRule *tr = (TimeZoneRule*)transitionRules->orphanElementAt(0);
             delete tr;
@@ -1890,14 +1890,14 @@ VTimeZone::writeSimple(UDate time, VTZWriter& writer, UErrorCode& status) const 
     UnicodeString tzid;
 
     // Extract simple rules
-    InitialTimeZoneRule *initial = nullptr;
-    AnnualTimeZoneRule *std = nullptr, *dst = nullptr;
+    InitialTimeZoneRule *initial = nullptr; 
+    AnnualTimeZoneRule *std = nullptr, *dst = nullptr; 
     getSimpleRulesNear(time, initial, std, dst, status);
     if (U_SUCCESS(status)) {
         // Create a RuleBasedTimeZone with the subset rule
         getID(tzid);
         RuleBasedTimeZone rbtz(tzid, initial);
-        if (std != nullptr && dst != nullptr) {
+        if (std != nullptr && dst != nullptr) { 
             rbtz.addTransitionRule(std, status);
             rbtz.addTransitionRule(dst, status);
         }
@@ -1907,10 +1907,10 @@ VTimeZone::writeSimple(UDate time, VTZWriter& writer, UErrorCode& status) const 
 
         if (olsonzid.length() > 0 && icutzver.length() > 0) {
             UnicodeString *icutzprop = new UnicodeString(ICU_TZINFO_PROP);
-            if (icutzprop == nullptr) {
-               status = U_MEMORY_ALLOCATION_ERROR;
-               goto cleanupWriteSimple;
-            }
+            if (icutzprop == nullptr) { 
+               status = U_MEMORY_ALLOCATION_ERROR; 
+               goto cleanupWriteSimple; 
+            } 
             icutzprop->append(olsonzid);
             icutzprop->append((UChar)0x005B/*'['*/);
             icutzprop->append(icutzver);
@@ -1928,13 +1928,13 @@ VTimeZone::writeSimple(UDate time, VTZWriter& writer, UErrorCode& status) const 
     return;
 
 cleanupWriteSimple:
-    if (initial != nullptr) {
+    if (initial != nullptr) { 
         delete initial;
     }
-    if (std != nullptr) {
+    if (std != nullptr) { 
         delete std;
     }
-    if (dst != nullptr) {
+    if (dst != nullptr) { 
         delete dst;
     }
 }
@@ -1950,7 +1950,7 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
         return;
     }
 
-    if (customProps != nullptr) {
+    if (customProps != nullptr) { 
         for (int32_t i = 0; i < customProps->size(); i++) {
             UnicodeString *custprop = (UnicodeString*)customProps->elementAt(i);
             w.write(*custprop);
@@ -1971,7 +1971,7 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
     UDate dstStartTime = 0.0;
     UDate dstUntilTime = 0.0;
     int32_t dstCount = 0;
-    AnnualTimeZoneRule *finalDstRule = nullptr;
+    AnnualTimeZoneRule *finalDstRule = nullptr; 
 
     UnicodeString stdName;
     int32_t stdFromOffset = 0;
@@ -1985,7 +1985,7 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
     UDate stdStartTime = 0.0;
     UDate stdUntilTime = 0.0;
     int32_t stdCount = 0;
-    AnnualTimeZoneRule *finalStdRule = nullptr;
+    AnnualTimeZoneRule *finalStdRule = nullptr; 
 
     int32_t year, month, dom, dow, doy, mid;
     UBool hasTransitions = FALSE;
@@ -2012,11 +2012,11 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
         UBool sameRule = FALSE;
         const AnnualTimeZoneRule *atzrule;
         if (isDst) {
-            if (finalDstRule == nullptr
-                && (atzrule = dynamic_cast<const AnnualTimeZoneRule *>(tzt.getTo())) != nullptr
+            if (finalDstRule == nullptr 
+                && (atzrule = dynamic_cast<const AnnualTimeZoneRule *>(tzt.getTo())) != nullptr 
                 && atzrule->getEndYear() == AnnualTimeZoneRule::MAX_YEAR
             ) {
-                finalDstRule = atzrule->clone();
+                finalDstRule = atzrule->clone(); 
             }
             if (dstCount > 0) {
                 if (year == dstStartYear + dstCount
@@ -2059,15 +2059,15 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
                 dstStartTime = dstUntilTime = t;
                 dstCount = 1;
             }
-            if (finalStdRule != nullptr && finalDstRule != nullptr) {
+            if (finalStdRule != nullptr && finalDstRule != nullptr) { 
                 break;
             }
         } else {
-            if (finalStdRule == nullptr
-                && (atzrule = dynamic_cast<const AnnualTimeZoneRule *>(tzt.getTo())) != nullptr
+            if (finalStdRule == nullptr 
+                && (atzrule = dynamic_cast<const AnnualTimeZoneRule *>(tzt.getTo())) != nullptr 
                 && atzrule->getEndYear() == AnnualTimeZoneRule::MAX_YEAR
             ) {
-                finalStdRule = atzrule->clone();
+                finalStdRule = atzrule->clone(); 
             }
             if (stdCount > 0) {
                 if (year == stdStartYear + stdCount
@@ -2110,7 +2110,7 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
                 stdStartTime = stdUntilTime = t;
                 stdCount = 1;
             }
-            if (finalStdRule != nullptr && finalDstRule != nullptr) {
+            if (finalStdRule != nullptr && finalDstRule != nullptr) { 
                 break;
             }
         }
@@ -2134,7 +2134,7 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
         }
     } else {
         if (dstCount > 0) {
-            if (finalDstRule == nullptr) {
+            if (finalDstRule == nullptr) { 
                 if (dstCount == 1) {
                     writeZonePropsByTime(w, TRUE, dstName, dstFromOffset, dstToOffset, dstStartTime,
                             TRUE, status);
@@ -2176,7 +2176,7 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
             }
         }
         if (stdCount > 0) {
-            if (finalStdRule == nullptr) {
+            if (finalStdRule == nullptr) { 
                 if (stdCount == 1) {
                     writeZonePropsByTime(w, FALSE, stdName, stdFromOffset, stdToOffset, stdStartTime,
                             TRUE, status);
@@ -2222,10 +2222,10 @@ VTimeZone::writeZone(VTZWriter& w, BasicTimeZone& basictz,
 
 cleanupWriteZone:
 
-    if (finalStdRule != nullptr) {
+    if (finalStdRule != nullptr) { 
         delete finalStdRule;
     }
-    if (finalDstRule != nullptr) {
+    if (finalDstRule != nullptr) { 
         delete finalDstRule;
     }
 }
@@ -2538,11 +2538,11 @@ VTimeZone::writeFinalRule(VTZWriter& writer, UBool isDst, const AnnualTimeZoneRu
         return;
     }
     UBool modifiedRule = TRUE;
-    const DateTimeRule *dtrule = toWallTimeRule(rule->getRule(), fromRawOffset, fromDSTSavings, status);
-    if (U_FAILURE(status)) {
-        return;
-    }
-    if (dtrule == nullptr) {
+    const DateTimeRule *dtrule = toWallTimeRule(rule->getRule(), fromRawOffset, fromDSTSavings, status); 
+    if (U_FAILURE(status)) { 
+        return; 
+    } 
+    if (dtrule == nullptr) { 
         modifiedRule = FALSE;
         dtrule = rule->getRule();
     }

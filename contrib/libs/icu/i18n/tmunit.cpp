@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *******************************************************************************
@@ -94,7 +94,7 @@ TimeUnit::TimeUnit(TimeUnit::UTimeUnitFields timeUnitField) {
         initTime("second");
         break;
     default:
-        UPRV_UNREACHABLE;
+        UPRV_UNREACHABLE; 
     }
 }
 
@@ -102,7 +102,7 @@ TimeUnit::TimeUnit(const TimeUnit& other)
 :   MeasureUnit(other), fTimeUnitField(other.fTimeUnitField) {
 }
 
-TimeUnit* 
+TimeUnit*  
 TimeUnit::clone() const {
     return new TimeUnit(*this);
 }

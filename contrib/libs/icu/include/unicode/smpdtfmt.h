@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 * Copyright (C) 1997-2016, International Business Machines Corporation and
@@ -28,8 +28,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 /**
  * \file
  * \brief C++ API: Format and parse dates in a language-independent manner.
@@ -51,12 +51,12 @@ class FieldPositionHandler;
 class TimeZoneFormat;
 class SharedNumberFormat;
 class SimpleDateFormatMutableNFs;
-class DateIntervalFormat;
+class DateIntervalFormat; 
 
-namespace number {
-class LocalizedNumberFormatter;
-}
-
+namespace number { 
+class LocalizedNumberFormatter; 
+} 
+ 
 /**
  *
  * SimpleDateFormat is a concrete class for formatting and parsing dates in a
@@ -867,7 +867,7 @@ public:
      * @return    A copy of the object.
      * @stable ICU 2.0
      */
-    virtual SimpleDateFormat* clone() const;
+    virtual SimpleDateFormat* clone() const; 
 
     /**
      * Return true if the given Format objects are semantically equal. Objects
@@ -1150,7 +1150,7 @@ public:
      * Overrides base class method and
      * This method clears per field NumberFormat instances
      * previously set by {@see adoptNumberFormat(const UnicodeString&, NumberFormat*, UErrorCode)}
-     * @param formatToAdopt the NumbeferFormat used
+     * @param formatToAdopt the NumbeferFormat used 
      * @stable ICU 54
      */
     void adoptNumberFormat(NumberFormat *formatToAdopt);
@@ -1165,7 +1165,7 @@ public:
      * Per field NumberFormat can also be cleared in {@see DateFormat::setNumberFormat(const NumberFormat& newNumberFormat)}
      *
      * @param fields  the fields to override(like y)
-     * @param formatToAdopt the NumbeferFormat used
+     * @param formatToAdopt the NumbeferFormat used 
      * @param status  Receives a status code, which will be U_ZERO_ERROR
      *                if the operation succeeds.
      * @stable ICU 54
@@ -1177,7 +1177,7 @@ public:
      * @param field The UDateFormatField to get
      * @stable ICU 54
      */
-    const NumberFormat * getNumberFormatForField(char16_t field) const;
+    const NumberFormat * getNumberFormatForField(char16_t field) const; 
 
 #ifndef U_HIDE_INTERNAL_API
     /**
@@ -1220,7 +1220,7 @@ public:
 
 private:
     friend class DateFormat;
-    friend class DateIntervalFormat;
+    friend class DateIntervalFormat; 
 
     void initializeDefaultCentury(void);
 
@@ -1270,11 +1270,11 @@ private:
      *                  succeeds.
      */
     void subFormat(UnicodeString &appendTo,
-                   char16_t ch,
+                   char16_t ch, 
                    int32_t count,
                    UDisplayContext capitalizationContext,
                    int32_t fieldNum,
-                   char16_t fieldToOutput,
+                   char16_t fieldToOutput, 
                    FieldPositionHandler& handler,
                    Calendar& cal,
                    UErrorCode& status) const; // in case of illegal argument
@@ -1292,7 +1292,7 @@ private:
      * @param minDigits Minimum number of digits the result should have
      * @param maxDigits Maximum number of digits the result should have
      */
-    void zeroPaddingNumber(const NumberFormat *currentNumberFormat,
+    void zeroPaddingNumber(const NumberFormat *currentNumberFormat, 
                            UnicodeString &appendTo,
                            int32_t value,
                            int32_t minDigits,
@@ -1302,7 +1302,7 @@ private:
      * Return true if the given format character, occuring count
      * times, represents a numeric field.
      */
-    static UBool isNumeric(char16_t formatChar, int32_t count);
+    static UBool isNumeric(char16_t formatChar, int32_t count); 
 
     /**
      * Returns TRUE if the patternOffset is at the start of a numeric field.
@@ -1420,38 +1420,38 @@ private:
      * @return the new start position if matching succeeded; a negative number
      * indicating matching failure, otherwise.
      */
-    int32_t subParse(const UnicodeString& text, int32_t& start, char16_t ch, int32_t count,
+    int32_t subParse(const UnicodeString& text, int32_t& start, char16_t ch, int32_t count, 
                      UBool obeyCount, UBool allowNegative, UBool ambiguousYear[], int32_t& saveHebrewMonth, Calendar& cal,
-                     int32_t patLoc, MessageFormat * numericLeapMonthFormatter, UTimeZoneFormatTimeType *tzTimeType,
+                     int32_t patLoc, MessageFormat * numericLeapMonthFormatter, UTimeZoneFormatTimeType *tzTimeType, 
                      int32_t *dayPeriod=NULL) const;
 
     void parseInt(const UnicodeString& text,
                   Formattable& number,
                   ParsePosition& pos,
                   UBool allowNegative,
-                  const NumberFormat *fmt) const;
+                  const NumberFormat *fmt) const; 
 
     void parseInt(const UnicodeString& text,
                   Formattable& number,
                   int32_t maxDigits,
                   ParsePosition& pos,
                   UBool allowNegative,
-                  const NumberFormat *fmt) const;
+                  const NumberFormat *fmt) const; 
 
     int32_t checkIntSuffix(const UnicodeString& text, int32_t start,
                            int32_t patLoc, UBool isNegative) const;
 
     /**
-     * Counts number of digit code points in the specified text.
-     *
-     * @param text  input text
-     * @param start start index, inclusive
-     * @param end   end index, exclusive
-     * @return  number of digits found in the text in the specified range.
-    */
-    int32_t countDigits(const UnicodeString& text, int32_t start, int32_t end) const;
-
-    /**
+     * Counts number of digit code points in the specified text. 
+     * 
+     * @param text  input text 
+     * @param start start index, inclusive 
+     * @param end   end index, exclusive 
+     * @return  number of digits found in the text in the specified range. 
+    */ 
+    int32_t countDigits(const UnicodeString& text, int32_t start, int32_t end) const; 
+ 
+    /** 
      * Translate a pattern, mapping each character in the from string to the
      * corresponding character in the to string. Return an error if the original
      * pattern contains an unmapped character, or if a quote is unmatched.
@@ -1504,16 +1504,16 @@ private:
     int32_t skipUWhiteSpace(const UnicodeString& text, int32_t pos) const;
 
     /**
-     * Initialize LocalizedNumberFormatter instances used for speedup.
-     */
-    void initFastNumberFormatters(UErrorCode& status);
-
-    /**
-     * Delete the LocalizedNumberFormatter instances used for speedup.
-     */
-    void freeFastNumberFormatters();
-
-    /**
+     * Initialize LocalizedNumberFormatter instances used for speedup. 
+     */ 
+    void initFastNumberFormatters(UErrorCode& status); 
+ 
+    /** 
+     * Delete the LocalizedNumberFormatter instances used for speedup. 
+     */ 
+    void freeFastNumberFormatters(); 
+ 
+    /** 
      * Initialize NumberFormat instances used for numbering system overrides.
      */
     void initNumberFormatters(const Locale &locale,UErrorCode &status);
@@ -1536,7 +1536,7 @@ private:
     /**
      * Lazy TimeZoneFormat instantiation, semantically const
      */
-    TimeZoneFormat *tzFormat(UErrorCode &status) const;
+    TimeZoneFormat *tzFormat(UErrorCode &status) const; 
 
     const NumberFormat* getNumberFormatByIndex(UDateFormatField index) const;
 
@@ -1551,12 +1551,12 @@ private:
     /**
      * Map calendar field letter into calendar field level.
      */
-    static int32_t getLevelFromChar(char16_t ch);
+    static int32_t getLevelFromChar(char16_t ch); 
 
     /**
      * Tell if a character can be used to define a field in a format string.
      */
-    static UBool isSyntaxChar(char16_t ch);
+    static UBool isSyntaxChar(char16_t ch); 
 
     /**
      * The formatting pattern for this formatter.
@@ -1602,7 +1602,7 @@ private:
 
     UBool                fHasMinute;
     UBool                fHasSecond;
-    UBool                fHasHanYearChar; // pattern contains the Han year character \u5E74
+    UBool                fHasHanYearChar; // pattern contains the Han year character \u5E74 
 
     /**
      * Sets fHasMinutes and fHasSeconds.
@@ -1630,23 +1630,23 @@ private:
      */
     const SharedNumberFormat    **fSharedNumberFormatters;
 
-    enum NumberFormatterKey {
-        SMPDTFMT_NF_1x10,
-        SMPDTFMT_NF_2x10,
-        SMPDTFMT_NF_3x10,
-        SMPDTFMT_NF_4x10,
-        SMPDTFMT_NF_2x2,
-        SMPDTFMT_NF_COUNT
-    };
-
-    /**
-     * Number formatters pre-allocated for fast performance on the most common integer lengths.
-     */
-    const number::LocalizedNumberFormatter* fFastNumberFormatters[SMPDTFMT_NF_COUNT] = {};
-
+    enum NumberFormatterKey { 
+        SMPDTFMT_NF_1x10, 
+        SMPDTFMT_NF_2x10, 
+        SMPDTFMT_NF_3x10, 
+        SMPDTFMT_NF_4x10, 
+        SMPDTFMT_NF_2x2, 
+        SMPDTFMT_NF_COUNT 
+    }; 
+ 
+    /** 
+     * Number formatters pre-allocated for fast performance on the most common integer lengths. 
+     */ 
+    const number::LocalizedNumberFormatter* fFastNumberFormatters[SMPDTFMT_NF_COUNT] = {}; 
+ 
     UBool fHaveDefaultCentury;
 
-    const BreakIterator* fCapitalizationBrkIter;
+    const BreakIterator* fCapitalizationBrkIter; 
 };
 
 inline UDate
@@ -1659,7 +1659,7 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif // _SMPDTFMT
 //eof

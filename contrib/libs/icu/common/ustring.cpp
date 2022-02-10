@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -19,7 +19,7 @@
 
 #include "unicode/utypes.h"
 #include "unicode/putil.h"
-#include "unicode/uchar.h"
+#include "unicode/uchar.h" 
 #include "unicode/ustring.h"
 #include "unicode/utf16.h"
 #include "cstring.h"
@@ -1428,7 +1428,7 @@ u_unescape(const char *src, UChar *dest, int32_t destCapacity) {
  * NUL-terminate a string no matter what its type.
  * Set warning and error codes accordingly.
  */
-#define __TERMINATE_STRING(dest, destCapacity, length, pErrorCode) UPRV_BLOCK_MACRO_BEGIN { \
+#define __TERMINATE_STRING(dest, destCapacity, length, pErrorCode) UPRV_BLOCK_MACRO_BEGIN { \ 
     if(pErrorCode!=NULL && U_SUCCESS(*pErrorCode)) {                    \
         /* not a public function, so no complete argument checking */   \
                                                                         \
@@ -1448,16 +1448,16 @@ u_unescape(const char *src, UChar *dest, int32_t destCapacity) {
             /* even the string itself did not fit - set an error code */ \
             *pErrorCode=U_BUFFER_OVERFLOW_ERROR;                        \
         }                                                               \
-    } \
-} UPRV_BLOCK_MACRO_END
-
-U_CAPI UChar U_EXPORT2
-u_asciiToUpper(UChar c) {
-    if (u'a' <= c && c <= u'z') {
-        c = c + u'A' - u'a';
+    } \ 
+} UPRV_BLOCK_MACRO_END 
+ 
+U_CAPI UChar U_EXPORT2 
+u_asciiToUpper(UChar c) { 
+    if (u'a' <= c && c <= u'z') { 
+        c = c + u'A' - u'a'; 
     }
-    return c;
-}
+    return c; 
+} 
 
 U_CAPI int32_t U_EXPORT2
 u_terminateUChars(UChar *dest, int32_t destCapacity, int32_t length, UErrorCode *pErrorCode) {
@@ -1497,7 +1497,7 @@ u_terminateWChars(wchar_t *dest, int32_t destCapacity, int32_t length, UErrorCod
   the output range. [LIU]
 */
 
-#define STRING_HASH(TYPE, STR, STRLEN, DEREF) UPRV_BLOCK_MACRO_BEGIN { \
+#define STRING_HASH(TYPE, STR, STRLEN, DEREF) UPRV_BLOCK_MACRO_BEGIN { \ 
     uint32_t hash = 0;                        \
     const TYPE *p = (const TYPE*) STR;        \
     if (p != NULL) {                          \
@@ -1509,8 +1509,8 @@ u_terminateWChars(wchar_t *dest, int32_t destCapacity, int32_t length, UErrorCod
             p += inc;                         \
         }                                     \
     }                                         \
-    return static_cast<int32_t>(hash);        \
-} UPRV_BLOCK_MACRO_END
+    return static_cast<int32_t>(hash);        \ 
+} UPRV_BLOCK_MACRO_END 
 
 /* Used by UnicodeString to compute its hashcode - Not public API. */
 U_CAPI int32_t U_EXPORT2

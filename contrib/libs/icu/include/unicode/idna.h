@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 *******************************************************************************
 *   file name:  idna.h
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -24,8 +24,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #if !UCONFIG_NO_IDNA
 
 #include "unicode/bytestream.h"
@@ -324,7 +324,7 @@ private:
 U_NAMESPACE_END
 
 #endif  // UCONFIG_NO_IDNA
-
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+ 
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif  // __IDNA_H__

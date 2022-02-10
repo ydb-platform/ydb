@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -58,7 +58,7 @@ StringMatcher::~StringMatcher() {
 /**
  * Implement UnicodeFunctor
  */
-StringMatcher* StringMatcher::clone() const {
+StringMatcher* StringMatcher::clone() const { 
     return new StringMatcher(*this);
 }
 

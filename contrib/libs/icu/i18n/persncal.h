@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  ******************************************************************************
@@ -164,7 +164,7 @@ class PersianCalendar : public Calendar {
   // TODO: copy c'tor, etc
 
   // clone
-  virtual PersianCalendar* clone() const;
+  virtual PersianCalendar* clone() const; 
 
  private:
   /**

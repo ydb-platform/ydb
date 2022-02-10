@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  ustr_wcs.cpp
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -254,7 +254,7 @@ u_strToWCS(wchar_t *dest,
         srcLength = u_strlen(src);
     }
     if(0 < srcLength && srcLength <= destCapacity){
-        u_memcpy((UChar *)dest, src, srcLength);
+        u_memcpy((UChar *)dest, src, srcLength); 
     }
     if(pDestLength){
        *pDestLength = srcLength;
@@ -342,7 +342,7 @@ _strFromWCS( UChar   *dest,
         pSrcLimit = src + srcLength;
 
         for(;;){
-            int32_t nulLen = 0;
+            int32_t nulLen = 0; 
 
             /* find nulls in the string */
             while(nulLen<srcLength && pSrc[nulLen++]!=0){
@@ -509,7 +509,7 @@ u_strFromWCS(UChar   *dest,
         srcLength = u_strlen((const UChar *)src);
     }
     if(0 < srcLength && srcLength <= destCapacity){
-        u_memcpy(dest, (const UChar *)src, srcLength);
+        u_memcpy(dest, (const UChar *)src, srcLength); 
     }
     if(pDestLength){
        *pDestLength = srcLength;

@@ -12,8 +12,8 @@ OWNER(
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
-PEERDIR(
-    contrib/libs/icu
+PEERDIR( 
+    contrib/libs/icu 
 )
 
 CFLAGS(

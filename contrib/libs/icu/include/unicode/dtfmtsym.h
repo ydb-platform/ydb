@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ********************************************************************************
@@ -22,12 +22,12 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #if !UCONFIG_NO_FORMATTING
 
 #include "unicode/calendar.h"
-#include "unicode/strenum.h"
+#include "unicode/strenum.h" 
 #include "unicode/uobject.h"
 #include "unicode/locid.h"
 #include "unicode/udat.h"
@@ -429,13 +429,13 @@ public:
      * doesn't specify any time separator, and always recognized when parsing.
      * @internal
      */
-    static const char16_t DEFAULT_TIME_SEPARATOR = 0x003a;  // ':'
+    static const char16_t DEFAULT_TIME_SEPARATOR = 0x003a;  // ':' 
 
     /**
      * This alternate time separator is always recognized when parsing.
      * @internal
      */
-    static const char16_t ALTERNATE_TIME_SEPARATOR = 0x002e;  // '.'
+    static const char16_t ALTERNATE_TIME_SEPARATOR = 0x002e;  // '.' 
 
     /**
      * Gets the time separator string. For example: ":".
@@ -569,7 +569,7 @@ public:
      * @return    the non-localized date-time pattern characters
      * @stable ICU 2.0
      */
-    static const char16_t * U_EXPORT2 getPatternUChars(void);
+    static const char16_t * U_EXPORT2 getPatternUChars(void); 
 
     /**
      * Gets localized date-time pattern characters. For example: 'u', 't', etc.
@@ -980,7 +980,7 @@ private:
      * Returns the date format field index of the pattern character c,
      * or UDAT_FIELD_COUNT if c is not a pattern character.
      */
-    static UDateFormatField U_EXPORT2 getPatternCharIndex(char16_t c);
+    static UDateFormatField U_EXPORT2 getPatternCharIndex(char16_t c); 
 
     /**
      * Returns TRUE if f (with its pattern character repeated count times) is a numeric field.
@@ -990,7 +990,7 @@ private:
     /**
      * Returns TRUE if c (repeated count times) is the pattern character for a numeric field.
      */
-    static UBool U_EXPORT2 isNumericPatternChar(char16_t c, int32_t count);
+    static UBool U_EXPORT2 isNumericPatternChar(char16_t c, int32_t count); 
 public:
 #ifndef U_HIDE_INTERNAL_API
     /**
@@ -1013,7 +1013,7 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif // _DTFMTSYM
 //eof

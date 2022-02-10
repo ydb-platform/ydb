@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  ********************************************************************************
@@ -28,8 +28,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 /**
  * \file 
  * \brief C++ API: SimpleTimeZone is a concrete subclass of TimeZone.
@@ -649,8 +649,8 @@ public:
      * Sets the amount of time in ms that the clock is advanced during DST.
      * @param millisSavedDuringDST the number of milliseconds the time is
      * advanced with respect to standard time when the daylight savings rules
-     * are in effect. Typically one hour (+3600000). The amount could be negative,
-     * but not 0.
+     * are in effect. Typically one hour (+3600000). The amount could be negative, 
+     * but not 0. 
      * @param status  An UErrorCode to receive the status.
      * @stable ICU 2.0
      */
@@ -660,8 +660,8 @@ public:
      * Returns the amount of time in ms that the clock is advanced during DST.
      * @return the number of milliseconds the time is
      * advanced with respect to standard time when the daylight savings rules
-     * are in effect. Typically one hour (+3600000). The amount could be negative,
-     * but not 0.
+     * are in effect. Typically one hour (+3600000). The amount could be negative, 
+     * but not 0. 
      * @stable ICU 2.0
      */
     virtual int32_t getDSTSavings(void) const;
@@ -674,7 +674,7 @@ public:
      */
     virtual UBool useDaylightTime(void) const;
 
-#ifndef U_FORCE_HIDE_DEPRECATED_API
+#ifndef U_FORCE_HIDE_DEPRECATED_API 
     /**
      * Returns true if the given date is within the period when daylight savings time
      * is in effect; false otherwise.  If the TimeZone doesn't observe daylight savings
@@ -690,7 +690,7 @@ public:
      * @deprecated ICU 2.4. Use Calendar::inDaylightTime() instead.
      */
     virtual UBool inDaylightTime(UDate date, UErrorCode& status) const;
-#endif  // U_FORCE_HIDE_DEPRECATED_API
+#endif  // U_FORCE_HIDE_DEPRECATED_API 
 
     /**
      * Return true if this zone has the same rules and offset as another zone.
@@ -707,7 +707,7 @@ public:
      * @return   A new copy of this TimeZone object.
      * @stable ICU 2.0
      */
-    virtual SimpleTimeZone* clone() const;
+    virtual SimpleTimeZone* clone() const; 
 
     /**
      * Gets the first time zone transition after the base time.
@@ -933,6 +933,6 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif // _SIMPLETZ

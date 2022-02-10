@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  casetrn.h
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -58,7 +58,7 @@ public:
      * Transliterator API.
      * @return a copy of the object.
      */
-    virtual CaseMapTransliterator* clone() const = 0;
+    virtual CaseMapTransliterator* clone() const = 0; 
 
     /**
      * ICU "poor man's RTTI", returns a UClassID for the actual class.

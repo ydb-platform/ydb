@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -19,7 +19,7 @@
 
 #if !UCONFIG_NO_FORMATTING
 
-#include <cstdlib>
+#include <cstdlib> 
 #include <math.h>
 #include "unicode/fmtable.h"
 #include "unicode/ustring.h"
@@ -30,7 +30,7 @@
 #include "cmemory.h"
 #include "cstring.h"
 #include "fmtableimp.h"
-#include "number_decimalquantity.h"
+#include "number_decimalquantity.h" 
 
 // *****************************************************************************
 // class Formattable
@@ -40,9 +40,9 @@ U_NAMESPACE_BEGIN
 
 UOBJECT_DEFINE_RTTI_IMPLEMENTATION(Formattable)
 
-using number::impl::DecimalQuantity;
+using number::impl::DecimalQuantity; 
 
-
+ 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
 // NOTE: As of 3.0, there are limitations to the UObject API.  It does
@@ -105,7 +105,7 @@ void  Formattable::init() {
     fValue.fInt64 = 0;
     fType = kLong;
     fDecimalStr = NULL;
-    fDecimalQuantity = NULL;
+    fDecimalQuantity = NULL; 
     fBogus.setToBogus(); 
 }
 
@@ -259,8 +259,8 @@ Formattable::operator=(const Formattable& source)
         }
 
         UErrorCode status = U_ZERO_ERROR;
-        if (source.fDecimalQuantity != NULL) {
-          fDecimalQuantity = new DecimalQuantity(*source.fDecimalQuantity);
+        if (source.fDecimalQuantity != NULL) { 
+          fDecimalQuantity = new DecimalQuantity(*source.fDecimalQuantity); 
         }
         if (source.fDecimalStr != NULL) {
             fDecimalStr = new CharString(*source.fDecimalStr, status);
@@ -358,9 +358,9 @@ void Formattable::dispose()
 
     delete fDecimalStr;
     fDecimalStr = NULL;
-
-    delete fDecimalQuantity;
-    fDecimalQuantity = NULL;
+ 
+    delete fDecimalQuantity; 
+    fDecimalQuantity = NULL; 
 }
 
 Formattable *
@@ -462,13 +462,13 @@ Formattable::getInt64(UErrorCode& status) const
         } else if (fValue.fDouble < (double)U_INT64_MIN) {
             status = U_INVALID_FORMAT_ERROR;
             return U_INT64_MIN;
-        } else if (fabs(fValue.fDouble) > U_DOUBLE_MAX_EXACT_INT && fDecimalQuantity != NULL) {
-            if (fDecimalQuantity->fitsInLong(true)) {
-                return fDecimalQuantity->toLong();
+        } else if (fabs(fValue.fDouble) > U_DOUBLE_MAX_EXACT_INT && fDecimalQuantity != NULL) { 
+            if (fDecimalQuantity->fitsInLong(true)) { 
+                return fDecimalQuantity->toLong(); 
             } else {
-                // Unexpected
+                // Unexpected 
                 status = U_INVALID_FORMAT_ERROR;
-                return fDecimalQuantity->isNegative() ? U_INT64_MIN : U_INT64_MAX;
+                return fDecimalQuantity->isNegative() ? U_INT64_MIN : U_INT64_MAX; 
             }
         } else {
             return (int64_t)fValue.fDouble;
@@ -711,90 +711,90 @@ StringPiece Formattable::getDecimalNumber(UErrorCode &status) {
 
 CharString *Formattable::internalGetCharString(UErrorCode &status) {
     if(fDecimalStr == NULL) {
-      if (fDecimalQuantity == NULL) {
+      if (fDecimalQuantity == NULL) { 
         // No decimal number for the formattable yet.  Which means the value was
         // set directly by the user as an int, int64 or double.  If the value came
         // from parsing, or from the user setting a decimal number, fDecimalNum
         // would already be set.
         //
-        LocalPointer<DecimalQuantity> dq(new DecimalQuantity(), status);
-        if (U_FAILURE(status)) { return nullptr; }
-        populateDecimalQuantity(*dq, status);
-        if (U_FAILURE(status)) { return nullptr; }
-        fDecimalQuantity = dq.orphan();
+        LocalPointer<DecimalQuantity> dq(new DecimalQuantity(), status); 
+        if (U_FAILURE(status)) { return nullptr; } 
+        populateDecimalQuantity(*dq, status); 
+        if (U_FAILURE(status)) { return nullptr; } 
+        fDecimalQuantity = dq.orphan(); 
       }
 
-      fDecimalStr = new CharString();
+      fDecimalStr = new CharString(); 
       if (fDecimalStr == NULL) {
         status = U_MEMORY_ALLOCATION_ERROR;
         return NULL;
       }
-      // Older ICUs called uprv_decNumberToString here, which is not exactly the same as
-      // DecimalQuantity::toScientificString(). The biggest difference is that uprv_decNumberToString does
-      // not print scientific notation for magnitudes greater than -5 and smaller than some amount (+5?).
-      if (fDecimalQuantity->isInfinite()) {
-        fDecimalStr->append("Infinity", status);
-      } else if (fDecimalQuantity->isNaN()) {
-        fDecimalStr->append("NaN", status);
-      } else if (fDecimalQuantity->isZeroish()) {
-        fDecimalStr->append("0", -1, status);
-      } else if (fType==kLong || fType==kInt64 || // use toPlainString for integer types
-                  (fDecimalQuantity->getMagnitude() != INT32_MIN && std::abs(fDecimalQuantity->getMagnitude()) < 5)) {
-        fDecimalStr->appendInvariantChars(fDecimalQuantity->toPlainString(), status);
-      } else {
-        fDecimalStr->appendInvariantChars(fDecimalQuantity->toScientificString(), status);
-      }
+      // Older ICUs called uprv_decNumberToString here, which is not exactly the same as 
+      // DecimalQuantity::toScientificString(). The biggest difference is that uprv_decNumberToString does 
+      // not print scientific notation for magnitudes greater than -5 and smaller than some amount (+5?). 
+      if (fDecimalQuantity->isInfinite()) { 
+        fDecimalStr->append("Infinity", status); 
+      } else if (fDecimalQuantity->isNaN()) { 
+        fDecimalStr->append("NaN", status); 
+      } else if (fDecimalQuantity->isZeroish()) { 
+        fDecimalStr->append("0", -1, status); 
+      } else if (fType==kLong || fType==kInt64 || // use toPlainString for integer types 
+                  (fDecimalQuantity->getMagnitude() != INT32_MIN && std::abs(fDecimalQuantity->getMagnitude()) < 5)) { 
+        fDecimalStr->appendInvariantChars(fDecimalQuantity->toPlainString(), status); 
+      } else { 
+        fDecimalStr->appendInvariantChars(fDecimalQuantity->toScientificString(), status); 
+      } 
     }
     return fDecimalStr;
 }
 
-void
-Formattable::populateDecimalQuantity(number::impl::DecimalQuantity& output, UErrorCode& status) const {
-    if (fDecimalQuantity != nullptr) {
-        output = *fDecimalQuantity;
-        return;
-    }
+void 
+Formattable::populateDecimalQuantity(number::impl::DecimalQuantity& output, UErrorCode& status) const { 
+    if (fDecimalQuantity != nullptr) { 
+        output = *fDecimalQuantity; 
+        return; 
+    } 
 
-    switch (fType) {
-        case kDouble:
-            output.setToDouble(this->getDouble());
-            output.roundToInfinity();
-            break;
-        case kLong:
-            output.setToInt(this->getLong());
-            break;
-        case kInt64:
-            output.setToLong(this->getInt64());
-            break;
-        default:
-            // The formattable's value is not a numeric type.
-            status = U_INVALID_STATE_ERROR;
-    }
+    switch (fType) { 
+        case kDouble: 
+            output.setToDouble(this->getDouble()); 
+            output.roundToInfinity(); 
+            break; 
+        case kLong: 
+            output.setToInt(this->getLong()); 
+            break; 
+        case kInt64: 
+            output.setToLong(this->getInt64()); 
+            break; 
+        default: 
+            // The formattable's value is not a numeric type. 
+            status = U_INVALID_STATE_ERROR; 
+    } 
 }
 
 // ---------------------------------------
 void
-Formattable::adoptDecimalQuantity(DecimalQuantity *dq) {
-    if (fDecimalQuantity != NULL) {
-        delete fDecimalQuantity;
-    }
-    fDecimalQuantity = dq;
-    if (dq == NULL) { // allow adoptDigitList(NULL) to clear
-        return;
-    }
+Formattable::adoptDecimalQuantity(DecimalQuantity *dq) { 
+    if (fDecimalQuantity != NULL) { 
+        delete fDecimalQuantity; 
+    } 
+    fDecimalQuantity = dq; 
+    if (dq == NULL) { // allow adoptDigitList(NULL) to clear 
+        return; 
+    } 
 
     // Set the value into the Union of simple type values.
-    // Cannot use the set() functions because they would delete the fDecimalNum value.
-    if (fDecimalQuantity->fitsInLong()) {
-        fValue.fInt64 = fDecimalQuantity->toLong();
-        if (fValue.fInt64 <= INT32_MAX && fValue.fInt64 >= INT32_MIN) {
-            fType = kLong;
-        } else {
-            fType = kInt64;
-        }
+    // Cannot use the set() functions because they would delete the fDecimalNum value. 
+    if (fDecimalQuantity->fitsInLong()) { 
+        fValue.fInt64 = fDecimalQuantity->toLong(); 
+        if (fValue.fInt64 <= INT32_MAX && fValue.fInt64 >= INT32_MIN) { 
+            fType = kLong; 
+        } else { 
+            fType = kInt64; 
+        } 
     } else {
         fType = kDouble;
-        fValue.fDouble = fDecimalQuantity->toDouble();
+        fValue.fDouble = fDecimalQuantity->toDouble(); 
     }
 }
 
@@ -807,12 +807,12 @@ Formattable::setDecimalNumber(StringPiece numberString, UErrorCode &status) {
     }
     dispose();
 
-    auto* dq = new DecimalQuantity();
-    dq->setToDecNumber(numberString, status);
-    adoptDecimalQuantity(dq);
+    auto* dq = new DecimalQuantity(); 
+    dq->setToDecNumber(numberString, status); 
+    adoptDecimalQuantity(dq); 
 
     // Note that we do not hang on to the caller's input string.
-    // If we are asked for the string, we will regenerate one from fDecimalQuantity.
+    // If we are asked for the string, we will regenerate one from fDecimalQuantity. 
 }
 
 #if 0

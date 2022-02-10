@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *******************************************************************************
@@ -8,7 +8,7 @@
  *
  *******************************************************************************
  *   file name:  uidna.cpp
- *   encoding:   UTF-8
+ *   encoding:   UTF-8 
  *   tab size:   8 (not used)
  *   indentation:4
  *
@@ -63,10 +63,10 @@ startsWithPrefix(const UChar* src , int32_t srcLength){
 
     for(int8_t i=0; i< ACE_PREFIX_LENGTH; i++){
         if(toASCIILower(src[i]) != ACE_PREFIX[i]){
-            return FALSE;
+            return FALSE; 
         }
     }
-    return TRUE;
+    return TRUE; 
 }
 
 
@@ -439,7 +439,7 @@ _internal_toUnicode(const UChar* src, int32_t srcLength,
         for(int32_t j=0; j<srcLength; j++){
             if(src[j]> 0x7f){
                 srcIsASCII = FALSE;
-                break;
+                break; 
             }/*else if(isLDHChar(src[j])==FALSE){
                 // here we do not assemble surrogates
                 // since we know that LDH code points

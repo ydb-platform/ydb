@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -98,7 +98,7 @@ public:
     /**
      * Transliterator API.
      */
-    virtual CompoundTransliterator* clone() const;
+    virtual CompoundTransliterator* clone() const; 
 
     /**
      * Returns the number of transliterators in this chain.

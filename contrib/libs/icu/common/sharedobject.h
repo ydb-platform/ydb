@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -17,8 +17,8 @@
 
 U_NAMESPACE_BEGIN
 
-class SharedObject;
-
+class SharedObject; 
+ 
 /**
  * Base class for unified cache exposing enough methods to SharedObject
  * instances to allow their addRef() and removeRef() methods to
@@ -30,11 +30,11 @@ public:
     UnifiedCacheBase() { }
 
     /**
-     * Notify the cache implementation that an object was seen transitioning to
-     * zero hard references. The cache may use this to keep track the number of
-     * unreferenced SharedObjects, and to trigger evictions.
+     * Notify the cache implementation that an object was seen transitioning to 
+     * zero hard references. The cache may use this to keep track the number of 
+     * unreferenced SharedObjects, and to trigger evictions. 
      */
-    virtual void handleUnreferencedObject() const = 0;
+    virtual void handleUnreferencedObject() const = 0; 
 
     virtual ~UnifiedCacheBase();
 private:
@@ -69,22 +69,22 @@ public:
     virtual ~SharedObject();
 
     /**
-     * Increments the number of hard references to this object. Thread-safe.
-     * Not for use from within the Unified Cache implementation.
+     * Increments the number of hard references to this object. Thread-safe. 
+     * Not for use from within the Unified Cache implementation. 
      */
-    void addRef() const;
+    void addRef() const; 
 
     /**
-     * Decrements the number of hard references to this object, and
-     * arrange for possible cache-eviction and/or deletion if ref
-     * count goes to zero. Thread-safe.
-     * 
-     * Not for use from within the UnifiedCache implementation.
+     * Decrements the number of hard references to this object, and 
+     * arrange for possible cache-eviction and/or deletion if ref 
+     * count goes to zero. Thread-safe. 
+     *  
+     * Not for use from within the UnifiedCache implementation. 
      */
-    void removeRef() const;
+    void removeRef() const; 
 
     /**
-     * Returns the number of hard references for this object.
+     * Returns the number of hard references for this object. 
      * Uses a memory barrier.
      */
     int32_t getRefCount() const;
@@ -93,18 +93,18 @@ public:
      * If noHardReferences() == TRUE then this object has no hard references.
      * Must be called only from within the internals of UnifiedCache.
      */
-    inline UBool noHardReferences() const { return getRefCount() == 0; }
+    inline UBool noHardReferences() const { return getRefCount() == 0; } 
 
     /**
      * If hasHardReferences() == TRUE then this object has hard references.
      * Must be called only from within the internals of UnifiedCache.
      */
-    inline UBool hasHardReferences() const { return getRefCount() != 0; }
+    inline UBool hasHardReferences() const { return getRefCount() != 0; } 
 
     /**
-     * Deletes this object if it has no references.
-     * Available for non-cached SharedObjects only. Ownership of cached objects
-     * is with the UnifiedCache, which is solely responsible for eviction and deletion.
+     * Deletes this object if it has no references. 
+     * Available for non-cached SharedObjects only. Ownership of cached objects 
+     * is with the UnifiedCache, which is solely responsible for eviction and deletion. 
      */
     void deleteIfZeroRefCount() const;
 
@@ -161,20 +161,20 @@ public:
     }
 
 private:
-    /**
-     * The number of references from the UnifiedCache, which is
-     * the number of times that the sharedObject is stored as a hash table value.
-     * For use by UnifiedCache implementation code only.
-     * All access is synchronized by UnifiedCache's gCacheMutex
-     */
+    /** 
+     * The number of references from the UnifiedCache, which is 
+     * the number of times that the sharedObject is stored as a hash table value. 
+     * For use by UnifiedCache implementation code only. 
+     * All access is synchronized by UnifiedCache's gCacheMutex 
+     */ 
     mutable int32_t softRefCount;
-    friend class UnifiedCache;
+    friend class UnifiedCache; 
 
-    /**
-     * Reference count, excluding references from within the UnifiedCache implementation.
-     */
+    /** 
+     * Reference count, excluding references from within the UnifiedCache implementation. 
+     */ 
     mutable u_atomic_int32_t hardRefCount;
-    
+     
     mutable const UnifiedCacheBase *cachePtr;
 
 };

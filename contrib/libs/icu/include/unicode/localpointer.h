@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  localpointer.h
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -42,8 +42,8 @@
 
 #if U_SHOW_CPLUSPLUS_API
 
-#include <memory>
-
+#include <memory> 
+ 
 U_NAMESPACE_BEGIN
 
 /**
@@ -67,13 +67,13 @@ U_NAMESPACE_BEGIN
 template<typename T>
 class LocalPointerBase {
 public:
-    // No heap allocation. Use only on the stack.
-    static void* U_EXPORT2 operator new(size_t) = delete;
-    static void* U_EXPORT2 operator new[](size_t) = delete;
-#if U_HAVE_PLACEMENT_NEW
-    static void* U_EXPORT2 operator new(size_t, void*) = delete;
-#endif
-
+    // No heap allocation. Use only on the stack. 
+    static void* U_EXPORT2 operator new(size_t) = delete; 
+    static void* U_EXPORT2 operator new[](size_t) = delete; 
+#if U_HAVE_PLACEMENT_NEW 
+    static void* U_EXPORT2 operator new(size_t, void*) = delete; 
+#endif 
+ 
     /**
      * Constructor takes ownership.
      * @param p simple pointer to an object that is adopted
@@ -177,9 +177,9 @@ private:
  * \code
  * LocalPointer<UnicodeString> s(new UnicodeString((UChar32)0x50005));
  * int32_t length=s->length();  // 2
- * char16_t lead=s->charAt(0);  // 0xd900
+ * char16_t lead=s->charAt(0);  // 0xd900 
  * if(some condition) { return; }  // no need to explicitly delete the pointer
- * s.adoptInstead(new UnicodeString((char16_t)0xfffc));
+ * s.adoptInstead(new UnicodeString((char16_t)0xfffc)); 
  * length=s->length();  // 1
  * // no need to explicitly delete the pointer
  * \endcode
@@ -224,21 +224,21 @@ public:
     LocalPointer(LocalPointer<T> &&src) U_NOEXCEPT : LocalPointerBase<T>(src.ptr) {
         src.ptr=NULL;
     }
-
+ 
     /**
-     * Constructs a LocalPointer from a C++11 std::unique_ptr.
-     * The LocalPointer steals the object owned by the std::unique_ptr.
-     *
-     * This constructor works via move semantics. If your std::unique_ptr is
-     * in a local variable, you must use std::move.
-     *
-     * @param p The std::unique_ptr from which the pointer will be stolen.
-     * @stable ICU 64
-     */
-    explicit LocalPointer(std::unique_ptr<T> &&p)
-        : LocalPointerBase<T>(p.release()) {}
-
-    /**
+     * Constructs a LocalPointer from a C++11 std::unique_ptr. 
+     * The LocalPointer steals the object owned by the std::unique_ptr. 
+     * 
+     * This constructor works via move semantics. If your std::unique_ptr is 
+     * in a local variable, you must use std::move. 
+     * 
+     * @param p The std::unique_ptr from which the pointer will be stolen. 
+     * @stable ICU 64 
+     */ 
+    explicit LocalPointer(std::unique_ptr<T> &&p) 
+        : LocalPointerBase<T>(p.release()) {} 
+ 
+    /** 
      * Destructor deletes the object it owns.
      * @stable ICU 4.4
      */
@@ -253,25 +253,25 @@ public:
      * @stable ICU 56
      */
     LocalPointer<T> &operator=(LocalPointer<T> &&src) U_NOEXCEPT {
-        delete LocalPointerBase<T>::ptr;
-        LocalPointerBase<T>::ptr=src.ptr;
-        src.ptr=NULL;
-        return *this;
+        delete LocalPointerBase<T>::ptr; 
+        LocalPointerBase<T>::ptr=src.ptr; 
+        src.ptr=NULL; 
+        return *this; 
     }
-
+ 
     /**
-     * Move-assign from an std::unique_ptr to this LocalPointer.
-     * Steals the pointer from the std::unique_ptr.
+     * Move-assign from an std::unique_ptr to this LocalPointer. 
+     * Steals the pointer from the std::unique_ptr. 
      *
-     * @param p The std::unique_ptr from which the pointer will be stolen.
+     * @param p The std::unique_ptr from which the pointer will be stolen. 
      * @return *this
-     * @stable ICU 64
+     * @stable ICU 64 
      */
-    LocalPointer<T> &operator=(std::unique_ptr<T> &&p) U_NOEXCEPT {
-        adoptInstead(p.release());
+    LocalPointer<T> &operator=(std::unique_ptr<T> &&p) U_NOEXCEPT { 
+        adoptInstead(p.release()); 
         return *this;
     }
-
+ 
     /**
      * Swap pointers.
      * @param other other smart pointer
@@ -327,21 +327,21 @@ public:
             delete p;
         }
     }
-
-    /**
-     * Conversion operator to a C++11 std::unique_ptr.
-     * Disowns the object and gives it to the returned std::unique_ptr.
-     *
-     * This operator works via move semantics. If your LocalPointer is
-     * in a local variable, you must use std::move.
-     *
-     * @return An std::unique_ptr owning the pointer previously owned by this
-     *         icu::LocalPointer.
-     * @stable ICU 64
-     */
-    operator std::unique_ptr<T> () && {
-        return std::unique_ptr<T>(LocalPointerBase<T>::orphan());
-    }
+ 
+    /** 
+     * Conversion operator to a C++11 std::unique_ptr. 
+     * Disowns the object and gives it to the returned std::unique_ptr. 
+     * 
+     * This operator works via move semantics. If your LocalPointer is 
+     * in a local variable, you must use std::move. 
+     * 
+     * @return An std::unique_ptr owning the pointer previously owned by this 
+     *         icu::LocalPointer. 
+     * @stable ICU 64 
+     */ 
+    operator std::unique_ptr<T> () && { 
+        return std::unique_ptr<T>(LocalPointerBase<T>::orphan()); 
+    } 
 };
 
 /**
@@ -352,10 +352,10 @@ public:
  * Usage example:
  * \code
  * LocalArray<UnicodeString> a(new UnicodeString[2]);
- * a[0].append((char16_t)0x61);
+ * a[0].append((char16_t)0x61); 
  * if(some condition) { return; }  // no need to explicitly delete the array
  * a.adoptInstead(new UnicodeString[4]);
- * a[3].append((char16_t)0x62).append((char16_t)0x63).reverse();
+ * a[3].append((char16_t)0x62).append((char16_t)0x63).reverse(); 
  * // no need to explicitly delete the array
  * \endcode
  *
@@ -399,21 +399,21 @@ public:
     LocalArray(LocalArray<T> &&src) U_NOEXCEPT : LocalPointerBase<T>(src.ptr) {
         src.ptr=NULL;
     }
-
+ 
     /**
-     * Constructs a LocalArray from a C++11 std::unique_ptr of an array type.
-     * The LocalPointer steals the array owned by the std::unique_ptr.
-     *
-     * This constructor works via move semantics. If your std::unique_ptr is
-     * in a local variable, you must use std::move.
-     *
-     * @param p The std::unique_ptr from which the array will be stolen.
-     * @stable ICU 64
-     */
-    explicit LocalArray(std::unique_ptr<T[]> &&p)
-        : LocalPointerBase<T>(p.release()) {}
-
-    /**
+     * Constructs a LocalArray from a C++11 std::unique_ptr of an array type. 
+     * The LocalPointer steals the array owned by the std::unique_ptr. 
+     * 
+     * This constructor works via move semantics. If your std::unique_ptr is 
+     * in a local variable, you must use std::move. 
+     * 
+     * @param p The std::unique_ptr from which the array will be stolen. 
+     * @stable ICU 64 
+     */ 
+    explicit LocalArray(std::unique_ptr<T[]> &&p) 
+        : LocalPointerBase<T>(p.release()) {} 
+ 
+    /** 
      * Destructor deletes the array it owns.
      * @stable ICU 4.4
      */
@@ -428,25 +428,25 @@ public:
      * @stable ICU 56
      */
     LocalArray<T> &operator=(LocalArray<T> &&src) U_NOEXCEPT {
-        delete[] LocalPointerBase<T>::ptr;
-        LocalPointerBase<T>::ptr=src.ptr;
-        src.ptr=NULL;
-        return *this;
+        delete[] LocalPointerBase<T>::ptr; 
+        LocalPointerBase<T>::ptr=src.ptr; 
+        src.ptr=NULL; 
+        return *this; 
     }
-
+ 
     /**
-     * Move-assign from an std::unique_ptr to this LocalPointer.
-     * Steals the array from the std::unique_ptr.
+     * Move-assign from an std::unique_ptr to this LocalPointer. 
+     * Steals the array from the std::unique_ptr. 
      *
-     * @param p The std::unique_ptr from which the array will be stolen.
+     * @param p The std::unique_ptr from which the array will be stolen. 
      * @return *this
-     * @stable ICU 64
+     * @stable ICU 64 
      */
-    LocalArray<T> &operator=(std::unique_ptr<T[]> &&p) U_NOEXCEPT {
-        adoptInstead(p.release());
+    LocalArray<T> &operator=(std::unique_ptr<T[]> &&p) U_NOEXCEPT { 
+        adoptInstead(p.release()); 
         return *this;
     }
-
+ 
     /**
      * Swap pointers.
      * @param other other smart pointer
@@ -510,21 +510,21 @@ public:
      * @stable ICU 4.4
      */
     T &operator[](ptrdiff_t i) const { return LocalPointerBase<T>::ptr[i]; }
-
-    /**
-     * Conversion operator to a C++11 std::unique_ptr.
-     * Disowns the object and gives it to the returned std::unique_ptr.
-     *
-     * This operator works via move semantics. If your LocalPointer is
-     * in a local variable, you must use std::move.
-     *
-     * @return An std::unique_ptr owning the pointer previously owned by this
-     *         icu::LocalPointer.
-     * @stable ICU 64
-     */
-    operator std::unique_ptr<T[]> () && {
-        return std::unique_ptr<T[]>(LocalPointerBase<T>::orphan());
-    }
+ 
+    /** 
+     * Conversion operator to a C++11 std::unique_ptr. 
+     * Disowns the object and gives it to the returned std::unique_ptr. 
+     * 
+     * This operator works via move semantics. If your LocalPointer is 
+     * in a local variable, you must use std::move. 
+     * 
+     * @return An std::unique_ptr owning the pointer previously owned by this 
+     *         icu::LocalPointer. 
+     * @stable ICU 64 
+     */ 
+    operator std::unique_ptr<T[]> () && { 
+        return std::unique_ptr<T[]>(LocalPointerBase<T>::orphan()); 
+    } 
 };
 
 /**
@@ -557,9 +557,9 @@ public:
                 : LocalPointerBase<Type>(src.ptr) { \
             src.ptr=NULL; \
         } \
-        /* TODO: Be agnostic of the deleter function signature from the user-provided std::unique_ptr? */ \
-        explicit LocalPointerClassName(std::unique_ptr<Type, decltype(&closeFunction)> &&p) \
-                : LocalPointerBase<Type>(p.release()) {} \
+        /* TODO: Be agnostic of the deleter function signature from the user-provided std::unique_ptr? */ \ 
+        explicit LocalPointerClassName(std::unique_ptr<Type, decltype(&closeFunction)> &&p) \ 
+                : LocalPointerBase<Type>(p.release()) {} \ 
         ~LocalPointerClassName() { if (ptr != NULL) { closeFunction(ptr); } } \
         LocalPointerClassName &operator=(LocalPointerClassName &&src) U_NOEXCEPT { \
             if (ptr != NULL) { closeFunction(ptr); } \
@@ -567,9 +567,9 @@ public:
             src.ptr=NULL; \
             return *this; \
         } \
-        /* TODO: Be agnostic of the deleter function signature from the user-provided std::unique_ptr? */ \
-        LocalPointerClassName &operator=(std::unique_ptr<Type, decltype(&closeFunction)> &&p) { \
-            adoptInstead(p.release()); \
+        /* TODO: Be agnostic of the deleter function signature from the user-provided std::unique_ptr? */ \ 
+        LocalPointerClassName &operator=(std::unique_ptr<Type, decltype(&closeFunction)> &&p) { \ 
+            adoptInstead(p.release()); \ 
             return *this; \
         } \
         void swap(LocalPointerClassName &other) U_NOEXCEPT { \
@@ -584,9 +584,9 @@ public:
             if (ptr != NULL) { closeFunction(ptr); } \
             ptr=p; \
         } \
-        operator std::unique_ptr<Type, decltype(&closeFunction)> () && { \
-            return std::unique_ptr<Type, decltype(&closeFunction)>(LocalPointerBase<Type>::orphan(), closeFunction); \
-        } \
+        operator std::unique_ptr<Type, decltype(&closeFunction)> () && { \ 
+            return std::unique_ptr<Type, decltype(&closeFunction)>(LocalPointerBase<Type>::orphan(), closeFunction); \ 
+        } \ 
     }
 
 U_NAMESPACE_END

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 //
 //  file:  repattrn.cpp
@@ -136,20 +136,20 @@ RegexPattern &RegexPattern::operator = (const RegexPattern &other) {
     }
 
     // Copy the named capture group hash map.
-    if (other.fNamedCaptureMap != nullptr && initNamedCaptureMap()) {
-        int32_t hashPos = UHASH_FIRST;
-        while (const UHashElement *hashEl = uhash_nextElement(other.fNamedCaptureMap, &hashPos)) {
-            if (U_FAILURE(fDeferredStatus)) {
-                break;
-            }
-            const UnicodeString *name = (const UnicodeString *)hashEl->key.pointer;
-            UnicodeString *key = new UnicodeString(*name);
-            int32_t val = hashEl->value.integer;
-            if (key == NULL) {
-                fDeferredStatus = U_MEMORY_ALLOCATION_ERROR;
-            } else {
-                uhash_puti(fNamedCaptureMap, key, val, &fDeferredStatus);
-            }
+    if (other.fNamedCaptureMap != nullptr && initNamedCaptureMap()) { 
+        int32_t hashPos = UHASH_FIRST; 
+        while (const UHashElement *hashEl = uhash_nextElement(other.fNamedCaptureMap, &hashPos)) { 
+            if (U_FAILURE(fDeferredStatus)) { 
+                break; 
+            } 
+            const UnicodeString *name = (const UnicodeString *)hashEl->key.pointer; 
+            UnicodeString *key = new UnicodeString(*name); 
+            int32_t val = hashEl->value.integer; 
+            if (key == NULL) { 
+                fDeferredStatus = U_MEMORY_ALLOCATION_ERROR; 
+            } else { 
+                uhash_puti(fNamedCaptureMap, key, val, &fDeferredStatus); 
+            } 
         }
     }
     return *this;
@@ -193,32 +193,32 @@ void RegexPattern::init() {
         return;
     }
     if (fCompiledPat == NULL  || fGroupMap == NULL || fSets == NULL ||
-            fInitialChars == NULL || fInitialChars8 == NULL) {
+            fInitialChars == NULL || fInitialChars8 == NULL) { 
         fDeferredStatus = U_MEMORY_ALLOCATION_ERROR;
         return;
     }
 
     // Slot zero of the vector of sets is reserved.  Fill it here.
     fSets->addElement((int32_t)0, fDeferredStatus);
-}
+} 
 
-
-bool RegexPattern::initNamedCaptureMap() {
-    if (fNamedCaptureMap) {
-        return true;
-    }
-    fNamedCaptureMap  = uhash_openSize(uhash_hashUnicodeString,     // Key hash function
-                                       uhash_compareUnicodeString,  // Key comparator function
-                                       uhash_compareLong,           // Value comparator function
-                                       7,                           // Initial table capacity
-                                       &fDeferredStatus);
-    if (U_FAILURE(fDeferredStatus)) {
-        return false;
-    }
-
+ 
+bool RegexPattern::initNamedCaptureMap() { 
+    if (fNamedCaptureMap) { 
+        return true; 
+    } 
+    fNamedCaptureMap  = uhash_openSize(uhash_hashUnicodeString,     // Key hash function 
+                                       uhash_compareUnicodeString,  // Key comparator function 
+                                       uhash_compareLong,           // Value comparator function 
+                                       7,                           // Initial table capacity 
+                                       &fDeferredStatus); 
+    if (U_FAILURE(fDeferredStatus)) { 
+        return false; 
+    } 
+ 
     // fNamedCaptureMap owns its key strings, type (UnicodeString *)
     uhash_setKeyDeleter(fNamedCaptureMap, uprv_deleteUObject);
-    return true;
+    return true; 
 }
 
 //--------------------------------------------------------------------------
@@ -255,10 +255,10 @@ void RegexPattern::zap() {
         delete fPatternString;
         fPatternString = NULL;
     }
-    if (fNamedCaptureMap != NULL) {
-        uhash_close(fNamedCaptureMap);
-        fNamedCaptureMap = NULL;
-    }
+    if (fNamedCaptureMap != NULL) { 
+        uhash_close(fNamedCaptureMap); 
+        fNamedCaptureMap = NULL; 
+    } 
 }
 
 
@@ -629,7 +629,7 @@ int32_t RegexPattern::groupNumberFromName(const UnicodeString &groupName, UError
     // No need to explicitly check for syntactically valid names.
     // Invalid ones will never be in the map, and the lookup will fail.
 
-    int32_t number = fNamedCaptureMap ? uhash_geti(fNamedCaptureMap, &groupName) : 0;
+    int32_t number = fNamedCaptureMap ? uhash_geti(fNamedCaptureMap, &groupName) : 0; 
     if (number == 0) {
         status = U_REGEX_INVALID_CAPTURE_GROUP_NAME;
     }
@@ -657,7 +657,7 @@ int32_t  RegexPattern::split(const UnicodeString &input,
 {
     if (U_FAILURE(status)) {
         return 0;
-    }
+    } 
 
     RegexMatcher  m(this);
     int32_t r = 0;
@@ -678,7 +678,7 @@ int32_t  RegexPattern::split(UText *input,
 {
     if (U_FAILURE(status)) {
         return 0;
-    }
+    } 
 
     RegexMatcher  m(this);
     int32_t r = 0;
@@ -801,8 +801,8 @@ void   RegexPattern::dumpOp(int32_t index) const {
                 printf("NOT ");
                 val &= ~URX_NEG_SET;
             }
-            UnicodeSet &set = RegexStaticSets::gStaticSets->fPropSets[val];
-            set.toPattern(s, TRUE);
+            UnicodeSet &set = RegexStaticSets::gStaticSets->fPropSets[val]; 
+            set.toPattern(s, TRUE); 
             printf("%s", CStr(s)());
         }
         break;
@@ -846,7 +846,7 @@ void RegexPattern::dumpPattern() const {
     }
 
     printf("Named Capture Groups:\n");
-    if (!fNamedCaptureMap || uhash_count(fNamedCaptureMap) == 0) {
+    if (!fNamedCaptureMap || uhash_count(fNamedCaptureMap) == 0) { 
         printf("   None\n");
     } else {
         int32_t pos = UHASH_FIRST;

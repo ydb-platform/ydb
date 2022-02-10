@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *******************************************************************************
@@ -33,7 +33,7 @@
 #include "unicode/gregocal.h"
 #include "unicode/smpdtfmt.h"
 
-#include "cmemory.h"
+#include "cmemory.h" 
 #include "gregoimp.h"
 #include "umutex.h"
 
@@ -178,7 +178,7 @@ void SimpleTimeZone::construct(int32_t rawOffsetGMT,
 
     decodeRules(status);
 
-    if (savingsDST == 0) {
+    if (savingsDST == 0) { 
         status = U_ILLEGAL_ARGUMENT_ERROR;
     }
 }
@@ -243,7 +243,7 @@ SimpleTimeZone::operator==(const TimeZone& that) const
 // -------------------------------------
 
 // Called by TimeZone::createDefault() inside a Mutex - be careful.
-SimpleTimeZone*
+SimpleTimeZone* 
 SimpleTimeZone::clone() const
 {
     return new SimpleTimeZone(*this);
@@ -687,7 +687,7 @@ SimpleTimeZone::setRawOffset(int32_t offsetMillis)
 void 
 SimpleTimeZone::setDSTSavings(int32_t millisSavedDuringDST, UErrorCode& status) 
 {
-    if (millisSavedDuringDST == 0) {
+    if (millisSavedDuringDST == 0) { 
         status = U_ILLEGAL_ARGUMENT_ERROR;
     }
     else {
@@ -1084,7 +1084,7 @@ SimpleTimeZone::checkTransitionRules(UErrorCode& status) const {
     if (U_FAILURE(status)) {
         return;
     }
-    static UMutex gLock;
+    static UMutex gLock; 
     umtx_lock(&gLock);
     if (!transitionRulesInitialized) {
         SimpleTimeZone *ncThis = const_cast<SimpleTimeZone*>(this);
@@ -1190,22 +1190,22 @@ SimpleTimeZone::initTransitionRules(UErrorCode& status) {
         // Create a TimeZoneRule for initial time
         if (firstStdStart < firstDstStart) {
             initialRule = new InitialTimeZoneRule(tzid+UnicodeString(DST_STR), getRawOffset(), dstRule->getDSTSavings());
-            if (initialRule == NULL) {
-                status = U_MEMORY_ALLOCATION_ERROR;
-                deleteTransitionRules();
-                return;
-            }
+            if (initialRule == NULL) { 
+                status = U_MEMORY_ALLOCATION_ERROR; 
+                deleteTransitionRules(); 
+                return; 
+            } 
             firstTransition = new TimeZoneTransition(firstStdStart, *initialRule, *stdRule);
         } else {
             initialRule = new InitialTimeZoneRule(tzid+UnicodeString(STD_STR), getRawOffset(), 0);
-            if (initialRule == NULL) {
-                status = U_MEMORY_ALLOCATION_ERROR;
-                deleteTransitionRules();
-                return;
-            }
+            if (initialRule == NULL) { 
+                status = U_MEMORY_ALLOCATION_ERROR; 
+                deleteTransitionRules(); 
+                return; 
+            } 
             firstTransition = new TimeZoneTransition(firstDstStart, *initialRule, *dstRule);
         }
-        if (firstTransition == NULL) {
+        if (firstTransition == NULL) { 
             status = U_MEMORY_ALLOCATION_ERROR;
             deleteTransitionRules();
             return;

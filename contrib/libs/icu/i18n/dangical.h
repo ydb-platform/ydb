@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *****************************************************************************
@@ -66,7 +66,7 @@ class DangiCalendar : public ChineseCalendar {
    * Clone.
    * @internal
    */
-  virtual DangiCalendar* clone() const;
+  virtual DangiCalendar* clone() const; 
 
   //----------------------------------------------------------------------
   // Internal methods & astronomical calculations

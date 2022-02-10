@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -16,8 +16,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #if !UCONFIG_NO_FORMATTING
 
 #include "unicode/format.h"
@@ -239,10 +239,10 @@ typedef enum UTimeZoneFormatParseOption {
      */
     UTZFMT_PARSE_OPTION_ALL_STYLES  = 0x01,
      /**
-      * When parsing a time zone display name in \link UTZFMT_STYLE_SPECIFIC_SHORT \endlink,
+      * When parsing a time zone display name in \link UTZFMT_STYLE_SPECIFIC_SHORT \endlink, 
       * look for the IANA tz database compatible zone abbreviations in addition
-      * to the localized names coming from the icu::TimeZoneNames currently
-      * used by the icu::TimeZoneFormat.
+      * to the localized names coming from the icu::TimeZoneNames currently 
+      * used by the icu::TimeZoneFormat. 
       * @stable ICU 54
       */
     UTZFMT_PARSE_OPTION_TZ_DATABASE_ABBREVIATIONS = 0x02
@@ -307,7 +307,7 @@ public:
      * @return A copy of the object
      * @stable ICU 50
      */
-    virtual TimeZoneFormat* clone() const;
+    virtual TimeZoneFormat* clone() const; 
 
     /**
      * Creates an instance of <code>TimeZoneFormat</code> for the given locale.
@@ -944,7 +944,7 @@ private:
      * @param parsedLen the parsed length, or 0 on failure.
      * @return the parsed offset in milliseconds.
      */
-    int32_t parseDefaultOffsetFields(const UnicodeString& text, int32_t start, char16_t separator,
+    int32_t parseDefaultOffsetFields(const UnicodeString& text, int32_t start, char16_t separator, 
         int32_t& parsedLen) const;
 
     /**
@@ -984,7 +984,7 @@ private:
      * @param maxFields The maximum fields
      * @return The offset string
      */
-    static UnicodeString& formatOffsetWithAsciiDigits(int32_t offset, char16_t sep,
+    static UnicodeString& formatOffsetWithAsciiDigits(int32_t offset, char16_t sep, 
         OffsetFields minFields, OffsetFields maxFields, UnicodeString& result);
 
     /**
@@ -1014,7 +1014,7 @@ private:
      * @param maxFields The maximum Fields to be parsed
      * @return Parsed offset, 0 or positive number.
      */
-    static int32_t parseAsciiOffsetFields(const UnicodeString& text, ParsePosition& pos, char16_t sep,
+    static int32_t parseAsciiOffsetFields(const UnicodeString& text, ParsePosition& pos, char16_t sep, 
         OffsetFields minFields, OffsetFields maxFields);
 
     /**
@@ -1096,7 +1096,7 @@ private:
 U_NAMESPACE_END
 
 #endif /* !UCONFIG_NO_FORMATTING */
-
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+ 
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif

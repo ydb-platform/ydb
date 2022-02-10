@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *******************************************************************************
@@ -12,8 +12,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #if !UCONFIG_NO_NORMALIZATION
 
 #include "unicode/uobject.h"
@@ -155,13 +155,13 @@ private:
 
     /**
      * Copy constructor. Private for now.
-     * @internal (private)
+     * @internal (private) 
      */
     CanonicalIterator(const CanonicalIterator& other);
 
     /**
      * Assignment operator. Private for now.
-     * @internal (private)
+     * @internal (private) 
      */
     CanonicalIterator& operator=(const CanonicalIterator& other);
 
@@ -189,7 +189,7 @@ private:
     UnicodeString *getEquivalents(const UnicodeString &segment, int32_t &result_len, UErrorCode &status); //private String[] getEquivalents(String segment)
 
     //Set getEquivalents2(String segment);
-    Hashtable *getEquivalents2(Hashtable *fillinResult, const char16_t *segment, int32_t segLen, UErrorCode &status);
+    Hashtable *getEquivalents2(Hashtable *fillinResult, const char16_t *segment, int32_t segLen, UErrorCode &status); 
     //Hashtable *getEquivalents2(const UnicodeString &segment, int32_t segLen, UErrorCode &status);
 
     /**
@@ -198,7 +198,7 @@ private:
      * If so, take the remainder, and return the equivalents
      */
     //Set extract(int comp, String segment, int segmentPos, StringBuffer buffer);
-    Hashtable *extract(Hashtable *fillinResult, UChar32 comp, const char16_t *segment, int32_t segLen, int32_t segmentPos, UErrorCode &status);
+    Hashtable *extract(Hashtable *fillinResult, UChar32 comp, const char16_t *segment, int32_t segLen, int32_t segmentPos, UErrorCode &status); 
     //Hashtable *extract(UChar32 comp, const UnicodeString &segment, int32_t segLen, int32_t segmentPos, UErrorCode &status);
 
     void cleanPieces();
@@ -209,6 +209,6 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_NORMALIZATION */
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -12,10 +12,10 @@
 #ifndef UNIFILT_H
 #define UNIFILT_H
 
-#include "unicode/utypes.h"
-
-#if U_SHOW_CPLUSPLUS_API
-
+#include "unicode/utypes.h" 
+ 
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #include "unicode/unifunct.h"
 #include "unicode/unimatch.h"
 
@@ -34,7 +34,7 @@ U_NAMESPACE_BEGIN
  * defined range.
  * @stable ICU 3.0
  */
-#define U_ETHER ((char16_t)0xFFFF)
+#define U_ETHER ((char16_t)0xFFFF) 
 
 /**
  *
@@ -72,14 +72,14 @@ public:
     virtual ~UnicodeFilter();
 
     /**
-     * Clones this object polymorphically.
-     * The caller owns the result and should delete it when done.
-     * @return clone, or nullptr if an error occurred
-     * @stable ICU 2.4
-     */
-    virtual UnicodeFilter* clone() const = 0;
-
-    /**
+     * Clones this object polymorphically. 
+     * The caller owns the result and should delete it when done. 
+     * @return clone, or nullptr if an error occurred 
+     * @stable ICU 2.4 
+     */ 
+    virtual UnicodeFilter* clone() const = 0; 
+ 
+    /** 
      * Returns <tt>true</tt> for characters that are in the selected
      * subset.  In other words, if a character is <b>to be
      * filtered</b>, then <tt>contains()</tt> returns
@@ -131,6 +131,6 @@ protected:
 
 U_NAMESPACE_END
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif

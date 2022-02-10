@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -15,8 +15,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #if !UCONFIG_NO_FORMATTING
 
 #include "unicode/measure.h"
@@ -48,7 +48,7 @@ class U_I18N_API CurrencyAmount: public Measure {
      * is invalid, then this will be set to a failing value.
      * @stable ICU 3.0
      */
-    CurrencyAmount(const Formattable& amount, ConstChar16Ptr isoCode,
+    CurrencyAmount(const Formattable& amount, ConstChar16Ptr isoCode, 
                    UErrorCode &ec);
 
     /**
@@ -61,7 +61,7 @@ class U_I18N_API CurrencyAmount: public Measure {
      * then this will be set to a failing value.
      * @stable ICU 3.0
      */
-    CurrencyAmount(double amount, ConstChar16Ptr isoCode,
+    CurrencyAmount(double amount, ConstChar16Ptr isoCode, 
                    UErrorCode &ec);
 
     /**
@@ -81,7 +81,7 @@ class U_I18N_API CurrencyAmount: public Measure {
      * have the same class as returned by getDynamicClassID().
      * @stable ICU 3.0
      */
-    virtual CurrencyAmount* clone() const;
+    virtual CurrencyAmount* clone() const; 
 
     /**
      * Destructor
@@ -117,21 +117,21 @@ class U_I18N_API CurrencyAmount: public Measure {
      * Return the ISO currency code of this object.
      * @stable ICU 3.0
      */
-    inline const char16_t* getISOCurrency() const;
+    inline const char16_t* getISOCurrency() const; 
 };
 
 inline const CurrencyUnit& CurrencyAmount::getCurrency() const {
     return (const CurrencyUnit&) getUnit();
 }
 
-inline const char16_t* CurrencyAmount::getISOCurrency() const {
+inline const char16_t* CurrencyAmount::getISOCurrency() const { 
     return getCurrency().getISOCurrency();
 }
 
 U_NAMESPACE_END
 
 #endif // !UCONFIG_NO_FORMATTING
-
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+ 
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif // __CURRENCYAMOUNT_H__

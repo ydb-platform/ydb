@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *******************************************************************************
@@ -18,8 +18,8 @@
  */
 
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #if !UCONFIG_NO_FORMATTING
 
 #include "unicode/unistr.h"
@@ -29,7 +29,7 @@
 #include "unicode/numfmt.h"
 #include "unicode/plurrule.h"
 
-#ifndef U_HIDE_DEPRECATED_API
+#ifndef U_HIDE_DEPRECATED_API 
 
 /**
  * Constants for various styles.
@@ -126,7 +126,7 @@ public:
      * @return    A copy of the object.
      * @deprecated ICU 53
      */
-    virtual TimeUnitFormat* clone() const;
+    virtual TimeUnitFormat* clone() const; 
 
     /**
      * Assignment operator
@@ -246,7 +246,7 @@ U_NAMESPACE_END
 #endif /* U_HIDE_DEPRECATED_API */
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif // __TMUTFMT_H__
 //eof

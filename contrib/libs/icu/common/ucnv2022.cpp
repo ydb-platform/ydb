@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 **********************************************************************
 *   file name:  ucnv2022.cpp
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -478,7 +478,7 @@ setInitialStateFromUnicodeKR(UConverter* converter,UConverterDataISO2022 *myConv
 static void U_CALLCONV
 _ISO2022Open(UConverter *cnv, UConverterLoadArgs *pArgs, UErrorCode *errorCode){
 
-    char myLocale[7]={' ',' ',' ',' ',' ',' ', '\0'};
+    char myLocale[7]={' ',' ',' ',' ',' ',' ', '\0'}; 
 
     cnv->extraInfo = uprv_malloc (sizeof (UConverterDataISO2022));
     if(cnv->extraInfo != NULL) {
@@ -493,7 +493,7 @@ _ISO2022Open(UConverter *cnv, UConverterLoadArgs *pArgs, UErrorCode *errorCode){
         myConverterData->currentType = ASCII1;
         cnv->fromUnicodeStatus =FALSE;
         if(pArgs->locale){
-            uprv_strncpy(myLocale, pArgs->locale, sizeof(myLocale)-1);
+            uprv_strncpy(myLocale, pArgs->locale, sizeof(myLocale)-1); 
         }
         version = pArgs->options & UCNV_OPTIONS_VERSION_MASK;
         myConverterData->version = version;
@@ -2772,7 +2772,7 @@ getTrailByte:
                         /* report a pair of illegal bytes if the second byte is not a DBCS starter */
                         ++mySource;
                         /* add another bit so that the code below writes 2 bytes in case of error */
-                        mySourceChar = static_cast<UChar>(0x10000 | (mySourceChar << 8) | trailByte);
+                        mySourceChar = static_cast<UChar>(0x10000 | (mySourceChar << 8) | trailByte); 
                     }
                 } else {
                     args->converter->toUBytes[0] = (uint8_t)mySourceChar;
@@ -3304,7 +3304,7 @@ UConverter_toUnicode_ISO_2022_CN_OFFSETS_LOGIC(UConverterToUnicodeArgs *args,
                     myData->isEmptySegment = FALSE;	/* we are handling it, reset to avoid future spurious errors */
                     *err = U_ILLEGAL_ESCAPE_SEQUENCE;
                     args->converter->toUCallbackReason = UCNV_IRREGULAR;
-                    args->converter->toUBytes[0] = static_cast<uint8_t>(mySourceChar);
+                    args->converter->toUBytes[0] = static_cast<uint8_t>(mySourceChar); 
                     args->converter->toULength = 1;
                     args->target = myTarget;
                     args->source = mySource;
@@ -3512,14 +3512,14 @@ _ISO_2022_WriteSub(UConverterFromUnicodeArgs *args, int32_t offsetIndex, UErrorC
     case 'k':
         if(myConverterData->version == 0) {
             if(length == 1) {
-                if(args->converter->fromUnicodeStatus) {
+                if(args->converter->fromUnicodeStatus) { 
                     /* in DBCS mode: switch to SBCS */
                     args->converter->fromUnicodeStatus = 0;
                     *p++ = UCNV_SI;
                 }
                 *p++ = subchar[0];
             } else /* length == 2*/ {
-                if(!args->converter->fromUnicodeStatus) {
+                if(!args->converter->fromUnicodeStatus) { 
                     /* in SBCS mode: switch to DBCS */
                     args->converter->fromUnicodeStatus = 1;
                     *p++ = UCNV_SO;
@@ -3593,10 +3593,10 @@ _ISO_2022_SafeClone(
     UConverterDataISO2022 *cnvData;
     int32_t i, size;
 
-    if (U_FAILURE(*status)){
-        return nullptr;
-    }
-
+    if (U_FAILURE(*status)){ 
+        return nullptr; 
+    } 
+ 
     if (*pBufferSize == 0) { /* 'preflighting' request - set needed size into *pBufferSize */
         *pBufferSize = (int32_t)sizeof(struct cloneStruct);
         return NULL;
@@ -3614,7 +3614,7 @@ _ISO_2022_SafeClone(
     /* share the subconverters */
 
     if(cnvData->currentConverter != NULL) {
-        size = (int32_t)sizeof(UConverter);
+        size = (int32_t)sizeof(UConverter); 
         localClone->mydata.currentConverter =
             ucnv_safeClone(cnvData->currentConverter,
                             &localClone->currentConverter,

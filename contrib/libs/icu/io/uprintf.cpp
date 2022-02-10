@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -183,7 +183,7 @@ u_vfprintf(    UFILE        *f,
     else {
         pattern = buffer;
     }
-    u_charsToUChars(patternSpecification, pattern, static_cast<int32_t>(size));
+    u_charsToUChars(patternSpecification, pattern, static_cast<int32_t>(size)); 
 
     /* do the work */
     count = u_vfprintf_u(f, pattern, ap);

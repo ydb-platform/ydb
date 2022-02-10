@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ********************************************************************************
@@ -19,8 +19,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API
-
+#if U_SHOW_CPLUSPLUS_API 
+ 
 /**
  * \file
  * \brief C++ API: Formattable is a thin wrapper for primitive types used for formatting and parsing
@@ -35,11 +35,11 @@
 U_NAMESPACE_BEGIN
 
 class CharString;
-namespace number {
-namespace impl {
-class DecimalQuantity;
-}
-}
+namespace number { 
+namespace impl { 
+class DecimalQuantity; 
+} 
+} 
 
 /**
  * Formattable objects can be passed to the Format class or
@@ -645,25 +645,25 @@ public:
      * Internal function, do not use.
      * TODO:  figure out how to make this be non-public.
      *        NumberFormat::format(Formattable, ...
-     *        needs to get at the DecimalQuantity, if it exists, for
+     *        needs to get at the DecimalQuantity, if it exists, for 
      *        big decimal formatting.
      *  @internal
      */
-    number::impl::DecimalQuantity *getDecimalQuantity() const { return fDecimalQuantity;}
+    number::impl::DecimalQuantity *getDecimalQuantity() const { return fDecimalQuantity;} 
 
     /**
-     * Export the value of this Formattable to a DecimalQuantity.
-     * @internal
+     * Export the value of this Formattable to a DecimalQuantity. 
+     * @internal 
      */
-    void populateDecimalQuantity(number::impl::DecimalQuantity& output, UErrorCode& status) const;
+    void populateDecimalQuantity(number::impl::DecimalQuantity& output, UErrorCode& status) const; 
 
     /**
-     *  Adopt, and set value from, a DecimalQuantity
+     *  Adopt, and set value from, a DecimalQuantity 
      *     Internal Function, do not use.
-     *  @param dq the DecimalQuantity to be adopted
+     *  @param dq the DecimalQuantity to be adopted 
      *  @internal
      */
-    void adoptDecimalQuantity(number::impl::DecimalQuantity *dq);
+    void adoptDecimalQuantity(number::impl::DecimalQuantity *dq); 
 
     /**
      * Internal function to return the CharString pointer.
@@ -703,7 +703,7 @@ private:
 
     CharString           *fDecimalStr;
 
-    number::impl::DecimalQuantity *fDecimalQuantity;
+    number::impl::DecimalQuantity *fDecimalQuantity; 
 
     Type                fType;
     UnicodeString       fBogus; // Bogus string when it's needed.
@@ -753,7 +753,7 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif //_FMTABLE
 //eof

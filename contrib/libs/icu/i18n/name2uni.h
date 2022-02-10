@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -49,7 +49,7 @@ public:
      * Transliterator API.
      * @return    A copy of the object.
      */
-    virtual NameUnicodeTransliterator* clone() const;
+    virtual NameUnicodeTransliterator* clone() const; 
 
     /**
      * ICU "poor man's RTTI", returns a UClassID for the actual class.

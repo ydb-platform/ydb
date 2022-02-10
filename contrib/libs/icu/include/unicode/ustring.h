@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -403,7 +403,7 @@ u_strspn(const UChar *string, const UChar *matchSet);
  * @param saveState The current pointer within the original string,
  *              which is set by this function. The saveState
  *              parameter should the address of a local variable of type
- *              UChar *. (i.e. defined "UChar *myLocalSaveState" and use
+ *              UChar *. (i.e. defined "UChar *myLocalSaveState" and use 
  *              &myLocalSaveState for this parameter).
  * @return A pointer to the next token found in src, or NULL
  *         when there are no more tokens.
@@ -884,7 +884,7 @@ u_memrchr32(const UChar *s, UChar32 c, int32_t count);
  * Unicode String literals in C.
  * We need one macro to declare a variable for the string
  * and to statically preinitialize it if possible,
- * and a second macro to dynamically initialize such a string variable if necessary.
+ * and a second macro to dynamically initialize such a string variable if necessary. 
  *
  * The macros are defined for maximum performance.
  * They work only for strings that contain "invariant characters", i.e.,
@@ -895,32 +895,32 @@ u_memrchr32(const UChar *s, UChar32 c, int32_t count);
  * parameters.
  * The string parameter must be a C string literal.
  * The length of the string, not including the terminating
- * `NUL`, must be specified as a constant.
+ * `NUL`, must be specified as a constant. 
  * The U_STRING_DECL macro should be invoked exactly once for one
  * such string variable before it is used.
  *
  * Usage:
- *
- *     U_STRING_DECL(ustringVar1, "Quick-Fox 2", 11);
- *     U_STRING_DECL(ustringVar2, "jumps 5%", 8);
- *     static UBool didInit=FALSE;
- *
- *     int32_t function() {
- *         if(!didInit) {
- *             U_STRING_INIT(ustringVar1, "Quick-Fox 2", 11);
- *             U_STRING_INIT(ustringVar2, "jumps 5%", 8);
- *             didInit=TRUE;
- *         }
- *         return u_strcmp(ustringVar1, ustringVar2);
- *     }
  * 
- * Note that the macros will NOT consistently work if their argument is another #`define`.
- * The following will not work on all platforms, don't use it.
+ *     U_STRING_DECL(ustringVar1, "Quick-Fox 2", 11); 
+ *     U_STRING_DECL(ustringVar2, "jumps 5%", 8); 
+ *     static UBool didInit=FALSE; 
+ * 
+ *     int32_t function() { 
+ *         if(!didInit) { 
+ *             U_STRING_INIT(ustringVar1, "Quick-Fox 2", 11); 
+ *             U_STRING_INIT(ustringVar2, "jumps 5%", 8); 
+ *             didInit=TRUE; 
+ *         } 
+ *         return u_strcmp(ustringVar1, ustringVar2); 
+ *     } 
+ * 
+ * Note that the macros will NOT consistently work if their argument is another #`define`. 
+ * The following will not work on all platforms, don't use it. 
  * 
  *     #define GLUCK "Mr. Gluck"
  *     U_STRING_DECL(var, GLUCK, 9)
  *     U_STRING_INIT(var, GLUCK, 9)
- *
+ * 
  * Instead, use the string literal "Mr. Gluck"  as the argument to both macro
  * calls.
  *

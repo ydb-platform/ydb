@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -12,9 +12,9 @@
 #define __SHARED_DATEFORMATSYMBOLS_H__
 
 #include "unicode/utypes.h"
-
-#if !UCONFIG_NO_FORMATTING
-
+ 
+#if !UCONFIG_NO_FORMATTING 
+ 
 #include "sharedobject.h"
 #include "unicode/dtfmtsym.h"
 
@@ -36,6 +36,6 @@ private:
 
 U_NAMESPACE_END
 
-#endif /* !UCONFIG_NO_FORMATTING */
-
+#endif /* !UCONFIG_NO_FORMATTING */ 
+ 
 #endif

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -440,16 +440,16 @@ class TransliteratorRegistry : public UMemory {
 
     /**
      * DAG of visible IDs by spec.  Hashtable: source => (Hashtable:
-     * target => variant bitmask)
+     * target => variant bitmask) 
      */
     Hashtable specDAG;
 
     /**
-     * Vector of all variant names
-     */
-    UVector variantList;
-
-    /**
+     * Vector of all variant names 
+     */ 
+    UVector variantList; 
+ 
+    /** 
      * Vector of public full IDs.
      */
     UVector availableIDs;

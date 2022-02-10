@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -43,24 +43,24 @@
 // Must be before any other #includes.
 #include "uposixdefs.h"
 
-// First, the platform type. Need this for U_PLATFORM.
-#include "unicode/platform.h"
-
-#if U_PLATFORM == U_PF_MINGW && defined __STRICT_ANSI__
-/* tzset isn't defined in strict ANSI on MinGW. */
-#undef __STRICT_ANSI__
-#endif
-
-/*
- * Cygwin with GCC requires inclusion of time.h after the above disabling strict asci mode statement.
- */
-#include <time.h>
-
-#if !U_PLATFORM_USES_ONLY_WIN32_API
-#include <sys/time.h>
-#endif
-
-/* include the rest of the ICU headers */
+// First, the platform type. Need this for U_PLATFORM. 
+#include "unicode/platform.h" 
+ 
+#if U_PLATFORM == U_PF_MINGW && defined __STRICT_ANSI__ 
+/* tzset isn't defined in strict ANSI on MinGW. */ 
+#undef __STRICT_ANSI__ 
+#endif 
+ 
+/* 
+ * Cygwin with GCC requires inclusion of time.h after the above disabling strict asci mode statement. 
+ */ 
+#include <time.h> 
+ 
+#if !U_PLATFORM_USES_ONLY_WIN32_API 
+#include <sys/time.h> 
+#endif 
+ 
+/* include the rest of the ICU headers */ 
 #include "unicode/putil.h"
 #include "unicode/ustring.h"
 #include "putilimp.h"
@@ -92,16 +92,16 @@
      * Should Cygwin be included as well (U_PLATFORM_HAS_WIN32_API)
      * to use native APIs as much as possible?
      */
-#ifndef WIN32_LEAN_AND_MEAN
+#ifndef WIN32_LEAN_AND_MEAN 
 #   define WIN32_LEAN_AND_MEAN
-#endif
+#endif 
 #   define VC_EXTRALEAN
 #   define NOUSER
 #   define NOSERVICE
 #   define NOIME
 #   define NOMCX
 #   include <windows.h>
-#   include "unicode/uloc.h"
+#   include "unicode/uloc.h" 
 #   include "wintz.h"
 #elif U_PLATFORM == U_PF_OS400
 #   include <float.h>
@@ -249,7 +249,7 @@ static UDate getUTCtime_real() {
 }
 
 static UDate getUTCtime_fake() {
-    static UMutex fakeClockMutex;
+    static UMutex fakeClockMutex; 
     umtx_lock(&fakeClockMutex);
     if(!fakeClock_set) {
         UDate real = getUTCtime_real();
@@ -521,28 +521,28 @@ uprv_fmin(double x, double y)
     return (x > y ? y : x);
 }
 
-U_CAPI UBool U_EXPORT2
-uprv_add32_overflow(int32_t a, int32_t b, int32_t* res) {
-    // NOTE: Some compilers (GCC, Clang) have primitives available, like __builtin_add_overflow.
-    // This function could be optimized by calling one of those primitives.
-    auto a64 = static_cast<int64_t>(a);
-    auto b64 = static_cast<int64_t>(b);
-    int64_t res64 = a64 + b64;
-    *res = static_cast<int32_t>(res64);
-    return res64 != *res;
-}
-
-U_CAPI UBool U_EXPORT2
-uprv_mul32_overflow(int32_t a, int32_t b, int32_t* res) {
-    // NOTE: Some compilers (GCC, Clang) have primitives available, like __builtin_mul_overflow.
-    // This function could be optimized by calling one of those primitives.
-    auto a64 = static_cast<int64_t>(a);
-    auto b64 = static_cast<int64_t>(b);
-    int64_t res64 = a64 * b64;
-    *res = static_cast<int32_t>(res64);
-    return res64 != *res;
-}
-
+U_CAPI UBool U_EXPORT2 
+uprv_add32_overflow(int32_t a, int32_t b, int32_t* res) { 
+    // NOTE: Some compilers (GCC, Clang) have primitives available, like __builtin_add_overflow. 
+    // This function could be optimized by calling one of those primitives. 
+    auto a64 = static_cast<int64_t>(a); 
+    auto b64 = static_cast<int64_t>(b); 
+    int64_t res64 = a64 + b64; 
+    *res = static_cast<int32_t>(res64); 
+    return res64 != *res; 
+} 
+ 
+U_CAPI UBool U_EXPORT2 
+uprv_mul32_overflow(int32_t a, int32_t b, int32_t* res) { 
+    // NOTE: Some compilers (GCC, Clang) have primitives available, like __builtin_mul_overflow. 
+    // This function could be optimized by calling one of those primitives. 
+    auto a64 = static_cast<int64_t>(a); 
+    auto b64 = static_cast<int64_t>(b); 
+    int64_t res64 = a64 * b64; 
+    *res = static_cast<int32_t>(res64); 
+    return res64 != *res; 
+} 
+ 
 /**
  * Truncates the given double.
  * trunc(3.3) = 3.0, trunc (-3.3) = -3.0
@@ -678,23 +678,23 @@ uprv_timezone()
 /* Note that U_TZNAME does *not* have to be tzname, but if it is,
    some platforms need to have it declared here. */
 
-#if defined(U_TZNAME) && (U_PLATFORM == U_PF_IRIX || U_PLATFORM_IS_DARWIN_BASED)
+#if defined(U_TZNAME) && (U_PLATFORM == U_PF_IRIX || U_PLATFORM_IS_DARWIN_BASED) 
 /* RS6000 and others reject char **tzname.  */
 extern U_IMPORT char *U_TZNAME[];
 #endif
 
 #if !UCONFIG_NO_FILE_IO && ((U_PLATFORM_IS_DARWIN_BASED && (U_PLATFORM != U_PF_IPHONE || defined(U_TIMEZONE))) || U_PLATFORM_IS_LINUX_BASED || U_PLATFORM == U_PF_BSD || U_PLATFORM == U_PF_SOLARIS)
 /* These platforms are likely to use Olson timezone IDs. */
-/* common targets of the symbolic link at TZDEFAULT are:
- * "/usr/share/zoneinfo/<olsonID>" default, older Linux distros, macOS to 10.12
- * "../usr/share/zoneinfo/<olsonID>" newer Linux distros: Red Hat Enterprise Linux 7, Ubuntu 16, SuSe Linux 12
- * "/usr/share/lib/zoneinfo/<olsonID>" Solaris
- * "../usr/share/lib/zoneinfo/<olsonID>" Solaris
- * "/var/db/timezone/zoneinfo/<olsonID>" macOS 10.13
- * To avoid checking lots of paths, just check that the target path
- * before the <olsonID> ends with "/zoneinfo/", and the <olsonID> is valid.
- */
-
+/* common targets of the symbolic link at TZDEFAULT are: 
+ * "/usr/share/zoneinfo/<olsonID>" default, older Linux distros, macOS to 10.12 
+ * "../usr/share/zoneinfo/<olsonID>" newer Linux distros: Red Hat Enterprise Linux 7, Ubuntu 16, SuSe Linux 12 
+ * "/usr/share/lib/zoneinfo/<olsonID>" Solaris 
+ * "../usr/share/lib/zoneinfo/<olsonID>" Solaris 
+ * "/var/db/timezone/zoneinfo/<olsonID>" macOS 10.13 
+ * To avoid checking lots of paths, just check that the target path 
+ * before the <olsonID> ends with "/zoneinfo/", and the <olsonID> is valid. 
+ */ 
+ 
 #define CHECK_LOCALTIME_LINK 1
 #if U_PLATFORM_IS_DARWIN_BASED
 #include <tzfile.h>
@@ -707,7 +707,7 @@ extern U_IMPORT char *U_TZNAME[];
 #define TZDEFAULT       "/etc/localtime"
 #define TZZONEINFO      "/usr/share/zoneinfo/"
 #endif
-#define TZZONEINFOTAIL  "/zoneinfo/"
+#define TZZONEINFOTAIL  "/zoneinfo/" 
 #if U_HAVE_DIRENT_H
 #define TZFILE_SKIP     "posixrules" /* tz file to skip when searching. */
 /* Some Linux distributions have 'localtime' in /usr/share/zoneinfo
@@ -959,26 +959,26 @@ static CharString *gSearchTZFileResult = NULL;
  * This function is not thread safe - it uses a global, gSearchTZFileResult, to hold its results.
  */
 static char* searchForTZFile(const char* path, DefaultTZInfo* tzInfo) {
-    DIR* dirp = NULL;
+    DIR* dirp = NULL; 
     struct dirent* dirEntry = NULL;
-    char* result = NULL;
-    UErrorCode status = U_ZERO_ERROR;
+    char* result = NULL; 
+    UErrorCode status = U_ZERO_ERROR; 
 
-    /* Save the current path */
-    CharString curpath(path, -1, status);
-    if (U_FAILURE(status)) {
-        goto cleanupAndReturn;
-    }
-
-    dirp = opendir(path);
+    /* Save the current path */ 
+    CharString curpath(path, -1, status); 
+    if (U_FAILURE(status)) { 
+        goto cleanupAndReturn; 
+    } 
+ 
+    dirp = opendir(path); 
     if (dirp == NULL) {
-        goto cleanupAndReturn;
+        goto cleanupAndReturn; 
     }
 
     if (gSearchTZFileResult == NULL) {
         gSearchTZFileResult = new CharString;
         if (gSearchTZFileResult == NULL) {
-            goto cleanupAndReturn;
+            goto cleanupAndReturn; 
         }
         ucln_common_registerCleanup(UCLN_COMMON_PUTIL, putil_cleanup);
     }
@@ -986,22 +986,22 @@ static char* searchForTZFile(const char* path, DefaultTZInfo* tzInfo) {
     /* Check each entry in the directory. */
     while((dirEntry = readdir(dirp)) != NULL) {
         const char* dirName = dirEntry->d_name;
-        if (uprv_strcmp(dirName, SKIP1) != 0 && uprv_strcmp(dirName, SKIP2) != 0
-            && uprv_strcmp(TZFILE_SKIP, dirName) != 0 && uprv_strcmp(TZFILE_SKIP2, dirName) != 0) {
+        if (uprv_strcmp(dirName, SKIP1) != 0 && uprv_strcmp(dirName, SKIP2) != 0 
+            && uprv_strcmp(TZFILE_SKIP, dirName) != 0 && uprv_strcmp(TZFILE_SKIP2, dirName) != 0) { 
             /* Create a newpath with the new entry to test each entry in the directory. */
             CharString newpath(curpath, status);
             newpath.append(dirName, -1, status);
             if (U_FAILURE(status)) {
-                break;
+                break; 
             }
 
-            DIR* subDirp = NULL;
+            DIR* subDirp = NULL; 
             if ((subDirp = opendir(newpath.data())) != NULL) {
                 /* If this new path is a directory, make a recursive call with the newpath. */
                 closedir(subDirp);
                 newpath.append('/', status);
                 if (U_FAILURE(status)) {
-                    break;
+                    break; 
                 }
                 result = searchForTZFile(newpath.data(), tzInfo);
                 /*
@@ -1014,7 +1014,7 @@ static char* searchForTZFile(const char* path, DefaultTZInfo* tzInfo) {
                 */
                 if (result != NULL)
                     break;
-            } else {
+            } else { 
                 if(compareBinaryFiles(TZDEFAULT, newpath.data(), tzInfo)) {
                     int32_t amountToSkip = sizeof(TZZONEINFO) - 1;
                     if (amountToSkip > newpath.length()) {
@@ -1025,7 +1025,7 @@ static char* searchForTZFile(const char* path, DefaultTZInfo* tzInfo) {
                     gSearchTZFileResult->clear();
                     gSearchTZFileResult->append(zoneid, -1, status);
                     if (U_FAILURE(status)) {
-                        break;
+                        break; 
                     }
                     result = gSearchTZFileResult->data();
                     /* Get out after the first one found. */
@@ -1034,11 +1034,11 @@ static char* searchForTZFile(const char* path, DefaultTZInfo* tzInfo) {
             }
         }
     }
-
-  cleanupAndReturn:
-    if (dirp) {
-        closedir(dirp);
-    }
+ 
+  cleanupAndReturn: 
+    if (dirp) { 
+        closedir(dirp); 
+    } 
     return result;
 }
 #endif
@@ -1054,7 +1054,7 @@ uprv_tzname_clear_cache()
 U_CAPI const char* U_EXPORT2
 uprv_tzname(int n)
 {
-    (void)n; // Avoid unreferenced parameter warning.
+    (void)n; // Avoid unreferenced parameter warning. 
     const char *tzid = NULL;
 #if U_PLATFORM_USES_ONLY_WIN32_API
     tzid = uprv_detectWindowsTimeZone();
@@ -1062,15 +1062,15 @@ uprv_tzname(int n)
     if (tzid != NULL) {
         return tzid;
     }
-
-#ifndef U_TZNAME
-    // The return value is free'd in timezone.cpp on Windows because
-    // the other code path returns a pointer to a heap location.
-    // If we don't have a name already, then tzname wouldn't be any
-    // better, so just fall back.
-    return uprv_strdup("");
-#endif // !U_TZNAME
-
+ 
+#ifndef U_TZNAME 
+    // The return value is free'd in timezone.cpp on Windows because 
+    // the other code path returns a pointer to a heap location. 
+    // If we don't have a name already, then tzname wouldn't be any 
+    // better, so just fall back. 
+    return uprv_strdup(""); 
+#endif // !U_TZNAME 
+ 
 #else
 
 /*#if U_PLATFORM_IS_DARWIN_BASED
@@ -1112,14 +1112,14 @@ uprv_tzname(int n)
         */
         int32_t ret = (int32_t)readlink(TZDEFAULT, gTimeZoneBuffer, sizeof(gTimeZoneBuffer)-1);
         if (0 < ret) {
-            int32_t tzZoneInfoTailLen = uprv_strlen(TZZONEINFOTAIL);
+            int32_t tzZoneInfoTailLen = uprv_strlen(TZZONEINFOTAIL); 
             gTimeZoneBuffer[ret] = 0;
-            char *  tzZoneInfoTailPtr = uprv_strstr(gTimeZoneBuffer, TZZONEINFOTAIL);
-            
-            if (tzZoneInfoTailPtr != NULL
-                && isValidOlsonID(tzZoneInfoTailPtr + tzZoneInfoTailLen))
+            char *  tzZoneInfoTailPtr = uprv_strstr(gTimeZoneBuffer, TZZONEINFOTAIL); 
+             
+            if (tzZoneInfoTailPtr != NULL 
+                && isValidOlsonID(tzZoneInfoTailPtr + tzZoneInfoTailLen)) 
             {
-                return (gTimeZoneBufferPtr = tzZoneInfoTailPtr + tzZoneInfoTailLen);
+                return (gTimeZoneBufferPtr = tzZoneInfoTailPtr + tzZoneInfoTailLen); 
             }
         } else {
 #if defined(SEARCH_TZFILE)
@@ -1206,8 +1206,8 @@ UInitOnce gTimeZoneFilesInitOnce = U_INITONCE_INITIALIZER;
 static CharString *gTimeZoneFilesDirectory = NULL;
 
 #if U_POSIX_LOCALE || U_PLATFORM_USES_ONLY_WIN32_API
- static const char *gCorrectedPOSIXLocale = NULL; /* Sometimes heap allocated */
- static bool gCorrectedPOSIXLocaleHeapAllocated = false;
+ static const char *gCorrectedPOSIXLocale = NULL; /* Sometimes heap allocated */ 
+ static bool gCorrectedPOSIXLocaleHeapAllocated = false; 
 #endif
 
 static UBool U_CALLCONV putil_cleanup(void)
@@ -1228,10 +1228,10 @@ static UBool U_CALLCONV putil_cleanup(void)
 #endif
 
 #if U_POSIX_LOCALE || U_PLATFORM_USES_ONLY_WIN32_API
-    if (gCorrectedPOSIXLocale && gCorrectedPOSIXLocaleHeapAllocated) {
-        uprv_free(const_cast<char *>(gCorrectedPOSIXLocale));
+    if (gCorrectedPOSIXLocale && gCorrectedPOSIXLocaleHeapAllocated) { 
+        uprv_free(const_cast<char *>(gCorrectedPOSIXLocale)); 
         gCorrectedPOSIXLocale = NULL;
-        gCorrectedPOSIXLocaleHeapAllocated = false;
+        gCorrectedPOSIXLocaleHeapAllocated = false; 
     }
 #endif
     return TRUE;
@@ -1265,7 +1265,7 @@ u_setDataDirectory(const char *directory) {
 #if (U_FILE_SEP_CHAR != U_FILE_ALT_SEP_CHAR)
         {
             char *p;
-            while((p = uprv_strchr(newDataDir, U_FILE_ALT_SEP_CHAR)) != NULL) {
+            while((p = uprv_strchr(newDataDir, U_FILE_ALT_SEP_CHAR)) != NULL) { 
                 *p = U_FILE_SEP_CHAR;
             }
         }
@@ -1307,49 +1307,49 @@ uprv_pathIsAbsolute(const char *path)
   return FALSE;
 }
 
-/* Backup setting of ICU_DATA_DIR_PREFIX_ENV_VAR
-   (needed for some Darwin ICU build environments) */
-#if U_PLATFORM_IS_DARWIN_BASED && TARGET_OS_SIMULATOR
+/* Backup setting of ICU_DATA_DIR_PREFIX_ENV_VAR 
+   (needed for some Darwin ICU build environments) */ 
+#if U_PLATFORM_IS_DARWIN_BASED && TARGET_OS_SIMULATOR 
 # if !defined(ICU_DATA_DIR_PREFIX_ENV_VAR)
 #  define ICU_DATA_DIR_PREFIX_ENV_VAR "IPHONE_SIMULATOR_ROOT"
 # endif
 #endif
 
-#if defined(ICU_DATA_DIR_WINDOWS)
-// Helper function to get the ICU Data Directory under the Windows directory location.
-static BOOL U_CALLCONV getIcuDataDirectoryUnderWindowsDirectory(char* directoryBuffer, UINT bufferLength)
-{
-    wchar_t windowsPath[MAX_PATH];
-    char windowsPathUtf8[MAX_PATH];
-
-    UINT length = GetSystemWindowsDirectoryW(windowsPath, UPRV_LENGTHOF(windowsPath));
-    if ((length > 0) && (length < (UPRV_LENGTHOF(windowsPath) - 1))) {
-        // Convert UTF-16 to a UTF-8 string.
-        UErrorCode status = U_ZERO_ERROR;
-        int32_t windowsPathUtf8Len = 0;
-        u_strToUTF8(windowsPathUtf8, static_cast<int32_t>(UPRV_LENGTHOF(windowsPathUtf8)),
-            &windowsPathUtf8Len, reinterpret_cast<const UChar*>(windowsPath), -1, &status);
-
-        if (U_SUCCESS(status) && (status != U_STRING_NOT_TERMINATED_WARNING) &&
-            (windowsPathUtf8Len < (UPRV_LENGTHOF(windowsPathUtf8) - 1))) {
-            // Ensure it always has a separator, so we can append the ICU data path.
-            if (windowsPathUtf8[windowsPathUtf8Len - 1] != U_FILE_SEP_CHAR) {
-                windowsPathUtf8[windowsPathUtf8Len++] = U_FILE_SEP_CHAR;
-                windowsPathUtf8[windowsPathUtf8Len] = '\0';
-            }
-            // Check if the concatenated string will fit.
-            if ((windowsPathUtf8Len + UPRV_LENGTHOF(ICU_DATA_DIR_WINDOWS)) < bufferLength) {
-                uprv_strcpy(directoryBuffer, windowsPathUtf8);
-                uprv_strcat(directoryBuffer, ICU_DATA_DIR_WINDOWS);
-                return TRUE;
-            }
-        }
-    }
-
-    return FALSE;
-}
-#endif
-
+#if defined(ICU_DATA_DIR_WINDOWS) 
+// Helper function to get the ICU Data Directory under the Windows directory location. 
+static BOOL U_CALLCONV getIcuDataDirectoryUnderWindowsDirectory(char* directoryBuffer, UINT bufferLength) 
+{ 
+    wchar_t windowsPath[MAX_PATH]; 
+    char windowsPathUtf8[MAX_PATH]; 
+ 
+    UINT length = GetSystemWindowsDirectoryW(windowsPath, UPRV_LENGTHOF(windowsPath)); 
+    if ((length > 0) && (length < (UPRV_LENGTHOF(windowsPath) - 1))) { 
+        // Convert UTF-16 to a UTF-8 string. 
+        UErrorCode status = U_ZERO_ERROR; 
+        int32_t windowsPathUtf8Len = 0; 
+        u_strToUTF8(windowsPathUtf8, static_cast<int32_t>(UPRV_LENGTHOF(windowsPathUtf8)), 
+            &windowsPathUtf8Len, reinterpret_cast<const UChar*>(windowsPath), -1, &status); 
+ 
+        if (U_SUCCESS(status) && (status != U_STRING_NOT_TERMINATED_WARNING) && 
+            (windowsPathUtf8Len < (UPRV_LENGTHOF(windowsPathUtf8) - 1))) { 
+            // Ensure it always has a separator, so we can append the ICU data path. 
+            if (windowsPathUtf8[windowsPathUtf8Len - 1] != U_FILE_SEP_CHAR) { 
+                windowsPathUtf8[windowsPathUtf8Len++] = U_FILE_SEP_CHAR; 
+                windowsPathUtf8[windowsPathUtf8Len] = '\0'; 
+            } 
+            // Check if the concatenated string will fit. 
+            if ((windowsPathUtf8Len + UPRV_LENGTHOF(ICU_DATA_DIR_WINDOWS)) < bufferLength) { 
+                uprv_strcpy(directoryBuffer, windowsPathUtf8); 
+                uprv_strcat(directoryBuffer, ICU_DATA_DIR_WINDOWS); 
+                return TRUE; 
+            } 
+        } 
+    } 
+ 
+    return FALSE; 
+} 
+#endif 
+ 
 static void U_CALLCONV dataDirectoryInitFn() {
     /* If we already have the directory, then return immediately. Will happen if user called
      * u_setDataDirectory().
@@ -1378,9 +1378,9 @@ static void U_CALLCONV dataDirectoryInitFn() {
     */
 #   if !defined(ICU_NO_USER_DATA_OVERRIDE) && !UCONFIG_NO_FILE_IO
     /* First try to get the environment variable */
-#     if U_PLATFORM_HAS_WINUWP_API == 0  // Windows UWP does not support getenv
-        path=getenv("ICU_DATA");
-#     endif
+#     if U_PLATFORM_HAS_WINUWP_API == 0  // Windows UWP does not support getenv 
+        path=getenv("ICU_DATA"); 
+#     endif 
 #   endif
 
     /* ICU_DATA_DIR may be set as a compile option.
@@ -1409,13 +1409,13 @@ static void U_CALLCONV dataDirectoryInitFn() {
     }
 #endif
 
-#if defined(ICU_DATA_DIR_WINDOWS)
-    char datadir_path_buffer[MAX_PATH];
-    if (getIcuDataDirectoryUnderWindowsDirectory(datadir_path_buffer, UPRV_LENGTHOF(datadir_path_buffer))) {
-        path = datadir_path_buffer;
-    }
-#endif
-
+#if defined(ICU_DATA_DIR_WINDOWS) 
+    char datadir_path_buffer[MAX_PATH]; 
+    if (getIcuDataDirectoryUnderWindowsDirectory(datadir_path_buffer, UPRV_LENGTHOF(datadir_path_buffer))) { 
+        path = datadir_path_buffer; 
+    } 
+#endif 
+ 
     if(path==NULL) {
         /* It looks really bad, set it to something. */
         path = "";
@@ -1439,7 +1439,7 @@ static void setTimeZoneFilesDir(const char *path, UErrorCode &status) {
     gTimeZoneFilesDirectory->append(path, status);
 #if (U_FILE_SEP_CHAR != U_FILE_ALT_SEP_CHAR)
     char *p = gTimeZoneFilesDirectory->data();
-    while ((p = uprv_strchr(p, U_FILE_ALT_SEP_CHAR)) != NULL) {
+    while ((p = uprv_strchr(p, U_FILE_ALT_SEP_CHAR)) != NULL) { 
         *p = U_FILE_SEP_CHAR;
     }
 #endif
@@ -1456,47 +1456,47 @@ static void U_CALLCONV TimeZoneDataDirInitFn(UErrorCode &status) {
         status = U_MEMORY_ALLOCATION_ERROR;
         return;
     }
-
-    const char *dir = "";
-
-#if defined(ICU_TIMEZONE_FILES_DIR_PREFIX_ENV_VAR)
-    char timezonefilesdir_path_buffer[PATH_MAX];
-    const char *prefix = getenv(ICU_TIMEZONE_FILES_DIR_PREFIX_ENV_VAR);
-#endif
-
-#if U_PLATFORM_HAS_WINUWP_API == 1
-// The UWP version does not support the environment variable setting.
-
-# if defined(ICU_DATA_DIR_WINDOWS)
-    // When using the Windows system data, we can possibly pick up time zone data from the Windows directory.
-    char datadir_path_buffer[MAX_PATH];
-    if (getIcuDataDirectoryUnderWindowsDirectory(datadir_path_buffer, UPRV_LENGTHOF(datadir_path_buffer))) {
-        dir = datadir_path_buffer;
-    }
-# endif
-
-#else
-    dir = getenv("ICU_TIMEZONE_FILES_DIR");
-#endif // U_PLATFORM_HAS_WINUWP_API
-
+ 
+    const char *dir = ""; 
+ 
+#if defined(ICU_TIMEZONE_FILES_DIR_PREFIX_ENV_VAR) 
+    char timezonefilesdir_path_buffer[PATH_MAX]; 
+    const char *prefix = getenv(ICU_TIMEZONE_FILES_DIR_PREFIX_ENV_VAR); 
+#endif 
+ 
+#if U_PLATFORM_HAS_WINUWP_API == 1 
+// The UWP version does not support the environment variable setting. 
+ 
+# if defined(ICU_DATA_DIR_WINDOWS) 
+    // When using the Windows system data, we can possibly pick up time zone data from the Windows directory. 
+    char datadir_path_buffer[MAX_PATH]; 
+    if (getIcuDataDirectoryUnderWindowsDirectory(datadir_path_buffer, UPRV_LENGTHOF(datadir_path_buffer))) { 
+        dir = datadir_path_buffer; 
+    } 
+# endif 
+ 
+#else 
+    dir = getenv("ICU_TIMEZONE_FILES_DIR"); 
+#endif // U_PLATFORM_HAS_WINUWP_API 
+ 
 #if defined(U_TIMEZONE_FILES_DIR)
     if (dir == NULL) {
-        // Build time configuration setting.
+        // Build time configuration setting. 
         dir = TO_STRING(U_TIMEZONE_FILES_DIR);
     }
 #endif
-
+ 
     if (dir == NULL) {
         dir = "";
     }
-
-#if defined(ICU_TIMEZONE_FILES_DIR_PREFIX_ENV_VAR)
-    if (prefix != NULL) {
-        snprintf(timezonefilesdir_path_buffer, PATH_MAX, "%s%s", prefix, dir);
-        dir = timezonefilesdir_path_buffer;
-    }
-#endif
-
+ 
+#if defined(ICU_TIMEZONE_FILES_DIR_PREFIX_ENV_VAR) 
+    if (prefix != NULL) { 
+        snprintf(timezonefilesdir_path_buffer, PATH_MAX, "%s%s", prefix, dir); 
+        dir = timezonefilesdir_path_buffer; 
+    } 
+#endif 
+ 
     setTimeZoneFilesDir(dir, status);
 }
 
@@ -1575,10 +1575,10 @@ static const char *uprv_getPOSIXIDForCategory(int category)
     {
         /* Nothing worked.  Give it a nice POSIX default value. */
         posixID = "en_US_POSIX";
-        // Note: this test will not catch 'C.UTF-8',
-        // that will be handled in uprv_getDefaultLocaleID().
-        // Leave this mapping here for the uprv_getPOSIXIDForDefaultCodepage()
-        // caller which expects to see "en_US_POSIX" in many branches.
+        // Note: this test will not catch 'C.UTF-8', 
+        // that will be handled in uprv_getDefaultLocaleID(). 
+        // Leave this mapping here for the uprv_getPOSIXIDForDefaultCodepage() 
+        // caller which expects to see "en_US_POSIX" in many branches. 
     }
     return posixID;
 }
@@ -1645,36 +1645,36 @@ The leftmost codepage (.xxx) wins.
       l = lang, C = ctry, M = charmap, V = variant
     */
 
-    if (gCorrectedPOSIXLocale != nullptr) {
+    if (gCorrectedPOSIXLocale != nullptr) { 
         return gCorrectedPOSIXLocale;
     }
 
-    // Copy the ID into owned memory.
-    // Over-allocate in case we replace "C" with "en_US_POSIX" (+10), + null termination
-    char *correctedPOSIXLocale = static_cast<char *>(uprv_malloc(uprv_strlen(posixID) + 10 + 1));
-    if (correctedPOSIXLocale == nullptr) {
-        return nullptr;
-    }
-    uprv_strcpy(correctedPOSIXLocale, posixID);
+    // Copy the ID into owned memory. 
+    // Over-allocate in case we replace "C" with "en_US_POSIX" (+10), + null termination 
+    char *correctedPOSIXLocale = static_cast<char *>(uprv_malloc(uprv_strlen(posixID) + 10 + 1)); 
+    if (correctedPOSIXLocale == nullptr) { 
+        return nullptr; 
+    } 
+    uprv_strcpy(correctedPOSIXLocale, posixID); 
 
-    char *limit;
-    if ((limit = uprv_strchr(correctedPOSIXLocale, '.')) != nullptr) {
-        *limit = 0;
+    char *limit; 
+    if ((limit = uprv_strchr(correctedPOSIXLocale, '.')) != nullptr) { 
+        *limit = 0; 
     }
-    if ((limit = uprv_strchr(correctedPOSIXLocale, '@')) != nullptr) {
-        *limit = 0;
-    }
+    if ((limit = uprv_strchr(correctedPOSIXLocale, '@')) != nullptr) { 
+        *limit = 0; 
+    } 
 
-    if ((uprv_strcmp("C", correctedPOSIXLocale) == 0) // no @ variant
-        || (uprv_strcmp("POSIX", correctedPOSIXLocale) == 0)) {
-      // Raw input was C.* or POSIX.*, Give it a nice POSIX default value.
-      // (The "C"/"POSIX" case is handled in uprv_getPOSIXIDForCategory())
-      uprv_strcpy(correctedPOSIXLocale, "en_US_POSIX");
-    }
- 
+    if ((uprv_strcmp("C", correctedPOSIXLocale) == 0) // no @ variant 
+        || (uprv_strcmp("POSIX", correctedPOSIXLocale) == 0)) { 
+      // Raw input was C.* or POSIX.*, Give it a nice POSIX default value. 
+      // (The "C"/"POSIX" case is handled in uprv_getPOSIXIDForCategory()) 
+      uprv_strcpy(correctedPOSIXLocale, "en_US_POSIX"); 
+    } 
+  
     /* Note that we scan the *uncorrected* ID. */
-    const char *p;
-    if ((p = uprv_strrchr(posixID, '@')) != nullptr) {
+    const char *p; 
+    if ((p = uprv_strrchr(posixID, '@')) != nullptr) { 
         p++;
 
         /* Take care of any special cases here.. */
@@ -1683,18 +1683,18 @@ The leftmost codepage (.xxx) wins.
             /* Don't worry about no__NY. In practice, it won't appear. */
         }
 
-        if (uprv_strchr(correctedPOSIXLocale,'_') == nullptr) {
-            uprv_strcat(correctedPOSIXLocale, "__"); /* aa@b -> aa__b (note this can make the new locale 1 char longer) */
+        if (uprv_strchr(correctedPOSIXLocale,'_') == nullptr) { 
+            uprv_strcat(correctedPOSIXLocale, "__"); /* aa@b -> aa__b (note this can make the new locale 1 char longer) */ 
         }
         else {
             uprv_strcat(correctedPOSIXLocale, "_"); /* aa_CC@b -> aa_CC_b */
         }
 
-        const char *q;
-        if ((q = uprv_strchr(p, '.')) != nullptr) {
+        const char *q; 
+        if ((q = uprv_strchr(p, '.')) != nullptr) { 
             /* How big will the resulting string be? */
-            int32_t len = (int32_t)(uprv_strlen(correctedPOSIXLocale) + (q-p));
-            uprv_strncat(correctedPOSIXLocale, p, q-p); // do not include charset
+            int32_t len = (int32_t)(uprv_strlen(correctedPOSIXLocale) + (q-p)); 
+            uprv_strncat(correctedPOSIXLocale, p, q-p); // do not include charset 
             correctedPOSIXLocale[len] = 0;
         }
         else {
@@ -1709,15 +1709,15 @@ The leftmost codepage (.xxx) wins.
          */
     }
 
-    if (gCorrectedPOSIXLocale == nullptr) {
+    if (gCorrectedPOSIXLocale == nullptr) { 
         gCorrectedPOSIXLocale = correctedPOSIXLocale;
-        gCorrectedPOSIXLocaleHeapAllocated = true;
+        gCorrectedPOSIXLocaleHeapAllocated = true; 
         ucln_common_registerCleanup(UCLN_COMMON_PUTIL, putil_cleanup);
-        correctedPOSIXLocale = nullptr;
+        correctedPOSIXLocale = nullptr; 
     }
-    posixID = gCorrectedPOSIXLocale;
+    posixID = gCorrectedPOSIXLocale; 
 
-    if (correctedPOSIXLocale != nullptr) {  /* Was already set - clean up. */
+    if (correctedPOSIXLocale != nullptr) {  /* Was already set - clean up. */ 
         uprv_free(correctedPOSIXLocale);
     }
 
@@ -1726,71 +1726,71 @@ The leftmost codepage (.xxx) wins.
 #elif U_PLATFORM_USES_ONLY_WIN32_API
 #define POSIX_LOCALE_CAPACITY 64
     UErrorCode status = U_ZERO_ERROR;
-    char *correctedPOSIXLocale = nullptr;
+    char *correctedPOSIXLocale = nullptr; 
 
-    // If we have already figured this out just use the cached value
-    if (gCorrectedPOSIXLocale != nullptr) {
+    // If we have already figured this out just use the cached value 
+    if (gCorrectedPOSIXLocale != nullptr) { 
         return gCorrectedPOSIXLocale;
     }
 
-    // No cached value, need to determine the current value
-    static WCHAR windowsLocale[LOCALE_NAME_MAX_LENGTH] = {};
-    int length = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SNAME, windowsLocale, LOCALE_NAME_MAX_LENGTH);
-
-    // Now we should have a Windows locale name that needs converted to the POSIX style.
-    if (length > 0) // If length is 0, then the GetLocaleInfoEx failed.
-    {
-        // First we need to go from UTF-16 to char (and also convert from _ to - while we're at it.)
-        char modifiedWindowsLocale[LOCALE_NAME_MAX_LENGTH] = {};
-
-        int32_t i;
-        for (i = 0; i < UPRV_LENGTHOF(modifiedWindowsLocale); i++)
-        {
-            if (windowsLocale[i] == '_')
-            {
-                modifiedWindowsLocale[i] = '-';
-            }
-            else
-            {
-                modifiedWindowsLocale[i] = static_cast<char>(windowsLocale[i]);
-            }
-
-            if (modifiedWindowsLocale[i] == '\0')
-            {
-                break;
-            }
+    // No cached value, need to determine the current value 
+    static WCHAR windowsLocale[LOCALE_NAME_MAX_LENGTH] = {}; 
+    int length = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SNAME, windowsLocale, LOCALE_NAME_MAX_LENGTH); 
+ 
+    // Now we should have a Windows locale name that needs converted to the POSIX style. 
+    if (length > 0) // If length is 0, then the GetLocaleInfoEx failed. 
+    { 
+        // First we need to go from UTF-16 to char (and also convert from _ to - while we're at it.) 
+        char modifiedWindowsLocale[LOCALE_NAME_MAX_LENGTH] = {}; 
+ 
+        int32_t i; 
+        for (i = 0; i < UPRV_LENGTHOF(modifiedWindowsLocale); i++) 
+        { 
+            if (windowsLocale[i] == '_') 
+            { 
+                modifiedWindowsLocale[i] = '-'; 
+            } 
+            else 
+            { 
+                modifiedWindowsLocale[i] = static_cast<char>(windowsLocale[i]); 
+            } 
+ 
+            if (modifiedWindowsLocale[i] == '\0') 
+            { 
+                break; 
+            } 
         }
-
-        if (i >= UPRV_LENGTHOF(modifiedWindowsLocale))
-        {
-            // Ran out of room, can't really happen, maybe we'll be lucky about a matching
-            // locale when tags are dropped
-            modifiedWindowsLocale[UPRV_LENGTHOF(modifiedWindowsLocale) - 1] = '\0';
-        }
-
-        // Now normalize the resulting name
-        correctedPOSIXLocale = static_cast<char *>(uprv_malloc(POSIX_LOCALE_CAPACITY + 1));
-        /* TODO: Should we just exit on memory allocation failure? */
-        if (correctedPOSIXLocale)
-        {
-            int32_t posixLen = uloc_canonicalize(modifiedWindowsLocale, correctedPOSIXLocale, POSIX_LOCALE_CAPACITY, &status);
-            if (U_SUCCESS(status))
-            {
-                *(correctedPOSIXLocale + posixLen) = 0;
-                gCorrectedPOSIXLocale = correctedPOSIXLocale;
-                gCorrectedPOSIXLocaleHeapAllocated = true;
-                ucln_common_registerCleanup(UCLN_COMMON_PUTIL, putil_cleanup);
-            }
-            else
-            {
-                uprv_free(correctedPOSIXLocale);
-            }
-        }
+ 
+        if (i >= UPRV_LENGTHOF(modifiedWindowsLocale)) 
+        { 
+            // Ran out of room, can't really happen, maybe we'll be lucky about a matching 
+            // locale when tags are dropped 
+            modifiedWindowsLocale[UPRV_LENGTHOF(modifiedWindowsLocale) - 1] = '\0'; 
+        } 
+ 
+        // Now normalize the resulting name 
+        correctedPOSIXLocale = static_cast<char *>(uprv_malloc(POSIX_LOCALE_CAPACITY + 1)); 
+        /* TODO: Should we just exit on memory allocation failure? */ 
+        if (correctedPOSIXLocale) 
+        { 
+            int32_t posixLen = uloc_canonicalize(modifiedWindowsLocale, correctedPOSIXLocale, POSIX_LOCALE_CAPACITY, &status); 
+            if (U_SUCCESS(status)) 
+            { 
+                *(correctedPOSIXLocale + posixLen) = 0; 
+                gCorrectedPOSIXLocale = correctedPOSIXLocale; 
+                gCorrectedPOSIXLocaleHeapAllocated = true; 
+                ucln_common_registerCleanup(UCLN_COMMON_PUTIL, putil_cleanup); 
+            } 
+            else 
+            { 
+                uprv_free(correctedPOSIXLocale); 
+            } 
+        } 
     }
 
-    // If unable to find a locale we can agree upon, use en-US by default
-    if (gCorrectedPOSIXLocale == nullptr) {
-        gCorrectedPOSIXLocale = "en_US";
+    // If unable to find a locale we can agree upon, use en-US by default 
+    if (gCorrectedPOSIXLocale == nullptr) { 
+        gCorrectedPOSIXLocale = "en_US"; 
     }
     return gCorrectedPOSIXLocale;
 
@@ -2077,35 +2077,35 @@ int_getDefaultCodepage()
 
 #elif U_PLATFORM_USES_ONLY_WIN32_API
     static char codepage[64];
-    DWORD codepageNumber = 0;
+    DWORD codepageNumber = 0; 
 
-#if U_PLATFORM_HAS_WINUWP_API == 1
-    // UWP doesn't have a direct API to get the default ACP as Microsoft would rather
-    // have folks use Unicode than a "system" code page, however this is the same
-    // codepage as the system default locale codepage.  (FWIW, the system locale is
-    // ONLY used for codepage, it should never be used for anything else)
-    GetLocaleInfoEx(LOCALE_NAME_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
-        (LPWSTR)&codepageNumber, sizeof(codepageNumber) / sizeof(WCHAR));
-#else
-    // Win32 apps can call GetACP
-    codepageNumber = GetACP();
-#endif
-    // Special case for UTF-8
-    if (codepageNumber == 65001)
+#if U_PLATFORM_HAS_WINUWP_API == 1 
+    // UWP doesn't have a direct API to get the default ACP as Microsoft would rather 
+    // have folks use Unicode than a "system" code page, however this is the same 
+    // codepage as the system default locale codepage.  (FWIW, the system locale is 
+    // ONLY used for codepage, it should never be used for anything else) 
+    GetLocaleInfoEx(LOCALE_NAME_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER, 
+        (LPWSTR)&codepageNumber, sizeof(codepageNumber) / sizeof(WCHAR)); 
+#else 
+    // Win32 apps can call GetACP 
+    codepageNumber = GetACP(); 
+#endif 
+    // Special case for UTF-8 
+    if (codepageNumber == 65001) 
+    {  
+        return "UTF-8"; 
+    } 
+    // Windows codepages can look like windows-1252, so format the found number 
+    // the numbers are eclectic, however all valid system code pages, besides UTF-8 
+    // are between 3 and 19999 
+    if (codepageNumber > 0 && codepageNumber < 20000) 
     { 
-        return "UTF-8";
-    }
-    // Windows codepages can look like windows-1252, so format the found number
-    // the numbers are eclectic, however all valid system code pages, besides UTF-8
-    // are between 3 and 19999
-    if (codepageNumber > 0 && codepageNumber < 20000)
-    {
-        sprintf(codepage, "windows-%ld", codepageNumber);
-        return codepage;
-    }
-    // If the codepage number call failed then return UTF-8
-    return "UTF-8";
-
+        sprintf(codepage, "windows-%ld", codepageNumber); 
+        return codepage; 
+    } 
+    // If the codepage number call failed then return UTF-8 
+    return "UTF-8"; 
+ 
 #elif U_POSIX_LOCALE
     static char codesetName[100];
     const char *localeName = NULL;
@@ -2288,7 +2288,7 @@ u_getVersion(UVersionInfo versionArray) {
  * icucfg.h dependent code 
  */
 
-#if U_ENABLE_DYLOAD && HAVE_DLOPEN && !U_PLATFORM_USES_ONLY_WIN32_API
+#if U_ENABLE_DYLOAD && HAVE_DLOPEN && !U_PLATFORM_USES_ONLY_WIN32_API 
 
 #if HAVE_DLFCN_H
 #ifdef __MVS__
@@ -2297,7 +2297,7 @@ u_getVersion(UVersionInfo versionArray) {
 #endif
 #endif
 #include <dlfcn.h>
-#endif /* HAVE_DLFCN_H */
+#endif /* HAVE_DLFCN_H */ 
 
 U_INTERNAL void * U_EXPORT2
 uprv_dl_open(const char *libName, UErrorCode *status) {
@@ -2337,10 +2337,10 @@ uprv_dlsym_func(void *lib, const char* sym, UErrorCode *status) {
   return uret.fp;
 }
 
-#elif U_ENABLE_DYLOAD && U_PLATFORM_USES_ONLY_WIN32_API && !U_PLATFORM_HAS_WINUWP_API
+#elif U_ENABLE_DYLOAD && U_PLATFORM_USES_ONLY_WIN32_API && !U_PLATFORM_HAS_WINUWP_API 
 
-/* Windows API implementation. */
-// Note: UWP does not expose/allow these APIs, so the UWP version gets the null implementation. */
+/* Windows API implementation. */ 
+// Note: UWP does not expose/allow these APIs, so the UWP version gets the null implementation. */ 
 
 U_INTERNAL void * U_EXPORT2
 uprv_dl_open(const char *libName, UErrorCode *status) {
@@ -2390,7 +2390,7 @@ uprv_dlsym_func(void *lib, const char* sym, UErrorCode *status) {
 
 #else
 
-/* No dynamic loading, null (nonexistent) implementation. */
+/* No dynamic loading, null (nonexistent) implementation. */ 
 
 U_INTERNAL void * U_EXPORT2
 uprv_dl_open(const char *libName, UErrorCode *status) {
@@ -2418,7 +2418,7 @@ uprv_dlsym_func(void *lib, const char* sym, UErrorCode *status) {
   return (UVoidFunction*)NULL;
 }
 
-#endif
+#endif 
 
 /*
  * Hey, Emacs, please set the following:

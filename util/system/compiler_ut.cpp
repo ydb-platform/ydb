@@ -19,21 +19,21 @@ Y_UNIT_TEST_SUITE(TCompilerTest) {
         Y_PRAGMA_DIAGNOSTIC_POP
     }
 
-    Y_PRAGMA_DIAGNOSTIC_PUSH
-    Y_PRAGMA_NO_UNUSED_PARAMETER
-
-    // define function with unused named parameter
-    // and there will be no warning for this
+    Y_PRAGMA_DIAGNOSTIC_PUSH 
+    Y_PRAGMA_NO_UNUSED_PARAMETER 
+ 
+    // define function with unused named parameter 
+    // and there will be no warning for this 
     int Foo(int a) {
-        return 0;
-    }
-
-    Y_PRAGMA_DIAGNOSTIC_POP
-
-    Y_UNIT_TEST(TestPragmaNoUnusedParameter) {
+        return 0; 
+    } 
+ 
+    Y_PRAGMA_DIAGNOSTIC_POP 
+ 
+    Y_UNIT_TEST(TestPragmaNoUnusedParameter) { 
         UNIT_ASSERT_EQUAL(Foo(1), 0);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestHaveInt128) {
 #ifdef Y_HAVE_INT128
         // will be compiled without errors

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -8,7 +8,7 @@
 *
 ******************************************************************************
 *   file name:  ucnvmbcs.cpp
-*   encoding:   UTF-8
+*   encoding:   UTF-8 
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -59,7 +59,7 @@
 #include "cmemory.h"
 #include "cstring.h"
 #include "umutex.h"
-#include "ustr_imp.h"
+#include "ustr_imp.h" 
 
 /* control optimizations according to the platform */
 #define MBCS_UNROLL_SINGLE_TO_BMP 1
@@ -1383,7 +1383,7 @@ _EBCDICSwapLFNL(UConverterSharedData *sharedData, UErrorCode *pErrorCode) {
     uprv_strcat(name, UCNV_SWAP_LFNL_OPTION_STRING);
 
     /* set the pointers */
-    icu::umtx_lock(NULL);
+    icu::umtx_lock(NULL); 
     if(mbcsTable->swapLFNLStateTable==NULL) {
         mbcsTable->swapLFNLStateTable=newStateTable;
         mbcsTable->swapLFNLFromUnicodeBytes=(uint8_t *)newResults;
@@ -1391,7 +1391,7 @@ _EBCDICSwapLFNL(UConverterSharedData *sharedData, UErrorCode *pErrorCode) {
 
         newStateTable=NULL;
     }
-    icu::umtx_unlock(NULL);
+    icu::umtx_unlock(NULL); 
 
     /* release the allocated memory if another thread beat us to it */
     if(newStateTable!=NULL) {
@@ -1919,9 +1919,9 @@ ucnv_MBCSOpen(UConverter *cnv,
         /* do this because double-checked locking is broken */
         UBool isCached;
 
-        icu::umtx_lock(NULL);
+        icu::umtx_lock(NULL); 
         isCached=mbcsTable->swapLFNLStateTable!=NULL;
-        icu::umtx_unlock(NULL);
+        icu::umtx_unlock(NULL); 
 
         if(!isCached) {
             if(!_EBCDICSwapLFNL(cnv->sharedData, pErrorCode)) {
@@ -4164,8 +4164,8 @@ ucnv_MBCSFromUnicodeWithOffsets(UConverterFromUnicodeArgs *pArgs,
     nextSourceIndex=0;
 
     /* Get the SI/SO character for the converter */
-    siLength = static_cast<uint8_t>(getSISOBytes(SI, cnv->options, siBytes));
-    soLength = static_cast<uint8_t>(getSISOBytes(SO, cnv->options, soBytes));
+    siLength = static_cast<uint8_t>(getSISOBytes(SI, cnv->options, siBytes)); 
+    soLength = static_cast<uint8_t>(getSISOBytes(SO, cnv->options, soBytes)); 
 
     /* conversion loop */
     /*
@@ -5014,7 +5014,7 @@ ucnv_MBCSSingleFromUChar32(UConverterSharedData *sharedData,
 
 /* offsets for n-byte UTF-8 sequences that were calculated with ((lead<<6)+trail)<<6+trail... */
 static const UChar32
-utf8_offsets[5]={ 0, 0, 0x3080, 0xE2080, 0x3C82080 };
+utf8_offsets[5]={ 0, 0, 0x3080, 0xE2080, 0x3C82080 }; 
 
 static void U_CALLCONV
 ucnv_SBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
@@ -5034,7 +5034,7 @@ ucnv_SBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
     uint8_t b, t1, t2;
 
     uint32_t asciiRoundtrips;
-    uint16_t value, minValue = 0;
+    uint16_t value, minValue = 0; 
     UBool hasSupplementary;
 
     /* set up the local pointers */
@@ -5064,36 +5064,36 @@ ucnv_SBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
     hasSupplementary=(UBool)(cnv->sharedData->mbcs.unicodeMask&UCNV_HAS_SUPPLEMENTARY);
 
     /* get the converter state from the UTF-8 UConverter */
-    if(utf8->toULength > 0) {
+    if(utf8->toULength > 0) { 
         toULength=oldToULength=utf8->toULength;
         toULimit=(int8_t)utf8->mode;
-        c=(UChar32)utf8->toUnicodeStatus;
+        c=(UChar32)utf8->toUnicodeStatus; 
     } else {
         toULength=oldToULength=toULimit=0;
-        c = 0;
+        c = 0; 
     }
 
-    // The conversion loop checks source<sourceLimit only once per 1/2/3-byte character.
-    // If the buffer ends with a truncated 2- or 3-byte sequence,
-    // then we reduce the sourceLimit to before that,
-    // and collect the remaining bytes after the conversion loop.
+    // The conversion loop checks source<sourceLimit only once per 1/2/3-byte character. 
+    // If the buffer ends with a truncated 2- or 3-byte sequence, 
+    // then we reduce the sourceLimit to before that, 
+    // and collect the remaining bytes after the conversion loop. 
     {
-        // Do not go back into the bytes that will be read for finishing a partial
-        // sequence from the previous buffer.
-        int32_t length=(int32_t)(sourceLimit-source) - (toULimit-oldToULength);
-        if(length>0) {
-            uint8_t b1=*(sourceLimit-1);
-            if(U8_IS_SINGLE(b1)) {
-                // common ASCII character
-            } else if(U8_IS_TRAIL(b1) && length>=2) {
-                uint8_t b2=*(sourceLimit-2);
-                if(0xe0<=b2 && b2<0xf0 && U8_IS_VALID_LEAD3_AND_T1(b2, b1)) {
-                    // truncated 3-byte sequence
-                    sourceLimit-=2;
+        // Do not go back into the bytes that will be read for finishing a partial 
+        // sequence from the previous buffer. 
+        int32_t length=(int32_t)(sourceLimit-source) - (toULimit-oldToULength); 
+        if(length>0) { 
+            uint8_t b1=*(sourceLimit-1); 
+            if(U8_IS_SINGLE(b1)) { 
+                // common ASCII character 
+            } else if(U8_IS_TRAIL(b1) && length>=2) { 
+                uint8_t b2=*(sourceLimit-2); 
+                if(0xe0<=b2 && b2<0xf0 && U8_IS_VALID_LEAD3_AND_T1(b2, b1)) { 
+                    // truncated 3-byte sequence 
+                    sourceLimit-=2; 
                 }
-            } else if(0xc2<=b1 && b1<0xf0) {
-                // truncated 2- or 3-byte sequence
-                --sourceLimit;
+            } else if(0xc2<=b1 && b1<0xf0) { 
+                // truncated 2- or 3-byte sequence 
+                --sourceLimit; 
             }
         }
     }
@@ -5127,7 +5127,7 @@ ucnv_SBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
     while(source<sourceLimit) {
         if(targetCapacity>0) {
             b=*source++;
-            if(U8_IS_SINGLE(b)) {
+            if(U8_IS_SINGLE(b)) { 
                 /* convert ASCII */
                 if(IS_ASCII_ROUNDTRIP(b, asciiRoundtrips)) {
                     *target++=(uint8_t)b;
@@ -5182,7 +5182,7 @@ ucnv_SBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
                     /* handle "complicated" and error cases, and continuing partial characters */
                     oldToULength=0;
                     toULength=1;
-                    toULimit=U8_COUNT_BYTES_NON_ASCII(b);
+                    toULimit=U8_COUNT_BYTES_NON_ASCII(b); 
                     c=b;
 moreBytes:
                     while(toULength<toULimit) {
@@ -5195,7 +5195,7 @@ moreBytes:
                          */
                         if(source<(uint8_t *)pToUArgs->sourceLimit) {
                             b=*source;
-                            if(icu::UTF8::isValidTrail(c, b, toULength, toULimit)) {
+                            if(icu::UTF8::isValidTrail(c, b, toULength, toULimit)) { 
                                 ++source;
                                 ++toULength;
                                 c=(c<<6)+b;
@@ -5217,18 +5217,18 @@ moreBytes:
                         }
                     }
 
-                    if(toULength==toULimit) {
-                        c-=utf8_offsets[toULength];
-                        if(toULength<=3) {  /* BMP */
-                            value=MBCS_SINGLE_RESULT_FROM_U(table, results, c);
+                    if(toULength==toULimit) { 
+                        c-=utf8_offsets[toULength]; 
+                        if(toULength<=3) {  /* BMP */ 
+                            value=MBCS_SINGLE_RESULT_FROM_U(table, results, c); 
                         } else {
-                            /* supplementary code point */
-                            if(!hasSupplementary) {
-                                /* BMP-only codepages are stored without stage 1 entries for supplementary code points */
-                                value=0;
-                            } else {
-                                value=MBCS_SINGLE_RESULT_FROM_U(table, results, c);
-                            }
+                            /* supplementary code point */ 
+                            if(!hasSupplementary) { 
+                                /* BMP-only codepages are stored without stage 1 entries for supplementary code points */ 
+                                value=0; 
+                            } else { 
+                                value=MBCS_SINGLE_RESULT_FROM_U(table, results, c); 
+                            } 
                         }
                     } else {
                         /* error handling: illegal UTF-8 byte sequence */
@@ -5303,7 +5303,7 @@ moreBytes:
             source<(sourceLimit=(uint8_t *)pToUArgs->sourceLimit)) {
         c=utf8->toUBytes[0]=b=*source++;
         toULength=1;
-        toULimit=U8_COUNT_BYTES(b);
+        toULimit=U8_COUNT_BYTES(b); 
         while(source<sourceLimit) {
             utf8->toUBytes[toULength++]=b=*source++;
             c=(c<<6)+b;
@@ -5337,7 +5337,7 @@ ucnv_DBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
 
     uint32_t stage2Entry;
     uint32_t asciiRoundtrips;
-    uint16_t value = 0;
+    uint16_t value = 0; 
     UBool hasSupplementary;
 
     /* set up the local pointers */
@@ -5360,36 +5360,36 @@ ucnv_DBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
     hasSupplementary=(UBool)(cnv->sharedData->mbcs.unicodeMask&UCNV_HAS_SUPPLEMENTARY);
 
     /* get the converter state from the UTF-8 UConverter */
-    if(utf8->toULength > 0) {
+    if(utf8->toULength > 0) { 
         toULength=oldToULength=utf8->toULength;
         toULimit=(int8_t)utf8->mode;
-        c=(UChar32)utf8->toUnicodeStatus;
+        c=(UChar32)utf8->toUnicodeStatus; 
     } else {
         toULength=oldToULength=toULimit=0;
-        c = 0;
+        c = 0; 
     }
 
-    // The conversion loop checks source<sourceLimit only once per 1/2/3-byte character.
-    // If the buffer ends with a truncated 2- or 3-byte sequence,
-    // then we reduce the sourceLimit to before that,
-    // and collect the remaining bytes after the conversion loop.
+    // The conversion loop checks source<sourceLimit only once per 1/2/3-byte character. 
+    // If the buffer ends with a truncated 2- or 3-byte sequence, 
+    // then we reduce the sourceLimit to before that, 
+    // and collect the remaining bytes after the conversion loop. 
     {
-        // Do not go back into the bytes that will be read for finishing a partial
-        // sequence from the previous buffer.
-        int32_t length=(int32_t)(sourceLimit-source) - (toULimit-oldToULength);
-        if(length>0) {
-            uint8_t b1=*(sourceLimit-1);
-            if(U8_IS_SINGLE(b1)) {
-                // common ASCII character
-            } else if(U8_IS_TRAIL(b1) && length>=2) {
-                uint8_t b2=*(sourceLimit-2);
-                if(0xe0<=b2 && b2<0xf0 && U8_IS_VALID_LEAD3_AND_T1(b2, b1)) {
-                    // truncated 3-byte sequence
-                    sourceLimit-=2;
+        // Do not go back into the bytes that will be read for finishing a partial 
+        // sequence from the previous buffer. 
+        int32_t length=(int32_t)(sourceLimit-source) - (toULimit-oldToULength); 
+        if(length>0) { 
+            uint8_t b1=*(sourceLimit-1); 
+            if(U8_IS_SINGLE(b1)) { 
+                // common ASCII character 
+            } else if(U8_IS_TRAIL(b1) && length>=2) { 
+                uint8_t b2=*(sourceLimit-2); 
+                if(0xe0<=b2 && b2<0xf0 && U8_IS_VALID_LEAD3_AND_T1(b2, b1)) { 
+                    // truncated 3-byte sequence 
+                    sourceLimit-=2; 
                 }
-            } else if(0xc2<=b1 && b1<0xf0) {
-                // truncated 2- or 3-byte sequence
-                --sourceLimit;
+            } else if(0xc2<=b1 && b1<0xf0) { 
+                // truncated 2- or 3-byte sequence 
+                --sourceLimit; 
             }
         }
     }
@@ -5405,7 +5405,7 @@ ucnv_DBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
     while(source<sourceLimit) {
         if(targetCapacity>0) {
             b=*source++;
-            if(U8_IS_SINGLE(b)) {
+            if(U8_IS_SINGLE(b)) { 
                 /* convert ASCII */
                 if(IS_ASCII_ROUNDTRIP(b, asciiRoundtrips)) {
                     *target++=b;
@@ -5419,13 +5419,13 @@ ucnv_DBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
                     }
                 }
             } else {
-                if(b>=0xe0) {
-                    if( /* handle U+0800..U+D7FF inline */
-                        b<=0xed &&  // do not assume maxFastUChar>0xd7ff
-                        U8_IS_VALID_LEAD3_AND_T1(b, t1=source[0]) &&
+                if(b>=0xe0) { 
+                    if( /* handle U+0800..U+D7FF inline */ 
+                        b<=0xed &&  // do not assume maxFastUChar>0xd7ff 
+                        U8_IS_VALID_LEAD3_AND_T1(b, t1=source[0]) && 
                         (t2=(uint8_t)(source[1]-0x80)) <= 0x3f
                     ) {
-                        c=((b&0xf)<<6)|(t1&0x3f);
+                        c=((b&0xf)<<6)|(t1&0x3f); 
                         source+=2;
                         value=DBCS_RESULT_FROM_UTF8(mbcsIndex, results, c, t2);
                         if(value==0) {
@@ -5435,7 +5435,7 @@ ucnv_DBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
                     } else {
                         c=-1;
                     }
-                } else {
+                } else { 
                     if( /* handle U+0080..U+07FF inline */
                         b>=0xc2 &&
                         (t1=(uint8_t)(*source-0x80)) <= 0x3f
@@ -5456,7 +5456,7 @@ ucnv_DBCSFromUTF8(UConverterFromUnicodeArgs *pFromUArgs,
                     /* handle "complicated" and error cases, and continuing partial characters */
                     oldToULength=0;
                     toULength=1;
-                    toULimit=U8_COUNT_BYTES_NON_ASCII(b);
+                    toULimit=U8_COUNT_BYTES_NON_ASCII(b); 
                     c=b;
 moreBytes:
                     while(toULength<toULimit) {
@@ -5469,7 +5469,7 @@ moreBytes:
                          */
                         if(source<(uint8_t *)pToUArgs->sourceLimit) {
                             b=*source;
-                            if(icu::UTF8::isValidTrail(c, b, toULength, toULimit)) {
+                            if(icu::UTF8::isValidTrail(c, b, toULength, toULimit)) { 
                                 ++source;
                                 ++toULength;
                                 c=(c<<6)+b;
@@ -5491,18 +5491,18 @@ moreBytes:
                         }
                     }
 
-                    if(toULength==toULimit) {
-                        c-=utf8_offsets[toULength];
-                        if(toULength<=3) {  /* BMP */
-                            stage2Entry=MBCS_STAGE_2_FROM_U(table, c);
+                    if(toULength==toULimit) { 
+                        c-=utf8_offsets[toULength]; 
+                        if(toULength<=3) {  /* BMP */ 
+                            stage2Entry=MBCS_STAGE_2_FROM_U(table, c); 
                         } else {
-                            /* supplementary code point */
-                            if(!hasSupplementary) {
-                                /* BMP-only codepages are stored without stage 1 entries for supplementary code points */
-                                stage2Entry=0;
-                            } else {
-                                stage2Entry=MBCS_STAGE_2_FROM_U(table, c);
-                            }
+                            /* supplementary code point */ 
+                            if(!hasSupplementary) { 
+                                /* BMP-only codepages are stored without stage 1 entries for supplementary code points */ 
+                                stage2Entry=0; 
+                            } else { 
+                                stage2Entry=MBCS_STAGE_2_FROM_U(table, c); 
+                            } 
                         }
                     } else {
                         /* error handling: illegal UTF-8 byte sequence */
@@ -5607,7 +5607,7 @@ unassigned:
             source<(sourceLimit=(uint8_t *)pToUArgs->sourceLimit)) {
         c=utf8->toUBytes[0]=b=*source++;
         toULength=1;
-        toULimit=U8_COUNT_BYTES(b);
+        toULimit=U8_COUNT_BYTES(b); 
         while(source<sourceLimit) {
             utf8->toUBytes[toULength++]=b=*source++;
             c=(c<<6)+b;

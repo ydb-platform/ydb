@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  ******************************************************************************
@@ -63,11 +63,11 @@
 
 static icu::Locale* availableLocaleList = NULL;
 static int32_t  availableLocaleListCount;
-#if !UCONFIG_NO_SERVICE
+#if !UCONFIG_NO_SERVICE 
 static icu::ICULocaleService* gService = NULL;
 static icu::UInitOnce gServiceInitOnce = U_INITONCE_INITIALIZER;
-#endif
-static icu::UInitOnce gAvailableLocaleListInitOnce = U_INITONCE_INITIALIZER;
+#endif 
+static icu::UInitOnce gAvailableLocaleListInitOnce = U_INITONCE_INITIALIZER; 
 
 /**
  * Release all static memory held by collator.
@@ -226,21 +226,21 @@ initAvailableLocaleList(UErrorCode &status) {
     U_ASSERT(availableLocaleList == NULL);
     // for now, there is a hardcoded list, so just walk through that list and set it up.
     UResourceBundle *index = NULL;
-    StackUResourceBundle installed;
+    StackUResourceBundle installed; 
     int32_t i = 0;
     
     index = ures_openDirect(U_ICUDATA_COLL, "res_index", &status);
-    ures_getByKey(index, "InstalledLocales", installed.getAlias(), &status);
-
+    ures_getByKey(index, "InstalledLocales", installed.getAlias(), &status); 
+ 
     if(U_SUCCESS(status)) {
-        availableLocaleListCount = ures_getSize(installed.getAlias());
+        availableLocaleListCount = ures_getSize(installed.getAlias()); 
         availableLocaleList = new Locale[availableLocaleListCount];
         
         if (availableLocaleList != NULL) {
-            ures_resetIterator(installed.getAlias());
-            while(ures_hasNext(installed.getAlias())) {
+            ures_resetIterator(installed.getAlias()); 
+            while(ures_hasNext(installed.getAlias())) { 
                 const char *tempKey = NULL;
-                ures_getNextString(installed.getAlias(), NULL, &tempKey, &status);
+                ures_getNextString(installed.getAlias(), NULL, &tempKey, &status); 
                 availableLocaleList[i++] = Locale(tempKey);
             }
         }
@@ -446,14 +446,14 @@ Collator* U_EXPORT2 Collator::createInstance(const Locale& desiredLocale,
 #endif
     {
         coll = makeInstance(desiredLocale, status);
-        // Either returns NULL with U_FAILURE(status), or non-NULL with U_SUCCESS(status)
+        // Either returns NULL with U_FAILURE(status), or non-NULL with U_SUCCESS(status) 
     }
-    // The use of *coll in setAttributesFromKeywords can cause the NULL check to be
-    // optimized out of the delete even though setAttributesFromKeywords returns
-    // immediately if U_FAILURE(status), so we add a check here.
-    if (U_FAILURE(status)) {
-        return NULL;
-    }
+    // The use of *coll in setAttributesFromKeywords can cause the NULL check to be 
+    // optimized out of the delete even though setAttributesFromKeywords returns 
+    // immediately if U_FAILURE(status), so we add a check here. 
+    if (U_FAILURE(status)) { 
+        return NULL; 
+    } 
     setAttributesFromKeywords(desiredLocale, *coll, status);
     if (U_FAILURE(status)) {
         delete coll;
@@ -991,8 +991,8 @@ Collator::internalCompareUTF8(const char *left, int32_t leftLength,
         return UCOL_EQUAL;
     }
     return compareUTF8(
-            StringPiece(left, (leftLength < 0) ? static_cast<int32_t>(uprv_strlen(left)) : leftLength),
-            StringPiece(right, (rightLength < 0) ? static_cast<int32_t>(uprv_strlen(right)) : rightLength),
+            StringPiece(left, (leftLength < 0) ? static_cast<int32_t>(uprv_strlen(left)) : leftLength), 
+            StringPiece(right, (rightLength < 0) ? static_cast<int32_t>(uprv_strlen(right)) : rightLength), 
             errorCode);
 }
 

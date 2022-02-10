@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others.
+// © 2016 and later: Unicode, Inc. and others. 
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -15,9 +15,9 @@
 #define __DTINTRV_H__
 
 #include "unicode/utypes.h"
-
-#if U_SHOW_CPLUSPLUS_API
-
+ 
+#if U_SHOW_CPLUSPLUS_API 
+ 
 #include "unicode/uobject.h"
 
 /**
@@ -55,14 +55,14 @@ public:
      * @return  the from date in dateInterval.
      * @stable ICU 4.0
      */
-    inline UDate getFromDate() const;
+    inline UDate getFromDate() const; 
 
     /** 
      * Get the to date.
      * @return  the to date in dateInterval.
      * @stable ICU 4.0
      */
-    inline UDate getToDate() const;
+    inline UDate getToDate() const; 
 
 
     /**
@@ -71,7 +71,7 @@ public:
      * <pre>
      * .   Base* polymorphic_pointer = createPolymorphicObject();
      * .   if (polymorphic_pointer->getDynamicClassID() ==
-     * .       derived::getStaticClassID()) ...
+     * .       derived::getStaticClassID()) ... 
      * </pre>
      * @return          The class ID for all objects of this class.
      * @stable ICU 4.0
@@ -116,7 +116,7 @@ public:
      * @return TRUE if the two DateIntervals are not the same
      * @stable ICU 4.0
      */
-    inline UBool operator!=(const DateInterval& other) const;
+    inline UBool operator!=(const DateInterval& other) const; 
 
 
     /**
@@ -159,6 +159,6 @@ DateInterval::operator!=(const DateInterval& other) const {
 
 U_NAMESPACE_END
 
-#endif /* U_SHOW_CPLUSPLUS_API */
-
+#endif /* U_SHOW_CPLUSPLUS_API */ 
+ 
 #endif

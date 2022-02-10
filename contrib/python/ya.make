@@ -63,7 +63,7 @@ RECURSE(
     argon2-cffi
     argon2-cffi-bindings
     argparse-addons
-    arq
+    arq 
     arrow
     asciitree
     asgiref

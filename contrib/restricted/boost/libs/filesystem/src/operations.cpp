@@ -10,9 +10,9 @@
 
 //--------------------------------------------------------------------------------------// 
 
-#if defined(__ANDROID__) && defined(__ANDROID_API__) && __ANDROID_API__ < 24 
-// Android fully supports 64-bit file offsets only for API 24 and above. 
-#else 
+#if defined(__ANDROID__) && defined(__ANDROID_API__) && __ANDROID_API__ < 24
+// Android fully supports 64-bit file offsets only for API 24 and above.
+#else
 //  define 64-bit offset macros BEFORE including boost/config.hpp (see ticket #5355) 
 #if defined(__ANDROID__) && defined(__ANDROID_API__) && __ANDROID_API__ < 24
 // Android fully supports 64-bit file offsets only for API 24 and above.
@@ -55,7 +55,7 @@
 // systems as well.
 #define _FILE_OFFSET_BITS 64
 #endif
-#endif 
+#endif
 
 // define BOOST_FILESYSTEM_SOURCE so that <boost/filesystem/config.hpp> knows
 // the library is being built (possibly exporting rather than importing code)

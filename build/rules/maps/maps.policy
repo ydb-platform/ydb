@@ -149,12 +149,12 @@ ALLOW taxi/tools/dorblu/aggregator -> maps/libs/log8
 ALLOW taxi/tools/dorblu/lib -> maps/libs/http
 ALLOW yql/udfs/taxi/graph -> maps/libs/leptidea
 
-ALLOW maps/ -> maps/ 
-ALLOW sandbox/projects/maps -> maps/ 
-ALLOW sandbox/projects/mapsearch -> maps/ 
-ALLOW sandbox/projects/masstransit -> maps/ 
+ALLOW maps/ -> maps/
+ALLOW sandbox/projects/maps -> maps/
+ALLOW sandbox/projects/mapsearch -> maps/
+ALLOW sandbox/projects/masstransit -> maps/
 ALLOW sprav/altay/panorama -> maps/streetview/libs
-ALLOW yql/udfs/maps -> maps/ 
+ALLOW yql/udfs/maps -> maps/
 
 # maps_adv will be split into maps and smb
 ALLOW maps_adv/ -> maps/
@@ -176,4 +176,4 @@ ALLOW toloka -> maps/wikimap/mapspro/services/mrc/libs/
 ALLOW devtools/contrib -> maps/infra/yacare
 
 # Do not allow PEERDIRs into maps unless such PEERDIRs have be explicitly allowed above
-DENY .* -> maps/ 
+DENY .* -> maps/

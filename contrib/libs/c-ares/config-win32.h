@@ -217,9 +217,9 @@
 /* Define to the return type of signal handlers (int or void). */
 #define RETSIGTYPE void
 
-#ifdef __cplusplus 
-/* Compiling headers in C++ mode means bool is available */ 
-#define HAVE_BOOL_T 
+#ifdef __cplusplus
+/* Compiling headers in C++ mode means bool is available */
+#define HAVE_BOOL_T
 #endif
 
 /* ---------------------------------------------------------------- */
@@ -252,18 +252,18 @@
 #endif
 
 /* Set the Target to Vista. However, any symbols required above Win2000
- * should be loaded via LoadLibrary() */ 
+ * should be loaded via LoadLibrary() */
 #if defined(_MSC_VER) && (_MSC_VER >= 1500)
-#  define VS2008_MIN_TARGET 0x0600 
+#  define VS2008_MIN_TARGET 0x0600
 #endif
 
 /* VS2008 default target settings and minimum build target check. */
 #if defined(_MSC_VER) && (_MSC_VER >= 1500)
 #  ifndef _WIN32_WINNT
-#    define _WIN32_WINNT VS2008_MIN_TARGET 
+#    define _WIN32_WINNT VS2008_MIN_TARGET
 #  endif
 #  ifndef WINVER
-#    define WINVER VS2008_MIN_TARGET 
+#    define WINVER VS2008_MIN_TARGET
 #  endif
 #  if (_WIN32_WINNT < VS2008_MIN_TARGET) || (WINVER < VS2008_MIN_TARGET)
 #    error VS2008 does not support Windows build targets prior to Windows 2000
@@ -271,13 +271,13 @@
 #endif
 
 /* When no build target is specified Pelles C 5.00 and later default build
-   target is Windows Vista. */ 
+   target is Windows Vista. */
 #if defined(__POCC__) && (__POCC__ >= 500)
 #  ifndef _WIN32_WINNT
-#    define _WIN32_WINNT 0x0600 
+#    define _WIN32_WINNT 0x0600
 #  endif
 #  ifndef WINVER
-#    define WINVER 0x0600 
+#    define WINVER 0x0600
 #  endif
 #endif
 

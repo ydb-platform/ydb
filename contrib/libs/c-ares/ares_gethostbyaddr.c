@@ -82,7 +82,7 @@ void ares_gethostbyaddr(ares_channel channel, const void *addr, int addrlen,
       return;
     }
 
-  aquery = ares_malloc(sizeof(struct addr_query)); 
+  aquery = ares_malloc(sizeof(struct addr_query));
   if (!aquery)
     {
       callback(arg, ARES_ENOMEM, 0, NULL);
@@ -150,17 +150,17 @@ static void addr_callback(void *arg, int status, int timeouts,
         {
           addrlen = sizeof(aquery->addr.addrV4);
           status = ares_parse_ptr_reply(abuf, alen, &aquery->addr.addrV4,
-                                        (int)addrlen, AF_INET, &host, NULL); 
+                                        (int)addrlen, AF_INET, &host, NULL);
         }
       else
         {
           addrlen = sizeof(aquery->addr.addrV6);
           status = ares_parse_ptr_reply(abuf, alen, &aquery->addr.addrV6,
-                                        (int)addrlen, AF_INET6, &host, NULL); 
+                                        (int)addrlen, AF_INET6, &host, NULL);
         }
       end_aquery(aquery, status, host);
     }
-  else if (status == ARES_EDESTRUCTION || status == ARES_ECANCELLED) 
+  else if (status == ARES_EDESTRUCTION || status == ARES_ECANCELLED)
     end_aquery(aquery, status, NULL);
   else
     next_lookup(aquery);
@@ -172,7 +172,7 @@ static void end_aquery(struct addr_query *aquery, int status,
   aquery->callback(aquery->arg, status, aquery->timeouts, host);
   if (host)
     ares_free_hostent(host);
-  ares_free(aquery); 
+  ares_free(aquery);
 }
 
 static int file_lookup(struct ares_addr *addr, struct hostent **host)
@@ -193,18 +193,18 @@ static int file_lookup(struct ares_addr *addr, struct hostent **host)
     char tmp[MAX_PATH];
     HKEY hkeyHosts;
 
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, WIN_NS_NT_KEY, 0, KEY_READ, 
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, WIN_NS_NT_KEY, 0, KEY_READ,
                      &hkeyHosts) == ERROR_SUCCESS)
     {
       DWORD dwLength = MAX_PATH;
-      RegQueryValueExA(hkeyHosts, DATABASEPATH, NULL, NULL, (LPBYTE)tmp, 
+      RegQueryValueExA(hkeyHosts, DATABASEPATH, NULL, NULL, (LPBYTE)tmp,
                       &dwLength);
-      ExpandEnvironmentStringsA(tmp, PATH_HOSTS, MAX_PATH); 
+      ExpandEnvironmentStringsA(tmp, PATH_HOSTS, MAX_PATH);
       RegCloseKey(hkeyHosts);
     }
   }
   else if (platform == WIN_9X)
-    GetWindowsDirectoryA(PATH_HOSTS, MAX_PATH); 
+    GetWindowsDirectoryA(PATH_HOSTS, MAX_PATH);
   else
     return ARES_ENOTFOUND;
 
@@ -298,4 +298,4 @@ static void ptr_rr_name(char *name, const struct ares_addr *addr)
 
 #undef next_lookup
 #undef file_lookup
- 
+

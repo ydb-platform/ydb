@@ -2,13 +2,13 @@
   - android/asset_manager.h
   - android/asset_manager_jni.h
   - android/dlext.h
-  - android/log.h 
-  - android/native_window_jni.h 
-  - cpu-features.h: contrib/libs/android_cpufeatures/cpu-features.h 
+  - android/log.h
+  - android/native_window_jni.h
+  - cpu-features.h: contrib/libs/android_cpufeatures/cpu-features.h
   - ifaddrs.h: contrib/libs/libc_compat/include/ifaddrs/ifaddrs.h
   - jni.h: contrib/libs/jdk/include/jni.h
-  - vulkan/vulkan.h 
-  - vulkan/vk_sdk_platform.h 
+  - vulkan/vulkan.h
+  - vulkan/vk_sdk_platform.h
   - EGL/egl.h
   - EGL/eglext.h
   - GLES2/gl2.h

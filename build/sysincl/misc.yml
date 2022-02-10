@@ -26,17 +26,17 @@
 - includes:
   - cudnn.h:         contrib/libs/nvidia/cudnn/cudnn.h
 
-# _cgo_export.h is generated into build dir of go package which uses cgo 
-# and we are unable to resolve it correctly to whcih build dir to resolve 
-# in the case when tests are also built for this package 
-- includes: 
-  - _cgo_export.h 
- 
+# _cgo_export.h is generated into build dir of go package which uses cgo
+# and we are unable to resolve it correctly to whcih build dir to resolve
+# in the case when tests are also built for this package
+- includes:
+  - _cgo_export.h
+
 # Resolve jni.h from swig/Lib/java/javahead.swg when building non-java .swg
 # since they do not peerdir contrib/libs/jdk.
 # Resolve Python.h from swig/Lib/python/pyruntime.swg when building non-python .swg
 # since they do not peerdir contrib/libs/python.
-- source_filter: "[.]swg([.](h|c(c|pp|xx)?))?$" 
+- source_filter: "[.]swg([.](h|c(c|pp|xx)?))?$"
   includes:
   - jni.h:           contrib/libs/jdk/include/jni.h
   - Python.h:        contrib/libs/python/Include/Python.h

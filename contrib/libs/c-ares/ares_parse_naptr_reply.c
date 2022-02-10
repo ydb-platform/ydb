@@ -51,7 +51,7 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
 {
   unsigned int qdcount, ancount, i;
   const unsigned char *aptr, *vptr;
-  int status, rr_type, rr_class, rr_len, rr_ttl; 
+  int status, rr_type, rr_class, rr_len, rr_ttl;
   long len;
   char *hostname = NULL, *rr_name = NULL;
   struct ares_naptr_reply *naptr_head = NULL;
@@ -81,7 +81,7 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
 
   if (aptr + len + QFIXEDSZ > abuf + alen)
     {
-      ares_free (hostname); 
+      ares_free (hostname);
       return ARES_EBADRESP;
     }
   aptr += len + QFIXEDSZ;
@@ -104,7 +104,7 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
       rr_type = DNS_RR_TYPE (aptr);
       rr_class = DNS_RR_CLASS (aptr);
       rr_len = DNS_RR_LEN (aptr);
-      rr_ttl = DNS_RR_TTL (aptr); 
+      rr_ttl = DNS_RR_TTL (aptr);
       aptr += RRFIXEDSZ;
       if (aptr + rr_len > abuf + alen)
         {
@@ -117,13 +117,13 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
         {
           /* parse the NAPTR record itself */
 
-          /* RR must contain at least 7 bytes = 2 x int16 + 3 x name */ 
-          if (rr_len < 7) 
-            { 
-              status = ARES_EBADRESP; 
-              break; 
-            } 
- 
+          /* RR must contain at least 7 bytes = 2 x int16 + 3 x name */
+          if (rr_len < 7)
+            {
+              status = ARES_EBADRESP;
+              break;
+            }
+
           /* Allocate storage for this NAPTR answer appending it to the list */
           naptr_curr = ares_malloc_data(ARES_DATATYPE_NAPTR_REPLY);
           if (!naptr_curr)
@@ -141,7 +141,7 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
             }
           naptr_last = naptr_curr;
 
-          naptr_curr->ttl = rr_ttl; 
+          naptr_curr->ttl = rr_ttl;
           vptr = aptr;
           naptr_curr->order = DNS__16BIT(vptr);
           vptr += sizeof(unsigned short);
@@ -169,7 +169,7 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
         }
 
       /* Don't lose memory in the next iteration */
-      ares_free (rr_name); 
+      ares_free (rr_name);
       rr_name = NULL;
 
       /* Move on to the next record */
@@ -177,9 +177,9 @@ ares_parse_naptr_reply (const unsigned char *abuf, int alen,
     }
 
   if (hostname)
-    ares_free (hostname); 
+    ares_free (hostname);
   if (rr_name)
-    ares_free (rr_name); 
+    ares_free (rr_name);
 
   /* clean up on error */
   if (status != ARES_SUCCESS)

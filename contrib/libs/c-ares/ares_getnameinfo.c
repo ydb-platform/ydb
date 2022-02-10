@@ -77,7 +77,7 @@ static char *lookup_service(unsigned short port, int flags,
 static void append_scopeid(struct sockaddr_in6 *addr6, unsigned int scopeid,
                            char *buf, size_t buflen);
 #endif
-STATIC_TESTABLE char *ares_striendstr(const char *s1, const char *s2); 
+STATIC_TESTABLE char *ares_striendstr(const char *s1, const char *s2);
 
 void ares_getnameinfo(ares_channel channel, const struct sockaddr *sa,
                       ares_socklen_t salen,
@@ -163,7 +163,7 @@ void ares_getnameinfo(ares_channel channel, const struct sockaddr *sa,
     /* This is where a DNS lookup becomes necessary */
     else
       {
-        niquery = ares_malloc(sizeof(struct nameinfo_query)); 
+        niquery = ares_malloc(sizeof(struct nameinfo_query));
         if (!niquery)
           {
             callback(arg, ARES_ENOMEM, 0, NULL, NULL);
@@ -234,7 +234,7 @@ static void nameinfo_callback(void *arg, int status, int timeouts,
       niquery->callback(niquery->arg, ARES_SUCCESS, niquery->timeouts,
                         (char *)(host->h_name),
                         service);
-      ares_free(niquery); 
+      ares_free(niquery);
       return;
     }
   /* We couldn't find the host, but it's OK, we can use the IP */
@@ -265,11 +265,11 @@ static void nameinfo_callback(void *arg, int status, int timeouts,
         }
       niquery->callback(niquery->arg, ARES_SUCCESS, niquery->timeouts, ipbuf,
                         service);
-      ares_free(niquery); 
+      ares_free(niquery);
       return;
     }
   niquery->callback(niquery->arg, status, niquery->timeouts, NULL, NULL);
-  ares_free(niquery); 
+  ares_free(niquery);
 }
 
 static char *lookup_service(unsigned short port, int flags,
@@ -281,8 +281,8 @@ static char *lookup_service(unsigned short port, int flags,
   struct servent se;
 #endif
   char tmpbuf[4096];
-  char *name; 
-  size_t name_len; 
+  char *name;
+  size_t name_len;
 
   if (port)
     {
@@ -299,13 +299,13 @@ static char *lookup_service(unsigned short port, int flags,
           else
             proto = "tcp";
 #ifdef HAVE_GETSERVBYPORT_R
-          memset(&se, 0, sizeof(se)); 
+          memset(&se, 0, sizeof(se));
           sep = &se;
           memset(tmpbuf, 0, sizeof(tmpbuf));
 #if GETSERVBYPORT_R_ARGS == 6
           if (getservbyport_r(port, proto, &se, (void *)tmpbuf,
                               sizeof(tmpbuf), &sep) != 0)
-            sep = NULL;  /* LCOV_EXCL_LINE: buffer large so this never fails */ 
+            sep = NULL;  /* LCOV_EXCL_LINE: buffer large so this never fails */
 #elif GETSERVBYPORT_R_ARGS == 5
           sep = getservbyport_r(port, proto, &se, (void *)tmpbuf,
                                 sizeof(tmpbuf));
@@ -326,23 +326,23 @@ static char *lookup_service(unsigned short port, int flags,
 #endif
         }
       if (sep && sep->s_name)
-        { 
-          /* get service name */ 
-          name = sep->s_name; 
-        } 
+        {
+          /* get service name */
+          name = sep->s_name;
+        }
       else
-        { 
-          /* get port as a string */ 
-          sprintf(tmpbuf, "%u", (unsigned int)ntohs(port)); 
-          name = tmpbuf; 
-        } 
-      name_len = strlen(name); 
-      if (name_len < buflen) 
+        {
+          /* get port as a string */
+          sprintf(tmpbuf, "%u", (unsigned int)ntohs(port));
+          name = tmpbuf;
+        }
+      name_len = strlen(name);
+      if (name_len < buflen)
         /* return it if buffer big enough */
-        memcpy(buf, name, name_len + 1); 
+        memcpy(buf, name, name_len + 1);
       else
         /* avoid reusing previous one */
-        buf[0] = '\0';  /* LCOV_EXCL_LINE: no real service names are too big */ 
+        buf[0] = '\0';  /* LCOV_EXCL_LINE: no real service names are too big */
       return buf;
     }
   buf[0] = '\0';
@@ -358,7 +358,7 @@ static void append_scopeid(struct sockaddr_in6 *addr6, unsigned int flags,
 #endif
   char tmpbuf[IF_NAMESIZE + 2];
   size_t bufl;
-  int is_scope_long = sizeof(addr6->sin6_scope_id) > sizeof(unsigned int); 
+  int is_scope_long = sizeof(addr6->sin6_scope_id) > sizeof(unsigned int);
 
   tmpbuf[0] = '%';
 
@@ -368,38 +368,38 @@ static void append_scopeid(struct sockaddr_in6 *addr6, unsigned int flags,
   if ((flags & ARES_NI_NUMERICSCOPE) ||
       (!is_ll && !is_mcll))
     {
-      if (is_scope_long) 
-        { 
-          sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id); 
-        } 
-      else 
-        { 
-          sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id); 
-        } 
+      if (is_scope_long)
+        {
+          sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id);
+        }
+      else
+        {
+          sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id);
+        }
     }
   else
     {
       if (if_indextoname(addr6->sin6_scope_id, &tmpbuf[1]) == NULL)
-        { 
-          if (is_scope_long) 
-            { 
-              sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id); 
-            } 
-          else 
-            { 
-              sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id); 
-            } 
-        } 
+        {
+          if (is_scope_long)
+            {
+              sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id);
+            }
+          else
+            {
+              sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id);
+            }
+        }
     }
 #else
-  if (is_scope_long) 
-    { 
-      sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id); 
-    } 
-  else 
-    { 
-      sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id); 
-    } 
+  if (is_scope_long)
+    {
+      sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id);
+    }
+  else
+    {
+      sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id);
+    }
   (void) flags;
 #endif
   tmpbuf[IF_NAMESIZE + 1] = '\0';
@@ -412,7 +412,7 @@ static void append_scopeid(struct sockaddr_in6 *addr6, unsigned int flags,
 #endif
 
 /* Determines if s1 ends with the string in s2 (case-insensitive) */
-STATIC_TESTABLE char *ares_striendstr(const char *s1, const char *s2) 
+STATIC_TESTABLE char *ares_striendstr(const char *s1, const char *s2)
 {
   const char *c1, *c2, *c1_begin;
   int lo1, lo2;
@@ -438,7 +438,7 @@ STATIC_TESTABLE char *ares_striendstr(const char *s1, const char *s2)
           c2++;
         }
     }
-  return (char *)c1_begin; 
+  return (char *)c1_begin;
 }
 
 int ares__is_onion_domain(const char *name)

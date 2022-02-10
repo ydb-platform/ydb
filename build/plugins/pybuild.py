@@ -197,9 +197,9 @@ def onpy_srcs(unit, *args):
     py_main_only = unit.get('PROCESS_PY_MAIN_ONLY')
     with_py = not unit.get('PYBUILD_NO_PY')
     with_pyc = not unit.get('PYBUILD_NO_PYC')
-    in_proto_library = unit.get('PY_PROTO') or unit.get('PY3_PROTO') 
+    in_proto_library = unit.get('PY_PROTO') or unit.get('PY3_PROTO')
     venv = unit.get(YA_IDE_VENV_VAR)
-    need_gazetteer_peerdir = False 
+    need_gazetteer_peerdir = False
     trim = 0
 
     if not upath.startswith('contrib/tools/python') and not upath.startswith('library/python/runtime') and unit.get('NO_PYTHON_INCLS') != 'yes':
@@ -234,7 +234,7 @@ def onpy_srcs(unit, *args):
     pys = []
     protos = []
     evs = []
-    fbss = [] 
+    fbss = []
     py_namespaces = {}
 
     dump_dir = unit.get('PYTHON_BUILD_DUMP_DIR')
@@ -272,7 +272,7 @@ def onpy_srcs(unit, *args):
         elif arg == 'SWIG_CPP':
             swigs = swigs_cpp
         # Unsupported but legal PROTO_LIBRARY arguments.
-        elif arg == 'GLOBAL' or not in_proto_library and arg.endswith('.gztproto'): 
+        elif arg == 'GLOBAL' or not in_proto_library and arg.endswith('.gztproto'):
             pass
         elif arg == '_MR':
             # GLOB support: convert arcadia-root-relative paths to module-relative
@@ -290,11 +290,11 @@ def onpy_srcs(unit, *args):
             else:
                 if trim:
                     arg = arg[trim:]
-                if arg.endswith('.gztproto'): 
-                    need_gazetteer_peerdir = True 
-                    path = '{}.proto'.format(arg[:-9]) 
-                else: 
-                    path = arg 
+                if arg.endswith('.gztproto'):
+                    need_gazetteer_peerdir = True
+                    path = '{}.proto'.format(arg[:-9])
+                else:
+                    path = arg
                 main_py = (path == '__main__.py' or path.endswith('/__main__.py'))
                 if not py3 and unit_needs_main and main_py:
                     mod = '__main__'
@@ -344,8 +344,8 @@ def onpy_srcs(unit, *args):
             # Allow pyi files in PY_SRCS for autocomplete in IDE, but skip it during building
             elif path.endswith('.pyi'):
                 pass
-            elif path.endswith('.fbs'): 
-                fbss.append(pathmod) 
+            elif path.endswith('.fbs'):
+                fbss.append(pathmod)
             else:
                 ymake.report_configure_error('in PY_SRCS: unrecognized arg {!r}'.format(path))
 
@@ -464,7 +464,7 @@ def onpy_srcs(unit, *args):
                 unit.onresource(ns_res)
 
             unit.onresource_files(res)
-            add_python_lint_checks(unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()) 
+            add_python_lint_checks(unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split())
         else:
             for path, mod in pys:
                 root_rel_path = rootrel_arc_src(path, unit)
@@ -481,7 +481,7 @@ def onpy_srcs(unit, *args):
                     res += [dst + '.yapyc', '/py_code/' + mod]
 
             unit.onresource(res)
-            add_python_lint_checks(unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()) 
+            add_python_lint_checks(unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split())
 
     use_vanilla_protoc = unit.get('USE_VANILLA_PROTOC') == 'yes'
     if use_vanilla_protoc:
@@ -515,13 +515,13 @@ def onpy_srcs(unit, *args):
         unit.on_generate_py_evs_internal([path for path, mod in evs])
         unit.onpy_srcs([ev_arg(path, mod, unit) for path, mod in evs])
 
-    if fbss: 
-        unit.onpeerdir(unit.get('_PY_FBS_DEPS').split()) 
-        pysrc_base_name = listid(fbss) 
-        unit.onfbs_to_pysrc([pysrc_base_name] + [path for path, _ in fbss]) 
-        unit.onsrcs(['GLOBAL', '{}.fbs.pysrc'.format(pysrc_base_name)]) 
+    if fbss:
+        unit.onpeerdir(unit.get('_PY_FBS_DEPS').split())
+        pysrc_base_name = listid(fbss)
+        unit.onfbs_to_pysrc([pysrc_base_name] + [path for path, _ in fbss])
+        unit.onsrcs(['GLOBAL', '{}.fbs.pysrc'.format(pysrc_base_name)])
 
- 
+
 def _check_test_srcs(*args):
     used = set(args) & {"NAMESPACE", "TOP_LEVEL", "__main__.py"}
     if used:

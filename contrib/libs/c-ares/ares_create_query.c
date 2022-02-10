@@ -85,14 +85,14 @@
  */
 
 int ares_create_query(const char *name, int dnsclass, int type,
-                      unsigned short id, int rd, unsigned char **bufp, 
-                      int *buflenp, int max_udp_size) 
+                      unsigned short id, int rd, unsigned char **bufp,
+                      int *buflenp, int max_udp_size)
 {
-  size_t len; 
+  size_t len;
   unsigned char *q;
   const char *p;
-  size_t buflen; 
-  unsigned char *buf; 
+  size_t buflen;
+  unsigned char *buf;
 
   /* Set our results early, in case we bail out early with an error. */
   *buflenp = 0;
@@ -102,18 +102,18 @@ int ares_create_query(const char *name, int dnsclass, int type,
   if (ares__is_onion_domain(name))
     return ARES_ENOTFOUND;
 
-  /* Allocate a memory area for the maximum size this packet might need. +2 
-   * is for the length byte and zero termination if no dots or ecscaping is 
-   * used. 
+  /* Allocate a memory area for the maximum size this packet might need. +2
+   * is for the length byte and zero termination if no dots or ecscaping is
+   * used.
    */
-  len = strlen(name) + 2 + HFIXEDSZ + QFIXEDSZ + 
-    (max_udp_size ? EDNSFIXEDSZ : 0); 
-  buf = ares_malloc(len); 
-  if (!buf) 
-    return ARES_ENOMEM; 
+  len = strlen(name) + 2 + HFIXEDSZ + QFIXEDSZ +
+    (max_udp_size ? EDNSFIXEDSZ : 0);
+  buf = ares_malloc(len);
+  if (!buf)
+    return ARES_ENOMEM;
 
   /* Set up the header. */
-  q = buf; 
+  q = buf;
   memset(q, 0, HFIXEDSZ);
   DNS_HEADER_SET_QID(q, id);
   DNS_HEADER_SET_OPCODE(q, QUERY);
@@ -137,10 +137,10 @@ int ares_create_query(const char *name, int dnsclass, int type,
   q += HFIXEDSZ;
   while (*name)
     {
-      if (*name == '.') { 
-        ares_free (buf); 
+      if (*name == '.') {
+        ares_free (buf);
         return ARES_EBADNAME;
-      } 
+      }
 
       /* Count the number of bytes in this label. */
       len = 0;
@@ -150,10 +150,10 @@ int ares_create_query(const char *name, int dnsclass, int type,
             p++;
           len++;
         }
-      if (len > MAXLABEL) { 
-        ares_free (buf); 
+      if (len > MAXLABEL) {
+        ares_free (buf);
         return ARES_EBADNAME;
-      } 
+      }
 
       /* Encode the length and copy the data. */
       *q++ = (unsigned char)len;
@@ -177,30 +177,30 @@ int ares_create_query(const char *name, int dnsclass, int type,
   DNS_QUESTION_SET_TYPE(q, type);
   DNS_QUESTION_SET_CLASS(q, dnsclass);
 
-  q += QFIXEDSZ; 
+  q += QFIXEDSZ;
   if (max_udp_size)
   {
       memset(q, 0, EDNSFIXEDSZ);
       q++;
       DNS_RR_SET_TYPE(q, T_OPT);
       DNS_RR_SET_CLASS(q, max_udp_size);
-      q += (EDNSFIXEDSZ-1); 
+      q += (EDNSFIXEDSZ-1);
   }
-  buflen = (q - buf); 
+  buflen = (q - buf);
 
-  /* Reject names that are longer than the maximum of 255 bytes that's 
-   * specified in RFC 1035 ("To simplify implementations, the total length of 
-   * a domain name (i.e., label octets and label length octets) is restricted 
-   * to 255 octets or less."). */ 
+  /* Reject names that are longer than the maximum of 255 bytes that's
+   * specified in RFC 1035 ("To simplify implementations, the total length of
+   * a domain name (i.e., label octets and label length octets) is restricted
+   * to 255 octets or less."). */
   if (buflen > (size_t)(MAXCDNAME + HFIXEDSZ + QFIXEDSZ +
-                (max_udp_size ? EDNSFIXEDSZ : 0))) { 
-    ares_free (buf); 
-    return ARES_EBADNAME; 
-  } 
- 
-  /* we know this fits in an int at this point */ 
-  *buflenp = (int) buflen; 
-  *bufp = buf; 
- 
+                (max_udp_size ? EDNSFIXEDSZ : 0))) {
+    ares_free (buf);
+    return ARES_EBADNAME;
+  }
+
+  /* we know this fits in an int at this point */
+  *buflenp = (int) buflen;
+  *bufp = buf;
+
   return ARES_SUCCESS;
 }

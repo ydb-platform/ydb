@@ -47,8 +47,8 @@ RECURSE(
     geodb_ops
     geodb_ops/tests
     geograph_compiler
-    go_test_miner 
-    go_fake_xcrun 
+    go_test_miner
+    go_fake_xcrun
     groupgen
     hilite
     host_canonizer

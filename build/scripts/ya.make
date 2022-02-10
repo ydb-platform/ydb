@@ -16,19 +16,19 @@ TEST_SRCS(
     collect_java_srcs.py
     compile_cuda.py
     compile_java.py
-    compile_jsrc.py 
-    compile_pysrc.py 
+    compile_jsrc.py
+    compile_pysrc.py
     configure_file.py
-    copy_files_to_dir.py 
+    copy_files_to_dir.py
     copy_to_dir.py
     coverage-info.py
-    cpp_flatc_wrapper.py 
+    cpp_flatc_wrapper.py
     create_jcoverage_report.py
-    extract_asrc.py 
-    extract_docs.py 
+    extract_asrc.py
+    extract_docs.py
     extract_jacoco_report.py
     f2c.py
-    fail_module_cmd.py 
+    fail_module_cmd.py
     fetch_from.py
     fetch_from_external.py
     fetch_from_mds.py
@@ -39,20 +39,20 @@ TEST_SRCS(
     find_and_tar.py
     fix_msvc_output.py
     fs_tools.py
-    gen_aar_gradle_script.py 
+    gen_aar_gradle_script.py
     gen_java_codenav_entry.py
     gen_java_codenav_protobuf.py
     gen_mx_table.py
     gen_py3_reg.py
     gen_py_reg.py
-    gen_test_apk_gradle_script.py 
+    gen_test_apk_gradle_script.py
     gen_ub.py
     generate_pom.py
-    go_proto_wrapper.py 
-    go_tool.py 
+    go_proto_wrapper.py
+    go_tool.py
     ios_wrapper.py
     java_pack_to_file.py
-    link_asrc.py 
+    link_asrc.py
     link_dyn_lib.py
     link_exe.py
     link_fat_obj.py
@@ -61,12 +61,12 @@ TEST_SRCS(
     merge_coverage_data.py
     merge_files.py
     mkdir.py
-    mkdocs_builder_wrapper.py 
+    mkdocs_builder_wrapper.py
     mkver.py
     pack_ios.py
     pack_jcoverage_resources.py
     perl_wrapper.py
-    postprocess_go_fbs.py 
+    postprocess_go_fbs.py
     preprocess.py
     py_compile.py
     run_ios_simulator.py
@@ -79,7 +79,7 @@ TEST_SRCS(
     stdout2stderr.py
     symlink.py
     tar_directory.py
-    tar_sources.py 
+    tar_sources.py
     tared_protoc.py
     touch.py
     unpacking_jtest_runner.py

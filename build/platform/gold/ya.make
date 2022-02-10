@@ -4,7 +4,7 @@ OWNER(somov)
 
 INCLUDE(${ARCADIA_ROOT}/build/platform/binutils/binutils.resource)
 
-LDFLAGS( 
+LDFLAGS(
     -fuse-ld=$BINUTILS_ROOT_RESOURCE_GLOBAL/bin/ld.gold
     -Wl,-z,noexecstack
 )

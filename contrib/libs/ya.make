@@ -5,7 +5,7 @@ OWNER(
 
 RECURSE(
     afl
-    antlr4_cpp_runtime 
+    antlr4_cpp_runtime
     apache
     apr
     apr-util
@@ -53,7 +53,7 @@ RECURSE(
     dpdk
     dr_wav
     dwarflib
-    earcut 
+    earcut
     eccodes
     eccodes/python
     eccodes/tools

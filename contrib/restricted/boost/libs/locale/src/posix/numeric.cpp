@@ -163,7 +163,7 @@ public:
 
     virtual iter_type do_put(iter_type out,std::ios_base &/*ios*/,CharType /*fill*/,std::tm const *tm,char format,char modifier) const
     {
-        char_type fmt[4] = { '%' , static_cast<char_type>(modifier != 0 ? modifier : format) , static_cast<char_type>(modifier == 0 ? '\0' : format) }; 
+        char_type fmt[4] = { '%' , static_cast<char_type>(modifier != 0 ? modifier : format) , static_cast<char_type>(modifier == 0 ? '\0' : format) };
         string_type res = ftime_traits<char_type>::ftime(fmt,tm,*lc_);
         for(unsigned i=0;i<res.size();i++)
             *out++ = res[i];

@@ -94,7 +94,7 @@ int ares__get_hostent(FILE *fp, int family, struct hostent **host)
         p++;
       if (!*p)
         /* Ignore line if reached end of line. */
-        continue;  /* LCOV_EXCL_LINE: trailing whitespace already stripped */ 
+        continue;  /* LCOV_EXCL_LINE: trailing whitespace already stripped */
 
       /* Pointer to start of host name. */
       txthost = p;
@@ -163,7 +163,7 @@ int ares__get_hostent(FILE *fp, int family, struct hostent **host)
       */
 
       /* Allocate memory for the hostent structure. */
-      hostent = ares_malloc(sizeof(struct hostent)); 
+      hostent = ares_malloc(sizeof(struct hostent));
       if (!hostent)
         break;
 
@@ -172,16 +172,16 @@ int ares__get_hostent(FILE *fp, int family, struct hostent **host)
       hostent->h_addr_list = NULL;
 
       /* Copy official host name. */
-      hostent->h_name = ares_strdup(txthost); 
+      hostent->h_name = ares_strdup(txthost);
       if (!hostent->h_name)
         break;
 
       /* Copy network address. */
-      hostent->h_addr_list = ares_malloc(2 * sizeof(char *)); 
+      hostent->h_addr_list = ares_malloc(2 * sizeof(char *));
       if (!hostent->h_addr_list)
         break;
       hostent->h_addr_list[1] = NULL;
-      hostent->h_addr_list[0] = ares_malloc(addrlen); 
+      hostent->h_addr_list[0] = ares_malloc(addrlen);
       if (!hostent->h_addr_list[0])
         break;
       if (addr.family == AF_INET)
@@ -190,7 +190,7 @@ int ares__get_hostent(FILE *fp, int family, struct hostent **host)
         memcpy(hostent->h_addr_list[0], &addr.addrV6, sizeof(addr.addrV6));
 
       /* Copy aliases. */
-      hostent->h_aliases = ares_malloc((naliases + 1) * sizeof(char *)); 
+      hostent->h_aliases = ares_malloc((naliases + 1) * sizeof(char *));
       if (!hostent->h_aliases)
         break;
       alias = hostent->h_aliases;
@@ -206,7 +206,7 @@ int ares__get_hostent(FILE *fp, int family, struct hostent **host)
           while (*q && ISSPACE(*q))
             q++;
           *p = '\0';
-          if ((*alias = ares_strdup(txtalias)) == NULL) 
+          if ((*alias = ares_strdup(txtalias)) == NULL)
             break;
           alias++;
           txtalias = *q ? q : NULL;
@@ -220,7 +220,7 @@ int ares__get_hostent(FILE *fp, int family, struct hostent **host)
       hostent->h_length = aresx_uztoss(addrlen);
 
       /* Free line buffer. */
-      ares_free(line); 
+      ares_free(line);
 
       /* Return hostent successfully */
       *host = hostent;
@@ -230,7 +230,7 @@ int ares__get_hostent(FILE *fp, int family, struct hostent **host)
 
   /* If allocated, free line buffer. */
   if (line)
-    ares_free(line); 
+    ares_free(line);
 
   if (status == ARES_SUCCESS)
     {
@@ -238,20 +238,20 @@ int ares__get_hostent(FILE *fp, int family, struct hostent **host)
       if (hostent)
         {
           if (hostent->h_name)
-            ares_free((char *) hostent->h_name); 
+            ares_free((char *) hostent->h_name);
           if (hostent->h_aliases)
             {
               for (alias = hostent->h_aliases; *alias; alias++)
-                ares_free(*alias); 
-              ares_free(hostent->h_aliases); 
+                ares_free(*alias);
+              ares_free(hostent->h_aliases);
             }
           if (hostent->h_addr_list)
             {
               if (hostent->h_addr_list[0])
-                ares_free(hostent->h_addr_list[0]); 
-              ares_free(hostent->h_addr_list); 
+                ares_free(hostent->h_addr_list[0]);
+              ares_free(hostent->h_addr_list);
             }
-          ares_free(hostent); 
+          ares_free(hostent);
         }
       return ARES_ENOMEM;
     }

@@ -10,7 +10,7 @@ RECURSE(
     aiobotocore
     aioch
     aiochclient
-    aiodns 
+    aiodns
     aiodocker
     aiofiles
     aioftp
@@ -358,7 +358,7 @@ RECURSE(
     falcon-cors
     falcon-multipart
     fallocate
-    fancycompleter 
+    fancycompleter
     fastapi
     fastapi-utils
     fastdtw
@@ -726,7 +726,7 @@ RECURSE(
     pathy
     patsy
     paypalrestsdk
-    pdbpp 
+    pdbpp
     pdfminer.six
     pecan
     peewee
@@ -793,7 +793,7 @@ RECURSE(
     pyasn1
     pyasn1-modules
     pybreaker
-    pycares 
+    pycares
     pycbrf
     pycodestyle
     pycollada
@@ -846,7 +846,7 @@ RECURSE(
     PyPika
     pyproj
     pyre2
-    pyrepl 
+    pyrepl
     pyresample
     pyrsistent
     pysctp

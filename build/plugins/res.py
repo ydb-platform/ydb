@@ -100,7 +100,7 @@ def onresource_files(unit, *args):
             src = 'resfs/src/{}={}'.format(key, rootrel_arc_src(path, unit))
             res += ['-', src, path, key]
 
-    if unit.enabled('_GO_MODULE'): 
-        unit.on_go_resource(res) 
-    else: 
-        unit.onresource(res) 
+    if unit.enabled('_GO_MODULE'):
+        unit.on_go_resource(res)
+    else:
+        unit.onresource(res)

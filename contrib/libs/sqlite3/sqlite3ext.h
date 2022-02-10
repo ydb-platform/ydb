@@ -15,8 +15,8 @@
 ** as extensions by SQLite should #include this file instead of 
 ** sqlite3.h.
 */
-#ifndef SQLITE3EXT_H 
-#define SQLITE3EXT_H 
+#ifndef SQLITE3EXT_H
+#define SQLITE3EXT_H
 #include "sqlite3.h"
 
 /*
@@ -134,7 +134,7 @@ struct sqlite3_api_routines {
   int  (*set_authorizer)(sqlite3*,int(*)(void*,int,const char*,const char*,
                          const char*,const char*),void*);
   void  (*set_auxdata)(sqlite3_context*,int,void*,void (*)(void*));
-  char * (*xsnprintf)(int,char*,const char*,...); 
+  char * (*xsnprintf)(int,char*,const char*,...);
   int  (*step)(sqlite3_stmt*);
   int  (*table_column_metadata)(sqlite3*,const char*,const char*,const char*,
                                 char const**,char const**,int*,int*,int*);
@@ -246,7 +246,7 @@ struct sqlite3_api_routines {
   int (*uri_boolean)(const char*,const char*,int);
   sqlite3_int64 (*uri_int64)(const char*,const char*,sqlite3_int64);
   const char *(*uri_parameter)(const char*,const char*);
-  char *(*xvsnprintf)(int,char*,const char*,va_list); 
+  char *(*xvsnprintf)(int,char*,const char*,va_list);
   int (*wal_checkpoint_v2)(sqlite3*,const char*,int,int*,int*);
   /* Version 3.8.7 and later */
   int (*auto_extension)(void(*)(void));
@@ -270,31 +270,31 @@ struct sqlite3_api_routines {
   void (*value_free)(sqlite3_value*);
   int (*result_zeroblob64)(sqlite3_context*,sqlite3_uint64);
   int (*bind_zeroblob64)(sqlite3_stmt*, int, sqlite3_uint64);
-  /* Version 3.9.0 and later */ 
-  unsigned int (*value_subtype)(sqlite3_value*); 
-  void (*result_subtype)(sqlite3_context*,unsigned int); 
-  /* Version 3.10.0 and later */ 
-  int (*status64)(int,sqlite3_int64*,sqlite3_int64*,int); 
-  int (*strlike)(const char*,const char*,unsigned int); 
-  int (*db_cacheflush)(sqlite3*); 
-  /* Version 3.12.0 and later */ 
-  int (*system_errno)(sqlite3*); 
-  /* Version 3.14.0 and later */ 
-  int (*trace_v2)(sqlite3*,unsigned,int(*)(unsigned,void*,void*,void*),void*); 
-  char *(*expanded_sql)(sqlite3_stmt*); 
-  /* Version 3.18.0 and later */ 
-  void (*set_last_insert_rowid)(sqlite3*,sqlite3_int64); 
-  /* Version 3.20.0 and later */ 
-  int (*prepare_v3)(sqlite3*,const char*,int,unsigned int, 
-                    sqlite3_stmt**,const char**); 
-  int (*prepare16_v3)(sqlite3*,const void*,int,unsigned int, 
-                      sqlite3_stmt**,const void**); 
-  int (*bind_pointer)(sqlite3_stmt*,int,void*,const char*,void(*)(void*)); 
-  void (*result_pointer)(sqlite3_context*,void*,const char*,void(*)(void*)); 
-  void *(*value_pointer)(sqlite3_value*,const char*); 
-  int (*vtab_nochange)(sqlite3_context*); 
-  int (*value_nochange)(sqlite3_value*); 
-  const char *(*vtab_collation)(sqlite3_index_info*,int); 
+  /* Version 3.9.0 and later */
+  unsigned int (*value_subtype)(sqlite3_value*);
+  void (*result_subtype)(sqlite3_context*,unsigned int);
+  /* Version 3.10.0 and later */
+  int (*status64)(int,sqlite3_int64*,sqlite3_int64*,int);
+  int (*strlike)(const char*,const char*,unsigned int);
+  int (*db_cacheflush)(sqlite3*);
+  /* Version 3.12.0 and later */
+  int (*system_errno)(sqlite3*);
+  /* Version 3.14.0 and later */
+  int (*trace_v2)(sqlite3*,unsigned,int(*)(unsigned,void*,void*,void*),void*);
+  char *(*expanded_sql)(sqlite3_stmt*);
+  /* Version 3.18.0 and later */
+  void (*set_last_insert_rowid)(sqlite3*,sqlite3_int64);
+  /* Version 3.20.0 and later */
+  int (*prepare_v3)(sqlite3*,const char*,int,unsigned int,
+                    sqlite3_stmt**,const char**);
+  int (*prepare16_v3)(sqlite3*,const void*,int,unsigned int,
+                      sqlite3_stmt**,const void**);
+  int (*bind_pointer)(sqlite3_stmt*,int,void*,const char*,void(*)(void*));
+  void (*result_pointer)(sqlite3_context*,void*,const char*,void(*)(void*));
+  void *(*value_pointer)(sqlite3_value*,const char*);
+  int (*vtab_nochange)(sqlite3_context*);
+  int (*value_nochange)(sqlite3_value*);
+  const char *(*vtab_collation)(sqlite3_index_info*,int);
   /* Version 3.24.0 and later */
   int (*keyword_count)(void);
   int (*keyword_name)(int,const char**,int*);
@@ -347,16 +347,16 @@ struct sqlite3_api_routines {
 };
 
 /*
-** This is the function signature used for all extension entry points.  It 
-** is also defined in the file "loadext.c". 
-*/ 
-typedef int (*sqlite3_loadext_entry)( 
-  sqlite3 *db,                       /* Handle to the database. */ 
-  char **pzErrMsg,                   /* Used to set error string on failure. */ 
-  const sqlite3_api_routines *pThunk /* Extension API function pointers. */ 
-); 
- 
-/* 
+** This is the function signature used for all extension entry points.  It
+** is also defined in the file "loadext.c".
+*/
+typedef int (*sqlite3_loadext_entry)(
+  sqlite3 *db,                       /* Handle to the database. */
+  char **pzErrMsg,                   /* Used to set error string on failure. */
+  const sqlite3_api_routines *pThunk /* Extension API function pointers. */
+);
+
+/*
 ** The following macros redefine the API routines so that they are
 ** redirected through the global sqlite3_api structure.
 **
@@ -367,7 +367,7 @@ typedef int (*sqlite3_loadext_entry)(
 ** the API.  So the redefinition macros are only valid if the
 ** SQLITE_CORE macros is undefined.
 */
-#if !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION) 
+#if !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION)
 #define sqlite3_aggregate_context      sqlite3_api->aggregate_context
 #ifndef SQLITE_OMIT_DEPRECATED
 #define sqlite3_aggregate_count        sqlite3_api->aggregate_count
@@ -470,7 +470,7 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_rollback_hook          sqlite3_api->rollback_hook
 #define sqlite3_set_authorizer         sqlite3_api->set_authorizer
 #define sqlite3_set_auxdata            sqlite3_api->set_auxdata
-#define sqlite3_snprintf               sqlite3_api->xsnprintf 
+#define sqlite3_snprintf               sqlite3_api->xsnprintf
 #define sqlite3_step                   sqlite3_api->step
 #define sqlite3_table_column_metadata  sqlite3_api->table_column_metadata
 #define sqlite3_thread_cleanup         sqlite3_api->thread_cleanup
@@ -494,7 +494,7 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_value_text16le         sqlite3_api->value_text16le
 #define sqlite3_value_type             sqlite3_api->value_type
 #define sqlite3_vmprintf               sqlite3_api->vmprintf
-#define sqlite3_vsnprintf              sqlite3_api->xvsnprintf 
+#define sqlite3_vsnprintf              sqlite3_api->xvsnprintf
 #define sqlite3_overload_function      sqlite3_api->overload_function
 #define sqlite3_prepare_v2             sqlite3_api->prepare_v2
 #define sqlite3_prepare16_v2           sqlite3_api->prepare16_v2
@@ -570,7 +570,7 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_uri_boolean            sqlite3_api->uri_boolean
 #define sqlite3_uri_int64              sqlite3_api->uri_int64
 #define sqlite3_uri_parameter          sqlite3_api->uri_parameter
-#define sqlite3_uri_vsnprintf          sqlite3_api->xvsnprintf 
+#define sqlite3_uri_vsnprintf          sqlite3_api->xvsnprintf
 #define sqlite3_wal_checkpoint_v2      sqlite3_api->wal_checkpoint_v2
 /* Version 3.8.7 and later */
 #define sqlite3_auto_extension         sqlite3_api->auto_extension
@@ -590,28 +590,28 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_value_free             sqlite3_api->value_free
 #define sqlite3_result_zeroblob64      sqlite3_api->result_zeroblob64
 #define sqlite3_bind_zeroblob64        sqlite3_api->bind_zeroblob64
-/* Version 3.9.0 and later */ 
-#define sqlite3_value_subtype          sqlite3_api->value_subtype 
-#define sqlite3_result_subtype         sqlite3_api->result_subtype 
-/* Version 3.10.0 and later */ 
-#define sqlite3_status64               sqlite3_api->status64 
-#define sqlite3_strlike                sqlite3_api->strlike 
-#define sqlite3_db_cacheflush          sqlite3_api->db_cacheflush 
-/* Version 3.12.0 and later */ 
-#define sqlite3_system_errno           sqlite3_api->system_errno 
-/* Version 3.14.0 and later */ 
-#define sqlite3_trace_v2               sqlite3_api->trace_v2 
-#define sqlite3_expanded_sql           sqlite3_api->expanded_sql 
-/* Version 3.18.0 and later */ 
-#define sqlite3_set_last_insert_rowid  sqlite3_api->set_last_insert_rowid 
-/* Version 3.20.0 and later */ 
-#define sqlite3_prepare_v3             sqlite3_api->prepare_v3 
-#define sqlite3_prepare16_v3           sqlite3_api->prepare16_v3 
-#define sqlite3_bind_pointer           sqlite3_api->bind_pointer 
-#define sqlite3_result_pointer         sqlite3_api->result_pointer 
-#define sqlite3_value_pointer          sqlite3_api->value_pointer 
-/* Version 3.22.0 and later */ 
-#define sqlite3_vtab_nochange          sqlite3_api->vtab_nochange 
+/* Version 3.9.0 and later */
+#define sqlite3_value_subtype          sqlite3_api->value_subtype
+#define sqlite3_result_subtype         sqlite3_api->result_subtype
+/* Version 3.10.0 and later */
+#define sqlite3_status64               sqlite3_api->status64
+#define sqlite3_strlike                sqlite3_api->strlike
+#define sqlite3_db_cacheflush          sqlite3_api->db_cacheflush
+/* Version 3.12.0 and later */
+#define sqlite3_system_errno           sqlite3_api->system_errno
+/* Version 3.14.0 and later */
+#define sqlite3_trace_v2               sqlite3_api->trace_v2
+#define sqlite3_expanded_sql           sqlite3_api->expanded_sql
+/* Version 3.18.0 and later */
+#define sqlite3_set_last_insert_rowid  sqlite3_api->set_last_insert_rowid
+/* Version 3.20.0 and later */
+#define sqlite3_prepare_v3             sqlite3_api->prepare_v3
+#define sqlite3_prepare16_v3           sqlite3_api->prepare16_v3
+#define sqlite3_bind_pointer           sqlite3_api->bind_pointer
+#define sqlite3_result_pointer         sqlite3_api->result_pointer
+#define sqlite3_value_pointer          sqlite3_api->value_pointer
+/* Version 3.22.0 and later */
+#define sqlite3_vtab_nochange          sqlite3_api->vtab_nochange
 #define sqlite3_value_nochange         sqlite3_api->value_nochange
 #define sqlite3_vtab_collation         sqlite3_api->vtab_collation
 /* Version 3.24.0 and later */
@@ -655,9 +655,9 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_total_changes64        sqlite3_api->total_changes64
 /* Version 3.37.0 and later */
 #define sqlite3_autovacuum_pages       sqlite3_api->autovacuum_pages
-#endif /* !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION) */ 
+#endif /* !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION) */
 
-#if !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION) 
+#if !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION)
   /* This case when the file really is being compiled as a loadable 
   ** extension */
 # define SQLITE_EXTENSION_INIT1     const sqlite3_api_routines *sqlite3_api=0;
@@ -672,4 +672,4 @@ typedef int (*sqlite3_loadext_entry)(
 # define SQLITE_EXTENSION_INIT3     /*no-op*/
 #endif
 
-#endif /* SQLITE3EXT_H */ 
+#endif /* SQLITE3EXT_H */

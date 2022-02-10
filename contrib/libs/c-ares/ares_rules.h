@@ -89,7 +89,7 @@
 
 typedef char
   __cares_rule_02__
-    [CareschkszEQ(ares_socklen_t, sizeof(CARES_TYPEOF_ARES_SOCKLEN_T))]; 
+    [CareschkszEQ(ares_socklen_t, sizeof(CARES_TYPEOF_ARES_SOCKLEN_T))];
 
 /*
  * Verify at compile time that the size of ares_socklen_t as reported

@@ -6,19 +6,19 @@
 OWNER(
     somov
     g:contrib
-    g:ymake 
+    g:ymake
 )
 
 VERSION(1.3.0)
 
-IF (USE_PREBUILT_TOOLS) 
-    INCLUDE(${ARCADIA_ROOT}/build/prebuilt/contrib/tools/yasm/ya.make.prebuilt) 
-ENDIF() 
- 
-IF (NOT PREBUILT) 
-    INCLUDE(${ARCADIA_ROOT}/contrib/tools/yasm/bin/ya.make) 
-ENDIF() 
- 
-RECURSE( 
-    bin 
+IF (USE_PREBUILT_TOOLS)
+    INCLUDE(${ARCADIA_ROOT}/build/prebuilt/contrib/tools/yasm/ya.make.prebuilt)
+ENDIF()
+
+IF (NOT PREBUILT)
+    INCLUDE(${ARCADIA_ROOT}/contrib/tools/yasm/bin/ya.make)
+ENDIF()
+
+RECURSE(
+    bin
 )

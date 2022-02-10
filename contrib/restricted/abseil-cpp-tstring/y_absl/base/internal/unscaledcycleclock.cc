@@ -22,7 +22,7 @@
 
 #if defined(__powerpc__) || defined(__ppc__)
 #ifdef __GLIBC__
-#include <sys/platform/ppc.h> 
+#include <sys/platform/ppc.h>
 #elif defined(__FreeBSD__)
 #include <sys/sysctl.h>
 #include <sys/types.h>

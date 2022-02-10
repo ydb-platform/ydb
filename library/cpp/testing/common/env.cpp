@@ -44,8 +44,8 @@ TString GetArcadiaTestsData() {
     TString atdRoot = NPrivate::GetTestEnv().ArcadiaTestsDataDir;
     if (atdRoot) {
         return atdRoot;
-    }
-
+    } 
+ 
     TString path = NPrivate::GetCwd();
     const char pathsep = GetDirectorySeparator();
     while (!path.empty()) {

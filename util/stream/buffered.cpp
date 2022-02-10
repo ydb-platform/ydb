@@ -250,15 +250,15 @@ public:
         try {
             Flush();
         } catch (...) {
-            try {
+            try { 
                 DoFinish();
-            } catch (...) {
+            } catch (...) { 
                 // ¯\_(ツ)_/¯
-            }
-
+            } 
+ 
             throw;
-        }
-
+        } 
+ 
         DoFinish();
     }
 

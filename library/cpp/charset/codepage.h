@@ -153,10 +153,10 @@ inline const CodePage* CodePageByCharset(ECharset e) {
     return ::NCodepagePrivate::TCodepagesMap::Instance().Get(e);
 }
 
-ECharset CharsetByName(TStringBuf name);
+ECharset CharsetByName(TStringBuf name); 
 
 // Same as CharsetByName, but throws yexception() if name is invalid
-ECharset CharsetByNameOrDie(TStringBuf name);
+ECharset CharsetByNameOrDie(TStringBuf name); 
 
 inline ECharset CharsetByCodePage(const CodePage* CP) {
     return CP->CPEnum;

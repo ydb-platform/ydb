@@ -1,5 +1,5 @@
 #include "stream.h"
-#include "chunk.h"
+#include "chunk.h" 
 
 #include <library/cpp/http/server/http_ex.h>
 
@@ -331,23 +331,23 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         httpOut.Flush();
         UNIT_ASSERT_VALUES_EQUAL(checkStr.size(), str.size());
     }
-
+ 
     TString MakeHttpOutputBody(const char* body, bool encodingEnabled) {
         TString str;
         TStringOutput strOut(str);
         {
             TBufferedOutput bufOut(&strOut, 8192);
             THttpOutput httpOut(&bufOut);
-
+ 
             httpOut.EnableKeepAlive(true);
             httpOut.EnableCompression(true);
             httpOut.EnableBodyEncoding(encodingEnabled);
-
+ 
             httpOut << "POST / HTTP/1.1\r\n";
             httpOut << "Host: yandex.ru\r\n";
             httpOut << "Content-Encoding: gzip\r\n";
             httpOut << "\r\n";
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
             httpOut << body;
         }
@@ -376,29 +376,29 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         TString str;
         TStringOutput strOut(str);
         TBufferedOutput bufOut(&strOut, 8192);
-        THttpOutput httpOut(&bufOut);
-
-        httpOut.EnableKeepAlive(true);
-        httpOut.EnableCompression(true);
-
+        THttpOutput httpOut(&bufOut); 
+ 
+        httpOut.EnableKeepAlive(true); 
+        httpOut.EnableCompression(true); 
+ 
         const char* header = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
         httpOut << header;
-
+ 
         unsigned curLen = str.size();
         const char* body = "<html>Hello</html>";
-        httpOut << body;
+        httpOut << body; 
         UNIT_ASSERT_VALUES_EQUAL(curLen, str.size());
         httpOut.Finish();
         UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size());
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestMultilineHeaders) {
         const char* headerLine0 = "HTTP/1.1 200 OK";
         const char* headerLine1 = "Content-Language: en";
         const char* headerLine2 = "Vary: Accept-Encoding, ";
         const char* headerLine3 = "\tAccept-Language";
         const char* headerLine4 = "Content-Length: 18";
-
+ 
         TString endLine("\r\n");
         TString r;
         r += headerLine0 + endLine;
@@ -564,53 +564,53 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
             UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "GGLOL");
         }
     }
-
+ 
     Y_UNIT_TEST(TestInputHasContent) {
-        {
-            TStringStream request;
+        { 
+            TStringStream request; 
             request << "POST / HTTP/1.1\r\n"
                        "Host: yandex.ru\r\n"
                        "\r\n";
-            request << "HTTPDATA";
-
-            TStringInput input(request.Str());
-            THttpInput httpInput(&input);
-
-            UNIT_ASSERT(!httpInput.HasContent());
-            UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "");
-        }
-
-        {
-            TStringStream request;
+            request << "HTTPDATA"; 
+ 
+            TStringInput input(request.Str()); 
+            THttpInput httpInput(&input); 
+ 
+            UNIT_ASSERT(!httpInput.HasContent()); 
+            UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), ""); 
+        } 
+ 
+        { 
+            TStringStream request; 
             request << "POST / HTTP/1.1\r\n"
                        "Host: yandex.ru\r\n"
                        "Content-Length: 8"
                        "\r\n\r\n";
-            request << "HTTPDATA";
-
-            TStringInput input(request.Str());
-            THttpInput httpInput(&input);
-
-            UNIT_ASSERT(httpInput.HasContent());
-            UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "HTTPDATA");
-        }
-
-        {
-            TStringStream request;
+            request << "HTTPDATA"; 
+ 
+            TStringInput input(request.Str()); 
+            THttpInput httpInput(&input); 
+ 
+            UNIT_ASSERT(httpInput.HasContent()); 
+            UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "HTTPDATA"); 
+        } 
+ 
+        { 
+            TStringStream request; 
             request << "POST / HTTP/1.1\r\n"
                        "Host: yandex.ru\r\n"
                        "Transfer-Encoding: chunked"
                        "\r\n\r\n";
-            request << "8\r\nHTTPDATA\r\n0\r\n";
-
-            TStringInput input(request.Str());
-            THttpInput httpInput(&input);
-
-            UNIT_ASSERT(httpInput.HasContent());
-            UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "HTTPDATA");
-        }
-    }
-
+            request << "8\r\nHTTPDATA\r\n0\r\n"; 
+ 
+            TStringInput input(request.Str()); 
+            THttpInput httpInput(&input); 
+ 
+            UNIT_ASSERT(httpInput.HasContent()); 
+            UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "HTTPDATA"); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestHttpInputHeadRequest) {
         class THeadOnlyInput: public IInputStream {
         public:

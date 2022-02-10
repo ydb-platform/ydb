@@ -398,7 +398,7 @@ RECURSE(
     vowpalwabbit/tools
     vowpalwabbit/ut
     watchdog
-    watchdog/timeout/ut
+    watchdog/timeout/ut 
     wordlistreader
     xml
     xmlrpc

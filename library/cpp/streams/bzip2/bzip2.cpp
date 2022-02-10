@@ -182,23 +182,23 @@ TBZipCompress::~TBZipCompress() {
 }
 
 void TBZipCompress::DoWrite(const void* buf, size_t size) {
-    if (!Impl_) {
+    if (!Impl_) { 
         ythrow TBZipCompressError() << "can not write to finished bzip stream";
-    }
-
+    } 
+ 
     Impl_->Write(buf, size);
 }
 
 void TBZipCompress::DoFlush() {
     if (Impl_) {
-        Impl_->Flush();
-    }
+        Impl_->Flush(); 
+    } 
 }
 
 void TBZipCompress::DoFinish() {
-    THolder<TImpl> impl(Impl_.Release());
-
+    THolder<TImpl> impl(Impl_.Release()); 
+ 
     if (impl) {
-        impl->Finish();
-    }
+        impl->Finish(); 
+    } 
 }

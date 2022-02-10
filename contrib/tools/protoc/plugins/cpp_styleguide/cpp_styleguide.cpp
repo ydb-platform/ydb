@@ -6,20 +6,20 @@
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/strutil.h>
-
-#include "cpp_styleguide.h"
+ 
+#include "cpp_styleguide.h" 
 #include <util/stream/output.h>
-
-namespace NProtobuf {
-namespace NCompiler {
-namespace NPlugins {
-
-    using namespace google::protobuf;
-    using namespace google::protobuf::compiler;
-    using namespace google::protobuf::compiler::cpp;
-
+ 
+namespace NProtobuf { 
+namespace NCompiler { 
+namespace NPlugins { 
+ 
+    using namespace google::protobuf; 
+    using namespace google::protobuf::compiler; 
+    using namespace google::protobuf::compiler::cpp; 
+ 
     typedef std::map<TProtoStringType, TProtoStringType> TVariables;
-
+ 
     bool GenerateYaStyle(const FileDescriptor* fileDescriptor) {
         const auto& extension = fileDescriptor->FindExtensionByName("GenerateYaStyle");
         return extension;
@@ -31,25 +31,25 @@ namespace NPlugins {
     }
 
 
-    void SetCommonFieldVariables(const FieldDescriptor* descriptor, TVariables* variables) {
+    void SetCommonFieldVariables(const FieldDescriptor* descriptor, TVariables* variables) { 
         const auto& name = descriptor->name();
         if (GenerateYaStyle(descriptor))
             (*variables)["rname"] = UnderscoresToCamelCase(name, true);
         else
             (*variables)["rname"] = name;
-        (*variables)["name"] = FieldName(descriptor);
-    }
-
-    TProtoStringType HeaderFileName(const FileDescriptor* file) {
+        (*variables)["name"] = FieldName(descriptor); 
+    } 
+ 
+    TProtoStringType HeaderFileName(const FileDescriptor* file) { 
         TProtoStringType basename = compiler::StripProto(file->name());
-        return basename.append(".pb.h");
-    }
-
-    TProtoStringType SourceFileName(const FileDescriptor* file) {
+        return basename.append(".pb.h"); 
+    } 
+ 
+    TProtoStringType SourceFileName(const FileDescriptor* file) { 
         TProtoStringType basename = compiler::StripProto(file->name());
-        return basename.append(".pb.cc");
-    }
-
+        return basename.append(".pb.cc"); 
+    } 
+ 
     bool IsLiteRuntimeMessage(const Descriptor* desc) {
         return desc->file() != NULL && desc->file()->options().optimize_for() == google::protobuf::FileOptions::LITE_RUNTIME;
     }
@@ -58,21 +58,21 @@ namespace NPlugins {
         return desc->options().map_entry();
     }
 
-    class TFieldExtGenerator {
-        public:
-            TFieldExtGenerator(const FieldDescriptor* field)
-                : Field_(field)
-            {
-                SetCommonFieldVariables(Field_, &Variables_);
-            }
-
+    class TFieldExtGenerator { 
+        public: 
+            TFieldExtGenerator(const FieldDescriptor* field) 
+                : Field_(field) 
+            { 
+                SetCommonFieldVariables(Field_, &Variables_); 
+            } 
+ 
             virtual ~TFieldExtGenerator() {
-            }
-
-            virtual void GenerateAccessorDeclarations(io::Printer* printer) = 0;
+            } 
+ 
+            virtual void GenerateAccessorDeclarations(io::Printer* printer) = 0; 
             virtual void GenerateJSONPrinting(io::Printer* printer) = 0;
-
-        protected:
+ 
+        protected: 
             void GenerateRepeatedJSONPrinting(io::Printer* printer, const char* itemPrinter) {
                 printer->Print("out << '[';\n");
                 printer->Print("{\n");
@@ -92,35 +92,35 @@ namespace NPlugins {
             }
 
         protected:
-            const FieldDescriptor* Field_;
-            TVariables Variables_;
-    };
-
-
-    class TMessageFieldExtGenerator: public TFieldExtGenerator  {
-        public:
-            TMessageFieldExtGenerator(const FieldDescriptor* field)
-                : TFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateAccessorDeclarations(io::Printer* printer) {
+            const FieldDescriptor* Field_; 
+            TVariables Variables_; 
+    }; 
+ 
+ 
+    class TMessageFieldExtGenerator: public TFieldExtGenerator  { 
+        public: 
+            TMessageFieldExtGenerator(const FieldDescriptor* field) 
+                : TFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateAccessorDeclarations(io::Printer* printer) { 
                 Variables_["type"] = QualifiedClassName(Field_->message_type());
-
-                printer->Print(Variables_,
+ 
+                printer->Print(Variables_, 
                     "inline const $type$& Get$rname$() const { return $name$(); }\n"
                     "inline $type$* Mutable$rname$() { return mutable_$name$(); }\n");
                 if (Variables_.end() != Variables_.find("RName"))
                     printer->Print(Variables_,
                         "inline const $type$& Get$RName$() const { return $name$(); }\n"
                         "inline $type$* Mutable$RName$() { return mutable_$name$(); }\n");
-            }
+            } 
 
             void GenerateJSONPrinting(io::Printer* printer) override {
                 printer->Print(Variables_, "Get$rname$().PrintJSON(out);\n");
             }
-    };
-
+    }; 
+ 
     class TMapFieldExtGenerator: public TFieldExtGenerator {
         public:
             TMapFieldExtGenerator(const FieldDescriptor* field)
@@ -197,17 +197,17 @@ namespace NPlugins {
             const FieldDescriptor* Val_;
     };
 
-    class TRepeatedMessageFieldExtGenerator: public TFieldExtGenerator  {
-        public:
-            TRepeatedMessageFieldExtGenerator(const FieldDescriptor* field)
-                : TFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateAccessorDeclarations(io::Printer* printer) {
+    class TRepeatedMessageFieldExtGenerator: public TFieldExtGenerator  { 
+        public: 
+            TRepeatedMessageFieldExtGenerator(const FieldDescriptor* field) 
+                : TFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateAccessorDeclarations(io::Printer* printer) { 
                 Variables_["type"] = QualifiedClassName(Field_->message_type());
-
-                printer->Print(Variables_,
+ 
+                printer->Print(Variables_, 
                     "inline const $type$& Get$rname$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(int(_index)); }\n"
                     "inline $type$* Mutable$rname$(size_t _index) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return mutable_$name$(int(_index)); }\n"
                     "inline $type$* Add$rname$() { return add_$name$(); }\n"
@@ -229,39 +229,39 @@ namespace NPlugins {
                         "inline ::google::protobuf::RepeatedPtrField< $type$ >*\n"
                         "    Mutable$RName$() { return mutable_$name$(); }\n"
                     );
-            }
+            } 
 
             void GenerateJSONPrinting(io::Printer* printer) override {
                 GenerateRepeatedJSONPrinting(printer, "Get$rname$(_index).PrintJSON(out)");
             }
-    };
-
-    class TStringFieldExtGenerator: public TFieldExtGenerator  {
-        public:
-            TStringFieldExtGenerator(const FieldDescriptor* field)
-                : TFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateAccessorDeclarations(io::Printer* printer) {
-                Variables_["pointer_type"] = Field_->type() == FieldDescriptor::TYPE_BYTES ? "void" : "char";
-
-                if (Field_->options().ctype() != FieldOptions::STRING) {
-                    printer->Outdent();
-                    printer->Print(
-                              " private:\n"
-                              "  // Hidden due to unknown ctype option.\n");
-                    printer->Indent();
-                }
-
-                printer->Print(Variables_,
+    }; 
+ 
+    class TStringFieldExtGenerator: public TFieldExtGenerator  { 
+        public: 
+            TStringFieldExtGenerator(const FieldDescriptor* field) 
+                : TFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateAccessorDeclarations(io::Printer* printer) { 
+                Variables_["pointer_type"] = Field_->type() == FieldDescriptor::TYPE_BYTES ? "void" : "char"; 
+ 
+                if (Field_->options().ctype() != FieldOptions::STRING) { 
+                    printer->Outdent(); 
+                    printer->Print( 
+                              " private:\n" 
+                              "  // Hidden due to unknown ctype option.\n"); 
+                    printer->Indent(); 
+                } 
+ 
+                printer->Print(Variables_, 
                     "inline const TProtoStringType& Get$rname$() const { return $name$(); }\n"
                     "inline void Set$rname$(const TProtoStringType& value) { set_$name$(value); }\n"
                     "inline void Set$rname$(TProtoStringType&& value) { set_$name$(std::move(value)); }\n"
                     "inline void Set$rname$(const char* value) { set_$name$(value); }\n"
                     "inline void Set$rname$(const $pointer_type$* value, size_t size) { set_$name$(value, size); }\n"
                     "inline TProtoStringType* Mutable$rname$() { return mutable_$name$(); }\n");
-
+ 
                 if (Variables_.end() != Variables_.find("RName"))
                     printer->Print(Variables_,
                         "inline const TProtoStringType& Get$RName$() const { return $name$(); }\n"
@@ -272,38 +272,38 @@ namespace NPlugins {
                         "inline TProtoStringType* Mutable$RName$() { return mutable_$name$(); }\n"
                     );
 
-                if (Field_->options().ctype() != FieldOptions::STRING) {
-                    printer->Outdent();
-                    printer->Print(" public:\n");
-                    printer->Indent();
-                }
-
-            }
+                if (Field_->options().ctype() != FieldOptions::STRING) { 
+                    printer->Outdent(); 
+                    printer->Print(" public:\n"); 
+                    printer->Indent(); 
+                } 
+ 
+            } 
 
             void GenerateJSONPrinting(io::Printer* printer) override {
                 printer->Print(Variables_, "::google::protobuf::io::PrintJSONString(out, Get$rname$());\n");
             }
-    };
-
-    class TRepeatedStringFieldExtGenerator: public TFieldExtGenerator  {
-        public:
-            TRepeatedStringFieldExtGenerator(const FieldDescriptor* field)
-                : TFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateAccessorDeclarations(io::Printer* printer) {
-                Variables_["pointer_type"] = Field_->type() == FieldDescriptor::TYPE_BYTES ? "void" : "char";
-
-                if (Field_->options().ctype() != FieldOptions::STRING) {
-                    printer->Outdent();
-                    printer->Print(
-                              " private:\n"
-                              "  // Hidden due to unknown ctype option.\n");
-                    printer->Indent();
-                }
-
-                printer->Print(Variables_,
+    }; 
+ 
+    class TRepeatedStringFieldExtGenerator: public TFieldExtGenerator  { 
+        public: 
+            TRepeatedStringFieldExtGenerator(const FieldDescriptor* field) 
+                : TFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateAccessorDeclarations(io::Printer* printer) { 
+                Variables_["pointer_type"] = Field_->type() == FieldDescriptor::TYPE_BYTES ? "void" : "char"; 
+ 
+                if (Field_->options().ctype() != FieldOptions::STRING) { 
+                    printer->Outdent(); 
+                    printer->Print( 
+                              " private:\n" 
+                              "  // Hidden due to unknown ctype option.\n"); 
+                    printer->Indent(); 
+                } 
+ 
+                printer->Print(Variables_, 
                     "inline const TProtoStringType& Get$rname$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(_index); }\n"
                     "inline TProtoStringType* Mutable$rname$(size_t _index) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return mutable_$name$(_index); }\n"
                     "inline void Set$rname$(size_t _index, const TProtoStringType& value) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); set_$name$(_index, value); }\n"
@@ -319,10 +319,10 @@ namespace NPlugins {
                     "inline const ::google::protobuf::RepeatedPtrField<TProtoStringType>& get_arr_$name$() const"
                     "{ return $name$(); }\n"
                     "inline const ::google::protobuf::RepeatedPtrField<TProtoStringType>& Get$rname$() const"
-                    "{ return $name$(); }\n"
+                    "{ return $name$(); }\n" 
                     "inline ::google::protobuf::RepeatedPtrField<TProtoStringType>* Mutable$rname$()"
-                    "{ return mutable_$name$(); }\n");
-
+                    "{ return mutable_$name$(); }\n"); 
+ 
                 if (Variables_.end() != Variables_.find("RName"))
                     printer->Print(Variables_,
                         "inline const TProtoStringType& Get$RName$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(_index); }\n"
@@ -342,12 +342,12 @@ namespace NPlugins {
                         "{ return mutable_$name$(); }\n"
                     );
 
-                if (Field_->options().ctype() != FieldOptions::STRING) {
-                    printer->Outdent();
-                    printer->Print(" public:\n");
-                    printer->Indent();
-                }
-            }
+                if (Field_->options().ctype() != FieldOptions::STRING) { 
+                    printer->Outdent(); 
+                    printer->Print(" public:\n"); 
+                    printer->Indent(); 
+                } 
+            } 
 
             void GenerateJSONPrinting(io::Printer* printer) override {
                 GenerateRepeatedJSONPrinting(
@@ -355,45 +355,45 @@ namespace NPlugins {
                     "::google::protobuf::io::PrintJSONString(out, Get$rname$(_index))"
                 );
             }
-    };
-
-    class TEnumFieldExtGenerator: public TFieldExtGenerator  {
-        public:
-            TEnumFieldExtGenerator(const FieldDescriptor* field)
-                : TFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateAccessorDeclarations(io::Printer* printer) {
-                Variables_["type"] = ClassName(Field_->enum_type(), true);
-
-                printer->Print(Variables_,
+    }; 
+ 
+    class TEnumFieldExtGenerator: public TFieldExtGenerator  { 
+        public: 
+            TEnumFieldExtGenerator(const FieldDescriptor* field) 
+                : TFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateAccessorDeclarations(io::Printer* printer) { 
+                Variables_["type"] = ClassName(Field_->enum_type(), true); 
+ 
+                printer->Print(Variables_, 
                     "inline $type$ Get$rname$() const { return $name$(); }\n"
                     "inline void Set$rname$($type$ value) { set_$name$(value); }\n");
-
+ 
                 if (Variables_.end() != Variables_.find("RName"))
                     printer->Print(Variables_,
                         "inline $type$ Get$RName$() const { return $name$(); } \n"
                         "inline void Set$RName$($type$ value) { set_$name$(value); }\n"
                     );
-            }
+            } 
 
             void GenerateJSONPrinting(io::Printer* printer) override {
                 printer->Print(Variables_, "out << (int)Get$rname$();\n");
             }
-    };
-
-    class TRepeatedEnumFieldExtGenerator: public TFieldExtGenerator  {
-        public:
-            TRepeatedEnumFieldExtGenerator(const FieldDescriptor* field)
-                : TFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateAccessorDeclarations(io::Printer* printer) {
-                Variables_["type"] = ClassName(Field_->enum_type(), true);
-
-                printer->Print(Variables_,
+    }; 
+ 
+    class TRepeatedEnumFieldExtGenerator: public TFieldExtGenerator  { 
+        public: 
+            TRepeatedEnumFieldExtGenerator(const FieldDescriptor* field) 
+                : TFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateAccessorDeclarations(io::Printer* printer) { 
+                Variables_["type"] = ClassName(Field_->enum_type(), true); 
+ 
+                printer->Print(Variables_, 
                     "inline $type$ Get$rname$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(_index); }\n"
                     "inline void Set$rname$(size_t _index, $type$ value) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); set_$name$(_index, value); }\n"
                     "inline void Add$rname$($type$ value) { add_$name$(value); }\n"
@@ -409,24 +409,24 @@ namespace NPlugins {
                         "inline const ::google::protobuf::RepeatedField<int>& Get$RName$() const { return $name$(); }\n"
                         "inline ::google::protobuf::RepeatedField<int>* Mutable$RName$() { return mutable_$name$(); }\n"
                     );
-            }
+            } 
 
             void GenerateJSONPrinting(io::Printer* printer) override {
                 GenerateRepeatedJSONPrinting(printer, "out << (int)Get$rname$(_index)");
             }
-    };
-
-    class TPrimitiveFieldExtGenerator: public TFieldExtGenerator  {
-        public:
-            TPrimitiveFieldExtGenerator(const FieldDescriptor* field)
-                : TFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateAccessorDeclarations(io::Printer* printer) {
-                Variables_["type"] = PrimitiveTypeName(Field_->cpp_type());
-
-                printer->Print(Variables_,
+    }; 
+ 
+    class TPrimitiveFieldExtGenerator: public TFieldExtGenerator  { 
+        public: 
+            TPrimitiveFieldExtGenerator(const FieldDescriptor* field) 
+                : TFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateAccessorDeclarations(io::Printer* printer) { 
+                Variables_["type"] = PrimitiveTypeName(Field_->cpp_type()); 
+ 
+                printer->Print(Variables_, 
                     "inline $type$ Get$rname$() const { return $name$();}\n"
                     "inline void Set$rname$($type$ value) { set_$name$(value); }\n");
                 if (Variables_.end() != Variables_.find("RName"))
@@ -434,24 +434,24 @@ namespace NPlugins {
                         "inline $type$ Get$RName$() const { return $name$();}\n"
                         "inline void Set$RName$($type$ value) { set_$name$(value); }\n"
                     );
-            }
+            } 
 
             void GenerateJSONPrinting(io::Printer* printer) override {
                 printer->Print(Variables_, "out << Get$rname$();\n");
             }
-    };
-
-    class TRepeatedPrimitiveFieldExtGenerator: public TFieldExtGenerator  {
-        public:
-            TRepeatedPrimitiveFieldExtGenerator(const FieldDescriptor* field)
-                : TFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateAccessorDeclarations(io::Printer* printer) {
-                Variables_["type"] = PrimitiveTypeName(Field_->cpp_type());
-
-                printer->Print(Variables_,
+    }; 
+ 
+    class TRepeatedPrimitiveFieldExtGenerator: public TFieldExtGenerator  { 
+        public: 
+            TRepeatedPrimitiveFieldExtGenerator(const FieldDescriptor* field) 
+                : TFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateAccessorDeclarations(io::Printer* printer) { 
+                Variables_["type"] = PrimitiveTypeName(Field_->cpp_type()); 
+ 
+                printer->Print(Variables_, 
                     "inline $type$ Get$rname$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(_index); }\n"
                     "inline void Set$rname$(size_t _index, $type$ value) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); set_$name$(_index, value); }\n"
                     "inline void Add$rname$($type$ value) { add_$name$(value); }\n"
@@ -472,13 +472,13 @@ namespace NPlugins {
                         "inline ::google::protobuf::RepeatedField< $type$ >*\n"
                         "    Mutable$RName$() { return mutable_$name$(); }\n"
                     );
-            }
+            } 
 
             void GenerateJSONPrinting(io::Printer* printer) override {
                 GenerateRepeatedJSONPrinting(printer, "out << Get$rname$(_index)");
             }
-    };
-
+    }; 
+ 
     class TBoolFieldExtGenerator: public TPrimitiveFieldExtGenerator {
         public:
             TBoolFieldExtGenerator(const FieldDescriptor* field)
@@ -608,68 +608,68 @@ namespace NPlugins {
         TVariables Variables_;
     };
 
-    TFieldExtGenerator* MakeGenerator(const FieldDescriptor* field) {
-        if (field->is_repeated()) {
-            switch (field->cpp_type()) {
-                case FieldDescriptor::CPPTYPE_MESSAGE:
+    TFieldExtGenerator* MakeGenerator(const FieldDescriptor* field) { 
+        if (field->is_repeated()) { 
+            switch (field->cpp_type()) { 
+                case FieldDescriptor::CPPTYPE_MESSAGE: 
                     if (field->is_map()) {
                         return new TMapFieldExtGenerator(field);
                     }
-                    return new TRepeatedMessageFieldExtGenerator(field);
+                    return new TRepeatedMessageFieldExtGenerator(field); 
                 case FieldDescriptor::CPPTYPE_BOOL:
                     return new TRepeatedBoolFieldExtGenerator(field);
                 case FieldDescriptor::CPPTYPE_FLOAT:
                     return new TRepeatedFloatFieldExtGenerator(field);
-                case FieldDescriptor::CPPTYPE_STRING:
-                    switch (field->options().ctype()) {
-                        default:  // RepeatedStringFieldExtGenerator handles unknown ctypes.
-                        case FieldOptions::STRING:
-                            return new TRepeatedStringFieldExtGenerator(field);
-                    }
-                case FieldDescriptor::CPPTYPE_ENUM:
-                    return new TRepeatedEnumFieldExtGenerator(field);
-                default:
-                    return new TRepeatedPrimitiveFieldExtGenerator(field);
-            }
-        } else {
-            switch (field->cpp_type()) {
-                case FieldDescriptor::CPPTYPE_MESSAGE:
-                    return new TMessageFieldExtGenerator(field);
+                case FieldDescriptor::CPPTYPE_STRING: 
+                    switch (field->options().ctype()) { 
+                        default:  // RepeatedStringFieldExtGenerator handles unknown ctypes. 
+                        case FieldOptions::STRING: 
+                            return new TRepeatedStringFieldExtGenerator(field); 
+                    } 
+                case FieldDescriptor::CPPTYPE_ENUM: 
+                    return new TRepeatedEnumFieldExtGenerator(field); 
+                default: 
+                    return new TRepeatedPrimitiveFieldExtGenerator(field); 
+            } 
+        } else { 
+            switch (field->cpp_type()) { 
+                case FieldDescriptor::CPPTYPE_MESSAGE: 
+                    return new TMessageFieldExtGenerator(field); 
                 case FieldDescriptor::CPPTYPE_BOOL:
                     return new TBoolFieldExtGenerator(field);
                 case FieldDescriptor::CPPTYPE_FLOAT:
                     return new TFloatFieldExtGenerator(field);
-                case FieldDescriptor::CPPTYPE_STRING:
-                    switch (field->options().ctype()) {
-                        default:  // StringFieldGenerator handles unknown ctypes.
-                        case FieldOptions::STRING:
-                            return new TStringFieldExtGenerator(field);
-                    }
-                case FieldDescriptor::CPPTYPE_ENUM:
-                    return new TEnumFieldExtGenerator(field);
-                default:
-                    return new TPrimitiveFieldExtGenerator(field);
-            }
-        }
-    }
-
-    class TMessageExtGenerator {
-        public:
-            TMessageExtGenerator(const Descriptor* descriptor, OutputDirectory* outputDirectory)
-                : Descriptor_(descriptor)
-                , Classname_(ClassName(descriptor, false))
-                , OutputDirectory_(outputDirectory)
-            {
+                case FieldDescriptor::CPPTYPE_STRING: 
+                    switch (field->options().ctype()) { 
+                        default:  // StringFieldGenerator handles unknown ctypes. 
+                        case FieldOptions::STRING: 
+                            return new TStringFieldExtGenerator(field); 
+                    } 
+                case FieldDescriptor::CPPTYPE_ENUM: 
+                    return new TEnumFieldExtGenerator(field); 
+                default: 
+                    return new TPrimitiveFieldExtGenerator(field); 
+            } 
+        } 
+    } 
+ 
+    class TMessageExtGenerator { 
+        public: 
+            TMessageExtGenerator(const Descriptor* descriptor, OutputDirectory* outputDirectory) 
+                : Descriptor_(descriptor) 
+                , Classname_(ClassName(descriptor, false)) 
+                , OutputDirectory_(outputDirectory) 
+            { 
                 for (int i = 0, idx = 0; i < descriptor->nested_type_count(); i++) {
                     if (!IsAutogeneratedNestedType(descriptor->nested_type(i))) {
                         NestedGenerators_.emplace_back(descriptor->nested_type(i), OutputDirectory_);
                     }
-                }
-
+                } 
+ 
                 FieldGenerators_.reserve(descriptor->field_count());
-                for (int i = 0; i < descriptor->field_count(); i++) {
+                for (int i = 0; i < descriptor->field_count(); i++) { 
                     FieldGenerators_.emplace_back(MakeGenerator(descriptor->field(i)));
-                }
+                } 
 
                 ExtensionGenerators_.reserve(descriptor->extension_count());
                 for (int i = 0; i < descriptor->extension_count(); i++) {
@@ -680,17 +680,17 @@ namespace NPlugins {
                 for (int i = 0; i < descriptor->real_oneof_decl_count(); i++) {
                     OneofGenerators_.emplace_back(descriptor->oneof_decl(i));
                 }
-            }
-
-            void GenerateClassDefinitionExtension() {
+            } 
+ 
+            void GenerateClassDefinitionExtension() { 
                 GenerateSaveLoadImplementation();
                 GenerateJSONImplementation();
-
+ 
                 for (auto& nestedGenerator: NestedGenerators_) {
                     nestedGenerator.GenerateClassDefinitionExtension();
-                }
-            }
-
+                } 
+            } 
+ 
             void GenerateDebugOutputExtension() {
                 GenerateDebugOutput();
 
@@ -708,13 +708,13 @@ namespace NPlugins {
             }
 
 
-            void GenerateClassExtension() {
+            void GenerateClassExtension() { 
                 GenerateDebugStringImplementation();
                 for (auto& nestedGenerator: NestedGenerators_) {
                     nestedGenerator.GenerateClassExtension();
                 }
-            }
-
+            } 
+ 
             void GenerateDeclarations() {
                 GenerateFieldAccessorDeclarations();
 
@@ -729,46 +729,46 @@ namespace NPlugins {
                 GenerateClassDefinitionExtension();
             }
 
-        private:
-            void GenerateFieldAccessorDeclarations() {
-                TProtoStringType fileName = HeaderFileName(Descriptor_->file());
-                TProtoStringType scope = "class_scope:" + Descriptor_->full_name();
+        private: 
+            void GenerateFieldAccessorDeclarations() { 
+                TProtoStringType fileName = HeaderFileName(Descriptor_->file()); 
+                TProtoStringType scope = "class_scope:" + Descriptor_->full_name(); 
                 std::unique_ptr<io::ZeroCopyOutputStream> output(
-                    OutputDirectory_->OpenForInsert(fileName, scope));
-                io::Printer printer(output.get(), '$');
-
+                    OutputDirectory_->OpenForInsert(fileName, scope)); 
+                io::Printer printer(output.get(), '$'); 
+ 
                 printer.Print("// Yandex cpp-styleguide extension\n");
-                for (int i = 0; i < Descriptor_->field_count(); i++) {
-                    const FieldDescriptor* field = Descriptor_->field(i);
-
-                    TVariables vars;
-                    SetCommonFieldVariables(field, &vars);
-
+                for (int i = 0; i < Descriptor_->field_count(); i++) { 
+                    const FieldDescriptor* field = Descriptor_->field(i); 
+ 
+                    TVariables vars; 
+                    SetCommonFieldVariables(field, &vars); 
+ 
                     const bool hasRName = (vars.end() != vars.find("RName"));
-                    if (field->is_repeated()) {
-                        printer.Print(vars,
+                    if (field->is_repeated()) { 
+                        printer.Print(vars, 
                             "inline size_t $rname$Size() const { return (size_t)$name$_size(); }\n");
                         if (hasRName)
                             printer.Print(vars,
                                 "inline size_t $RName$Size() const { return (size_t)$name$_size(); }\n");
                     } else if (field->has_presence()) {
-                        printer.Print(vars,
+                        printer.Print(vars, 
                             "inline bool Has$rname$() const { return has_$name$(); }\n");
                         if (hasRName)
                             printer.Print(vars,
                                 "inline bool Has$RName$() const { return has_$name$(); }\n");
-                    }
-
+                    } 
+ 
                     printer.Print(vars, "inline void Clear$rname$() { clear_$name$(); }\n");
                     if (hasRName)
                         printer.Print(vars,
                             "inline void Clear$RName$() { clear_$name$(); }\n");
-
-                    // Generate type-specific accessor declarations.
-                    FieldGenerators_[i]->GenerateAccessorDeclarations(&printer);
-
-                    printer.Print("\n");
-                }
+ 
+                    // Generate type-specific accessor declarations. 
+                    FieldGenerators_[i]->GenerateAccessorDeclarations(&printer); 
+ 
+                    printer.Print("\n"); 
+                } 
                 for (auto& extensionGenerator: ExtensionGenerators_) {
                     extensionGenerator.GenerateDeclaration(&printer);
                 }
@@ -828,8 +828,8 @@ namespace NPlugins {
                     printer.Print("}\n");
                     printer.Print("// End of Yandex-specific extension\n");
                 }
-            }
-
+            } 
+ 
             void GenerateJSONImplementation() {
                 if (IsLiteRuntimeMessage(Descriptor_)) {
                     return;
@@ -924,46 +924,46 @@ namespace NPlugins {
             }
 
 
-        private:
-            const Descriptor* Descriptor_;
+        private: 
+            const Descriptor* Descriptor_; 
             TProtoStringType Classname_;
-            OutputDirectory* OutputDirectory_;
+            OutputDirectory* OutputDirectory_; 
             std::vector<std::unique_ptr<TFieldExtGenerator>>  FieldGenerators_;
             std::vector<TMessageExtGenerator> NestedGenerators_;
             std::vector<TExtensionGenerator> ExtensionGenerators_;
             std::vector<TOneofGenerator> OneofGenerators_;
-    };
-
-    class TFileExtGenerator {
-        public:
-            TFileExtGenerator(const FileDescriptor* file, OutputDirectory* output_directory)
+    }; 
+ 
+    class TFileExtGenerator { 
+        public: 
+            TFileExtGenerator(const FileDescriptor* file, OutputDirectory* output_directory) 
                 : File_(file)
                 , OutputDirectory_(output_directory)
-            {
+            { 
                 MessageGenerators_.reserve(file->message_type_count());
                 for (size_t i = 0; i < file->message_type_count(); i++) {
                     MessageGenerators_.emplace_back(file->message_type(i), OutputDirectory_);
-                }
-            }
-
-            void GenerateHeaderExtensions() {
+                } 
+            } 
+ 
+            void GenerateHeaderExtensions() { 
                 GenerateHeaderIncludeExtensions();
 
                 for (auto& messageGenerator: MessageGenerators_) {
                     messageGenerator.GenerateTypedefOutputExtension(false);
                     messageGenerator.GenerateDeclarations();
-                }
-            }
-
-            void GenerateSourceExtensions() {
+                } 
+            } 
+ 
+            void GenerateSourceExtensions() { 
                 GenerateSourceIncludeExtensions();
 
                 for (auto& messageGenerator: MessageGenerators_) {
                     messageGenerator.GenerateDefinitions();
-                }
-            }
-
-        private:
+                } 
+            } 
+ 
+        private: 
             void GenerateSourceIncludeExtensions() {
                 TProtoStringType fileName = SourceFileName(File_);
                 TProtoStringType scope = "includes";
@@ -984,38 +984,38 @@ namespace NPlugins {
 
         private:
             const FileDescriptor* File_;
-            OutputDirectory* OutputDirectory_;
-            size_t MessageTypeCount_;
+            OutputDirectory* OutputDirectory_; 
+            size_t MessageTypeCount_; 
             std::vector<TMessageExtGenerator> MessageGenerators_;
-    };
-
-    bool TCppStyleGuideExtensionGenerator::Generate(const FileDescriptor* file,
+    }; 
+ 
+    bool TCppStyleGuideExtensionGenerator::Generate(const FileDescriptor* file, 
         const TProtoStringType&,
-        OutputDirectory* outputDirectory,
+        OutputDirectory* outputDirectory, 
         TProtoStringType*) const {
-
-        TFileExtGenerator fileGenerator(file, outputDirectory);
-
-        // Generate header.
-        fileGenerator.GenerateHeaderExtensions();
-
-        // Generate cc file.
+ 
+        TFileExtGenerator fileGenerator(file, outputDirectory); 
+ 
+        // Generate header. 
+        fileGenerator.GenerateHeaderExtensions(); 
+ 
+        // Generate cc file. 
         fileGenerator.GenerateSourceExtensions();
-
-        return true;
-    }
-
-}
-}
-}
-
-int main(int argc, char* argv[]) {
+ 
+        return true; 
+    } 
+ 
+} 
+} 
+} 
+ 
+int main(int argc, char* argv[]) { 
 #ifdef _MSC_VER
-    // Don't print a silly message or stick a modal dialog box in my face,
-    // please.
-    _set_abort_behavior(0, ~0);
-#endif  // !_MSC_VER
-
-    NProtobuf::NCompiler::NPlugins::TCppStyleGuideExtensionGenerator generator;
-    return google::protobuf::compiler::PluginMain(argc, argv, &generator);
-}
+    // Don't print a silly message or stick a modal dialog box in my face, 
+    // please. 
+    _set_abort_behavior(0, ~0); 
+#endif  // !_MSC_VER 
+ 
+    NProtobuf::NCompiler::NPlugins::TCppStyleGuideExtensionGenerator generator; 
+    return google::protobuf::compiler::PluginMain(argc, argv, &generator); 
+} 

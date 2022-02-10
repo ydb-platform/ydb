@@ -501,7 +501,7 @@ private:
 
         AllDone_ = true;
 
-        while (AtomicGet(ThrCount_)) {
+        while (AtomicGet(ThrCount_)) { 
             Mutex_.Release();
             CondReady_.Signal();
             Mutex_.Acquire();

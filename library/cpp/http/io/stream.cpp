@@ -200,10 +200,10 @@ public:
         return ContentEncoded_;
     }
 
-    inline bool HasContent() const noexcept {
-        return HasContentLength_ || ChunkedInput_;
-    }
-
+    inline bool HasContent() const noexcept { 
+        return HasContentLength_ || ChunkedInput_; 
+    } 
+ 
     inline bool HasExpect100Continue() const noexcept {
         return Expect100Continue_;
     }
@@ -273,15 +273,15 @@ private:
         }
     }
 
-    inline bool IsRequest() const {
+    inline bool IsRequest() const { 
         return strnicmp(FirstLine().data(), "get", 3) == 0 ||
                strnicmp(FirstLine().data(), "post", 4) == 0 ||
                strnicmp(FirstLine().data(), "put", 3) == 0 ||
                strnicmp(FirstLine().data(), "patch", 5) == 0 ||
                strnicmp(FirstLine().data(), "head", 4) == 0 ||
                strnicmp(FirstLine().data(), "delete", 6) == 0;
-    }
-
+    } 
+ 
     inline void BuildInputChain() {
         TParsedHeaders p;
 
@@ -344,7 +344,7 @@ private:
             Buffered_.Reset(&Cnull);
             Input_ = Streams_.Add(new TMultiInput(&Buffered_, Slave_));
 
-            if (IsRequest() || HasContentLength_) {
+            if (IsRequest() || HasContentLength_) { 
                 /*
                  * TODO - we have other cases
                  */
@@ -448,10 +448,10 @@ bool THttpInput::ContentEncoded() const noexcept {
     return Impl_->ContentEncoded();
 }
 
-bool THttpInput::HasContent() const noexcept {
-    return Impl_->HasContent();
-}
-
+bool THttpInput::HasContent() const noexcept { 
+    return Impl_->HasContent(); 
+} 
+ 
 bool THttpInput::HasExpect100Continue() const noexcept {
     return Impl_->HasExpect100Continue();
 }
@@ -663,7 +663,7 @@ private:
     static inline size_t ParseHttpVersion(const TString& s) {
         if (s.empty()) {
             ythrow THttpParseException() << "malformed http stream";
-        }
+        } 
 
         size_t parsed_version = 0;
 
@@ -804,7 +804,7 @@ private:
 
         return ret;
     }
-
+ 
     inline void RebuildStream() {
         bool keepAlive = false;
         const TCompressionCodecFactory::TEncoderConstructor* encoder = nullptr;

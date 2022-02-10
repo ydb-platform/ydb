@@ -307,8 +307,8 @@ private:
 };
 
 template <typename TPool>
-struct TPoolableBase {
-    inline void* operator new(size_t bytes, TPool& pool) {
+struct TPoolableBase { 
+    inline void* operator new(size_t bytes, TPool& pool) { 
         return pool.Allocate(bytes);
     }
 
@@ -326,9 +326,9 @@ private:
     inline void* operator new(size_t); // disallow default allocation
 };
 
-struct TPoolable: public TPoolableBase<TMemoryPool> {
-};
-
+struct TPoolable: public TPoolableBase<TMemoryPool> { 
+}; 
+ 
 class TMemoryPoolAllocator: public IAllocator {
 public:
     inline TMemoryPoolAllocator(TMemoryPool* pool)
@@ -350,8 +350,8 @@ private:
     TMemoryPool* Pool_;
 };
 
-template <class T, class TPool>
-class TPoolAllocBase {
+template <class T, class TPool> 
+class TPoolAllocBase { 
 public:
     using pointer = T*;
     using const_pointer = const T*;
@@ -415,8 +415,8 @@ private:
 };
 
 template <class T>
-using TPoolAlloc = TPoolAllocBase<T, TMemoryPool>;
-
+using TPoolAlloc = TPoolAllocBase<T, TMemoryPool>; 
+ 
 // Any type since it is supposed to be rebound anyway.
 using TPoolAllocator = TPoolAlloc<int>;
 

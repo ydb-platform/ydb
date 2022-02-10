@@ -52,7 +52,7 @@ namespace {
 
             TString Host;
             ui16 Port;
-            TManualEvent E;
+            TManualEvent E; 
             TNetworkAddressPtr Result;
             IErrorRef Error;
         };

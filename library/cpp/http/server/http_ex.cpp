@@ -4,10 +4,10 @@
 #include <util/generic/cast.h>
 #include <util/stream/null.h>
 
-bool THttpClientRequestExtension::Parse(char* req, TBaseServerRequestData& rd) {
-    rd.SetSocket(Socket());
+bool THttpClientRequestExtension::Parse(char* req, TBaseServerRequestData& rd) { 
+    rd.SetSocket(Socket()); 
 
-    if (!rd.Parse(req)) {
+    if (!rd.Parse(req)) { 
         Output() << "HTTP/1.1 403 Forbidden\r\n"
                     "Content-Type: text/plain\r\n"
                     "Content-Length: 39\r\n"
@@ -20,7 +20,7 @@ bool THttpClientRequestExtension::Parse(char* req, TBaseServerRequestData& rd) {
     return true;
 }
 
-bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBlob& postData) {
+bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBlob& postData) { 
     for (const auto& header : ParsedHeaders) {
         rd.AddHeader(header.first, header.second);
     }

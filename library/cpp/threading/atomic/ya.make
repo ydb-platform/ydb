@@ -1,9 +1,9 @@
-LIBRARY()
-
-OWNER(vmordovin)
-
-SRCS(
-    bool.cpp
-)
-
-END()
+LIBRARY() 
+ 
+OWNER(vmordovin) 
+ 
+SRCS( 
+    bool.cpp 
+) 
+ 
+END() 

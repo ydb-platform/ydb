@@ -34,7 +34,7 @@ namespace NKikimr {
 
         // handoff
         ui32 handoff = top->GType.Handoff();
-        Y_VERIFY(handoff < domainsNum);
+        Y_VERIFY(handoff < domainsNum); 
 
         // barrierIngressValueMask
         ui32 barrierIngressValueMask = (1ull << totalVDisks) - 1;
@@ -219,7 +219,7 @@ namespace NKikimr {
         Y_VERIFY(IngressMode(top->GType) == EMode::GENERIC);
 
         // FIXME: think how we merge ingress (especially for handoff replicas) (when we delete parts)
-        Y_VERIFY_DEBUG(id.PartId() == 0);
+        Y_VERIFY_DEBUG(id.PartId() == 0); 
         SETUP_VECTORS(Data, top->GType);
 
         ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
@@ -228,7 +228,7 @@ namespace NKikimr {
             return TPairOfVectors(emptyVec, emptyVec);
         } else {
             ui8 handoffNodeId = nodeId - totalParts;
-            Y_VERIFY_DEBUG(handoffNodeId < handoffNum);
+            Y_VERIFY_DEBUG(handoffNodeId < handoffNum); 
 
             TVectorType m = handoff[handoffNodeId].ToVector(); // map of handoff replicas on this node
             TVectorType mainVec = main.ToVector();
@@ -272,7 +272,7 @@ namespace NKikimr {
     TVDiskIdShort TIngress::GetMainReplica(const TBlobStorageGroupInfo::TTopology *top, const TLogoBlobID &id) {
         Y_VERIFY(IngressMode(top->GType) == EMode::GENERIC);
 
-        Y_VERIFY_DEBUG(id.PartId() != 0);
+        Y_VERIFY_DEBUG(id.PartId() != 0); 
         ui8 partId = id.PartId();
         return top->GetVDiskInSubgroup(partId - 1, id.Hash());
     }
@@ -282,15 +282,15 @@ namespace NKikimr {
                                  const TLogoBlobID &id) {
         Y_VERIFY(IngressMode(top->GType) == EMode::GENERIC);
 
-        Y_VERIFY_DEBUG(id.PartId() != 0);
+        Y_VERIFY_DEBUG(id.PartId() != 0); 
         SETUP_VECTORS(Data, top->GType);
 
         ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
-        Y_VERIFY(nodeId >= totalParts, "DeleteHandoff: can't delete main replica; nodeId# %u totalParts# %u vdisk# %s "
+        Y_VERIFY(nodeId >= totalParts, "DeleteHandoff: can't delete main replica; nodeId# %u totalParts# %u vdisk# %s " 
                "id# %s", unsigned(nodeId), unsigned(totalParts), vdisk.ToString().data(), id.ToString().data());
 
         ui8 handoffNodeId = nodeId - totalParts;
-        Y_VERIFY_DEBUG(handoffNodeId < handoffNum);
+        Y_VERIFY_DEBUG(handoffNodeId < handoffNum); 
 
         ui8 i = id.PartId() - 1u;
         local.Clear(i);                     // delete local
@@ -384,7 +384,7 @@ namespace NKikimr {
     }
 
     TString TIngress::PrintVDisksForLogoBlob(const TBlobStorageGroupInfo *info, const TLogoBlobID &id) {
-        Y_VERIFY_DEBUG(id.PartId() == 0);
+        Y_VERIFY_DEBUG(id.PartId() == 0); 
         TBlobStorageGroupInfo::TVDiskIds outVDisks;
         info->PickSubgroup(id.Hash(), &outVDisks, nullptr);
         TStringStream str;

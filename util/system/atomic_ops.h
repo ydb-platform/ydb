@@ -22,7 +22,7 @@ struct TAtomicTraits {
 };
 
 template <typename T, typename TT>
-using TEnableIfCastable = std::enable_if_t<TAtomicTraits<T>::Castable, TT>;
+using TEnableIfCastable = std::enable_if_t<TAtomicTraits<T>::Castable, TT>; 
 
 template <typename T>
 inline TEnableIfCastable<T, T> AtomicGet(T const volatile& target) {

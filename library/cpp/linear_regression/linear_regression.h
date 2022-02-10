@@ -146,12 +146,12 @@ public:
     bool Add(const double* featuresBegin, const double* featuresEnd, const double* goalsBegin, const double* weightsBegin);
 
     bool Add(const TVector<double>& features, const TVector<double>& goals) {
-        Y_ASSERT(features.size() == goals.size());
+        Y_ASSERT(features.size() == goals.size()); 
         return Add(features.data(), features.data() + features.size(), goals.data());
     }
 
     bool Add(const TVector<double>& features, const TVector<double>& goals, const TVector<double>& weights) {
-        Y_ASSERT(features.size() == goals.size() && features.size() == weights.size());
+        Y_ASSERT(features.size() == goals.size() && features.size() == weights.size()); 
         return Add(features.data(), features.data() + features.size(), goals.data(), weights.data());
     }
 
@@ -239,7 +239,7 @@ struct TTransformationParameters {
     double FeatureOffset = 0.;
     double FeatureNormalizer = 1.;
 
-    Y_SAVELOAD_DEFINE(RegressionFactor,
+    Y_SAVELOAD_DEFINE(RegressionFactor, 
                       RegressionIntercept,
                       FeatureOffset,
                       FeatureNormalizer);
@@ -251,7 +251,7 @@ private:
     TTransformationParameters TransformationParameters;
 
 public:
-    Y_SAVELOAD_DEFINE(TransformationType, TransformationParameters);
+    Y_SAVELOAD_DEFINE(TransformationType, TransformationParameters); 
 
     TFeaturesTransformer() = default;
 
@@ -273,7 +273,7 @@ public:
                 return TransformationParameters.RegressionIntercept + TransformationParameters.RegressionFactor * transformedValue;
             }
         }
-        Y_ASSERT(0);
+        Y_ASSERT(0); 
         return 0.;
     }
 };

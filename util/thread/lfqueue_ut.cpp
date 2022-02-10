@@ -102,8 +102,8 @@ int TOperationsChecker::CopyCtor_ = 0;
 int TOperationsChecker::MoveAssign_ = 0;
 int TOperationsChecker::CopyAssign_ = 0;
 
-Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
-    Y_UNIT_TEST(TestMoveEnqueue) {
+Y_UNIT_TEST_SUITE(TLockFreeQueueTests) { 
+    Y_UNIT_TEST(TestMoveEnqueue) { 
         TMoveTest value(0xFF, 0xAA);
         TMoveTest tmp;
 
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
         UNIT_ASSERT_VALUES_EQUAL(tmp.Value(), 0xAA);
     }
 
-    Y_UNIT_TEST(TestSimpleEnqueueDequeue) {
+    Y_UNIT_TEST(TestSimpleEnqueueDequeue) { 
         TLockFreeQueue<int> queue;
 
         int i = -1;
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
         UNIT_ASSERT_VALUES_EQUAL(i, tmp);
     }
 
-    Y_UNIT_TEST(TestSimpleEnqueueAllDequeue) {
+    Y_UNIT_TEST(TestSimpleEnqueueAllDequeue) { 
         TLockFreeQueue<int> queue;
 
         int i = -1;
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
         UNIT_ASSERT_VALUES_EQUAL(v[2], 3);
     }
 
-    Y_UNIT_TEST(CleanInDestructor) {
+    Y_UNIT_TEST(CleanInDestructor) { 
         TSimpleSharedPtr<bool> p(new bool);
         UNIT_ASSERT_VALUES_EQUAL(1u, p.RefCount());
 
@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
         UNIT_ASSERT_VALUES_EQUAL(1, p.RefCount());
     }
 
-    Y_UNIT_TEST(CheckOperationsCount) {
+    Y_UNIT_TEST(CheckOperationsCount) { 
         TOperationsChecker o;
         o.Check(1, 0, 0, 0, 0);
         TLockFreeQueue<TOperationsChecker> queue;

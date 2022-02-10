@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-class TStringListInput: public IWalkInput {
+class TStringListInput: public IWalkInput { 
 public:
     TStringListInput(const TVector<TString>& data)
         : Data_(data)
@@ -27,8 +27,8 @@ private:
     size_t Index_;
 };
 
-Y_UNIT_TEST_SUITE(TWalkTest) {
-    Y_UNIT_TEST(ReadTo) {
+Y_UNIT_TEST_SUITE(TWalkTest) { 
+    Y_UNIT_TEST(ReadTo) { 
         TVector<TString> data;
         data.push_back("111a");
         data.push_back("222b");

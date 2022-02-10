@@ -26,14 +26,14 @@ public:
     }
 
     void Clear() {
-        Cur = nullptr;
+        Cur = nullptr; 
         FileNamesSize = CurName = 0;
         FileNames.Clear();
         FileNames.Append("", 1);
     }
 
     const char* Next() {
-        return Cur = (CurName++ < FileNamesSize ? strchr(Cur, 0) + 1 : nullptr);
+        return Cur = (CurName++ < FileNamesSize ? strchr(Cur, 0) + 1 : nullptr); 
     }
 
     size_t Size() {

@@ -21,7 +21,7 @@ struct TGCTime {
     inline bool operator <=(const TGCTime& another) const { return Generation < another.Generation || (Generation == another.Generation && Step <= another.Step); }
     inline bool Valid() const { return Generation != 0 || Step != 0; }
     inline void Clear() { Generation = Step = 0; }
-    static TGCTime Infinity() { return TGCTime(std::numeric_limits<ui32>::max(), std::numeric_limits<ui32>::max()); }
+    static TGCTime Infinity() { return TGCTime(std::numeric_limits<ui32>::max(), std::numeric_limits<ui32>::max()); } 
 
     explicit operator bool() const noexcept { return Valid(); }
 };

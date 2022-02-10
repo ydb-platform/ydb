@@ -145,7 +145,7 @@ namespace NProtoBuf {
         }
         /*
     void Swap(TMutableField& f) {
-        Y_ASSERT(Field() == f.Field());
+        Y_ASSERT(Field() == f.Field()); 
 
         // not implemented yet, TODO: implement when Reflection::Mutable(Ptr)RepeatedField
         // is ported into arcadia protobuf library from up-stream.

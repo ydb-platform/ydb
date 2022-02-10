@@ -5,8 +5,8 @@
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
-Y_UNIT_TEST_SUITE(TestMP) {
-    Y_UNIT_TEST(TestErr) {
+Y_UNIT_TEST_SUITE(TestMP) { 
+    Y_UNIT_TEST(TestErr) { 
         std::function<void(int)> f = [](int x) {
             if (x == 5) {
                 ythrow yexception() << "oops";

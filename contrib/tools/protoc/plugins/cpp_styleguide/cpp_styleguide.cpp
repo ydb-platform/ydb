@@ -8,7 +8,7 @@
 #include <google/protobuf/stubs/strutil.h>
 
 #include "cpp_styleguide.h"
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 
 namespace NProtobuf {
 namespace NCompiler {
@@ -843,7 +843,7 @@ namespace NPlugins {
                 printer.Print("// Yandex JSON extension\n");
                 TVariables vars;
                 vars["class"] = ClassName(Descriptor_, true);
-                printer.Print(vars, "inline void $class$::PrintJSON(IOutputStream& out) const {\n");
+                printer.Print(vars, "inline void $class$::PrintJSON(IOutputStream& out) const {\n"); 
 
                 printer.Indent();
                 printer.Print("out << '{';\n");
@@ -894,7 +894,7 @@ namespace NPlugins {
                     TVariables vars;
                     vars["class"] = ClassName(Descriptor_, true);
                     printer.Print("template<>\n");
-                    printer.Print(vars, "void Out< $class$>(IOutputStream& out, const $class$& msg) {\n");
+                    printer.Print(vars, "void Out< $class$>(IOutputStream& out, const $class$& msg) {\n"); 
                     printer.Print("    out << \"{ \" << msg.ShortUtf8DebugString() << \" }\";\n");
                     printer.Print("}\n");
                     printer.Print("// End of Yandex debug output extension\n");

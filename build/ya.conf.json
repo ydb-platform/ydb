@@ -3023,14 +3023,14 @@
                 }
             ]
         },
-        "transfer-manager": {
-            "tools": {
+        "transfer-manager": { 
+            "tools": { 
                 "transfer-manager": {
                     "bottle": "transfer-manager",
                     "executable": "transfer-manager"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "DARWIN"
@@ -3049,16 +3049,16 @@
                     },
                     "default": true
                 }
-            ]
-        },
-        "rem-tool": {
-            "tools": {
+            ] 
+        }, 
+        "rem-tool": { 
+            "tools": { 
                 "rem-tool": {
                     "bottle": "rem-tool",
                     "executable": "rem-tool"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "DARWIN"
@@ -3077,8 +3077,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "uc": {
             "tools": {
                 "uc": {
@@ -3732,13 +3732,13 @@
                 }
             ]
         },
-        "tmux": {
-            "tools": {
+        "tmux": { 
+            "tools": { 
                 "tmux": {
                     "bottle": "tmux",
                     "executable": "tmux"
                 }
-            },
+            }, 
             "env": {
                 "TERMINFO": [
                     "$(ROOT)/share/terminfo"
@@ -3752,7 +3752,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "rsync": {
             "tools": {
                 "rsync": {
@@ -6565,28 +6565,28 @@
                 ]
             }
         },
-        "transfer-manager": {
-            "formula": {
-                "sandbox_id": 135979123,
-                "match": "transfer-manager"
-            },
-            "executable": {
+        "transfer-manager": { 
+            "formula": { 
+                "sandbox_id": 135979123, 
+                "match": "transfer-manager" 
+            }, 
+            "executable": { 
                 "transfer-manager": [
                     "transfer-manager"
                 ]
-            }
-        },
-        "rem-tool": {
-            "formula": {
-                "sandbox_id": 79265295,
-                "match": "rem-tool"
-            },
-            "executable": {
+            } 
+        }, 
+        "rem-tool": { 
+            "formula": { 
+                "sandbox_id": 79265295, 
+                "match": "rem-tool" 
+            }, 
+            "executable": { 
                 "rem-tool": [
                     "rem-tool"
                 ]
-            }
-        },
+            } 
+        }, 
         "uc": {
             "formula": {
                 "sandbox_id": 505682252,
@@ -6909,20 +6909,20 @@
                 ]
             }
         },
-        "tmux": {
-            "formula": {
+        "tmux": { 
+            "formula": { 
                 "sandbox_id": [
                     1105659071
                 ],
-                "match": "tmux"
-            },
-            "executable": {
+                "match": "tmux" 
+            }, 
+            "executable": { 
                 "tmux": [
                     "bin",
                     "tmux"
                 ]
-            }
-        },
+            } 
+        }, 
         "optrace": {
             "formula": {
                 "sandbox_id": [

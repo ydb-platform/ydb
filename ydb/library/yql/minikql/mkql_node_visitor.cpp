@@ -12,12 +12,12 @@ const ui64 IS_NODE_ENTERED = 1;
 const ui64 IS_NODE_EXITED = 2;
 
 void TThrowingNodeVisitor::Visit(TTypeType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TVoidType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
@@ -37,47 +37,47 @@ void TThrowingNodeVisitor::Visit(TEmptyDictType& node) {
 }
 
 void TThrowingNodeVisitor::Visit(TDataType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TStructType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TListType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TOptionalType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TDictType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TCallableType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TAnyType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TTupleType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TResourceType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
@@ -87,7 +87,7 @@ void TThrowingNodeVisitor::Visit(TVariantType& node) {
 }
 
 void TThrowingNodeVisitor::Visit(TVoid& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
@@ -107,42 +107,42 @@ void TThrowingNodeVisitor::Visit(TEmptyDict& node) {
 }
 
 void TThrowingNodeVisitor::Visit(TDataLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TStructLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TListLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TOptionalLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TDictLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TCallable& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TAny& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
 void TThrowingNodeVisitor::Visit(TTupleLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     ThrowUnexpectedNodeType();
 }
 
@@ -176,11 +176,11 @@ void TThrowingNodeVisitor::ThrowUnexpectedNodeType() {
 }
 
 void TEmptyNodeVisitor::Visit(TTypeType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TVoidType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TNullType& node) {
@@ -196,39 +196,39 @@ void TEmptyNodeVisitor::Visit(TEmptyDictType& node) {
 }
 
 void TEmptyNodeVisitor::Visit(TDataType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TStructType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TListType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TOptionalType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TDictType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TCallableType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TAnyType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TTupleType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TResourceType& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TVariantType& node) {
@@ -236,7 +236,7 @@ void TEmptyNodeVisitor::Visit(TVariantType& node) {
 }
 
 void TEmptyNodeVisitor::Visit(TVoid& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TNull& node) {
@@ -252,35 +252,35 @@ void TEmptyNodeVisitor::Visit(TEmptyDict& node) {
 }
 
 void TEmptyNodeVisitor::Visit(TDataLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TStructLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TListLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TOptionalLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TDictLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TCallable& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TAny& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TTupleLiteral& node) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
 }
 
 void TEmptyNodeVisitor::Visit(TVariantLiteral& node) {
@@ -304,7 +304,7 @@ void TEmptyNodeVisitor::Visit(TBlockType& node) {
 }
 
 void TExploringNodeVisitor::Visit(TTypeType& node) {
-    Y_VERIFY_DEBUG(node.GetType() == &node);
+    Y_VERIFY_DEBUG(node.GetType() == &node); 
 }
 
 void TExploringNodeVisitor::Visit(TVoidType& node) {
@@ -527,7 +527,7 @@ void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const
                 NodeList.push_back(node);
                 node->SetCookie(IS_NODE_EXITED);
             } else {
-                Y_VERIFY(node->GetCookie() <= IS_NODE_EXITED, "TNode graph should not be reused");
+                Y_VERIFY(node->GetCookie() <= IS_NODE_EXITED, "TNode graph should not be reused"); 
             }
 
             Stack->pop_back();

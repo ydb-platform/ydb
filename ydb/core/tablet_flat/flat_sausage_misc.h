@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NPageCollection {
 
-    ui32 Checksum(TArrayRef<const char> body) noexcept;
+    ui32 Checksum(TArrayRef<const char> body) noexcept; 
 
     struct TBorder {
         struct TOn {

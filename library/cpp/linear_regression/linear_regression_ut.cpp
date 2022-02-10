@@ -13,8 +13,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
-    Y_UNIT_TEST(MeanAndDeviationTest) {
+Y_UNIT_TEST_SUITE(TLinearRegressionTest) { 
+    Y_UNIT_TEST(MeanAndDeviationTest) { 
         TVector<double> arguments;
         TVector<double> weights;
 
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         ValueIsCorrect(deviationCalculator.GetDeviation(), checkRemovingDeviationCalculator.GetDeviation(), 1e-5);
     }
 
-    Y_UNIT_TEST(CovariationTest) {
+    Y_UNIT_TEST(CovariationTest) { 
         TVector<double> firstValues;
         TVector<double> secondValues;
         TVector<double> weights;
@@ -176,15 +176,15 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         }
     }
 
-    Y_UNIT_TEST(FastSLRTest) {
+    Y_UNIT_TEST(FastSLRTest) { 
         SLRTest<TFastSLRSolver>();
     }
 
-    Y_UNIT_TEST(KahanSLRTest) {
+    Y_UNIT_TEST(KahanSLRTest) { 
         SLRTest<TKahanSLRSolver>();
     }
 
-    Y_UNIT_TEST(SLRTest) {
+    Y_UNIT_TEST(SLRTest) { 
         SLRTest<TSLRSolver>();
     }
 
@@ -231,11 +231,11 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(lrSolver.SumSquaredErrors(), expectedSumSquaredErrors, expectedSumSquaredErrors * 0.01);
     }
 
-    Y_UNIT_TEST(FastLRTest) {
+    Y_UNIT_TEST(FastLRTest) { 
         LinearRegressionTest<TFastLinearRegressionSolver>();
     }
 
-    Y_UNIT_TEST(LRTest) {
+    Y_UNIT_TEST(LRTest) { 
         LinearRegressionTest<TLinearRegressionSolver>();
     }
 
@@ -275,31 +275,31 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(rmse, 0., 1e-3);
     }
 
-    Y_UNIT_TEST(SigmaTest100) {
+    Y_UNIT_TEST(SigmaTest100) { 
         TransformationTest(ETransformationType::TT_SIGMA, 100);
     }
 
-    Y_UNIT_TEST(SigmaTest1000) {
+    Y_UNIT_TEST(SigmaTest1000) { 
         TransformationTest(ETransformationType::TT_SIGMA, 1000);
     }
 
-    Y_UNIT_TEST(SigmaTest10000) {
+    Y_UNIT_TEST(SigmaTest10000) { 
         TransformationTest(ETransformationType::TT_SIGMA, 10000);
     }
 
-    Y_UNIT_TEST(SigmaTest100000) {
+    Y_UNIT_TEST(SigmaTest100000) { 
         TransformationTest(ETransformationType::TT_SIGMA, 100000);
     }
 
-    Y_UNIT_TEST(SigmaTest1000000) {
+    Y_UNIT_TEST(SigmaTest1000000) { 
         TransformationTest(ETransformationType::TT_SIGMA, 1000000);
     }
 
-    Y_UNIT_TEST(SigmaTest10000000) {
+    Y_UNIT_TEST(SigmaTest10000000) { 
         TransformationTest(ETransformationType::TT_SIGMA, 10000000);
     }
 
-    Y_UNIT_TEST(ResetCalculatorTest) {
+    Y_UNIT_TEST(ResetCalculatorTest) { 
         TVector<double> arguments;
         TVector<double> weights;
         const double eps = 1e-10;

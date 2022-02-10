@@ -25,7 +25,7 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
         const NSchemeCache::TSchemeCacheNavigate &request = *ev->Get()->Request;
-        Y_VERIFY(request.ResultSet.size() == Tables.size());
+        Y_VERIFY(request.ResultSet.size() == Tables.size()); 
 
         TVector<TTableResult> results;
         results.reserve(Tables.size());

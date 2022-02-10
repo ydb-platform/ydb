@@ -1,8 +1,8 @@
 #include "merge.h"
-#include "simple_reflection.h"
-
+#include "simple_reflection.h" 
+ 
 #include <google/protobuf/message.h>
-
+ 
 #include <library/cpp/protobuf/util/proto/merge.pb.h>
 
 namespace NProtoBuf {

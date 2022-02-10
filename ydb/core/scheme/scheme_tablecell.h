@@ -49,7 +49,7 @@ public:
         , IsNull_(ptr == nullptr)
         , Ptr(ptr)
     {
-        Y_VERIFY_DEBUG(ptr || sz == 0);
+        Y_VERIFY_DEBUG(ptr || sz == 0); 
         if (CanInline(sz)) {
             IsInline_ = 1;
             IntVal = 0;
@@ -101,20 +101,20 @@ public:
     // Optimization to store small values (<= 8 bytes) inplace
     static constexpr bool CanInline(ui32 sz) { return sz <= 8; }
     static constexpr size_t MaxInlineSize() { return 8; }
-    const char* InlineData() const                  { Y_VERIFY_DEBUG(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
+    const char* InlineData() const                  { Y_VERIFY_DEBUG(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; } 
     const char* Data() const                        { return IsNull_ ? nullptr : (IsInline_ ? (char*)&IntVal : Ptr); }
 #else
     // Non-inlinable version for perf comparisons
     static bool CanInline(ui32)                     { return false; }
-    const char* InlineData() const                  { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
-    const char* Data() const                        { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
+    const char* InlineData() const                  { Y_VERIFY_DEBUG(!IsInline_); return Ptr; } 
+    const char* Data() const                        { Y_VERIFY_DEBUG(!IsInline_); return Ptr; } 
 #endif
 };
 
 #pragma pack(pop)
 
 static_assert(sizeof(TCell) == 12, "TCell must be 12 bytes");
-using TCellsRef = TConstArrayRef<const TCell>;
+using TCellsRef = TConstArrayRef<const TCell>; 
 
 
 // NULL is considered equal to another NULL and less than non-NULL
@@ -131,8 +131,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
 #define SIMPLE_TYPE_SWITCH(typeEnum, castType)      \
     case NKikimr::NScheme::NTypeIds::typeEnum:      \
     {                                               \
-        Y_VERIFY_DEBUG(a.IsInline());                      \
-        Y_VERIFY_DEBUG(b.IsInline());                      \
+        Y_VERIFY_DEBUG(a.IsInline());                      \ 
+        Y_VERIFY_DEBUG(b.IsInline());                      \ 
         castType va = ReadUnaligned<castType>((const castType*)a.InlineData()); \
         castType vb = ReadUnaligned<castType>((const castType*)b.InlineData()); \
         return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
@@ -189,7 +189,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
     }
 
     default:
-        Y_VERIFY_DEBUG(false, "Unknown type");
+        Y_VERIFY_DEBUG(false, "Unknown type"); 
     };
 
     return 0;
@@ -210,7 +210,7 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
 template<class TTypeClass>
 inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) {
-    Y_VERIFY_DEBUG(cnt_b <= cnt_a);
+    Y_VERIFY_DEBUG(cnt_b <= cnt_a); 
     ui32 i = 0;
     for (; i < cnt_b; ++i) {
         int cmpRes = CompareTypedCells(a[i], b[i], type[i]);
@@ -448,11 +448,11 @@ public:
         Y_VERIFY(TryParse(buf, *this));
     }
 
-    TConstArrayRef<TCell> GetCells() const {
+    TConstArrayRef<TCell> GetCells() const { 
         return Cells;
     }
 
-    static TString Serialize(const TConstArrayRef<TCell>& cells) {
+    static TString Serialize(const TConstArrayRef<TCell>& cells) { 
         if (cells.empty())
             return TString();
 

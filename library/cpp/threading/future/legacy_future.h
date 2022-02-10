@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "future.h"
 
 #include <util/thread/factory.h>
@@ -8,7 +8,7 @@
 #include <functional>
 
 namespace NThreading {
-    template <typename TR, bool IgnoreException>
+    template <typename TR, bool IgnoreException> 
     class TLegacyFuture: public IThreadFactory::IThreadAble, TNonCopyable {
     public:
         typedef TR(TFunctionSignature)();

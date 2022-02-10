@@ -10,7 +10,7 @@ class TYaBlobStream: public IBinaryStream {
     i64 Pos;
 
     int WriteImpl(const void*, int) override {
-        Y_ASSERT(0);
+        Y_ASSERT(0); 
         return 0;
     }
     int ReadImpl(void* userBuffer, int size) override {

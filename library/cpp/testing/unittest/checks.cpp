@@ -1,5 +1,5 @@
 #include <util/generic/string.h>
-#include <util/string/type.h>
+#include <util/string/type.h> 
 
 bool CheckExceptionMessage(const char* msg, TString& err) {
     static const char* badMsg[] = {
@@ -10,7 +10,7 @@ bool CheckExceptionMessage(const char* msg, TString& err) {
 
     err.clear();
 
-    if (msg == nullptr) {
+    if (msg == nullptr) { 
         err = "Error message is null";
         return false;
     }
@@ -20,8 +20,8 @@ bool CheckExceptionMessage(const char* msg, TString& err) {
         return false;
     }
 
-    for (auto& i : badMsg) {
-        if (strstr(msg, i) != nullptr) {
+    for (auto& i : badMsg) { 
+        if (strstr(msg, i) != nullptr) { 
             err = "Invalid error message: " + TString(msg);
             return false;
         }

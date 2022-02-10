@@ -6,8 +6,8 @@
 namespace NKikimr {
 namespace NOperationId {
 
-Y_UNIT_TEST_SUITE(OperationIdTest) {
-    Y_UNIT_TEST(ConvertKindOnly) {
+Y_UNIT_TEST_SUITE(OperationIdTest) { 
+    Y_UNIT_TEST(ConvertKindOnly) { 
         Ydb::TOperationId proto;
         proto.SetKind(Ydb::TOperationId::OPERATION_DDL);
         auto str = ProtoToString(proto);
@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
         UNIT_ASSERT_EQUAL(newProto.DataSize(), 0);
     }
 
-    Y_UNIT_TEST(ConvertKindAndValues) {
+    Y_UNIT_TEST(ConvertKindAndValues) { 
         Ydb::TOperationId proto;
         proto.SetKind(Ydb::TOperationId::OPERATION_DDL);
         {

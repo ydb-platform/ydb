@@ -37,12 +37,12 @@ public:
     }
 
     const T& operator[](size_t index) const {
-        Y_ASSERT(IsAvail(index));
+        Y_ASSERT(IsAvail(index)); 
         return Items[RealIndex(index)];
     }
 
     T& operator[](size_t index) {
-        Y_ASSERT(IsAvail(index));
+        Y_ASSERT(IsAvail(index)); 
         return Items[RealIndex(index)];
     }
 

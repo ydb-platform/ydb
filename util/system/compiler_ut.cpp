@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TCompilerTest) {
-    Y_UNIT_TEST(TestPragmaNoWshadow) {
+Y_UNIT_TEST_SUITE(TCompilerTest) { 
+    Y_UNIT_TEST(TestPragmaNoWshadow) { 
         Y_PRAGMA_DIAGNOSTIC_PUSH
         Y_PRAGMA_NO_WSHADOW
 
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TCompilerTest) {
         UNIT_ASSERT_EQUAL(Foo(1), 0);
     }
 
-    Y_UNIT_TEST(TestHaveInt128) {
+    Y_UNIT_TEST(TestHaveInt128) { 
 #ifdef Y_HAVE_INT128
         // will be compiled without errors
         unsigned __int128 a = 1;

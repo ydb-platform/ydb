@@ -28,14 +28,14 @@ TString TMessageStatusCounter::PrintToString() const {
     bool hasZeros = false;
     for (size_t i = 0; i < MESSAGE_STATUS_COUNT; ++i) {
         if (i == MESSAGE_OK) {
-            Y_VERIFY(Counts[i] == 0);
+            Y_VERIFY(Counts[i] == 0); 
             continue;
         }
         if (Counts[i] != 0) {
             p.AddRow(EMessageStatus(i), Counts[i]);
             const char* description = MessageStatusDescription(EMessageStatus(i));
             // TODO: add third column
-            Y_UNUSED(description);
+            Y_UNUSED(description); 
 
             hasNonZeros = true;
         } else {
@@ -59,7 +59,7 @@ void TMessageStatusCounter::FillErrorsProtobuf(TConnectionStatusMonRecord* statu
     status->clear_errorcountbystatus();
     for (size_t i = 0; i < MESSAGE_STATUS_COUNT; ++i) {
         if (i == MESSAGE_OK) {
-            Y_VERIFY(Counts[i] == 0);
+            Y_VERIFY(Counts[i] == 0); 
             continue;
         }
         if (Counts[i] != 0) {

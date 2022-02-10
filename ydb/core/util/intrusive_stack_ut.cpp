@@ -5,12 +5,12 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TIntrusiveStackTest) {
+Y_UNIT_TEST_SUITE(TIntrusiveStackTest) { 
     struct TSimpleItem {
         TSimpleItem *Next = nullptr;
     };
 
-    Y_UNIT_TEST(TestEmptyPop) {
+    Y_UNIT_TEST(TestEmptyPop) { 
         TIntrusiveStack<TSimpleItem, &TSimpleItem::Next> stack;
         TSimpleItem *res = stack.Pop();
         UNIT_ASSERT_EQUAL(res, nullptr);
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TIntrusiveStackTest) {
         UNIT_ASSERT_EQUAL(size, 0);
     }
 
-    Y_UNIT_TEST(TestPushPop) {
+    Y_UNIT_TEST(TestPushPop) { 
         TIntrusiveStack<TSimpleItem, &TSimpleItem::Next> stack;
         TVector<TSimpleItem> items;
         items.resize(100);

@@ -16,15 +16,15 @@
 
 using namespace NTvmAuth;
 
-Y_UNIT_TEST_SUITE(ClientDisk) {
-    Y_UNIT_TEST(Hash) {
+Y_UNIT_TEST_SUITE(ClientDisk) { 
+    Y_UNIT_TEST(Hash) { 
         TString hash = TDiskReader::GetHash("asd");
         UNIT_ASSERT(hash);
         UNIT_ASSERT_VALUES_EQUAL(32, hash.size());
         UNIT_ASSERT_VALUES_EQUAL("Zj5_qYg31bPlqjBW76z8IV0rCsHmv-iN-McV6ybS1-g", NUtils::Bin2base64url(hash));
     }
 
-    Y_UNIT_TEST(Timestamp) {
+    Y_UNIT_TEST(Timestamp) { 
         time_t t = 100500;
 
         TString s = TDiskWriter::WriteTimestamp(t);
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
     const TInstant TIME = TInstant::Seconds(100500);
     const TString DATA = "oiweuhn \n vw3ut hweoi uhgewproritjhwequtherwoiughfdsv 8ty34q01u   34  1=3";
 
-    Y_UNIT_TEST(ParseData_Ok) {
+    Y_UNIT_TEST(ParseData_Ok) { 
         TLogger l;
 
         const TInstant time = TInstant::Seconds(1523446554789);
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
                                  l.Stream.Str());
     }
 
-    Y_UNIT_TEST(ParseData_SmallFile) {
+    Y_UNIT_TEST(ParseData_SmallFile) { 
         TLogger l;
 
         TString toFile = TDiskWriter::PrepareData(TIME, DATA);
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
                                  l.Stream.Str());
     }
 
-    Y_UNIT_TEST(ParseData_Changed) {
+    Y_UNIT_TEST(ParseData_Changed) { 
         TLogger l;
 
         TString toFile = TDiskWriter::PrepareData(TIME, DATA);
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
                                  l.Stream.Str());
     }
 
-    Y_UNIT_TEST(Read_Ok) {
+    Y_UNIT_TEST(Read_Ok) { 
         TLogger l;
 
         TDiskReader r(GetFilePath("ok.cache"), &l);
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
         UNIT_ASSERT_C(l.Stream.Str().find("was successfully read") != TString::npos, l.Stream.Str());
     }
 
-    Y_UNIT_TEST(Read_NoFile) {
+    Y_UNIT_TEST(Read_NoFile) { 
         TLogger l;
 
         TDiskReader r("missing", &l);
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
     }
 
 #ifdef _unix_
-    Y_UNIT_TEST(Read_NoPermitions) {
+    Y_UNIT_TEST(Read_NoPermitions) { 
         TLogger l;
 
         const TString path = GetWorkPath() + "/123";
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
     }
 #endif
 
-    Y_UNIT_TEST(Write_Ok) {
+    Y_UNIT_TEST(Write_Ok) { 
         TLogger l;
 
         const TString path = "./tmp_file";
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
         NFs::Remove(path);
     }
 
-    Y_UNIT_TEST(Write_NoPermitions) {
+    Y_UNIT_TEST(Write_NoPermitions) { 
         TLogger l;
 
         TDiskWriter w("/some_file", &l);

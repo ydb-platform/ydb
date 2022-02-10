@@ -211,7 +211,7 @@ void* TAlignedPagePool::GetPage() {
     }
 
     if (const auto ptr = TGlobalPools::Instance().Get(0).GetPage()) {
-        TotalAllocated += POOL_PAGE_SIZE;
+        TotalAllocated += POOL_PAGE_SIZE; 
         if (AllocNotifyCallback) {
             AllocNotifyCurrentBytes += POOL_PAGE_SIZE;
         }
@@ -409,10 +409,10 @@ ui64 TAlignedPagePool::GetGlobalPagePoolSize() {
     return size;
 }
 
-void TAlignedPagePool::PrintStat(size_t usedPages, IOutputStream& out) const {
+void TAlignedPagePool::PrintStat(size_t usedPages, IOutputStream& out) const { 
     usedPages += GetFreePageCount();
     out << "Count of free pages: " << GetFreePageCount() << Endl;
-    out << "Allocated for blocks: " << (GetAllocated() - usedPages * TAlignedPagePool::POOL_PAGE_SIZE) << Endl;
+    out << "Allocated for blocks: " << (GetAllocated() - usedPages * TAlignedPagePool::POOL_PAGE_SIZE) << Endl; 
     out << "Total allocated by lists: " << GetAllocated() << Endl;
 }
 

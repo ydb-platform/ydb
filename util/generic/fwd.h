@@ -99,8 +99,8 @@ class TBitMap;
 
 //autopointers
 class TDelete;
-class TDeleteArray;
-class TFree;
+class TDeleteArray; 
+class TFree; 
 class TCopyNew;
 
 template <class T, class D = TDelete>
@@ -112,57 +112,57 @@ class THolder;
 template <class T, class C, class D = TDelete>
 class TRefCounted;
 
-template <class T>
-class TDefaultIntrusivePtrOps;
-
+template <class T> 
+class TDefaultIntrusivePtrOps; 
+ 
 template <class T, class Ops>
-class TSimpleIntrusiveOps;
-
-template <class T, class Ops = TDefaultIntrusivePtrOps<T>>
+class TSimpleIntrusiveOps; 
+ 
+template <class T, class Ops = TDefaultIntrusivePtrOps<T>> 
 class TIntrusivePtr;
 
-template <class T, class Ops = TDefaultIntrusivePtrOps<T>>
-class TIntrusiveConstPtr;
-
-template <class T, class Ops = TDefaultIntrusivePtrOps<T>>
-using TSimpleIntrusivePtr = TIntrusivePtr<T, TSimpleIntrusiveOps<T, Ops>>;
-
+template <class T, class Ops = TDefaultIntrusivePtrOps<T>> 
+class TIntrusiveConstPtr; 
+ 
+template <class T, class Ops = TDefaultIntrusivePtrOps<T>> 
+using TSimpleIntrusivePtr = TIntrusivePtr<T, TSimpleIntrusiveOps<T, Ops>>; 
+ 
 template <class T, class C, class D = TDelete>
 class TSharedPtr;
 
 template <class T, class C = TCopyNew, class D = TDelete>
 class TCopyPtr;
 
-template <class TPtr, class TCopy = TCopyNew>
-class TCowPtr;
-
-template <typename T>
-class TPtrArg;
-
-template <typename T>
-using TArrayHolder = THolder<T, TDeleteArray>;
-
-template <typename T>
-using TMallocHolder = THolder<T, TFree>;
-
-template <typename T>
-using TArrayPtr = TAutoPtr<T, TDeleteArray>;
-
-template <typename T>
-using TMallocPtr = TAutoPtr<T, TFree>;
-
+template <class TPtr, class TCopy = TCopyNew> 
+class TCowPtr; 
+ 
+template <typename T> 
+class TPtrArg; 
+ 
+template <typename T> 
+using TArrayHolder = THolder<T, TDeleteArray>; 
+ 
+template <typename T> 
+using TMallocHolder = THolder<T, TFree>; 
+ 
+template <typename T> 
+using TArrayPtr = TAutoPtr<T, TDeleteArray>; 
+ 
+template <typename T> 
+using TMallocPtr = TAutoPtr<T, TFree>; 
+ 
 //maybe
 namespace NMaybe {
     struct TPolicyUndefinedExcept;
 }
-
+ 
 template <class T, class Policy = ::NMaybe::TPolicyUndefinedExcept>
 class TMaybe;
-
-struct TGUID;
-
-template <class T>
-class TArrayRef;
-
-template <class T>
-using TConstArrayRef = TArrayRef<const T>;
+ 
+struct TGUID; 
+ 
+template <class T> 
+class TArrayRef; 
+ 
+template <class T> 
+using TConstArrayRef = TArrayRef<const T>; 

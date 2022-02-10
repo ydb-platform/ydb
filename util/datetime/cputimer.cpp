@@ -2,7 +2,7 @@
 
 #include <util/system/defaults.h>
 #include <util/system/hp_timer.h>
-#include <util/string/printf.h>
+#include <util/string/printf.h> 
 #include <util/stream/output.h>
 #include <util/generic/singleton.h>
 
@@ -16,7 +16,7 @@
     #include <util/system/winint.h>
 #endif
 
-TTimer::TTimer(const TStringBuf message) {
+TTimer::TTimer(const TStringBuf message) { 
     static const int SMALL_DURATION_CHAR_LENGTH = 9;                     // strlen("0.123456s")
     Message_.Reserve(message.length() + SMALL_DURATION_CHAR_LENGTH + 1); // +"\n"
     Message_ << message;
@@ -77,7 +77,7 @@ TString FormatCycles(ui64 cycles) {
     return result;
 }
 
-TFormattedPrecisionTimer::TFormattedPrecisionTimer(const char* message, IOutputStream* out)
+TFormattedPrecisionTimer::TFormattedPrecisionTimer(const char* message, IOutputStream* out) 
     : Message(message)
     , Out(out)
 {
@@ -106,7 +106,7 @@ TTimeLogger::TTimeLogger(const TString& message, bool verbose)
     : Message(message)
     , Verbose(verbose)
     , OK(false)
-    , Begin(time(nullptr))
+    , Begin(time(nullptr)) 
     , BeginCycles(GetCycleCount())
 {
     if (Verbose) {
@@ -116,7 +116,7 @@ TTimeLogger::TTimeLogger(const TString& message, bool verbose)
 }
 
 double TTimeLogger::ElapsedTime() const {
-    return time(nullptr) - Begin;
+    return time(nullptr) - Begin; 
 }
 
 void TTimeLogger::SetOK() {
@@ -124,7 +124,7 @@ void TTimeLogger::SetOK() {
 }
 
 TTimeLogger::~TTimeLogger() {
-    time_t tim = time(nullptr);
+    time_t tim = time(nullptr); 
     ui64 endCycles = GetCycleCount();
     if (Verbose) {
         const char* prefix = (OK) ? "" : "!";

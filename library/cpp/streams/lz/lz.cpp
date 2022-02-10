@@ -32,7 +32,7 @@ const size_t SIGNATURE_SIZE = 4;
 template <class TCompressor, class TBase>
 class TCompressorBase: public TAdditionalStorage<TCompressorBase<TCompressor, TBase>>, public TCompressor, public TCommonData {
 public:
-    inline TCompressorBase(IOutputStream* slave, ui16 blockSize)
+    inline TCompressorBase(IOutputStream* slave, ui16 blockSize) 
         : Slave_(slave)
         , BlockSize_(blockSize)
     {
@@ -76,7 +76,7 @@ public:
     }
 
     template <class T>
-    static inline void Save(T t, IOutputStream* out) {
+    static inline void Save(T t, IOutputStream* out) { 
         t = HostToLittle(t);
 
         out->Write(&t, sizeof(t));
@@ -97,14 +97,14 @@ private:
     }
 
     inline void WriteBlock(const void* ptr, ui16 len) {
-        Y_ASSERT(len <= this->BlockSize());
+        Y_ASSERT(len <= this->BlockSize()); 
 
         ui8 compressed = false;
 
         if (len) {
             const size_t out = this->Compress((const char*)ptr, len, (char*)Block(), this->AdditionalDataLength());
             // catch compressor buffer overrun (e.g. SEARCH-2043)
-            //Y_VERIFY(out <= this->Hint(this->BlockSize()));
+            //Y_VERIFY(out <= this->Hint(this->BlockSize())); 
 
             if (out < len || TCompressor::SaveIncompressibleChunks()) {
                 compressed = true;
@@ -119,7 +119,7 @@ private:
         this->Save(len, &header);
         this->Save(compressed, &header);
 
-        using TPart = IOutputStream::TPart;
+        using TPart = IOutputStream::TPart; 
         if (ptr) {
             const TPart parts[] = {
                 TPart(tmp, sizeof(tmp)),
@@ -133,12 +133,12 @@ private:
     }
 
 private:
-    IOutputStream* Slave_;
+    IOutputStream* Slave_; 
     const ui16 BlockSize_;
 };
 
 template <class T>
-static inline T GLoad(IInputStream* input) {
+static inline T GLoad(IInputStream* input) { 
     T t;
 
     if (input->Load(&t, sizeof(t)) != sizeof(t)) {
@@ -150,7 +150,7 @@ static inline T GLoad(IInputStream* input) {
 
 class TDecompressSignature {
 public:
-    inline TDecompressSignature(IInputStream* input) {
+    inline TDecompressSignature(IInputStream* input) { 
         if (input->Load(Buffer_, SIGNATURE_SIZE) != SIGNATURE_SIZE) {
             ythrow TDecompressorError() << "can not load stream signature";
         }
@@ -167,7 +167,7 @@ private:
 };
 
 template <class TDecompressor>
-static inline IInputStream* ConsumeSignature(IInputStream* input) {
+static inline IInputStream* ConsumeSignature(IInputStream* input) { 
     TDecompressSignature sign(input);
     if (!sign.Check<TDecompressor>()) {
         ythrow TDecompressorError() << "incorrect signature";
@@ -186,7 +186,7 @@ public:
         return v;
     }
 
-    inline TDecompressorBaseImpl(IInputStream* slave)
+    inline TDecompressorBaseImpl(IInputStream* slave) 
         : Slave_(slave)
         , Input_(nullptr, 0)
         , Eof_(false)
@@ -265,7 +265,7 @@ public:
     }
 
 protected:
-    IInputStream* Slave_;
+    IInputStream* Slave_; 
     TMemoryInput Input_;
     bool Eof_;
     const ui32 Version_;
@@ -279,7 +279,7 @@ protected:
 template <class TDecompressor, class TBase>
 class TDecompressorBase: public TDecompressorBaseImpl<TDecompressor> {
 public:
-    inline TDecompressorBase(IInputStream* slave)
+    inline TDecompressorBase(IInputStream* slave) 
         : TDecompressorBaseImpl<TDecompressor>(ConsumeSignature<TDecompressor>(slave))
     {
     }
@@ -323,12 +323,12 @@ public:
 #define DEF_COMPRESSOR(rname, name)                                     \
     class rname::TImpl: public TCompressorBase<name, TImpl> {           \
     public:                                                             \
-        inline TImpl(IOutputStream* out, ui16 blockSize)                \
+        inline TImpl(IOutputStream* out, ui16 blockSize)                \ 
             : TCompressorBase<name, TImpl>(out, blockSize) {            \
         }                                                               \
     };                                                                  \
                                                                         \
-    rname::rname(IOutputStream* slave, ui16 blockSize)                  \
+    rname::rname(IOutputStream* slave, ui16 blockSize)                  \ 
         : Impl_(new (TImpl::Hint(blockSize)) TImpl(slave, blockSize)) { \
     }                                                                   \
                                                                         \
@@ -337,12 +337,12 @@ public:
 #define DEF_DECOMPRESSOR(rname, name)                            \
     class rname::TImpl: public TDecompressorBase<name, TImpl> {  \
     public:                                                      \
-        inline TImpl(IInputStream* in)                           \
+        inline TImpl(IInputStream* in)                           \ 
             : TDecompressorBase<name, TImpl>(in) {               \
         }                                                        \
     };                                                           \
                                                                  \
-    rname::rname(IInputStream* slave)                            \
+    rname::rname(IInputStream* slave)                            \ 
         : Impl_(new TImpl(slave)) {                              \
     }                                                            \
                                                                  \
@@ -420,7 +420,7 @@ public:
         return ret;
     }
 
-    inline void InitFromStream(IInputStream*) const noexcept {
+    inline void InitFromStream(IInputStream*) const noexcept { 
     }
 };
 
@@ -446,7 +446,7 @@ public:
         return fastlz_decompress(data, len, ptr, max);
     }
 
-    inline void InitFromStream(IInputStream*) const noexcept {
+    inline void InitFromStream(IInputStream*) const noexcept { 
     }
 
     static inline bool SaveIncompressibleChunks() noexcept {
@@ -481,7 +481,7 @@ public:
         return res;
     }
 
-    inline void InitFromStream(IInputStream*) const noexcept {
+    inline void InitFromStream(IInputStream*) const noexcept { 
     }
 
     static inline bool SaveIncompressibleChunks() noexcept {
@@ -518,7 +518,7 @@ public:
         return srclen;
     }
 
-    inline void InitFromStream(IInputStream*) const noexcept {
+    inline void InitFromStream(IInputStream*) const noexcept { 
     }
 
     static inline bool SaveIncompressibleChunks() noexcept {
@@ -586,7 +586,7 @@ public:
         return Table_->Decompress(data, ptr, (char*)Mem_.Get());
     }
 
-    inline void InitFromStream(IInputStream* in) {
+    inline void InitFromStream(IInputStream* in) { 
         const ui8 ver = ::GLoad<ui8>(in);
         const ui8 lev = ::GLoad<ui8>(in);
         const ui8 mod = ::GLoad<ui8>(in);
@@ -597,7 +597,7 @@ public:
 
 class TLzqCompress::TImpl: public TCompressorBase<TQuickLZCompress, TImpl> {
 public:
-    inline TImpl(IOutputStream* out, ui16 blockSize, EVersion ver, unsigned level, EMode mode)
+    inline TImpl(IOutputStream* out, ui16 blockSize, EVersion ver, unsigned level, EMode mode) 
         : TCompressorBase<TQuickLZCompress, TImpl>(out, blockSize)
     {
         memset(AdditionalData(), 0, AdditionalDataLength());
@@ -610,7 +610,7 @@ public:
     }
 };
 
-TLzqCompress::TLzqCompress(IOutputStream* slave, ui16 blockSize, EVersion ver, unsigned level, EMode mode)
+TLzqCompress::TLzqCompress(IOutputStream* slave, ui16 blockSize, EVersion ver, unsigned level, EMode mode) 
     : Impl_(new (TImpl::Hint(blockSize)) TImpl(slave, blockSize, ver, level, mode))
 {
 }
@@ -639,7 +639,7 @@ namespace {
 
     // Decompressing input streams without signature verification
     template <class TInput, class TDecompressor>
-    class TLzDecompressInput: public TInputHolder<TInput>, public IInputStream {
+    class TLzDecompressInput: public TInputHolder<TInput>, public IInputStream { 
     public:
         inline TLzDecompressInput(TInput in)
             : Impl_(this->Set(in))
@@ -657,7 +657,7 @@ namespace {
 }
 
 template <class T>
-static TAutoPtr<IInputStream> TryOpenLzDecompressorX(const TDecompressSignature& s, T input) {
+static TAutoPtr<IInputStream> TryOpenLzDecompressorX(const TDecompressSignature& s, T input) { 
     if (s.Check<TLZ4>())
         return new TLzDecompressInput<T, TLZ4>(input);
 
@@ -677,7 +677,7 @@ static TAutoPtr<IInputStream> TryOpenLzDecompressorX(const TDecompressSignature&
 }
 
 template <class T>
-static inline TAutoPtr<IInputStream> TryOpenLzDecompressorImpl(const TStringBuf& signature, T input) {
+static inline TAutoPtr<IInputStream> TryOpenLzDecompressorImpl(const TStringBuf& signature, T input) { 
     if (signature.size() == SIGNATURE_SIZE) {
         TMemoryInput mem(signature.data(), signature.size());
         TDecompressSignature s(&mem);
@@ -689,15 +689,15 @@ static inline TAutoPtr<IInputStream> TryOpenLzDecompressorImpl(const TStringBuf&
 }
 
 template <class T>
-static inline TAutoPtr<IInputStream> TryOpenLzDecompressorImpl(T input) {
+static inline TAutoPtr<IInputStream> TryOpenLzDecompressorImpl(T input) { 
     TDecompressSignature s(&*input);
 
     return TryOpenLzDecompressorX(s, input);
 }
 
 template <class T>
-static inline TAutoPtr<IInputStream> OpenLzDecompressorImpl(T input) {
-    TAutoPtr<IInputStream> ret = TryOpenLzDecompressorImpl(input);
+static inline TAutoPtr<IInputStream> OpenLzDecompressorImpl(T input) { 
+    TAutoPtr<IInputStream> ret = TryOpenLzDecompressorImpl(input); 
 
     if (!ret) {
         ythrow TDecompressorError() << "Unknown compression format";
@@ -706,26 +706,26 @@ static inline TAutoPtr<IInputStream> OpenLzDecompressorImpl(T input) {
     return ret;
 }
 
-TAutoPtr<IInputStream> OpenLzDecompressor(IInputStream* input) {
+TAutoPtr<IInputStream> OpenLzDecompressor(IInputStream* input) { 
     return OpenLzDecompressorImpl(input);
 }
 
-TAutoPtr<IInputStream> TryOpenLzDecompressor(IInputStream* input) {
+TAutoPtr<IInputStream> TryOpenLzDecompressor(IInputStream* input) { 
     return TryOpenLzDecompressorImpl(input);
 }
 
-TAutoPtr<IInputStream> TryOpenLzDecompressor(const TStringBuf& signature, IInputStream* input) {
+TAutoPtr<IInputStream> TryOpenLzDecompressor(const TStringBuf& signature, IInputStream* input) { 
     return TryOpenLzDecompressorImpl(signature, input);
 }
 
-TAutoPtr<IInputStream> OpenOwnedLzDecompressor(TAutoPtr<IInputStream> input) {
+TAutoPtr<IInputStream> OpenOwnedLzDecompressor(TAutoPtr<IInputStream> input) { 
     return OpenLzDecompressorImpl(input);
 }
 
-TAutoPtr<IInputStream> TryOpenOwnedLzDecompressor(TAutoPtr<IInputStream> input) {
+TAutoPtr<IInputStream> TryOpenOwnedLzDecompressor(TAutoPtr<IInputStream> input) { 
     return TryOpenLzDecompressorImpl(input);
 }
 
-TAutoPtr<IInputStream> TryOpenOwnedLzDecompressor(const TStringBuf& signature, TAutoPtr<IInputStream> input) {
+TAutoPtr<IInputStream> TryOpenOwnedLzDecompressor(const TStringBuf& signature, TAutoPtr<IInputStream> input) { 
     return TryOpenLzDecompressorImpl(signature, input);
 }

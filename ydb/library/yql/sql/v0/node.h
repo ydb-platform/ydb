@@ -186,7 +186,7 @@ namespace NSQLTranslationV0 {
 
         template <typename... TVals>
         TPtr L(TPtr list, TVals... vals) const {
-            Y_VERIFY_DEBUG(list);
+            Y_VERIFY_DEBUG(list); 
             auto copy = list->ShallowCopy();
             copy->Add(vals...);
             return copy;

@@ -8,7 +8,7 @@ RECURSE(
     aio-pika
     aioboto3
     aiobotocore
-    aioch
+    aioch 
     aiochclient
     aiodns
     aiodocker
@@ -35,13 +35,13 @@ RECURSE(
     aiosignal
     aiosmtpd
     aiosmtplib
-    aiosocksy
+    aiosocksy 
     aiosqlite
     aiotg
     aiounittest
     aiozipkin
     aiozk
-    alabaster
+    alabaster 
     alembic
     allpairspy
     amqp
@@ -88,10 +88,10 @@ RECURSE(
     autobahn
     Automat
     awscli
-    Babel
+    Babel 
     backcall
-    backports_abc
-    backports.csv
+    backports_abc 
+    backports.csv 
     backports.functools-lru-cache
     backports.lzma
     backports.shutil-get-terminal-size
@@ -162,7 +162,7 @@ RECURSE(
     color
     colorama
     coloredlogs
-    colorhash
+    colorhash 
     colorlog
     commoncode
     commonmark
@@ -325,7 +325,7 @@ RECURSE(
     dpath
     dpkt
     drf-extensions
-    drf_ujson
+    drf_ujson 
     drf-yasg
     easywebdav
     ecdsa
@@ -367,7 +367,7 @@ RECURSE(
     fastsnmp
     faulthandler
     fbprophet
-    feedparser
+    feedparser 
     ffmpeg-python
     fido2
     filelock
@@ -383,20 +383,20 @@ RECURSE(
     flaky
     Flask
     Flask-Admin
-    flask-appconfig
+    flask-appconfig 
     Flask-Babel
     Flask-Bootstrap
     Flask-Bootstrap/example
     Flask-Caching
     flask-cors
-    flask_graphql
+    flask_graphql 
     Flask-Humanize
     Flask-Log-Request-ID
     Flask-Login
     Flask-Mail
     flask-marshmallow
     Flask-Menu
-    flask_migrate
+    flask_migrate 
     flask-mongoengine
     Flask-OpenTracing
     Flask-Principal
@@ -678,7 +678,7 @@ RECURSE(
     odfpy
     Office365-REST-Python-Client
     olefile
-    openapi-codec
+    openapi-codec 
     openapi-core
     openapi-schema-validator
     openapi-spec-validator
@@ -712,7 +712,7 @@ RECURSE(
     parse
     parse-type
     parsedatetime
-    parsel
+    parsel 
     Parsley
     parso
     partd
@@ -720,7 +720,7 @@ RECURSE(
     patch
     patched
     path.py
-    pathlib2
+    pathlib2 
     pathspec
     pathtools
     pathy
@@ -789,7 +789,7 @@ RECURSE(
     py4j
     pyaes
     pyahocorasick
-    pyaml
+    pyaml 
     pyasn1
     pyasn1-modules
     pybreaker
@@ -857,7 +857,7 @@ RECURSE(
     pystan/pystan_model
     pysyncobj
     pyTelegramBotAPI
-    pytest
+    pytest 
     pytest-allure-adaptor
     pytest-asyncio
     pytest-bdd
@@ -865,13 +865,13 @@ RECURSE(
     pytest-datafixtures
     pytest-django
     pytest-falcon
-    pytest-falcon-client
+    pytest-falcon-client 
     pytest-fixture-config
     pytest-flake8
     pytest-flakes
     pytest-flask
     pytest-forked
-    pytest-freezegun
+    pytest-freezegun 
     pytest-httpretty
     pytest-lazy-fixture
     pytest-localserver
@@ -899,7 +899,7 @@ RECURSE(
     python-geohash
     python-gnupg
     python-hglib
-    python-i18n
+    python-i18n 
     python-jose
     python-json-logger
     python-ldap
@@ -1003,7 +1003,7 @@ RECURSE(
     skynet_pyro4
     slack-sdk
     slackclient
-    smart-open
+    smart-open 
     smmap
     snappy
     sniffio
@@ -1021,12 +1021,12 @@ RECURSE(
     spidev
     spintop-openhtf
     splunk-sdk-python
-    sqlalchemy
+    sqlalchemy 
     SQLAlchemy-Continuum
     sqlalchemy-stubs
     SQLAlchemy-Utils
     sqlparse
-    sqltap
+    sqltap 
     srptools
     srsly
     sshpubkeys
@@ -1047,7 +1047,7 @@ RECURSE(
     swagger-spec-validator
     sympy
     sysv-ipc
-    tableauserverclient
+    tableauserverclient 
     tablib
     tabulate
     tblib
@@ -1080,7 +1080,7 @@ RECURSE(
     toro
     tqdm
     trace_event
-    traceback2
+    traceback2 
     traitlets
     transfer_manager_client
     transitions
@@ -1141,7 +1141,7 @@ RECURSE(
     webargs
     webauthn
     webcolors
-    webencodings
+    webencodings 
     WebOb
     websocket-client
     websockets

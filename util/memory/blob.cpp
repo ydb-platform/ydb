@@ -4,7 +4,7 @@
 #include <util/system/yassert.h>
 #include <util/system/filemap.h>
 #include <util/system/mlock.h>
-#include <util/stream/buffer.h>
+#include <util/stream/buffer.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/buffer.h>
@@ -174,7 +174,7 @@ static inline TBlob CopyConstruct(const void* data, size_t len) {
     using Base = TDynamicBlobBase<TCounter>;
     THolder<Base> base(new (len) Base);
 
-    Y_ASSERT(base->Length() == len);
+    Y_ASSERT(base->Length() == len); 
 
     memcpy(base->Data(), data, len);
 
@@ -305,7 +305,7 @@ static inline TBlob ReadFromFile(const TFile& file, ui64 offset, size_t length) 
     using TBase = TDynamicBlobBase<TCounter>;
     THolder<TBase> base(new (length) TBase);
 
-    Y_ASSERT(base->Length() == length);
+    Y_ASSERT(base->Length() == length); 
 
     file.Pload(base->Data(), length, offset);
 
@@ -362,7 +362,7 @@ static inline TBlob ConstructFromBuffer(TBuffer& in) {
 }
 
 template <class TCounter>
-static inline TBlob ConstructFromStream(IInputStream& in) {
+static inline TBlob ConstructFromStream(IInputStream& in) { 
     TBuffer buf;
 
     {
@@ -374,11 +374,11 @@ static inline TBlob ConstructFromStream(IInputStream& in) {
     return ConstructFromBuffer<TCounter>(buf);
 }
 
-TBlob TBlob::FromStreamSingleThreaded(IInputStream& in) {
+TBlob TBlob::FromStreamSingleThreaded(IInputStream& in) { 
     return ConstructFromStream<TSimpleCounter>(in);
 }
 
-TBlob TBlob::FromStream(IInputStream& in) {
+TBlob TBlob::FromStream(IInputStream& in) { 
     return ConstructFromStream<TAtomicCounter>(in);
 }
 

@@ -343,7 +343,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
         runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
         return;
     } else {
-        Y_FAIL();
+        Y_FAIL(); 
     }
 }
 
@@ -406,7 +406,7 @@ void PrepareBlobSubgroup(TLogoBlobID logoblobid, TString data, TVector<TVDiskSta
 
 
 
-Y_UNIT_TEST_SUITE(TBlobStorageProxySequenceTest) {
+Y_UNIT_TEST_SUITE(TBlobStorageProxySequenceTest) { 
 
 
 struct TGeneralDecorator : public TDecorator {
@@ -746,7 +746,7 @@ Y_UNIT_TEST(TestGivenMirror3DCGetWithFirstSlowDisk) {
     TEvBlobStorage::TEvVGet::TPtr vget = testState.GrabEventPtr<TEvBlobStorage::TEvVGet>();
 }
 
-Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
+Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) { 
     TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
@@ -974,7 +974,7 @@ Y_UNIT_TEST(TestProtobufSizeWithMultiGet) {
     MakeTestProtobufSizeWithMultiGet(blobPacks, {224, 223, 1});
 }
 
-Y_UNIT_TEST(TestGivenStripe42GetThenVGetResponsePartsNodata263451ThenGetOk) {
+Y_UNIT_TEST(TestGivenStripe42GetThenVGetResponsePartsNodata263451ThenGetOk) { 
     TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Stripe};
     Setup(runtime, type);
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
     }
 }
 
-Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
+Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) { 
     TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
@@ -1145,7 +1145,7 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
     }
 }
 
-Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
+Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) { 
     TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
@@ -1254,7 +1254,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
     }
 }
 
-Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
+Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) { 
     TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
@@ -1374,6 +1374,6 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
 }
 
 
-} // Y_UNIT_TEST_SUITE TBlobStorageProxySequenceTest
+} // Y_UNIT_TEST_SUITE TBlobStorageProxySequenceTest 
 } // namespace NBlobStorageProxySequenceTest
 } // namespace NKikimr

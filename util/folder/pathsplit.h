@@ -10,7 +10,7 @@ struct TPathSplitStore: public TVector<TStringBuf> {
     TStringBuf Drive;
     bool IsAbsolute = false;
 
-    void AppendComponent(const TStringBuf comp);
+    void AppendComponent(const TStringBuf comp); 
     TStringBuf Extension() const;
 
 protected:
@@ -22,41 +22,41 @@ protected:
 };
 
 struct TPathSplitTraitsUnix: public TPathSplitStore {
-    static constexpr char MainPathSep = '/';
+    static constexpr char MainPathSep = '/'; 
 
     inline TString Reconstruct() const {
         return DoReconstruct(TStringBuf("/"));
     }
 
-    static constexpr bool IsPathSep(const char c) noexcept {
+    static constexpr bool IsPathSep(const char c) noexcept { 
         return c == '/';
     }
 
-    static inline bool IsAbsolutePath(const TStringBuf path) noexcept {
+    static inline bool IsAbsolutePath(const TStringBuf path) noexcept { 
         return path && IsPathSep(path[0]);
     }
 
-    void DoParseFirstPart(const TStringBuf part);
-    void DoParsePart(const TStringBuf part);
+    void DoParseFirstPart(const TStringBuf part); 
+    void DoParsePart(const TStringBuf part); 
 };
 
 struct TPathSplitTraitsWindows: public TPathSplitStore {
-    static constexpr char MainPathSep = '\\';
+    static constexpr char MainPathSep = '\\'; 
 
     inline TString Reconstruct() const {
         return DoReconstruct(TStringBuf("\\"));
     }
 
-    static constexpr bool IsPathSep(char c) noexcept {
+    static constexpr bool IsPathSep(char c) noexcept { 
         return c == '/' || c == '\\';
     }
 
-    static inline bool IsAbsolutePath(const TStringBuf path) noexcept {
+    static inline bool IsAbsolutePath(const TStringBuf path) noexcept { 
         return path && (IsPathSep(path[0]) || (path.size() > 1 && path[1] == ':' && IsAsciiAlpha(path[0]) && (path.size() == 2 || IsPathSep(path[2]))));
     }
 
-    void DoParseFirstPart(const TStringBuf part);
-    void DoParsePart(const TStringBuf part);
+    void DoParseFirstPart(const TStringBuf part); 
+    void DoParsePart(const TStringBuf part); 
 };
 
 #if defined(_unix_)
@@ -70,7 +70,7 @@ class TPathSplitBase: public TTraits {
 public:
     inline TPathSplitBase() = default;
 
-    inline TPathSplitBase(const TStringBuf part) {
+    inline TPathSplitBase(const TStringBuf part) { 
         this->ParseFirstPart(part);
     }
 
@@ -80,13 +80,13 @@ public:
         return *this;
     }
 
-    inline TPathSplitBase& ParseFirstPart(const TStringBuf part) {
+    inline TPathSplitBase& ParseFirstPart(const TStringBuf part) { 
         this->DoParseFirstPart(part);
 
         return *this;
     }
 
-    inline TPathSplitBase& ParsePart(const TStringBuf part) {
+    inline TPathSplitBase& ParsePart(const TStringBuf part) { 
         this->DoParsePart(part);
 
         return *this;
@@ -110,4 +110,4 @@ using TPathSplitWindows = TPathSplitBase<TPathSplitTraitsWindows>;
 
 TString JoinPaths(const TPathSplit& p1, const TPathSplit& p2);
 
-TStringBuf CutExtension(const TStringBuf fileName);
+TStringBuf CutExtension(const TStringBuf fileName); 

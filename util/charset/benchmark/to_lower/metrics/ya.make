@@ -1,21 +1,21 @@
-OWNER(
-    agorodilov
+OWNER( 
+    agorodilov 
     g:util
-)
+) 
 SUBSCRIBER(g:util-subscribers)
-
+ 
 PY2TEST()
-
+ 
 SIZE(LARGE)
-
-TAG(
+ 
+TAG( 
     ya:force_sandbox
-    sb:intel_e5_2660v1
+    sb:intel_e5_2660v1 
     ya:fat
-)
-
+) 
+ 
 TEST_SRCS(main.py)
-
+ 
 DEPENDS(util/charset/benchmark/to_lower)
-
-END()
+ 
+END() 

@@ -3,9 +3,9 @@
 
 namespace NKikimr {
 
-    Y_UNIT_TEST_SUITE(TBlobStorageKeyBarrierTest) {
+    Y_UNIT_TEST_SUITE(TBlobStorageKeyBarrierTest) { 
 
-        Y_UNIT_TEST(ParseTest) {
+        Y_UNIT_TEST(ParseTest) { 
             TKeyBarrier id;
             TKeyBarrier expected;
             TString explanation;

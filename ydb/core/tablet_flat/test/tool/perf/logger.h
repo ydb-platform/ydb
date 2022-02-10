@@ -22,7 +22,7 @@ namespace NPerf {
             , public NKikiSched::ILogger {
 
     public:
-        TLogger(int level = 0, int relev = -1, IOutputStream *redir = nullptr)
+        TLogger(int level = 0, int relev = -1, IOutputStream *redir = nullptr) 
             : Start(Now())
             , Level(level)
             , Relev(redir ? relev : -1)
@@ -71,7 +71,7 @@ namespace NPerf {
         const TInstant Start;
         const int Level = 0;
         const int Relev = 0;
-        IOutputStream *Redir = nullptr;
+        IOutputStream *Redir = nullptr; 
     };
 }
 }

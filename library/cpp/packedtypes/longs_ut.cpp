@@ -4,11 +4,11 @@
 
 #include <library/cpp/digest/old_crc/crc.h>
 #include <util/string/util.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/system/hi_lo.h>
 
-Y_UNIT_TEST_SUITE(TLongsTest) {
-    Y_UNIT_TEST(TestLongs) {
+Y_UNIT_TEST_SUITE(TLongsTest) { 
+    Y_UNIT_TEST(TestLongs) { 
         i16 x16 = 40;
         i64 x64 = 40;
         i64 y64;
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
         }
     }
 
-    Y_UNIT_TEST(TestCornerCases) {
+    Y_UNIT_TEST(TestCornerCases) { 
         TestCornerCasesImpl<i32>(31);
         TestCornerCasesImpl<i64>(63);
     }

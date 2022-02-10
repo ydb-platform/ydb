@@ -13,8 +13,8 @@ THolder<TTestActorRuntimeBase> CreateRuntime() {
     return runtime;
 }
 
-Y_UNIT_TEST_SUITE(TSelfPingTest) {
-    Y_UNIT_TEST(Basic)
+Y_UNIT_TEST_SUITE(TSelfPingTest) { 
+    Y_UNIT_TEST(Basic) 
     {
         auto runtime = CreateRuntime();
 

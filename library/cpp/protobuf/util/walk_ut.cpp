@@ -6,7 +6,7 @@
 
 using namespace NProtoBuf;
 
-Y_UNIT_TEST_SUITE(ProtobufWalk) {
+Y_UNIT_TEST_SUITE(ProtobufWalk) { 
     static void InitProto(NProtobufUtilUt::TWalkTest & p, int level = 0) {
         p.SetOptInt(1);
         p.AddRepInt(2);

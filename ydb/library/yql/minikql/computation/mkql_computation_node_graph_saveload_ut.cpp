@@ -103,8 +103,8 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
-    Y_UNIT_TEST(TestSqueezeSaveLoad) {
+Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) { 
+    Y_UNIT_TEST(TestSqueezeSaveLoad) { 
         TScopedAlloc alloc;
 
         const std::vector<ui32> items = {2, 3, 4, 5, 6, 7, 8};
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSqueeze1SaveLoad) {
+    Y_UNIT_TEST(TestSqueeze1SaveLoad) { 
         TScopedAlloc alloc;
 
         const std::vector<ui32> items = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
         }
     }
 
-    Y_UNIT_TEST(TestHoppingSaveLoad) {
+    Y_UNIT_TEST(TestHoppingSaveLoad) { 
         TScopedAlloc alloc;
 
         const std::vector<std::pair<i64, ui32>> items = {

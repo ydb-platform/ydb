@@ -42,7 +42,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     }
 
     void Plan(TTransactionContext &txc, const TActorContext &ctx) {
-        Y_UNUSED(txc);
+        Y_UNUSED(txc); 
         NIceDb::TNiceDb db(txc.DB);
         ExecStartMoment = ctx.Now();
         const bool lowDiskSpace = Self->Executor()->GetStats().IsAnyChannelYellowStop;
@@ -69,7 +69,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                 }
 
                 const TTxId txId = proposal->TxId;
-                Y_VERIFY(txId);
+                Y_VERIFY(txId); 
 
                 Self->MonCounters.StepConsideredTx->Inc();
                 auto durationMs = (ExecStartMoment - proposal->AcceptMoment).MilliSeconds();
@@ -131,7 +131,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                     TTransaction& transaction = Self->Transactions[txId];
 
                     transaction.PlanOnStep = PlanOnStep;
-                    Y_VERIFY(!proposal->AffectedSet.empty());
+                    Y_VERIFY(!proposal->AffectedSet.empty()); 
                     for (const auto &txprop : proposal->AffectedSet) {
                         const TTabletId affectedTablet = txprop.TabletId;
                         const TTabletId mediatorId = Self->Config.Mediators->Select(affectedTablet);

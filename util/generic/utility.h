@@ -66,8 +66,8 @@ static inline void SecureZero(T& t) noexcept {
 }
 
 namespace NSwapCheck {
-    Y_HAS_MEMBER(swap);
-    Y_HAS_MEMBER(Swap);
+    Y_HAS_MEMBER(swap); 
+    Y_HAS_MEMBER(Swap); 
 
     template <class T, class = void>
     struct TSwapSelector {

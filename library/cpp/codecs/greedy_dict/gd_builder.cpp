@@ -4,7 +4,7 @@
 #include <util/generic/algorithm.h>
 
 #include <util/random/shuffle.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/string/printf.h>
 #include <util/system/rusage.h>
 

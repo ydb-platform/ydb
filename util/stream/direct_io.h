@@ -4,7 +4,7 @@
 #include "output.h"
 #include <util/system/direct_io.h>
 
-class TRandomAccessFileInput: public IInputStream {
+class TRandomAccessFileInput: public IInputStream { 
 public:
     TRandomAccessFileInput(TDirectIOBufferedFile& file, ui64 position);
 
@@ -17,7 +17,7 @@ private:
     ui64 Position;
 };
 
-class TRandomAccessFileOutput: public IOutputStream {
+class TRandomAccessFileOutput: public IOutputStream { 
 public:
     TRandomAccessFileOutput(TDirectIOBufferedFile& file);
 

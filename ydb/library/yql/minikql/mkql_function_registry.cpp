@@ -63,7 +63,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 const NUdf::TStringRef& name,
                 NUdf::TUniquePtr<NUdf::IUdfModule> module) override
         {
-            Y_VERIFY_DEBUG(module, "Module is empty");
+            Y_VERIFY_DEBUG(module, "Module is empty"); 
 
             if (!HasError()) {
                 TUdfModule m;
@@ -78,7 +78,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 auto i = ModulesMap.insert({ newName, std::move(m) });
                 if (!i.second) {
                     TUdfModule* oldModule = ModulesMap.FindPtr(newName);
-                    Y_VERIFY_DEBUG(oldModule != nullptr);
+                    Y_VERIFY_DEBUG(oldModule != nullptr); 
                     Error = (TStringBuilder()
                              << "UDF module duplication: name " << TStringBuf(name)
                              << ", already loaded from " << oldModule->LibraryPath
@@ -183,7 +183,7 @@ public:
         TUdfModuleLoader loader(
                     UdfModules_, libraryPath, remmapings, lib->AbiVersion);
         registerFunc(loader, flags);
-        Y_ENSURE(!loader.HasError(), loader.GetError());
+        Y_ENSURE(!loader.HasError(), loader.GetError()); 
     }
 
     void AddModule(
@@ -203,7 +203,7 @@ public:
                     remappings, NUdf::CurrentAbiVersion());
         loader.AddModule(moduleName, std::move(module));
 
-        Y_ENSURE(!loader.HasError(), loader.GetError());
+        Y_ENSURE(!loader.HasError(), loader.GetError()); 
     }
 
     void SetSystemModulePaths(const TUdfModulePathsMap& paths) override {
@@ -338,7 +338,7 @@ public:
         return SupportsSizedAllocators_;
     }
 
-    void PrintInfoTo(IOutputStream& out) const override {
+    void PrintInfoTo(IOutputStream& out) const override { 
         Builtins_->PrintInfoTo(out);
     }
 
@@ -432,7 +432,7 @@ public:
         return true;
     }
 
-    void PrintInfoTo(IOutputStream& out) const override {
+    void PrintInfoTo(IOutputStream& out) const override { 
         Builtins_->PrintInfoTo(out);
     }
 

@@ -18,7 +18,7 @@ namespace NKikimr {
             : SchTime(TAppData::TimeProvider->Now())
         {}
 
-        void TPeerSyncState::Serialize(IOutputStream &s) const {
+        void TPeerSyncState::Serialize(IOutputStream &s) const { 
             i32 status = (i32)LastSyncStatus;
             s.Write(&status, sizeof(status));
             SyncState.Serialize(s);
@@ -66,7 +66,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void TPeerSyncState::OutputHtml(IOutputStream &str) const {
+        void TPeerSyncState::OutputHtml(IOutputStream &str) const { 
             HTML(str) {
                 ESyncStatus state = LastSyncStatus;
                 if (NSyncer::TPeerSyncState::Good(state)) {
@@ -107,7 +107,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void TPeerGuidInfo::OutputHtml(IOutputStream &str) const {
+        void TPeerGuidInfo::OutputHtml(IOutputStream &str) const { 
             HTML(str) {
                 SMALL() {
                     SMALL() {
@@ -124,7 +124,7 @@ namespace NKikimr {
         // TPeer
         // We manage this structure for every disk in the group
         ////////////////////////////////////////////////////////////////////////////
-        void TPeer::Serialize(IOutputStream &s) const {
+        void TPeer::Serialize(IOutputStream &s) const { 
             PeerSyncState.Serialize(s);
             // we don't serialize PeerGuidInfo because we can't do it in old format
         }
@@ -151,7 +151,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void TPeer::OutputHtml(IOutputStream &str) const {
+        void TPeer::OutputHtml(IOutputStream &str) const { 
             PeerSyncState.OutputHtml(str);
             PeerGuidInfo.OutputHtml(str);
         }
@@ -171,12 +171,12 @@ namespace NKikimr {
         , QuorumTracker(self, top, false)
     {}
 
-    void TSyncNeighbors::OldSerialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const {
+    void TSyncNeighbors::OldSerialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const { 
         TOldSer ser(str, info);
         Neighbors.GenericSerialize(ser);
     }
 
-    void TSyncNeighbors::Serialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const {
+    void TSyncNeighbors::Serialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const { 
         TSer ser(str, info);
         Neighbors.GenericSerialize(ser);
     }
@@ -186,7 +186,7 @@ namespace NKikimr {
         Neighbors.GenericSerialize(ser);
     }
 
-    void TSyncNeighbors::OldParse(IInputStream &str) {
+    void TSyncNeighbors::OldParse(IInputStream &str) { 
         TOldDes des(str);
         Neighbors.GenericParse(des);
     }
@@ -197,7 +197,7 @@ namespace NKikimr {
         OldParse(str);
     }
 
-    void TSyncNeighbors::Parse(IInputStream &str) {
+    void TSyncNeighbors::Parse(IInputStream &str) { 
         TDes des(str);
         Neighbors.GenericParse(des);
     }

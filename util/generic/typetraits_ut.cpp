@@ -78,13 +78,13 @@ namespace {
         UNIT_ASSERT_C(x_, #x " != " #y);           \
     }
 
-Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
-    Y_UNIT_TEST(TestIsSame) {
+Y_UNIT_TEST_SUITE(TTypeTraitsTest) { 
+    Y_UNIT_TEST(TestIsSame) { 
         UNIT_ASSERT((std::is_same<int, int>::value));
         UNIT_ASSERT(!(std::is_same<signed int, unsigned int>::value));
     }
 
-    Y_UNIT_TEST(TestRemoveReference) {
+    Y_UNIT_TEST(TestRemoveReference) { 
         ASSERT_SAME_TYPE(std::remove_reference_t<int>, int);
         ASSERT_SAME_TYPE(std::remove_reference_t<const int>, const int);
         ASSERT_SAME_TYPE(std::remove_reference_t<int&>, int);
@@ -96,23 +96,23 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         ASSERT_SAME_TYPE(std::remove_reference_t<TIncompleteType&>, TIncompleteType);
     }
 
-    Y_UNIT_TEST(TestRemoveConst) {
+    Y_UNIT_TEST(TestRemoveConst) { 
         ASSERT_SAME_TYPE(std::remove_const_t<const int>, int);
     }
 
-    Y_UNIT_TEST(TestRemoveVolatile) {
+    Y_UNIT_TEST(TestRemoveVolatile) { 
         ASSERT_SAME_TYPE(std::remove_volatile_t<volatile int>, int);
     }
 
-    Y_UNIT_TEST(TestRemoveCV) {
+    Y_UNIT_TEST(TestRemoveCV) { 
         ASSERT_SAME_TYPE(std::remove_cv_t<const volatile int>, int);
     }
 
-    Y_UNIT_TEST(TestAddCV) {
+    Y_UNIT_TEST(TestAddCV) { 
         ASSERT_SAME_TYPE(std::add_cv_t<int>, const volatile int);
     }
 
-    Y_UNIT_TEST(TestClass) {
+    Y_UNIT_TEST(TestClass) { 
         UNIT_ASSERT(std::is_class<TString>::value);
         UNIT_ASSERT(!std::is_class<ETestEnum>::value);
         UNIT_ASSERT(!std::is_class<int>::value);
@@ -168,35 +168,35 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_signed<ETypedEnum>::value);
     }
 
-    Y_UNIT_TEST(TestBool) {
+    Y_UNIT_TEST(TestBool) { 
         TestArithmeticType<bool>();
         TestUnsignedIntType<bool>();
     }
 
-    Y_UNIT_TEST(TestUnsignedChar) {
+    Y_UNIT_TEST(TestUnsignedChar) { 
         TestArithmeticType<unsigned char>();
         TestUnsignedIntType<unsigned char>();
     }
 
-    Y_UNIT_TEST(TestSizeT) {
+    Y_UNIT_TEST(TestSizeT) { 
         TestArithmeticType<size_t>();
         TestUnsignedIntType<size_t>();
     }
 
-    Y_UNIT_TEST(TestInt) {
+    Y_UNIT_TEST(TestInt) { 
         TestArithmeticType<int>();
         TestSignedIntType<int>();
     }
 
-    Y_UNIT_TEST(TestDouble) {
+    Y_UNIT_TEST(TestDouble) { 
         TestArithmeticType<double>();
     }
 
-    Y_UNIT_TEST(TestLongDouble) {
+    Y_UNIT_TEST(TestLongDouble) { 
         TestArithmeticType<long double>();
     }
 
-    Y_UNIT_TEST(TestAddRValueReference) {
+    Y_UNIT_TEST(TestAddRValueReference) { 
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int>, int&&);
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int const&>, int const&);
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int*>, int*&&);
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<void>, void);
     }
 
-    Y_UNIT_TEST(TestIsEmpty) {
+    Y_UNIT_TEST(TestIsEmpty) { 
         UNIT_ASSERT(std::is_empty<TEmptyClass>::value);
         UNIT_ASSERT(std::is_empty<TEmptyDerivedClass>::value);
         UNIT_ASSERT(std::is_empty<TAnotherEmptyClass>::value);
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_empty<TNonEmptyDerivedClass>::value);
     }
 
-    Y_UNIT_TEST(TestIsStandardLayout) {
+    Y_UNIT_TEST(TestIsStandardLayout) { 
         UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass1>::value);
         UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass2>::value);
         UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass1>::value);
@@ -230,10 +230,10 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     template <class T>
     using TTrySum = decltype(std::declval<T>() + std::declval<T>());
 
-    Y_UNIT_TEST(TestIsTriviallyCopyable) {
-        struct TPod {
-            int value;
-        };
+    Y_UNIT_TEST(TestIsTriviallyCopyable) { 
+        struct TPod { 
+            int value; 
+        }; 
 
         struct TNontriviallyCopyAssignable {
             TNontriviallyCopyAssignable(const TNontriviallyCopyAssignable&) = default;
@@ -381,7 +381,7 @@ namespace {
 
 #define UNIT_ASSERT_EQUAL_ENUM(expected, actual) UNIT_ASSERT_VALUES_EQUAL((bool)(expected), (bool)(actual))
 
-Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) {
+Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) { 
     template <typename T>
     void TestImpl() {
         //UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsPod, TTypeTraits<T>::IsPod);
@@ -434,22 +434,22 @@ enum class E8: ui8 {
     X
 };
 
-// test for std::underlying_type_t
-static_assert(sizeof(std::underlying_type_t<E4>) == sizeof(int), "");
-static_assert(sizeof(std::underlying_type_t<E64>) == sizeof(ui64), "");
-static_assert(sizeof(std::underlying_type_t<E8>) == sizeof(ui8), "");
+// test for std::underlying_type_t 
+static_assert(sizeof(std::underlying_type_t<E4>) == sizeof(int), ""); 
+static_assert(sizeof(std::underlying_type_t<E64>) == sizeof(ui64), ""); 
+static_assert(sizeof(std::underlying_type_t<E8>) == sizeof(ui8), ""); 
 
-// tests for TFixedWidthUnsignedInt
-static_assert(std::is_same<ui8, TFixedWidthUnsignedInt<i8>>::value, "");
-static_assert(std::is_same<ui16, TFixedWidthUnsignedInt<i16>>::value, "");
-static_assert(std::is_same<ui32, TFixedWidthUnsignedInt<i32>>::value, "");
-static_assert(std::is_same<ui64, TFixedWidthUnsignedInt<i64>>::value, "");
-
-// tests for TFixedWidthSignedInt
-static_assert(std::is_same<i8, TFixedWidthSignedInt<ui8>>::value, "");
-static_assert(std::is_same<i16, TFixedWidthSignedInt<ui16>>::value, "");
-static_assert(std::is_same<i32, TFixedWidthSignedInt<ui32>>::value, "");
-static_assert(std::is_same<i64, TFixedWidthSignedInt<ui64>>::value, "");
+// tests for TFixedWidthUnsignedInt 
+static_assert(std::is_same<ui8, TFixedWidthUnsignedInt<i8>>::value, ""); 
+static_assert(std::is_same<ui16, TFixedWidthUnsignedInt<i16>>::value, ""); 
+static_assert(std::is_same<ui32, TFixedWidthUnsignedInt<i32>>::value, ""); 
+static_assert(std::is_same<ui64, TFixedWidthUnsignedInt<i64>>::value, ""); 
+ 
+// tests for TFixedWidthSignedInt 
+static_assert(std::is_same<i8, TFixedWidthSignedInt<ui8>>::value, ""); 
+static_assert(std::is_same<i16, TFixedWidthSignedInt<ui16>>::value, ""); 
+static_assert(std::is_same<i32, TFixedWidthSignedInt<ui32>>::value, ""); 
+static_assert(std::is_same<i64, TFixedWidthSignedInt<ui64>>::value, ""); 
 
 // test for TIsSpecializationOf
 static_assert(TIsSpecializationOf<std::vector, std::vector<int>>::value, "");

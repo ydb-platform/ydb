@@ -290,7 +290,7 @@ void TModChooser::PrintHelp(const TString& progName) const {
     }
 
     if (ShowSeparated) {
-        for (const auto& unsortedMode : UnsortedModes)
+        for (const auto& unsortedMode : UnsortedModes) 
             if (!unsortedMode->Hidden) {
                 if (unsortedMode->Name.size()) {
                     Cerr << "  " << unsortedMode->FormatFullName(maxModeLen + 4) << unsortedMode->Description << Endl;

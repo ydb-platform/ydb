@@ -65,7 +65,7 @@ ui8* AlignedAllocate(size_t size)
     p[-1] = (ui8)adjustment;
 #endif
 
-    Y_ASSERT(IsAlignedOn(p, 16));
+    Y_ASSERT(IsAlignedOn(p, 16)); 
     return p;
 }
 

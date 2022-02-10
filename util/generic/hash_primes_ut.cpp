@@ -6,8 +6,8 @@
 #include <util/string/builder.h>
 #include <util/random/fast.h>
 
-Y_UNIT_TEST_SUITE(TestHashPrimes) {
-    Y_UNIT_TEST(Test1) {
+Y_UNIT_TEST_SUITE(TestHashPrimes) { 
+    Y_UNIT_TEST(Test1) { 
         UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(1), 7);
         UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(6), 7);
         UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(7), 7);

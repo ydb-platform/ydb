@@ -75,7 +75,7 @@ size_t TAllocState::GetDeallocatedInPages() const {
 
 void* MKQLAllocSlow(size_t sz, TAllocState* state) {
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
-    auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
+    auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize); 
     auto currPage = (TAllocPageHeader*)state->GetBlock(capacity);
     currPage->Deallocated = 0;
     currPage->Capacity = capacity;
@@ -106,7 +106,7 @@ void MKQLFreeSlow(TAllocPageHeader* header) noexcept {
 void* TPagedArena::AllocSlow(size_t sz) {
     auto prevLink = CurrentPage_;
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
-    auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
+    auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize); 
     CurrentPage_ = (TAllocPageHeader*)PagePool_->GetBlock(capacity);
     CurrentPage_->Capacity = capacity;
     void* ret = (char*)CurrentPage_ + sizeof(TAllocPageHeader);

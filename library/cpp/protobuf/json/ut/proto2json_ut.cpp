@@ -25,8 +25,8 @@
 using namespace NProtobufJson;
 using namespace NProtobufJsonTest;
 
-Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
-    Y_UNIT_TEST(TestFlatDefault) {
+Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) { 
+    Y_UNIT_TEST(TestFlatDefault) { 
         using namespace ::google::protobuf;
         TFlatDefault proto;
         NJson::TJsonValue json;
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
 #undef DEFINE_FIELD
     }
 
-    Y_UNIT_TEST(TestNameGenerator) {
+    Y_UNIT_TEST(TestNameGenerator) { 
         TNameGeneratorType proto;
         proto.SetField(42);
 
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
         UNIT_ASSERT_STRINGS_EQUAL(R"({"42":42})", str.Str());
     }
 
-    Y_UNIT_TEST(TestEnumValueGenerator) {
+    Y_UNIT_TEST(TestEnumValueGenerator) { 
         TEnumValueGeneratorType proto;
         proto.SetEnum(TEnumValueGeneratorType::ENUM_42);
 
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
         UNIT_ASSERT_STRINGS_EQUAL(R"({"Enum":"42"})", str.Str());
     }
 
-    Y_UNIT_TEST(TestFlatOptional){
+    Y_UNIT_TEST(TestFlatOptional){ 
         {TFlatOptional proto;
     FillFlatProto(&proto);
     const NJson::TJsonValue& modelJson = CreateFlatJson();
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
 #undef DEFINE_FIELD
 } // TestFlatOptional
 
-Y_UNIT_TEST(TestFlatRequired){
+Y_UNIT_TEST(TestFlatRequired){ 
     {TFlatRequired proto;
 FillFlatProto(&proto);
 const NJson::TJsonValue& modelJson = CreateFlatJson();
@@ -182,7 +182,7 @@ const NJson::TJsonValue& modelJson = CreateFlatJson();
 #undef DEFINE_FIELD
 } // TestFlatRequired
 
-Y_UNIT_TEST(TestFlatRepeated) {
+Y_UNIT_TEST(TestFlatRepeated) { 
     {
         TFlatRepeated proto;
         FillRepeatedProto(&proto);
@@ -227,7 +227,7 @@ Y_UNIT_TEST(TestFlatRepeated) {
 #undef DEFINE_REPEATED_FIELD
 } // TestFlatRepeated
 
-Y_UNIT_TEST(TestCompositeOptional){
+Y_UNIT_TEST(TestCompositeOptional){ 
     {TCompositeOptional proto;
 FillCompositeProto(&proto);
 const NJson::TJsonValue& modelJson = CreateCompositeJson();
@@ -268,7 +268,7 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
 #undef DEFINE_FIELD
 } // TestCompositeOptional
 
-Y_UNIT_TEST(TestCompositeRequired){
+Y_UNIT_TEST(TestCompositeRequired){ 
     {TCompositeRequired proto;
 FillCompositeProto(&proto);
 const NJson::TJsonValue& modelJson = CreateCompositeJson();
@@ -309,7 +309,7 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
 #undef DEFINE_FIELD
 } // TestCompositeRequired
 
-Y_UNIT_TEST(TestCompositeRepeated) {
+Y_UNIT_TEST(TestCompositeRepeated) { 
     {
         TFlatOptional partProto;
         FillFlatProto(&partProto);
@@ -371,7 +371,7 @@ Y_UNIT_TEST(TestCompositeRepeated) {
     }
 } // TestCompositeRepeated
 
-Y_UNIT_TEST(TestEnumConfig) {
+Y_UNIT_TEST(TestEnumConfig) { 
     {
         TFlatOptional proto;
         proto.SetEnum(E_1);
@@ -438,7 +438,7 @@ Y_UNIT_TEST(TestEnumConfig) {
     }
 } // TestEnumConfig
 
-Y_UNIT_TEST(TestMissingSingleKeyConfig) {
+Y_UNIT_TEST(TestMissingSingleKeyConfig) { 
     {
         TFlatOptional proto;
         NJson::TJsonValue modelJson(NJson::JSON_MAP);
@@ -513,7 +513,7 @@ Y_UNIT_TEST(TestMissingSingleKeyConfig) {
     }
 } // TestMissingSingleKeyConfig
 
-Y_UNIT_TEST(TestMissingRepeatedKeyNoConfig) {
+Y_UNIT_TEST(TestMissingRepeatedKeyNoConfig) { 
     {
         TFlatRepeated proto;
         NJson::TJsonValue modelJson(NJson::JSON_MAP);
@@ -524,7 +524,7 @@ Y_UNIT_TEST(TestMissingRepeatedKeyNoConfig) {
     }
 } // TestMissingRepeatedKeyNoConfig
 
-Y_UNIT_TEST(TestMissingRepeatedKeyConfig) {
+Y_UNIT_TEST(TestMissingRepeatedKeyConfig) { 
     {
         TFlatRepeated proto;
         NJson::TJsonValue modelJson(NJson::JSON_MAP);
@@ -564,7 +564,7 @@ Y_UNIT_TEST(TestMissingRepeatedKeyConfig) {
     }
 } // TestMissingRepeatedKeyConfig
 
-Y_UNIT_TEST(TestEscaping) {
+Y_UNIT_TEST(TestEscaping) { 
     // No escape
     {
         TString modelStr(R"_({"String":"value\""})_");
@@ -632,7 +632,7 @@ public:
     }
 };
 
-Y_UNIT_TEST(TestBytesTransform) {
+Y_UNIT_TEST(TestBytesTransform) { 
     // Test that string field is not changed
     {
         TString modelStr(R"_({"String":"value"})_");
@@ -662,7 +662,7 @@ Y_UNIT_TEST(TestBytesTransform) {
     }
 }
 
-Y_UNIT_TEST(TestFieldNameMode) {
+Y_UNIT_TEST(TestFieldNameMode) { 
     // Original case 1
     {
         TString modelStr(R"_({"String":"value"})_");
@@ -888,21 +888,21 @@ Y_UNIT_TEST(TestFieldNameMode) {
     /// TODO: test missing keys
 } // TestFieldNameMode
 
-Y_UNIT_TEST(TestNan) {
+Y_UNIT_TEST(TestNan) { 
     TFlatOptional proto;
     proto.SetDouble(std::numeric_limits<double>::quiet_NaN());
 
     UNIT_ASSERT_EXCEPTION(Proto2Json(proto, TProto2JsonConfig()), yexception);
 } // TestNan
 
-Y_UNIT_TEST(TestInf) {
+Y_UNIT_TEST(TestInf) { 
     TFlatOptional proto;
     proto.SetFloat(std::numeric_limits<float>::infinity());
 
     UNIT_ASSERT_EXCEPTION(Proto2Json(proto, TProto2JsonConfig()), yexception);
 } // TestInf
 
-Y_UNIT_TEST(TestMap) {
+Y_UNIT_TEST(TestMap) { 
     TMapType proto;
 
     auto& items = *proto.MutableItems();
@@ -931,7 +931,7 @@ Y_UNIT_TEST(TestMap) {
     UNIT_ASSERT_EQUAL(jsonItems, modelItems);
 } // TestMap
 
-Y_UNIT_TEST(TestMapAsObject) {
+Y_UNIT_TEST(TestMapAsObject) { 
     TMapType proto;
 
     auto& items = *proto.MutableItems();
@@ -949,7 +949,7 @@ Y_UNIT_TEST(TestMapAsObject) {
     UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
 } // TestMapAsObject
 
-Y_UNIT_TEST(TestMapWTF) {
+Y_UNIT_TEST(TestMapWTF) { 
     TMapType proto;
 
     auto& items = *proto.MutableItems();
@@ -965,7 +965,7 @@ Y_UNIT_TEST(TestMapWTF) {
     UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
 } // TestMapWTF
 
-Y_UNIT_TEST(TestStringifyLongNumbers) {
+Y_UNIT_TEST(TestStringifyLongNumbers) { 
 #define TEST_SINGLE(flag, value, expectString)                             \
     do {                                                                   \
         TFlatOptional proto;                                               \

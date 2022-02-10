@@ -17,7 +17,7 @@ using namespace NThreading;
 static TString DATA = "1234567890";
 static TString DATA_MD5 = "e807f1fcf82d132f9bb018ca6738a19f";
 
-Y_UNIT_TEST_SUITE(TStorageTests) {
+Y_UNIT_TEST_SUITE(TStorageTests) { 
 
     class TTestDir {
     private:
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         return PutFile(name, storage, {}, 1);
     }
 
-    Y_UNIT_TEST(Put) {
+    Y_UNIT_TEST(Put) { 
         THolder<TStorage> storage = MakeHolder<TStorage>(10, 100);
         TFileLinkPtr fileInStorage = PutFile("test.file", *storage, "somename");
         TFsPath rootPath(fileInStorage->GetPath());
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         UNIT_ASSERT(false == rootPath.Exists());
     }
 
-    Y_UNIT_TEST(ParallelPut) {
+    Y_UNIT_TEST(ParallelPut) { 
         THolder<TStorage> storage = MakeHolder<TStorage>(10, 100);
         TThreadPool queue;
         queue.Start(10);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         }
     }
 
-    Y_UNIT_TEST(CleanUp) {
+    Y_UNIT_TEST(CleanUp) { 
         THolder<TStorage> storage = MakeHolder<TStorage>(10, 100);
         TFileLinkPtr fileInStorage = PutFile("test.file", *storage);
         UNIT_ASSERT(fileInStorage->GetPath().Exists());
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         UNIT_ASSERT(!rootPath.Exists());
     }
 
-    Y_UNIT_TEST(DisplaceByCount) {
+    Y_UNIT_TEST(DisplaceByCount) { 
         ui64 maxCount = 2;
         THolder<TStorage> storage = MakeHolder<TStorage>(maxCount, 100);
 
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         UNIT_ASSERT(Find(beg, end, file3->GetStorageFileName()) != end);
     }
 
-    Y_UNIT_TEST(DisplaceBySize) {
+    Y_UNIT_TEST(DisplaceBySize) { 
         ui64 maxSize = 25;
         THolder<TStorage> storage = MakeHolder<TStorage>(10, maxSize);
 
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         UNIT_ASSERT(Find(beg, end, file3->GetStorageFileName()) != end);
     }
 
-    Y_UNIT_TEST(PersistStorage) {
+    Y_UNIT_TEST(PersistStorage) { 
         TTestDir dir("PersistStorage");
         THolder<TStorage> storage = MakeHolder<TStorage>(100, 100, dir.GetFsPath());
         auto rootPath = storage->GetRoot();

@@ -6,7 +6,7 @@ using namespace NMonitoring;
 
 class TCountersPrinter: public ICountableConsumer {
 public:
-    TCountersPrinter(IOutputStream* out)
+    TCountersPrinter(IOutputStream* out) 
         : Out_(out)
         , Level_(0)
     {
@@ -41,7 +41,7 @@ private:
         Indent(Out_, --Level_) << "}\n";
     }
 
-    static IOutputStream& Indent(IOutputStream* out, int level) {
+    static IOutputStream& Indent(IOutputStream* out, int level) { 
         for (int i = 0; i < level; i++) {
             out->Write("  ");
         }
@@ -49,12 +49,12 @@ private:
     }
 
 private:
-    IOutputStream* Out_;
+    IOutputStream* Out_; 
     int Level_ = 0;
 };
 
-Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
-    Y_UNIT_TEST(CountersConsumer) {
+Y_UNIT_TEST_SUITE(TDynamicCountersTest) { 
+    Y_UNIT_TEST(CountersConsumer) { 
         TDynamicCounterPtr rootGroup(new TDynamicCounters());
 
         auto usersCounter = rootGroup->GetNamedCounter("users", "count");
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
                                   "}\n");
     }
 
-    Y_UNIT_TEST(MergeSubgroup) {
+    Y_UNIT_TEST(MergeSubgroup) { 
         TDynamicCounterPtr rootGroup(new TDynamicCounters());
 
         auto sensor1 = rootGroup->GetNamedCounter("sensor", "1");
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
                                   "}\n");
     }
 
-    Y_UNIT_TEST(ResetCounters) {
+    Y_UNIT_TEST(ResetCounters) { 
         TDynamicCounterPtr rootGroup(new TDynamicCounters());
 
         auto sensor1 = rootGroup->GetNamedCounter("sensor", "1");
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
                                   "}\n");
     }
 
-    Y_UNIT_TEST(RemoveCounter) {
+    Y_UNIT_TEST(RemoveCounter) { 
         TDynamicCounterPtr rootGroup(new TDynamicCounters());
 
         rootGroup->GetNamedCounter("label", "1");
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
                                   "}\n");
     }
 
-    Y_UNIT_TEST(RemoveSubgroup) {
+    Y_UNIT_TEST(RemoveSubgroup) { 
         TDynamicCounterPtr rootGroup(new TDynamicCounters());
 
         rootGroup->GetSubgroup("group", "1");

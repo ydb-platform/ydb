@@ -10,7 +10,7 @@ class TTypeListTest: public TTestBase {
     UNIT_TEST(TestSimple);
     UNIT_TEST(TestHave);
     UNIT_TEST(TestGet);
-    UNIT_TEST(TestFloatList);
+    UNIT_TEST(TestFloatList); 
     UNIT_TEST(TestSelectBy);
     UNIT_TEST_SUITE_END();
 
@@ -73,13 +73,13 @@ public:
         using TMyMapPTATB = TMyMap<TA*, TB>;
         UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TIsNArgTemplate>::type, TMyMapPTATB);
     }
-
-    void TestFloatList() {
-        UNIT_ASSERT_TYPES_EQUAL(TFixedWidthFloat<ui32>, float);
-        UNIT_ASSERT_TYPES_EQUAL(TFixedWidthFloat<i32>, float);
-        UNIT_ASSERT_TYPES_EQUAL(TFixedWidthFloat<ui64>, double);
-        UNIT_ASSERT_TYPES_EQUAL(TFixedWidthFloat<i64>, double);
-    }
+ 
+    void TestFloatList() { 
+        UNIT_ASSERT_TYPES_EQUAL(TFixedWidthFloat<ui32>, float); 
+        UNIT_ASSERT_TYPES_EQUAL(TFixedWidthFloat<i32>, float); 
+        UNIT_ASSERT_TYPES_EQUAL(TFixedWidthFloat<ui64>, double); 
+        UNIT_ASSERT_TYPES_EQUAL(TFixedWidthFloat<i64>, double); 
+    } 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TTypeListTest);

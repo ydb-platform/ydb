@@ -18,7 +18,7 @@ namespace NCompactTrie {
     Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len);
     size_t MeasureOffset(size_t offset);
     size_t PackOffset(char* buffer, size_t offset);
-    static inline ui64 ArcSaveOffset(size_t offset, IOutputStream& os);
+    static inline ui64 ArcSaveOffset(size_t offset, IOutputStream& os); 
     Y_FORCE_INLINE char LeapByte(const char*& datapos, const char* dataend, char label);
 
     template <class T>
@@ -37,7 +37,7 @@ namespace NCompactTrie {
         }
         const size_t offsetlength = flags & MT_SIZEMASK;
         const size_t offset = UnpackOffset(datapos + 1, offsetlength);
-        Y_ASSERT(offset);
+        Y_ASSERT(offset); 
         datapos += offset;
     }
 
@@ -89,7 +89,7 @@ namespace NCompTriePrivate {
 }
 
 namespace NCompactTrie {
-    static inline ui64 ArcSaveOffset(size_t offset, IOutputStream& os) {
+    static inline ui64 ArcSaveOffset(size_t offset, IOutputStream& os) { 
         using namespace NCompactTrie;
 
         if (!offset)
@@ -127,7 +127,7 @@ namespace NCompactTrie {
                 // These links are created during minimization: original uncompressed
                 // tree does not need them. (If we find a way to package 3 offset lengths
                 // into 1 byte, we could get rid of them; but it looks like they do no harm.
-                Y_ASSERT(datapos < dataend);
+                Y_ASSERT(datapos < dataend); 
                 offsetlength = flags & MT_SIZEMASK;
                 offset = UnpackOffset(datapos, offsetlength);
                 if (!offset)
@@ -185,7 +185,7 @@ namespace NCompactTrie {
     template <typename TSymbol, class TPacker>
     Y_FORCE_INLINE bool Advance(const char*& datapos, const char* const dataend, const char*& value,
                                 TSymbol label, TPacker packer) {
-        Y_ASSERT(datapos < dataend);
+        Y_ASSERT(datapos < dataend); 
         char flags = MT_NEXT;
         for (int i = (int)ExtraBits<TSymbol>(); i >= 0; i -= 8) {
             flags = LeapByte(datapos, dataend, (char)(label >> i));
@@ -195,7 +195,7 @@ namespace NCompactTrie {
 
             value = nullptr;
 
-            Y_ASSERT(datapos <= dataend);
+            Y_ASSERT(datapos <= dataend); 
             if ((flags & MT_FINAL)) {
                 value = datapos;
                 datapos += packer.SkipLeaf(datapos);

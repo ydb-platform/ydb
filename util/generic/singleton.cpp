@@ -29,8 +29,8 @@ namespace {
 
 void NPrivate::FillWithTrash(void* ptr, size_t len) {
 #if defined(NDEBUG)
-    Y_UNUSED(ptr);
-    Y_UNUSED(len);
+    Y_UNUSED(ptr); 
+    Y_UNUSED(len); 
 #else
     if constexpr (NSan::TSanIsOn()) {
         Y_UNUSED(ptr);
@@ -44,7 +44,7 @@ void NPrivate::FillWithTrash(void* ptr, size_t len) {
 void NPrivate::LockRecursive(TAtomic& lock) noexcept {
     const TAtomicBase id = MyThreadId();
 
-    Y_VERIFY(AtomicGet(lock) != id, "recursive singleton initialization");
+    Y_VERIFY(AtomicGet(lock) != id, "recursive singleton initialization"); 
 
     if (!MyAtomicTryLock(lock, id)) {
         TSpinWait sw;
@@ -56,6 +56,6 @@ void NPrivate::LockRecursive(TAtomic& lock) noexcept {
 }
 
 void NPrivate::UnlockRecursive(TAtomic& lock) noexcept {
-    Y_VERIFY(AtomicGet(lock) == MyThreadId(), "unlock from another thread?!?!");
+    Y_VERIFY(AtomicGet(lock) == MyThreadId(), "unlock from another thread?!?!"); 
     AtomicUnlock(&lock);
 }

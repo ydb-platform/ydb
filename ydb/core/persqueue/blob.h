@@ -247,7 +247,7 @@ struct THead {
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
 };
 
-IOutputStream& operator <<(IOutputStream& out, const THead& value);
+IOutputStream& operator <<(IOutputStream& out, const THead& value); 
 
 
 //stucture for tracking written KV-blobs, stored in memory parts of one partitioned blob

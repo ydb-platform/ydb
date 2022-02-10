@@ -302,7 +302,7 @@ namespace NSQLTranslationV1 {
 
     public:
         TContext& Context();
-        IOutputStream& Error();
+        IOutputStream& Error(); 
 
         template <typename TToken>
         const TString& Token(const TToken& token) {

@@ -1,23 +1,23 @@
 #pragma once
 
 #include <library/cpp/threading/future/future.h>
-
+ 
 #include <util/generic/cast.h>
-#include <util/generic/fwd.h>
-#include <util/generic/noncopyable.h>
+#include <util/generic/fwd.h> 
+#include <util/generic/noncopyable.h> 
 #include <util/generic/ptr.h>
-#include <util/generic/singleton.h>
+#include <util/generic/singleton.h> 
 #include <util/generic/ymath.h>
-
+ 
 #include <functional>
 
 namespace NPar {
     struct ILocallyExecutable : virtual public TThrRefBase {
-        // Must be implemented by the end user to define job that will be processed by one of
-        // executor threads.
-        //
-        // @param id        Job parameter, typically an index pointing somewhere in array, or just
-        //                  some dummy value, e.g. `0`.
+        // Must be implemented by the end user to define job that will be processed by one of 
+        // executor threads. 
+        // 
+        // @param id        Job parameter, typically an index pointing somewhere in array, or just 
+        //                  some dummy value, e.g. `0`. 
         virtual void LocalExec(int id) = 0;
     };
 
@@ -31,7 +31,7 @@ namespace NPar {
         ILocalExecutor() = default;
         virtual ~ILocalExecutor() = default;
 
-        enum EFlags : int {
+        enum EFlags : int { 
             HIGH_PRIORITY = 0,
             MED_PRIORITY = 1,
             LOW_PRIORITY = 2,
@@ -58,8 +58,8 @@ namespace NPar {
         virtual int GetWorkerThreadId() const noexcept = 0;
         virtual int GetThreadCount() const noexcept = 0;
 
-        // Describes a range of tasks with parameters from integer range [FirstId, LastId).
-        //
+        // Describes a range of tasks with parameters from integer range [FirstId, LastId). 
+        // 
         class TExecRangeParams {
         public:
             template <typename TFirst, typename TLast>
@@ -70,9 +70,9 @@ namespace NPar {
                 Y_ASSERT(LastId >= FirstId);
                 SetBlockSize(1);
             }
-            // Partition tasks into `blockCount` blocks of approximately equal size, each of which
-            // will be executed as a separate bigger task.
-            //
+            // Partition tasks into `blockCount` blocks of approximately equal size, each of which 
+            // will be executed as a separate bigger task. 
+            // 
             template <typename TBlockCount>
             TExecRangeParams& SetBlockCount(TBlockCount blockCount) {
                 Y_ASSERT(SafeIntegerCast<int>(blockCount) > 0 || FirstId == LastId);
@@ -81,9 +81,9 @@ namespace NPar {
                 BlockEqualToThreads = false;
                 return *this;
             }
-            // Partition tasks into blocks of approximately `blockSize` size, each of which will
-            // be executed as a separate bigger task.
-            //
+            // Partition tasks into blocks of approximately `blockSize` size, each of which will 
+            // be executed as a separate bigger task. 
+            // 
             template <typename TBlockSize>
             TExecRangeParams& SetBlockSize(TBlockSize blockSize) {
                 Y_ASSERT(SafeIntegerCast<int>(blockSize) > 0 || FirstId == LastId);
@@ -92,9 +92,9 @@ namespace NPar {
                 BlockEqualToThreads = false;
                 return *this;
             }
-            // Partition tasks into thread count blocks of approximately equal size, each of which
-            // will be executed as a separate bigger task.
-            //
+            // Partition tasks into thread count blocks of approximately equal size, each of which 
+            // will be executed as a separate bigger task. 
+            // 
             TExecRangeParams& SetBlockCountToThreadCount() {
                 BlockEqualToThreads = true;
                 return *this;
@@ -107,9 +107,9 @@ namespace NPar {
                 Y_ASSERT(!BlockEqualToThreads);
                 return BlockSize;
             }
-            bool GetBlockEqualToThreads() {
-                return BlockEqualToThreads;
-            }
+            bool GetBlockEqualToThreads() { 
+                return BlockEqualToThreads; 
+            } 
 
             const int FirstId = 0;
             const int LastId = 0;
@@ -120,26 +120,26 @@ namespace NPar {
             bool BlockEqualToThreads;
         };
 
-        // `Exec` and `ExecRange` versions that accept functions.
-        //
-        void Exec(TLocallyExecutableFunction exec, int id, int flags);
-        void ExecRange(TLocallyExecutableFunction exec, int firstId, int lastId, int flags);
-
-        // Version of `ExecRange` that throws exception from task with minimal id if at least one of
-        // task threw an exception.
-        //
-        void ExecRangeWithThrow(TLocallyExecutableFunction exec, int firstId, int lastId, int flags);
-
-        // Version of `ExecRange` that returns vector of futures, thus allowing to retry any task if
-        // it fails.
-        //
-        TVector<NThreading::TFuture<void>> ExecRangeWithFutures(TLocallyExecutableFunction exec, int firstId, int lastId, int flags);
-
+        // `Exec` and `ExecRange` versions that accept functions. 
+        // 
+        void Exec(TLocallyExecutableFunction exec, int id, int flags); 
+        void ExecRange(TLocallyExecutableFunction exec, int firstId, int lastId, int flags); 
+ 
+        // Version of `ExecRange` that throws exception from task with minimal id if at least one of 
+        // task threw an exception. 
+        // 
+        void ExecRangeWithThrow(TLocallyExecutableFunction exec, int firstId, int lastId, int flags); 
+ 
+        // Version of `ExecRange` that returns vector of futures, thus allowing to retry any task if 
+        // it fails. 
+        // 
+        TVector<NThreading::TFuture<void>> ExecRangeWithFutures(TLocallyExecutableFunction exec, int firstId, int lastId, int flags); 
+ 
         template <typename TBody>
         static inline auto BlockedLoopBody(const TExecRangeParams& params, const TBody& body) {
             return [=](int blockId) {
-                const int blockFirstId = params.FirstId + blockId * params.GetBlockSize();
-                const int blockLastId = Min(params.LastId, blockFirstId + params.GetBlockSize());
+                const int blockFirstId = params.FirstId + blockId * params.GetBlockSize(); 
+                const int blockLastId = Min(params.LastId, blockFirstId + params.GetBlockSize()); 
                 for (int i = blockFirstId; i < blockLastId; ++i) {
                     body(i);
                 }
@@ -151,10 +151,10 @@ namespace NPar {
             if (TryExecRangeSequentially(body, params.FirstId, params.LastId, flags)) {
                 return;
             }
-            if (params.GetBlockEqualToThreads()) {
-                params.SetBlockCount(GetThreadCount() + ((flags & WAIT_COMPLETE) != 0)); // ThreadCount or ThreadCount+1 depending on WaitFlag
+            if (params.GetBlockEqualToThreads()) { 
+                params.SetBlockCount(GetThreadCount() + ((flags & WAIT_COMPLETE) != 0)); // ThreadCount or ThreadCount+1 depending on WaitFlag 
             }
-            ExecRange(BlockedLoopBody(params, body), 0, params.GetBlockCount(), flags);
+            ExecRange(BlockedLoopBody(params, body), 0, params.GetBlockCount(), flags); 
         }
 
         template <typename TBody>
@@ -269,7 +269,7 @@ namespace NPar {
         THolder<TImpl> Impl_;
     };
 
-    static inline TLocalExecutor& LocalExecutor() {
+    static inline TLocalExecutor& LocalExecutor() { 
         return *Singleton<TLocalExecutor>();
     }
 

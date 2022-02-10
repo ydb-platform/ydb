@@ -43,7 +43,7 @@
 namespace {
     template <typename TChar>
     static inline char HexDigit(TChar value) {
-        Y_ASSERT(value < 16);
+        Y_ASSERT(value < 16); 
         if (value < 10) {
             return '0' + value;
         } else {
@@ -53,7 +53,7 @@ namespace {
 
     template <typename TChar>
     static inline char OctDigit(TChar value) {
-        Y_ASSERT(value < 8);
+        Y_ASSERT(value < 8); 
         return '0' + value;
     }
 

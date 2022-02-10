@@ -10,11 +10,11 @@ void TBusClientHandlerError::OnError(TAutoPtr<TBusMessage>, EMessageStatus statu
 }
 
 void TBusClientHandlerError::OnReply(TAutoPtr<TBusMessage>, TAutoPtr<TBusMessage>) {
-    Y_FAIL("must not be called");
+    Y_FAIL("must not be called"); 
 }
 
 void TBusClientHandlerError::OnMessageSentOneWay(TAutoPtr<TBusMessage>) {
-    Y_FAIL("must not be called");
+    Y_FAIL("must not be called"); 
 }
 
 void TBusServerHandlerError::OnError(TAutoPtr<TBusMessage>, EMessageStatus status) {
@@ -22,5 +22,5 @@ void TBusServerHandlerError::OnError(TAutoPtr<TBusMessage>, EMessageStatus statu
 }
 
 void TBusServerHandlerError::OnMessage(TOnMessageContext&) {
-    Y_FAIL("must not be called");
+    Y_FAIL("must not be called"); 
 }

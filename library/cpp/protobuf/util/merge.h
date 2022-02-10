@@ -1,14 +1,14 @@
 #pragma once
 
-namespace google {
-    namespace protobuf {
-        class Message;
-    }
-}
+namespace google { 
+    namespace protobuf { 
+        class Message; 
+    } 
+} 
 
-namespace NProtoBuf {
-    using Message = ::google::protobuf::Message;
-}
+namespace NProtoBuf { 
+    using Message = ::google::protobuf::Message; 
+} 
 
 namespace NProtoBuf {
     // Similiar to Message::MergeFrom, overwrites existing repeated fields

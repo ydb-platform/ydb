@@ -167,7 +167,7 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
         } else if (status == NKikimrProto::ERROR) {
             return UpdateInfo();
         } else {
-            Y_FAIL();
+            Y_FAIL(); 
         }
     }
 public:
@@ -357,7 +357,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
         const TVector<TActorId> &replicasList = ev->Get()->Replicas;
-        Y_VERIFY(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
+        Y_VERIFY(!replicasList.empty(), "must not happens, guardian must be created over active tablet"); 
 
         const ui32 replicaSz = replicasList.size();
 
@@ -402,8 +402,8 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev) {
-        Y_UNUSED(ev);
-        Y_FAIL("must not happens, guardian must be created over active tablet");
+        Y_UNUSED(ev); 
+        Y_FAIL("must not happens, guardian must be created over active tablet"); 
     }
 
     bool ReplicaDown(TActorId guardian) {

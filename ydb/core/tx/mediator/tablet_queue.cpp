@@ -97,7 +97,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     }
 
     void CheckStepHead(const TActorContext &ctx) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
 
         bool updateTimecast = false;
         while (TStepEntry *sx = StepCommitQueue->Head()) {
@@ -147,7 +147,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             StepCommitQueue->Push(ActiveStep);
         }
 
-        Y_VERIFY(ActiveStep->Step == step);
+        Y_VERIFY(ActiveStep->Step == step); 
         ++ActiveStep->RefCounter;
 
         TTabletEntry::TStep *tabletStep = new TTabletEntry::TStep(ActiveStep);
@@ -190,7 +190,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
 
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
-        Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnect);
+        Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnect); 
 
         if (!Pipes->OnConnect(ev)) {
             if (msg->Dead) {
@@ -228,7 +228,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         Pipes->OnDisconnect(ev);
 
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
-        Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnected);
+        Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnected); 
 
         // if connect to tablet lost and tablet is in no use - just forget connection
         if (tabletEntry.Queue->Head() == nullptr) {
@@ -352,7 +352,7 @@ public:
         , CommitedStep(0)
         , ActiveStep(nullptr)
     {
-       Y_UNUSED(HashRange);
+       Y_UNUSED(HashRange); 
     }
 
     STFUNC(StateFunc) {

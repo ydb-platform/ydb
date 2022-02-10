@@ -126,7 +126,7 @@ public:
         EV_SET(e + 0, fd, EVFILT_READ, flags | ((what & CONT_POLL_READ) ? EV_ENABLE : EV_DISABLE), 0, 0, data);
         EV_SET(e + 1, fd, EVFILT_WRITE, flags | ((what & CONT_POLL_WRITE) ? EV_ENABLE : EV_DISABLE), 0, 0, data);
 
-        if (Kevent(Fd_, e, 2, nullptr, 0, nullptr) == -1) {
+        if (Kevent(Fd_, e, 2, nullptr, 0, nullptr) == -1) { 
             ythrow TSystemError() << "kevent add failed";
         }
     }
@@ -139,7 +139,7 @@ public:
         EV_SET(e + 0, fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
         EV_SET(e + 1, fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
 
-        Y_VERIFY(!(Kevent(Fd_, e, 2, nullptr, 0, nullptr) == -1 && errno != ENOENT), "kevent remove failed: %s", LastSystemErrorText());
+        Y_VERIFY(!(Kevent(Fd_, e, 2, nullptr, 0, nullptr) == -1 && errno != ENOENT), "kevent remove failed: %s", LastSystemErrorText()); 
     }
 
     inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept {
@@ -148,9 +148,9 @@ public:
         ts.tv_sec = timeout / 1000000;
         ts.tv_nsec = (timeout % 1000000) * 1000;
 
-        const int ret = Kevent(Fd_, nullptr, 0, events, len, &ts);
+        const int ret = Kevent(Fd_, nullptr, 0, events, len, &ts); 
 
-        Y_VERIFY(ret >= 0, "kevent failed: %s", LastSystemErrorText());
+        Y_VERIFY(ret >= 0, "kevent failed: %s", LastSystemErrorText()); 
 
         return (size_t)ret;
     }
@@ -269,7 +269,7 @@ public:
     inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept {
         const int ret = ContEpollWait(Fd_, events, len, MicroToMilli(timeout));
 
-        Y_VERIFY(ret >= 0, "epoll wait error: %s", LastSystemErrorText());
+        Y_VERIFY(ret >= 0, "epoll wait error: %s", LastSystemErrorText()); 
 
         return (size_t)ret;
     }
@@ -331,7 +331,7 @@ struct TSelectPollerNoTemplate {
         int Filter_;
 
         inline THandle()
-            : Data_(nullptr)
+            : Data_(nullptr) 
             , Filter_(0)
         {
         }
@@ -367,9 +367,9 @@ struct TSelectPollerNoTemplate {
         inline SOCKET Build(fd_set* r, fd_set* w, fd_set* e) const noexcept {
             SOCKET ret = 0;
 
-            for (const auto& it : *this) {
-                const SOCKET fd = it.first;
-                const THandle& handle = it.second;
+            for (const auto& it : *this) { 
+                const SOCKET fd = it.first; 
+                const THandle& handle = it.second; 
 
                 FD_SET(fd, e);
 
@@ -411,8 +411,8 @@ class TSelectPoller: public TSelectPollerNoTemplate {
 
 public:
     inline TSelectPoller()
-        : Begin_(nullptr)
-        , End_(nullptr)
+        : Begin_(nullptr) 
+        , End_(nullptr) 
     {
         SocketPair(Signal_);
         SetNonBlock(WaitSock());
@@ -519,7 +519,7 @@ public:
             TryWait();
         }
 
-        Y_VERIFY(ret >= 0 && (size_t)ret <= len, "select error: %s", LastSystemErrorText());
+        Y_VERIFY(ret >= 0 && (size_t)ret <= len, "select error: %s", LastSystemErrorText()); 
 
         TEvent* eventsStart = events;
 
@@ -598,7 +598,7 @@ private:
         char ch[32];
 
         while (recv(WaitSock(), ch, sizeof(ch), 0) > 0) {
-            Y_ASSERT(ch[0] == 13);
+            Y_ASSERT(ch[0] == 13); 
         }
     }
 

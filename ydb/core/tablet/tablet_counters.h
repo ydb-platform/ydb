@@ -34,7 +34,7 @@ public:
         return Value;
     }
 
-    void OutputHtml(IOutputStream &os, const char* name) const;
+    void OutputHtml(IOutputStream &os, const char* name) const; 
 
 protected:
     //
@@ -123,7 +123,7 @@ private:
         SetTo(rp);
     }
     void AdjustToBaseLine(const TTabletCumulativeCounter& baseLine) {
-        Y_VERIFY_DEBUG(Value >= baseLine.Value);
+        Y_VERIFY_DEBUG(Value >= baseLine.Value); 
         Value -= baseLine.Value;
     }
     void SetTo(const TTabletCumulativeCounter& rp) {
@@ -202,19 +202,19 @@ public:
         Populate(rp);
     }
 
-    void OutputHtml(IOutputStream &os, const char* name) const;
+    void OutputHtml(IOutputStream &os, const char* name) const; 
 
 private:
     //
     void AdjustToBaseLine(const TTabletPercentileCounter& baseLine) {
         //
-        Y_VERIFY_DEBUG(RangeCount == baseLine.RangeCount);
+        Y_VERIFY_DEBUG(RangeCount == baseLine.RangeCount); 
         if (Integral) {
             return;
         }
 
         for (ui32 i = 0; i < RangeCount; ++i) {
-            Y_VERIFY_DEBUG(Values[i] >= baseLine.Values[i]);
+            Y_VERIFY_DEBUG(Values[i] >= baseLine.Values[i]); 
             Values[i] -= baseLine.Values[i];
         }
     }
@@ -230,7 +230,7 @@ private:
     //
     void SetTo(const TTabletPercentileCounter& rp) {
         //
-        Y_VERIFY_DEBUG(RangeCount == rp.RangeCount);
+        Y_VERIFY_DEBUG(RangeCount == rp.RangeCount); 
         for (ui32 i = 0; i < RangeCount; ++i) {
             Values[i] = rp.Values[i];
         }
@@ -238,16 +238,16 @@ private:
 
 public:
     void Initialize(ui32 rangeCount, const TRangeDef* ranges, bool integral) {
-        Y_VERIFY_DEBUG(!Ranges);
-        Y_VERIFY_DEBUG(!Values);
-        Y_VERIFY_DEBUG(rangeCount > 0);
-        Y_VERIFY_DEBUG(ranges[0].RangeVal == 0);
+        Y_VERIFY_DEBUG(!Ranges); 
+        Y_VERIFY_DEBUG(!Values); 
+        Y_VERIFY_DEBUG(rangeCount > 0); 
+        Y_VERIFY_DEBUG(ranges[0].RangeVal == 0); 
 
         RangeCount = rangeCount;
         Ranges = ranges;
         Integral = integral;
 
-        Y_VERIFY_DEBUG(IsSorted());
+        Y_VERIFY_DEBUG(IsSorted()); 
 
         Values = TArrayHolder<ui64>(new ui64[RangeCount]());
     }
@@ -331,12 +331,12 @@ public:
 
     //
     T& operator[] (ui32 index) {
-        Y_ASSERT(index < CountersQnt);
+        Y_ASSERT(index < CountersQnt); 
         return Counters[index];
     }
 
     const T& operator[] (ui32 index) const {
-        Y_ASSERT(index < CountersQnt);
+        Y_ASSERT(index < CountersQnt); 
         return Counters[index];
     }
 
@@ -347,7 +347,7 @@ public:
 private:
     //
     void Reset(const TCountersArray<T>& rp) {
-        Y_VERIFY(!CountersQnt);
+        Y_VERIFY(!CountersQnt); 
         CountersHolder.reset();
         Counters = nullptr;
 
@@ -364,14 +364,14 @@ private:
 
     //
     void AdjustToBaseLine(const TCountersArray<T>& baseLine) {
-        Y_VERIFY_DEBUG(baseLine.CountersQnt == CountersQnt);
+        Y_VERIFY_DEBUG(baseLine.CountersQnt == CountersQnt); 
         for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
             Counters[i].AdjustToBaseLine(baseLine.Counters[i]);
         }
     }
 
     void SetTo(const TCountersArray<T>& rp) {
-        Y_VERIFY_DEBUG(rp.CountersQnt == CountersQnt);
+        Y_VERIFY_DEBUG(rp.CountersQnt == CountersQnt); 
         for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
             Counters[i].SetTo(rp.Counters[i]);
         }
@@ -474,7 +474,7 @@ public:
     void RememberCurrentStateAsBaseline(/*out*/ TTabletCountersBase& baseLine) const;
 
     //
-    void OutputHtml(IOutputStream &os) const;
+    void OutputHtml(IOutputStream &os) const; 
     void OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const;
 
     //
@@ -514,7 +514,7 @@ private:
 
     //
     template<typename T>
-    void OutputHtml(IOutputStream &os, const char* sectionName, const char* const* counterNames, const char* counterClass, const TCountersArray<T>& counters) const;
+    void OutputHtml(IOutputStream &os, const char* sectionName, const char* const* counterNames, const char* counterClass, const TCountersArray<T>& counters) const; 
 
     //
     TCountersArray<TTabletSimpleCounter> SimpleCounters;
@@ -627,7 +627,7 @@ public:
         return AggregateFunc;
     }
 
-    void OutputHtml(IOutputStream &os) const;
+    void OutputHtml(IOutputStream &os) const; 
 
     //
     const char* GetCounterName(ui32 index) const {
@@ -665,7 +665,7 @@ private:
 };
 
 
-IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func);
+IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func); 
 
 
 } // end of NKikimr

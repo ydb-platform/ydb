@@ -15,20 +15,20 @@ inline void Out<NDatetime::TCivilDiff>(IOutputStream& out, const NDatetime::TCiv
     out << "(" << diff.Value << "," << diff.Unit << ")";
 }
 
-Y_UNIT_TEST_SUITE(DateTime) {
-    Y_UNIT_TEST(Calc) {
+Y_UNIT_TEST_SUITE(DateTime) { 
+    Y_UNIT_TEST(Calc) { 
         NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9);
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::Calc<NDatetime::TCivilDay>(s, 2), NDatetime::TCivilDay(2017, 2, 3));
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::Calc<NDatetime::TCivilDay>(s, -2), NDatetime::TCivilDay(2017, 1, 30));
     }
-    Y_UNIT_TEST(Adds) {
+    Y_UNIT_TEST(Adds) { 
         NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9);
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddDays(s, 2), NDatetime::TCivilSecond(2017, 2, 3, 10, 12, 9));
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddMonths(s, -2), NDatetime::TCivilSecond(2016, 12, 1, 10, 12, 9));
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddYears(s, -55), NDatetime::TCivilSecond(1962, 2, 1, 10, 12, 9));
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddHours(s, 40), NDatetime::TCivilSecond(2017, 2, 3, 2, 12, 9));
     }
-    Y_UNIT_TEST(Convert) {
+    Y_UNIT_TEST(Convert) { 
         TInstant absTime = TInstant::Seconds(1500299239);
         NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles");
         NDatetime::TCivilSecond dt1 = NDatetime::Convert(absTime, lax);
@@ -66,13 +66,13 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:60"), NDatetime::TInvalidTimezone);
         UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:30:"), NDatetime::TInvalidTimezone);
     }
-    Y_UNIT_TEST(Format) {
+    Y_UNIT_TEST(Format) { 
         NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles");
         NDatetime::TCivilSecond tp(2013, 1, 2, 3, 4, 5);
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::Format("%H:%M:%S", tp, lax), "03:04:05");
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::Format("%H:%M:%E3S", tp, lax), "03:04:05.000");
     }
-    Y_UNIT_TEST(Weekday) {
+    Y_UNIT_TEST(Weekday) { 
         NDatetime::TCivilDay d(2013, 1, 2);
         NDatetime::TWeekday wd = NDatetime::GetWeekday(d);
         UNIT_ASSERT_VALUES_EQUAL(wd, NDatetime::TWeekday::wednesday);
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::wednesday), NDatetime::TCivilDay(2013, 1, 2));
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::friday), NDatetime::TCivilDay(2013, 1, 4));
     }
-    Y_UNIT_TEST(CivilUnit) {
+    Y_UNIT_TEST(CivilUnit) { 
         using namespace NDatetime;
 
         UNIT_ASSERT_VALUES_EQUAL(GetCivilUnit<TCivilMonth>(), ECivilUnit::Month);

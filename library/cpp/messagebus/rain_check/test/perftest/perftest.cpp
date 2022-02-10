@@ -137,8 +137,8 @@ struct TReproduceCrashTask: public ISimpleTask {
 };
 
 int main(int argc, char** argv) {
-    Y_UNUSED(argc);
-    Y_UNUSED(argv);
+    Y_UNUSED(argc); 
+    Y_UNUSED(argv); 
 
     TRainCheckPerftestEnv env;
 

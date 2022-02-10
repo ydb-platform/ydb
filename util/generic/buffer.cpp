@@ -7,7 +7,7 @@
 #include <util/system/sanitizers.h>
 
 TBuffer::TBuffer(size_t len)
-    : Data_(nullptr)
+    : Data_(nullptr) 
     , Len_(0)
     , Pos_(0)
 {
@@ -23,7 +23,7 @@ TBuffer::TBuffer(TBuffer&& b) noexcept
 }
 
 TBuffer::TBuffer(const char* buf, size_t len)
-    : Data_(nullptr)
+    : Data_(nullptr) 
     , Len_(0)
     , Pos_(0)
 {
@@ -76,14 +76,14 @@ void TBuffer::DoReserve(size_t realLen) {
     // FastClp2<T>(x) returns 0 on x from [Max<T>/2 + 2, Max<T>]
     const size_t len = Max<size_t>(FastClp2(realLen), realLen);
 
-    Y_ASSERT(realLen > Len_);
-    Y_ASSERT(len >= realLen);
+    Y_ASSERT(realLen > Len_); 
+    Y_ASSERT(len >= realLen); 
 
     Realloc(len);
 }
 
 void TBuffer::Realloc(size_t len) {
-    Y_ASSERT(Pos_ <= len);
+    Y_ASSERT(Pos_ <= len); 
 
     Data_ = (char*)y_reallocate(Data_, len);
     Len_ = len;

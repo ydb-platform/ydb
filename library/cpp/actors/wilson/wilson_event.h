@@ -76,7 +76,7 @@ namespace NWilson {
         using TParamPack = N##EVENT_NAME##Params::TParamPack;    \
         TParamPack ParamPack;                                    \
                                                                  \
-        void Output(IOutputStream& str) {                        \
+        void Output(IOutputStream& str) {                        \ 
             str << #EVENT_NAME << "{";                           \
             __UNROLL_PARAMS(__OUTPUT_PARAM, ##__VA_ARGS__)       \
             str << "}";                                          \

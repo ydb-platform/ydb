@@ -31,14 +31,14 @@ namespace TMyNS {
 }
 DEFINE_DUMPER(TMyNS::TMyStruct, A, B)
 
-Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
-    Y_UNIT_TEST(TestVectorInt) {
+Y_UNIT_TEST_SUITE(TContainerPrintersTest) { 
+    Y_UNIT_TEST(TestVectorInt) { 
         TStringStream out;
         out << DbgDump(TVector<int>({1, 2, 3, 4, 5}));
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "[1, 2, 3, 4, 5]");
     }
 
-    Y_UNIT_TEST(TestMapCharToCharArray) {
+    Y_UNIT_TEST(TestMapCharToCharArray) { 
         TStringStream out;
 
         TMap<char, const char*> m;
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{'a' -> \"SMALL LETTER A\", 'b' -> (empty)}");
     }
 
-    Y_UNIT_TEST(TestVectorOfVectors) {
+    Y_UNIT_TEST(TestVectorOfVectors) { 
         TStringStream out;
         TVector<TVector<wchar16>> vec(2);
         vec[0].push_back(0);
@@ -60,24 +60,24 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "[[w'\\0'], [w'a']]");
     }
 
-    Y_UNIT_TEST(TestInfinite) {
+    Y_UNIT_TEST(TestInfinite) { 
         UNIT_ASSERT(!!(TStringBuilder() << DbgDumpDeep(TX())));
     }
 
-    Y_UNIT_TEST(TestLabeledDump) {
+    Y_UNIT_TEST(TestLabeledDump) { 
         TStringStream out;
         int a = 1, b = 2;
         out << LabeledDump(a, b, 1 + 2);
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{\"a\": 1, \"b\": 2, \"1 + 2\": 3}");
     }
 
-    Y_UNIT_TEST(TestStructDumper) {
+    Y_UNIT_TEST(TestStructDumper) { 
         TStringStream out;
         out << DbgDump(TMyNS::TMyStruct{3, 4});
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{\"A\": 3, \"B\": 4}");
     }
 
-    Y_UNIT_TEST(TestColors) {
+    Y_UNIT_TEST(TestColors) { 
         using TComplex = TMap<TString, TMap<int, char>>;
         TComplex test;
         test["a"][1] = '7';
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
             "\\x1B[1;31m'6'\\x1B[22;39m\\x1B[1;32m}\\x1B[22;39m\\x1B[22;39m\\x1B[49m\\x1B[1;32m}\\x1B[22;39m");
     }
 
-    Y_UNIT_TEST(SmallIntOrChar) {
+    Y_UNIT_TEST(SmallIntOrChar) { 
         char c = 'e';
         i8 i = -100;
         ui8 u = 10;

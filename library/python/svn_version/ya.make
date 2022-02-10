@@ -8,8 +8,8 @@ PEERDIR(
 )
 
 PY_SRCS(
-    __init__.py
-    __svn_version.pyx
+    __init__.py 
+    __svn_version.pyx 
 )
 
 END()

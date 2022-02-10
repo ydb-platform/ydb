@@ -1,6 +1,6 @@
 #include "console.h"
 
-IOutputStream& PrintToConsoleStream(IOutputStream& stream, const TStringBuf& data) {
+IOutputStream& PrintToConsoleStream(IOutputStream& stream, const TStringBuf& data) { 
 #ifdef _win_
     TStringBuf current = data;
     while (current.size() > 0) {

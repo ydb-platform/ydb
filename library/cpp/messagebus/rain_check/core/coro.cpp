@@ -23,7 +23,7 @@ TCoroTaskRunner::TCoroTaskRunner(IEnv* env, ISubtaskListener* parent, TAutoPtr<I
 }
 
 TCoroTaskRunner::~TCoroTaskRunner() {
-    Y_ASSERT(CoroDone);
+    Y_ASSERT(CoroDone); 
 }
 
 Y_POD_STATIC_THREAD(TContMachineContext*)
@@ -32,7 +32,7 @@ Y_POD_STATIC_THREAD(TCoroTaskRunner*)
 Task;
 
 bool TCoroTaskRunner::ReplyReceived() {
-    Y_ASSERT(!CoroDone);
+    Y_ASSERT(!CoroDone); 
 
     TContMachineContext me;
 
@@ -43,8 +43,8 @@ bool TCoroTaskRunner::ReplyReceived() {
 
     Stack.VerifyNoStackOverflow();
 
-    Y_ASSERT(CallerContext == &me);
-    Y_ASSERT(Task == this);
+    Y_ASSERT(CallerContext == &me); 
+    Y_ASSERT(Task == this); 
 
     return !CoroDone;
 }

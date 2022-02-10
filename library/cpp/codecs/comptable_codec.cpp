@@ -54,11 +54,11 @@ namespace NCodecs {
             Init();
         }
 
-        void Save(IOutputStream* out) const {
+        void Save(IOutputStream* out) const { 
             ::Save(out, Table);
         }
 
-        void Load(IInputStream* in) {
+        void Load(IInputStream* in) { 
             ::Load(in, Table);
             Init();
         }
@@ -97,11 +97,11 @@ namespace NCodecs {
         Impl->DoLearn(in);
     }
 
-    void TCompTableCodec::Save(IOutputStream* out) const {
+    void TCompTableCodec::Save(IOutputStream* out) const { 
         Impl->Save(out);
     }
 
-    void TCompTableCodec::Load(IInputStream* in) {
+    void TCompTableCodec::Load(IInputStream* in) { 
         Impl->Load(in);
     }
 

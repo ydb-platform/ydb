@@ -1067,7 +1067,7 @@ public:
     }
 
     TBasicString& pop_back() Y_NOEXCEPT {
-        Y_ASSERT(!this->empty());
+        Y_ASSERT(!this->empty()); 
 
         MutRef().pop_back();
 

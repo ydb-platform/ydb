@@ -3,7 +3,7 @@
 #include "leaf_skipper.h"
 #include <cstddef>
 
-class IOutputStream;
+class IOutputStream; 
 
 namespace NCompactTrie {
     // Return value: size of the resulting trie.

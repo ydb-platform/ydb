@@ -26,7 +26,7 @@ struct TVDiskID {
 
     TVDiskID() = default;
     TVDiskID(ui32 groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort);
-    TVDiskID(IInputStream &str);
+    TVDiskID(IInputStream &str); 
 
     TVDiskID(ui32 groupId, ui32 groupGen, ui8 failRealm, ui8 failDomain, ui8 vdisk)
         : GroupID(groupId)
@@ -64,8 +64,8 @@ struct TVDiskID {
 
     TString ToString() const;
     TString ToStringWOGeneration() const;
-    void Serialize(IOutputStream &s) const;
-    bool Deserialize(IInputStream &s);
+    void Serialize(IOutputStream &s) const; 
+    bool Deserialize(IInputStream &s); 
 
     ui64 Hash() const {
         ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk);
@@ -167,11 +167,11 @@ struct THash<NKikimr::TVDiskIdShort> {
 };
 
 template<>
-inline void Out<NKikimr::TVDiskID>(IOutputStream& os, const NKikimr::TVDiskID& vdiskId) {
+inline void Out<NKikimr::TVDiskID>(IOutputStream& os, const NKikimr::TVDiskID& vdiskId) { 
     os << vdiskId.ToString();
 }
 
 template<>
-inline void Out<NKikimr::TVDiskIdShort>(IOutputStream& os, const NKikimr::TVDiskIdShort& vdiskId) {
+inline void Out<NKikimr::TVDiskIdShort>(IOutputStream& os, const NKikimr::TVDiskIdShort& vdiskId) { 
     os << vdiskId.ToString();
 }

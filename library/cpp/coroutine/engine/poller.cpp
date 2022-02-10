@@ -162,7 +162,7 @@ namespace {
         T* Get(size_t i) {
             TValRef& v = V_.Get(i);
 
-            if (Y_UNLIKELY(!v)) {
+            if (Y_UNLIKELY(!v)) { 
                 v.Reset(new (&P_) TVal());
                 I_.PushFront(v.Get());
             }

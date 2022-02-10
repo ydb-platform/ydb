@@ -80,7 +80,7 @@ void Fsm::DumpState(yostream& s, size_t state) const
 		for (auto&& transitionState : transition.second) {
 			if (transitionState >= Size()) {
 				std::cerr << "WTF?! Transition from " << state << " on letter " << transition.first << " leads to non-existing state " << transitionState << "\n";
-				Y_ASSERT(false);
+				Y_ASSERT(false); 
 			}
 			if (Letters().Contains(transition.first)) {
 				const TVector<Char>& letters = Letters().Klass(Letters().Representative(transition.first));
@@ -977,7 +977,7 @@ public:
 	void Connect(size_t from, size_t to, Char letter)
 	{
 		PIRE_IFDEBUG(Cdbg << "Connecting " << from << " --" << letter << "--> " << to << Endl);
-		Y_ASSERT(mNewTerminals.find(from) == mNewTerminals.end());
+		Y_ASSERT(mNewTerminals.find(from) == mNewTerminals.end()); 
 		mNewFsm.Connect(from, to, letter);
 	}
 	typedef bool Result;

@@ -193,6 +193,6 @@ namespace NBus {
 }
 
 template <>
-void Out<TBusIdentity>(IOutputStream& os, TTypeTraits<TBusIdentity>::TFuncParam ident) {
+void Out<TBusIdentity>(IOutputStream& os, TTypeTraits<TBusIdentity>::TFuncParam ident) { 
     os << ident.ToString();
 }

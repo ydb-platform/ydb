@@ -1431,7 +1431,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_VERIFY_DEBUG(Node); 
         return Node->Translate(ctx);
     }
 
@@ -1533,8 +1533,8 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_UNUSED(ctx);
-        Y_VERIFY_DEBUG(Node);
+        Y_UNUSED(ctx); 
+        Y_VERIFY_DEBUG(Node); 
         return Node->Translate(ctx);
     }
 

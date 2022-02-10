@@ -77,7 +77,7 @@ namespace NXml {
         };
 
     public:
-        TTextReader(IInputStream& stream, const TOptions& options = TOptions());
+        TTextReader(IInputStream& stream, const TOptions& options = TOptions()); 
         ~TTextReader();
 
         /**
@@ -313,7 +313,7 @@ namespace NXml {
         TString TempStringOrEmptyResult(TCharPtr value) const;
 
     private:
-        IInputStream& Stream;
+        IInputStream& Stream; 
 
         mutable bool IsError;
         mutable TStringStream ErrorBuffer;

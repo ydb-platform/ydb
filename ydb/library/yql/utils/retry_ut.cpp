@@ -11,8 +11,8 @@ class TMyError : public yexception {
 
 }
 
-Y_UNIT_TEST_SUITE(TRetryTests) {
-    Y_UNIT_TEST(ZeroAttempts) {
+Y_UNIT_TEST_SUITE(TRetryTests) { 
+    Y_UNIT_TEST(ZeroAttempts) { 
         auto r = WithRetry<TMyError>(0,
             []() { return TString("abc"); },
             [](auto, auto, auto) { UNIT_FAIL("Exception handler invoked"); });
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TRetryTests) {
         UNIT_ASSERT_VALUES_EQUAL("abc", r);
     }
 
-    Y_UNIT_TEST(NoRetries) {
+    Y_UNIT_TEST(NoRetries) { 
         auto r = WithRetry<TMyError>(5,
             []() { return TString("abc"); },
             [](auto, auto, auto) { UNIT_FAIL("Exception handler invoked"); });
@@ -28,13 +28,13 @@ Y_UNIT_TEST_SUITE(TRetryTests) {
         UNIT_ASSERT_VALUES_EQUAL("abc", r);
     }
 
-    Y_UNIT_TEST(NoRetriesButException) {
+    Y_UNIT_TEST(NoRetriesButException) { 
         UNIT_ASSERT_EXCEPTION_CONTAINS(WithRetry<TMyError>(5,
             []() { throw yexception() << "xxxx"; },
             [](auto, auto, auto) { UNIT_FAIL("Exception handler invoked"); }), yexception, "xxxx");
     }
 
-    Y_UNIT_TEST(FewRetries) {
+    Y_UNIT_TEST(FewRetries) { 
         int counter = 0;
         int exceptions = 0;
         auto r = WithRetry<TMyError>(3, [&]() {
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TRetryTests) {
         UNIT_ASSERT_VALUES_EQUAL(3, counter);
     }
 
-    Y_UNIT_TEST(ManyRetries) {
+    Y_UNIT_TEST(ManyRetries) { 
         int counter = 0;
         int exceptions = 0;
         UNIT_ASSERT_EXCEPTION_CONTAINS(WithRetry<TMyError>(3, [&]() {

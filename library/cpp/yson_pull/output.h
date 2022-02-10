@@ -58,7 +58,7 @@ namespace NYsonPull {
         //! \brief Write data to POSIX file descriptor
         THolder<IStream> FromPosixFd(int fd, size_t buffer_size = 65536);
 
-        THolder<IStream> FromOutputStream(IOutputStream* output, size_t buffer_size = 65536);
+        THolder<IStream> FromOutputStream(IOutputStream* output, size_t buffer_size = 65536); 
 
         THolder<IStream> FromString(TString* output, size_t buffer_size = 1024);
     }

@@ -7,7 +7,7 @@
 
 using namespace NRainCheck;
 
-Y_UNIT_TEST_SUITE(RainCheckCoro) {
+Y_UNIT_TEST_SUITE(RainCheckCoro) { 
     struct TSimpleCoroTask : ICoroTask {
         TTestSync* const TestSync;
 
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
         }
     };
 
-    Y_UNIT_TEST(Simple) {
+    Y_UNIT_TEST(Simple) { 
         TTestSync testSync;
 
         TTestEnv env;
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
         }
     };
 
-    Y_UNIT_TEST(Sleep) {
+    Y_UNIT_TEST(Sleep) { 
         TTestSync testSync;
 
         TTestEnv env;
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
         }
     };
 
-    Y_UNIT_TEST(Spawn) {
+    Y_UNIT_TEST(Spawn) { 
         TTestSync testSync;
 
         TTestEnv env;

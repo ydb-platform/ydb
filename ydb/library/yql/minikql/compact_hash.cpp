@@ -14,7 +14,7 @@ void TListPoolBase::FreeListPage(TListHeader* p) {
     PagePool_.ReturnPage(p);
 }
 
-size_t TListPoolBase::TUsedPages::PrintStat(const TStringBuf& header, IOutputStream& out) const {
+size_t TListPoolBase::TUsedPages::PrintStat(const TStringBuf& header, IOutputStream& out) const { 
     TMap<ui32, ui64> counts;
     size_t pages = 0;
     for (auto& p: FullPages) {

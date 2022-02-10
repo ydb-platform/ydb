@@ -4,7 +4,7 @@
 
 #include <util/random/random.h>
 
-Y_UNIT_TEST_SUITE(TestPopCount) {
+Y_UNIT_TEST_SUITE(TestPopCount) { 
     template <class T>
     static inline ui32 SlowPopCount(T t) {
         ui32 ret = 0;
@@ -29,23 +29,23 @@ Y_UNIT_TEST_SUITE(TestPopCount) {
         }
     }
 
-    Y_UNIT_TEST(Test8) {
+    Y_UNIT_TEST(Test8) { 
         Test<ui8>();
     }
 
-    Y_UNIT_TEST(Test16) {
+    Y_UNIT_TEST(Test16) { 
         Test<ui16>();
     }
 
-    Y_UNIT_TEST(Test32) {
+    Y_UNIT_TEST(Test32) { 
         Test<ui32>();
     }
 
-    Y_UNIT_TEST(Test64) {
+    Y_UNIT_TEST(Test64) { 
         Test<ui64>();
     }
 
-    Y_UNIT_TEST(TestPopCount) {
+    Y_UNIT_TEST(TestPopCount) { 
         UNIT_ASSERT_VALUES_EQUAL(PopCount(0), 0);
         UNIT_ASSERT_VALUES_EQUAL(PopCount(1), 1);
         UNIT_ASSERT_VALUES_EQUAL(PopCount(1 << 10), 1);

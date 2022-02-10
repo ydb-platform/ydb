@@ -89,7 +89,7 @@ TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const noexcept
     return TStringBuf(InboundData + begin, InboundData + end);
 }
 
-ui32 Checksum(TArrayRef<const char> body) noexcept
+ui32 Checksum(TArrayRef<const char> body) noexcept 
 {
     return Crc32c(body.data(), body.size());
 }

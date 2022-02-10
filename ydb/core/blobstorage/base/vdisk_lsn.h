@@ -33,7 +33,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void Output(IOutputStream &str) const {
+        void Output(IOutputStream &str) const { 
             str << "[" << First << ", " << Last << "]";
         }
 

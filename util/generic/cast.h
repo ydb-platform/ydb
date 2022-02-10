@@ -13,12 +13,12 @@
 template <class T, class F>
 static inline T VerifyDynamicCast(F f) {
     if (!f) {
-        return nullptr;
+        return nullptr; 
     }
 
     T ret = dynamic_cast<T>(f);
 
-    Y_VERIFY(ret, "verify cast failed");
+    Y_VERIFY(ret, "verify cast failed"); 
 
     return ret;
 }
@@ -68,7 +68,7 @@ template <>
 class TInteger<true> {
 public:
     template <class TUnsigned>
-    static constexpr bool IsNegative(TUnsigned) noexcept {
+    static constexpr bool IsNegative(TUnsigned) noexcept { 
         return false;
     }
 };
@@ -77,13 +77,13 @@ template <>
 class TInteger<false> {
 public:
     template <class TSigned>
-    static constexpr bool IsNegative(const TSigned value) noexcept {
+    static constexpr bool IsNegative(const TSigned value) noexcept { 
         return value < 0;
     }
 };
 
 template <class TType>
-constexpr bool IsNegative(const TType value) noexcept {
+constexpr bool IsNegative(const TType value) noexcept { 
     return TInteger<std::is_unsigned<TType>::value>::IsNegative(value);
 }
 
@@ -93,7 +93,7 @@ namespace NPrivate {
         std::is_enum<T>::value,
         std::underlying_type<T>, // Lazy evaluatuion: do not call ::type here, because underlying_type<T> is undefined if T is not an enum.
         std::enable_if<true, T>  // Wrapping T in a class, that has member ::type typedef.
-        >::type::type;           // Left ::type is for std::conditional, right ::type is for underlying_type/enable_if
+        >::type::type;           // Left ::type is for std::conditional, right ::type is for underlying_type/enable_if 
 
     template <class TSmall, class TLarge>
     struct TSafelyConvertible {
@@ -112,15 +112,15 @@ constexpr std::enable_if_t<::NPrivate::TSafelyConvertible<TSmallInt, TLargeInt>:
 }
 
 template <class TSmall, class TLarge>
-inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result, TSmall> SafeIntegerCast(TLarge largeInt) {
+inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result, TSmall> SafeIntegerCast(TLarge largeInt) { 
     using TSmallInt = ::NPrivate::TUnderlyingTypeOrSelf<TSmall>;
     using TLargeInt = ::NPrivate::TUnderlyingTypeOrSelf<TLarge>;
 
     if (std::is_unsigned<TSmallInt>::value && std::is_signed<TLargeInt>::value) {
         if (IsNegative(largeInt)) {
             ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
-                                       << TypeName<TSmallInt>()
-                                       << "', negative value converted to unsigned";
+                                       << TypeName<TSmallInt>() 
+                                       << "', negative value converted to unsigned"; 
         }
     }
 
@@ -129,14 +129,14 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
     if (std::is_signed<TSmallInt>::value && std::is_unsigned<TLargeInt>::value) {
         if (IsNegative(smallInt)) {
             ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
-                                       << TypeName<TSmallInt>()
-                                       << "', positive value converted to negative";
+                                       << TypeName<TSmallInt>() 
+                                       << "', positive value converted to negative"; 
         }
     }
 
     if (TLargeInt(smallInt) != largeInt) {
         ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
-                                   << TypeName<TSmallInt>() << "', loss of data";
+                                   << TypeName<TSmallInt>() << "', loss of data"; 
     }
 
     return static_cast<TSmall>(smallInt);
@@ -147,17 +147,17 @@ inline TSmallInt IntegerCast(TLargeInt largeInt) noexcept {
     try {
         return SafeIntegerCast<TSmallInt>(largeInt);
     } catch (const yexception& exc) {
-        Y_FAIL("IntegerCast: %s", exc.what());
+        Y_FAIL("IntegerCast: %s", exc.what()); 
     }
 }
-
-/* Convert given enum value to its underlying type. This is just a shortcut for
- * `static_cast<std::underlying_type_t<EEnum>>(enum_)`.
- */
-template <typename T>
-constexpr std::underlying_type_t<T> ToUnderlying(const T enum_) noexcept {
-    return static_cast<std::underlying_type_t<T>>(enum_);
-}
+ 
+/* Convert given enum value to its underlying type. This is just a shortcut for 
+ * `static_cast<std::underlying_type_t<EEnum>>(enum_)`. 
+ */ 
+template <typename T> 
+constexpr std::underlying_type_t<T> ToUnderlying(const T enum_) noexcept { 
+    return static_cast<std::underlying_type_t<T>>(enum_); 
+} 
 
 // std::bit_cast from c++20
 template <class TTarget, class TSource>

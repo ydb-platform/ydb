@@ -86,7 +86,7 @@ bool HasChild(const NKikimr::NClient::TSchemaObject& obj, const char * path) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(ClientLibSchema) {
+Y_UNIT_TEST_SUITE(ClientLibSchema) { 
     static void RootExists(NClient::TKikimr& kikimr) {
         auto root = kikimr.GetSchemaRoot();
         auto children = root.GetChildren();
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         //UNIT_ASSERT(children.empty());
     }
 
-    Y_UNIT_TEST(RootExists) {
+    Y_UNIT_TEST(RootExists) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         RootExists(kikimr);
     }
 
-    Y_UNIT_TEST(RootExists_GRpc) {
+    Y_UNIT_TEST(RootExists_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         UNIT_ASSERT(std::find_if(children.begin(), children.end(), [](const NClient::TSchemaObject& s) -> bool { return s.GetPath() == "/dc-1"; }) != children.end());
    }
 
-    Y_UNIT_TEST(RootDcExists) {
+    Y_UNIT_TEST(RootDcExists) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         RootDcExists(kikimr);
    }
 
-    Y_UNIT_TEST(RootDcExists_GRpc) {
+    Y_UNIT_TEST(RootDcExists_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         UNIT_ASSERT(dc.GetChildren().empty());
     }
 
-    Y_UNIT_TEST(RootDcStartsEmpty) {
+    Y_UNIT_TEST(RootDcStartsEmpty) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         RootDcStartsEmpty(kikimr);
     }
 
-    Y_UNIT_TEST(RootDcStartsEmpty_GRpc) {
+    Y_UNIT_TEST(RootDcStartsEmpty_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
 #endif
     }
 
-    Y_UNIT_TEST(CreateTable) {
+    Y_UNIT_TEST(CreateTable) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         CreateTable(kikimr);
     }
 
-    Y_UNIT_TEST(CreateTable_GRpc) {
+    Y_UNIT_TEST(CreateTable_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         }
     }
 
-    Y_UNIT_TEST(MkDir) {
+    Y_UNIT_TEST(MkDir) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         MkDir(kikimr);
     }
 
-    Y_UNIT_TEST(MkDir_GRpc) {
+    Y_UNIT_TEST(MkDir_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         UNIT_ASSERT_VALUES_EQUAL(zoo.GetChild("Animals").GetStats().PartitionsCount, 4);
     }
 
-    Y_UNIT_TEST(CreatePartitionedTable) {
+    Y_UNIT_TEST(CreatePartitionedTable) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         CreatePartitionedTable(kikimr);
     }
 
-    Y_UNIT_TEST(CreatePartitionedTable_GRpc) {
+    Y_UNIT_TEST(CreatePartitionedTable_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         UNIT_ASSERT_VALUES_EQUAL(zoo.GetChild("Animals").GetStats().PartitionsCount, numParts);
     }
 
-    Y_UNIT_TEST(CreateVeryPartitionedTable) {
+    Y_UNIT_TEST(CreateVeryPartitionedTable) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         CreateVeryPartitionedTable(kikimr);
     }
 
-    Y_UNIT_TEST(CreateVeryPartitionedTable_GRpc) {
+    Y_UNIT_TEST(CreateVeryPartitionedTable_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         UNIT_ASSERT_EQUAL(dc.GetChildren().size(), 0);
     }
 
-    Y_UNIT_TEST(Drop) {
+    Y_UNIT_TEST(Drop) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         Drop(kikimr);
     }
 
-    Y_UNIT_TEST(Drop_GRpc) {
+    Y_UNIT_TEST(Drop_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         }
     }
 
-    Y_UNIT_TEST(MaxPath) {
+    Y_UNIT_TEST(MaxPath) { 
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         MaxPath(kikimr);
     }
 
-    Y_UNIT_TEST(MaxPath_GRpc) {
+    Y_UNIT_TEST(MaxPath_GRpc) { 
         NGRpcProxy::TGRpcClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
@@ -425,8 +425,8 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
 #endif
 }
 
-Y_UNIT_TEST_SUITE(ClientLib) {
-    Y_UNIT_TEST(Test6) {
+Y_UNIT_TEST_SUITE(ClientLib) { 
+    Y_UNIT_TEST(Test6) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT(value.IsNull());
     }
 
-    Y_UNIT_TEST(Test7) {
+    Y_UNIT_TEST(Test7) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         }
     }
 
-    Y_UNIT_TEST(Test8) {
+    Y_UNIT_TEST(Test8) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         }
     }
 
-    Y_UNIT_TEST(Test9) {
+    Y_UNIT_TEST(Test9) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -578,7 +578,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT_VALUES_EQUAL((i64)readResult["myRes"][1]["Weight"], 500);
     }
 
-    Y_UNIT_TEST(Test10) {
+    Y_UNIT_TEST(Test10) { 
         using namespace NClient;
         TTestEnvironment env({
             NClient::TKeyColumn("Id", NClient::TType::Uint64),
@@ -652,7 +652,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
 
-    Y_UNIT_TEST(Test11) {
+    Y_UNIT_TEST(Test11) { 
         using namespace NClient;
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                           "Korzhik\tRat\t500\n\n");
     }
 
-    Y_UNIT_TEST(Test12) {
+    Y_UNIT_TEST(Test12) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -736,7 +736,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "<main>:1:34: Error: expected either let, return or import");
     }
 
-    Y_UNIT_TEST(Test13) {
+    Y_UNIT_TEST(Test13) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -761,7 +761,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "Mismatch of column type expectedType = 3 actual type = 4608");
     }
 
-    Y_UNIT_TEST(Test14) {
+    Y_UNIT_TEST(Test14) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         "            <main>:1:91: Error: Bad atom format for type: Int64, value: \"Dobby\"\n");
     }
 
-    Y_UNIT_TEST(Test15) {
+    Y_UNIT_TEST(Test15) { 
         TTestEnvironment env({
             NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
             NClient::TColumn("Species", NClient::TType::Utf8),
@@ -854,7 +854,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
 
-    Y_UNIT_TEST(Test16) {
+    Y_UNIT_TEST(Test16) { 
         using namespace NClient;
         TTestEnvironment env({
             TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         return shardRange;
     }
 
-    Y_UNIT_TEST(Test17) {
+    Y_UNIT_TEST(Test17) { 
         using namespace NClient;
         TTestEnvironment env({
             TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
@@ -1009,7 +1009,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         }
     }
 
-    Y_UNIT_TEST(Test18) {
+    Y_UNIT_TEST(Test18) { 
         using namespace NClient;
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -1070,7 +1070,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
-    Y_UNIT_TEST(Test19) {
+    Y_UNIT_TEST(Test19) { 
         using namespace NClient;
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -1127,7 +1127,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
-    Y_UNIT_TEST(Test20) {
+    Y_UNIT_TEST(Test20) { 
         using namespace NClient;
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -1211,7 +1211,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
-    Y_UNIT_TEST(Test21) {
+    Y_UNIT_TEST(Test21) { 
         using namespace NClient;
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -1281,7 +1281,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
-    Y_UNIT_TEST(Test22) {
+    Y_UNIT_TEST(Test22) { 
         using namespace NClient;
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -1353,7 +1353,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
-    Y_UNIT_TEST(Test24) {
+    Y_UNIT_TEST(Test24) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -1374,7 +1374,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT(value.IsNull());
     }
 
-    Y_UNIT_TEST(Test25) {
+    Y_UNIT_TEST(Test25) { 
         TTestEnvironment env;
         NClient::TKikimr& kikimr = env.Kikimr;
 
@@ -1396,7 +1396,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT(value.IsNull());
     }
 
-    Y_UNIT_TEST(SameTableDifferentColumns) {
+    Y_UNIT_TEST(SameTableDifferentColumns) { 
         using namespace NClient;
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
@@ -1549,7 +1549,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         }
     }
 
-    Y_UNIT_TEST(SelectRangeWithInf) {
+    Y_UNIT_TEST(SelectRangeWithInf) { 
         using namespace NClient;
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
@@ -1617,7 +1617,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
 
-    Y_UNIT_TEST(TypicalCase1) {
+    Y_UNIT_TEST(TypicalCase1) { 
         using namespace NClient;
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
@@ -1692,7 +1692,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         }
     }
 
-    Y_UNIT_TEST(TypicalCase2) {
+    Y_UNIT_TEST(TypicalCase2) { 
         using namespace NClient;
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
@@ -1837,7 +1837,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         }
     }
 
-    Y_UNIT_TEST(TypicalCase2A) {
+    Y_UNIT_TEST(TypicalCase2A) { 
         using namespace NClient;
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
@@ -1983,7 +1983,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         }
     }
 
-    Y_UNIT_TEST(TestParameterTypes) {
+    Y_UNIT_TEST(TestParameterTypes) { 
         using namespace NClient;
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
         Tests::TServer server = StartupKikimr(clientConfig);
@@ -2044,7 +2044,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT_EQUAL((TString)value["ru"], "Str2");
     }
 
-//    Y_UNIT_TEST(Wrongdoing1) {
+//    Y_UNIT_TEST(Wrongdoing1) { 
 //        using namespace NClient;
 //        TString type = R"___(
 //                    Kind: 6

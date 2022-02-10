@@ -4558,7 +4558,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         } catch (const std::exception& ex) {
             Y_FAIL("there must be no leaked exceptions: %s", ex.what());
         } catch (...) {
-            Y_FAIL("there must be no leaked exceptions");
+            Y_FAIL("there must be no leaked exceptions"); 
         }
     }
 

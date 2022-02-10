@@ -34,7 +34,7 @@ static inline bool ValidSignInfo(bool limitIsSigned, const T&) {
 
 template <class T>
 static inline bool TestIntegralLimits(const T&, bool unknownSign = true, bool isSigned = true) {
-    using lim = std::numeric_limits<T>;
+    using lim = std::numeric_limits<T>; 
 
     CHECK_COND(lim::is_specialized);
     CHECK_COND(lim::is_integer);
@@ -66,7 +66,7 @@ static inline bool TestUnsignedIntegralLimits(const T& val) {
 
 template <class T>
 static inline bool TestFloatLimits(const T&) {
-    using lim = std::numeric_limits<T>;
+    using lim = std::numeric_limits<T>; 
 
     CHECK_COND(lim::is_specialized);
     CHECK_COND(!lim::is_modulo);
@@ -96,7 +96,7 @@ static inline bool TestFloatLimits(const T&) {
 
 template <class T>
 static inline bool TestNan(const T&) {
-    using lim = std::numeric_limits<T>;
+    using lim = std::numeric_limits<T>; 
 
     if (lim::has_quiet_NaN) {
         const T qnan = lim::quiet_NaN();

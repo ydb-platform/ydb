@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <utility>
 
 #include <util/charset/wide.h>
@@ -75,7 +75,7 @@ void TPackersTest::TestPackers() {
 
         TestPacker<TString, NPackers::TPacker<TString>>(test, Y_ARRAY_SIZE(test));
 
-        for (size_t i = 0; i != Y_ARRAY_SIZE(test); ++i) {
+        for (size_t i = 0; i != Y_ARRAY_SIZE(test); ++i) { 
             TestPacker<TUtf16String, NPackers::TPacker<TUtf16String>>(UTF8ToWide(test[i]));
         }
     }

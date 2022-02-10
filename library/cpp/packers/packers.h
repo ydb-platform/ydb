@@ -5,7 +5,7 @@
 #include <util/generic/set.h>
 #include <util/generic/list.h>
 #include <util/generic/vector.h>
-#include <util/generic/bitops.h>
+#include <util/generic/bitops.h> 
 
 #include <array>
 // Data serialization strategy class.
@@ -37,11 +37,11 @@ public:
         memcpy(&t, p, sizeof(T));
     }
     void PackLeaf(char* buffer, const T& data, size_t computedSize) const {
-        Y_ASSERT(computedSize == sizeof(data));
+        Y_ASSERT(computedSize == sizeof(data)); 
         memcpy(buffer, &data, sizeof(T));
     }
     size_t MeasureLeaf(const T& data) const {
-        Y_UNUSED(data);
+        Y_UNUSED(data); 
         return sizeof(T);
     }
     size_t SkipLeaf(const char*) const {
@@ -211,14 +211,14 @@ namespace NPackers {
 
             TFloat FromUInt(TUInt u) const {
                 THelper h;
-                h.U = ReverseBytes(u);
+                h.U = ReverseBytes(u); 
                 return h.F;
             }
 
             TUInt ToUInt(TFloat f) const {
                 THelper h;
                 h.F = f;
-                return ReverseBytes(h.U);
+                return ReverseBytes(h.U); 
             }
 
         public:
@@ -416,7 +416,7 @@ namespace NPackers {
             TElementPacker().PackLeaf(buffer + curSize, *p, sizeChange);
             curSize += sizeChange;
         }
-        Y_ASSERT(curSize == size);
+        Y_ASSERT(curSize == size); 
     }
 
     template <class C, class EP>
@@ -430,7 +430,7 @@ namespace NPackers {
         // e.g. when curSize is 127 and stays in one byte, but curSize + 1 requires two bytes.
 
         extraSize = TIntegralPacker<size_t>().MeasureLeaf(curSize + extraSize);
-        Y_ASSERT(extraSize == TIntegralPacker<size_t>().MeasureLeaf(curSize + extraSize));
+        Y_ASSERT(extraSize == TIntegralPacker<size_t>().MeasureLeaf(curSize + extraSize)); 
         return curSize + extraSize;
     }
 
@@ -469,7 +469,7 @@ namespace NPackers {
         TPacker1().PackLeaf(buffer, data.first, size1);
         size_t size2 = TPacker2().MeasureLeaf(data.second);
         TPacker2().PackLeaf(buffer + size1, data.second, size2);
-        Y_ASSERT(size == size1 + size2);
+        Y_ASSERT(size == size1 + size2); 
     }
 
     template <class T1, class T2, class TPacker1, class TPacker2>
@@ -600,12 +600,12 @@ namespace NPackers {
     class TPacker<TSet<T>>: public TContainerPacker<TSet<T>> {
     };
 
-    template <class T1, class T2>
+    template <class T1, class T2> 
     class TPacker<std::pair<T1, T2>>: public TPairPacker<T1, T2> {
     };
 
-    template <class T, size_t N>
+    template <class T, size_t N> 
     class TPacker<std::array<T, N>>: public TArrayPacker<std::array<T, N>> {
-    };
+    }; 
 
 }

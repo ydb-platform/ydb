@@ -43,7 +43,7 @@ public:
     }
 
     TEvTablet::TEvLocalMKQL* MakeReq(const TActorContext &ctx) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
 
         TAutoPtr<TEvTablet::TEvLocalMKQL> req = new TEvTablet::TEvLocalMKQL();
         auto *pgm = req->Record.MutableProgram();

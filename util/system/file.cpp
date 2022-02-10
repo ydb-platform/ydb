@@ -274,8 +274,8 @@ bool TFileHandle::Close() noexcept {
         isOk = (::CloseHandle(Fd_) != 0);
     }
     if (!isOk) {
-        Y_VERIFY(GetLastError() != ERROR_INVALID_HANDLE,
-                 "must not quietly close invalid handle");
+        Y_VERIFY(GetLastError() != ERROR_INVALID_HANDLE, 
+                 "must not quietly close invalid handle"); 
     }
 #elif defined(_unix_)
     if (Fd_ != INVALID_FHANDLE) {
@@ -285,7 +285,7 @@ bool TFileHandle::Close() noexcept {
         // Do not quietly close bad descriptor,
         // because often it means double close
         // that is disasterous
-        Y_VERIFY(errno != EBADF, "must not quietly close bad descriptor: fd=%d", int(Fd_));
+        Y_VERIFY(errno != EBADF, "must not quietly close bad descriptor: fd=%d", int(Fd_)); 
     }
 #else
     #error unsupported platform
@@ -1288,15 +1288,15 @@ bool PosixDisableReadAhead(FHANDLE fileHandle, void* addr) noexcept {
 
 #if HAVE_POSIX_FADVISE
     #if defined(_linux_)
-    Y_UNUSED(fileHandle);
+    Y_UNUSED(fileHandle); 
     ret = madvise(addr, 0, MADV_RANDOM); // according to klamm@ posix_fadvise does not work under linux, madvise does work
     #else
-    Y_UNUSED(addr);
+    Y_UNUSED(addr); 
     ret = ::posix_fadvise(fileHandle, 0, 0, POSIX_FADV_RANDOM);
     #endif
 #else
-    Y_UNUSED(fileHandle);
-    Y_UNUSED(addr);
+    Y_UNUSED(fileHandle); 
+    Y_UNUSED(addr); 
 #endif
     return ret == 0;
 }

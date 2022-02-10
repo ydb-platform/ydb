@@ -62,7 +62,7 @@ inline bool HasData<TStringBuf>(const TProtoValue& value, NScheme::TTypeId schem
 
 #define ENSURE_HAS_DATA(type, value, schemeType) \
     do { \
-        Y_ENSURE(HasData<type>(value, schemeType), "No data of type " #type "."); \
+        Y_ENSURE(HasData<type>(value, schemeType), "No data of type " #type "."); \ 
     } while (0);
 
 template <>

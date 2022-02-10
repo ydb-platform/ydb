@@ -4,8 +4,8 @@
 
 #include <util/system/mutex.h>
 
-Y_UNIT_TEST_SUITE(WhatThreadDoesGuard) {
-    Y_UNIT_TEST(Simple) {
+Y_UNIT_TEST_SUITE(WhatThreadDoesGuard) { 
+    Y_UNIT_TEST(Simple) { 
         TMutex mutex;
 
         TWhatThreadDoesAcquireGuard<TMutex> guard(mutex, "acquiring my mutex");

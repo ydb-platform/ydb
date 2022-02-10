@@ -7,7 +7,7 @@
 
 using namespace NRainCheck;
 
-Y_UNIT_TEST_SUITE(TaskTracker) {
+Y_UNIT_TEST_SUITE(TaskTracker) { 
     struct TTaskForTracker: public ISimpleTask {
         TTestSync* const TestSync;
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TaskTracker) {
         }
     };
 
-    Y_UNIT_TEST(Simple) {
+    Y_UNIT_TEST(Simple) { 
         TTestEnv env;
 
         TIntrusivePtr<TTaskTracker> tracker(new TTaskTracker(env.GetExecutor()));

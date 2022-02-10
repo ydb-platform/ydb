@@ -11,7 +11,7 @@ public:
     }
 
     ~TContMutex() {
-        Y_ASSERT(Token_);
+        Y_ASSERT(Token_); 
     }
 
     int LockD(TCont* current, TInstant deadline) {
@@ -37,7 +37,7 @@ public:
     }
 
     void UnLock() noexcept {
-        Y_ASSERT(!Token_);
+        Y_ASSERT(!Token_); 
 
         Token_ = true;
         WaitQueue_.Signal();

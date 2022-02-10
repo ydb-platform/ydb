@@ -4,7 +4,7 @@
 using namespace NKikimr;
 using namespace NKikimr::NSyncLog;
 
-Y_UNIT_TEST_SUITE(NaiveFragmentWriterTest) {
+Y_UNIT_TEST_SUITE(NaiveFragmentWriterTest) { 
 
     void AppendBlock(TString &data, ui64 lsn, ui64 tabletId, ui32 gen) {
         char buf[MaxRecFullSize];
@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(NaiveFragmentWriterTest) {
         data.append(buf, len);
     }
 
-    Y_UNIT_TEST(Basic) {
+    Y_UNIT_TEST(Basic) { 
         TString data;
         AppendBlock(data, 100, 66, 1);
         AppendBlock(data, 101, 66, 2);
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(NaiveFragmentWriterTest) {
         UNIT_ASSERT_STRINGS_EQUAL(temp, result);
     }
 
-    Y_UNIT_TEST(Long) {
+    Y_UNIT_TEST(Long) { 
         TString data;
         AppendBlock(data, 100, 66, 1);
         const TRecordHdr *rec = (const TRecordHdr *)(data.data());

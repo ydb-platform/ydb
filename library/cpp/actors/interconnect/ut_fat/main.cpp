@@ -15,7 +15,7 @@
 #include <util/system/atomic.h>
 #include <util/generic/set.h>
 
-Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
+Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) { 
     using namespace NActors;
 
     class TSenderActor: public TSenderBaseActor {
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         }
     };
 
-    Y_UNIT_TEST(InterconnectTestWithProxyUnsureUndelivered) {
+    Y_UNIT_TEST(InterconnectTestWithProxyUnsureUndelivered) { 
         ui32 numNodes = 2;
         double bandWidth = 1000000;
         ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         NanoSleep(30ULL * 1000 * 1000 * 1000);
     }
 
-    Y_UNIT_TEST(InterconnectTestWithProxy) {
+    Y_UNIT_TEST(InterconnectTestWithProxy) { 
         ui32 numNodes = 2;
         double bandWidth = 1000000;
         ui16 flags = IEventHandle::FlagTrackDelivery;

@@ -191,7 +191,7 @@ public:
     operator TVector<ElementType>() const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
-        Y_VERIFY(Size() % sizeof(ElementType) == 0);
+        Y_VERIFY(Size() % sizeof(ElementType) == 0); 
         std::size_t count = Size() / sizeof(ElementType);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + count;
@@ -202,7 +202,7 @@ public:
     void ExtractArray(THashSet<ElementType> &container) const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
-        Y_VERIFY(Size() % sizeof(ElementType) == 0);
+        Y_VERIFY(Size() % sizeof(ElementType) == 0); 
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + Size() / sizeof(ElementType);
         container.resize(Size() / sizeof(ElementType));

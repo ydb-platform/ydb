@@ -5,8 +5,8 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(THyperLogCounterTest) {
-    Y_UNIT_TEST(TestGetSet) {
+Y_UNIT_TEST_SUITE(THyperLogCounterTest) { 
+    Y_UNIT_TEST(TestGetSet) { 
         THyperLogCounter c1;
         THyperLogCounter c2(17);
         THyperLogCounter c3(63);
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(THyperLogCounterTest) {
         UNIT_ASSERT_EQUAL(c3.GetEstimatedCounter(), ui64(-2));
     }
 
-    Y_UNIT_TEST(TestIncrement) {
+    Y_UNIT_TEST(TestIncrement) { 
         THyperLogCounter c;
         auto randomProvider = CreateDefaultRandomProvider();
         const ui32 n = 1000000;
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(THyperLogCounterTest) {
         Cout << "min. delta: " << minDelta << ", max. delta: " << maxDelta << ", avg. : " << avg << ", dev. : " << dev << "\n";
     }
 
-    Y_UNIT_TEST(TestAddRandom) {
+    Y_UNIT_TEST(TestAddRandom) { 
         THyperLogCounter c;
         auto randomProvider = CreateDefaultRandomProvider();
         const ui32 n = 1000000;
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(THyperLogCounterTest) {
         Cout << "min. delta: " << minDelta << ", max. delta: " << maxDelta << ", avg. : " << avg << ", dev. : " << dev << "\n";
     }
 
-    Y_UNIT_TEST(TestAddFixed) {
+    Y_UNIT_TEST(TestAddFixed) { 
         auto randomProvider = CreateDefaultRandomProvider();
         THyperLogCounter c;
         const ui32 n = 1000000;
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(THyperLogCounterTest) {
         Cout << "min. delta: " << minDelta << ", max. delta: " << maxDelta << ", avg. : " << avg << ", dev. : " << dev << "\n";
     }
 
-    Y_UNIT_TEST(TestHybridIncrement) {
+    Y_UNIT_TEST(TestHybridIncrement) { 
         auto randomProvider = CreateDefaultRandomProvider();
         THybridLogCounter c1;
         UNIT_ASSERT_EQUAL(c1.GetValue(), 0);
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(THyperLogCounterTest) {
         }
     }
 
-    Y_UNIT_TEST(TestHybridAdd) {
+    Y_UNIT_TEST(TestHybridAdd) { 
         auto randomProvider = CreateDefaultRandomProvider();
         THybridLogCounter c1;
         UNIT_ASSERT(c1.Add(23, *randomProvider));

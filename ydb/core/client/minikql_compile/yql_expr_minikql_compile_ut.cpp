@@ -87,8 +87,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
-    Y_UNIT_TEST(CheckResolve) {
+Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) { 
+    Y_UNIT_TEST(CheckResolve) { 
         TServices services;
         RegisterSampleTables(services);
         TVector<IDbSchemeResolver::TTable> tablesToResolve;
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].Type, (ui32)NUdf::TDataType<char*>::Id);
     }
 
-    Y_UNIT_TEST(OnlyResult) {
+    Y_UNIT_TEST(OnlyResult) { 
         auto programText = R"___(
 (
 (let pgmReturn (AsList (SetResult 'myRes (String 'abc))))
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT_VALUES_EQUAL(services.DescList.size(), 0);
     }
 
-    Y_UNIT_TEST(EraseRow) {
+    Y_UNIT_TEST(EraseRow) { 
         auto programText = R"___(
 (
 (let row1 '('('key (Uint32 '23))))
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         }
     }
 
-    Y_UNIT_TEST(UpdateRow) {
+    Y_UNIT_TEST(UpdateRow) { 
         auto programText = R"___(
 (
 (let row '('('key (Uint32 '23))))
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         }
     }
 
-    Y_UNIT_TEST(SelectRow) {
+    Y_UNIT_TEST(SelectRow) { 
         auto programText = R"___(
 (
 (let row '('('key (Uint32 '23))))
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         }
     }
 
-    Y_UNIT_TEST(SelectRange) {
+    Y_UNIT_TEST(SelectRange) { 
         auto programText = R"___(
 (
 (let range '('IncFrom 'ExcTo '('key (Uint32 '23) (Void))))
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         }
     }
 
-    Y_UNIT_TEST(SimpleCrossShardTx) {
+    Y_UNIT_TEST(SimpleCrossShardTx) { 
         auto programText = R"___(
                 (
                 (let row '('('key (Uint32 '2))))
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT_VALUES_EQUAL(counters[TKeyDesc::ERowOperation::Update], 1);
     }
 
-    Y_UNIT_TEST(AcquireLocks) {
+    Y_UNIT_TEST(AcquireLocks) { 
         auto programText = R"___(
 (
 (let row '('('key (Uint32 '23))))
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         }
     }
 
-    Y_UNIT_TEST(StaticMapTypeOf) {
+    Y_UNIT_TEST(StaticMapTypeOf) { 
         auto programText = R"___(
 (
     (return (AsList
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT_VALUES_EQUAL(services.DescList.size(), 0);
     }
 
-    Y_UNIT_TEST(SelectRangeAtomInRange) {
+    Y_UNIT_TEST(SelectRangeAtomInRange) { 
         auto programText = R"___(
 (
     (let range '('key (Void) 'Void))
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT_NO_DIFF(result.Errors.begin()->Message, "At function: SelectRange");
     }
 
-    Y_UNIT_TEST(Extract) {
+    Y_UNIT_TEST(Extract) { 
         auto programText = R"___(
 (
 (let range '('IncFrom 'ExcTo '('key (Uint32 '23) (Void))))

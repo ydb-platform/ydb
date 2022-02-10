@@ -114,7 +114,7 @@ TMimeTypes::TMimeTypes()
 }
 
 void TMimeTypes::SetContentTypes() {
-    for (int i = 0; i < (int)Y_ARRAY_SIZE(Records); ++i) {
+    for (int i = 0; i < (int)Y_ARRAY_SIZE(Records); ++i) { 
         const TRecord& record(Records[i]);
         assert(i == record.Mime || i > MIME_MAX || record.Mime == MIME_UNKNOWN);
         if (!record.ContentType)
@@ -127,7 +127,7 @@ void TMimeTypes::SetContentTypes() {
 }
 
 void TMimeTypes::SetExt() {
-    for (int i = 0; i < (int)Y_ARRAY_SIZE(Records); ++i) {
+    for (int i = 0; i < (int)Y_ARRAY_SIZE(Records); ++i) { 
         const TRecord& record(Records[i]);
         if (!record.Ext)
             continue;

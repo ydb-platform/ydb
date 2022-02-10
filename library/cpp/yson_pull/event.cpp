@@ -7,7 +7,7 @@
 using namespace NYsonPull;
 
 template <>
-void Out<TEvent>(IOutputStream& out, const TEvent& value) {
+void Out<TEvent>(IOutputStream& out, const TEvent& value) { 
     out << '(' << value.Type();
     if (value.Type() == EEventType::Scalar) {
         out << ' ' << value.AsScalar();

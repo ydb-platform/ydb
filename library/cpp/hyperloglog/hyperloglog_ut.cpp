@@ -8,8 +8,8 @@
 
 #include <cmath>
 
-Y_UNIT_TEST_SUITE(THyperLogLog) {
-    Y_UNIT_TEST(TestPrecision18) {
+Y_UNIT_TEST_SUITE(THyperLogLog) { 
+    Y_UNIT_TEST(TestPrecision18) { 
         TMersenne<ui64> rand;
 
         auto counter = THyperLogLog::Create(18);

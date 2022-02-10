@@ -15,7 +15,7 @@ TMappedFile::TMappedFile(TFileMap* map, const char* dbgName) {
 }
 
 TMappedFile::TMappedFile(const TFile& file, TFileMap::EOpenMode om, const char* dbgName)
-    : Map_(nullptr)
+    : Map_(nullptr) 
 {
     init(file, om, dbgName);
 }

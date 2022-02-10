@@ -3,7 +3,7 @@
 #include "platform.h"
 #include "backtrace.h"
 
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/stream/format.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/string.h>
@@ -233,13 +233,13 @@ TResolvedSymbol ResolveSymbol(void* sym, char*, size_t) {
 }
 #endif
 
-void FormatBackTrace(IOutputStream* out, void* const* backtrace, size_t backtraceSize) {
+void FormatBackTrace(IOutputStream* out, void* const* backtrace, size_t backtraceSize) { 
     char tmpBuf[1024];
 
     for (size_t i = 0; i < backtraceSize; ++i) {
         TResolvedSymbol rs = ResolveSymbol(backtrace[i], tmpBuf, sizeof(tmpBuf));
 
-        *out << rs.Name << "+" << ((ptrdiff_t)backtrace[i] - (ptrdiff_t)rs.NearestSymbol) << " (" << Hex((ptrdiff_t)backtrace[i], HF_ADDX) << ')' << '\n';
+        *out << rs.Name << "+" << ((ptrdiff_t)backtrace[i] - (ptrdiff_t)rs.NearestSymbol) << " (" << Hex((ptrdiff_t)backtrace[i], HF_ADDX) << ')' << '\n'; 
     }
 }
 
@@ -274,7 +274,7 @@ void TBackTrace::Capture() {
     Size = BackTrace(Data, CAPACITY);
 }
 
-void TBackTrace::PrintTo(IOutputStream& out) const {
+void TBackTrace::PrintTo(IOutputStream& out) const { 
     FormatBackTraceFn(&out, Data, Size);
 }
 

@@ -6,8 +6,8 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TBlobStoragePDiskCrypto) {
-    Y_UNIT_TEST(TestMixedStreamCypher) {
+Y_UNIT_TEST_SUITE(TBlobStoragePDiskCrypto) { 
+    Y_UNIT_TEST(TestMixedStreamCypher) { 
         for (ui32 enableEnctyption = 0; enableEnctyption < 2; ++enableEnctyption) {
             NPDisk::TPDiskStreamCypher cypher1(enableEnctyption);
             NPDisk::TPDiskStreamCypher cypher2(enableEnctyption);
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TBlobStoragePDiskCrypto) {
         }
     }
 
-    Y_UNIT_TEST(TestInplaceStreamCypher) {
+    Y_UNIT_TEST(TestInplaceStreamCypher) { 
         for (ui32 enableEnctyption = 0; enableEnctyption < 2; ++enableEnctyption) {
             NPDisk::TPDiskStreamCypher cypher1(enableEnctyption);
             NPDisk::TPDiskStreamCypher cypher2(enableEnctyption);

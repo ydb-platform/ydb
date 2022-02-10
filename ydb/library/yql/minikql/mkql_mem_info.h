@@ -143,7 +143,7 @@ public:
     inline ui64 GetFreed() const { return Freed_; }
     inline ui64 GetPeak() const { return Peak_; }
 
-    inline void PrintTo(IOutputStream& out) const {
+    inline void PrintTo(IOutputStream& out) const { 
         out << Title_ << TStringBuf(": usage=") << GetUsage()
             << TStringBuf(" (allocated=") << GetAllocated()
             << TStringBuf(", freed=") << GetFreed()
@@ -224,7 +224,7 @@ inline void Return(TMemoryUsageInfo* memInfo, const void* mem)
 
 template <>
 inline void Out<NKikimr::NMiniKQL::TMemoryUsageInfo>(
-        IOutputStream& out,
+        IOutputStream& out, 
         const NKikimr::NMiniKQL::TMemoryUsageInfo& memInfo)
 {
     memInfo.PrintTo(out);

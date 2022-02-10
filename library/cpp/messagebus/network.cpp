@@ -11,7 +11,7 @@ using namespace NBus::NPrivate;
 
 namespace {
     TBindResult BindOnPortProto(int port, int af, bool reusePort) {
-        Y_VERIFY(af == AF_INET || af == AF_INET6, "wrong af");
+        Y_VERIFY(af == AF_INET || af == AF_INET6, "wrong af"); 
 
         SOCKET fd = ::socket(af, SOCK_STREAM, 0);
         if (fd == INVALID_SOCKET) {
@@ -126,8 +126,8 @@ void NBus::NPrivate::SetSockOptTcpCork(SOCKET s, bool value) {
 #ifdef _linux_
     CheckedSetSockOpt(s, IPPROTO_TCP, TCP_CORK, (int)value, "TCP_CORK");
 #else
-    Y_UNUSED(s);
-    Y_UNUSED(value);
+    Y_UNUSED(s); 
+    Y_UNUSED(value); 
 #endif
 }
 
@@ -138,7 +138,7 @@ ssize_t NBus::NPrivate::SocketSend(SOCKET s, TArrayRef<const char> data) {
 #endif
     ssize_t r = ::send(s, data.data(), data.size(), flags);
     if (r < 0) {
-        Y_VERIFY(LastSystemError() != EBADF, "bad fd");
+        Y_VERIFY(LastSystemError() != EBADF, "bad fd"); 
     }
     return r;
 }
@@ -150,7 +150,7 @@ ssize_t NBus::NPrivate::SocketRecv(SOCKET s, TArrayRef<char> buffer) {
 #endif
     ssize_t r = ::recv(s, buffer.data(), buffer.size(), flags);
     if (r < 0) {
-        Y_VERIFY(LastSystemError() != EBADF, "bad fd");
+        Y_VERIFY(LastSystemError() != EBADF, "bad fd"); 
     }
     return r;
 }

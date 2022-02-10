@@ -115,8 +115,8 @@ struct TKikimrTestSettings {
     static constexpr bool PrecreatePools = true;
 };
 
-Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
-    Y_UNIT_TEST(SimpleRequest) {
+Y_UNIT_TEST_SUITE(TGRpcClientLowTest) { 
+    Y_UNIT_TEST(SimpleRequest) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         }
     }
 
-    Y_UNIT_TEST(MultipleSimpleRequests) {
+    Y_UNIT_TEST(MultipleSimpleRequests) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -472,8 +472,8 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TGRpcNewClient) {
-    Y_UNIT_TEST(SimpleYqlQuery) {
+Y_UNIT_TEST_SUITE(TGRpcNewClient) { 
+    Y_UNIT_TEST(SimpleYqlQuery) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         connection.Stop(true);
     }
 
-    Y_UNIT_TEST(YqlQueryWithParams) {
+    Y_UNIT_TEST(YqlQueryWithParams) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -617,7 +617,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         client.CreateSession().Apply(createSessionHandler).Wait();
     }
 
-    Y_UNIT_TEST(YqlExplainDataQuery) {
+    Y_UNIT_TEST(YqlExplainDataQuery) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -859,8 +859,8 @@ Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
-    Y_UNIT_TEST(RemoveNotExistedDirecroty) {
+Y_UNIT_TEST_SUITE(TGRpcYdbTest) { 
+    Y_UNIT_TEST(RemoveNotExistedDirecroty) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -890,7 +890,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         }
     }
 
-    Y_UNIT_TEST(MakeListRemoveDirectory) {
+    Y_UNIT_TEST(MakeListRemoveDirectory) { 
         TKikimrWithGrpcAndRootSchemaNoSystemViews server;
         ui16 grpc = server.GetPort();
 
@@ -988,7 +988,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         */
     }
 
-    Y_UNIT_TEST(GetOperationBadRequest) {
+    Y_UNIT_TEST(GetOperationBadRequest) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
 
     }
 /*
-    Y_UNIT_TEST(GetOperationUnknownId) {
+    Y_UNIT_TEST(GetOperationUnknownId) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1029,7 +1029,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         }
     }
 */
-    Y_UNIT_TEST(CreateTableBadRequest) {
+    Y_UNIT_TEST(CreateTableBadRequest) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1102,7 +1102,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         CreateTableBadRequest(scheme, expected, Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(DropTableBadRequest) {
+    Y_UNIT_TEST(DropTableBadRequest) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1189,7 +1189,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         }
     }
 
-    Y_UNIT_TEST(CreateAlterCopyAndDropTable) {
+    Y_UNIT_TEST(CreateAlterCopyAndDropTable) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1632,7 +1632,7 @@ partitioning_settings {
 
     }
 
-    Y_UNIT_TEST(CreateYqlSession) {
+    Y_UNIT_TEST(CreateYqlSession) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1652,7 +1652,7 @@ partitioning_settings {
         }
     }
 
-    Y_UNIT_TEST(CreateDeleteYqlSession) {
+    Y_UNIT_TEST(CreateDeleteYqlSession) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1691,7 +1691,7 @@ partitioning_settings {
 
     }
 
-    Y_UNIT_TEST(ExecuteQueryBadRequest) {
+    Y_UNIT_TEST(ExecuteQueryBadRequest) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1731,7 +1731,7 @@ partitioning_settings {
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryImplicitSession) {
+    Y_UNIT_TEST(ExecuteQueryImplicitSession) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1752,7 +1752,7 @@ partitioning_settings {
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryExplicitSession) {
+    Y_UNIT_TEST(ExecuteQueryExplicitSession) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1961,7 +1961,7 @@ tx_meta {
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryWithParametersBadRequest) {
+    Y_UNIT_TEST(ExecuteQueryWithParametersBadRequest) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -2055,7 +2055,7 @@ tx_meta {
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryWithParametersExplicitSession) {
+    Y_UNIT_TEST(ExecuteQueryWithParametersExplicitSession) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -2213,7 +2213,7 @@ tx_meta {
 
     }
 
-    Y_UNIT_TEST(ExecuteDmlQuery) {
+    Y_UNIT_TEST(ExecuteDmlQuery) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -2406,7 +2406,7 @@ tx_meta {
         }
     }
 
-    Y_UNIT_TEST(CreateYqlSessionExecuteQuery) {
+    Y_UNIT_TEST(CreateYqlSessionExecuteQuery) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -2466,7 +2466,7 @@ tx_meta {
 
     }
 
-    Y_UNIT_TEST(ExecutePreparedQuery) {
+    Y_UNIT_TEST(ExecutePreparedQuery) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         std::shared_ptr<grpc::Channel> Channel_;
@@ -2646,7 +2646,7 @@ tx_meta {
         }
     }
 
-    Y_UNIT_TEST(ExplainQuery) {
+    Y_UNIT_TEST(ExplainQuery) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -2737,7 +2737,7 @@ tx_meta {
         }
     }
 
-    Y_UNIT_TEST(DeleteFromAfterCreate) {
+    Y_UNIT_TEST(DeleteFromAfterCreate) { 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -2863,7 +2863,7 @@ tx_meta {
         }
     }
 
-    Y_UNIT_TEST(ReadTable) {
+    Y_UNIT_TEST(ReadTable) { 
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);

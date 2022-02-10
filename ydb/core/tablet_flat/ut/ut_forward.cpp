@@ -128,7 +128,7 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(NFwd) {
+Y_UNIT_TEST_SUITE(NFwd) { 
 
     static TIntrusiveConstPtr<NPage::TFrames> Cook()
     {
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
         }
     }
 
-    Y_UNIT_TEST(Lower)
+    Y_UNIT_TEST(Lower) 
     {
         const auto frames = Cook();
 
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
         UNIT_ASSERT(frames->Lower(15, Max<ui32>(), Max<ui32>()) == 10);
     }
 
-    Y_UNIT_TEST(Sieve)
+    Y_UNIT_TEST(Sieve) 
     {
         NPage::TExtBlobsWriter out;
 
@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
         UNIT_ASSERT(logo[1] == globs[5].Logo);
     }
 
-    Y_UNIT_TEST(Basics)
+    Y_UNIT_TEST(Basics) 
     {
         /*_ Check unorderd access over the same frame */
         TWrap(Cook(), 61).Get(1, false, true, true).Get(0, false, true, true);
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
         TWrap(Cook(), 61).Get(3, false, true, true).Get(7, false, true, true);
     }
 
-    Y_UNIT_TEST(Simple)
+    Y_UNIT_TEST(Simple) 
     {
         TWrap(Cook(), 61, 999, 999)
         /*_ Get, load and reread the same blob  */
@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
             .To(14).Get(6, true, false, true);
     }
 
-    Y_UNIT_TEST(Shuffle)
+    Y_UNIT_TEST(Shuffle) 
     {
         TWrap(Cook(), 61, 999, 999)
         /*_ Touch two columns on the same frame */
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
             .To(21).Fill(2, 3, { 1 });
     }
 
-    Y_UNIT_TEST(Grow)
+    Y_UNIT_TEST(Grow) 
     {
         TWrap(Cook(), 55, 15, 30)
             .To(10).Get(1, false, true, true).Fill(2, 3, { 2 })
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
             .To(17).Get(9, true, false, true).Fill(0, 1, { 2 });
     }
 
-    Y_UNIT_TEST(Trace)
+    Y_UNIT_TEST(Trace) 
     {
         TWrap wrap(Cook(), 15, 999, 999);
 

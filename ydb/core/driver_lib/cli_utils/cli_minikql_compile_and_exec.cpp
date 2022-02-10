@@ -28,7 +28,7 @@ struct TCmdCompileAndExecMiniKQLConfig : public TCliCmdConfig {
 };
 
 int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
-    Y_UNUSED(cmdConf);
+    Y_UNUSED(cmdConf); 
 
 #ifdef _win32_
     WSADATA dummy;

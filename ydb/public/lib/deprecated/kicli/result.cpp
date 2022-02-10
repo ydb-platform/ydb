@@ -80,7 +80,7 @@ TQueryResult::TQueryResult(const TResult& result)
 
 TValue TQueryResult::GetValue() const {
     const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
-    Y_VERIFY(response.HasExecutionEngineEvaluatedResponse());
+    Y_VERIFY(response.HasExecutionEngineEvaluatedResponse()); 
     const auto& result = response.GetExecutionEngineEvaluatedResponse();
     // TODO: type caching
     return TValue::Create(result.GetValue(), result.GetType());

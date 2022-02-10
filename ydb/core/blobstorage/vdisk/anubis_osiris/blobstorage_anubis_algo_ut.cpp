@@ -10,7 +10,7 @@ namespace NKikimr {
 
 #define STR Cnull
 
-    Y_UNIT_TEST_SUITE(TBlobStorageAnubisAlgo) {
+    Y_UNIT_TEST_SUITE(TBlobStorageAnubisAlgo) { 
 
         void OutputVector(const TVector<TLogoBlobID> &vec, IOutputStream &str) {
             str << "{";
@@ -42,7 +42,7 @@ namespace NKikimr {
         }
 
 
-        Y_UNIT_TEST(Mirror3) {
+        Y_UNIT_TEST(Mirror3) { 
             TBlobStorageGroupInfo info(TErasureType::ErasureMirror3, 1, 4);
             TBlobsStatusMngr mngr(&info.GetTopology());
 

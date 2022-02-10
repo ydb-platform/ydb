@@ -14,7 +14,7 @@
 
 #ifndef _win_
 static void SegvHandler(int sig) {
-    Y_UNUSED(sig);
+    Y_UNUSED(sig); 
     const char msg[] = "Got SEGV\n";
     Y_UNUSED(write(STDERR_FILENO, msg, sizeof(msg)));
     //PrintBackTrace();
@@ -29,6 +29,6 @@ static void SegvHandler(int sig) {
 void InstallSegvHandler() {
 #ifndef _win_
     sig_t r = signal(SIGSEGV, &SegvHandler);
-    Y_VERIFY(r != SIG_ERR, "signal failed: %s", strerror(errno));
+    Y_VERIFY(r != SIG_ERR, "signal failed: %s", strerror(errno)); 
 #endif // !_win_
 }

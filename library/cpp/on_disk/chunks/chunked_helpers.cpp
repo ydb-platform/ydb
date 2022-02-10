@@ -37,7 +37,7 @@ TNamedChunkedDataReader::TNamedChunkedDataReader(const TBlob& blob)
 
 /*************************** TNamedChunkedDataWriter ***************************/
 
-TNamedChunkedDataWriter::TNamedChunkedDataWriter(IOutputStream& slave)
+TNamedChunkedDataWriter::TNamedChunkedDataWriter(IOutputStream& slave) 
     : TChunkedDataWriter(slave)
 {
 }

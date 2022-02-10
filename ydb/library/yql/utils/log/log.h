@@ -161,7 +161,7 @@ void InitLogger(TAutoPtr<TLogBackend> backend);
  *
  * @param out - output stream
  */
-void InitLogger(IOutputStream* out);
+void InitLogger(IOutputStream* out); 
 
 void CleanupLogger();
 

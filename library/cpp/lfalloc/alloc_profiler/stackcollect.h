@@ -5,7 +5,7 @@
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 
 namespace NAllocProfiler {
 

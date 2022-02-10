@@ -8,7 +8,7 @@
 
 namespace NYql {
 
-Y_UNIT_TEST_SUITE(TParseYqlAst) {
+Y_UNIT_TEST_SUITE(TParseYqlAst) { 
     constexpr TStringBuf TEST_PROGRAM =
         "(\n"
         "#comment\n"
@@ -24,14 +24,14 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         "(return world)\n"
         ")";
 
-    Y_UNIT_TEST(ParseAstTest) {
+    Y_UNIT_TEST(ParseAstTest) { 
         TAstParseResult res = ParseAst(TEST_PROGRAM);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root->IsList());
         UNIT_ASSERT(res.Issues.Empty());
     }
 
-    Y_UNIT_TEST(ParseAstTestPerf) {
+    Y_UNIT_TEST(ParseAstTestPerf) { 
 #ifdef WITH_VALGRIND
         const ui32 n = 1000;
 #else
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         Cout << t2 - t1 << Endl;
     }
 
-    Y_UNIT_TEST(PrintAstTest) {
+    Y_UNIT_TEST(PrintAstTest) { 
         TAstParseResult ast = ParseAst(TEST_PROGRAM);
         UNIT_ASSERT(ast.IsOk());
 
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT(parsedAst.IsOk());
     }
 
-    Y_UNIT_TEST(PrettyPrintAst) {
+    Y_UNIT_TEST(PrettyPrintAst) { 
         const ui32 testFlags[] = {
             TAstPrintFlags::Default,
             TAstPrintFlags::PerLine,
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TAstParseResult ast = ParseAst(TEST_PROGRAM);
         UNIT_ASSERT(ast.IsOk());
 
-        for (ui32 i = 0; i < Y_ARRAY_SIZE(testFlags); ++i) {
+        for (ui32 i = 0; i < Y_ARRAY_SIZE(testFlags); ++i) { 
             ui32 prettyFlags = testFlags[i];
 
             TString printedProgram1 = ast.Root->ToString(prettyFlags);
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         }
     }
 
-    Y_UNIT_TEST(AnnotatedAstPrint) {
+    Y_UNIT_TEST(AnnotatedAstPrint) { 
         TMemoryPool pool(4096);
         TAstParseResult ast = ParseAst(TEST_PROGRAM, &pool);
         UNIT_ASSERT(ast.IsOk());
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
                     program);
     }
 
-    Y_UNIT_TEST(GoodArbitraryAtom) {
+    Y_UNIT_TEST(GoodArbitraryAtom) { 
         TestGoodArbitraryAtom("(\"\")", TStringBuf());
         TestGoodArbitraryAtom("(\" 1 a 3 b \")", TStringBuf(" 1 a 3 b "));
 
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT_STRINGS_EQUAL(ast.Issues.begin()->Message, expectedError);
     }
 
-    Y_UNIT_TEST(BadArbitraryAtom) {
+    Y_UNIT_TEST(BadArbitraryAtom) { 
         TestBadArbitraryAtom("(a\")", "Unexpected \"");
         TestBadArbitraryAtom("(\"++++\"11111)", "Unexpected end of \"");
         TestBadArbitraryAtom("(\"\\", "Expected escape sequence");
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT_STRINGS_EQUAL_C(result, expected, program);
     }
 
-    Y_UNIT_TEST(ArbitraryAtomEscaping) {
+    Y_UNIT_TEST(ArbitraryAtomEscaping) { 
         ParseAndPrint(
                     "(\"\\t\\n\\r\\b\\a\\f\\v\")",
                     "(\"\\t\\n\\r\\b\\a\\f\\v\")");
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         ParseAndPrint("(\"\")", "(\"\")");
     }
 
-    Y_UNIT_TEST(BinaryAtom) {
+    Y_UNIT_TEST(BinaryAtom) { 
         ParseAndPrint("(x\"abcdef\")", "(x\"ABCDEF\")");
         ParseAndPrint("(x\"aBcDeF\")", "(x\"ABCDEF\")");
         ParseAndPrint("(x)", "(x)");
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT_STRINGS_EQUAL_C(result, expected, program);
     }
 
-    Y_UNIT_TEST(AdaptArbitraryAtom) {
+    Y_UNIT_TEST(AdaptArbitraryAtom) { 
         ParseAndAdaptPrint("(\"test\")", "(test)");
         ParseAndAdaptPrint("(\"another test\")", "(\"another test\")");
         ParseAndAdaptPrint("(\"braces(in)test\")", "(\"braces(in)test\")");
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT_C(!ast.IsOk(), program);
     }
 
-    Y_UNIT_TEST(MultilineAtomTrivial) {
+    Y_UNIT_TEST(MultilineAtomTrivial) { 
         TStringStream s;
         for (ui32 i = 4; i < 13; ++i) {
             TStringStream prog;
@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         );
     }
 
-    Y_UNIT_TEST(MultilineAtom) {
+    Y_UNIT_TEST(MultilineAtom) { 
         TString s1 = "(@@multi \n"
                    "line \n"
                    "string@@)";
@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT_STRINGS_EQUAL(s5, printResult);
     }
 
-    Y_UNIT_TEST(UnicodePrettyPrint) {
+    Y_UNIT_TEST(UnicodePrettyPrint) { 
         ParseAndAdaptPrint("(\"абв αβγ ﬡ\")", "(\"\\u0430\\u0431\\u0432 \\u03B1\\u03B2\\u03B3 \\uFB21\")");
     }
 

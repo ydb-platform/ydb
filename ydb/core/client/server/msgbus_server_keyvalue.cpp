@@ -31,7 +31,7 @@ public:
     }
 
     TEvKeyValue::TEvRequest* MakeReq(const TActorContext &ctx) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest());
         request->Record = RequestProto;
         return request.Release();

@@ -134,7 +134,7 @@ size_t NSystemInfo::NumberOfCpus() {
     mib[0] = CTL_HW;
     mib[1] = HW_NCPU;
     len = sizeof(ncpus);
-    if (sysctl(mib, 2, &ncpus, &len, nullptr, 0) == -1) {
+    if (sysctl(mib, 2, &ncpus, &len, nullptr, 0) == -1) { 
         abort();
     }
 

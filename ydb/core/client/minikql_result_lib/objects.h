@@ -27,16 +27,16 @@ namespace NPrivate {
 
 template <typename T>
 inline bool HasData(const TProtoValue& value, NScheme::TTypeId schemeType) {
-    Y_UNUSED(value);
-    Y_UNUSED(schemeType);
-    Y_FAIL("Not scpecified type.");
+    Y_UNUSED(value); 
+    Y_UNUSED(schemeType); 
+    Y_FAIL("Not scpecified type."); 
 }
 
 template <typename T>
 inline T GetData(const TProtoValue& value, NScheme::TTypeId schemeType) {
-    Y_UNUSED(value);
-    Y_UNUSED(schemeType);
-    Y_FAIL("Not scpecified type.");
+    Y_UNUSED(value); 
+    Y_UNUSED(schemeType); 
+    Y_FAIL("Not scpecified type."); 
 }
 
 #include "data_funcs.inl"
@@ -47,9 +47,9 @@ inline T GetData(const TProtoValue& value, NScheme::TTypeId schemeType) {
 #define ENSURE_KIND(type, expectedKind) \
     do {                                             \
         auto kind = (EProtoTypeKind) type.GetKind(); \
-        Y_ENSURE(kind == EProtoTypeKind::expectedKind, \
+        Y_ENSURE(kind == EProtoTypeKind::expectedKind, \ 
             "Expected " #expectedKind " instead of " << NKikimrMiniKQL::ETypeKind_Name(kind));    \
-        Y_ENSURE(type.Has ## expectedKind(), "No " #expectedKind " in type, seems like an error."); \
+        Y_ENSURE(type.Has ## expectedKind(), "No " #expectedKind " in type, seems like an error."); \ 
     } while (false);
 
 
@@ -132,7 +132,7 @@ public:
 
     template <typename T>
     T GetItem(size_t index) {
-        Y_ENSURE(CheckIndex(index), "List item index" << index << " is out of bounds.");
+        Y_ENSURE(CheckIndex(index), "List item index" << index << " is out of bounds."); 
         iterator<T> it(RootValue.GetList().begin() + index, RootType.GetList().GetItem());
         return it.Get();
     }
@@ -161,7 +161,7 @@ public:
         , Size(RootValue.TupleSize())
     {
         ENSURE_KIND(RootType, Tuple);
-        Y_ENSURE(RootType.GetTuple().ElementSize() == RootValue.TupleSize(), "Size mismatch.");
+        Y_ENSURE(RootType.GetTuple().ElementSize() == RootValue.TupleSize(), "Size mismatch."); 
     }
 
     template <typename T>
@@ -191,7 +191,7 @@ public:
         , Size(RootValue.StructSize())
     {
         ENSURE_KIND(RootType, Struct);
-        Y_ENSURE(RootType.GetStruct().MemberSize() == RootValue.StructSize(), "Size mismatch.");
+        Y_ENSURE(RootType.GetStruct().MemberSize() == RootValue.StructSize(), "Size mismatch."); 
     }
 
     template <typename T>
@@ -249,7 +249,7 @@ private:
 // TOptional.
 template <typename T>
 T TOptional::GetItem() const {
-    Y_ENSURE(HasItem(), "Optional is empty!");
+    Y_ENSURE(HasItem(), "Optional is empty!"); 
     const auto& itemType = RootType.GetOptional().GetItem();
     ENSURE_KIND(itemType, Data);
     auto schemeType = itemType.GetData().GetScheme();
@@ -266,7 +266,7 @@ T TOptional::GetItem() const {
 // TTuple.
 template <typename T>
 T TTuple::GetElement(size_t index) const {
-    Y_ENSURE(CheckIndex(index), "Tuple element index" << index << " is out of bounds.");
+    Y_ENSURE(CheckIndex(index), "Tuple element index" << index << " is out of bounds."); 
     const auto& elementType = RootType.GetTuple().GetElement(index);
     const auto& element = RootValue.GetTuple(index);
     ENSURE_KIND(elementType, Data);
@@ -286,7 +286,7 @@ T TStruct::GetMember(const TStringBuf& memberName) {
 
 template <typename T>
 T TStruct::GetMember(size_t memberIndex) {
-    Y_ENSURE(CheckIndex(memberIndex), "Struct member index" << memberIndex << " is out of bounds.");
+    Y_ENSURE(CheckIndex(memberIndex), "Struct member index" << memberIndex << " is out of bounds."); 
     const auto& memberType = RootType.GetStruct().GetMember(memberIndex).GetType();
     const auto& member = RootValue.GetStruct(memberIndex);
     ENSURE_KIND(memberType, Data);

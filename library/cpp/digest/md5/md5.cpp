@@ -14,7 +14,7 @@ namespace {
     constexpr size_t MD5_PADDING_SHIFT = 56;
     constexpr size_t MD5_HEX_DIGEST_LENGTH = 32;
 
-    struct TMd5Stream: public IOutputStream {
+    struct TMd5Stream: public IOutputStream { 
         inline TMd5Stream(MD5* md5)
             : M_(md5)
         {
@@ -44,7 +44,7 @@ char* MD5::File(const char* filename, char* buf) {
     } catch (...) {
     }
 
-    return nullptr;
+    return nullptr; 
 }
 
 TString MD5::File(const TString& filename) {
@@ -61,7 +61,7 @@ char* MD5::Data(const TArrayRef<const ui8>& data, char* buf) {
     return MD5().Update(data).End(buf);
 }
 
-char* MD5::Data(const void* data, size_t len, char* buf) {
+char* MD5::Data(const void* data, size_t len, char* buf) { 
     return Data(MakeUnsignedArrayRef(data, len), buf);
 }
 
@@ -76,11 +76,11 @@ TString MD5::Data(TStringBuf data) {
     return Data(MakeUnsignedArrayRef(data));
 }
 
-char* MD5::Stream(IInputStream* in, char* buf) {
+char* MD5::Stream(IInputStream* in, char* buf) { 
     return MD5().Update(in).End(buf);
 }
 
-MD5& MD5::Update(IInputStream* in) {
+MD5& MD5::Update(IInputStream* in) { 
     TMd5Stream md5(this);
 
     TransferData(in, &md5);
@@ -179,7 +179,7 @@ char* MD5::End(char* buf) {
     if (!buf)
         buf = (char*)malloc(33);
     if (!buf)
-        return nullptr;
+        return nullptr; 
     Final(digest);
     for (ui8 i = 0; i < MD5_HEX_DIGEST_LENGTH / 2; i++) {
         buf[i * 2] = hex[digest[i] >> 4];
@@ -194,10 +194,10 @@ char* MD5::End_b64(char* buf) {
     if (!buf)
         buf = (char*)malloc(25);
     if (!buf)
-        return nullptr;
+        return nullptr; 
     Final(digest);
     Base64Encode(buf, digest, 16);
-    buf[24] = '\0';
+    buf[24] = '\0'; 
     return buf;
 }
 

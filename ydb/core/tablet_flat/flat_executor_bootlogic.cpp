@@ -228,7 +228,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::CheckCompletion()
 }
 
 TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveRestored(TEvTablet::TEvRestored::TPtr &ev) {
-    Y_UNUSED(ev);
+    Y_UNUSED(ev); 
     Restored = true;
     return CheckCompletion();
 }

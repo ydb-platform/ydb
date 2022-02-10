@@ -8,7 +8,7 @@ TDebugReceiverProtocol::TDebugReceiverProtocol()
 }
 
 void TDebugReceiverProtocol::Serialize(const NBus::TBusMessage*, TBuffer&) {
-    Y_FAIL("it is receiver only");
+    Y_FAIL("it is receiver only"); 
 }
 
 TAutoPtr<NBus::TBusMessage> TDebugReceiverProtocol::Deserialize(ui16, TArrayRef<const char> payload) {

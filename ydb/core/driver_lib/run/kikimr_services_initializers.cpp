@@ -289,7 +289,7 @@ void AddExecutorPool(
         break;
     }
     default:
-        Y_FAIL();
+        Y_FAIL(); 
     }
 }
 
@@ -344,7 +344,7 @@ static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSyste
 
 static TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler &config) {
     const ui64 resolution = config.HasResolution() ? config.GetResolution() : 1024;
-    Y_VERIFY_DEBUG((resolution & (resolution - 1)) == 0);  // resolution must be power of 2
+    Y_VERIFY_DEBUG((resolution & (resolution - 1)) == 0);  // resolution must be power of 2 
     const ui64 spinThreshold = config.HasSpinThreshold() ? config.GetSpinThreshold() : 0;
     const ui64 progressThreshold = config.HasProgressThreshold() ? config.GetProgressThreshold() : 10000;
     const bool useSchedulerActor = config.HasUseSchedulerActor() ? config.GetUseSchedulerActor() : false;
@@ -506,7 +506,7 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
 
 void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                    const NKikimr::TAppData* appData) {
-    Y_VERIFY(Config.HasActorSystemConfig());
+    Y_VERIFY(Config.HasActorSystemConfig()); 
 
     auto& systemConfig = Config.GetActorSystemConfig();
     Y_VERIFY(systemConfig.HasScheduler());
@@ -851,7 +851,7 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
     bool knownss[maxssid + 1] = {};
     for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
         const ui32 ssid = ssconf.GetSSId();
-        Y_VERIFY(ssid <= maxssid);
+        Y_VERIFY(ssid <= maxssid); 
         knownss[ssid] = true;
 
         TIntrusivePtr<TStateStorageInfo> ssrInfo;
@@ -1132,7 +1132,7 @@ TRestartsCountPublisher::TRestartsCountPublisher(const TKikimrRunConfig& runConf
 void TRestartsCountPublisher::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
-    Y_UNUSED(setup);
+    Y_UNUSED(setup); 
     const TIntrusivePtr<NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
 
     if (Config.HasRestartsCountConfig()) {

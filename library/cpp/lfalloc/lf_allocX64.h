@@ -116,7 +116,7 @@ static inline long AtomicSub(TAtomic& a, long b) {
 #ifndef _darwin_
 
 #ifndef Y_ARRAY_SIZE
-#define Y_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#define Y_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
 #endif
 
 #ifndef NDEBUG
@@ -261,7 +261,7 @@ static volatile int freeChunkCount;
 
 static void AddFreeChunk(uintptr_t chunkId) {
     chunkSizeIdx[chunkId] = -1;
-    if (Y_UNLIKELY(freeChunkCount == FREE_CHUNK_ARR_BUF))
+    if (Y_UNLIKELY(freeChunkCount == FREE_CHUNK_ARR_BUF)) 
         NMalloc::AbortFromCorruptedAllocator("free chunks array overflowed");
     freeChunkArr[freeChunkCount++] = chunkId;
 }
@@ -303,7 +303,7 @@ enum EMMapMode {
 
 #ifndef _MSC_VER
 inline void VerifyMmapResult(void* result) {
-    if (Y_UNLIKELY(result == MAP_FAILED))
+    if (Y_UNLIKELY(result == MAP_FAILED)) 
         NMalloc::AbortFromCorruptedAllocator("negative size requested? or just out of mem");
 }
 #endif
@@ -336,7 +336,7 @@ static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {
         char* prevAllocPtr = *areaPtr;
         char* nextAllocPtr = prevAllocPtr + sz;
         if (uintptr_t(nextAllocPtr - (char*)nullptr) >= areaFinish) {
-            if (Y_UNLIKELY(wrapped)) {
+            if (Y_UNLIKELY(wrapped)) { 
                 NMalloc::AbortFromCorruptedAllocator("virtual memory is over fragmented");
             }
             // wrap after all area is used
@@ -369,13 +369,13 @@ static char* AllocWithMMap(uintptr_t sz, EMMapMode mode) {
     char* largeBlock = (char*)VirtualAlloc(0, sz, MEM_RESERVE, PAGE_READWRITE);
     if (Y_UNLIKELY(largeBlock == nullptr))
         NMalloc::AbortFromCorruptedAllocator("out of memory");
-    if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE))
+    if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE)) 
         NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
 #else
 #if defined(_freebsd_) || !defined(_64_)
     char* largeBlock = (char*)mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     VerifyMmapResult(largeBlock);
-    if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE))
+    if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE)) 
         NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
 #else
     char* largeBlock = AllocWithMMapLinuxImpl(sz, mode);
@@ -452,7 +452,7 @@ static void* LargeBlockAlloc(size_t _nSize, ELFAllocCounter counter) {
     size_t pgCount = (_nSize + 4095) / 4096;
 #ifdef _MSC_VER
     char* pRes = (char*)VirtualAlloc(0, (pgCount + 1) * 4096ll, MEM_COMMIT, PAGE_READWRITE);
-    if (Y_UNLIKELY(pRes == 0)) {
+    if (Y_UNLIKELY(pRes == 0)) { 
         NMalloc::AbortFromCorruptedAllocator("out of memory");
     }
 #else
@@ -492,12 +492,12 @@ static void* LargeBlockAlloc(size_t _nSize, ELFAllocCounter counter) {
 
 #ifndef _MSC_VER
 static void FreeAllLargeBlockMem() {
-    for (auto& lbFreePtr : lbFreePtrs) {
+    for (auto& lbFreePtr : lbFreePtrs) { 
         for (int i = 0; i < LB_BUF_SIZE; ++i) {
-            void* p = lbFreePtr[i];
+            void* p = lbFreePtr[i]; 
             if (p == nullptr)
                 continue;
-            if (DoCas(&lbFreePtr[i], (void*)nullptr, p) == p) {
+            if (DoCas(&lbFreePtr[i], (void*)nullptr, p) == p) { 
                 int pgCount = TLargeBlk::As(p)->Pages;
                 AtomicAdd(lbFreePageCount, -pgCount);
                 LargeBlockUnmap(p, pgCount);
@@ -782,7 +782,7 @@ static bool DefragmentMem() {
     IncrementCounter(CT_DEGRAGMENT_CNT, 1);
 
     int* nFreeCount = (int*)SystemAlloc(N_CHUNKS * sizeof(int));
-    if (Y_UNLIKELY(!nFreeCount)) {
+    if (Y_UNLIKELY(!nFreeCount)) { 
         //__debugbreak();
         NMalloc::AbortFromCorruptedAllocator("debugbreak");
     }
@@ -792,7 +792,7 @@ static bool DefragmentMem() {
     for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx) {
         wholeLists[nSizeIdx] = (TFreeListGroup*)globalFreeLists[nSizeIdx].GetWholeList();
         for (TFreeListGroup* g = wholeLists[nSizeIdx]; g; g = g->Next) {
-            for (auto pData : g->Ptrs) {
+            for (auto pData : g->Ptrs) { 
                 if (pData) {
                     uintptr_t nChunk = (pData - ALLOC_START) / N_CHUNK_SIZE;
                     ++nFreeCount[nChunk];
@@ -816,12 +816,12 @@ static bool DefragmentMem() {
         }
     }
     if (bRes) {
-        for (auto& wholeList : wholeLists) {
-            TFreeListGroup** ppPtr = &wholeList;
+        for (auto& wholeList : wholeLists) { 
+            TFreeListGroup** ppPtr = &wholeList; 
             while (*ppPtr) {
                 TFreeListGroup* g = *ppPtr;
                 int dst = 0;
-                for (auto pData : g->Ptrs) {
+                for (auto pData : g->Ptrs) { 
                     if (pData) {
                         uintptr_t nChunk = (pData - ALLOC_START) / N_CHUNK_SIZE;
                         if (nFreeCount[nChunk] == 0)
@@ -964,9 +964,9 @@ static Y_FORCE_INLINE int TakeBlocksFromGlobalFreeList(int nSizeIdx, char** buf)
     TFreeListGroup* g = (TFreeListGroup*)fl.Alloc();
     if (g) {
         int resCount = 0;
-        for (auto& ptr : g->Ptrs) {
-            if (ptr)
-                buf[resCount++] = ptr;
+        for (auto& ptr : g->Ptrs) { 
+            if (ptr) 
+                buf[resCount++] = ptr; 
             else
                 break;
         }
@@ -1116,8 +1116,8 @@ struct TThreadAllocInfo {
 
     void Init(TThreadAllocInfo** pHead) {
         memset(this, 0, sizeof(*this));
-        for (auto& i : FreePtrIndex)
-            i = THREAD_BUF;
+        for (auto& i : FreePtrIndex) 
+            i = THREAD_BUF; 
 #ifdef _win_
         BOOL b = DuplicateHandle(
             GetCurrentProcess(), GetCurrentThread(),
@@ -1146,11 +1146,11 @@ struct TThreadAllocInfo {
 #endif
     }
     void Done() {
-        for (auto sizeIdx : FreePtrIndex) {
+        for (auto sizeIdx : FreePtrIndex) { 
             Y_ASSERT_NOBT(sizeIdx == THREAD_BUF);
         }
-        for (auto& localCounter : LocalCounters) {
-            localCounter.Flush();
+        for (auto& localCounter : LocalCounters) { 
+            localCounter.Flush(); 
         }
 #if defined(LFALLOC_DBG)
         for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) {
@@ -1740,13 +1740,13 @@ static void DumpMemoryBlockUtilizationLocked() {
         int nEntriesTotal = N_CHUNK_SIZE / nSize;
         memset(entries, 0, nEntriesTotal);
         for (TFreeListGroup* g = wholeLists[nSizeIdx]; g; g = g->Next) {
-            for (auto& ptr : g->Ptrs)
-                cs.CheckBlock(ptr);
+            for (auto& ptr : g->Ptrs) 
+                cs.CheckBlock(ptr); 
         }
         TChunkStats csGB(k, nSize, entries);
         if (nSizeIdx == FREE_LIST_GROUP_SIZEIDX) {
-            for (auto g : wholeLists) {
-                for (; g; g = g->Next)
+            for (auto g : wholeLists) { 
+                for (; g; g = g->Next) 
                     csGB.CheckBlock((char*)g);
             }
             for (char* blk = bfList; blk; blk = *(char**)blk)
@@ -1769,9 +1769,9 @@ static void DumpMemoryBlockUtilizationLocked() {
                 pages[(nShift + nDelta) / N_PAGE_SIZE] |= nBit;
         }
         i64 nBadPages = 0;
-        for (auto page : pages) {
-            nBadPages += page == 3;
-            nTotalPages += page != 1;
+        for (auto page : pages) { 
+            nBadPages += page == 3; 
+            nTotalPages += page != 1; 
         }
         DebugTraceMMgr("entry = %lld; size = %lld; free = %lld; system %lld; utilisation = %g%%, fragmentation = %g%%\n",
                        k, nSize, cs.FreeCount * nSize, csGB.FreeCount * nSize,
@@ -1869,7 +1869,7 @@ static const char* LFAlloc_GetParam(const char* param) {
 }
 
 static Y_FORCE_INLINE int LFPosixMemalign(void** memptr, size_t alignment, size_t size) {
-    if (Y_UNLIKELY(alignment > 4096)) {
+    if (Y_UNLIKELY(alignment > 4096)) { 
         const char* error = "Larger alignment are not guaranteed with this implementation\n";
 #ifdef _win_
         OutputDebugStringA(error);

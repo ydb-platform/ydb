@@ -273,7 +273,7 @@ public:
         const Descriptor& descriptor = *TElementType::descriptor();
         TVector<TString> requestedFilters;
         TVector<THolder<IFieldProtoFilter>> foundFilters;
-        if (filters.StartsWith('(') && filters.EndsWith(')')) {
+        if (filters.StartsWith('(') && filters.EndsWith(')')) { 
             filters = filters.substr(1, filters.size() - 2);
         }
         StringSplitter(filters).Split(';').SkipEmpty().Collect(&requestedFilters);

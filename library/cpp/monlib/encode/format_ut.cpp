@@ -9,7 +9,7 @@
 
 using namespace NMonitoring;
 
-Y_UNIT_TEST_SUITE(TFormatTest) {
+Y_UNIT_TEST_SUITE(TFormatTest) { 
     Y_UNIT_TEST(ContentTypeHeader) {
         UNIT_ASSERT_EQUAL(FormatFromContentType(""), EFormat::UNKNOWN);
         UNIT_ASSERT_EQUAL(FormatFromContentType("application/json;some=stuff"), EFormat::JSON);
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
         UNIT_ASSERT_EQUAL(FormatFromContentType(";application/xml"), EFormat::UNKNOWN);
     }
 
-    Y_UNIT_TEST(AcceptHeader) {
+    Y_UNIT_TEST(AcceptHeader) { 
         UNIT_ASSERT_EQUAL(FormatFromAcceptHeader(""), EFormat::UNKNOWN);
         UNIT_ASSERT_EQUAL(FormatFromAcceptHeader("*/*"), EFormat::UNKNOWN);
 
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
             EFormat::PROMETHEUS);
     }
 
-    Y_UNIT_TEST(FormatToStrFromStr) {
+    Y_UNIT_TEST(FormatToStrFromStr) { 
         const std::array<EFormat, 6> formats = {{
             EFormat::UNKNOWN,
             EFormat::SPACK,
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
         }
     }
 
-    Y_UNIT_TEST(AcceptEncodingHeader) {
+    Y_UNIT_TEST(AcceptEncodingHeader) { 
         UNIT_ASSERT_EQUAL(
             CompressionFromAcceptEncodingHeader(""),
             ECompression::UNKNOWN);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
             ECompression::LZ4);
     }
 
-    Y_UNIT_TEST(CompressionToStrFromStr) {
+    Y_UNIT_TEST(CompressionToStrFromStr) { 
         const std::array<ECompression, 5> algs = {{
             ECompression::UNKNOWN,
             ECompression::IDENTITY,

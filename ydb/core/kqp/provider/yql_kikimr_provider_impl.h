@@ -62,19 +62,19 @@ public:
         : Ctx(ctx) {}
 
     Type GetKeyType() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
+        Y_VERIFY_DEBUG(KeyType.Defined()); 
         return *KeyType;
     }
 
     TString GetTablePath() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::Table || KeyType == Type::TableScheme);
+        Y_VERIFY_DEBUG(KeyType.Defined()); 
+        Y_VERIFY_DEBUG(KeyType == Type::Table || KeyType == Type::TableScheme); 
         return Target;
     }
 
     TString GetFolderPath() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::TableList);
+        Y_VERIFY_DEBUG(KeyType.Defined()); 
+        Y_VERIFY_DEBUG(KeyType == Type::TableList); 
         return Target;
     }
 

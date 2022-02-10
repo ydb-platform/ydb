@@ -23,13 +23,13 @@ private:
 
         void Release() {
             TGuard<TMutex> g(Mutex);
-            Y_ASSERT(!!Outer);
+            Y_ASSERT(!!Outer); 
             Outer = nullptr;
         }
 
         TIntrusivePtr<TSelf> Get() {
             TGuard<TMutex> g(Mutex);
-            Y_ASSERT(!Outer || Outer->RefCount() > 0);
+            Y_ASSERT(!Outer || Outer->RefCount() > 0); 
             return Outer;
         }
     };

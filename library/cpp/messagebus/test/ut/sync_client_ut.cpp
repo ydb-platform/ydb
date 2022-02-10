@@ -50,8 +50,8 @@ namespace NBus {
             }
         };
 
-        Y_UNIT_TEST_SUITE(SyncClientTest) {
-            Y_UNIT_TEST(TestSync) {
+        Y_UNIT_TEST_SUITE(SyncClientTest) { 
+            Y_UNIT_TEST(TestSync) { 
                 TObjectCountCheck objectCountCheck;
 
                 TExampleServer server;

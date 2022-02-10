@@ -41,7 +41,7 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
+        Y_UNUSED(ev); 
         PipeClient = TActorId();
         SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx, "Tablet pipe client destroyed Marker# MBT2"));
         return Die(ctx);

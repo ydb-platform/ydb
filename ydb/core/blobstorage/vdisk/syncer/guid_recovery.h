@@ -76,7 +76,7 @@ namespace NKikimr {
                                       bool subsequentFailure);
             static TDecision Good(TVDiskEternalGuid guid);
             static TDecision Good(EFirstRunStep step, TVDiskEternalGuid guid);
-            void Output(IOutputStream &str) const;
+            void Output(IOutputStream &str) const; 
             TString ToString() const;
             EDecision GetDecision() const { return Decision; }
             TVDiskEternalGuid GetGuid() const { return Guid; }
@@ -113,7 +113,7 @@ namespace NKikimr {
             TOutcome &operator=(TOutcome &&) = default;
             ~TOutcome() = default;
             bool BadDecision() const { return IsBad(Decision); }
-            void Output(IOutputStream &str) const;
+            void Output(IOutputStream &str) const; 
             TString ToString() const;
         };
 

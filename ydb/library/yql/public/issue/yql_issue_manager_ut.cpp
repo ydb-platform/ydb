@@ -10,8 +10,8 @@ static std::function<TIssuePtr()> CreateScopeIssueFunction(TString name, ui32 co
     };
 }
 
-Y_UNIT_TEST_SUITE(TIssueManagerTest) {
-    Y_UNIT_TEST(NoErrorNoLevelTest) {
+Y_UNIT_TEST_SUITE(TIssueManagerTest) { 
+    Y_UNIT_TEST(NoErrorNoLevelTest) { 
         TIssueManager issueManager;
         auto completedIssues = issueManager.GetCompletedIssues();
         UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0);
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
     }
 
-    Y_UNIT_TEST(NoErrorOneLevelTest) {
+    Y_UNIT_TEST(NoErrorOneLevelTest) { 
         TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         auto completedIssues = issueManager.GetCompletedIssues();
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
     }
 
-    Y_UNIT_TEST(NoErrorTwoLevelsTest) {
+    Y_UNIT_TEST(NoErrorTwoLevelsTest) { 
         TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         issueManager.AddScope(CreateScopeIssueFunction("B", 1, 1));
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
     }
 
-    Y_UNIT_TEST(OneErrorOneLevelTest) {
+    Y_UNIT_TEST(OneErrorOneLevelTest) { 
         TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         auto completedIssues1 = issueManager.GetCompletedIssues();
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "IssueOne");
     }
 
-    Y_UNIT_TEST(OneErrorTwoLevelsTest) {
+    Y_UNIT_TEST(OneErrorTwoLevelsTest) { 
         TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         issueManager.AddScope(CreateScopeIssueFunction("B", 1, 1));
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues()[0]->Message, "IssueOne");
     }
 
-    Y_UNIT_TEST(MultiErrorsMultiLevelsTest) {
+    Y_UNIT_TEST(MultiErrorsMultiLevelsTest) { 
         TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         issueManager.RaiseIssue(TIssue(TPosition(), "WarningScope1"));
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), ref);
     }
 
-    Y_UNIT_TEST(TIssueScopeGuardSimpleTest) {
+    Y_UNIT_TEST(TIssueScopeGuardSimpleTest) { 
         TIssueManager issueManager;
         {
             TIssueScopeGuard guard(issueManager, CreateScopeIssueFunction("A", 0, 0));

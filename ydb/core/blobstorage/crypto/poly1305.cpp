@@ -136,7 +136,7 @@ constexpr size_t Poly1305::MAC_SIZE;
 
 void Poly1305::SetKey(const ui8* key, size_t size)
 {
-    Y_ASSERT((size == KEY_SIZE) && "key must be 32 bytes long");
+    Y_ASSERT((size == KEY_SIZE) && "key must be 32 bytes long"); 
 
     poly1305_state_st *st = (poly1305_state_st *)&state;
     ui32 t0, t1, t2, t3;

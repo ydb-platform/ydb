@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/system/yassert.h> // Y_ASSERT
+#include <util/system/yassert.h> // Y_ASSERT 
 
 
 namespace NYql {
@@ -89,17 +89,17 @@ class TDefaultRefCountedPtrOps
 {
 public:
     static inline void Ref(T* t) {
-        Y_ASSERT(t);
+        Y_ASSERT(t); 
         t->Ref();
     }
 
     static inline void UnRef(T* t) {
-        Y_ASSERT(t);
+        Y_ASSERT(t); 
         t->UnRef();
     }
 
     static inline ui32 RefCount(const T* t) {
-        Y_ASSERT(t);
+        Y_ASSERT(t); 
         return t->RefCount();
     }
 };

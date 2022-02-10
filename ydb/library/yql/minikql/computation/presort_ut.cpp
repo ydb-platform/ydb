@@ -184,9 +184,9 @@ struct TPresortTest {
 
 }
 
-Y_UNIT_TEST_SUITE(TPresortCodecTest) {
+Y_UNIT_TEST_SUITE(TPresortCodecTest) { 
 
-Y_UNIT_TEST(SimpleTypes) {
+Y_UNIT_TEST(SimpleTypes) { 
     TPresortTest test;
 
     TSimpleTypes values = {false, 1u, 2u, 3u, 4u, 5, 6, 7, 8, 9.f, 10.0};
@@ -209,7 +209,7 @@ Y_UNIT_TEST(SimpleTypes) {
 }
 
 
-Y_UNIT_TEST(Bool) {
+Y_UNIT_TEST(Bool) { 
     const TVector<std::tuple<bool, TString, TString>> values = {
         {false, "00", "FF"},
         {true, "01", "FE"}
@@ -217,7 +217,7 @@ Y_UNIT_TEST(Bool) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Int8) {
+Y_UNIT_TEST(Int8) { 
     const TVector<std::tuple<i8, TString, TString>> values = {
         {-0x80, "00", "FF"},
         {-1,    "7F", "80"},
@@ -228,7 +228,7 @@ Y_UNIT_TEST(Int8) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Uint8) {
+Y_UNIT_TEST(Uint8) { 
     const TVector<std::tuple<ui8, TString, TString>> values = {
         {0u,    "00", "FF"},
         {0x80u, "80", "7F"},
@@ -237,7 +237,7 @@ Y_UNIT_TEST(Uint8) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Int16) {
+Y_UNIT_TEST(Int16) { 
     const TVector<std::tuple<i16, TString, TString>> values = {
         {-0x8000, "0000", "FFFF"},
         {-1,      "7FFF", "8000"},
@@ -248,7 +248,7 @@ Y_UNIT_TEST(Int16) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Uint16) {
+Y_UNIT_TEST(Uint16) { 
     const TVector<std::tuple<ui16, TString, TString>> values = {
         {0,       "0000", "FFFF"},
         {0x8000u, "8000", "7FFF"},
@@ -257,7 +257,7 @@ Y_UNIT_TEST(Uint16) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Int32) {
+Y_UNIT_TEST(Int32) { 
     const TVector<std::tuple<i32, TString, TString>> values = {
         {-0x80000000, "00000000", "FFFFFFFF"},
         {-1,          "7FFFFFFF", "80000000"},
@@ -268,7 +268,7 @@ Y_UNIT_TEST(Int32) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Uint32) {
+Y_UNIT_TEST(Uint32) { 
     const TVector<std::tuple<ui32, TString, TString>> values = {
         {0u,          "00000000", "FFFFFFFF"},
         {0x80000000u, "80000000", "7FFFFFFF"},
@@ -277,7 +277,7 @@ Y_UNIT_TEST(Uint32) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Int64) {
+Y_UNIT_TEST(Int64) { 
     const TVector<std::tuple<i64, TString, TString>> values = {
         {-0x8000000000000000, "0000000000000000", "FFFFFFFFFFFFFFFF"},
         {-1,                  "7FFFFFFFFFFFFFFF", "8000000000000000"},
@@ -288,7 +288,7 @@ Y_UNIT_TEST(Int64) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Uint64) {
+Y_UNIT_TEST(Uint64) { 
     const TVector<std::tuple<ui64, TString, TString>> values = {
         {0u,                  "0000000000000000", "FFFFFFFFFFFFFFFF"},
         {0x8000000000000000u, "8000000000000000", "7FFFFFFFFFFFFFFF"},
@@ -297,7 +297,7 @@ Y_UNIT_TEST(Uint64) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Float) {
+Y_UNIT_TEST(Float) { 
     using TLimits = std::numeric_limits<float>;
 
     const TVector<std::tuple<float, TString, TString>> values = {
@@ -316,7 +316,7 @@ Y_UNIT_TEST(Float) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(Double) {
+Y_UNIT_TEST(Double) { 
     using TLimits = std::numeric_limits<double>;
 
     const TVector<std::tuple<double, TString, TString>> values = {
@@ -335,7 +335,7 @@ Y_UNIT_TEST(Double) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(String) {
+Y_UNIT_TEST(String) { 
     const TVector<std::tuple<TStringBuf, TString, TString>> values = {
         {TStringBuf(""), "00", "FF"},
         {"\x00"sv, "1F00000000000000000000000000000001",

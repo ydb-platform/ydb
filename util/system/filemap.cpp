@@ -128,12 +128,12 @@ class TMemoryMap::TImpl: public TAtomicRefCount<TImpl> {
 public:
     inline void CreateMapping() {
 #if defined(_win_)
-        Mapping_ = nullptr;
+        Mapping_ = nullptr; 
         if (Length_) {
-            Mapping_ = CreateFileMapping(File_.GetHandle(), nullptr,
+            Mapping_ = CreateFileMapping(File_.GetHandle(), nullptr, 
                                          (Mode_ & oAccessMask) == TFileMap::oRdWr ? PAGE_READWRITE : PAGE_READONLY,
-                                         (DWORD)(Length_ >> 32), (DWORD)(Length_ & 0xFFFFFFFF), nullptr);
-            if (Mapping_ == nullptr) {
+                                         (DWORD)(Length_ >> 32), (DWORD)(Length_ & 0xFFFFFFFF), nullptr); 
+            if (Mapping_ == nullptr) { 
                 ythrow yexception() << "Can't create file mapping of '" << DbgName_ << "': " << LastSystemErrorText();
             }
         } else {
@@ -147,7 +147,7 @@ public:
                 ythrow yexception() << "Can't map " << (unsigned long)Length_ << " bytes of file '" << DbgName_ << "' at offset 0: " << LastSystemErrorText();
             }
         } else {
-            PtrStart_ = nullptr;
+            PtrStart_ = nullptr; 
         }
 #endif
     }
@@ -209,7 +209,7 @@ public:
     inline bool IsOpen() const noexcept {
         return File_.IsOpen()
 #if defined(_win_)
-               && Mapping_ != nullptr
+               && Mapping_ != nullptr 
 #endif
             ;
     }
@@ -247,15 +247,15 @@ public:
             result.Ptr = mmap((caddr_t) nullptr, size, ModeToMmapProt(Mode_), ModeToMmapFlags(Mode_), File_.GetHandle(), base);
 
             if (result.Ptr == (char*)(-1)) {
-                result.Ptr = nullptr;
+                result.Ptr = nullptr; 
             }
     #if defined(_unix_)
         } else {
-            result.Ptr = PtrStart_ ? static_cast<caddr_t>(PtrStart_) + base : nullptr;
+            result.Ptr = PtrStart_ ? static_cast<caddr_t>(PtrStart_) + base : nullptr; 
         }
     #endif
 #endif
-        if (result.Ptr != nullptr || size == 0) { // allow map of size 0
+        if (result.Ptr != nullptr || size == 0) { // allow map of size 0 
             result.Size = size;
         } else {
             ythrow yexception() << "Can't map " << (unsigned long)size << " bytes at offset " << offset << " of '" << DbgName_ << "': " << LastSystemErrorText();
@@ -308,7 +308,7 @@ public:
 #if defined(_win_)
         if (Mapping_) {
             ::CloseHandle(Mapping_); // != FALSE
-            Mapping_ = nullptr;
+            Mapping_ = nullptr; 
         }
 #elif defined(_unix_)
         if (PtrStart_) {
@@ -475,8 +475,8 @@ TFileMap::TFileMap(const TFileMap& fm) noexcept
 }
 
 void TFileMap::Flush(void* ptr, size_t size, bool sync) {
-    Y_ASSERT(ptr >= Ptr());
-    Y_ASSERT(static_cast<char*>(ptr) + size <= static_cast<char*>(Ptr()) + MappedSize());
+    Y_ASSERT(ptr >= Ptr()); 
+    Y_ASSERT(static_cast<char*>(ptr) + size <= static_cast<char*>(Ptr()) + MappedSize()); 
 
     if (!Region_.IsMapped()) {
         return;
@@ -530,11 +530,11 @@ void TFileMap::Precharge(size_t pos, size_t size) const {
 }
 
 TMappedAllocation::TMappedAllocation(size_t size, bool shared, void* addr)
-    : Ptr_(nullptr)
+    : Ptr_(nullptr) 
     , Size_(0)
     , Shared_(shared)
 #if defined(_win_)
-    , Mapping_(nullptr)
+    , Mapping_(nullptr) 
 #endif
 {
     if (size != 0) {
@@ -543,16 +543,16 @@ TMappedAllocation::TMappedAllocation(size_t size, bool shared, void* addr)
 }
 
 void* TMappedAllocation::Alloc(size_t size, void* addr) {
-    assert(Ptr_ == nullptr);
+    assert(Ptr_ == nullptr); 
 #if defined(_win_)
     (void)addr;
-    Mapping_ = CreateFileMapping((HANDLE)-1, nullptr, PAGE_READWRITE, 0, size ? size : 1, nullptr);
+    Mapping_ = CreateFileMapping((HANDLE)-1, nullptr, PAGE_READWRITE, 0, size ? size : 1, nullptr); 
     Ptr_ = MapViewOfFile(Mapping_, FILE_MAP_WRITE, 0, 0, size ? size : 1);
 #else
     Ptr_ = mmap(addr, size, PROT_READ | PROT_WRITE, (Shared_ ? MAP_SHARED : MAP_PRIVATE) | MAP_ANON, -1, 0);
 
     if (Ptr_ == (void*)MAP_FAILED) {
-        Ptr_ = nullptr;
+        Ptr_ = nullptr; 
     }
 #endif
     if (Ptr_ != nullptr) {
@@ -568,11 +568,11 @@ void TMappedAllocation::Dealloc() {
 #if defined(_win_)
     UnmapViewOfFile(Ptr_);
     CloseHandle(Mapping_);
-    Mapping_ = nullptr;
+    Mapping_ = nullptr; 
 #else
     munmap((caddr_t)Ptr_, Size_);
 #endif
-    Ptr_ = nullptr;
+    Ptr_ = nullptr; 
     Size_ = 0;
 }
 

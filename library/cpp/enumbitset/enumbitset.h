@@ -1,11 +1,11 @@
 #pragma once
 
-#include <util/ysaveload.h>
-#include <util/generic/bitmap.h>
+#include <util/ysaveload.h> 
+#include <util/generic/bitmap.h> 
 #include <util/generic/serialized_enum.h>
-#include <util/generic/yexception.h>
-#include <util/string/cast.h>
-#include <util/string/printf.h>
+#include <util/generic/yexception.h> 
+#include <util/string/cast.h> 
+#include <util/string/printf.h> 
 #include <util/system/yassert.h>
 
 // Stack memory bitmask for TEnum values [begin, end).
@@ -134,7 +134,7 @@ public:
     }
 
     bool operator<(const TThis& right) const {
-        Y_ASSERT(this->GetChunkCount() == right.GetChunkCount());
+        Y_ASSERT(this->GetChunkCount() == right.GetChunkCount()); 
         for (size_t i = 0; i < this->GetChunkCount(); ++i) {
             if (this->GetChunks()[i] < right.GetChunks()[i])
                 return true;
@@ -258,7 +258,7 @@ public:
     }
 
     //serialization to/from stream
-    void Save(IOutputStream* buffer) const {
+    void Save(IOutputStream* buffer) const { 
         ::Save(buffer, (ui32)Count());
         for (TEnum bit : *this) {
             ::Save(buffer, (ui32)bit);
@@ -363,7 +363,7 @@ public:
         }
 
         TEnum operator*() const noexcept {
-            Y_ASSERT(Value < EndIndex);
+            Y_ASSERT(Value < EndIndex); 
             return static_cast<TEnum>(Value);
         }
 
@@ -372,7 +372,7 @@ public:
         }
 
         TIterator& operator++() noexcept {
-            Y_ASSERT(Value < EndIndex);
+            Y_ASSERT(Value < EndIndex); 
             TEnum res;
             if (BitMap->FindNext(static_cast<TEnum>(Value), res)) {
                 Value = static_cast<int>(res);
@@ -399,7 +399,7 @@ public:
 
 private:
     static size_t Pos(TEnum c) {
-        Y_ASSERT(IsValid(c));
+        Y_ASSERT(IsValid(c)); 
         return static_cast<size_t>(int(c) - BeginIndex);
     }
 

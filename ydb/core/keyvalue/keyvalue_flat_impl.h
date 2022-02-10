@@ -159,7 +159,7 @@ protected:
             txc.DB.NoMoreReadsForTx();
             return true;
 #else
-            Y_UNUSED(txc);
+            Y_UNUSED(txc); 
             return true;
 #endif
         }
@@ -177,7 +177,7 @@ protected:
         {}
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
-            Y_UNUSED(txc);
+            Y_UNUSED(txc); 
             TStringStream str;
             THolder<IEventBase> response;
             TCgiParameters params(Event->Cgi());
@@ -200,7 +200,7 @@ protected:
         }
 
         void Complete(const TActorContext &ctx) override {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
         }
     };
 
@@ -406,7 +406,7 @@ protected:
 
     void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " Handle TEvents::TEvPoisonPill");
-        Y_UNUSED(ev);
+        Y_UNUSED(ev); 
         Become(&TThis::StateBroken);
         ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     }

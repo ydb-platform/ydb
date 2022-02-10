@@ -69,7 +69,7 @@ public:
     }
 
     ~TContWaitQueue() {
-        Y_ASSERT(Waiters_.Empty());
+        Y_ASSERT(Waiters_.Empty()); 
     }
 
     int WaitD(TCont* current, TInstant deadline) {

@@ -31,7 +31,7 @@ namespace NKikimr {
             , LastKeepLsn(lastKeepLsn)
             , GenerationTime(TAppData::TimeProvider->Now())
         {
-            Y_VERIFY_DEBUG(Start <= component && component < Max);
+            Y_VERIFY_DEBUG(Start <= component && component < Max); 
         }
     };
 

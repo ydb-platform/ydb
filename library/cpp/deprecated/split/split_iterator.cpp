@@ -155,7 +155,7 @@ TDelimitersSplitWithoutTags::TDelimitersSplitWithoutTags(const TString& s, const
 }
 
 size_t TDelimitersSplitWithoutTags::SkipTag(size_t pos) const {
-    Y_ASSERT('<' == Str[pos]);
+    Y_ASSERT('<' == Str[pos]); 
     while ((pos < Len) && ('>' != Str[pos]))
         ++pos;
     return pos + 1;
@@ -236,7 +236,7 @@ TCharSplitWithoutTags::TCharSplitWithoutTags(const TString& s)
 }
 
 size_t TCharSplitWithoutTags::SkipTag(size_t pos) const {
-    Y_ASSERT('<' == Str[pos]);
+    Y_ASSERT('<' == Str[pos]); 
     while ((pos < Len) && ('>' != Str[pos]))
         ++pos;
     return pos + 1;

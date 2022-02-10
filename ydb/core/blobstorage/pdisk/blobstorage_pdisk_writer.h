@@ -133,7 +133,7 @@ public:
 
         ui64 sectorOffset = Format.Offset(ChunkIdx, SectorIdx);
         if (buffer) {
-            Y_VERIFY(IsLog);
+            Y_VERIFY(IsLog); 
             Y_VERIFY(!IsSysLog);
             ui64 startOffset = Format.Offset(ChunkIdx, SectorIdx);
             BufferedWriter->SetupWithBuffer(startOffset, sectorOffset, buffer, 1,
@@ -344,7 +344,7 @@ public:
     }
 
     void Write(const void* data, ui64 size, TReqId reqId, NWilson::TTraceId *traceId) {
-        Y_VERIFY(data != nullptr);
+        Y_VERIFY(data != nullptr); 
         Cypher.Encrypt(BufferedWriter->Get() + CurrentPosition, data, (ui32)size);
         FinalizeWrite(size, reqId, traceId);
     }
@@ -490,7 +490,7 @@ public:
 protected:
     void FinalizeWrite(ui64 size, TReqId reqId, NWilson::TTraceId *traceId) {
         CurrentPosition += size;
-        Y_VERIFY(SectorBytesFree >= size);
+        Y_VERIFY(SectorBytesFree >= size); 
         SectorBytesFree -= size;
         RecordBytesLeft -= size;
         if (size) {

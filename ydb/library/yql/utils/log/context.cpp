@@ -14,7 +14,7 @@ struct TThrowedLogContext {
 
 } // namspace
 
-void OutputLogCtx(IOutputStream* out, bool withBraces) {
+void OutputLogCtx(IOutputStream* out, bool withBraces) { 
     const NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
 
     if (ctxList->HasNext()) {

@@ -91,7 +91,7 @@ namespace NKikimr {
                 return true;
             }
 
-            void Output(IOutputStream &str) const {
+            void Output(IOutputStream &str) const { 
                 str << "{TabletId# " << TabletId << " Channel# " << Channel << "}";
             }
 
@@ -267,7 +267,7 @@ namespace NKikimr {
         // The method dumps database to str.
         // It can limit output size close to 'limitInBytes', to avoid
         // dumping too much.
-        EDumpRes Dump(IOutputStream &str) {
+        EDumpRes Dump(IOutputStream &str) { 
             TCountingOutput countedStr(&str);
             DumpFresh(countedStr);
             DumpLevels(countedStr);

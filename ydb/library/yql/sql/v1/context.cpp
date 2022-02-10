@@ -466,7 +466,7 @@ TContext& TTranslation::Context() {
     return Ctx;
 }
 
-IOutputStream& TTranslation::Error() {
+IOutputStream& TTranslation::Error() { 
     return Ctx.Error();
 }
 
@@ -489,11 +489,11 @@ TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, cons
         YQL_ENSURE(Ctx.Scoped->NamedNodes.find(resultName) == Ctx.Scoped->NamedNodes.end());
     }
     auto node = builder(resultName);
-    Y_VERIFY_DEBUG(node);
+    Y_VERIFY_DEBUG(node); 
     auto mapIt = Ctx.Scoped->NamedNodes.find(resultName);
     if (mapIt == Ctx.Scoped->NamedNodes.end()) {
         auto result = Ctx.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>()));
-        Y_VERIFY_DEBUG(result.second);
+        Y_VERIFY_DEBUG(result.second); 
         mapIt = result.first;
     }
 
@@ -515,7 +515,7 @@ TString TTranslation::PushNamedAtom(TPosition namePos, const TString& name) {
 void TTranslation::PopNamedNode(const TString& name) {
     auto mapIt = Ctx.Scoped->NamedNodes.find(name);
     Y_VERIFY_DEBUG(mapIt != Ctx.Scoped->NamedNodes.end());
-    Y_VERIFY_DEBUG(mapIt->second.size() > 0);
+    Y_VERIFY_DEBUG(mapIt->second.size() > 0); 
     auto& top = mapIt->second.front();
     if (!top->IsUsed && !Ctx.HasPendingErrors && !name.StartsWith("$_")) {
         Ctx.Warning(top->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";

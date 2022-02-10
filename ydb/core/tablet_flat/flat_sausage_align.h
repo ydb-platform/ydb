@@ -8,7 +8,7 @@ namespace NPageCollection {
 
     class TAlign {
     public:
-        TAlign(TArrayRef<const ui64> steps) : Steps(steps) { }
+        TAlign(TArrayRef<const ui64> steps) : Steps(steps) { } 
 
         TBorder Lookup(ui64 offset, const ui64 sz) const noexcept
         {
@@ -35,7 +35,7 @@ namespace NPageCollection {
                 };
         }
 
-        const TArrayRef<const ui64> Steps;
+        const TArrayRef<const ui64> Steps; 
     };
 
 }

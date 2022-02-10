@@ -383,9 +383,9 @@ private:
 
 	void SetJump(size_t oldState, Char c, size_t newState, unsigned long action)
 	{
-		Y_ASSERT(!m_vec.empty());
-		Y_ASSERT(oldState < m.statesCount);
-		Y_ASSERT(newState < m.statesCount);
+		Y_ASSERT(!m_vec.empty()); 
+		Y_ASSERT(oldState < m.statesCount); 
+		Y_ASSERT(newState < m.statesCount); 
 
 		size_t idx = oldState * m.lettersCount + m_letters[c];
 		m_vec[idx].push_back(newState);

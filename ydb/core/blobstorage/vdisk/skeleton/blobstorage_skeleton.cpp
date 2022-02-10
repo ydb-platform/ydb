@@ -1544,7 +1544,7 @@ namespace NKikimr {
             }
             TString data;
             bool res = record.SerializeToString(&data);
-            Y_VERIFY(res);
+            Y_VERIFY(res); 
 
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecPhantoms(seg, true, ev));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
@@ -1917,7 +1917,7 @@ namespace NKikimr {
             }
         }
 
-        void RenderState(IOutputStream &str, const TActorContext &ctx) {
+        void RenderState(IOutputStream &str, const TActorContext &ctx) { 
             constexpr ui32 threshold = 10000u;
             std::pair<ui32, ui32> actorQueues = ctx.CountMailboxEvents(threshold);
 

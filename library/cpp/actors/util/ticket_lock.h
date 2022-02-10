@@ -23,7 +23,7 @@ public:
         ui32 revolves = 0;
         const ui32 ticket = AtomicUi32Increment(&TicketIn) - 1;
         while (ticket != AtomicLoad(&TicketOut)) {
-            Y_VERIFY_DEBUG(ticket >= AtomicLoad(&TicketOut));
+            Y_VERIFY_DEBUG(ticket >= AtomicLoad(&TicketOut)); 
             SpinLockPause();
             ++revolves;
         }

@@ -179,13 +179,13 @@ public:
     }
 
     const T& GetNext() {
-        Y_ENSURE(!IsEmpty(), "Trying GetNext from empty heap!");
+        Y_ENSURE(!IsEmpty(), "Trying GetNext from empty heap!"); 
         Finalize();
         return Internal.Back();
     }
 
     void Pop() {
-        Y_ENSURE(!IsEmpty(), "Trying Pop from empty heap!");
+        Y_ENSURE(!IsEmpty(), "Trying Pop from empty heap!"); 
         Finalize();
         Internal.Pop();
         if (IsEmpty()) {
@@ -194,7 +194,7 @@ public:
     }
 
     T ExtractOne() {
-        Y_ENSURE(!IsEmpty(), "Trying ExtractOne from empty heap!");
+        Y_ENSURE(!IsEmpty(), "Trying ExtractOne from empty heap!"); 
         Finalize();
         auto value = std::move(Internal.Back());
         Internal.Pop();
@@ -243,7 +243,7 @@ public:
     }
 
     void SetMaxSize(size_t newMaxSize) {
-        Y_ENSURE(!Finalized, "Cannot resize after finalizing (Pop() / GetNext() / Finalize())! "
+        Y_ENSURE(!Finalized, "Cannot resize after finalizing (Pop() / GetNext() / Finalize())! " 
                              "Use TLimitedHeap for this scenario");
         MaxSize = newMaxSize;
         Internal.SetMaxSize(newMaxSize);

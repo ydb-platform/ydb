@@ -27,7 +27,7 @@ public:
     }
 
     inline T Pop() {
-        Y_ASSERT(!this->Empty());
+        Y_ASSERT(!this->Empty()); 
 
         THolder<THelper> tmp(Queue_.PopBack());
         --Size_;

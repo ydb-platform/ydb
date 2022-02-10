@@ -6,8 +6,8 @@
 
 using namespace NTld;
 
-Y_UNIT_TEST_SUITE(TTldTest) {
-    Y_UNIT_TEST(TestFindTld) {
+Y_UNIT_TEST_SUITE(TTldTest) { 
+    Y_UNIT_TEST(TestFindTld) { 
         UNIT_ASSERT(FindTld("yandex.ru") == "ru");
         UNIT_ASSERT(FindTld("YandeX.Ru") == "Ru");
         UNIT_ASSERT(FindTld("yandex.com.tr") == "tr");
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TTldTest) {
         UNIT_ASSERT(FindTld("") == "");
     }
 
-    Y_UNIT_TEST(TestTLDs) {
+    Y_UNIT_TEST(TestTLDs) { 
         UNIT_ASSERT(IsTld("ru"));
         UNIT_ASSERT(IsTld("Ru"));
         UNIT_ASSERT(IsTld("BMW"));
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TTldTest) {
         UNIT_ASSERT(!InTld("ru.xn"));
     }
 
-    Y_UNIT_TEST(TestVeryGoodTlds) {
+    Y_UNIT_TEST(TestVeryGoodTlds) { 
         UNIT_ASSERT(IsVeryGoodTld("ru"));
         UNIT_ASSERT(IsVeryGoodTld("Ru"));
         UNIT_ASSERT(!IsVeryGoodTld("BMW"));

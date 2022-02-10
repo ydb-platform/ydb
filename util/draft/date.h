@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/stream/output.h>
-#include <util/stream/input.h>
+#include <util/stream/output.h> 
+#include <util/stream/input.h> 
 #include <util/generic/string.h>
 #include <util/datetime/constants.h>
 
@@ -83,8 +83,8 @@ public:
     friend bool operator==(const TDate& left, const TDate& right);
     friend int operator-(const TDate& left, const TDate& right);
 
-    friend IInputStream& operator>>(IInputStream& left, TDate& right);
-    friend IOutputStream& operator<<(IOutputStream& left, const TDate& right);
+    friend IInputStream& operator>>(IInputStream& left, TDate& right); 
+    friend IOutputStream& operator<<(IOutputStream& left, const TDate& right); 
 };
 
 Y_DECLARE_PODTYPE(TDate);
@@ -116,7 +116,7 @@ inline int operator-(const TDate& left, const TDate& right) {
     return static_cast<int>((left.Timestamp + SECONDS_IN_DAY / 2 - right.Timestamp) / SECONDS_IN_DAY);
 }
 
-inline IInputStream& operator>>(IInputStream& left, TDate& right) {
+inline IInputStream& operator>>(IInputStream& left, TDate& right) { 
     TString stroka;
     left >> stroka;
     TDate date(stroka.c_str());
@@ -124,6 +124,6 @@ inline IInputStream& operator>>(IInputStream& left, TDate& right) {
     return left;
 }
 
-inline IOutputStream& operator<<(IOutputStream& left, const TDate& right) {
+inline IOutputStream& operator<<(IOutputStream& left, const TDate& right) { 
     return left << right.ToStroka();
 }

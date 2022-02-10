@@ -14,7 +14,7 @@ TFlightControl::TFlightControl(ui64 bits)
     , Mask(~((~0ull) << bits))
     , IsCompleteLoop(1ull << bits)
 {
-    Y_VERIFY(bits > 0 && bits < 16);
+    Y_VERIFY(bits > 0 && bits < 16); 
 }
 
 // Returns 0 in case of scheduling error
@@ -62,8 +62,8 @@ void TFlightControl::WakeUp() {
 
 void TFlightControl::MarkComplete(ui64 idx) {
     ui64 beginIdx = AtomicGet(BeginIdx);
-    Y_VERIFY(idx >= beginIdx);
-    Y_VERIFY(idx < beginIdx + MaxSize);
+    Y_VERIFY(idx >= beginIdx); 
+    Y_VERIFY(idx < beginIdx + MaxSize); 
     if (idx == beginIdx) {
         // It's the first item we are waiting for
         if (beginIdx == EndIdx) {

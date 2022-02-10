@@ -75,11 +75,11 @@ namespace NKikimr {
                 : GcMap(gcMap)
                 , Pos(0)
             {
-                Y_VERIFY_DEBUG(GcMap);
+                Y_VERIFY_DEBUG(GcMap); 
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(Valid()); 
                 Pos++;
             }
 
@@ -88,14 +88,14 @@ namespace NKikimr {
             }
 
             bool KeepItem() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(Valid()); 
                 bool keepIndex = GcMap->IndexKeepMap.Get(Pos);
                 bool keepData = GcMap->DataKeepMap.Get(Pos);
                 return keepIndex || keepData;
             }
 
             bool KeepData() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(Valid()); 
                 bool keepData = GcMap->DataKeepMap.Get(Pos);
                 return keepData;
             }
@@ -128,15 +128,15 @@ namespace NKikimr {
             // dbMerger must return max circaLsn for the record with _data_
             // we must switch to a special kind of TIndexRecordMerger
             auto newItem = [] (const TIterator &subsIt, const TIndexRecordMerger &subsMerger) {
-                Y_UNUSED(subsIt);
-                Y_UNUSED(subsMerger);
+                Y_UNUSED(subsIt); 
+                Y_UNUSED(subsMerger); 
             };
 
             auto doMerge = [this, barriersEssence] (const TIterator &subsIt, const TLevelIt &dbIt,
                                                     const TIndexRecordMerger &subsMerger,
                                                     const TIndexRecordMerger &dbMerger) {
-                Y_UNUSED(subsIt);
-                Y_UNUSED(subsMerger);
+                Y_UNUSED(subsIt); 
+                Y_UNUSED(subsMerger); 
                 bool allowKeepFlags = HullCtx->AllowKeepFlags;
                 NGc::TKeepStatus keep = barriersEssence->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(),
                                                               dbMerger.GetMemRecsMerged(), allowKeepFlags);

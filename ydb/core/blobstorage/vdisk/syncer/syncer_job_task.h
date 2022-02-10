@@ -134,7 +134,7 @@ namespace NKikimr {
                     const TActorId &service,
                     const NSyncer::TPeerSyncState &peerState,
                     const std::shared_ptr<TSjCtx> &ctx);
-            void Output(IOutputStream &str) const;
+            void Output(IOutputStream &str) const; 
             TString ToString() const;
             TSjOutcome NextRequest();
             TSjOutcome Handle(TEvBlobStorage::TEvVSyncResult::TPtr &ev, const TActorId &parentId);

@@ -95,7 +95,7 @@ namespace NActors {
         }
 
         STFUNC(StateFunc) {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             TGuard<TMutex> guard(Runtime->Mutex);
             bool verbose = (Runtime->CurrentDispatchContext ? !Runtime->CurrentDispatchContext->Options->Quiet : true) && VERBOSE;
             if (Runtime->BlockedOutput.find(ev->Sender) != Runtime->BlockedOutput.end()) {
@@ -109,7 +109,7 @@ namespace NActors {
 
             if (!Runtime->EventFilterFunc(*Runtime, ev)) {
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
-                Y_VERIFY(nodeId != 0);
+                Y_VERIFY(nodeId != 0); 
                 ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
                 Runtime->GetMailbox(nodeId, mailboxHint).Send(ev);
                 Runtime->MailboxesHasEvents.Signal();
@@ -128,7 +128,7 @@ namespace NActors {
 
     void TEventMailBox::Send(TAutoPtr<IEventHandle> ev) {
         IEventHandle* ptr = ev.Get();
-        Y_VERIFY(ptr);
+        Y_VERIFY(ptr); 
 #ifdef DEBUG_ORDER_EVENTS
         ui64 counter = NextToSend++;
         TrackSent[ptr] = counter;
@@ -142,7 +142,7 @@ namespace NActors {
 #ifdef DEBUG_ORDER_EVENTS
         auto it = TrackSent.find(result.Get());
         if (it != TrackSent.end()) {
-            Y_VERIFY(ExpectedReceive == it->second);
+            Y_VERIFY(ExpectedReceive == it->second); 
             TrackSent.erase(result.Get());
             ++ExpectedReceive;
         }
@@ -239,18 +239,18 @@ namespace NActors {
             : Runtime(runtime)
             , Node(node)
         {
-            Y_UNUSED(Runtime);
+            Y_UNUSED(Runtime); 
         }
 
         void Prepare(TActorSystem *actorSystem, volatile ui64 *currentTimestamp, volatile ui64 *currentMonotonic) override {
-            Y_UNUSED(actorSystem);
+            Y_UNUSED(actorSystem); 
             Node->ActorSystemTimestamp = currentTimestamp;
             Node->ActorSystemMonotonic = currentMonotonic;
         }
 
         void PrepareSchedules(NSchedulerQueue::TReader **readers, ui32 scheduleReadersCount) override {
-            Y_UNUSED(readers);
-            Y_UNUSED(scheduleReadersCount);
+            Y_UNUSED(readers); 
+            Y_UNUSED(scheduleReadersCount); 
         }
 
         void Start() override {
@@ -284,8 +284,8 @@ namespace NActors {
         // for threads
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
             Y_UNUSED(wctx);
-            Y_UNUSED(revolvingCounter);
-            Y_FAIL();
+            Y_UNUSED(revolvingCounter); 
+            Y_FAIL(); 
         }
 
         void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) override {
@@ -357,7 +357,7 @@ namespace NActors {
 
             if (!Runtime->EventFilterFunc(*Runtime, ev)) {
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
-                Y_VERIFY(nodeId != 0);
+                Y_VERIFY(nodeId != 0); 
                 TNodeDataBase* node = Runtime->Nodes[nodeId].Get();
 
                 if (!AllowSendFrom(node, ev)) {
@@ -394,12 +394,12 @@ namespace NActors {
         }
 
         void ScheduleActivation(ui32 activation) override {
-            Y_UNUSED(activation);
+            Y_UNUSED(activation); 
         }
 
         void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) override {
-            Y_UNUSED(activation);
-            Y_UNUSED(revolvingCounter);
+            Y_UNUSED(activation); 
+            Y_UNUSED(revolvingCounter); 
         }
 
         TActorId Register(IActor *actor, TMailboxType::EType mailboxType, ui64 revolvingCounter,
@@ -413,9 +413,9 @@ namespace NActors {
 
         // lifecycle stuff
         void Prepare(TActorSystem *actorSystem, NSchedulerQueue::TReader **scheduleReaders, ui32 *scheduleSz) override {
-            Y_UNUSED(actorSystem);
-            Y_UNUSED(scheduleReaders);
-            Y_UNUSED(scheduleSz);
+            Y_UNUSED(actorSystem); 
+            Y_UNUSED(scheduleReaders); 
+            Y_UNUSED(scheduleSz); 
         }
 
         void Start() override {
@@ -433,7 +433,7 @@ namespace NActors {
 
         // generic
         TAffinity* Affinity() const override {
-            Y_FAIL();
+            Y_FAIL(); 
         }
 
     private:
@@ -553,20 +553,20 @@ namespace NActors {
     }
 
     TTestActorRuntimeBase::EEventAction TTestActorRuntimeBase::DefaultObserverFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-        Y_UNUSED(runtime);
-        Y_UNUSED(event);
+        Y_UNUSED(runtime); 
+        Y_UNUSED(event); 
         return EEventAction::PROCESS;
     }
 
     void TTestActorRuntimeBase::DroppingScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue) {
-        Y_UNUSED(runtime);
-        Y_UNUSED(queue);
+        Y_UNUSED(runtime); 
+        Y_UNUSED(queue); 
         scheduledEvents.clear();
     }
 
     bool TTestActorRuntimeBase::DefaultFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-        Y_UNUSED(runtime);
-        Y_UNUSED(event);
+        Y_UNUSED(runtime); 
+        Y_UNUSED(event); 
         return false;
     }
 
@@ -618,7 +618,7 @@ namespace NActors {
             }
         }
 
-        void Print(IOutputStream& stream, const TString& prefix) {
+        void Print(IOutputStream& stream, const TString& prefix) { 
             for (auto it = Children.begin(); it != Children.end(); ++it) {
                 bool lastChild = (std::next(it) == Children.end());
                 TString connectionPrefix = lastChild ? "└─ " : "├─ ";
@@ -628,7 +628,7 @@ namespace NActors {
             }
         }
 
-        void Print(IOutputStream& stream) {
+        void Print(IOutputStream& stream) { 
             stream << Name << " (" << Count << ")\n";
             Print(stream, TString());
         }
@@ -726,8 +726,8 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex) {
-        Y_VERIFY(!IsInitialized);
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(!IsInitialized); 
+        Y_VERIFY(nodeIndex < NodeCount); 
         auto node = Nodes[nodeIndex + FirstNodeId];
         if (!node) {
             node = GetNodeFactory().CreateNode();
@@ -793,7 +793,7 @@ namespace NActors {
 
     TInstant TTestActorRuntimeBase::GetCurrentTime() const {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(!UseRealThreads);
+        Y_VERIFY(!UseRealThreads); 
         return TInstant::MicroSeconds(CurrentTimestamp);
     }
 
@@ -804,7 +804,7 @@ namespace NActors {
             Cerr << "UpdateCurrentTime(" << counter << "," << newTime << ")\n";
         }
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(!UseRealThreads);
+        Y_VERIFY(!UseRealThreads); 
         if (newTime.MicroSeconds() > CurrentTimestamp) {
             CurrentTimestamp = newTime.MicroSeconds();
             for (auto& kv : Nodes) {
@@ -819,12 +819,12 @@ namespace NActors {
     }
 
     TIntrusivePtr<ITimeProvider> TTestActorRuntimeBase::GetTimeProvider() {
-        Y_VERIFY(!UseRealThreads);
+        Y_VERIFY(!UseRealThreads); 
         return TimeProvider;
     }
 
     ui32 TTestActorRuntimeBase::GetNodeId(ui32 index) const {
-        Y_VERIFY(index < NodeCount);
+        Y_VERIFY(index < NodeCount); 
         return FirstNodeId + index;
     }
 
@@ -859,11 +859,11 @@ namespace NActors {
 
     TActorId TTestActorRuntimeBase::Register(IActor* actor, ui32 nodeIndex, ui32 poolId, TMailboxType::EType mailboxType,
         ui64 revolvingCounter, const TActorId& parentId) {
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         TGuard<TMutex> guard(Mutex);
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         if (UseRealThreads) {
-            Y_VERIFY(poolId < node->ExecutorPools.size());
+            Y_VERIFY(poolId < node->ExecutorPools.size()); 
             return node->ExecutorPools[poolId]->Register(actor, mailboxType, revolvingCounter, parentId);
         }
 
@@ -927,11 +927,11 @@ namespace NActors {
 
     TActorId TTestActorRuntimeBase::Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailboxHeader *mailbox, ui32 hint,
         const TActorId& parentId) {
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         TGuard<TMutex> guard(Mutex);
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         if (UseRealThreads) {
-            Y_VERIFY(poolId < node->ExecutorPools.size());
+            Y_VERIFY(poolId < node->ExecutorPools.size()); 
             return node->ExecutorPools[poolId]->Register(actor, mailbox, hint, parentId);
         }
 
@@ -951,7 +951,7 @@ namespace NActors {
 
     TActorId TTestActorRuntimeBase::RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         if (!UseRealThreads) {
             IActor* actor = FindActor(actorId, node);
@@ -964,7 +964,7 @@ namespace NActors {
 
     TActorId TTestActorRuntimeBase::AllocateEdgeActor(ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         TActorId edgeActor = Register(new TEdgeActor(this), nodeIndex);
         EdgeActors.insert(edgeActor);
         EdgeActorByMailbox[TEventMailboxId(edgeActor.NodeId(), edgeActor.Hint())] = edgeActor;
@@ -983,7 +983,7 @@ namespace NActors {
 
     TEventsList TTestActorRuntimeBase::CaptureMailboxEvents(ui32 hint, ui32 nodeId) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeId >= FirstNodeId && nodeId < FirstNodeId + NodeCount);
+        Y_VERIFY(nodeId >= FirstNodeId && nodeId < FirstNodeId + NodeCount); 
         TEventsList result;
         GetMailbox(nodeId, hint).Capture(result);
         return result;
@@ -992,7 +992,7 @@ namespace NActors {
     void TTestActorRuntimeBase::PushFront(TAutoPtr<IEventHandle>& ev) {
         TGuard<TMutex> guard(Mutex);
         ui32 nodeId = ev->GetRecipientRewrite().NodeId();
-        Y_VERIFY(nodeId != 0);
+        Y_VERIFY(nodeId != 0); 
         GetMailbox(nodeId, ev->GetRecipientRewrite().Hint()).PushFront(ev);
     }
 
@@ -1002,7 +1002,7 @@ namespace NActors {
             if (*rit) {
                 auto& ev = *rit;
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
-                Y_VERIFY(nodeId != 0);
+                Y_VERIFY(nodeId != 0); 
                 GetMailbox(nodeId, ev->GetRecipientRewrite().Hint()).PushFront(ev);
             }
         }
@@ -1012,7 +1012,7 @@ namespace NActors {
 
     void TTestActorRuntimeBase::PushMailboxEventsFront(ui32 hint, ui32 nodeId, TEventsList& events) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeId >= FirstNodeId && nodeId < FirstNodeId + NodeCount);
+        Y_VERIFY(nodeId >= FirstNodeId && nodeId < FirstNodeId + NodeCount); 
         TEventsList result;
         GetMailbox(nodeId, hint).PushFront(events);
         events.clear();
@@ -1081,7 +1081,7 @@ namespace NActors {
                     Runtime.GetMailbox(edgeActor.NodeId(), edgeActor.Hint()).Capture(events);
                     auto mboxId = TEventMailboxId(edgeActor.NodeId(), edgeActor.Hint());
                     auto storeIt = Store.find(mboxId);
-                    Y_VERIFY(storeIt == Store.end());
+                    Y_VERIFY(storeIt == Store.end()); 
                     storeIt = Store.insert(std::make_pair(mboxId, new TEventMailBox)).first;
                     storeIt->second->PushFront(events);
                     if (!events.empty())
@@ -1213,13 +1213,13 @@ namespace NActors {
                                             break;
                                         }
                                         default:
-                                            Y_FAIL("Unknown action");
+                                            Y_FAIL("Unknown action"); 
                                     }
                                 }
                             }
 
                         }
-                        Y_VERIFY(mboxIt != currentMailboxes.end());
+                        Y_VERIFY(mboxIt != currentMailboxes.end()); 
                         if (!isIgnored && !CurrentDispatchContext->PrevContext && !restrictedMailboxes &&
                                 mboxIt->second->IsEmpty() &&
                                 mboxIt->second->IsScheduledEmpty() &&
@@ -1230,7 +1230,7 @@ namespace NActors {
                         if (mboxIt == currentMailboxes.end()) {
                             mboxIt = currentMailboxes.begin();
                         }
-                        Y_VERIFY(endWithMboxIt != currentMailboxes.end());
+                        Y_VERIFY(endWithMboxIt != currentMailboxes.end()); 
                         if (mboxIt == endWithMboxIt) {
                             break;
                         }
@@ -1384,14 +1384,14 @@ namespace NActors {
 
     void TTestActorRuntimeBase::Send(IEventHandle* ev, ui32 senderNodeIndex, bool viaActorSystem) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(senderNodeIndex < NodeCount, "senderNodeIndex# %" PRIu32 " < NodeCount# %" PRIu32,
+        Y_VERIFY(senderNodeIndex < NodeCount, "senderNodeIndex# %" PRIu32 " < NodeCount# %" PRIu32, 
             senderNodeIndex, NodeCount);
         SendInternal(ev, senderNodeIndex, viaActorSystem);
     }
 
     void TTestActorRuntimeBase::Schedule(IEventHandle* ev, const TDuration& duration, ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         ui32 nodeId = FirstNodeId + nodeIndex;
         ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
         TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + duration;
@@ -1416,7 +1416,7 @@ namespace NActors {
 
     TActorId TTestActorRuntimeBase::GetLocalServiceId(const TActorId& serviceId, ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         return node->ActorSystem->LookupLocalService(serviceId);
     }
@@ -1456,15 +1456,15 @@ namespace NActors {
                 }
             }
 
-            Y_VERIFY(dispatchCount < 1000, "Hard limit to prevent endless loop");
+            Y_VERIFY(dispatchCount < 1000, "Hard limit to prevent endless loop"); 
         }
     }
 
     TActorId TTestActorRuntimeBase::GetInterconnectProxy(ui32 nodeIndexFrom, ui32 nodeIndexTo) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeIndexFrom < NodeCount);
-        Y_VERIFY(nodeIndexTo < NodeCount);
-        Y_VERIFY(nodeIndexFrom != nodeIndexTo);
+        Y_VERIFY(nodeIndexFrom < NodeCount); 
+        Y_VERIFY(nodeIndexTo < NodeCount); 
+        Y_VERIFY(nodeIndexFrom != nodeIndexTo); 
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndexFrom].Get();
         return node->ActorSystem->InterconnectProxy(FirstNodeId + nodeIndexTo);
     }
@@ -1483,13 +1483,13 @@ namespace NActors {
     IActor* TTestActorRuntimeBase::FindActor(const TActorId& actorId, ui32 nodeIndex) const {
         TGuard<TMutex> guard(Mutex);
         if (nodeIndex == Max<ui32>()) {
-            Y_VERIFY(actorId.NodeId());
+            Y_VERIFY(actorId.NodeId()); 
             nodeIndex = actorId.NodeId() - FirstNodeId;
         }
 
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         auto nodeIt = Nodes.find(FirstNodeId + nodeIndex);
-        Y_VERIFY(nodeIt != Nodes.end());
+        Y_VERIFY(nodeIt != Nodes.end()); 
         TNodeDataBase* node = nodeIt->second.Get();
         return FindActor(actorId, node);
     }
@@ -1516,7 +1516,7 @@ namespace NActors {
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> TTestActorRuntimeBase::GetDynamicCounters(ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         ui32 nodeId = FirstNodeId + nodeIndex;
         TNodeDataBase* node = Nodes[nodeId].Get();
         return node->DynamicCounters;
@@ -1527,7 +1527,7 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::SendInternal(IEventHandle* ev, ui32 nodeIndex, bool viaActorSystem) {
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_VERIFY(nodeIndex < NodeCount); 
         ui32 nodeId = FirstNodeId + nodeIndex;
         TNodeDataBase* node = Nodes[nodeId].Get();
         ui32 targetNode = ev->GetRecipientRewrite().NodeId();
@@ -1536,7 +1536,7 @@ namespace NActors {
             targetNodeIndex = nodeIndex;
         } else {
             targetNodeIndex = targetNode - FirstNodeId;
-            Y_VERIFY(targetNodeIndex < NodeCount);
+            Y_VERIFY(targetNodeIndex < NodeCount); 
         }
 
         if (viaActorSystem || UseRealThreads || ev->GetRecipientRewrite().IsService() || (targetNodeIndex != nodeIndex)) {
@@ -1544,7 +1544,7 @@ namespace NActors {
             return;
         }
 
-        Y_VERIFY(!ev->GetRecipientRewrite().IsService() && (targetNodeIndex == nodeIndex));
+        Y_VERIFY(!ev->GetRecipientRewrite().IsService() && (targetNodeIndex == nodeIndex)); 
         TAutoPtr<IEventHandle> evHolder(ev);
 
         if (!AllowSendFrom(node, evHolder)) {
@@ -1705,7 +1705,7 @@ namespace NActors {
         for (auto& x : Nodes) {
             return x.second->ActorSystem.Get();
         }
-        Y_FAIL("Don't use this method.");
+        Y_FAIL("Don't use this method."); 
     }
 
     TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) {
@@ -1785,7 +1785,7 @@ namespace NActors {
             , ReplyChecker(createReplyChecker())
         {
             if (IsSync) {
-                Y_VERIFY(!runtime->IsRealThreads());
+                Y_VERIFY(!runtime->IsRealThreads()); 
             }
         }
 
@@ -1811,7 +1811,7 @@ namespace NActors {
         }
 
         STFUNC(Reply) {
-            Y_VERIFY(!HasReply);
+            Y_VERIFY(!HasReply); 
             IEventHandle *requestEv = Context->Queue->Head();
             TActorId originalSender = requestEv->Sender;
             HasReply = !ReplyChecker->IsWaitingForMoreResponses(ev.Get());

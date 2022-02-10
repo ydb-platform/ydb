@@ -15,7 +15,7 @@ struct TCmdMessageBusTraceConfig : public TCliCmdConfig {
 };
 
 int MessageBusTrace(TCommandConfig &cmdConf, int argc, char** argv) {
-    Y_UNUSED(cmdConf);
+    Y_UNUSED(cmdConf); 
 
 #ifdef _win32_
     WSADATA dummy;

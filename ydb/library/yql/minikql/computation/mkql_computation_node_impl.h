@@ -832,24 +832,24 @@ private:
     }
 
     NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override {
-        Y_UNUSED(builder);
+        Y_UNUSED(builder); 
         return nullptr;
     }
 
     NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
-        Y_UNUSED(builder);
-        Y_UNUSED(count);
+        Y_UNUSED(builder); 
+        Y_UNUSED(count); 
         return nullptr;
     }
 
     NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
-        Y_UNUSED(builder);
-        Y_UNUSED(count);
+        Y_UNUSED(builder); 
+        Y_UNUSED(count); 
         return nullptr;
     }
 
     NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
-        Y_UNUSED(builder);
+        Y_UNUSED(builder); 
         return nullptr;
     }
 
@@ -923,8 +923,8 @@ private:
             const NUdf::IValueBuilder* valueBuilder,
             const NUdf::TUnboxedValuePod* args) const override
     {
-        Y_UNUSED(valueBuilder);
-        Y_UNUSED(args);
+        Y_UNUSED(valueBuilder); 
+        Y_UNUSED(args); 
         ThrowNotSupported(__func__);
         return {};
     }

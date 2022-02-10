@@ -21,8 +21,8 @@ static NProtobufJsonUt::TInlineTest GetTestMsg() {
     return msg;
 }
 
-Y_UNIT_TEST_SUITE(TProto2JsonInlineTest){
-    Y_UNIT_TEST(TestNormalPrint){
+Y_UNIT_TEST_SUITE(TProto2JsonInlineTest){ 
+    Y_UNIT_TEST(TestNormalPrint){ 
         NProtobufJsonUt::TInlineTest msg = GetTestMsg();
 // normal print should output these fields as just string values
 TString expRaw = R"({"OptJson":"{\"a\":1,\"b\":\"000\"}","NotJson":"12{}34","RepJson":["{}","[1,2]"],)"
@@ -35,7 +35,7 @@ myRaw = PrintInlined(msg, [](const NProtoBuf::Message&, const NProtoBuf::FieldDe
 UNIT_ASSERT_STRINGS_EQUAL(myRaw, expRaw); // result is the same
 }
 
-Y_UNIT_TEST(TestInliningPrinter) {
+Y_UNIT_TEST(TestInliningPrinter) { 
     NProtobufJsonUt::TInlineTest msg = GetTestMsg();
     // inlined print should output these fields as inlined json sub-objects
     TString expInlined = R"({"OptJson":{"a":1,"b":"000"},"NotJson":"12{}34","RepJson":[{},[1,2]],)"
@@ -54,7 +54,7 @@ Y_UNIT_TEST(TestInliningPrinter) {
     }
 }
 
-Y_UNIT_TEST(TestNoValues) {
+Y_UNIT_TEST(TestNoValues) { 
     // no values - no printing
     NProtobufJsonUt::TInlineTest msg;
     msg.MutableInner()->AddNumber(100);
@@ -66,7 +66,7 @@ Y_UNIT_TEST(TestNoValues) {
     UNIT_ASSERT_STRINGS_EQUAL(myInlined, expInlined);
 }
 
-Y_UNIT_TEST(TestMissingKeyModeNull) {
+Y_UNIT_TEST(TestMissingKeyModeNull) { 
     NProtobufJsonUt::TInlineTest msg;
     msg.MutableInner()->AddNumber(100);
     msg.MutableInner()->AddNumber(200);
@@ -79,7 +79,7 @@ Y_UNIT_TEST(TestMissingKeyModeNull) {
     UNIT_ASSERT_STRINGS_EQUAL(myInlined, expInlined);
 }
 
-Y_UNIT_TEST(TestMissingKeyModeDefault) {
+Y_UNIT_TEST(TestMissingKeyModeDefault) { 
     NProtobufJsonUt::TInlineTestDefaultValues msg;
 
     TString expInlined = R"({"OptJson":{"default":1},"Number":0,"RepJson":[],"Inner":{"OptJson":{"default":2}}})";
@@ -90,7 +90,7 @@ Y_UNIT_TEST(TestMissingKeyModeDefault) {
     UNIT_ASSERT_STRINGS_EQUAL(myInlined, expInlined);
 }
 
-Y_UNIT_TEST(NoUnnecessaryCopyFunctor) {
+Y_UNIT_TEST(NoUnnecessaryCopyFunctor) { 
     size_t CopyCount = 0;
     struct TFunctorMock {
         TFunctorMock(size_t* copyCount)

@@ -45,7 +45,7 @@ bool operator==(const TTestMessage& lhs, const TTestMessage& rhs) {
     return true;
 }
 
-Y_UNIT_TEST_SUITE(ProtoPackerTestSuite) {
+Y_UNIT_TEST_SUITE(ProtoPackerTestSuite) { 
     TProtoMessagePacker<TTestMessage> Packer;
     TString Buffer;
 
@@ -61,20 +61,20 @@ Y_UNIT_TEST_SUITE(ProtoPackerTestSuite) {
         UNIT_ASSERT_EQUAL(msg, checkMsg);
     }
 
-    Y_UNIT_TEST(TestPackUnpackOnlyRequired) {
+    Y_UNIT_TEST(TestPackUnpackOnlyRequired) { 
         TTestMessage msg;
         FillRequiredFields(msg);
         DoPackUnpackTest(msg);
     }
 
-    Y_UNIT_TEST(TestPackUnpackRequiredAndOptional) {
+    Y_UNIT_TEST(TestPackUnpackRequiredAndOptional) { 
         TTestMessage msg;
         FillRequiredFields(msg);
         FillOptionalFields(msg);
         DoPackUnpackTest(msg);
     }
 
-    Y_UNIT_TEST(TestPackUnpackAll) {
+    Y_UNIT_TEST(TestPackUnpackAll) { 
         TTestMessage msg;
         FillRequiredFields(msg);
         FillOptionalFields(msg);
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(ProtoPackerTestSuite) {
         DoPackUnpackTest(msg);
     }
 
-    Y_UNIT_TEST(TestSkipLeaf) {
+    Y_UNIT_TEST(TestSkipLeaf) { 
         TTestMessage msgFirst;
         FillRequiredFields(msgFirst);
         TTestMessage msgSecond;

@@ -52,7 +52,7 @@ public:
     }
 
     bool Set(ui64 pos) {
-        Y_ASSERT(pos < Size_);
+        Y_ASSERT(pos < Size_); 
         TWord& val = Data_[pos >> TTraits::DivShift];
         if (val & TTraits::BitMask(pos & TTraits::ModMask))
             return false;
@@ -65,7 +65,7 @@ public:
     }
 
     void Reset(ui64 pos) {
-        Y_ASSERT(pos < Size_);
+        Y_ASSERT(pos < Size_); 
         Data_[pos >> TTraits::DivShift] &= ~TTraits::BitMask(pos & TTraits::ModMask);
     }
 
@@ -80,7 +80,7 @@ public:
     void Set(ui64 pos, TWord value, ui8 width, TWord mask) {
         if (!width)
             return;
-        Y_ASSERT((pos + width) <= Size_);
+        Y_ASSERT((pos + width) <= Size_); 
         size_t word = pos >> TTraits::DivShift;
         TWord shift1 = pos & TTraits::ModMask;
         TWord shift2 = TTraits::NumBits - shift1;
@@ -130,12 +130,12 @@ public:
         return Data_.data();
     }
 
-    void Save(IOutputStream* out) const {
+    void Save(IOutputStream* out) const { 
         ::Save(out, Size_);
         ::Save(out, Data_);
     }
 
-    void Load(IInputStream* inp) {
+    void Load(IInputStream* inp) { 
         ::Load(inp, Size_);
         ::Load(inp, Data_);
     }
@@ -145,7 +145,7 @@ public:
                            Data_.size() * sizeof(TWord));
     }
 
-    void Print(IOutputStream& out, size_t truncate = 128) {
+    void Print(IOutputStream& out, size_t truncate = 128) { 
         for (size_t i = 0; i < Data_.size() && i < truncate; ++i) {
             for (int j = TTraits::NumBits - 1; j >= 0; --j) {
                 size_t pos = TTraits::NumBits * i + j;

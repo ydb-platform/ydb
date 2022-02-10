@@ -8,7 +8,7 @@
 
 namespace NKikimr {
 namespace NFmt {
-    using TOut = IOutputStream;
+    using TOut = IOutputStream; 
 
     struct TCells {
         using TReg = NScheme::TTypeRegistry;

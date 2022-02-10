@@ -183,7 +183,7 @@ struct TAppData {
 inline TAppData* AppData(TActorSystem* actorSystem) {
     Y_VERIFY_DEBUG(actorSystem);
     TAppData * const x = actorSystem->AppData<TAppData>();
-    Y_VERIFY_DEBUG(x && x->Magic == TAppData::MagicTag);
+    Y_VERIFY_DEBUG(x && x->Magic == TAppData::MagicTag); 
     return x;
 }
 

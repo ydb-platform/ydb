@@ -8,11 +8,11 @@
 #include <google/protobuf/text_format.h>
 
 #include <util/generic/string.h>
-#include <util/stream/file.h>
-#include <util/stream/str.h>
+#include <util/stream/file.h> 
+#include <util/stream/str.h> 
 #include <util/string/cast.h>
 
-namespace NProtoBuf {
+namespace NProtoBuf { 
 
     class TEnumIdValuePrinter : public google::protobuf::TextFormat::FastFieldValuePrinter {
     public:
@@ -34,7 +34,7 @@ namespace NProtoBuf {
         } catch (const std::exception&) {
             return false;
         }
-    }
+    } 
 
     void SerializeToBase64String(const Message& m, TString& dataBase64) {
         TString rawData;
@@ -58,8 +58,8 @@ namespace NProtoBuf {
         } catch (const std::exception&) {
             return false;
         }
-    }
-
+    } 
+ 
     const TString ShortUtf8DebugString(const Message& message) {
         TextFormat::Printer printer;
         printer.SetSingleLineMode(true);
@@ -93,21 +93,21 @@ int operator&(NProtoBuf::Message& m, IBinSaver& f) {
     return 0;
 }
 
-void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) {
-    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
+void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) { 
+    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out); 
 
-    if (!NProtoBuf::TextFormat::Print(m, &adaptor)) {
+    if (!NProtoBuf::TextFormat::Print(m, &adaptor)) { 
         ythrow yexception() << "SerializeToTextFormat failed on Print";
-    }
+    } 
 }
 
 void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName) {
     /* TUnbufferedFileOutput is unbuffered, but TCopyingOutputStreamAdaptor adds
-     * a buffer on top of it. */
+     * a buffer on top of it. */ 
     TUnbufferedFileOutput stream(fileName);
-    SerializeToTextFormat(m, stream);
-}
-
+    SerializeToTextFormat(m, stream); 
+} 
+ 
 void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream& out) {
     google::protobuf::TextFormat::Printer printer;
     printer.SetDefaultFieldValuePrinter(new NProtoBuf::TEnumIdValuePrinter());
@@ -130,20 +130,20 @@ void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out
     }
 }
 
-static void ConfigureParser(const EParseFromTextFormatOptions options,
-                            NProtoBuf::TextFormat::Parser& p) {
-    if (options & EParseFromTextFormatOption::AllowUnknownField) {
-        p.AllowUnknownField(true);
-    }
-}
-
-void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
-                         const EParseFromTextFormatOptions options) {
-    NProtoBuf::io::TCopyingInputStreamAdaptor adaptor(&in);
-    NProtoBuf::TextFormat::Parser p;
-    ConfigureParser(options, p);
-
-    if (!p.Parse(&adaptor, &m)) {
+static void ConfigureParser(const EParseFromTextFormatOptions options, 
+                            NProtoBuf::TextFormat::Parser& p) { 
+    if (options & EParseFromTextFormatOption::AllowUnknownField) { 
+        p.AllowUnknownField(true); 
+    } 
+} 
+ 
+void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m, 
+                         const EParseFromTextFormatOptions options) { 
+    NProtoBuf::io::TCopyingInputStreamAdaptor adaptor(&in); 
+    NProtoBuf::TextFormat::Parser p; 
+    ConfigureParser(options, p); 
+ 
+    if (!p.Parse(&adaptor, &m)) { 
         // remove everything that may have been read
         m.Clear();
         ythrow yexception() << "ParseFromTextFormat failed on Parse for " << m.GetTypeName();
@@ -151,71 +151,71 @@ void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 }
 
 void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
-                         const EParseFromTextFormatOptions options) {
+                         const EParseFromTextFormatOptions options) { 
     /* TUnbufferedFileInput is unbuffered, but TCopyingInputStreamAdaptor adds
-    * a buffer on top of it. */
+    * a buffer on top of it. */ 
     TUnbufferedFileInput stream(fileName);
-    ParseFromTextFormat(stream, m, options);
-}
-
+    ParseFromTextFormat(stream, m, options); 
+} 
+ 
 bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
-                            const EParseFromTextFormatOptions options) {
-    try {
-        ParseFromTextFormat(fileName, m, options);
-    } catch (std::exception&) {
-        return false;
-    }
-
-    return true;
+                            const EParseFromTextFormatOptions options) { 
+    try { 
+        ParseFromTextFormat(fileName, m, options); 
+    } catch (std::exception&) { 
+        return false; 
+    } 
+ 
+    return true; 
 }
 
-bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
-                            const EParseFromTextFormatOptions options) {
-    try {
-        ParseFromTextFormat(in, m, options);
-    } catch (std::exception&) {
-        return false;
-    }
-
-    return true;
-}
-
-void MergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
-                         const EParseFromTextFormatOptions options) {
-    NProtoBuf::io::TCopyingInputStreamAdaptor adaptor(&in);
-    NProtoBuf::TextFormat::Parser p;
-    ConfigureParser(options, p);
-    if (!p.Merge(&adaptor, &m)) {
-        ythrow yexception() << "MergeFromTextFormat failed on Merge for " << m.GetTypeName();
-    }
-}
-
-void MergeFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
-                         const EParseFromTextFormatOptions options) {
+bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m, 
+                            const EParseFromTextFormatOptions options) { 
+    try { 
+        ParseFromTextFormat(in, m, options); 
+    } catch (std::exception&) { 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
+void MergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m, 
+                         const EParseFromTextFormatOptions options) { 
+    NProtoBuf::io::TCopyingInputStreamAdaptor adaptor(&in); 
+    NProtoBuf::TextFormat::Parser p; 
+    ConfigureParser(options, p); 
+    if (!p.Merge(&adaptor, &m)) { 
+        ythrow yexception() << "MergeFromTextFormat failed on Merge for " << m.GetTypeName(); 
+    } 
+} 
+ 
+void MergeFromTextFormat(const TString& fileName, NProtoBuf::Message& m, 
+                         const EParseFromTextFormatOptions options) { 
     /* TUnbufferedFileInput is unbuffered, but TCopyingInputStreamAdaptor adds
-    * a buffer on top of it. */
+    * a buffer on top of it. */ 
     TUnbufferedFileInput stream(fileName);
-    MergeFromTextFormat(stream, m, options);
-}
-
-bool TryMergeFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
-                            const EParseFromTextFormatOptions options) {
-    try {
-        MergeFromTextFormat(fileName, m, options);
-    } catch (std::exception&) {
-        return false;
-    }
-
-    return true;
-}
-
-bool TryMergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
-                            const EParseFromTextFormatOptions options) {
-    try {
-        MergeFromTextFormat(in, m, options);
-    } catch (std::exception&) {
-        return false;
-    }
-
-    return true;
-}
+    MergeFromTextFormat(stream, m, options); 
+} 
+ 
+bool TryMergeFromTextFormat(const TString& fileName, NProtoBuf::Message& m, 
+                            const EParseFromTextFormatOptions options) { 
+    try { 
+        MergeFromTextFormat(fileName, m, options); 
+    } catch (std::exception&) { 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
+bool TryMergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m, 
+                            const EParseFromTextFormatOptions options) { 
+    try { 
+        MergeFromTextFormat(in, m, options); 
+    } catch (std::exception&) { 
+        return false; 
+    } 
+ 
+    return true; 
+} 

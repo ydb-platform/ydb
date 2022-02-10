@@ -126,28 +126,28 @@ static const CodePage CODES_BIG5_CODE_PAGE = {
     CODES_BIG5,
     {"BIG5", "BIGFIVE", "CN-BIG5", "CSBIG5",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_BIG5_HKSCS_CODE_PAGE = {
     CODES_BIG5_HKSCS,
     {"BIG5-HKSCS", "BIG5-HKSCS:2004",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_BIG5_HKSCS_1999_CODE_PAGE = {
     CODES_BIG5_HKSCS_1999,
     {"BIG5-HKSCS:1999",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_BIG5_HKSCS_2001_CODE_PAGE = {
     CODES_BIG5_HKSCS_2001,
     {"BIG5-HKSCS:2001",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_CP1046_CODE_PAGE = {
@@ -1274,70 +1274,70 @@ static const CodePage CODES_CP932_CODE_PAGE = {
     CODES_CP932,
     {"CP932",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_CP936_CODE_PAGE = {
     CODES_CP936,
     {"CP936",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_CP949_CODE_PAGE = {
     CODES_CP949,
     {"CP949", "UHC",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_CP950_CODE_PAGE = {
     CODES_CP950,
     {"CP950",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_EUC_CN_CODE_PAGE = {
     CODES_EUC_CN,
     {"EUC-CN", "CN-GB", "GB2312", "CSGB2312",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_EUC_JP_CODE_PAGE = {
     CODES_EUC_JP,
     {"EUC-JP", "EXTENDED_UNIX_CODE_PACKED_FORMAT_FOR_JAPANESE", "CSEUCPKDFMTJAPANESE",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_EUC_KR_CODE_PAGE = {
     CODES_EUC_KR,
     {"EUC-KR", "ISO-IR-149", "KOREAN", "KSC_5601", "KS_C_5601-1987", "KS_C_5601-1989", "CSEUCKR", "CSKSC56011987",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_EUC_TW_CODE_PAGE = {
     CODES_EUC_TW,
     {"EUC-TW", "CSEUCTW",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_GB18030_CODE_PAGE = {
     CODES_GB18030,
     {"GB18030",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_GBK_CODE_PAGE = {
     CODES_GBK,
     {"GBK",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_GEO_ITA_CODE_PAGE = {
@@ -1464,7 +1464,7 @@ static const CodePage CODES_HZ_CODE_PAGE = {
     CODES_HZ,
     {"HZ", "HZ-GB-2312",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_IBM855_CODE_PAGE = {
@@ -1711,42 +1711,42 @@ static const CodePage CODES_ISO_2022_CN_CODE_PAGE = {
     CODES_ISO_2022_CN,
     {"ISO-2022-CN", "CSISO2022CN",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_ISO_2022_CN_EXT_CODE_PAGE = {
     CODES_ISO_2022_CN_EXT,
     {"ISO-2022-CN-EXT",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_ISO_2022_JP_CODE_PAGE = {
     CODES_ISO_2022_JP,
     {"ISO-2022-JP", "CPISO2022JP",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_ISO_2022_JP_1_CODE_PAGE = {
     CODES_ISO_2022_JP_1,
     {"ISO-2022-JP-1",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_ISO_2022_JP_2_CODE_PAGE = {
     CODES_ISO_2022_JP_2,
     {"ISO-2022-JP-2", "CPISO2022JP2",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_ISO_2022_KR_CODE_PAGE = {
     CODES_ISO_2022_KR,
     {"ISO-2022-KR", "CSISO2022KR",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_ISO_8859_13_CODE_PAGE = {
@@ -2193,7 +2193,7 @@ static const CodePage CODES_JOHAB_CODE_PAGE = {
     CODES_JOHAB,
     {"JOHAB", "CP1361",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_KAZWIN_CODE_PAGE = {
@@ -3080,7 +3080,7 @@ static const CodePage CODES_SHIFT_JIS_CODE_PAGE = {
     CODES_SHIFT_JIS,
     {"SHIFT_JIS", "MS_KANJI", "SJIS", "CSSHIFTJIS",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_TATWIN_CODE_PAGE = {
@@ -3287,21 +3287,21 @@ static const CodePage CODES_UTF8_CODE_PAGE = {
     CODES_UTF8,
     {"utf-8",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_UTF_16BE_CODE_PAGE = {
     CODES_UTF_16BE,
     {"UTF-16BE",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_UTF_16LE_CODE_PAGE = {
     CODES_UTF_16LE,
     {"UTF-16LE", "UTF-16",},
     {},
-    nullptr,
+    nullptr, 
 }; // generated from multibyte.txt
 
 static const CodePage CODES_VISCII_CODE_PAGE = {

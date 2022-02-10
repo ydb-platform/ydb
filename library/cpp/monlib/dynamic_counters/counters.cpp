@@ -153,7 +153,7 @@ void TDynamicCounters::MergeWithSubgroup(const TString& name, const TString& val
     auto it = Counters.find({name, value});
     Y_VERIFY(it != Counters.end());
     TIntrusivePtr<TDynamicCounters> subgroup = AsDynamicCounters(it->second);
-    Y_VERIFY(subgroup);
+    Y_VERIFY(subgroup); 
     Counters.erase(it);
     Counters.merge(subgroup->Resign());
     AtomicAdd(ExpiringCount, AtomicSwap(&subgroup->ExpiringCount, 0));
@@ -200,7 +200,7 @@ void TDynamicCounters::EnumerateSubgroups(const std::function<void(const TString
     }
 }
 
-void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent) const {
+void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent) const { 
     auto snap = ReadSnapshot();
     // mark private records in plain text output
     auto outputVisibilityMarker = [] (EVisibility vis) {

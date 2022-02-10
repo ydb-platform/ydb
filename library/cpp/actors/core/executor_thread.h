@@ -14,7 +14,7 @@
 
 namespace NActors {
 
-    class TExecutorThread: public ISimpleThread {
+    class TExecutorThread: public ISimpleThread { 
     public:
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX =
             TDuration::MilliSeconds(10);

@@ -5,11 +5,11 @@
 
 namespace NActors {
     namespace {
-        void (*PreviousFormatBackTrace)(IOutputStream*) = 0;
+        void (*PreviousFormatBackTrace)(IOutputStream*) = 0; 
         ui32 ActorBackTraceEnableCounter = 0;
     }
 
-    void ActorFormatBackTrace(IOutputStream* out) {
+    void ActorFormatBackTrace(IOutputStream* out) { 
         TStringStream str;
         PreviousFormatBackTrace(&str);
         str << Endl;

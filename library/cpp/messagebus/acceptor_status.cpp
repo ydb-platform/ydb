@@ -25,8 +25,8 @@ void TAcceptorStatus::ResetIncremental() {
 }
 
 TAcceptorStatus& TAcceptorStatus::operator+=(const TAcceptorStatus& that) {
-    Y_ASSERT(Summary);
-    Y_ASSERT(AcceptorId == 0);
+    Y_ASSERT(Summary); 
+    Y_ASSERT(AcceptorId == 0); 
 
     AcceptSuccessCount += that.AcceptSuccessCount;
     LastAcceptSuccessInstant = Max(LastAcceptSuccessInstant, that.LastAcceptSuccessInstant);

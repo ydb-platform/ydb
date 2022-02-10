@@ -2,7 +2,7 @@
 
 #include <util/system/defaults.h> // _BIDSCLASS _EXPCLASS
 #include <util/system/yassert.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 
 #define PUT_8(x, buf, shift) WriteUnaligned<ui8>((buf)++, (x) >> (shift))
 #define GET_8_OR(x, buf, type, shift) (x) |= (type) * (buf)++ << (shift)
@@ -310,9 +310,9 @@ template <typename T, typename C>
 inline const C* Unpack32(T& x, const C* src) {
     int pkLen = 0;
     const char* c = reinterpret_cast<const char*>(src);
-    Y_UNUSED(pkLen);
+    Y_UNUSED(pkLen); 
     UNPACK_32(x, c, mem_traits, pkLen);
-    Y_ASSERT(pkLen);
+    Y_ASSERT(pkLen); 
     return reinterpret_cast<const C*>(c);
 }
 
@@ -320,28 +320,28 @@ template <typename T, typename C>
 inline const C* Unpack64(T& x, const C* src) {
     int pkLen = 0;
     const char* c = reinterpret_cast<const char*>(src);
-    Y_UNUSED(pkLen);
+    Y_UNUSED(pkLen); 
     UNPACK_64(x, c, mem_traits, pkLen);
-    Y_ASSERT(pkLen);
+    Y_ASSERT(pkLen); 
     return reinterpret_cast<const C*>(c);
 }
 
 template <typename T, typename C>
 inline C* Pack32(const T& x, C* dest) {
     int pkLen = 0;
-    Y_UNUSED(pkLen);
+    Y_UNUSED(pkLen); 
     char* c = reinterpret_cast<char*>(dest);
     PACK_32(x, c, mem_traits, pkLen);
-    Y_ASSERT(pkLen);
+    Y_ASSERT(pkLen); 
     return reinterpret_cast<C*>(c);
 }
 
 template <typename T, typename C>
 inline C* Pack64(const T& x, C* dest) {
     int pkLen = 0;
-    Y_UNUSED(pkLen);
+    Y_UNUSED(pkLen); 
     char* c = reinterpret_cast<char*>(dest);
     PACK_64(x, c, mem_traits, pkLen);
-    Y_ASSERT(pkLen);
+    Y_ASSERT(pkLen); 
     return reinterpret_cast<C*>(c);
 }

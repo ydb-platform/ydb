@@ -4,8 +4,8 @@
 
 using namespace NActor;
 
-Y_UNIT_TEST_SUITE(TTasks) {
-    Y_UNIT_TEST(AddTask_FetchTask_Simple) {
+Y_UNIT_TEST_SUITE(TTasks) { 
+    Y_UNIT_TEST(AddTask_FetchTask_Simple) { 
         TTasks tasks;
 
         UNIT_ASSERT(tasks.AddTask());
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TTasks) {
         UNIT_ASSERT(tasks.AddTask());
     }
 
-    Y_UNIT_TEST(AddTask_FetchTask_AddTask) {
+    Y_UNIT_TEST(AddTask_FetchTask_AddTask) { 
         TTasks tasks;
 
         UNIT_ASSERT(tasks.AddTask());

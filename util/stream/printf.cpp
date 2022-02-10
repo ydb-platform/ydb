@@ -1,11 +1,11 @@
-#include "output.h"
+#include "output.h" 
 #include "printf.h"
 
 #include <util/generic/scope.h>
 #include <util/memory/tempbuf.h>
 #include <util/generic/yexception.h>
 
-size_t Printf(IOutputStream& out, const char* fmt, ...) {
+size_t Printf(IOutputStream& out, const char* fmt, ...) { 
     va_list lst;
     va_start(lst, fmt);
 
@@ -16,7 +16,7 @@ size_t Printf(IOutputStream& out, const char* fmt, ...) {
     return Printf(out, fmt, lst);
 }
 
-static inline size_t TryPrintf(void* ptr, size_t len, IOutputStream& out, const char* fmt, va_list params) {
+static inline size_t TryPrintf(void* ptr, size_t len, IOutputStream& out, const char* fmt, va_list params) { 
     va_list lst;
     va_copy(lst, params);
     const int ret = vsnprintf((char*)ptr, len, fmt, lst);
@@ -33,7 +33,7 @@ static inline size_t TryPrintf(void* ptr, size_t len, IOutputStream& out, const 
     return (size_t)ret;
 }
 
-size_t Printf(IOutputStream& out, const char* fmt, va_list params) {
+size_t Printf(IOutputStream& out, const char* fmt, va_list params) { 
     size_t guess = 0;
 
     while (true) {

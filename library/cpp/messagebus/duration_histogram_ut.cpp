@@ -2,8 +2,8 @@
 
 #include "duration_histogram.h"
 
-Y_UNIT_TEST_SUITE(TDurationHistogramTest) {
-    Y_UNIT_TEST(BucketFor) {
+Y_UNIT_TEST_SUITE(TDurationHistogramTest) { 
+    Y_UNIT_TEST(BucketFor) { 
         UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(0)));
         UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(1)));
         UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(900)));
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TDurationHistogramTest) {
         UNIT_ASSERT_VALUES_EQUAL(TDurationHistogram::Buckets - 1, TDurationHistogram::BucketFor(TDuration::Hours(1)));
     }
 
-    Y_UNIT_TEST(Simple) {
+    Y_UNIT_TEST(Simple) { 
         TDurationHistogram h1;
         h1.AddTime(TDuration::MicroSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(1u, h1.Times.front());
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TDurationHistogramTest) {
         UNIT_ASSERT_VALUES_EQUAL(1u, h1.Times.back());
     }
 
-    Y_UNIT_TEST(LabelFor) {
+    Y_UNIT_TEST(LabelFor) { 
         for (unsigned i = 0; i < TDurationHistogram::Buckets; ++i) {
             TDurationHistogram::LabelBefore(i);
             //Cerr << TDurationHistogram::LabelBefore(i) << "\n";

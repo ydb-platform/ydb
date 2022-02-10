@@ -37,8 +37,8 @@ class TMemoryLimitExceededException {};
 
 class TAlignedPagePool {
 public:
-    static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
-    static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
+    static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k 
+    static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1); 
 
     explicit TAlignedPagePool(const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
         : Counters(counters)
@@ -61,7 +61,7 @@ public:
     }
 
     inline size_t GetUsed() const noexcept {
-        return TotalAllocated - GetFreePageCount() * POOL_PAGE_SIZE;
+        return TotalAllocated - GetFreePageCount() * POOL_PAGE_SIZE; 
     }
 
     inline size_t GetFreePageCount() const noexcept {
@@ -102,7 +102,7 @@ public:
         DoSwap(IncreaseMemoryLimitCallback, other.IncreaseMemoryLimitCallback);
     }
 
-    void PrintStat(size_t usedPages, IOutputStream& out) const;
+    void PrintStat(size_t usedPages, IOutputStream& out) const; 
 
     void* GetBlock(size_t size);
 

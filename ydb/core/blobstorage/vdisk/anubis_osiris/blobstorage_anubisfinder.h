@@ -40,7 +40,7 @@ namespace NKikimr {
             return Candidates.empty();
         }
 
-        void Output(IOutputStream &str) const {
+        void Output(IOutputStream &str) const { 
             str << "{Pos# " << Pos << " Candidates# [";
             bool prev = false;
             for (const auto &x : Candidates) {

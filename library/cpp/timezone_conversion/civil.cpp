@@ -176,37 +176,37 @@ namespace NDatetime {
 }
 
 template <>
-void Out<NDatetime::TCivilYear>(IOutputStream& out, const NDatetime::TCivilYear& y) {
+void Out<NDatetime::TCivilYear>(IOutputStream& out, const NDatetime::TCivilYear& y) { 
     out << y.year();
 }
 
 template <>
-void Out<NDatetime::TCivilMonth>(IOutputStream& out, const NDatetime::TCivilMonth& m) {
+void Out<NDatetime::TCivilMonth>(IOutputStream& out, const NDatetime::TCivilMonth& m) { 
     out << NDatetime::TCivilYear(m) << '-' << LeftPad(m.month(), 2, '0');
 }
 
 template <>
-void Out<NDatetime::TCivilDay>(IOutputStream& out, const NDatetime::TCivilDay& d) {
+void Out<NDatetime::TCivilDay>(IOutputStream& out, const NDatetime::TCivilDay& d) { 
     out << NDatetime::TCivilMonth(d) << '-' << LeftPad(d.day(), 2, '0');
 }
 
 template <>
-void Out<NDatetime::TCivilHour>(IOutputStream& out, const NDatetime::TCivilHour& h) {
+void Out<NDatetime::TCivilHour>(IOutputStream& out, const NDatetime::TCivilHour& h) { 
     out << NDatetime::TCivilDay(h) << 'T' << LeftPad(h.hour(), 2, '0');
 }
 
 template <>
-void Out<NDatetime::TCivilMinute>(IOutputStream& out, const NDatetime::TCivilMinute& m) {
+void Out<NDatetime::TCivilMinute>(IOutputStream& out, const NDatetime::TCivilMinute& m) { 
     out << NDatetime::TCivilHour(m) << ':' << LeftPad(m.minute(), 2, '0');
 }
 
 template <>
-void Out<NDatetime::TCivilSecond>(IOutputStream& out, const NDatetime::TCivilSecond& s) {
+void Out<NDatetime::TCivilSecond>(IOutputStream& out, const NDatetime::TCivilSecond& s) { 
     out << NDatetime::TCivilMinute(s) << ':' << LeftPad(s.second(), 2, '0');
 }
 
 template <>
-void Out<NDatetime::TWeekday>(IOutputStream& out, NDatetime::TWeekday wd) {
+void Out<NDatetime::TWeekday>(IOutputStream& out, NDatetime::TWeekday wd) { 
     using namespace cctz;
     switch (wd) {
         case weekday::monday:

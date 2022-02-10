@@ -1,6 +1,6 @@
 #include <util/generic/cast.h>
 #include <util/memory/blob.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 
 #include "reader.h"
 
@@ -8,7 +8,7 @@ template <typename T>
 static inline void ReadAux(const char* data, T* aux, T count, TVector<const char*>* result) {
     result->resize(count);
     for (size_t i = 0; i < count; ++i) {
-        (*result)[i] = data + ReadUnaligned<T>(aux + i);
+        (*result)[i] = data + ReadUnaligned<T>(aux + i); 
     }
 }
 
@@ -17,7 +17,7 @@ TChunkedDataReader::TChunkedDataReader(const TBlob& blob) {
     const size_t size = blob.Size();
     Y_ENSURE(size >= sizeof(ui32), "Empty file with chunks. ");
 
-    ui32 last = ReadUnaligned<ui32>((ui32*)(cdata + size) - 1);
+    ui32 last = ReadUnaligned<ui32>((ui32*)(cdata + size) - 1); 
 
     if (last != 0) { // old version file
         ui32* aux = (ui32*)(cdata + size);
@@ -32,10 +32,10 @@ TChunkedDataReader::TChunkedDataReader(const TBlob& blob) {
     Y_ENSURE(size >= 3 * sizeof(ui64), "Blob size must be >= 3 * sizeof(ui64). ");
 
     ui64* aux = (ui64*)(cdata + size);
-    Version = ReadUnaligned<ui64>(aux - 2);
+    Version = ReadUnaligned<ui64>(aux - 2); 
     Y_ENSURE(Version > 0, "Invalid chunked array version. ");
 
-    ui64 count = ReadUnaligned<ui64>(aux - 3);
+    ui64 count = ReadUnaligned<ui64>(aux - 3); 
 
     aux -= (count + 3);
     ReadAux<ui64>(cdata, aux, count, &Offsets);
@@ -43,7 +43,7 @@ TChunkedDataReader::TChunkedDataReader(const TBlob& blob) {
     aux -= count;
     Lengths.resize(count);
     for (size_t i = 0; i < count; ++i) {
-        Lengths[i] = IntegerCast<size_t>(ReadUnaligned<ui64>(aux + i));
+        Lengths[i] = IntegerCast<size_t>(ReadUnaligned<ui64>(aux + i)); 
     }
 }
 

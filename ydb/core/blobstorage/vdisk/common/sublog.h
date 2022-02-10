@@ -23,7 +23,7 @@ namespace NKikimr {
         // Start a new line of the log
         // USAGE:
         // Sublog.Log() << "My component got a message " << message << "\n";
-        IOutputStream &Log() const {
+        IOutputStream &Log() const { 
             ++Recs;
             if (PrefixWithTime) {
                 Out << TAppData::TimeProvider->Now().ToStringLocalUpToSeconds() << " ";
@@ -79,7 +79,7 @@ namespace NKikimr {
             Ctx.Send(Aid, Ev.release());
         }
 
-        IOutputStream &GetStream() {
+        IOutputStream &GetStream() { 
             return Ev->Stream;
         }
     private:

@@ -3,14 +3,14 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TPipeTrackerTest) {
+Y_UNIT_TEST_SUITE(TPipeTrackerTest) { 
     const ui64 txid1 = 1;
     const ui64 txid2 = 2;
     const ui64 txid3 = 3;
     const ui64 tablet1 = 100;
     const ui64 tablet2 = 101;
 
-    Y_UNIT_TEST(TestSimpleAdd) {
+    Y_UNIT_TEST(TestSimpleAdd) { 
         TPipeTrackerBase tracker;
         UNIT_ASSERT(!tracker.IsTxAlive(txid1));
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 0);
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(TPipeTrackerTest) {
         UNIT_ASSERT(tracker.FindTablets(txid1).size() == 0);
     }
 
-    Y_UNIT_TEST(TestAddSameTabletTwice) {
+    Y_UNIT_TEST(TestAddSameTabletTwice) { 
         TPipeTrackerBase tracker;
         UNIT_ASSERT(!tracker.IsTxAlive(txid1));
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 0);
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TPipeTrackerTest) {
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 0);
     }
 
-    Y_UNIT_TEST(TestAddTwoTablets) {
+    Y_UNIT_TEST(TestAddTwoTablets) { 
         TPipeTrackerBase tracker;
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 0);
         UNIT_ASSERT(tracker.FindTx(tablet2).size() == 0);
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TPipeTrackerTest) {
         UNIT_ASSERT(tracker.FindTx(tablet2).size() == 0);
     }
 
-    Y_UNIT_TEST(TestShareTablet) {
+    Y_UNIT_TEST(TestShareTablet) { 
         TPipeTrackerBase tracker;
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 0);
         tracker.AttachTablet(txid1, tablet1);
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TPipeTrackerTest) {
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 0);
     }
 
-    Y_UNIT_TEST(TestIdempotentAttachDetach) {
+    Y_UNIT_TEST(TestIdempotentAttachDetach) { 
         TPipeTrackerBase tracker;
         UNIT_ASSERT(tracker.FindTablets(txid1).size() == 0);
         tracker.AttachTablet(txid1, tablet1, 5);

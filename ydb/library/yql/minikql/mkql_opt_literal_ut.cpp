@@ -13,8 +13,8 @@ TRuntimeNode MakeVoidCallable(TProgramBuilder& pgmBuilder) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
-    Y_UNIT_TEST(TestIfPredicateTrue) {
+Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) { 
+    Y_UNIT_TEST(TestIfPredicateTrue) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TCallableType&>(*item.GetNode()->GetType()).GetName(), "Effect");
     }
 
-    Y_UNIT_TEST(TestIfPredicateSame) {
+    Y_UNIT_TEST(TestIfPredicateSame) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TCallableType&>(*item.GetNode()->GetType()).GetName(), "Effect");
     }
 
-     Y_UNIT_TEST(TestIfPredicateFalse) {
+     Y_UNIT_TEST(TestIfPredicateFalse) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TCallableType&>(*item.GetNode()->GetType()).GetName(), "Effect");
     }
 
-    Y_UNIT_TEST(TestSize) {
+    Y_UNIT_TEST(TestSize) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TDataLiteral&>(*pgm).AsValue().Get<ui32>(), 3);
     }
 
-    Y_UNIT_TEST(TestLength) {
+    Y_UNIT_TEST(TestLength) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TDataLiteral&>(*pgm).AsValue().Get<ui64>(), 1);
     }
 
-    Y_UNIT_TEST(TestAddMember) {
+    Y_UNIT_TEST(TestAddMember) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TStructLiteral&>(*pgm).GetValuesCount(), 3);
     }
 
-    Y_UNIT_TEST(TestMember) {
+    Y_UNIT_TEST(TestMember) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(pgm->GetType()->GetKind(), TType::EKind::Void);
     }
 
-    Y_UNIT_TEST(TestFilterPredicateTrue) {
+    Y_UNIT_TEST(TestFilterPredicateTrue) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TListLiteral&>(*pgm).GetItemsCount(), 2);
     }
 
-    Y_UNIT_TEST(TestFilterPredicateFalse) {
+    Y_UNIT_TEST(TestFilterPredicateFalse) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TListLiteral&>(*pgm).GetItemsCount(), 0);
     }
 
-    Y_UNIT_TEST(TestMapToVoid) {
+    Y_UNIT_TEST(TestMapToVoid) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TListLiteral&>(*pgm).GetItemsCount(), 0);
     }
 
-    Y_UNIT_TEST(TestFlatMapToLiteralListOfVoid) {
+    Y_UNIT_TEST(TestFlatMapToLiteralListOfVoid) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TListLiteral&>(*pgm).GetItemsCount(), 0);
     }
 
-    Y_UNIT_TEST(TestFlatMapToLiteralListOfVoid_Optional) {
+    Y_UNIT_TEST(TestFlatMapToLiteralListOfVoid_Optional) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TListLiteral&>(*pgm).GetItemsCount(), 0);
     }
 
-    Y_UNIT_TEST(TestLiteralCoalesceExist) {
+    Y_UNIT_TEST(TestLiteralCoalesceExist) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TDataLiteral&>(*pgm).AsValue().Get<ui32>(), 1);
     }
 
-    Y_UNIT_TEST(TestLiteralCoalesceNotExist) {
+    Y_UNIT_TEST(TestLiteralCoalesceNotExist) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TDataLiteral&>(*pgm).AsValue().Get<ui32>(), 2);
     }
 
-    Y_UNIT_TEST(TestLiteralExists) {
+    Y_UNIT_TEST(TestLiteralExists) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TDataLiteral&>(*pgm).AsValue().Get<bool>(), true);
     }
 
-    Y_UNIT_TEST(TestNth) {
+    Y_UNIT_TEST(TestNth) { 
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);

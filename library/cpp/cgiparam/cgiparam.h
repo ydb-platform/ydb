@@ -20,7 +20,7 @@ class TCgiParameters: public TMultiMap<TString, TString> {
 public:
     TCgiParameters() = default;
 
-    explicit TCgiParameters(const TStringBuf cgiParamStr) {
+    explicit TCgiParameters(const TStringBuf cgiParamStr) { 
         Scan(cgiParamStr);
     }
 
@@ -30,7 +30,7 @@ public:
         erase(begin(), end());
     }
 
-    size_t EraseAll(const TStringBuf name);
+    size_t EraseAll(const TStringBuf name); 
 
     size_t NumOfValues(const TStringBuf name) const noexcept {
         return count(name);
@@ -40,11 +40,11 @@ public:
         return Print();
     }
 
-    void Scan(const TStringBuf cgiParStr, bool form = true);
-    void ScanAdd(const TStringBuf cgiParStr);
-    void ScanAddUnescaped(const TStringBuf cgiParStr);
+    void Scan(const TStringBuf cgiParStr, bool form = true); 
+    void ScanAdd(const TStringBuf cgiParStr); 
+    void ScanAddUnescaped(const TStringBuf cgiParStr); 
     void ScanAddAllUnescaped(const TStringBuf cgiParStr);
-    void ScanAddAll(const TStringBuf cgiParStr);
+    void ScanAddAll(const TStringBuf cgiParStr); 
 
     /// Returns the string representation of all the stored parameters
     /**
@@ -85,7 +85,7 @@ public:
     Y_PURE_FUNCTION
     const TString& Get(const TStringBuf name, size_t numOfValue = 0) const noexcept;
 
-    void InsertEscaped(const TStringBuf name, const TStringBuf value);
+    void InsertEscaped(const TStringBuf name, const TStringBuf value); 
 
 #if !defined(__GLIBCXX__)
     template <typename TName, typename TValue>
@@ -119,14 +119,14 @@ public:
     // if val is a [possibly empty] non-NULL string, append it as well
     void JoinUnescaped(const TStringBuf key, char sep, TStringBuf val = TStringBuf());
 
-    bool Erase(const TStringBuf name, size_t numOfValue = 0);
+    bool Erase(const TStringBuf name, size_t numOfValue = 0); 
     bool Erase(const TStringBuf name, const TStringBuf val);
 
-    inline const char* FormField(const TStringBuf name, size_t numOfValue = 0) const {
+    inline const char* FormField(const TStringBuf name, size_t numOfValue = 0) const { 
         const_iterator it = Find(name, numOfValue);
 
         if (it == end()) {
-            return nullptr;
+            return nullptr; 
         }
 
         return it->second.data();

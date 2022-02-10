@@ -65,16 +65,16 @@ public:
                 return false;
             }
             case 1:
-                Y_FAIL();
+                Y_FAIL(); 
             case 2:
                 return true;
             default:
-                Y_FAIL();
+                Y_FAIL(); 
         }
     }
 
     void Handle(TEvHullLogHugeBlob::TPtr &ev, const TActorContext &ctx) override {
-        Y_VERIFY(State == 1);
+        Y_VERIFY(State == 1); 
         // FIXME: log
 
         const auto *msg = ev->Get();

@@ -54,7 +54,7 @@ inline void YaDebugBreak() {
     __debugbreak();
 }
 
-#undef Y_ASSERT
+#undef Y_ASSERT 
 
 #if !defined(NDEBUG) && !defined(__GCCXML__)
     #define Y_ASSERT(a)                                         \
@@ -95,16 +95,16 @@ namespace NPrivate {
 }
 
 /// Assert that does not depend on NDEBUG macro and outputs message like printf
-#define Y_VERIFY(expr, ...)                                                                          \
+#define Y_VERIFY(expr, ...)                                                                          \ 
     do {                                                                                             \
         if (Y_UNLIKELY(!(expr))) {                                                                   \
             ::NPrivate::Panic(__SOURCE_FILE_IMPL__, __LINE__, __FUNCTION__, #expr, " " __VA_ARGS__); \
         }                                                                                            \
     } while (false)
 
-#define Y_FAIL(...)                                                                                \
-    do {                                                                                           \
-        ::NPrivate::Panic(__SOURCE_FILE_IMPL__, __LINE__, __FUNCTION__, nullptr, " " __VA_ARGS__); \
+#define Y_FAIL(...)                                                                                \ 
+    do {                                                                                           \ 
+        ::NPrivate::Panic(__SOURCE_FILE_IMPL__, __LINE__, __FUNCTION__, nullptr, " " __VA_ARGS__); \ 
     } while (false)
 
 #ifndef NDEBUG

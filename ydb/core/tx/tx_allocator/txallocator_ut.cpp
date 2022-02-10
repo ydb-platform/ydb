@@ -7,19 +7,19 @@
 using namespace NKikimr;
 using namespace NTxAllocatorUT_Private;
 
-Y_UNIT_TEST_SUITE(TTxLocatorTest) {
-    Y_UNIT_TEST(Boot) {
+Y_UNIT_TEST_SUITE(TTxLocatorTest) { 
+    Y_UNIT_TEST(Boot) { 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
     }
 
-    Y_UNIT_TEST(TestZeroRange) {
+    Y_UNIT_TEST(TestZeroRange) { 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         AllocateAndCheck(runtime, 0, NKikimrTx::TEvTxAllocateResult::SUCCESS);
     }
 
-    Y_UNIT_TEST(TestImposibleSize) {
+    Y_UNIT_TEST(TestImposibleSize) { 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         const ui64 capacity = NTxAllocator::TTxAllocator::MaxCapacity;
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
         AllocateAndCheck(runtime, capacity - 3*requestSize + 1, NKikimrTx::TEvTxAllocateResult::IMPOSIBLE);
     }
 
-    Y_UNIT_TEST(TestAllocateAll) {
+    Y_UNIT_TEST(TestAllocateAll) { 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         const ui64 capacity = NTxAllocator::TTxAllocator::MaxCapacity;
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
         AllocateAndCheck(runtime, 1, NKikimrTx::TEvTxAllocateResult::IMPOSIBLE);
     }
 
-    Y_UNIT_TEST(TestAllocateAllByPieces) {
+    Y_UNIT_TEST(TestAllocateAllByPieces) { 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         const ui64 capacity = NTxAllocator::TTxAllocator::MaxCapacity;
@@ -92,12 +92,12 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
         inersections.AssertIntersection(continuesRange);
     }
 
-    Y_UNIT_TEST(TestSignificantRequestWhenRunReserveTx) {
+    Y_UNIT_TEST(TestSignificantRequestWhenRunReserveTx) { 
         const bool restartsEnable = false;
         DoSignificantRequests(restartsEnable);
     }
 
-    Y_UNIT_TEST(TestWithReboot) {
+    Y_UNIT_TEST(TestWithReboot) { 
         const bool restartsEnable = true;
         DoSignificantRequests(restartsEnable);
     }

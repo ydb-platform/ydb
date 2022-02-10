@@ -32,8 +32,8 @@ namespace NSQLTranslationV0 {
         void ClearBlockScope();
         TString MakeName(const TString& name);
 
-        IOutputStream& Error();
-        IOutputStream& Error(NYql::TPosition pos);
+        IOutputStream& Error(); 
+        IOutputStream& Error(NYql::TPosition pos); 
         IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code);
         IOutputStream& Info(NYql::TPosition pos);
 
@@ -177,7 +177,7 @@ namespace NSQLTranslationV0 {
 
     public:
         TContext& Context();
-        IOutputStream& Error();
+        IOutputStream& Error(); 
 
         template <typename TToken>
         const TString& Token(const TToken& token) {

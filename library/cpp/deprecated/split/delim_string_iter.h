@@ -173,8 +173,8 @@ public:
     TKeyValueDelimStringIter(const TStringBuf str, const TStringBuf delim);
     bool Valid() const;
     TKeyValueDelimStringIter& operator++();
-    const TStringBuf& Key() const;
-    const TStringBuf& Value() const;
+    const TStringBuf& Key() const; 
+    const TStringBuf& Value() const; 
 
 private:
     TDelimStringIter DelimIter;

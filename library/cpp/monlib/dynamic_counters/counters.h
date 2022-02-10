@@ -343,11 +343,11 @@ namespace NMonitoring {
             const TString& value,
             TIntrusivePtr<TDynamicCounters> subgroup);
 
-        void OutputHtml(IOutputStream& os) const;
+        void OutputHtml(IOutputStream& os) const; 
         void EnumerateSubgroups(const std::function<void(const TString& name, const TString& value)>& output) const;
 
         // mostly for debugging purposes -- use accept with encoder instead
-        void OutputPlainText(IOutputStream& os, const TString& indent = "") const;
+        void OutputPlainText(IOutputStream& os, const TString& indent = "") const; 
 
         void Accept(
             const TString& labelName, const TString& labelValue,

@@ -23,7 +23,7 @@ TMonService2::TMonService2(const THttpServerOptions& options, const TString& tit
     , IndexMonPage(new TIndexMonPage("", Title))
     , AuthProvider_{std::move(auth)}
 {
-    Y_VERIFY(!!title);
+    Y_VERIFY(!!title); 
     time_t t = time(nullptr);
     ctime_r(&t, StartTime);
 }
@@ -79,7 +79,7 @@ void TMonService2::OutputIndexBody(IOutputStream& out) {
 
 void TMonService2::ServeRequest(IOutputStream& out, const NMonitoring::IHttpRequest& request) {
     TString path = request.GetPath();
-    Y_VERIFY(path.StartsWith('/'));
+    Y_VERIFY(path.StartsWith('/')); 
 
     if (AuthProvider_) {
         const auto authResult = AuthProvider_->Check(request);

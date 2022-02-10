@@ -653,7 +653,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 }
 
 
-Y_UNIT_TEST_SUITE(TConsoleTests) {
+Y_UNIT_TEST_SUITE(TConsoleTests) { 
     void RunTestCreateTenant(TTenantTestRuntime& runtime, bool shared = false) {
         using EType = TCreateTenantRequest::EType;
 

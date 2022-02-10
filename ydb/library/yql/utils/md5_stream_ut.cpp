@@ -19,20 +19,20 @@ TString Consume(const TString& input) {
 }
 }
 
-Y_UNIT_TEST_SUITE(TStreamMd5Tests) {
-    Y_UNIT_TEST(Empty) {
+Y_UNIT_TEST_SUITE(TStreamMd5Tests) { 
+    Y_UNIT_TEST(Empty) { 
         const auto md5 = Consume("");
         const TString emptyStringMd5 = "d41d8cd98f00b204e9800998ecf8427e";
         UNIT_ASSERT_VALUES_EQUAL(md5, emptyStringMd5);
     }
 
-    Y_UNIT_TEST(ShortText) {
+    Y_UNIT_TEST(ShortText) { 
         const auto md5 = Consume("hello from Y!");
         const TString expectedMd5 = "abf59ed7b0daa71085e76e461a737cc2";
         UNIT_ASSERT_VALUES_EQUAL(md5, expectedMd5);
     }
 
-    Y_UNIT_TEST(BigText) {
+    Y_UNIT_TEST(BigText) { 
         // TransferData uses TempBuf of 64K
         const TString s(1000000, 'A');
         const auto md5 = Consume(s.c_str());

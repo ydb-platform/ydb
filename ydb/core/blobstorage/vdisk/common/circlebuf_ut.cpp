@@ -6,9 +6,9 @@
 namespace NKikimr {
 
 
-    Y_UNIT_TEST_SUITE(TCircleBufTest) {
+    Y_UNIT_TEST_SUITE(TCircleBufTest) { 
 
-        Y_UNIT_TEST(SimpleTest) {
+        Y_UNIT_TEST(SimpleTest) { 
             TCircleBuf<int> buf(10);
             buf.Push(1);
             buf.Push(2);
@@ -48,14 +48,14 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(EmptyTest) {
+        Y_UNIT_TEST(EmptyTest) { 
             TCircleBuf<int> buf(10);
             TCircleBuf<int>::TIterator it = buf.Begin(), e = buf.End();
             UNIT_ASSERT(it == e);
         }
 
 
-        Y_UNIT_TEST(OverflowTest) {
+        Y_UNIT_TEST(OverflowTest) { 
             TCircleBuf<int> buf(3);
             buf.Push(1);
             buf.Push(2);
@@ -100,7 +100,7 @@ namespace NKikimr {
         };
         typedef TIntrusivePtr<TStruct> TStructPtr;
 
-        Y_UNIT_TEST(PtrTest) {
+        Y_UNIT_TEST(PtrTest) { 
             TCircleBuf<TStructPtr> buf(3);
             TStructPtr val1(new TStruct());
             buf.Push(val1);

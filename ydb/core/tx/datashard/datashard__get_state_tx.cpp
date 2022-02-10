@@ -12,7 +12,7 @@ TDataShard::TTxGetShardState::TTxGetShardState(TDataShard* ds, TEvDataShard::TEv
 
 bool TDataShard::TTxGetShardState::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_UNUSED(txc);
-    Y_UNUSED(ctx);
+    Y_UNUSED(ctx); 
 
     Result = MakeHolder<TEvDataShard::TEvGetShardStateResult>(Self->TabletID(), Self->State);
     if (Self->Pipeline.HasDrop())

@@ -50,13 +50,13 @@ int SocketPair(SOCKET socks[2], bool overlapped, bool cloexec) {
         if (listen(listener, 1) == SOCKET_ERROR)
             break;
 
-        if ((socks[0] = WSASocket(AF_INET, SOCK_STREAM, 0, nullptr, 0, flags)) == INVALID_SOCKET)
+        if ((socks[0] = WSASocket(AF_INET, SOCK_STREAM, 0, nullptr, 0, flags)) == INVALID_SOCKET) 
             break;
 
         if (connect(socks[0], (const struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR)
             break;
 
-        if ((socks[1] = accept(listener, nullptr, nullptr)) == INVALID_SOCKET)
+        if ((socks[1] = accept(listener, nullptr, nullptr)) == INVALID_SOCKET) 
             break;
 
         closesocket(listener);

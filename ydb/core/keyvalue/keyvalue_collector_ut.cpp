@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TKeyValueCollectorTest) {
+Y_UNIT_TEST_SUITE(TKeyValueCollectorTest) { 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SETUP
@@ -107,7 +107,7 @@ public:
 // TEST CASES
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Y_UNIT_TEST(TestKeyValueCollectorEmpty) {
+Y_UNIT_TEST(TestKeyValueCollectorEmpty) { 
     TContext context;
     context.Setup();
 
@@ -133,7 +133,7 @@ Y_UNIT_TEST(TestKeyValueCollectorEmpty) {
     UNIT_ASSERT(eraseCollect);
 }
 
-Y_UNIT_TEST(TestKeyValueCollectorSingle) {
+Y_UNIT_TEST(TestKeyValueCollectorSingle) { 
     TContext context;
     context.Setup();
 
@@ -169,7 +169,7 @@ Y_UNIT_TEST(TestKeyValueCollectorSingle) {
     UNIT_ASSERT(eraseCollect);
 }
 
-Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
+Y_UNIT_TEST(TestKeyValueCollectorMultiple) { 
     TContext context;
     context.Setup();
 

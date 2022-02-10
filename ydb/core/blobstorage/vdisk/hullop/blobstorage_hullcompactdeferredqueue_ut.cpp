@@ -44,9 +44,9 @@ public:
     {}
 };
 
-Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
+Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) { 
 
-    Y_UNIT_TEST(Basic) {
+    Y_UNIT_TEST(Basic) { 
         TRope parts[6] = {
             TRope(TString("AAAAAA")),
             TRope(TString("BBBBBB")),

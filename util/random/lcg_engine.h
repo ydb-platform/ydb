@@ -15,7 +15,7 @@ template <typename T, T A, T C>
 struct TFastLcgIterator {
     static_assert(C % 2 == 1, "C must be odd");
 
-    static constexpr T Iterate(T x) noexcept {
+    static constexpr T Iterate(T x) noexcept { 
         return x * A + C;
     }
 

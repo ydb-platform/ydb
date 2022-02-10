@@ -5,26 +5,26 @@ namespace NKikimr {
 
 
 int MainFormatUtil(const TCommandConfig &cmdConf, int argc, char** argv) {
-    Y_UNUSED(cmdConf);
+    Y_UNUSED(cmdConf); 
 
     TCmdFormatUtilConfig config;
     config.Parse(argc, argv);
 
-    Y_VERIFY(config.NodeId != 0);
+    Y_VERIFY(config.NodeId != 0); 
 
     TAutoPtr<NKikimrConfig::TBlobStorageFormatConfig> formatConfig;
     formatConfig.Reset(new NKikimrConfig::TBlobStorageFormatConfig());
-    Y_VERIFY(ParsePBFromFile(config.FormatFile, formatConfig.Get()));
+    Y_VERIFY(ParsePBFromFile(config.FormatFile, formatConfig.Get())); 
 
     size_t driveSize = formatConfig->DriveSize();
     bool isFirst = true;
     for (size_t driveIdx = 0; driveIdx < driveSize; ++driveIdx) {
         const NKikimrConfig::TBlobStorageFormatConfig::TDrive& drive = formatConfig->GetDrive(driveIdx);
-        Y_VERIFY(drive.HasNodeId());
-        Y_VERIFY(drive.HasType());
-        Y_VERIFY(drive.HasPath());
-        Y_VERIFY(drive.HasGuid());
-        Y_VERIFY(drive.HasPDiskId());
+        Y_VERIFY(drive.HasNodeId()); 
+        Y_VERIFY(drive.HasType()); 
+        Y_VERIFY(drive.HasPath()); 
+        Y_VERIFY(drive.HasGuid()); 
+        Y_VERIFY(drive.HasPDiskId()); 
         if (drive.GetNodeId() == config.NodeId) {
             if (isFirst) {
                 isFirst = false;

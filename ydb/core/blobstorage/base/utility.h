@@ -88,7 +88,7 @@ namespace NKikimr {
         }
 
         void DecrementUndertakerCounter(const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(UndertakerCounter > 0);
+            Y_VERIFY_DEBUG(UndertakerCounter > 0); 
             --UndertakerCounter;
             UndertakerCheckToDie(ctx);
         }

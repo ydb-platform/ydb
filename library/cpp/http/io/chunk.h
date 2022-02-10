@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
@@ -11,11 +11,11 @@ class THttpHeaders;
 /// Ввод данных порциями.
 /// @details Последовательное чтение блоков данных. Предполагается, что
 /// данные записаны в виде <длина блока><блок данных>.
-class TChunkedInput: public IInputStream {
+class TChunkedInput: public IInputStream { 
 public:
     /// Если передан указатель на trailers, то туда будут записаны HTTP trailer'ы (возможно пустые),
     /// которые идут после чанков.
-    TChunkedInput(IInputStream* slave, TMaybe<THttpHeaders>* trailers = nullptr);
+    TChunkedInput(IInputStream* slave, TMaybe<THttpHeaders>* trailers = nullptr); 
     ~TChunkedInput() override;
 
 private:
@@ -30,9 +30,9 @@ private:
 /// Вывод данных порциями.
 /// @details Вывод данных блоками в виде <длина блока><блок данных>. Если объем
 /// данных превышает 64K, они записываются в виде n блоков по 64K + то, что осталось.
-class TChunkedOutput: public IOutputStream {
+class TChunkedOutput: public IOutputStream { 
 public:
-    TChunkedOutput(IOutputStream* slave);
+    TChunkedOutput(IOutputStream* slave); 
     ~TChunkedOutput() override;
 
 private:

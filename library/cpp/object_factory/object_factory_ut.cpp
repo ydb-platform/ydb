@@ -142,8 +142,8 @@ struct TDirectOrderDSCreator: public IFactoryObjectCreator<ICommonInterface, con
 
 static TTestFactory::TRegistrator<TDirectOrderDifferentSignature> DirectDs("direct_ds", new TDirectOrderDSCreator);
 
-Y_UNIT_TEST_SUITE(TestObjectFactory) {
-    Y_UNIT_TEST(TestParametrized) {
+Y_UNIT_TEST_SUITE(TestObjectFactory) { 
+    Y_UNIT_TEST(TestParametrized) { 
         TArgument directArg{"Name", nullptr};
         TArgument inverseArg{"Fake", nullptr};
         THolder<ICommonInterface> direct(TTestFactory::Construct("direct", "prov", 0.42, directArg));

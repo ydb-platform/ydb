@@ -16,14 +16,14 @@ void LoadData(THistogram* h1, THistogram* h2) {
     UNIT_ASSERT(h2->RecordValueWithExpectedInterval(1000 * 1000, 1000));
 }
 
-Y_UNIT_TEST_SUITE(THistogramTest) {
-    Y_UNIT_TEST(Creation) {
+Y_UNIT_TEST_SUITE(THistogramTest) { 
+    Y_UNIT_TEST(Creation) { 
         THistogram h(TDuration::Hours(1).MicroSeconds(), 3);
         UNIT_ASSERT_EQUAL(h.GetMemorySize(), 188512);
         UNIT_ASSERT_EQUAL(h.GetCountsLen(), 23552);
     }
 
-    Y_UNIT_TEST(CreateWithLargeValues) {
+    Y_UNIT_TEST(CreateWithLargeValues) { 
         THistogram h(20L * 1000 * 1000, 100L * 1000 * 1000, 5);
         UNIT_ASSERT(h.RecordValue(100L * 1000 * 1000));
         UNIT_ASSERT(h.RecordValue(20L * 1000 * 1000));
@@ -45,18 +45,18 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         UNIT_ASSERT(h.ValuesAreEqual(v99, 100L * 1000 * 1000));
     }
 
-    Y_UNIT_TEST(InvalidSignificantValueDigits) {
+    Y_UNIT_TEST(InvalidSignificantValueDigits) { 
         UNIT_ASSERT_EXCEPTION(THistogram(1000, -1), yexception);
         UNIT_ASSERT_EXCEPTION(THistogram(1000, 0), yexception);
         UNIT_ASSERT_EXCEPTION(THistogram(1000, 6), yexception);
     }
 
-    Y_UNIT_TEST(InvalidLowestDiscernibleValue) {
+    Y_UNIT_TEST(InvalidLowestDiscernibleValue) { 
         UNIT_ASSERT_EXCEPTION(THistogram(0, 100, 3), yexception);
         UNIT_ASSERT_EXCEPTION(THistogram(110, 100, 3), yexception);
     }
 
-    Y_UNIT_TEST(TotalCount) {
+    Y_UNIT_TEST(TotalCount) { 
         i64 oneHour = SafeIntegerCast<i64>(TDuration::Hours(1).MicroSeconds());
         THistogram h1(oneHour, 3);
         THistogram h2(oneHour, 3);
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         UNIT_ASSERT_EQUAL(h2.GetTotalCount(), 2000);
     }
 
-    Y_UNIT_TEST(StatsValues) {
+    Y_UNIT_TEST(StatsValues) { 
         i64 oneHour = SafeIntegerCast<i64>(TDuration::Hours(1).MicroSeconds());
         THistogram h1(oneHour, 3);
         THistogram h2(oneHour, 3);
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         }
     }
 
-    Y_UNIT_TEST(Percentiles) {
+    Y_UNIT_TEST(Percentiles) { 
         i64 oneHour = SafeIntegerCast<i64>(TDuration::Hours(1).MicroSeconds());
         THistogram h1(oneHour, 3);
         THistogram h2(oneHour, 3);
@@ -156,13 +156,13 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         }
     }
 
-    Y_UNIT_TEST(OutOfRangeValues) {
+    Y_UNIT_TEST(OutOfRangeValues) { 
         THistogram h(1000, 4);
         UNIT_ASSERT(h.RecordValue(32767));
         UNIT_ASSERT(!h.RecordValue(32768));
     }
 
-    Y_UNIT_TEST(Reset) {
+    Y_UNIT_TEST(Reset) { 
         THistogram h(TDuration::Hours(1).MicroSeconds(), 3);
         UNIT_ASSERT(h.RecordValues(1000, 1000));
         UNIT_ASSERT(h.RecordValue(1000 * 1000));

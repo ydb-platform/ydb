@@ -114,7 +114,7 @@ public:
     void OnMessage(TOnMessageContext& mess) override {
         TExampleRequest* fmess = static_cast<TExampleRequest*>(mess.GetMessage());
 
-        Y_ASSERT(fmess->Data == "TADA");
+        Y_ASSERT(fmess->Data == "TADA"); 
 
         /// tell session to forget this message and never expect any reply
         mess.ForgetRequest();
@@ -124,13 +124,13 @@ public:
 
     /// this handler should not be called because this server does not send replies
     void OnSent(TAutoPtr<TBusMessage> mess) override {
-        Y_UNUSED(mess);
-        Y_FAIL("This server does not sent replies");
+        Y_UNUSED(mess); 
+        Y_FAIL("This server does not sent replies"); 
     }
 };
 
-Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
-    Y_UNIT_TEST(Simple) {
+Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) { 
+    Y_UNIT_TEST(Simple) { 
         TObjectCountCheck objectCountCheck;
 
         NullServer server;
@@ -166,15 +166,15 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
         }
 
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
 
-            Y_VERIFY(status == MESSAGE_MESSAGE_TOO_LARGE, "wrong status: %s", ToCString(status));
+            Y_VERIFY(status == MESSAGE_MESSAGE_TOO_LARGE, "wrong status: %s", ToCString(status)); 
 
             GotTooLarge.Signal();
         }
     };
 
-    Y_UNIT_TEST(MessageTooLargeOnClient) {
+    Y_UNIT_TEST(MessageTooLargeOnClient) { 
         TObjectCountCheck objectCountCheck;
 
         NullServer server;
@@ -209,14 +209,14 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
 
         /// message that could not be delivered
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
-            Y_UNUSED(mess);
-            Y_UNUSED(status); // TODO: check status
+            Y_UNUSED(mess); 
+            Y_UNUSED(status); // TODO: check status 
 
             GotError.Signal();
         }
     };
 
-    Y_UNIT_TEST(SendTimeout_Callback_NoServer) {
+    Y_UNIT_TEST(SendTimeout_Callback_NoServer) { 
         TObjectCountCheck objectCountCheck;
 
         TCheckTimeoutClient client(TNetAddr("localhost", 17));
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
         client.GotError.WaitI();
     }
 
-    Y_UNIT_TEST(SendTimeout_Callback_HangingServer) {
+    Y_UNIT_TEST(SendTimeout_Callback_HangingServer) { 
         THangingServer server;
 
         TObjectCountCheck objectCountCheck;

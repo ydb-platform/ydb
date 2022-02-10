@@ -12,9 +12,9 @@ template <class C, class T>
 static inline bool IsIn(const C& c, const T& e);
 
 namespace NIsInHelper {
-    Y_HAS_MEMBER(find, FindMethod);
-    Y_HAS_SUBTYPE(const_iterator, ConstIterator);
-    Y_HAS_SUBTYPE(key_type, KeyType);
+    Y_HAS_MEMBER(find, FindMethod); 
+    Y_HAS_SUBTYPE(const_iterator, ConstIterator); 
+    Y_HAS_SUBTYPE(key_type, KeyType); 
 
     template <class T>
     using TIsAssocCont = TConjunction<THasFindMethod<T>, THasConstIterator<T>, THasKeyType<T>>;
@@ -44,7 +44,7 @@ static inline bool IsIn(I f, I l, const T& v) {
 template <class C, class T>
 static inline bool IsIn(const C& c, const T& e) {
     using namespace NIsInHelper;
-    return TIsInTraits<C, T, TIsAssocCont<C>::value>::IsIn(c, e);
+    return TIsInTraits<C, T, TIsAssocCont<C>::value>::IsIn(c, e); 
 }
 
 template <class T, class U>

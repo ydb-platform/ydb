@@ -17,8 +17,8 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
     {}
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
-        Y_UNUSED(txc);
-        Y_UNUSED(ctx);
+        Y_UNUSED(txc); 
+        Y_UNUSED(ctx); 
         auto rawTxId = Ev->Get()->Record.GetTxId();
 
         if (Self->Operations.contains(TTxId(rawTxId))) {

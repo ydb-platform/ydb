@@ -183,11 +183,11 @@ namespace NCodecs {
             return true;
         }
 
-        void Save(IOutputStream* out) const {
+        void Save(IOutputStream* out) const { 
             ::Save(out, Dict);
         }
 
-        void Load(IInputStream* in) {
+        void Load(IInputStream* in) { 
             ::Load(in, Dict);
             InitContexts();
         }
@@ -255,11 +255,11 @@ namespace NCodecs {
         return Impl->Learn(in, false/*throwOnError*/);
     }
 
-    void TZStdDictCodec::Save(IOutputStream* out) const {
+    void TZStdDictCodec::Save(IOutputStream* out) const { 
         Impl->Save(out);
     }
 
-    void TZStdDictCodec::Load(IInputStream* in) {
+    void TZStdDictCodec::Load(IInputStream* in) { 
         Impl->Load(in);
     }
 

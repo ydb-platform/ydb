@@ -10,7 +10,7 @@ namespace NKikimr {
 
 namespace NTable {
 
-Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
+Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) { 
     using TDummyEnv = NTable::TDummyEnv;
 
     enum ESomeEnum : ui8 {
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
         using TTables = SchemaTables<TestTable, TestTable2, TestTable3, TestTable4>;
     };
 
-    Y_UNIT_TEST(BasicSchemaTest) {
+    Y_UNIT_TEST(BasicSchemaTest) { 
         TDatabase DB;
         NIceDb::TNiceDb db(DB);
         ui64 stamp = 0;
@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
         }
     }
 
-    Y_UNIT_TEST(RenameColumnSchemaTest) {
+    Y_UNIT_TEST(RenameColumnSchemaTest) { 
         TScheme scheme;
         TSchemeModifier applier(scheme);
         TAlter delta;

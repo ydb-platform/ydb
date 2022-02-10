@@ -43,7 +43,7 @@ public:
     void Threads2_Push1M_Threads1_Pop2M() {
         TQueueType queue;
 
-        class TPusherThread: public ISimpleThread {
+        class TPusherThread: public ISimpleThread { 
         public:
             TPusherThread(TQueueType& theQueue, char* start)
                 : Queue(theQueue)
@@ -81,7 +81,7 @@ public:
     void Threads4_Push1M_Threads1_Pop4M() {
         TQueueType queue;
 
-        class TPusherThread: public ISimpleThread {
+        class TPusherThread: public ISimpleThread { 
         public:
             TPusherThread(TQueueType& theQueue, char* start)
                 : Queue(theQueue)
@@ -124,7 +124,7 @@ public:
     void ManyRndPush100K_ManyQueues() {
         TQueueType queue[NUMBER_OF_QUEUES];
 
-        class TPusherThread: public ISimpleThread {
+        class TPusherThread: public ISimpleThread { 
         public:
             TPusherThread(TQueueType* queues, char* start)
                 : Queues(queues)
@@ -155,7 +155,7 @@ public:
             }
         };
 
-        class TPopperThread: public ISimpleThread {
+        class TPopperThread: public ISimpleThread { 
         public:
             TPopperThread(TQueueType* theQueue, char* base)
                 : Queue(theQueue)

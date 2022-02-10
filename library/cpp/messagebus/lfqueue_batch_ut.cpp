@@ -2,8 +2,8 @@
 
 #include "lfqueue_batch.h"
 
-Y_UNIT_TEST_SUITE(TLockFreeQueueBatch) {
-    Y_UNIT_TEST(Order1) {
+Y_UNIT_TEST_SUITE(TLockFreeQueueBatch) { 
+    Y_UNIT_TEST(Order1) { 
         TLockFreeQueueBatch<unsigned> q;
         {
             TAutoPtr<TVector<unsigned>> v(new TVector<unsigned>);
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueBatch) {
         UNIT_ASSERT_VALUES_EQUAL(0u, r.size());
     }
 
-    Y_UNIT_TEST(Order2) {
+    Y_UNIT_TEST(Order2) { 
         TLockFreeQueueBatch<unsigned> q;
         {
             TAutoPtr<TVector<unsigned>> v(new TVector<unsigned>);

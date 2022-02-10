@@ -6,7 +6,7 @@
 #include <util/system/fasttime.h>
 #include <util/datetime/base.h>
 #include <util/datetime/systime.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/stream/mem.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -28,12 +28,12 @@ namespace NDatetime {
         // [31, ..., 365] or [31, ..., 366] (12 elements)
 
         const ui32* pos = UpperBound(begin, end, yday);
-        Y_ENSURE(pos != end, "day no. " << yday << " does not exist in " << (isleap ? "leap" : "non-leap") << " year");
+        Y_ENSURE(pos != end, "day no. " << yday << " does not exist in " << (isleap ? "leap" : "non-leap") << " year"); 
 
         *month = pos - begin;
         *mday = yday - *(pos - 1) + 1;
 
-        Y_ASSERT((*month < 12) && (1 <= *mday) && (*mday <= MonthDays[isleap][*month]));
+        Y_ASSERT((*month < 12) && (1 <= *mday) && (*mday <= MonthDays[isleap][*month])); 
     }
 
     struct TTimeData {
@@ -215,7 +215,7 @@ namespace NDatetime {
 }
 
 template <>
-void In<TMonth>(IInputStream& in, TMonth& t) {
+void In<TMonth>(IInputStream& in, TMonth& t) { 
     char buf[4];
     LoadPodArray(&in, buf, 4);
     t.Year = FromString<ui16>(buf, 4);
@@ -224,7 +224,7 @@ void In<TMonth>(IInputStream& in, TMonth& t) {
 }
 
 template <>
-void Out<TMonth>(IOutputStream& o, const TMonth& t) {
+void Out<TMonth>(IOutputStream& o, const TMonth& t) { 
     o << t.Year << Sprintf("%.2hu", (ui16)(t.Month + 1));
 }
 

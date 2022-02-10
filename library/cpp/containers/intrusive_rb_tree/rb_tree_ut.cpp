@@ -46,7 +46,7 @@ class TRedBlackTreeTest: public TTestBase {
     UNIT_TEST(TestCheckChildrenAfterErase)
     UNIT_TEST(TestGettingIndexWithDifferentValuesAfterErase)
     UNIT_TEST(TestGettingIndexWithEqualValues)
-    UNIT_TEST(TestLessCountOnEmptyTree)
+    UNIT_TEST(TestLessCountOnEmptyTree) 
     UNIT_TEST_SUITE_END();
 
 private:
@@ -288,11 +288,11 @@ private:
 
         UNIT_ASSERT(tree.Empty());
     }
-
-    inline void TestLessCountOnEmptyTree() {
-        TTree tree;
-        UNIT_ASSERT_VALUES_EQUAL(0, tree.LessCount(TNode(1)));
-    }
+ 
+    inline void TestLessCountOnEmptyTree() { 
+        TTree tree; 
+        UNIT_ASSERT_VALUES_EQUAL(0, tree.LessCount(TNode(1))); 
+    } 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TRedBlackTreeTest);

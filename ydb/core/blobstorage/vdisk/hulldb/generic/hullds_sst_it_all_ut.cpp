@@ -19,7 +19,7 @@ namespace NKikimr {
         TLogoBlobSstPtr GenerateSst(ui32 step, ui32 recs, ui32 plus, ui64 tabletId = 0, ui32 generation = 0,
                                     ui32 channel = 0, ui32 cookie = 0) {
             using TRec = TLogoBlobSst::TRec;
-            Y_UNUSED(step);
+            Y_UNUSED(step); 
             TLogoBlobSstPtr ptr(new TLogoBlobSst(TTestContexts().GetVCtx()));
             for (ui32 i = 0; i < recs; i++) {
                 TLogoBlobID id(tabletId, generation, step + i * plus, channel, 0, cookie);
@@ -43,12 +43,12 @@ namespace NKikimr {
 
     } // NBlobStorageHullSstItHelpers
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullSstIt) {
+    Y_UNIT_TEST_SUITE(TBlobStorageHullSstIt) { 
 
         using namespace NBlobStorageHullSstItHelpers;
         using TMemIterator = TLogoBlobSst::TMemIterator;
 
-        Y_UNIT_TEST(TestSeekToFirst) {
+        Y_UNIT_TEST(TestSeekToFirst) { 
             TLogoBlobSstPtr ptr(GenerateSst(10, 10, 1));
             TMemIterator it(ptr.Get());
             it.SeekToFirst();
@@ -66,7 +66,7 @@ namespace NKikimr {
             UNIT_ASSERT(str.Str() == result);
         }
 
-        Y_UNIT_TEST(TestSeekToLast) {
+        Y_UNIT_TEST(TestSeekToLast) { 
             TLogoBlobSstPtr ptr(GenerateSst(10, 10, 1));
             TMemIterator it(ptr.Get());
             it.SeekToLast();
@@ -84,7 +84,7 @@ namespace NKikimr {
             UNIT_ASSERT(str.Str() == result);
         }
 
-        Y_UNIT_TEST(TestSeekExactAndNext) {
+        Y_UNIT_TEST(TestSeekExactAndNext) { 
             TLogoBlobSstPtr ptr(GenerateSst(10, 10, 1));
             TMemIterator it(ptr.Get());
 
@@ -104,7 +104,7 @@ namespace NKikimr {
             UNIT_ASSERT(str.Str() == result);
         }
 
-        Y_UNIT_TEST(TestSeekExactAndPrev) {
+        Y_UNIT_TEST(TestSeekExactAndPrev) { 
             TLogoBlobSstPtr ptr(GenerateSst(10, 10, 1));
             TMemIterator it(ptr.Get());
 
@@ -124,7 +124,7 @@ namespace NKikimr {
             UNIT_ASSERT(str.Str() == result);
         }
 
-        Y_UNIT_TEST(TestSeekBefore) {
+        Y_UNIT_TEST(TestSeekBefore) { 
             TLogoBlobSstPtr ptr(GenerateSst(10, 10, 1));
             TMemIterator it(ptr.Get());
 
@@ -134,7 +134,7 @@ namespace NKikimr {
             UNIT_ASSERT(it.GetCurKey().ToString() == "[0:0:10:0:0:0:0]");
         }
 
-        Y_UNIT_TEST(TestSeekAfterAndPrev) {
+        Y_UNIT_TEST(TestSeekAfterAndPrev) { 
             TLogoBlobSstPtr ptr(GenerateSst(10, 10, 1));
             TMemIterator it(ptr.Get());
 
@@ -147,7 +147,7 @@ namespace NKikimr {
             UNIT_ASSERT(it.GetCurKey().ToString() == "[0:0:19:0:0:0:0]");
         }
 
-        Y_UNIT_TEST(TestSeekNotExactBefore) {
+        Y_UNIT_TEST(TestSeekNotExactBefore) { 
             TLogoBlobSstPtr ptr(GenerateSst(10, 10, 2));
             TMemIterator it(ptr.Get());
 
@@ -158,13 +158,13 @@ namespace NKikimr {
         }
     } // TBlobStorageHullSstIt
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullOrderedSstsIt) {
+    Y_UNIT_TEST_SUITE(TBlobStorageHullOrderedSstsIt) { 
 
         using namespace NBlobStorageHullSstItHelpers;
         using TIterator = TLogoBlobOrderedSsts::TReadIterator;
         TTestContexts TestCtx(ChunkSize, CompWorthReadSize);
 
-        Y_UNIT_TEST(TestSeekToFirst) {
+        Y_UNIT_TEST(TestSeekToFirst) { 
             TLogoBlobOrderedSstsPtr ptr(GenerateOrderedSsts(10, 5, 1, 3));
             THullCtxPtr hullCtx = TestCtx.GetHullCtx();
             TIterator it(hullCtx, ptr.Get());
@@ -186,7 +186,7 @@ namespace NKikimr {
             UNIT_ASSERT(str.Str() == result);
         }
 
-        Y_UNIT_TEST(TestSeekToLast) {
+        Y_UNIT_TEST(TestSeekToLast) { 
             TLogoBlobOrderedSstsPtr ptr(GenerateOrderedSsts(10, 5, 1, 3));
             THullCtxPtr hullCtx = TestCtx.GetHullCtx();
             TIterator it(hullCtx, ptr.Get());
@@ -208,7 +208,7 @@ namespace NKikimr {
             UNIT_ASSERT(str.Str() == result);
         }
 
-        Y_UNIT_TEST(TestSeekAfterAndPrev) {
+        Y_UNIT_TEST(TestSeekAfterAndPrev) { 
             TLogoBlobOrderedSstsPtr ptr(GenerateOrderedSsts(10, 5, 1, 3));
             THullCtxPtr hullCtx = TestCtx.GetHullCtx();
             TIterator it(hullCtx, ptr.Get());

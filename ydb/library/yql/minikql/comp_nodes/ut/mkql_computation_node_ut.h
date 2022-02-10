@@ -22,7 +22,7 @@
 
 
 #if defined(_msan_enabled_) || defined(_ubsan_enabled_) || defined(WITH_VALGRIND)
-#define Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT)                                       \
+#define Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT)                                       \ 
     template<bool OPT> void N(NUnitTest::TTestContext&);                                   \
     struct TTestRegistration##N {                                                              \
         TTestRegistration##N() {                                                               \
@@ -31,7 +31,7 @@
     };                                                                                         \
     static TTestRegistration##N testRegistration##N;
 #else
-#define Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT)                                       \
+#define Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT)                                       \ 
     template<bool OPT> void N(NUnitTest::TTestContext&);                                   \
     struct TTestRegistration##N {                                                              \
         TTestRegistration##N() {                                                               \
@@ -42,12 +42,12 @@
     static TTestRegistration##N testRegistration##N;
 #endif
 
-#define Y_UNIT_TEST_TWIN(N, OPT)      \
-    Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT) \
+#define Y_UNIT_TEST_TWIN(N, OPT)      \ 
+    Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT) \ 
     template<bool OPT> \
     void N(NUnitTest::TTestContext&)
 
-#define Y_UNIT_TEST_LLVM(N) Y_UNIT_TEST_TWIN(N, LLVM)
+#define Y_UNIT_TEST_LLVM(N) Y_UNIT_TEST_TWIN(N, LLVM) 
 
 namespace NKikimr {
 namespace NMiniKQL {

@@ -8,7 +8,7 @@ namespace NFlatTests {
 using namespace Tests;
 using NClient::TValue;
 
-Y_UNIT_TEST_SUITE(TS3ListingTest) {
+Y_UNIT_TEST_SUITE(TS3ListingTest) { 
 
     void S3WriteRow(TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, ui64 ts, TString data, TString table) {
         TString insertRowQuery =  R"(
@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         }
     }
 
-    Y_UNIT_TEST(Listing) {
+    Y_UNIT_TEST(Listing) { 
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
                                            expectedStatus, expectedErrMessage);
     }
 
-    Y_UNIT_TEST(SchemaChecks) {
+    Y_UNIT_TEST(SchemaChecks) { 
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -584,7 +584,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         CompareS3Listing(annoyingClient, 100, "/", "/", "", 100500, {"Path"});
     }
 
-    Y_UNIT_TEST(SuffixColumns) {
+    Y_UNIT_TEST(SuffixColumns) { 
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));

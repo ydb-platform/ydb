@@ -1,22 +1,22 @@
 #pragma once
 
-#include <util/generic/fwd.h>
+#include <util/generic/fwd.h> 
 
-namespace google {
-    namespace protobuf {
-        class Message;
+namespace google { 
+    namespace protobuf { 
+        class Message; 
         class FieldDescriptor;
-    }
-}
+    } 
+} 
 
 namespace NProtoBuf {
     using ::google::protobuf::FieldDescriptor;
     using ::google::protobuf::Message;
-}
+} 
 
-namespace NProtoBuf {
+namespace NProtoBuf { 
     // Reflection-based equality check for arbitrary protobuf messages
-
+ 
     // Strict comparison: optional field without value is NOT equal to
     // a field with explicitly set default value.
     bool IsEqual(const Message& m1, const Message& m2);

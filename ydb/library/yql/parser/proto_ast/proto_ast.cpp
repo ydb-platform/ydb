@@ -26,7 +26,7 @@ void IErrorCollector::Error(ui32 line, ui32 col, const TString& message) {
     ++NumErrors;
 }
 
-TErrorOutput::TErrorOutput(IOutputStream& err, const TString& name, size_t maxErrors)
+TErrorOutput::TErrorOutput(IOutputStream& err, const TString& name, size_t maxErrors) 
     : IErrorCollector(maxErrors)
     , Err(err)
     , Name(name)

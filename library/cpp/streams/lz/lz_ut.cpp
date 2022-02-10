@@ -31,7 +31,7 @@ namespace {
                     seed += 1;
                 }
             } while (!sym);
-            Y_ASSERT(sym);
+            Y_ASSERT(sym); 
             j = (j + 1) % entropy.size();
             result += char(sym + entropy[j]);
         }
@@ -75,7 +75,7 @@ static const TVector<size_t> bufferSizes = {
 namespace {
     template <TLzqCompress::EVersion Ver, int Level, TLzqCompress::EMode Mode>
     struct TLzqCompressX: public TLzqCompress {
-        inline TLzqCompressX(IOutputStream* out, size_t bufLen)
+        inline TLzqCompressX(IOutputStream* out, size_t bufLen) 
             : TLzqCompress(out, bufLen, Ver, Level, Mode)
         {
         }
@@ -160,9 +160,9 @@ static inline void TestDecompress() {
     }
 }
 
-class TMixedDecompress: public IInputStream {
+class TMixedDecompress: public IInputStream { 
 public:
-    TMixedDecompress(IInputStream* input)
+    TMixedDecompress(IInputStream* input) 
         : Slave_(OpenLzDecompressor(input).Release())
     {
     }
@@ -173,7 +173,7 @@ private:
     }
 
 private:
-    THolder<IInputStream> Slave_;
+    THolder<IInputStream> Slave_; 
 };
 
 template <class C>
@@ -188,63 +188,63 @@ static inline void TestDecompressError() {
     UNIT_ASSERT_EXCEPTION(TestDecompress<D>(), TDecompressorError);
 }
 
-Y_UNIT_TEST_SUITE(TLzTest) {
-    Y_UNIT_TEST(TestLzo) {
+Y_UNIT_TEST_SUITE(TLzTest) { 
+    Y_UNIT_TEST(TestLzo) { 
         TestCompress<TLzoCompress>();
         TestDecompress<TLzoDecompress>();
     }
 
-    Y_UNIT_TEST(TestLzf) {
+    Y_UNIT_TEST(TestLzf) { 
         TestCompress<TLzfCompress>();
         TestDecompress<TLzfDecompress>();
     }
 
-    Y_UNIT_TEST(TestLzq) {
+    Y_UNIT_TEST(TestLzq) { 
         TestCompress<TLzqCompress>();
         TestDecompress<TLzqDecompress>();
     }
 
-    Y_UNIT_TEST(TestLzq151_1) {
+    Y_UNIT_TEST(TestLzq151_1) { 
         TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 1, TLzqCompress::M_0>>();
         TestDecompress<TLzqDecompress>();
     }
 
-    Y_UNIT_TEST(TestLzq151_2) {
+    Y_UNIT_TEST(TestLzq151_2) { 
         TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 2, TLzqCompress::M_100000>>();
         TestDecompress<TLzqDecompress>();
     }
 
-    Y_UNIT_TEST(TestLzq151_3) {
+    Y_UNIT_TEST(TestLzq151_3) { 
         TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 3, TLzqCompress::M_1000000>>();
         TestDecompress<TLzqDecompress>();
     }
 
-    Y_UNIT_TEST(TestLzq140_1) {
+    Y_UNIT_TEST(TestLzq140_1) { 
         TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 1, TLzqCompress::M_0>>();
         TestDecompress<TLzqDecompress>();
     }
 
-    Y_UNIT_TEST(TestLzq140_2) {
+    Y_UNIT_TEST(TestLzq140_2) { 
         TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 2, TLzqCompress::M_100000>>();
         TestDecompress<TLzqDecompress>();
     }
 
-    Y_UNIT_TEST(TestLzq140_3) {
+    Y_UNIT_TEST(TestLzq140_3) { 
         TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 3, TLzqCompress::M_1000000>>();
         TestDecompress<TLzqDecompress>();
     }
 
-    Y_UNIT_TEST(TestLz4) {
+    Y_UNIT_TEST(TestLz4) { 
         TestCompress<TLz4Compress>();
         TestDecompress<TLz4Decompress>();
     }
 
-    Y_UNIT_TEST(TestSnappy) {
+    Y_UNIT_TEST(TestSnappy) { 
         TestCompress<TSnappyCompress>();
         TestDecompress<TSnappyDecompress>();
     }
 
-    Y_UNIT_TEST(TestGeneric) {
+    Y_UNIT_TEST(TestGeneric) { 
         TestMixedDecompress<TLzoCompress>();
         TestMixedDecompress<TLzfCompress>();
         TestMixedDecompress<TLzqCompress>();
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TLzTest) {
         TestMixedDecompress<TSnappyCompress>();
     }
 
-    Y_UNIT_TEST(TestDecompressorError) {
+    Y_UNIT_TEST(TestDecompressorError) { 
         TestDecompressError<TLzoDecompress, TLzfCompress>();
         TestDecompressError<TLzfDecompress, TLzqCompress>();
         TestDecompressError<TLzqDecompress, TLz4Compress>();
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(TLzTest) {
         TestDecompressError<TMixedDecompress, TBufferedOutput>();
     }
 
-    Y_UNIT_TEST(TestFactory) {
+    Y_UNIT_TEST(TestFactory) { 
         TStringStream ss;
 
         {
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(TLzTest) {
             c.Finish();
         }
 
-        TAutoPtr<IInputStream> is(OpenOwnedLzDecompressor(new TStringInput(ss.Str())));
+        TAutoPtr<IInputStream> is(OpenOwnedLzDecompressor(new TStringInput(ss.Str()))); 
 
         UNIT_ASSERT_EQUAL(is->ReadAll(), "123456789");
     }

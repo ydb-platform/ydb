@@ -18,7 +18,7 @@
 
 #else
 
-#define UDF_VERIFY Y_VERIFY_DEBUG
+#define UDF_VERIFY Y_VERIFY_DEBUG 
 #define UDF_ALWAYS_INLINE   Y_FORCE_INLINE
 
 #endif
@@ -41,7 +41,7 @@ inline void IBoxedValue1::UnRef() noexcept
     if (Refs_ < 0)
         return;
 #endif
-    Y_VERIFY_DEBUG(Refs_ > 0);
+    Y_VERIFY_DEBUG(Refs_ > 0); 
     if (!--Refs_)
         delete this;
 }

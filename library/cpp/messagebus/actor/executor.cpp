@@ -178,7 +178,7 @@ void TExecutor::Init() {
 
     AtomicSet(ExitWorkers, 0);
 
-    Y_VERIFY(Config.WorkerCount > 0);
+    Y_VERIFY(Config.WorkerCount > 0); 
 
     for (size_t i = 0; i < Config.WorkerCount; i++) {
         WorkerThreads.push_back(new TExecutorWorker(this));
@@ -215,7 +215,7 @@ void TExecutor::EnqueueWork(TArrayRef<IWorkItem* const> wis) {
         return;
 
     if (Y_UNLIKELY(AtomicGet(ExitWorkers) != 0)) {
-        Y_VERIFY(WorkItems.Empty(), "executor %s: cannot add tasks after queue shutdown", Config.Name);
+        Y_VERIFY(WorkItems.Empty(), "executor %s: cannot add tasks after queue shutdown", Config.Name); 
     }
 
     TWhatThreadDoesPushPop pp("executor: EnqueueWork");
@@ -319,7 +319,7 @@ void TExecutor::ProcessWorkQueueHere() {
 }
 
 void TExecutor::RunWorker() {
-    Y_VERIFY(!ThreadCurrentExecutor, "state check");
+    Y_VERIFY(!ThreadCurrentExecutor, "state check"); 
     ThreadCurrentExecutor = this;
 
     SetCurrentThreadName("wrkr");

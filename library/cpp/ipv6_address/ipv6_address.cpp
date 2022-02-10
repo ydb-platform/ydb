@@ -169,11 +169,11 @@ void TIpv6Address::ToSockaddrAndSocklen(sockaddr_in& sockAddrIPv4,
         sockAddrSize = sizeof(sockAddrIPv6);
         sockAddrPtr = reinterpret_cast<sockaddr*>(&sockAddrIPv6);
     } else
-        Y_VERIFY(false);
+        Y_VERIFY(false); 
 }
 
 void TIpv6Address::ToInAddr(in_addr& Addr4) const {
-    Y_VERIFY(Type_ == TIpv6Address::Ipv4);
+    Y_VERIFY(Type_ == TIpv6Address::Ipv4); 
 
     Zero(Addr4);
     ui32 Value = GetLow(Ip);
@@ -182,7 +182,7 @@ void TIpv6Address::ToInAddr(in_addr& Addr4) const {
     Addr4.s_addr = SwapBytes(Value);
 }
 void TIpv6Address::ToIn6Addr(in6_addr& Addr6) const {
-    Y_VERIFY(Type_ == TIpv6Address::Ipv6);
+    Y_VERIFY(Type_ == TIpv6Address::Ipv6); 
 
     Zero(Addr6);
     ui64 Raw[2] = {GetHigh(Ip), GetLow(Ip)};
@@ -237,7 +237,7 @@ TIpv6Address TIpv6Address::Normalized() const noexcept {
         return *this;
 
     TIpv6Address Result = TryToExtractIpv4From6();
-    Y_VERIFY(Result.IsNull() == false);
+    Y_VERIFY(Result.IsNull() == false); 
     return Result;
 }
 
@@ -369,7 +369,7 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
 
     // ---------------------------------------------------------------------
 
-    const size_t ColPos = RawStr.find(':');
+    const size_t ColPos = RawStr.find(':'); 
     if (ColPos != TString::npos) {
         // host:port
         // ipv4:port

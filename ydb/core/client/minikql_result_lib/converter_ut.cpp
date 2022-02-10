@@ -10,9 +10,9 @@ namespace NKikimr {
 
 using namespace NResultLib;
 
-Y_UNIT_TEST_SUITE(TMiniKQLResultConverterTest) {
+Y_UNIT_TEST_SUITE(TMiniKQLResultConverterTest) { 
 
-Y_UNIT_TEST(TTestWithSimpleProgram) {
+Y_UNIT_TEST(TTestWithSimpleProgram) { 
     TPortManager pm;
     ui16 port = pm.GetPort(2134);
     auto settings = Tests::TServerSettings(port);

@@ -301,7 +301,7 @@ class TRealBlockDevice : public IBlockDevice {
         void Exec() {
             bool isOk = SetHighestThreadPriority();
             // TODO: ckeck isOk
-            Y_UNUSED(isOk);
+            Y_UNUSED(isOk); 
 
             TAsyncIoOperationResult events[MaxEvents];
 
@@ -933,7 +933,7 @@ protected:
 
     void PreadAsync(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId,
             NWilson::TTraceId *traceId) override {
-        Y_VERIFY(completionAction);
+        Y_VERIFY(completionAction); 
         if (!IsInitialized) {
             completionAction->Release(ActorSystem);
             return;
@@ -953,7 +953,7 @@ protected:
 
     void PwriteAsync(const void *data, ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId,
             NWilson::TTraceId *traceId) override {
-        Y_VERIFY(completionAction);
+        Y_VERIFY(completionAction); 
         if (!IsInitialized) {
             completionAction->Release(ActorSystem);
             return;
@@ -972,7 +972,7 @@ protected:
     }
 
     void FlushAsync(TCompletionAction *completionAction, TReqId reqId) override {
-        Y_VERIFY(completionAction);
+        Y_VERIFY(completionAction); 
         if (!IsInitialized) {
             completionAction->Release(ActorSystem);
             return;
@@ -1014,7 +1014,7 @@ protected:
     }
 
     void TrimAsync(ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
-        Y_VERIFY(completionAction);
+        Y_VERIFY(completionAction); 
         if (!IsInitialized || QuitCounter.IsBlocked()) {
             return;
         }

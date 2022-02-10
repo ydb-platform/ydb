@@ -23,7 +23,7 @@ private:
 
 public:
     TMappedFile() {
-        Map_ = nullptr;
+        Map_ = nullptr; 
     }
 
     ~TMappedFile() {
@@ -31,7 +31,7 @@ public:
     }
 
     explicit TMappedFile(const TString& name) {
-        Map_ = nullptr;
+        Map_ = nullptr; 
         init(name, TFileMap::oRdOnly);
     }
 
@@ -51,7 +51,7 @@ public:
         if (Map_) {
             Map_->Unmap();
             delete Map_;
-            Map_ = nullptr;
+            Map_ = nullptr; 
         }
     }
 
@@ -60,7 +60,7 @@ public:
     }
 
     void* getData(size_t pos = 0) const {
-        Y_ASSERT(!Map_ || (pos <= getSize()));
+        Y_ASSERT(!Map_ || (pos <= getSize())); 
         return (Map_ ? (void*)((unsigned char*)Map_->Ptr() + pos) : nullptr);
     }
 

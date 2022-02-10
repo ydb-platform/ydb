@@ -2,33 +2,33 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
-#include <util/generic/utility.h>
+#include <util/generic/utility.h> 
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-#include <util/memory/blob.h>
-#include <util/memory/tempbuf.h>
-#include <util/stream/input.h>
-#include <util/stream/length.h>
-#include <util/stream/mem.h>
-#include <util/stream/output.h>
-#include <util/stream/zlib.h>
-#include <util/system/byteorder.h>
-#include <util/ysaveload.h>
+#include <util/memory/blob.h> 
+#include <util/memory/tempbuf.h> 
+#include <util/stream/input.h> 
+#include <util/stream/length.h> 
+#include <util/stream/mem.h> 
+#include <util/stream/output.h> 
+#include <util/stream/zlib.h> 
+#include <util/system/byteorder.h> 
+#include <util/ysaveload.h> 
 
 template <class T>
-static inline void ESSave(IOutputStream* out, const T& t_in) {
+static inline void ESSave(IOutputStream* out, const T& t_in) { 
     T t = HostToLittle(t_in);
 
     out->Write((const void*)&t, sizeof(t));
 }
 
-static inline void ESSave(IOutputStream* out, const TString& s) {
+static inline void ESSave(IOutputStream* out, const TString& s) { 
     ESSave(out, (ui32) s.size());
     out->Write(s.data(), s.size());
 }
 
 template <class T>
-static inline T ESLoad(IInputStream* in) {
+static inline T ESLoad(IInputStream* in) { 
     T t = T();
 
     if (in->Load(&t, sizeof(t)) != sizeof(t)) {
@@ -39,7 +39,7 @@ static inline T ESLoad(IInputStream* in) {
 }
 
 template <>
-inline TString ESLoad<TString>(IInputStream* in) {
+inline TString ESLoad<TString>(IInputStream* in) { 
     size_t len = ESLoad<ui32>(in);
     TString ret;
     TTempBuf tmp;
@@ -69,7 +69,7 @@ namespace {
         {
         }
 
-        inline TArchiveRecordDescriptor(IInputStream* in)
+        inline TArchiveRecordDescriptor(IInputStream* in) 
             : Off_(ESLoad<ui64>(in))
             , Len_(ESLoad<ui64>(in))
             , Name_(ESLoad<TString>(in))
@@ -78,7 +78,7 @@ namespace {
 
         inline ~TArchiveRecordDescriptor() = default;
 
-        inline void SaveTo(IOutputStream* out) const {
+        inline void SaveTo(IOutputStream* out) const { 
             ESSave(out, Off_);
             ESSave(out, Len_);
             ESSave(out, Name_);
@@ -109,7 +109,7 @@ class TArchiveWriter::TImpl {
     using TDict = THashMap<TString, TArchiveRecordDescriptorRef>;
 
 public:
-    inline TImpl(IOutputStream& out, bool compress)
+    inline TImpl(IOutputStream& out, bool compress) 
         : Off_(0)
         , Out_(&out)
         , UseCompression(compress)
@@ -123,15 +123,15 @@ public:
     }
 
     inline void Finish() {
-        TCountingOutput out(Out_);
+        TCountingOutput out(Out_); 
 
         {
             TZLibCompress compress(&out);
 
             ESSave(&compress, (ui32)Dict_.size());
 
-            for (const auto& kv : Dict_) {
-                kv.second->SaveTo(&compress);
+            for (const auto& kv : Dict_) { 
+                kv.second->SaveTo(&compress); 
             }
 
             ESSave(&compress, static_cast<ui8>(UseCompression));
@@ -139,15 +139,15 @@ public:
             compress.Finish();
         }
 
-        ESSave(Out_, out.Counter());
+        ESSave(Out_, out.Counter()); 
 
         Out_->Flush();
     }
 
-    inline void Add(const TString& key, IInputStream* src) {
+    inline void Add(const TString& key, IInputStream* src) { 
         Y_ENSURE(!Dict_.contains(key), "key " << key.data() << " already stored");
 
-        TCountingOutput out(Out_);
+        TCountingOutput out(Out_); 
         if (UseCompression) {
             TZLibCompress compress(&out);
             TransferData(src, &compress);
@@ -166,10 +166,10 @@ public:
             out.Finish();
         }
 
-        TArchiveRecordDescriptorRef descr(new TArchiveRecordDescriptor(Off_, out.Counter(), key));
+        TArchiveRecordDescriptorRef descr(new TArchiveRecordDescriptor(Off_, out.Counter(), key)); 
 
         Dict_[key] = descr;
-        Off_ += out.Counter();
+        Off_ += out.Counter(); 
     }
 
     inline void AddSynonym(const TString& existingKey, const TString& newKey) {
@@ -184,12 +184,12 @@ public:
 
 private:
     ui64 Off_;
-    IOutputStream* Out_;
+    IOutputStream* Out_; 
     TDict Dict_;
     const bool UseCompression;
 };
 
-TArchiveWriter::TArchiveWriter(IOutputStream* out, bool compress)
+TArchiveWriter::TArchiveWriter(IOutputStream* out, bool compress) 
     : Impl_(new TImpl(*out, compress))
 {
 }
@@ -214,7 +214,7 @@ void TArchiveWriter::Finish() {
     }
 }
 
-void TArchiveWriter::Add(const TString& key, IInputStream* src) {
+void TArchiveWriter::Add(const TString& key, IInputStream* src) { 
     Y_ENSURE(Impl_.Get(), "archive already closed");
 
     Impl_->Add(key, src);
@@ -287,8 +287,8 @@ public:
             Recs_.push_back(descr);
             Dict_[descr->Name()] = descr;
         }
-        Sort(Recs_.begin(), Recs_.end(), [](const auto& lhs, const auto& rhs) -> bool {
-            return lhs->Offset() < rhs->Offset();
+        Sort(Recs_.begin(), Recs_.end(), [](const auto& lhs, const auto& rhs) -> bool { 
+            return lhs->Offset() < rhs->Offset(); 
         });
 
         try {
@@ -311,11 +311,11 @@ public:
         ythrow yexception() << "incorrect index";
     }
 
-    inline bool Has(const TStringBuf key) const {
+    inline bool Has(const TStringBuf key) const { 
         return Dict_.contains(key);
     }
 
-    inline TAutoPtr<IInputStream> ObjectByKey(const TStringBuf key) const {
+    inline TAutoPtr<IInputStream> ObjectByKey(const TStringBuf key) const { 
         TBlob subBlob = BlobByKey(key);
 
         if (UseDecompression) {
@@ -325,7 +325,7 @@ public:
         }
     }
 
-    inline TBlob ObjectBlobByKey(const TStringBuf key) const {
+    inline TBlob ObjectBlobByKey(const TStringBuf key) const { 
         TBlob subBlob = BlobByKey(key);
 
         if (UseDecompression) {
@@ -336,8 +336,8 @@ public:
         }
     }
 
-    inline TBlob BlobByKey(const TStringBuf key) const {
-        const auto it = Dict_.find(key);
+    inline TBlob BlobByKey(const TStringBuf key) const { 
+        const auto it = Dict_.find(key); 
 
         Y_ENSURE(it != Dict_.end(), "key " << key.data() << " not found");
 
@@ -377,19 +377,19 @@ TString TArchiveReader::KeyByIndex(size_t n) const {
     return Impl_->KeyByIndex(n);
 }
 
-bool TArchiveReader::Has(const TStringBuf key) const {
+bool TArchiveReader::Has(const TStringBuf key) const { 
     return Impl_->Has(key);
 }
 
-TAutoPtr<IInputStream> TArchiveReader::ObjectByKey(const TStringBuf key) const {
+TAutoPtr<IInputStream> TArchiveReader::ObjectByKey(const TStringBuf key) const { 
     return Impl_->ObjectByKey(key);
 }
 
-TBlob TArchiveReader::ObjectBlobByKey(const TStringBuf key) const {
+TBlob TArchiveReader::ObjectBlobByKey(const TStringBuf key) const { 
     return Impl_->ObjectBlobByKey(key);
 }
 
-TBlob TArchiveReader::BlobByKey(const TStringBuf key) const {
+TBlob TArchiveReader::BlobByKey(const TStringBuf key) const { 
     return Impl_->BlobByKey(key);
 }
 

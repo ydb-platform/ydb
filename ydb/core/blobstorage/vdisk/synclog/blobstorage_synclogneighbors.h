@@ -37,7 +37,7 @@ namespace NKikimr {
                     return Sprintf("{SyncedLsn: %" PRIu64 " LockedLsn: %" PRIu64 "}", SyncedLsn, LockedLsn);
                 }
 
-                TSyncPos(IInputStream &) {
+                TSyncPos(IInputStream &) { 
                     Y_FAIL("Not supported");
                 }
             };
@@ -68,7 +68,7 @@ namespace NKikimr {
                 if (Neighbors.GetTotalDisks() == 1) {
                     return (ui64)-1;
                 }
-                Y_VERIFY_DEBUG(CheckSyncPosQueue());
+                Y_VERIFY_DEBUG(CheckSyncPosQueue()); 
                 // TAvlTree doesn't have const Begin, se we have to remove 'const' qualifier
                 ui64 result = (const_cast<TSyncLogNeighbors*>(this))->SyncPosQueue.Begin()->SyncedLsn;
                 return result;
@@ -77,7 +77,7 @@ namespace NKikimr {
             void Lock(const TVDiskID &vdisk, ui64 lsn);
             void Unlock(const TVDiskID &vdisk);
             bool IsLocked(const TVDiskID &vdisk);
-            void OutputHtml(IOutputStream &str,
+            void OutputHtml(IOutputStream &str, 
                             const TBlobStorageGroupInfo &ginfo,
                             TEvInterconnect::TEvNodesInfo::TPtr nodesInfo);
 
@@ -101,7 +101,7 @@ namespace NKikimr {
                 ref.Unlink();
                 SyncPosQueue.Insert(&ref);
 
-                Y_VERIFY_DEBUG(CheckSyncPosQueue());
+                Y_VERIFY_DEBUG(CheckSyncPosQueue()); 
             }
 
             ui64 GetSyncedLsn(const TVDiskID &vdisk) {
@@ -128,7 +128,7 @@ namespace NKikimr {
                         SyncPosQueue.Insert(&(it->Get()));
                     }
                 }
-                Y_VERIFY_DEBUG(CheckSyncPosQueue());
+                Y_VERIFY_DEBUG(CheckSyncPosQueue()); 
             }
 
         private:

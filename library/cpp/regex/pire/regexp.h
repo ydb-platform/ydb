@@ -58,8 +58,8 @@ namespace NRegExp {
                 size_t outWritten = 0;
                 int recodeRes = RecodeToUnicode(opts.Charset, regexp.data(), ucs4.data(),
                                                 regexp.size(), regexp.size(), inRead, outWritten);
-                Y_ASSERT(recodeRes == RECODE_OK);
-                Y_ASSERT(outWritten < ucs4.size());
+                Y_ASSERT(recodeRes == RECODE_OK); 
+                Y_ASSERT(outWritten < ucs4.size()); 
                 ucs4[outWritten] = 0;
 
                 lexer.Assign(ucs4.begin(),

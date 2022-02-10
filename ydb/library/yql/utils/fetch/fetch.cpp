@@ -46,18 +46,18 @@ public:
             TStringOutput rqs(req);
             TStringBuf userAgent = "User-Agent: Mozilla/5.0 (compatible; YQL/1.0)";
 
-            IOutputStream::TPart request[] = {
-                IOutputStream::TPart("GET ", 4),
+            IOutputStream::TPart request[] = { 
+                IOutputStream::TPart("GET ", 4), 
                 IOutputStream::TPart(path.data(), path.size()),
-                IOutputStream::TPart(" HTTP/1.1", 9),
-                IOutputStream::TPart::CrLf(),
-                IOutputStream::TPart("Host: ", 6),
+                IOutputStream::TPart(" HTTP/1.1", 9), 
+                IOutputStream::TPart::CrLf(), 
+                IOutputStream::TPart("Host: ", 6), 
                 IOutputStream::TPart(host.data(), host.size()),
-                IOutputStream::TPart::CrLf(),
+                IOutputStream::TPart::CrLf(), 
                 IOutputStream::TPart(userAgent.data(), userAgent.size()),
-                IOutputStream::TPart::CrLf(),
+                IOutputStream::TPart::CrLf(), 
             };
-            rqs.Write(request, Y_ARRAY_SIZE(request));
+            rqs.Write(request, Y_ARRAY_SIZE(request)); 
             if (!additionalHeaders.Empty()) {
                 additionalHeaders.OutTo(&rqs);
             }
@@ -75,10 +75,10 @@ public:
         }
 
         {
-            THttpOutput ho(Ssl ? (IOutputStream*)Ssl.Get() : (IOutputStream*)SocketOutput.Get());
+            THttpOutput ho(Ssl ? (IOutputStream*)Ssl.Get() : (IOutputStream*)SocketOutput.Get()); 
             (ho << req).Finish();
         }
-        HttpInput.Reset(new THttpInput(Ssl ? (IInputStream*)Ssl.Get() : (IInputStream*)SocketInput.Get()));
+        HttpInput.Reset(new THttpInput(Ssl ? (IInputStream*)Ssl.Get() : (IInputStream*)SocketInput.Get())); 
     }
 
     THttpInput& GetStream() override {

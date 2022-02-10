@@ -176,7 +176,7 @@ TIntervals MakeIntervalSet(ui64 n, ui32 len) {
     template <class TIntervals, const char* type_name>      \
     void TTestCase##N<TIntervals, type_name>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
-Y_UNIT_TEST_SUITE(TIntervalSetTest) {
+Y_UNIT_TEST_SUITE(TIntervalSetTest) { 
     MY_UNIT_TEST(TestEmpty) {
         TIntervals a;
         UNIT_ASSERT_EQUAL(a.IsEmpty(), true);

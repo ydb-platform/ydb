@@ -25,7 +25,7 @@ namespace NScheme {
 
 namespace NTable {
 
-    using TRawVals = TArrayRef<const TRawTypeValue>;
+    using TRawVals = TArrayRef<const TRawTypeValue>; 
 
     class TEpoch : public TTypeSafeAlias<TEpoch, i64> {
     public:

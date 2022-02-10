@@ -10,8 +10,8 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(ArchiveLoaderTests) {
-    Y_UNIT_TEST(BaseTest) {
+Y_UNIT_TEST_SUITE(ArchiveLoaderTests) { 
+    Y_UNIT_TEST(BaseTest) { 
         TDummyTrie trie = LoadTrieFromArchive<TDummyTrie>("/dummy.trie", DATA, true);
         UNIT_ASSERT_EQUAL(trie.Size(), 3);
 

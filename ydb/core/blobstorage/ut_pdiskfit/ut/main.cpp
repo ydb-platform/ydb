@@ -4,7 +4,7 @@
 
 #include <util/system/sanitizers.h>
 
-class TWatchdogThread : public ISimpleThread {
+class TWatchdogThread : public ISimpleThread { 
     TMutex Mutex;
     TCondVar Stop;
     TAtomic QuitFlag = 0;
@@ -30,8 +30,8 @@ public:
     }
 };
 
-Y_UNIT_TEST_SUITE(TPDiskFIT) {
-    Y_UNIT_TEST(Basic) {
+Y_UNIT_TEST_SUITE(TPDiskFIT) { 
+    Y_UNIT_TEST(Basic) { 
         TWatchdogThread watchdog;
         watchdog.Start();
         TPDiskFailureInjectionTest test;

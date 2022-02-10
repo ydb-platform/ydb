@@ -17,7 +17,7 @@ namespace NTest {
     struct TSponge {
         TSponge(ESponge kind) : Kind(kind) { }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const noexcept 
         {
             out
                 << "Sponge{"

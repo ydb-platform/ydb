@@ -4,9 +4,9 @@
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
-    Y_UNIT_TEST_SUITE(TLogoBlobTest) {
+    Y_UNIT_TEST_SUITE(TLogoBlobTest) { 
 
-        Y_UNIT_TEST(LogoBlobParse) {
+        Y_UNIT_TEST(LogoBlobParse) { 
             TLogoBlobID id;
             TString explanation;
             bool res = false;
@@ -24,7 +24,7 @@ namespace NKikimr {
             UNIT_ASSERT(res);
         }
 
-        Y_UNIT_TEST(LogoBlobCompare) {
+        Y_UNIT_TEST(LogoBlobCompare) { 
             bool res = false;
 
             const TLogoBlobID left(1, 0x30002C2D, 0x50005F6F, 1, 0x3333, 0x0001A01B);
@@ -73,7 +73,7 @@ namespace NKikimr {
             UNIT_ASSERT(left.IsSameBlob(TLogoBlobID(1, 0x30002C2D, 0x50005F6F, 1, 0x3333, 0x0001A01B, 1)));
         }
 
-        Y_UNIT_TEST(LogoBlobSort) {
+        Y_UNIT_TEST(LogoBlobSort) { 
             TVector<TLogoBlobID> vec;
             vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 110, 20));
             vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 109, 21));
@@ -113,8 +113,8 @@ namespace NKikimr {
         }
     }
 
-    Y_UNIT_TEST_SUITE(TLogoBlobIdHashTest) {
-        Y_UNIT_TEST(SimpleTest) {
+    Y_UNIT_TEST_SUITE(TLogoBlobIdHashTest) { 
+        Y_UNIT_TEST(SimpleTest) { 
     //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
             UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash());
             UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15).Hash());
@@ -124,7 +124,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16).Hash());
         }
 
-        Y_UNIT_TEST(SimpleTestPartIdDoesNotMatter) {
+        Y_UNIT_TEST(SimpleTestPartIdDoesNotMatter) { 
     //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId
             ui32 partId = 1;
             UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15, partId).Hash());
@@ -151,7 +151,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16, partId).Hash());
         }
 
-         Y_UNIT_TEST(SimpleTestBlobSizeDoesNotMatter) {
+         Y_UNIT_TEST(SimpleTestBlobSizeDoesNotMatter) { 
     //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId
             ui32 partId = 1;
             UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 32423523, 15, partId).Hash());
@@ -162,7 +162,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 58435455, 16, partId).Hash());
         }
 
-        Y_UNIT_TEST(SimpleTestWithDifferentTabletId) {
+        Y_UNIT_TEST(SimpleTestWithDifferentTabletId) { 
     //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
             UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash());
             UNIT_ASSERT_VALUES_EQUAL(0x13330eae, TLogoBlobID(43, 1, 1, 0, 100, 15).Hash());
@@ -173,7 +173,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(0x13ab0ba4, TLogoBlobID(47, 1, 1, 0, 100, 15).Hash());
         }
 
-        Y_UNIT_TEST(SimpleTestWithDifferentSteps) {
+        Y_UNIT_TEST(SimpleTestWithDifferentSteps) { 
     //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
             UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash());
             UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15).Hash());
@@ -183,7 +183,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(0x7570c6bf, TLogoBlobID(42, 6, 1, 0, 100, 15).Hash());
         }
 
-        Y_UNIT_TEST(SimpleTestWithDifferentChannel) {
+        Y_UNIT_TEST(SimpleTestWithDifferentChannel) { 
     //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
             UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash());
             UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15).Hash());

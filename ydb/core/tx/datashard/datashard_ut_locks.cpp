@@ -294,7 +294,7 @@ namespace NTest {
 }
 
 // TODO: correctness, times
-Y_UNIT_TEST_SUITE(TDataShardLocksTest) {
+Y_UNIT_TEST_SUITE(TDataShardLocksTest) { 
 
 Y_UNIT_TEST(MvccTestOooTxDoesntBreakPrecedingReadersLocks) {
     NTest::TLockTester tester;
@@ -471,7 +471,7 @@ Y_UNIT_TEST(MvccTestAlreadyBrokenLocks) {
     }
 }
 
-Y_UNIT_TEST(Points_OneTx) {
+Y_UNIT_TEST(Points_OneTx) { 
     NTest::TLockTester tester;
 
     ui32 numVals = 100 * 1000;
@@ -486,7 +486,7 @@ Y_UNIT_TEST(Points_OneTx) {
 }
 
 // 100000 tx, 1 points per tx
-Y_UNIT_TEST(Points_ManyTx) {
+Y_UNIT_TEST(Points_ManyTx) { 
     NTest::TLockTester tester;
 
     ui32 numVals = 100 * 1000;
@@ -505,7 +505,7 @@ Y_UNIT_TEST(Points_ManyTx) {
 // TODO: 1000 tx, 100 points per tx
 // TODO: 10000 tx, 10 points per tx
 
-Y_UNIT_TEST(Points_ManyTx_BreakAll) {
+Y_UNIT_TEST(Points_ManyTx_BreakAll) { 
     NTest::TLockTester tester;
 
     ui32 numVals = 100 * 1000;
@@ -529,7 +529,7 @@ Y_UNIT_TEST(Points_ManyTx_BreakAll) {
     }
 }
 
-Y_UNIT_TEST(Points_ManyTx_RemoveAll) {
+Y_UNIT_TEST(Points_ManyTx_RemoveAll) { 
     NTest::TLockTester tester;
 
     ui32 numVals = 100 * 1000;
@@ -552,7 +552,7 @@ Y_UNIT_TEST(Points_ManyTx_RemoveAll) {
     }
 }
 
-Y_UNIT_TEST(Points_ManyTx_BreakHalf_RemoveHalf) {
+Y_UNIT_TEST(Points_ManyTx_BreakHalf_RemoveHalf) { 
     NTest::TLockTester tester;
 
     ui32 numVals = 100 * 1000;

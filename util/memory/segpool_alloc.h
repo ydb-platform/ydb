@@ -45,40 +45,40 @@ struct segpool_alloc {
     segpool_alloc()
         : pool(nullptr)
     {
-        Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
+        Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0); 
     }
     segpool_alloc(pool_type* p)
         : pool(p)
     {
-        Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
+        Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0); 
     }
     segpool_alloc(const segpool_alloc& a)
         : pool(a.pool)
     {
-        Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
+        Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0); 
     }
     template <class _Tp1>
     segpool_alloc(const segpool_alloc<_Tp1>& a)
         : pool(a.pool)
     {
-        Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
+        Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0); 
     }
     _Tp* allocate(size_t __n) {
         if (!pool) {
             _Tp* data = (_Tp*)malloc(__n * sizeof(_Tp));
-            Y_IF_DEBUG(if (data) malloc_count++);
+            Y_IF_DEBUG(if (data) malloc_count++); 
             return data;
         }
         _Tp* data = (_Tp*)pool->append(nullptr, __n * sizeof(_Tp));
-        Y_IF_DEBUG(pool_count++);
+        Y_IF_DEBUG(pool_count++); 
         return data;
     }
     void deallocate(pointer __p, size_t /*__n*/) {
         if (!pool) {
-            Y_IF_DEBUG(malloc_free_count++);
+            Y_IF_DEBUG(malloc_free_count++); 
             free(__p);
         } else {
-            Y_IF_DEBUG(pool_free_count++);
+            Y_IF_DEBUG(pool_free_count++); 
             ;
         }
     }

@@ -16,7 +16,7 @@ using TCodecSig = NScheme::TCodecSig;
 using TCodecType = NScheme::TCodecType;
 using TDataRef = NScheme::TDataRef;
 
-Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
+Y_UNIT_TEST_SUITE(TTypeCodecsTest) { 
 
     void Metrics(const TVector<TDataRef>& values, const ICodec* codec) {
         TAutoPtr<TFlatBlobDataOutputStream> output(new TFlatBlobDataOutputStream());
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         start = TInstant::Now();
         for (size_t i = 0, size = values.size(); i != size; ++i) {
             auto value = reading->GetValue(i);
-            Y_UNUSED(value);
+            Y_UNUSED(value); 
         }
         Cerr << "Read by index: " << TInstant::Now() - start << Endl;
 
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         start = TInstant::Now();
         for (size_t i = 0; i != values.size(); ++i) {
             auto value = iter->Next();
-            Y_UNUSED(value);
+            Y_UNUSED(value); 
         }
         Cerr << "Iterate: " << TInstant::Now() - start << Endl;
     }
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         Metrics(values, codec);
     };
 
-    Y_UNIT_TEST(TestBoolCodec) {
+    Y_UNIT_TEST(TestBoolCodec) { 
         static const bool VALUE_FALSE = false;
         static const bool VALUE_TRUE = true;
 
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         TestImpl(values, codec);
     }
 
-    Y_UNIT_TEST(TestFixedLenCodec) {
+    Y_UNIT_TEST(TestFixedLenCodec) { 
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
 
         TVector<TDataRef> values;
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         TestImpl(values, codec);
     }
 
-    Y_UNIT_TEST(TestVarLenCodec) {
+    Y_UNIT_TEST(TestVarLenCodec) { 
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
 
         TReallyFastRng32 rand(100500);
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         TestImpl(values, codec);
     }
 
-    Y_UNIT_TEST(TestVarIntCodec) {
+    Y_UNIT_TEST(TestVarIntCodec) { 
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
         TReallyFastRng32 rand(100500);
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         TestImpl(values, codec);
     }
 
-    Y_UNIT_TEST(TestZigZagCodec) {
+    Y_UNIT_TEST(TestZigZagCodec) { 
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
         TReallyFastRng32 rand(100500);
@@ -224,12 +224,12 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         TestImpl(values, codec);
     }
 
-    Y_UNIT_TEST(TestDeltaVarIntCodecAndRev) {
+    Y_UNIT_TEST(TestDeltaVarIntCodecAndRev) { 
         TestDeltaVarIntCodecImpl(TCodecType::DeltaVarInt, false);
         TestDeltaVarIntCodecImpl(TCodecType::DeltaRevVarInt, true);
     }
 
-    Y_UNIT_TEST(TestDeltaZigZagCodec) {
+    Y_UNIT_TEST(TestDeltaZigZagCodec) { 
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
 
         TReallyFastRng32 rand(100500);

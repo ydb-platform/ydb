@@ -9,8 +9,8 @@ TSizedCache::TSizedCache(size_t maxEntries, ui64 maxSize)
     , MaxEntries(maxEntries)
     , MaxSize(maxSize)
 {
-    Y_ASSERT(MaxEntries > 0);
-    Y_ASSERT(MaxSize > 0);
+    Y_ASSERT(MaxEntries > 0); 
+    Y_ASSERT(MaxSize > 0); 
 }
 
 void TSizedCache::Put(const TIntrusivePtr<ICacheObj>& obj, bool lock) {
@@ -38,9 +38,9 @@ void TSizedCache::Release(const TString& name, bool remove) {
     auto guard = Guard(Lock);
     auto it = Cache.FindWithoutPromote(name);
     if (it == Cache.End()) {
-        Y_ASSERT(false);
+        Y_ASSERT(false); 
     } else {
-        Y_ASSERT(it->Locks);
+        Y_ASSERT(it->Locks); 
         if (it->Locks) {
             --it->Locks;
         }
@@ -66,7 +66,7 @@ TIntrusivePtr<TSizedCache::ICacheObj> TSizedCache::Revoke(const TString& name) {
     TIntrusivePtr<TSizedCache::ICacheObj> res;
     if (it != Cache.End()) {
         res = it->Obj;
-        Y_ASSERT(CurrentSize >= res->GetSize());
+        Y_ASSERT(CurrentSize >= res->GetSize()); 
         CurrentSize -= res->GetSize();
         Cache.Erase(it);
     }
@@ -85,7 +85,7 @@ TMaybe<ui32> TSizedCache::GetLocks(const TString& name) const {
 
 void TSizedCache::Remove(TCache::TIterator it) {
     TIntrusivePtr<TSizedCache::ICacheObj> obj = it->Obj;
-    Y_ASSERT(CurrentSize >= obj->GetSize());
+    Y_ASSERT(CurrentSize >= obj->GetSize()); 
     CurrentSize -= obj->GetSize();
     Cache.Erase(it);
     // Dismissing may take a long time. Unlock temporary

@@ -10,17 +10,17 @@
 // Returns pointer to the end of the result string
 char* CGIEscape(char* to, const char* from);
 char* CGIEscape(char* to, const char* from, size_t len);
-inline char* CGIEscape(char* to, const TStringBuf from) {
+inline char* CGIEscape(char* to, const TStringBuf from) { 
     return CGIEscape(to, from.data(), from.size());
 }
 void CGIEscape(TString& url);
 TString CGIEscapeRet(const TStringBuf url);
 TString& AppendCgiEscaped(const TStringBuf value, TString& to);
 
-inline TStringBuf CgiEscapeBuf(char* to, const TStringBuf from) {
+inline TStringBuf CgiEscapeBuf(char* to, const TStringBuf from) { 
     return TStringBuf(to, CGIEscape(to, from.data(), from.size()));
 }
-inline TStringBuf CgiEscape(void* tmp, const TStringBuf s) {
+inline TStringBuf CgiEscape(void* tmp, const TStringBuf s) { 
     return CgiEscapeBuf(static_cast<char*>(tmp), s);
 }
 
@@ -33,17 +33,17 @@ char* CGIUnescape(char* to, const char* from, size_t len);
 void CGIUnescape(TString& url);
 TString CGIUnescapeRet(const TStringBuf from);
 
-inline TStringBuf CgiUnescapeBuf(char* to, const TStringBuf from) {
+inline TStringBuf CgiUnescapeBuf(char* to, const TStringBuf from) { 
     return TStringBuf(to, CGIUnescape(to, from.data(), from.size()));
 }
-inline TStringBuf CgiUnescape(void* tmp, const TStringBuf s) {
+inline TStringBuf CgiUnescape(void* tmp, const TStringBuf s) { 
     return CgiUnescapeBuf(static_cast<char*>(tmp), s);
 }
 
 //Quote:
 // Is like CGIEscape, also skips encoding of user-supplied 'safe' characters.
 char* Quote(char* to, const char* from, const char* safe = "/");
-char* Quote(char* to, const TStringBuf s, const char* safe = "/");
+char* Quote(char* to, const TStringBuf s, const char* safe = "/"); 
 void Quote(TString& url, const char* safe = "/");
 
 //UrlEscape:
@@ -63,10 +63,10 @@ void UrlUnescape(TString& url);
 TString UrlUnescapeRet(const TStringBuf from);
 
 //*BufLen: how much characters you should allocate for 'char* to' buffers.
-constexpr size_t CgiEscapeBufLen(const size_t len) noexcept {
+constexpr size_t CgiEscapeBufLen(const size_t len) noexcept { 
     return 3 * len + 1;
 }
 
-constexpr size_t CgiUnescapeBufLen(const size_t len) noexcept {
+constexpr size_t CgiUnescapeBufLen(const size_t len) noexcept { 
     return len + 1;
 }

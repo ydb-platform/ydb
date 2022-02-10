@@ -244,9 +244,9 @@ Function *CreateUseExternalFromGeneratedFunction128(const ICodegen::TPtr& codege
 }
 
 #if !defined(_ubsan_enabled_) && !defined(HAVE_VALGRIND)
-Y_UNIT_TEST_SUITE(TCodegenTests) {
+Y_UNIT_TEST_SUITE(TCodegenTests) { 
 
-    Y_UNIT_TEST(FibNative) {
+    Y_UNIT_TEST(FibNative) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto func = CreateFibFunction(codegen->GetModule(), codegen->GetContext());
         codegen->Verify();
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(24), 46368);
     }
 
-    Y_UNIT_TEST(FibCurrentOS) {
+    Y_UNIT_TEST(FibCurrentOS) { 
         auto codegen = ICodegen::Make(ETarget::CurrentOS);
         auto func = CreateFibFunction(codegen->GetModule(), codegen->GetContext());
         codegen->Verify();
@@ -266,13 +266,13 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(24), 46368);
     }
 
-    Y_UNIT_TEST(BadFib) {
+    Y_UNIT_TEST(BadFib) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto func = CreateBadFibFunction(codegen->GetModule(), codegen->GetContext());
         UNIT_ASSERT_EXCEPTION(codegen->Verify(), yexception);
     }
 
-    Y_UNIT_TEST(FibFromBitCode) {
+    Y_UNIT_TEST(FibFromBitCode) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(24), 46368);
     }
 
-    Y_UNIT_TEST(LinkWithNativeFunction) {
+    Y_UNIT_TEST(LinkWithNativeFunction) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(3, 4), 14);
     }
 
-    Y_UNIT_TEST(LinkWithGeneratedFunction) {
+    Y_UNIT_TEST(LinkWithGeneratedFunction) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto mulFunc = CreateMulFunction(codegen->GetModule(), codegen->GetContext());
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(3, 4), 25);
     }
 
-    Y_UNIT_TEST(ReuseExternalCode) {
+    Y_UNIT_TEST(ReuseExternalCode) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(3, 4), 25);
     }
 
-    Y_UNIT_TEST(UseObjectReference) {
+    Y_UNIT_TEST(UseObjectReference) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(hw), 12);
     }
 
-    Y_UNIT_TEST(UseNativeFromGeneratedFunction) {
+    Y_UNIT_TEST(UseNativeFromGeneratedFunction) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto func = CreateUseNativeFunction(codegen->GetModule(), codegen->GetContext());
         codegen->AddGlobalMapping("mul", (void*)&mul);
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(3, 4), 12);
     }
 
-    Y_UNIT_TEST(UseExternalFromGeneratedFunction) {
+    Y_UNIT_TEST(UseExternalFromGeneratedFunction) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         UNIT_ASSERT_VALUES_EQUAL(funcPtr(7, 4, 8), 4289);
     }
 
-    Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Compiled) {
+    Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Compiled) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
 #endif
     }
 
-    Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Bitcode) {
+    Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Bitcode) { 
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");

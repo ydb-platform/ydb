@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-Y_UNIT_TEST_SUITE(NProto /* executor binary units */) {
+Y_UNIT_TEST_SUITE(NProto /* executor binary units */) { 
     Y_UNIT_TEST(LargeGlobId)
     {
         NKikimrExecutorFlat::TPageCollection pageCollection;

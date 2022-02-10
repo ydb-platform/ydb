@@ -298,7 +298,7 @@ void THive::Handle(TEvPrivate::TEvProcessPendingOperations::TPtr&) {
 void THive::Handle(TEvHive::TEvBootTablet::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
     TTabletInfo* tablet = FindTablet(tabletId);
-    Y_VERIFY(tablet != nullptr);
+    Y_VERIFY(tablet != nullptr); 
     if (tablet->IsReadyToBoot()) {
         tablet->InitiateBoot();
     }
@@ -831,7 +831,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
     HiveDomain = domainsInfo->GetHiveDomainUid(HiveUid);
     const TDomainsInfo::TDomain& domain = domainsInfo->GetDomain(HiveDomain);
     RootHiveId = domainsInfo->GetHive(domain.DefaultHiveUid);
-    Y_VERIFY(HiveUid != Max<ui32>() && HiveDomain != TDomainsInfo::BadDomainId);
+    Y_VERIFY(HiveUid != Max<ui32>() && HiveDomain != TDomainsInfo::BadDomainId); 
     HiveId = TabletID();
     HiveGeneration = Executor()->Generation();
     RootDomainKey = TSubDomainKey(domain.SchemeRoot, 1);
@@ -850,7 +850,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
 }
 
 void THive::DefaultSignalTabletActive(const TActorContext& ctx) {
-    Y_UNUSED(ctx);
+    Y_UNUSED(ctx); 
 }
 
 

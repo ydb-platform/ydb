@@ -6,7 +6,7 @@
 
 #include "input.h"
 
-class IOutputStream;
+class IOutputStream; 
 
 /**
  * @addtogroup Streams
@@ -18,13 +18,13 @@ class IOutputStream;
  *
  * Derived classes must implement `DoNext` method.
  */
-class IZeroCopyInput: public IInputStream {
+class IZeroCopyInput: public IInputStream { 
 public:
-    IZeroCopyInput() noexcept = default;
-    ~IZeroCopyInput() override;
+    IZeroCopyInput() noexcept = default; 
+    ~IZeroCopyInput() override; 
 
-    IZeroCopyInput(IZeroCopyInput&&) noexcept = default;
-    IZeroCopyInput& operator=(IZeroCopyInput&&) noexcept = default;
+    IZeroCopyInput(IZeroCopyInput&&) noexcept = default; 
+    IZeroCopyInput& operator=(IZeroCopyInput&&) noexcept = default; 
 
     /**
      * Returns the next data chunk from this input stream.
@@ -39,7 +39,7 @@ public:
      */
     template <class T>
     inline size_t Next(T** ptr, size_t len) {
-        Y_ASSERT(ptr);
+        Y_ASSERT(ptr); 
 
         return DoNext((const void**)ptr, len);
     }
@@ -52,7 +52,7 @@ public:
 protected:
     size_t DoRead(void* buf, size_t len) override;
     size_t DoSkip(size_t len) override;
-    ui64 DoReadAll(IOutputStream& out) override;
+    ui64 DoReadAll(IOutputStream& out) override; 
     virtual size_t DoNext(const void** ptr, size_t len) = 0;
 };
 
@@ -61,13 +61,13 @@ protected:
 *
 * Derived classes must implement `DoUndo` method.
 */
-class IZeroCopyInputFastReadTo: public IZeroCopyInput {
+class IZeroCopyInputFastReadTo: public IZeroCopyInput { 
 public:
-    IZeroCopyInputFastReadTo() noexcept = default;
-    ~IZeroCopyInputFastReadTo() override;
+    IZeroCopyInputFastReadTo() noexcept = default; 
+    ~IZeroCopyInputFastReadTo() override; 
 
-    IZeroCopyInputFastReadTo(IZeroCopyInputFastReadTo&&) noexcept = default;
-    IZeroCopyInputFastReadTo& operator=(IZeroCopyInputFastReadTo&&) noexcept = default;
+    IZeroCopyInputFastReadTo(IZeroCopyInputFastReadTo&&) noexcept = default; 
+    IZeroCopyInputFastReadTo& operator=(IZeroCopyInputFastReadTo&&) noexcept = default; 
 
 protected:
     size_t DoReadTo(TString& st, char ch) override;

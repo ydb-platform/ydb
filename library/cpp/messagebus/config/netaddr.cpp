@@ -178,6 +178,6 @@ namespace NBus {
 }
 
 template <>
-void Out<NBus::TNetAddr>(IOutputStream& out, const NBus::TNetAddr& addr) {
+void Out<NBus::TNetAddr>(IOutputStream& out, const NBus::TNetAddr& addr) { 
     Out<NAddr::IRemoteAddr>(out, addr);
 }

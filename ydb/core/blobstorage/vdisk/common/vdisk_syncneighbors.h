@@ -340,7 +340,7 @@ namespace NKikimr {
             }
 
             template <class TPrinter>
-            void OutputHtml(IOutputStream &str, TPrinter &printer, const TString &name, const TString &divClass) const {
+            void OutputHtml(IOutputStream &str, TPrinter &printer, const TString &name, const TString &divClass) const { 
                 str << "\n";
                 HTML(str) {
                     DIV_CLASS (divClass) {
@@ -356,7 +356,7 @@ namespace NKikimr {
             }
 
             template <class TPrinter>
-            void OutputHtmlTable(IOutputStream &str, TPrinter &printer) const {
+            void OutputHtmlTable(IOutputStream &str, TPrinter &printer) const { 
                 TVector<TConstIterator> its;
                 HTML(str) {
                     TABLE_CLASS ("table table-condensed") {

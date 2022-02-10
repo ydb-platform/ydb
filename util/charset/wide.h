@@ -5,12 +5,12 @@
 #include "utf8.h"
 #include "wide_specific.h"
 
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
-#include <util/system/compiler.h>
-#include <util/system/cpu_id.h>
+#include <util/system/compiler.h> 
+#include <util/system/cpu_id.h> 
 #include <util/system/yassert.h>
 
 #include <cstring>
@@ -79,7 +79,7 @@ inline const wchar32* SkipSymbol(const wchar32* begin, const wchar32* end) noexc
 }
 
 inline wchar32 ReadSymbol(const wchar16* begin, const wchar16* end) noexcept {
-    Y_ASSERT(begin < end);
+    Y_ASSERT(begin < end); 
     if (IsW16SurrogateLead(*begin)) {
         if (begin + 1 < end && IsW16SurrogateTail(*(begin + 1)))
             return ::NDetail::ReadSurrogatePair(begin);
@@ -99,10 +99,10 @@ inline wchar32 ReadSymbol(const wchar32* begin, const wchar32* end) noexcept {
 
 //! presuming input data is either big enought of null terminated
 inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin) noexcept {
-    Y_ASSERT(*begin);
+    Y_ASSERT(*begin); 
     if (IsW16SurrogateLead(begin[0])) {
         if (IsW16SurrogateTail(begin[1])) {
-            Y_ASSERT(begin[1] != 0);
+            Y_ASSERT(begin[1] != 0); 
             const wchar32 c = ::NDetail::ReadSurrogatePair(begin);
             begin += 2;
             return c;
@@ -123,7 +123,7 @@ inline wchar32 ReadSymbolAndAdvance(const wchar32*& begin) noexcept {
 }
 
 inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin, const wchar16* end) noexcept {
-    Y_ASSERT(begin < end);
+    Y_ASSERT(begin < end); 
     if (IsW16SurrogateLead(begin[0])) {
         if (begin + 1 != end && IsW16SurrogateTail(begin[1])) {
             const wchar32 c = ::NDetail::ReadSurrogatePair(begin);
@@ -140,7 +140,7 @@ inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin, const wchar16* end) n
 }
 
 inline wchar32 ReadSymbolAndAdvance(const wchar32*& begin, const wchar32* end) noexcept {
-    Y_ASSERT(begin < end);
+    Y_ASSERT(begin < end); 
     return *(begin++);
 }
 
@@ -165,7 +165,7 @@ inline size_t WriteSymbol(wchar32 s, T& dest) noexcept {
 }
 
 inline bool WriteSymbol(wchar32 s, wchar16*& dest, const wchar16* destEnd) noexcept {
-    Y_ASSERT(dest < destEnd);
+    Y_ASSERT(dest < destEnd); 
 
     if (s > 0xFFFF) {
         if (s >= NUnicode::UnicodeInstancesLimit()) {
@@ -190,7 +190,7 @@ inline size_t WriteSymbol(wchar32 s, wchar32*& dest) noexcept {
 }
 
 inline bool WriteSymbol(wchar32 s, wchar32*& dest, const wchar32* destEnd) noexcept {
-    Y_ASSERT(dest < destEnd);
+    Y_ASSERT(dest < destEnd); 
 
     *(dest++) = s;
 
@@ -200,7 +200,7 @@ inline bool WriteSymbol(wchar32 s, wchar32*& dest, const wchar32* destEnd) noexc
 template <class T>
 inline void ::NDetail::WriteSurrogatePair(wchar32 s, T& dest) noexcept {
     const wchar32 LEAD_OFFSET = 0xD800 - (0x10000 >> 10);
-    Y_ASSERT(s > 0xFFFF && s < ::NUnicode::UnicodeInstancesLimit());
+    Y_ASSERT(s > 0xFFFF && s < ::NUnicode::UnicodeInstancesLimit()); 
 
     wchar16 lead = LEAD_OFFSET + (static_cast<wchar16>(s >> 10));
     wchar16 tail = 0xDC00 + static_cast<wchar16>(s & 0x3FF);
@@ -327,7 +327,7 @@ inline TUtf16String UTF8ToWide(const char* text, size_t len) {
     size_t pos = UTF8ToWideImpl<robust>(text, len, w.begin(), written);
     if (pos != len)
         ythrow yexception() << "failed to decode UTF-8 string at pos " << pos << ::NDetail::InStringMsg(text, len);
-    Y_ASSERT(w.size() >= written);
+    Y_ASSERT(w.size() >= written); 
     w.remove(written);
     return w;
 }
@@ -400,7 +400,7 @@ inline void WideToUTF8(const TCharType* text, size_t len, char* dest, size_t& wr
     size_t runeLen;
     for (const TCharType* cur = text; cur != last;) {
         WriteUTF8Char(ReadSymbolAndAdvance(cur, last), runeLen, p);
-        Y_ASSERT(runeLen <= 4);
+        Y_ASSERT(runeLen <= 4); 
         p += runeLen;
     }
     written = p - reinterpret_cast<unsigned char*>(dest);
@@ -414,7 +414,7 @@ inline TStringBuf WideToUTF8(const TWtringBuf src, TString& dst) {
     dst.ReserveAndResize(WideToUTF8BufferSize(src.size()));
     size_t written = 0;
     WideToUTF8(src.data(), src.size(), dst.begin(), written);
-    Y_ASSERT(dst.size() >= written);
+    Y_ASSERT(dst.size() >= written); 
     dst.remove(written);
     return dst;
 }
@@ -423,7 +423,7 @@ inline TString WideToUTF8(const wchar16* text, size_t len) {
     TString s = TString::Uninitialized(WideToUTF8BufferSize(len));
     size_t written = 0;
     WideToUTF8(text, len, s.begin(), written);
-    Y_ASSERT(s.size() >= written);
+    Y_ASSERT(s.size() >= written); 
     s.remove(written);
     return s;
 }
@@ -469,49 +469,49 @@ namespace NDetail {
         return !(reinterpret_cast<TMachineWord>(pointer) & kMachineWordAlignmentMask);
     }
 
-    template <typename T>
+    template <typename T> 
     inline T* AlignToMachineWord(T* pointer) {
         return reinterpret_cast<T*>(reinterpret_cast<TMachineWord>(pointer) & ~kMachineWordAlignmentMask);
     }
 
-    template <size_t size, typename CharacterType>
+    template <size_t size, typename CharacterType> 
     struct NonASCIIMask;
 
-    template <>
-    struct
-        NonASCIIMask<4, wchar16> {
-        static constexpr ui32 Value() {
-            return 0xFF80FF80U;
-        }
+    template <> 
+    struct 
+        NonASCIIMask<4, wchar16> { 
+        static constexpr ui32 Value() { 
+            return 0xFF80FF80U; 
+        } 
     };
 
-    template <>
-    struct
-        NonASCIIMask<4, char> {
-        static constexpr ui32 Value() {
-            return 0x80808080U;
-        }
+    template <> 
+    struct 
+        NonASCIIMask<4, char> { 
+        static constexpr ui32 Value() { 
+            return 0x80808080U; 
+        } 
     };
 
-    template <>
-    struct
-        NonASCIIMask<8, wchar16> {
-        static constexpr ui64 Value() {
-            return 0xFF80FF80FF80FF80ULL;
-        }
+    template <> 
+    struct 
+        NonASCIIMask<8, wchar16> { 
+        static constexpr ui64 Value() { 
+            return 0xFF80FF80FF80FF80ULL; 
+        } 
     };
 
-    template <>
-    struct
-        NonASCIIMask<8, char> {
-        static constexpr ui64 Value() {
-            return 0x8080808080808080ULL;
-        }
+    template <> 
+    struct 
+        NonASCIIMask<8, char> { 
+        static constexpr ui64 Value() { 
+            return 0x8080808080808080ULL; 
+        } 
     };
 
     template <typename TChar>
     inline bool DoIsStringASCIISlow(const TChar* first, const TChar* last) {
-        using TUnsignedChar = std::make_unsigned_t<TChar>;
+        using TUnsignedChar = std::make_unsigned_t<TChar>; 
         Y_ASSERT(first <= last);
         for (; first != last; ++first) {
             if (static_cast<TUnsignedChar>(*first) > 0x7F) {
@@ -573,7 +573,7 @@ namespace NDetail {
             int asciiMask = _mm_movemask_epi8(chunk);
             if (asciiMask) {
                 return false;
-            }
+            } 
             first += 16;
         }
 
@@ -630,7 +630,7 @@ inline void Copy(const TChar1* first, size_t len, TChar2* result) {
 //!       and the family of template member functions: append, assign, insert, replace.
 template <typename TStringType, typename TChar>
 inline TStringType CopyTo(const TChar* first, const TChar* last) {
-    Y_ASSERT(first <= last);
+    Y_ASSERT(first <= last); 
     TStringType str = TStringType::Uninitialized(last - first);
     Copy(first, last, str.begin());
     return str;
@@ -644,12 +644,12 @@ inline TStringType CopyTo(const TChar* s, size_t n) {
 }
 
 inline TString WideToASCII(const TWtringBuf w) {
-    Y_ASSERT(IsStringASCII(w.begin(), w.end()));
+    Y_ASSERT(IsStringASCII(w.begin(), w.end())); 
     return CopyTo<TString>(w.begin(), w.end());
 }
 
 inline TUtf16String ASCIIToWide(const TStringBuf s) {
-    Y_ASSERT(IsStringASCII(s.begin(), s.end()));
+    Y_ASSERT(IsStringASCII(s.begin(), s.end())); 
     return CopyTo<TUtf16String>(s.begin(), s.end());
 }
 
@@ -663,7 +663,7 @@ inline bool IsSpace(const wchar16* s, size_t n) {
     if (n == 0)
         return false;
 
-    Y_ASSERT(s);
+    Y_ASSERT(s); 
 
     const wchar16* const e = s + n;
     for (const wchar16* p = s; p != e; ++p) {
@@ -674,7 +674,7 @@ inline bool IsSpace(const wchar16* s, size_t n) {
 }
 
 //! returns @c true if string contains whitespace characters only
-inline bool IsSpace(const TWtringBuf s) {
+inline bool IsSpace(const TWtringBuf s) { 
     return IsSpace(s.data(), s.length());
 }
 
@@ -684,61 +684,61 @@ void Collapse(TUtf16String& w);
 //! @return new length
 size_t Collapse(wchar16* s, size_t n);
 
-//! Removes leading whitespace characters
-TWtringBuf StripLeft(const TWtringBuf text) noexcept Y_WARN_UNUSED_RESULT;
-void StripLeft(TUtf16String& text);
+//! Removes leading whitespace characters 
+TWtringBuf StripLeft(const TWtringBuf text) noexcept Y_WARN_UNUSED_RESULT; 
+void StripLeft(TUtf16String& text); 
 
-//! Removes trailing whitespace characters
-TWtringBuf StripRight(const TWtringBuf text) noexcept Y_WARN_UNUSED_RESULT;
-void StripRight(TUtf16String& text);
-
-//! Removes leading and trailing whitespace characters
-TWtringBuf Strip(const TWtringBuf text) noexcept Y_WARN_UNUSED_RESULT;
-void Strip(TUtf16String& text);
-
-/* Check if given word is lowercase/uppercase. Will return false if string contains any
- * non-alphabetical symbols. It is expected that `text` is a correct UTF-16 string.
- *
- * For example `IsLowerWord("hello")` will return `true`, when `IsLowerWord("hello there")` will
- * return false because of the space in the middle of the string. Empty string is also considered
- * lowercase.
- */
-bool IsLowerWord(const TWtringBuf text) noexcept;
-bool IsUpperWord(const TWtringBuf text) noexcept;
-
-/* Will check if given word starts with capital letter and the rest of the word is lowercase. Will
- * return `false` for empty string. See also `IsLowerWord`.
- */
-bool IsTitleWord(const TWtringBuf text) noexcept;
-
-/* Check if given string is lowercase/uppercase. Will return `true` if all alphabetic symbols are
- * in proper case, all other symbols are ignored. It is expected that `text` is a correct UTF-16
- * string.
- *
- * For example `IsLowerWord("hello")` will return `true` and `IsLowerWord("hello there")` will
- * also return true because. Empty string is also considered lowercase.
- *
- * NOTE: for any case where `IsLowerWord` returns `true` `IsLower` will also return `true`.
- */
-bool IsLower(const TWtringBuf text) noexcept;
-bool IsUpper(const TWtringBuf text) noexcept;
-
-/* Lowercase/uppercase given string inplace. Any alphabetic symbol will be converted to a proper
- * case, the rest of the symbols will be kept the same. It is expected that `text` is a correct
- * UTF-16 string.
- *
- * For example `ToLower("heLLo")` will return `"hello"`.
- *
- * @param text      String to modify
- * @param pos       Position of the first character to modify
- * @param count     Length of the substring
- * @returns         `true` if `text` was changed
- *
- * NOTE: `pos` and `count` are measured in `wchar16`, not in codepoints.
- */
-bool ToLower(TUtf16String& text, size_t pos = 0, size_t count = TUtf16String::npos);
-bool ToUpper(TUtf16String& text, size_t pos = 0, size_t count = TUtf16String::npos);
-
+//! Removes trailing whitespace characters 
+TWtringBuf StripRight(const TWtringBuf text) noexcept Y_WARN_UNUSED_RESULT; 
+void StripRight(TUtf16String& text); 
+ 
+//! Removes leading and trailing whitespace characters 
+TWtringBuf Strip(const TWtringBuf text) noexcept Y_WARN_UNUSED_RESULT; 
+void Strip(TUtf16String& text); 
+ 
+/* Check if given word is lowercase/uppercase. Will return false if string contains any 
+ * non-alphabetical symbols. It is expected that `text` is a correct UTF-16 string. 
+ * 
+ * For example `IsLowerWord("hello")` will return `true`, when `IsLowerWord("hello there")` will 
+ * return false because of the space in the middle of the string. Empty string is also considered 
+ * lowercase. 
+ */ 
+bool IsLowerWord(const TWtringBuf text) noexcept; 
+bool IsUpperWord(const TWtringBuf text) noexcept; 
+ 
+/* Will check if given word starts with capital letter and the rest of the word is lowercase. Will 
+ * return `false` for empty string. See also `IsLowerWord`. 
+ */ 
+bool IsTitleWord(const TWtringBuf text) noexcept; 
+ 
+/* Check if given string is lowercase/uppercase. Will return `true` if all alphabetic symbols are 
+ * in proper case, all other symbols are ignored. It is expected that `text` is a correct UTF-16 
+ * string. 
+ * 
+ * For example `IsLowerWord("hello")` will return `true` and `IsLowerWord("hello there")` will 
+ * also return true because. Empty string is also considered lowercase. 
+ * 
+ * NOTE: for any case where `IsLowerWord` returns `true` `IsLower` will also return `true`. 
+ */ 
+bool IsLower(const TWtringBuf text) noexcept; 
+bool IsUpper(const TWtringBuf text) noexcept; 
+ 
+/* Lowercase/uppercase given string inplace. Any alphabetic symbol will be converted to a proper 
+ * case, the rest of the symbols will be kept the same. It is expected that `text` is a correct 
+ * UTF-16 string. 
+ * 
+ * For example `ToLower("heLLo")` will return `"hello"`. 
+ * 
+ * @param text      String to modify 
+ * @param pos       Position of the first character to modify 
+ * @param count     Length of the substring 
+ * @returns         `true` if `text` was changed 
+ * 
+ * NOTE: `pos` and `count` are measured in `wchar16`, not in codepoints. 
+ */ 
+bool ToLower(TUtf16String& text, size_t pos = 0, size_t count = TUtf16String::npos); 
+bool ToUpper(TUtf16String& text, size_t pos = 0, size_t count = TUtf16String::npos); 
+ 
 /* Lowercase/uppercase given string inplace. Any alphabetic symbol will be converted to a proper
 * case, the rest of the symbols will be kept the same. It is expected that `text` is a correct
 * UTF-32 string.
@@ -755,54 +755,54 @@ bool ToUpper(TUtf16String& text, size_t pos = 0, size_t count = TUtf16String::np
 bool ToLower(TUtf32String& /*text*/, size_t /*pos*/ = 0, size_t /*count*/ = TUtf16String::npos);
 bool ToUpper(TUtf32String& /*text*/, size_t /*pos*/ = 0, size_t /*count*/ = TUtf16String::npos);
 
-/* Titlecase first symbol and lowercase the rest, see `ToLower` for more details.
- */
-bool ToTitle(TUtf16String& text, size_t pos = 0, size_t count = TUtf16String::npos);
-
+/* Titlecase first symbol and lowercase the rest, see `ToLower` for more details. 
+ */ 
+bool ToTitle(TUtf16String& text, size_t pos = 0, size_t count = TUtf16String::npos); 
+ 
 /* Titlecase first symbol and lowercase the rest, see `ToLower` for more details.
 */
 bool ToTitle(TUtf32String& /*text*/, size_t /*pos*/ = 0, size_t /*count*/ = TUtf16String::npos);
 
-/* @param text      Pointer to the string to modify
- * @param length    Length of the string to modify
- * @param out       Pointer to the character array to write to
- *
- * NOTE: [text, text+length) and [out, out+length) should not interleave.
- *
- * TODO(yazevnul): replace these functions with `bool(const TWtringBuf, const TArrayRef<wchar16>)`
- * overload.
- */
-bool ToLower(const wchar16* text, size_t length, wchar16* out) noexcept;
-bool ToUpper(const wchar16* text, size_t length, wchar16* out) noexcept;
-bool ToTitle(const wchar16* text, size_t length, wchar16* out) noexcept;
-
+/* @param text      Pointer to the string to modify 
+ * @param length    Length of the string to modify 
+ * @param out       Pointer to the character array to write to 
+ * 
+ * NOTE: [text, text+length) and [out, out+length) should not interleave. 
+ * 
+ * TODO(yazevnul): replace these functions with `bool(const TWtringBuf, const TArrayRef<wchar16>)` 
+ * overload. 
+ */ 
+bool ToLower(const wchar16* text, size_t length, wchar16* out) noexcept; 
+bool ToUpper(const wchar16* text, size_t length, wchar16* out) noexcept; 
+bool ToTitle(const wchar16* text, size_t length, wchar16* out) noexcept; 
+ 
 bool ToLower(const wchar32* text, size_t length, wchar32* out) noexcept;
 bool ToUpper(const wchar32* text, size_t length, wchar32* out) noexcept;
 bool ToTitle(const wchar32* text, size_t length, wchar32* out) noexcept;
 
-/* @param text      Pointer to the string to modify
- * @param length    Length of the string to modify
- *
- * TODO(yazevnul): replace these functions with `bool(const TArrayRef<wchar16>)` overload.
- */
-bool ToLower(wchar16* text, size_t length) noexcept;
-bool ToUpper(wchar16* text, size_t length) noexcept;
-bool ToTitle(wchar16* text, size_t length) noexcept;
-
+/* @param text      Pointer to the string to modify 
+ * @param length    Length of the string to modify 
+ * 
+ * TODO(yazevnul): replace these functions with `bool(const TArrayRef<wchar16>)` overload. 
+ */ 
+bool ToLower(wchar16* text, size_t length) noexcept; 
+bool ToUpper(wchar16* text, size_t length) noexcept; 
+bool ToTitle(wchar16* text, size_t length) noexcept; 
+ 
 bool ToLower(wchar32* text, size_t length) noexcept;
 bool ToUpper(wchar32* text, size_t length) noexcept;
 bool ToTitle(wchar32* text, size_t length) noexcept;
 
-/* Convenience wrappers for `ToLower`, `ToUpper` and `ToTitle`.
- */
-TUtf16String ToLowerRet(TUtf16String text, size_t pos = 0, size_t count = TUtf16String::npos) Y_WARN_UNUSED_RESULT;
-TUtf16String ToUpperRet(TUtf16String text, size_t pos = 0, size_t count = TUtf16String::npos) Y_WARN_UNUSED_RESULT;
-TUtf16String ToTitleRet(TUtf16String text, size_t pos = 0, size_t count = TUtf16String::npos) Y_WARN_UNUSED_RESULT;
-
-TUtf16String ToLowerRet(const TWtringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
-TUtf16String ToUpperRet(const TWtringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
-TUtf16String ToTitleRet(const TWtringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
-
+/* Convenience wrappers for `ToLower`, `ToUpper` and `ToTitle`. 
+ */ 
+TUtf16String ToLowerRet(TUtf16String text, size_t pos = 0, size_t count = TUtf16String::npos) Y_WARN_UNUSED_RESULT; 
+TUtf16String ToUpperRet(TUtf16String text, size_t pos = 0, size_t count = TUtf16String::npos) Y_WARN_UNUSED_RESULT; 
+TUtf16String ToTitleRet(TUtf16String text, size_t pos = 0, size_t count = TUtf16String::npos) Y_WARN_UNUSED_RESULT; 
+ 
+TUtf16String ToLowerRet(const TWtringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT; 
+TUtf16String ToUpperRet(const TWtringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT; 
+TUtf16String ToTitleRet(const TWtringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT; 
+ 
 TUtf32String ToLowerRet(const TUtf32StringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
 TUtf32String ToUpperRet(const TUtf32StringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
 TUtf32String ToTitleRet(const TUtf32StringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
@@ -823,7 +823,7 @@ inline size_t CountWideChars(const wchar16* b, const wchar16* e) {
     return count;
 }
 
-inline size_t CountWideChars(const TWtringBuf str) {
+inline size_t CountWideChars(const TWtringBuf str) { 
     return CountWideChars(str.begin(), str.end());
 }
 
@@ -838,6 +838,6 @@ inline bool IsValidUTF16(const wchar16* b, const wchar16* e) {
     return true;
 }
 
-inline bool IsValidUTF16(const TWtringBuf str) {
+inline bool IsValidUTF16(const TWtringBuf str) { 
     return IsValidUTF16(str.begin(), str.end());
 }

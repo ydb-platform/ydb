@@ -332,7 +332,7 @@ public:
         }
     }
 
-    void RemapVDisks(IOutputStream& json,
+    void RemapVDisks(IOutputStream& json, 
                      const ::google::protobuf::Message& protoFrom,
                      const TJsonSettings& jsonSettings) {
         NKikimrWhiteboard::EFlag diskSpace = NKikimrWhiteboard::Grey;
@@ -367,7 +367,7 @@ public:
         }
     }
 
-    void RemapPDisk(IOutputStream& json,
+    void RemapPDisk(IOutputStream& json, 
                     const ::google::protobuf::Message& protoFrom,
                     const TJsonSettings& jsonSettings) {
         json << "\"PDisk\":";

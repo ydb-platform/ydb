@@ -7,7 +7,7 @@
 
 class TBZipDecompress::TImpl: public TAdditionalStorage<TImpl> {
 public:
-    inline TImpl(IInputStream* input)
+    inline TImpl(IInputStream* input) 
         : Stream_(input)
     {
         Zero(BzStream_);
@@ -70,11 +70,11 @@ public:
     }
 
 private:
-    IInputStream* Stream_;
+    IInputStream* Stream_; 
     bz_stream BzStream_;
 };
 
-TBZipDecompress::TBZipDecompress(IInputStream* input, size_t bufLen)
+TBZipDecompress::TBZipDecompress(IInputStream* input, size_t bufLen) 
     : Impl_(new (bufLen) TImpl(input))
 {
 }
@@ -88,7 +88,7 @@ size_t TBZipDecompress::DoRead(void* buf, size_t size) {
 
 class TBZipCompress::TImpl: public TAdditionalStorage<TImpl> {
 public:
-    inline TImpl(IOutputStream* stream, size_t level)
+    inline TImpl(IOutputStream* stream, size_t level) 
         : Stream_(stream)
     {
         Zero(BzStream_);
@@ -165,11 +165,11 @@ private:
     }
 
 private:
-    IOutputStream* Stream_;
+    IOutputStream* Stream_; 
     bz_stream BzStream_;
 };
 
-TBZipCompress::TBZipCompress(IOutputStream* out, size_t compressionLevel, size_t bufLen)
+TBZipCompress::TBZipCompress(IOutputStream* out, size_t compressionLevel, size_t bufLen) 
     : Impl_(new (bufLen) TImpl(out, compressionLevel))
 {
 }

@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 
 class TCheckedAllocator: public TDefaultAllocator {
 public:

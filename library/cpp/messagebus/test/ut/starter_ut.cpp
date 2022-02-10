@@ -7,7 +7,7 @@
 using namespace NBus;
 using namespace NBus::NTest;
 
-Y_UNIT_TEST_SUITE(TBusStarterTest) {
+Y_UNIT_TEST_SUITE(TBusStarterTest) { 
     struct TStartJobTestModule: public TExampleModule {
         using TBusModule::CreateDefaultStarter;
 
@@ -19,21 +19,21 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         }
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             AtomicIncrement(StartCount);
             job->Sleep(10);
             return &TStartJobTestModule::End;
         }
 
         TJobHandler End(TBusJob* job, TBusMessage* mess) {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             AtomicIncrement(StartCount);
             job->Cancel(MESSAGE_UNKNOWN);
             return nullptr;
         }
     };
 
-    Y_UNIT_TEST(Test) {
+    Y_UNIT_TEST(Test) { 
         TObjectCountCheck objectCountCheck;
 
         TBusMessageQueuePtr bus(CreateMessageQueue());
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         bus->Stop();
     }
 
-    Y_UNIT_TEST(TestModuleStartJob) {
+    Y_UNIT_TEST(TestModuleStartJob) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleProtocol proto;
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         TSystemEvent MessageReceivedEvent;
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
 
             MessageReceivedEvent.Signal();
 
@@ -89,12 +89,12 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         }
 
         TJobHandler Never(TBusJob*, TBusMessage*) {
-            Y_FAIL("happens");
+            Y_FAIL("happens"); 
             throw 1;
         }
     };
 
-    Y_UNIT_TEST(StartJobDestroyDuringSleep) {
+    Y_UNIT_TEST(StartJobDestroyDuringSleep) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleProtocol proto;
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         TSystemEvent MessageReceivedEvent;
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
 
             job->SendReply(new TExampleResponse(&Proto.ResponseCount));
 
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         }
     };
 
-    Y_UNIT_TEST(AllowSendReplyInStarted) {
+    Y_UNIT_TEST(AllowSendReplyInStarted) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleProtocol proto;

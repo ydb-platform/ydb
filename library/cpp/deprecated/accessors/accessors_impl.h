@@ -27,8 +27,8 @@ namespace NAccessors {
 
             template <typename Tb>
             struct TIndirectMemoryRegionBegin {
-                Y_HAS_MEMBER(Begin);
-                Y_HAS_MEMBER(begin);
+                Y_HAS_MEMBER(Begin); 
+                Y_HAS_MEMBER(begin); 
 
                 template <typename Tc>
                 struct TByBegin {
@@ -51,10 +51,10 @@ namespace NAccessors {
                 }
             };
 
-            using TGet = std::conditional_t<
+            using TGet = std::conditional_t< 
                 TMemoryAccessorBase<Ta>::SimpleMemory,
                 TNoMemoryIndirectionBegin<Ta>,
-                std::conditional_t<
+                std::conditional_t< 
                     TMemoryAccessorBase<Ta>::ContinuousMemory,
                     TIndirectMemoryRegionBegin<Ta>,
                     typename TMemoryAccessorBase<Ta>::TBadAccessor>>;
@@ -77,8 +77,8 @@ namespace NAccessors {
 
             template <typename Tb>
             struct TIndirectMemoryRegionEnd {
-                Y_HAS_MEMBER(End);
-                Y_HAS_MEMBER(end);
+                Y_HAS_MEMBER(End); 
+                Y_HAS_MEMBER(end); 
 
                 template <typename Tc>
                 struct TByEnd {
@@ -101,10 +101,10 @@ namespace NAccessors {
                 }
             };
 
-            using TGet = std::conditional_t<
+            using TGet = std::conditional_t< 
                 TMemoryAccessorBase<Ta>::SimpleMemory,
                 TNoMemoryIndirectionEnd<Ta>,
-                std::conditional_t<
+                std::conditional_t< 
                     TMemoryAccessorBase<Ta>::ContinuousMemory,
                     TIndirectMemoryRegionEnd<Ta>,
                     typename TMemoryAccessorBase<Ta>::TBadAccessor>>;
@@ -125,8 +125,8 @@ namespace NAccessors {
 
             template <typename Tb>
             struct TIndirectMemoryRegionClear {
-                Y_HAS_MEMBER(Clear);
-                Y_HAS_MEMBER(clear);
+                Y_HAS_MEMBER(Clear); 
+                Y_HAS_MEMBER(clear); 
 
                 template <typename Tc>
                 struct TByClear {
@@ -150,10 +150,10 @@ namespace NAccessors {
                     }
                 };
 
-                using TDo = std::conditional_t<
+                using TDo = std::conditional_t< 
                     THasClear<Tb>::value,
                     TByClear<Tb>,
-                    std::conditional_t<
+                    std::conditional_t< 
                         THasclear<Tb>::value,
                         TByclear<Tb>,
                         TByNone<Tb>>>;
@@ -163,7 +163,7 @@ namespace NAccessors {
                 }
             };
 
-            using TDo = std::conditional_t<TMemoryAccessorBase<Ta>::SimpleMemory, TNoMemoryIndirectionClear<Ta>, TIndirectMemoryRegionClear<Ta>>;
+            using TDo = std::conditional_t<TMemoryAccessorBase<Ta>::SimpleMemory, TNoMemoryIndirectionClear<Ta>, TIndirectMemoryRegionClear<Ta>>; 
 
             static void Do(Ta& b) {
                 TDo::Do(b);
@@ -172,8 +172,8 @@ namespace NAccessors {
 
         template <typename Tb>
         struct TReserve {
-            Y_HAS_MEMBER(Reserve);
-            Y_HAS_MEMBER(reserve);
+            Y_HAS_MEMBER(Reserve); 
+            Y_HAS_MEMBER(reserve); 
 
             template <typename Tc>
             struct TByReserve {
@@ -195,10 +195,10 @@ namespace NAccessors {
                 }
             };
 
-            using TDo = std::conditional_t<
+            using TDo = std::conditional_t< 
                 THasReserve<Tb>::value,
                 TByReserve<Tb>,
-                std::conditional_t<
+                std::conditional_t< 
                     THasreserve<Tb>::value,
                     TByreserve<Tb>,
                     TByNone<Tb>>>;
@@ -210,8 +210,8 @@ namespace NAccessors {
 
         template <typename Tb>
         struct TResize {
-            Y_HAS_MEMBER(Resize);
-            Y_HAS_MEMBER(resize);
+            Y_HAS_MEMBER(Resize); 
+            Y_HAS_MEMBER(resize); 
 
             template <typename Tc>
             struct TByResize {
@@ -236,9 +236,9 @@ namespace NAccessors {
 
         template <typename Tb>
         struct TAppend {
-            Y_HAS_MEMBER(Append);
-            Y_HAS_MEMBER(append);
-            Y_HAS_MEMBER(push_back);
+            Y_HAS_MEMBER(Append); 
+            Y_HAS_MEMBER(append); 
+            Y_HAS_MEMBER(push_back); 
 
             template <typename Tc>
             struct TByAppend {
@@ -267,10 +267,10 @@ namespace NAccessors {
                 }
             };
 
-            using TDo = std::conditional_t<
+            using TDo = std::conditional_t< 
                 THasAppend<Tb>::value,
                 TByAppend<Tb>,
-                std::conditional_t<
+                std::conditional_t< 
                     THasappend<Tb>::value,
                     TByappend<Tb>,
                     TBypush_back<Tb>>>;
@@ -284,9 +284,9 @@ namespace NAccessors {
 
         template <typename Tb>
         struct TAppendRegion {
-            Y_HAS_MEMBER(Append);
-            Y_HAS_MEMBER(append);
-            Y_HAS_MEMBER(insert);
+            Y_HAS_MEMBER(Append); 
+            Y_HAS_MEMBER(append); 
+            Y_HAS_MEMBER(insert); 
 
             template <typename Tc>
             struct TByAppend {
@@ -325,13 +325,13 @@ namespace NAccessors {
                 }
             };
 
-            using TDo = std::conditional_t<
+            using TDo = std::conditional_t< 
                 THasAppend<Tb>::value,
                 TByAppend<Tb>,
-                std::conditional_t<
+                std::conditional_t< 
                     THasappend<Tb>::value,
                     TByappend<Tb>,
-                    std::conditional_t<
+                    std::conditional_t< 
                         THasinsert<Tb>::value,
                         TByinsert<Tb>,
                         TByNone<Tb>>>>;
@@ -362,8 +362,8 @@ namespace NAccessors {
 
             template <typename Tb>
             struct TIndirectMemoryRegionAssign {
-                Y_HAS_MEMBER(Assign);
-                Y_HAS_MEMBER(assign);
+                Y_HAS_MEMBER(Assign); 
+                Y_HAS_MEMBER(assign); 
 
                 template <typename Tc>
                 struct TByAssign {
@@ -394,13 +394,13 @@ namespace NAccessors {
                     }
                 };
 
-                using TDo = std::conditional_t<
+                using TDo = std::conditional_t< 
                     THasAssign<Tb>::value,
                     TByAssign<Tb>,
-                    std::conditional_t<
+                    std::conditional_t< 
                         THasassign<Tb>::value,
                         TByassign<Tb>,
-                        std::conditional_t<
+                        std::conditional_t< 
                             TMemoryTraits<Tb>::OwnsMemory,
                             TByClearAppend<Tb>,
                             TByConstruction<Tb>>>>;
@@ -410,7 +410,7 @@ namespace NAccessors {
                 }
             };
 
-            using TDo = std::conditional_t<TMemoryAccessorBase<Ta>::SimpleMemory, TNoMemoryIndirectionAssign<Ta>, TIndirectMemoryRegionAssign<Ta>>;
+            using TDo = std::conditional_t<TMemoryAccessorBase<Ta>::SimpleMemory, TNoMemoryIndirectionAssign<Ta>, TIndirectMemoryRegionAssign<Ta>>; 
 
             static void Do(Ta& b, const TElementType* beg, const TElementType* end) {
                 TDo::Do(b, beg, end);

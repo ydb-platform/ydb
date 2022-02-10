@@ -1066,7 +1066,7 @@ bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) c
     while (key != id.Ids.end()) {
         while (true) {
             if (a == Levels.end()) {
-                Y_FAIL("Not enough a levels for FailDomain comparison");
+                Y_FAIL("Not enough a levels for FailDomain comparison"); 
             }
             if (a->first < *key) {
                 ++a;
@@ -1074,7 +1074,7 @@ bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) c
 
                 while (true) {
                     if (b == other.Levels.end()) {
-                        Y_FAIL("Not enough b levels for FailDomain comparison");
+                        Y_FAIL("Not enough b levels for FailDomain comparison"); 
                     }
                     if (b->first < *key) {
                         ++b;
@@ -1087,12 +1087,12 @@ bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) c
                         ++b;
                         break;
                     } else {
-                        Y_FAIL("Missing b level for FailDomain comparison");
+                        Y_FAIL("Missing b level for FailDomain comparison"); 
                     }
                 }
                 break;
             } else {
-                Y_FAIL("Missing a level for FailDomain comparison");
+                Y_FAIL("Missing a level for FailDomain comparison"); 
             }
         }
     }

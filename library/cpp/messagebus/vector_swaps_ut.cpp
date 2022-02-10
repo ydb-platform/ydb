@@ -2,8 +2,8 @@
 
 #include "vector_swaps.h"
 
-Y_UNIT_TEST_SUITE(TVectorSwapsTest) {
-    Y_UNIT_TEST(Simple) {
+Y_UNIT_TEST_SUITE(TVectorSwapsTest) { 
+    Y_UNIT_TEST(Simple) { 
         TVectorSwaps<THolder<unsigned>> v;
         for (unsigned i = 0; i < 100; ++i) {
             THolder<unsigned> tmp(new unsigned(i));

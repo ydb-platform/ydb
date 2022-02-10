@@ -17,19 +17,19 @@ struct TClassWithStreamOperator {
     }
 };
 
-IOutputStream& operator<<(IOutputStream& out, const TClassWithStreamOperator& value) {
+IOutputStream& operator<<(IOutputStream& out, const TClassWithStreamOperator& value) { 
     return out << value.Id << " " << value.Name;
 }
 
-Y_UNIT_TEST_SUITE(TStringBuilderTest) {
-    Y_UNIT_TEST(TestStringBuilder) {
+Y_UNIT_TEST_SUITE(TStringBuilderTest) { 
+    Y_UNIT_TEST(TestStringBuilder) { 
         TestEquals("", TStringBuilder());
         TestEquals("a", TStringBuilder() << "a");
         TestEquals("a1", TStringBuilder() << "a" << 1);
         TestEquals("value: 123 name", TStringBuilder() << "value: " << TClassWithStreamOperator(123, "name"));
     }
 
-    Y_UNIT_TEST(TestStringBuilderOut) {
+    Y_UNIT_TEST(TestStringBuilderOut) { 
         TString s;
         TStringOutput out(s);
         TStringBuilder sb;
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TStringBuilderTest) {
         TestEquals("a", s);
     }
 
-    Y_UNIT_TEST(TestStringBuilderRValue) {
+    Y_UNIT_TEST(TestStringBuilderRValue) { 
         struct TRValueAcceptTester {
             static bool IsRValue(const TString&) {
                 return false;

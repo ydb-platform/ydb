@@ -20,7 +20,7 @@ public:
         UNIT_ASSERT_EQUAL(strcmp(rul.sep(s1), ""), 0);
         UNIT_ASSERT_EQUAL(strcmp(rul.sep(s1), "%^&"), 0);
         UNIT_ASSERT_EQUAL(strcmp(rul.sep(s1), "+-"), 0);
-        UNIT_ASSERT_EQUAL(rul.sep(s1), nullptr);
+        UNIT_ASSERT_EQUAL(rul.sep(s1), nullptr); 
     }
 
     void TestRemoveAll() {
@@ -35,7 +35,7 @@ public:
             {"hello world", 'x', "hello world"},
         };
 
-        for (const T* t = tests; t != std::end(tests); ++t) {
+        for (const T* t = tests; t != std::end(tests); ++t) { 
             TString str(t->Str);
             RemoveAll(str, t->Ch);
             UNIT_ASSERT_EQUAL(t->Result, str);

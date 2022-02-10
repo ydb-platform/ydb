@@ -13,7 +13,7 @@
 
 using namespace NActors;
 
-Y_UNIT_TEST_SUITE(SchedulerActor) {
+Y_UNIT_TEST_SUITE(SchedulerActor) { 
     class TTestActor: public TActorBootstrapped<TTestActor> {
         TManualEvent& DoneEvent;
         TAtomic& EventsProcessed;
@@ -86,15 +86,15 @@ Y_UNIT_TEST_SUITE(SchedulerActor) {
         actorSystem.Stop();
     }
 
-    Y_UNIT_TEST(LongEvents) {
+    Y_UNIT_TEST(LongEvents) { 
         Test(10, 500);
     }
 
-    Y_UNIT_TEST(MediumEvents) {
+    Y_UNIT_TEST(MediumEvents) { 
         Test(100, 50);
     }
 
-    Y_UNIT_TEST(QuickEvents) {
+    Y_UNIT_TEST(QuickEvents) { 
         Test(1000, 5);
     }
 }

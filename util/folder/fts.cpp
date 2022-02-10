@@ -33,9 +33,9 @@
  * $OpenBSD: fts.c,v 1.22 1999/10/03 19:22:22 millert Exp $
  */
 
-#include <util/memory/tempbuf.h>
-#include <util/system/compat.h>
-#include <util/system/compiler.h>
+#include <util/memory/tempbuf.h> 
+#include <util/system/compat.h> 
+#include <util/system/compiler.h> 
 #include <util/system/defaults.h>
 #include <util/system/error.h>
 
@@ -110,14 +110,14 @@ int stat64UTF(dird path, struct _stat64* _Stat) {
     return _wstat64(path, _Stat);
 }
 
-const dird invalidDirD = nullptr;
+const dird invalidDirD = nullptr; 
 
 dird get_cwdd() {
     return _wgetcwd(nullptr, 0);
 }
 
 int valid_dird(dird fd) {
-    return fd == nullptr;
+    return fd == nullptr; 
 }
 
 void close_dird(dird fd) {
@@ -258,19 +258,19 @@ FTS* yfts_open(char* const* argv, int options, int (*compar)(const FTSENT**, con
     /* Options check. */
     if (options & ~FTS_OPTIONMASK) {
         errno = EINVAL;
-        return nullptr;
+        return nullptr; 
     }
 
     /* Allocate/initialize the stream */
     if ((sp = (FTS*)malloc(sizeof(FTS))) == nullptr) {
-        return nullptr;
+        return nullptr; 
     }
     memset(sp, 0, sizeof(FTS));
     sp->fts_compar = compar;
     sp->fts_options = options;
 
     /* Shush, GCC. */
-    tmp = nullptr;
+    tmp = nullptr; 
 
     /* Logical walks turn on NOCHDIR; symbolic links are too hard. */
     if (ISSET(FTS_LOGICAL)) {
@@ -292,7 +292,7 @@ FTS* yfts_open(char* const* argv, int options, int (*compar)(const FTSENT**, con
     parent->fts_level = FTS_ROOTPARENTLEVEL;
 
     /* Allocate/initialize root(s). */
-    for (root = nullptr, nitems = 0; *argv; ++argv, ++nitems) {
+    for (root = nullptr, nitems = 0; *argv; ++argv, ++nitems) { 
         /* Don't allow zero-length paths. */
 
         len = strlen(*argv);
@@ -329,7 +329,7 @@ FTS* yfts_open(char* const* argv, int options, int (*compar)(const FTSENT**, con
             p->fts_link = root;
             root = p;
         } else {
-            p->fts_link = nullptr;
+            p->fts_link = nullptr; 
             if (root == nullptr) {
                 tmp = root = p;
             } else {
@@ -375,7 +375,7 @@ mem2:
     free(sp->fts_path);
 mem1:
     free(sp);
-    return nullptr;
+    return nullptr; 
 }
 
 static void
@@ -393,7 +393,7 @@ fts_load(FTS* sp, FTSENT* p)
      */
     len = p->fts_pathlen = p->fts_namelen;
     memmove((void*)sp->fts_path, (void*)p->fts_name, len + 1);
-    if ((cp = strrchr(p->fts_name, LOCSLASH_C)) != nullptr && (cp != p->fts_name || cp[1])) {
+    if ((cp = strrchr(p->fts_name, LOCSLASH_C)) != nullptr && (cp != p->fts_name || cp[1])) { 
         len = strlen(++cp);
         memmove((void*)p->fts_name, (void*)cp, len + 1);
         p->fts_namelen = (u_short)len;
@@ -469,7 +469,7 @@ yfts_read(FTS* sp) {
 
     /* If finished or unrecoverable error, return NULL. */
     if (sp->fts_cur == nullptr || ISSET(FTS_STOP)) {
-        return nullptr;
+        return nullptr; 
     }
 
     /* Set current node pointer. */
@@ -517,7 +517,7 @@ yfts_read(FTS* sp) {
             }
             if (sp->fts_child) {
                 fts_lfree(sp->fts_child);
-                sp->fts_child = nullptr;
+                sp->fts_child = nullptr; 
             }
             p->fts_info = FTS_DP;
             return (p);
@@ -527,7 +527,7 @@ yfts_read(FTS* sp) {
         if (sp->fts_child && ISSET(FTS_NAMEONLY)) {
             CLR(FTS_NAMEONLY);
             fts_lfree(sp->fts_child);
-            sp->fts_child = nullptr;
+            sp->fts_child = nullptr; 
         }
 
         /*
@@ -551,21 +551,21 @@ yfts_read(FTS* sp) {
                         p->fts_parent->fts_accpath;
                 }
             }
-        } else if ((sp->fts_child = fts_build(sp, BREAD)) == nullptr) {
+        } else if ((sp->fts_child = fts_build(sp, BREAD)) == nullptr) { 
             if (ISSET(FTS_STOP)) {
-                return nullptr;
+                return nullptr; 
             }
             return (p);
         }
         p = sp->fts_child;
-        sp->fts_child = nullptr;
+        sp->fts_child = nullptr; 
         goto name;
     }
 
     /* Move to the next node on this level. */
 next:
     tmp = p;
-    if ((p = p->fts_link) != nullptr) {
+    if ((p = p->fts_link) != nullptr) { 
         free(tmp);
 
         /*
@@ -575,7 +575,7 @@ next:
         if (p->fts_level == FTS_ROOTLEVEL) {
             if (FCHDIR(sp, sp->fts_rfd)) {
                 SET(FTS_STOP);
-                return nullptr;
+                return nullptr; 
             }
             fts_load(sp, p);
             return (sp->fts_cur = p);
@@ -622,7 +622,7 @@ next:
          */
         free(p);
         errno = 0;
-        return (sp->fts_cur = nullptr);
+        return (sp->fts_cur = nullptr); 
     }
 
     /* NUL terminate the pathname. */
@@ -636,7 +636,7 @@ next:
     if (p->fts_level == FTS_ROOTLEVEL) {
         if (FCHDIR(sp, sp->fts_rfd)) {
             SET(FTS_STOP);
-            return nullptr;
+            return nullptr; 
         }
     } else if (p->fts_flags & FTS_SYMFOLLOW) {
         if (FCHDIR(sp, p->fts_symfd)) {
@@ -644,7 +644,7 @@ next:
             close_dird(p->fts_symfd);
             errno = saved_errno;
             SET(FTS_STOP);
-            return nullptr;
+            return nullptr; 
         }
         close_dird(p->fts_symfd);
     } else if (!(p->fts_flags & FTS_DONTCHDIR) &&
@@ -682,7 +682,7 @@ yfts_children(FTS* sp, int instr)
     dird fd;
     if (instr && instr != FTS_NAMEONLY) {
         errno = EINVAL;
-        return nullptr;
+        return nullptr; 
     }
 
     /* Set current node pointer. */
@@ -696,7 +696,7 @@ yfts_children(FTS* sp, int instr)
 
     /* Fatal errors stop here. */
     if (ISSET(FTS_STOP)) {
-        return nullptr;
+        return nullptr; 
     }
 
     /* Return logical hierarchy of user's arguments. */
@@ -710,7 +710,7 @@ yfts_children(FTS* sp, int instr)
      * same effect is available with FTS_AGAIN.
      */
     if (p->fts_info != FTS_D /* && p->fts_info != FTS_DNR */) {
-        return nullptr;
+        return nullptr; 
     }
 
     /* Free up any previous child list. */
@@ -738,28 +738,28 @@ yfts_children(FTS* sp, int instr)
     }
 
     if (valid_dird(fd = get_cwdd())) {
-        return nullptr;
+        return nullptr; 
     }
     sp->fts_child = fts_build(sp, instr);
     if (chdir_dird(fd)) {
         close_dird(fd);
-        return nullptr;
+        return nullptr; 
     }
     close_dird(fd);
     return (sp->fts_child);
 }
 
 static inline struct dirent* yreaddir(DIR* dir, struct dirent* de) {
-    // TODO(yazevnul|IGNIETFERRO-1070): remove these macroses by replacing `readdir_r` with proper
-    // alternative
-    Y_PRAGMA_DIAGNOSTIC_PUSH
-    Y_PRAGMA_NO_DEPRECATED
+    // TODO(yazevnul|IGNIETFERRO-1070): remove these macroses by replacing `readdir_r` with proper 
+    // alternative 
+    Y_PRAGMA_DIAGNOSTIC_PUSH 
+    Y_PRAGMA_NO_DEPRECATED 
     if (readdir_r(dir, de, &de) == 0) {
         Y_PRAGMA_DIAGNOSTIC_POP
         return de;
     }
 
-    return nullptr;
+    return nullptr; 
 }
 
 /*
@@ -811,12 +811,12 @@ fts_build(FTS* sp, int type)
 #else
     #define __opendir2(path, flag) opendir(path)
 #endif
-    if ((dirp = __opendir2(cur->fts_accpath, oflag)) == nullptr) {
+    if ((dirp = __opendir2(cur->fts_accpath, oflag)) == nullptr) { 
         if (type == BREAD) {
             cur->fts_info = FTS_DNR;
             cur->fts_errno = errno;
         }
-        return nullptr;
+        return nullptr; 
     }
 
 #ifdef _win_
@@ -858,7 +858,7 @@ fts_build(FTS* sp, int type)
     cderrno = 0;
     if (nlinks || type == BREAD) {
 #ifndef _win_
-        if (fts_safe_changedir(sp, cur, dirfd(dirp), nullptr)) {
+        if (fts_safe_changedir(sp, cur, dirfd(dirp), nullptr)) { 
 #else
         if (fts_safe_changedir(sp, cur, -1, dirpd)) {
 #endif
@@ -870,12 +870,12 @@ fts_build(FTS* sp, int type)
             descend = 0;
             cderrno = errno;
             (void)closedir(dirp);
-            dirp = nullptr;
+            dirp = nullptr; 
 #ifdef _win_
             close_dird(dirpd);
             dirpd = invalidDirD;
 #else
-            Y_UNUSED(invalidDirD);
+            Y_UNUSED(invalidDirD); 
 #endif
         } else {
             descend = 1;
@@ -900,7 +900,7 @@ fts_build(FTS* sp, int type)
         *cp++ = LOCSLASH_C;
     } else {
         /* GCC, you're too verbose. */
-        cp = nullptr;
+        cp = nullptr; 
     }
     ++len;
     maxlen = sp->fts_pathlen - len;
@@ -913,7 +913,7 @@ fts_build(FTS* sp, int type)
     //to ensure enough buffer
     TTempBuf dpe;
 
-    for (head = tail = nullptr, nitems = 0; dirp && (dp = yreaddir(dirp, (struct dirent*)dpe.Data())) != nullptr;) {
+    for (head = tail = nullptr, nitems = 0; dirp && (dp = yreaddir(dirp, (struct dirent*)dpe.Data())) != nullptr;) { 
         if (!ISSET(FTS_SEEDOT) && ISDOT(dp->d_name)) {
             continue;
         }
@@ -942,7 +942,7 @@ fts_build(FTS* sp, int type)
                 cur->fts_info = FTS_ERR;
                 SET(FTS_STOP);
                 errno = saved_errno;
-                return nullptr;
+                return nullptr; 
             }
             /* Did realloc() change the pointer? */
             if (oldaddr != sp->fts_path) {
@@ -970,7 +970,7 @@ fts_build(FTS* sp, int type)
             cur->fts_info = FTS_ERR;
             SET(FTS_STOP);
             errno = ENAMETOOLONG;
-            return nullptr;
+            return nullptr; 
         }
         p->fts_level = (short)level;
         p->fts_parent = sp->fts_cur;
@@ -1029,7 +1029,7 @@ fts_build(FTS* sp, int type)
         }
 
         /* We walk in directory order so "ls -f" doesn't get upset. */
-        p->fts_link = nullptr;
+        p->fts_link = nullptr; 
         if (head == nullptr) {
             head = tail = p;
         } else {
@@ -1076,7 +1076,7 @@ fts_build(FTS* sp, int type)
         cur->fts_info = FTS_ERR;
         SET(FTS_STOP);
         fts_lfree(head);
-        return nullptr;
+        return nullptr; 
     }
 
     /* If didn't find anything, return NULL. */
@@ -1085,7 +1085,7 @@ fts_build(FTS* sp, int type)
             cur->fts_info = FTS_DP;
         }
         fts_lfree(head);
-        return nullptr;
+        return nullptr; 
     }
 
     /* Sort the entries. */
@@ -1206,7 +1206,7 @@ fts_sort(FTS* sp, FTSENT* head, int nitems)
             if (sp->fts_array) {
                 free(sp->fts_array);
             }
-            sp->fts_array = nullptr;
+            sp->fts_array = nullptr; 
             sp->fts_nitems = 0;
             return (head);
         }
@@ -1219,7 +1219,7 @@ fts_sort(FTS* sp, FTSENT* head, int nitems)
     for (head = *(ap = sp->fts_array); --nitems; ++ap) {
         ap[0]->fts_link = ap[1];
     }
-    ap[0]->fts_link = nullptr;
+    ap[0]->fts_link = nullptr; 
     return (head);
 }
 
@@ -1242,7 +1242,7 @@ fts_alloc(FTS* sp, const char* name, int namelen)
         len += sizeof(stat_struct) + ALIGNBYTES;
     }
     if ((p = (FTSENT*)malloc(len)) == nullptr) {
-        return nullptr;
+        return nullptr; 
     }
 
     /* Copy the name and guarantee NUL termination. */
@@ -1258,7 +1258,7 @@ fts_alloc(FTS* sp, const char* name, int namelen)
     p->fts_flags = 0;
     p->fts_instr = FTS_NOINSTR;
     p->fts_number = 0;
-    p->fts_pointer = nullptr;
+    p->fts_pointer = nullptr; 
     p->fts_type = FTS_NSOK;
     return (p);
 }
@@ -1269,7 +1269,7 @@ fts_lfree(FTSENT* head)
     FTSENT* p;
 
     /* Free a linked list of structures. */
-    while ((p = head) != nullptr) {
+    while ((p = head) != nullptr) { 
         head = head->fts_link;
         free(p);
     }
@@ -1286,7 +1286,7 @@ fts_palloc(FTS* sp, size_t more)
 {
     sp->fts_pathlen += more + 256;
     sp->fts_path = (char*)yreallocf(sp->fts_path, (size_t)sp->fts_pathlen);
-    return (sp->fts_path == nullptr);
+    return (sp->fts_path == nullptr); 
 }
 
 static void

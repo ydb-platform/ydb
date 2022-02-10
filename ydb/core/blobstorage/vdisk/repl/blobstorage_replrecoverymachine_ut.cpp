@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-    Y_UNIT_TEST_SUITE(TBlobStorageReplRecoveryMachine) {
+    Y_UNIT_TEST_SUITE(TBlobStorageReplRecoveryMachine) { 
 
         TMap<TLogoBlobID, TVector<TString>> GenerateData(ui32 numBlobs,
                                                         ui32 maxLen,

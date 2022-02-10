@@ -57,8 +57,8 @@ void CheckAlterTenant(TTenantTestRuntime &runtime, const TString &tenant, TEvLoc
 
 }
 
-Y_UNIT_TEST_SUITE(TLocalTests) {
-    Y_UNIT_TEST(TestAddTenant) {
+Y_UNIT_TEST_SUITE(TLocalTests) { 
+    Y_UNIT_TEST(TestAddTenant) { 
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckAddTenant(runtime, TENANT1_1_NAME, TEvLocal::TEvTenantStatus::STARTED, 5);
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
                                    {TENANT1_2_NAME, 1, 1, 1}}});
     }
 
-    Y_UNIT_TEST(TestAlterTenant) {
+    Y_UNIT_TEST(TestAlterTenant) { 
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckAddTenant(runtime, TENANT1_1_NAME, TEvLocal::TEvTenantStatus::STARTED, 5, 5, 5);
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
                                    {TENANT1_1_NAME, 10, 10, 10}}});
     }
 
-    Y_UNIT_TEST(TestAddTenantWhileResolving) {
+    Y_UNIT_TEST(TestAddTenantWhileResolving) { 
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
         TAutoPtr<IEventHandle> handle;
 
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
                                    {TENANT1_2_NAME, 1, 1, 1}}});
     }
 
-    Y_UNIT_TEST(TestRemoveTenantWhileResolving) {
+    Y_UNIT_TEST(TestRemoveTenantWhileResolving) { 
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
         TAutoPtr<IEventHandle> handle;
 

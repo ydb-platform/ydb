@@ -54,12 +54,12 @@ public:
     }
 
     void SetPos(size_t off) {
-        Y_ASSERT(off <= Size());
+        Y_ASSERT(off <= Size()); 
         Offset_ = off;
     }
 
     inline void Proceed(size_t off) {
-        Y_ASSERT(off <= Left());
+        Y_ASSERT(off <= Left()); 
 
         Offset_ += off;
     }

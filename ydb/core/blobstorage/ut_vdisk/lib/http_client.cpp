@@ -33,7 +33,7 @@ THttpClient::~THttpClient() = default;
 void THttpClient::SendHttpRequest(const TStringBuf relativeUrl,
                                   const TString& body,
                                   const TString& method,
-                                  IOutputStream* output,
+                                  IOutputStream* output, 
                                   const THeaders& headers) const
 {
     auto addr = Resolve();
@@ -43,31 +43,31 @@ void THttpClient::SendHttpRequest(const TStringBuf relativeUrl,
 
     TString contentLength;
     parts.reserve(16);
-    parts.push_back(IOutputStream::TPart(method));
+    parts.push_back(IOutputStream::TPart(method)); 
     parts.push_back(TStringBuf(" "));
     parts.push_back(relativeUrl);
     parts.push_back(TStringBuf(" HTTP/1.1"));
-    parts.push_back(IOutputStream::TPart::CrLf());
+    parts.push_back(IOutputStream::TPart::CrLf()); 
     parts.push_back(TStringBuf("Host: "));
     parts.push_back(TStringBuf(Host));
-    parts.push_back(IOutputStream::TPart::CrLf());
+    parts.push_back(IOutputStream::TPart::CrLf()); 
     parts.push_back(TStringBuf("From: oxygen@yandex-team.ru"));
-    parts.push_back(IOutputStream::TPart::CrLf());
+    parts.push_back(IOutputStream::TPart::CrLf()); 
     if (body.size() > 0) {
         contentLength = ToString(body.size());
         parts.push_back(TStringBuf("Content-Length: "));
         parts.push_back(TStringBuf(contentLength));
-        parts.push_back(IOutputStream::TPart::CrLf());
+        parts.push_back(IOutputStream::TPart::CrLf()); 
     }
     for (const auto& entry: headers) {
-        parts.push_back(IOutputStream::TPart(entry.first));
+        parts.push_back(IOutputStream::TPart(entry.first)); 
         parts.push_back(IOutputStream::TPart(TStringBuf(": ")));
-        parts.push_back(IOutputStream::TPart(entry.second));
-        parts.push_back(IOutputStream::TPart::CrLf());
+        parts.push_back(IOutputStream::TPart(entry.second)); 
+        parts.push_back(IOutputStream::TPart::CrLf()); 
     }
-    parts.push_back(IOutputStream::TPart::CrLf());
+    parts.push_back(IOutputStream::TPart::CrLf()); 
     if (body.size() > 0) {
-        parts.push_back(IOutputStream::TPart(body));
+        parts.push_back(IOutputStream::TPart(body)); 
     }
 
     TSocketOutput sockOutput(*socket);
@@ -108,7 +108,7 @@ std::unique_ptr<TSocket> THttpClient::Connect(TNetworkAddress& addr) const {
 }
 
 
-void THttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output,
+void THttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output, 
     const unsigned statusCode) const
 {
     if (output) {
@@ -121,7 +121,7 @@ void THttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& inpu
     }
 }
 
-void THttpClient::ReadAndTransferHttp(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output) const {
+void THttpClient::ReadAndTransferHttp(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output) const { 
     unsigned statusCode;
     try {
         statusCode = ParseHttpRetCode(input.FirstLine());

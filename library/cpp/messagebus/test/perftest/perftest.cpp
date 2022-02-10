@@ -150,7 +150,7 @@ TAutoPtr<TBusMessage> NewRequest() {
 void CheckRequest(TPerftestRequest* request) {
     const TString& data = request->Record.GetData();
     for (size_t i = 0; i != data.size(); ++i) {
-        Y_VERIFY(data.at(i) == '?', "must be question mark");
+        Y_VERIFY(data.at(i) == '?', "must be question mark"); 
     }
 }
 
@@ -164,7 +164,7 @@ TAutoPtr<TPerftestResponse> NewResponse(TPerftestRequest* request) {
 void CheckResponse(TPerftestResponse* response) {
     const TString& data = response->Record.GetData();
     for (size_t i = 0; i != data.size(); ++i) {
-        Y_VERIFY(data.at(i) == '.', "must be dot");
+        Y_VERIFY(data.at(i) == '.', "must be dot"); 
     }
 }
 
@@ -279,7 +279,7 @@ public:
                 //delete message;
                 //Sleep(TDuration::MilliSeconds(1));
                 //continue;
-                Y_FAIL("unreachable");
+                Y_FAIL("unreachable"); 
             } else if (ret == MESSAGE_SHUTDOWN) {
                 delete message;
             } else {
@@ -295,7 +295,7 @@ public:
 
     /// actual work is being done here
     void OnReply(TAutoPtr<TBusMessage> mess, TAutoPtr<TBusMessage> reply) override {
-        Y_UNUSED(mess);
+        Y_UNUSED(mess); 
 
         if (Config.SimpleProtocol) {
             VerifyDynamicCast<TSimpleMessage*>(reply.Get());
@@ -310,8 +310,8 @@ public:
 
     /// message that could not be delivered
     void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
-        Y_UNUSED(mess);
-        Y_UNUSED(status);
+        Y_UNUSED(mess); 
+        Y_UNUSED(status); 
 
         if (TheExit) {
             return;
@@ -319,7 +319,7 @@ public:
 
         Stats.IncErrors();
 
-        // Y_ASSERT(TheConfig->Failure > 0.0);
+        // Y_ASSERT(TheConfig->Failure > 0.0); 
     }
 };
 
@@ -368,7 +368,7 @@ public:
     {
         /// register destination session
         Session = TBusServerSession::Create(Proto.Get(), this, Config.ServerSessionConfig, Bus);
-        Y_ASSERT(Session && "probably somebody is listening on the same port");
+        Y_ASSERT(Session && "probably somebody is listening on the same port"); 
     }
 
     /// when message comes, send reply
@@ -416,8 +416,8 @@ public:
         : TPerftestServerCommon("server")
         , TBusModule("fast")
     {
-        Y_VERIFY(CreatePrivateSessions(Bus.Get()), "failed to initialize dupdetect module");
-        Y_VERIFY(StartInput(), "failed to start input");
+        Y_VERIFY(CreatePrivateSessions(Bus.Get()), "failed to initialize dupdetect module"); 
+        Y_VERIFY(StartInput(), "failed to start input"); 
     }
 
     ~TPerftestUsingModule() override {
@@ -479,7 +479,7 @@ TVector<TNetAddr> ParseNodes(const TString nodes) {
 
     for (int i = 0; i < int(numh); i++) {
         const TNetworkAddress& networkAddress = ParseNetworkAddress(hosts[i].data());
-        Y_VERIFY(networkAddress.Begin() != networkAddress.End(), "no addresses");
+        Y_VERIFY(networkAddress.Begin() != networkAddress.End(), "no addresses"); 
         r.push_back(TNetAddr(networkAddress, &*networkAddress.Begin()));
     }
 
@@ -549,9 +549,9 @@ void TTestStats::PeriodicallyPrint() {
                     (unsigned)ServerUsingModule->Bus->GetExecutor()->GetWorkQueueSize(),
                     ServerUsingModule->Session->GetStatusSingleLine().data());
         }
-        for (const auto& client : clients) {
+        for (const auto& client : clients) { 
             fprintf(stderr, "client: q: %u %s\n",
-                    (unsigned)client->Bus->GetExecutor()->GetWorkQueueSize(),
+                    (unsigned)client->Bus->GetExecutor()->GetWorkQueueSize(), 
                     client->Session->GetStatusSingleLine().data());
         }
 
@@ -574,13 +574,13 @@ void TTestStats::PeriodicallyPrint() {
             stats << "server using modules:\n";
             stats << IndentText(ServerUsingModule->Bus->GetStatus());
         }
-        for (const auto& client : clients) {
+        for (const auto& client : clients) { 
             if (!first) {
                 stats << "\n";
             }
             first = false;
             stats << "client:\n";
-            stats << IndentText(client->Bus->GetStatus());
+            stats << IndentText(client->Bus->GetStatus()); 
         }
 
         TUnbufferedFileOutput("stats").Write(stats.Str());
@@ -693,15 +693,15 @@ int main(int argc, char* argv[]) {
     if (!clients.empty()) {
         Cerr << "Stopping clients\n";
 
-        for (auto& client : clients) {
-            client->Stop();
+        for (auto& client : clients) { 
+            client->Stop(); 
         }
     }
 
     wwwServer.Destroy();
 
-    for (const auto& future : futures) {
-        future->Get();
+    for (const auto& future : futures) { 
+        future->Get(); 
     }
 
     if (TheConfig->Profile) {

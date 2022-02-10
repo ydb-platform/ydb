@@ -3,7 +3,7 @@
 #include <util/stream/zlib.h>
 
 Y_UNIT_TEST_SUITE(THttpTestMedium) {
-    Y_UNIT_TEST(TestCodings2) {
+    Y_UNIT_TEST(TestCodings2) { 
         TStringBuf data = "aaaaaaaaaaaaaaaaaaaaaaa";
 
         for (auto codec : SupportedCodings()) {

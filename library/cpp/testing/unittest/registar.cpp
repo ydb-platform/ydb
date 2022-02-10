@@ -59,7 +59,7 @@ void ::NUnitTest::SetRaiseErrorHandler(::NUnitTest::TRaiseErrorHandler handler) 
 }
 
 void ::NUnitTest::NPrivate::SetUnittestThread(bool unittestThread) {
-    Y_VERIFY(UnittestThread != unittestThread, "state check");
+    Y_VERIFY(UnittestThread != unittestThread, "state check"); 
     UnittestThread = unittestThread;
 }
 

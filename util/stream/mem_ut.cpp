@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TestMemIO) {
-    Y_UNIT_TEST(TestReadTo) {
+Y_UNIT_TEST_SUITE(TestMemIO) { 
+    Y_UNIT_TEST(TestReadTo) { 
         TString s("0123456789abc");
         TMemoryInput in(s);
 
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TestMemIO) {
         UNIT_ASSERT(0 == memcmp(buffer, result, strlen(result)));
     }
 
-    Y_UNIT_TEST(Write) {
+    Y_UNIT_TEST(Write) { 
         char buffer[20];
         TMemoryOutput output(buffer, sizeof(buffer));
         output << "1"
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TestMemIO) {
         UNIT_ASSERT(0 == memcmp(buffer, result, strlen(result)));
     }
 
-    Y_UNIT_TEST(WriteChars) {
+    Y_UNIT_TEST(WriteChars) { 
         char buffer[20];
         TMemoryOutput output(buffer, sizeof(buffer));
         output << '1' << '2' << '3' << '4' << '5' << '6' << '7' << '8' << '9' << '0';

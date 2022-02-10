@@ -11,7 +11,7 @@
 extern const wchar32 BROKEN_RUNE;
 
 inline unsigned char UTF8LeadByteMask(size_t utf8_rune_len) {
-    // Y_ASSERT (utf8_rune_len <= 4);
+    // Y_ASSERT (utf8_rune_len <= 4); 
     return "\0\0\037\017\007"[utf8_rune_len];
 }
 
@@ -70,7 +70,7 @@ inline bool IsUTF8ContinuationByte(unsigned char c) {
 //! @param p    pointer to the current character
 //! @param e    end of the character sequence
 inline RECODE_RESULT GetUTF8CharLen(size_t& n, const unsigned char* p, const unsigned char* e) {
-    Y_ASSERT(p < e); // since p < e then we will check RECODE_EOINPUT only for n > 1 (see calls of this functions)
+    Y_ASSERT(p < e); // since p < e then we will check RECODE_EOINPUT only for n > 1 (see calls of this functions) 
     switch (UTF8RuneLen(*p)) {
         case 0:
             return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in first byte
@@ -125,7 +125,7 @@ inline bool GetNumberOfUTF8Chars(const char* text, size_t len, size_t& number) {
             break;
         }
         cur += runeLen;
-        Y_ASSERT(cur <= last);
+        Y_ASSERT(cur <= last); 
         ++number;
     }
     return res;
@@ -195,7 +195,7 @@ inline RECODE_RESULT SafeReadUTF8Char(wchar32& rune, size_t& rune_len, const uns
 //! @param p    pointer to the current character, it will be changed in case of valid UTF8 byte sequence
 //! @param e    the end of the character sequence
 Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigned char*& p, const unsigned char* e) noexcept {
-    Y_ASSERT(p < e); // since p < e then we will check RECODE_EOINPUT only for n > 1 (see calls of this functions)
+    Y_ASSERT(p < e); // since p < e then we will check RECODE_EOINPUT only for n > 1 (see calls of this functions) 
     switch (UTF8RuneLen(*p)) {
         case 0:
             rune = BROKEN_RUNE;
@@ -345,7 +345,7 @@ inline void WriteUTF8Char(wchar32 rune, size_t& rune_len, unsigned char* s) {
     }
 }
 
-TStringBuf SubstrUTF8(const TStringBuf str, size_t pos, size_t len);
+TStringBuf SubstrUTF8(const TStringBuf str, size_t pos, size_t len); 
 
 enum EUTF8Detect {
     NotUTF8,
@@ -355,7 +355,7 @@ enum EUTF8Detect {
 
 EUTF8Detect UTF8Detect(const char* s, size_t len);
 
-inline EUTF8Detect UTF8Detect(const TStringBuf input) {
+inline EUTF8Detect UTF8Detect(const TStringBuf input) { 
     return UTF8Detect(input.data(), input.size());
 }
 
@@ -363,7 +363,7 @@ inline bool IsUtf(const char* input, size_t len) {
     return UTF8Detect(input, len) != NotUTF8;
 }
 
-inline bool IsUtf(const TStringBuf input) {
+inline bool IsUtf(const TStringBuf input) { 
     return IsUtf(input.data(), input.size());
 }
 

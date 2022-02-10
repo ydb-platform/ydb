@@ -136,7 +136,7 @@ namespace NUnicode {
         class TCompositor<false> {
         public:
             inline void DoComposition(TBuffer& buffer) {
-                Y_UNUSED(buffer);
+                Y_UNUSED(buffer); 
             }
         };
 
@@ -182,7 +182,7 @@ namespace NUnicode {
                     }
                 } while (oneMoreTurnPlease);
 
-                Y_ASSERT(DecompositionCombining(lead) == 0);
+                Y_ASSERT(DecompositionCombining(lead) == 0); 
                 buffer[0] = TSymbol(lead, 0);
             }
         };
@@ -280,7 +280,7 @@ namespace NUnicode {
             const wchar32* decompBegin = Decompositor.Decomposition(c);
             if (decompBegin) {
                 while (*decompBegin) {
-                    Y_ASSERT(Decompositor.Decomposition(*decompBegin) == nullptr);
+                    Y_ASSERT(Decompositor.Decomposition(*decompBegin) == nullptr); 
                     AddCharNoDecomposition(*(decompBegin++), out);
                 }
                 return;
@@ -377,8 +377,8 @@ inline TBasicString<TCharType> Normalize(const TBasicString<TCharType>& str) {
     ::NUnicode::TNormalizer<N> dec;
     return dec.Normalize(str);
 }
-
+ 
 template <NUnicode::ENormalization N, typename TCharType>
 inline TBasicString<TCharType> Normalize(const TBasicStringBuf<TCharType> str) {
-    return Normalize<N>(str.data(), str.size());
-}
+    return Normalize<N>(str.data(), str.size()); 
+} 

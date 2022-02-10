@@ -1,10 +1,10 @@
-OWNER(
-    yazevnul
+OWNER( 
+    yazevnul 
     g:util
-)
-
-RECURSE(
-    generic
-    lib
+) 
+ 
+RECURSE( 
+    generic 
+    lib 
     uneven
-)
+) 

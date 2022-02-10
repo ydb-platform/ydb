@@ -3,21 +3,21 @@ OWNER(
     g:util
 )
 
-IF (NOT MSVC)
-    FUZZ()
+IF (NOT MSVC) 
+    FUZZ() 
 
-    SIZE(MEDIUM)
+    SIZE(MEDIUM) 
 
-    SRCS(
-        main.cpp
-    )
-
-    PEERDIR(
-        contrib/libs/protobuf
-        contrib/libs/protobuf-mutator
+    SRCS( 
+        main.cpp 
+    ) 
+ 
+    PEERDIR( 
+        contrib/libs/protobuf 
+        contrib/libs/protobuf-mutator 
         library/cpp/blockcodecs
         library/cpp/blockcodecs/fuzz/proto
-    )
-
-    END()
-ENDIF()
+    ) 
+ 
+    END() 
+ENDIF() 

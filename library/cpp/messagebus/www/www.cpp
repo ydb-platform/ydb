@@ -38,7 +38,7 @@ namespace {
         TVector<std::pair<TString, TValuePtr>> Entries;
 
         TValuePtr FindByName(TStringBuf name) {
-            Y_VERIFY(!!name);
+            Y_VERIFY(!!name); 
 
             for (unsigned i = 0; i < Entries.size(); ++i) {
                 if (Entries[i].first == name) {
@@ -49,7 +49,7 @@ namespace {
         }
 
         TString FindNameByPtr(TValuePtr value) {
-            Y_VERIFY(!!value);
+            Y_VERIFY(!!value); 
 
             for (unsigned i = 0; i < Entries.size(); ++i) {
                 if (Entries[i].second.Get() == value.Get()) {
@@ -57,11 +57,11 @@ namespace {
                 }
             }
 
-            Y_FAIL("unregistered");
+            Y_FAIL("unregistered"); 
         }
 
         void Add(TValuePtr p) {
-            Y_VERIFY(!!p);
+            Y_VERIFY(!!p); 
 
             // Do not add twice
             for (unsigned i = 0; i < Entries.size(); ++i) {
@@ -187,27 +187,27 @@ struct TBusWww::TImpl {
     TMutex Mutex;
 
     void RegisterClientSession(TBusClientSessionPtr s) {
-        Y_VERIFY(!!s);
+        Y_VERIFY(!!s); 
         TGuard<TMutex> g(Mutex);
         ClientSessions.Add(s.Get());
         Queues.Add(s->GetQueue());
     }
 
     void RegisterServerSession(TBusServerSessionPtr s) {
-        Y_VERIFY(!!s);
+        Y_VERIFY(!!s); 
         TGuard<TMutex> g(Mutex);
         ServerSessions.Add(s.Get());
         Queues.Add(s->GetQueue());
     }
 
     void RegisterQueue(TBusMessageQueuePtr q) {
-        Y_VERIFY(!!q);
+        Y_VERIFY(!!q); 
         TGuard<TMutex> g(Mutex);
         Queues.Add(q);
     }
 
     void RegisterModule(TBusModule* module) {
-        Y_VERIFY(!!module);
+        Y_VERIFY(!!module); 
         TGuard<TMutex> g(Mutex);
 
         {
@@ -239,17 +239,17 @@ struct TBusWww::TImpl {
             serverSession = ServerSessions.FindByName(sessionName);
             session = serverSession.Get();
         }
-        Y_VERIFY(!!session);
+        Y_VERIFY(!!session); 
         return Queues.FindNameByPtr(session->GetQueue());
     }
 
     struct TRequest {
         TImpl* const Outer;
-        IOutputStream& Os;
+        IOutputStream& Os; 
         const TCgiParameters& CgiParams;
         const TOptionalParams& Params;
 
-        TRequest(TImpl* outer, IOutputStream& os, const TCgiParameters& cgiParams, const TOptionalParams& params)
+        TRequest(TImpl* outer, IOutputStream& os, const TCgiParameters& cgiParams, const TOptionalParams& params) 
             : Outer(outer)
             , Os(os)
             , CgiParams(cgiParams)
@@ -681,9 +681,9 @@ struct TBusWww::TImpl {
         }
 
         void ServeSolomonJson(const TString& q, const TString& cs, const TString& ss) {
-            Y_UNUSED(q);
-            Y_UNUSED(cs);
-            Y_UNUSED(ss);
+            Y_UNUSED(q); 
+            Y_UNUSED(cs); 
+            Y_UNUSED(ss); 
             bool all = q == "" && cs == "" && ss == "";
 
             NMonitoring::TDeprecatedJsonWriter sj(&Os);
@@ -720,10 +720,10 @@ struct TBusWww::TImpl {
             sj.CloseDocument();
         }
 
-        void ServeStatic(IOutputStream& os, TStringBuf path) {
-            if (path.EndsWith(".js")) {
+        void ServeStatic(IOutputStream& os, TStringBuf path) { 
+            if (path.EndsWith(".js")) { 
                 os << HTTP_OK_JS;
-            } else if (path.EndsWith(".png")) {
+            } else if (path.EndsWith(".png")) { 
                 os << HTTP_OK_PNG;
             } else {
                 os << HTTP_OK_BIN;
@@ -799,7 +799,7 @@ struct TBusWww::TImpl {
         }
     };
 
-    void ServeHttp(IOutputStream& os, const TCgiParameters& queryArgs, const TBusWww::TOptionalParams& params) {
+    void ServeHttp(IOutputStream& os, const TCgiParameters& queryArgs, const TBusWww::TOptionalParams& params) { 
         TGuard<TMutex> g(Mutex);
 
         TRequest request(this, os, queryArgs, params);
@@ -832,7 +832,7 @@ void TBusWww::RegisterModule(TBusModule* module) {
     Impl->RegisterModule(module);
 }
 
-void TBusWww::ServeHttp(IOutputStream& httpOutputStream,
+void TBusWww::ServeHttp(IOutputStream& httpOutputStream, 
                         const TCgiParameters& queryArgs,
                         const TBusWww::TOptionalParams& params) {
     Impl->ServeHttp(httpOutputStream, queryArgs, params);
@@ -843,7 +843,7 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
     THttpServer HttpServer;
 
     static THttpServer::TOptions MakeHttpServerOptions(unsigned port) {
-        Y_VERIFY(port > 0);
+        Y_VERIFY(port > 0); 
         THttpServer::TOptions r;
         r.Port = port;
         return r;

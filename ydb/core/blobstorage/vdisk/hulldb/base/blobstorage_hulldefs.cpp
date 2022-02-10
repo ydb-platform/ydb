@@ -58,7 +58,7 @@ namespace NKikimr {
         return str.Str();
     }
 
-    void TPutRecoveryLogRecOpt::Output(IOutputStream &str) const {
+    void TPutRecoveryLogRecOpt::Output(IOutputStream &str) const { 
         str << "{Id# " << Id << "}";
     }
 

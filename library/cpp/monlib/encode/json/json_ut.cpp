@@ -132,10 +132,10 @@ namespace {
 } // namespace
 
 
-Y_UNIT_TEST_SUITE(TJsonTest) {
+Y_UNIT_TEST_SUITE(TJsonTest) { 
     const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z");
 
-    Y_UNIT_TEST(Encode) {
+    Y_UNIT_TEST(Encode) { 
         auto check = [](bool cloud, bool buffered, TStringBuf expectedResourceKey) {
             TString json;
             TStringOutput out(json);
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(1));
         }
     }
-    Y_UNIT_TEST(Decode1) {
+    Y_UNIT_TEST(Decode1) { 
         NProto::TMultiSamplesList samples;
         {
             IMetricEncoderPtr e = EncoderProtobuf(&samples);

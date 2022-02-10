@@ -2,7 +2,7 @@
 
 #include "headers.h"
 
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -22,9 +22,9 @@ struct THttpReadException: public THttpException {
 };
 
 /// Чтение ответа HTTP-сервера.
-class THttpInput: public IInputStream {
+class THttpInput: public IInputStream { 
 public:
-    THttpInput(IInputStream* slave);
+    THttpInput(IInputStream* slave); 
     THttpInput(THttpInput&& httpInput);
     ~THttpInput() override;
 
@@ -96,10 +96,10 @@ private:
 };
 
 /// Передача запроса HTTP-серверу.
-class THttpOutput: public IOutputStream {
+class THttpOutput: public IOutputStream { 
 public:
-    THttpOutput(IOutputStream* slave);
-    THttpOutput(IOutputStream* slave, THttpInput* request);
+    THttpOutput(IOutputStream* slave); 
+    THttpOutput(IOutputStream* slave, THttpInput* request); 
     ~THttpOutput() override;
 
     /*

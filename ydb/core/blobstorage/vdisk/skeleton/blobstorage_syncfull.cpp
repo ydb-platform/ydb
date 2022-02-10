@@ -56,7 +56,7 @@ namespace NKikimr {
                        TString *buf,
                        const TKeyLogoBlob &key,
                        const TMemRecLogoBlob &memRec) {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetLogoBlob;
             ui32 size = s(HullCtx->VCtx->Top->GType, tmpBuf, 0, key.LogoBlobID(), memRec.GetIngress());
@@ -67,7 +67,7 @@ namespace NKikimr {
                        TString *buf,
                        const TKeyBlock &key,
                        const TMemRecBlock &memRec) {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetBlock;
             ui32 size = s(tmpBuf, 0, key.TabletId, memRec.BlockedGeneration, 0);
@@ -78,7 +78,7 @@ namespace NKikimr {
                        TString *buf,
                        const TKeyBarrier &key,
                        const TMemRecBarrier &memRec) {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetBarrier;
             ui32 size = s(tmpBuf, 0, key.TabletId, key.Channel, key.Gen,
@@ -113,7 +113,7 @@ namespace NKikimr {
                     Stage = NKikimrBlobStorage::Barriers;
                     pres = Process(ctx, FullSnap.BarriersSnap, KeyBarrier, FakeFilter);
                     break;
-                default: Y_FAIL("Unexpected case: stage=%d", Stage);
+                default: Y_FAIL("Unexpected case: stage=%d", Stage); 
             }
 
             bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::Barriers;

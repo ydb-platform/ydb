@@ -62,7 +62,7 @@ namespace NKikimr {
         };
 
         ui64 GetFirstLsn() const {
-            Y_VERIFY_DEBUG(!Empty());
+            Y_VERIFY_DEBUG(!Empty()); 
             ui64 firstLsn = ui64(-1);
             for (const auto &x : Segments)
                 firstLsn = Min(firstLsn, x->Info.FirstLsn);
@@ -70,7 +70,7 @@ namespace NKikimr {
         }
 
         ui64 GetLastLsn() const {
-            Y_VERIFY_DEBUG(!Empty());
+            Y_VERIFY_DEBUG(!Empty()); 
             ui64 lastLsn = 0;
             for (const auto &x : Segments)
                 lastLsn = Max(lastLsn, x->Info.LastLsn);
@@ -149,14 +149,14 @@ namespace NKikimr {
             return elements;
         }
 
-        void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
+        void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const { 
             for (typename TSegments::const_iterator it = Segments.begin(), e = Segments.end(); it != e; ++it) {
                 (*it)->OutputHtml(index, level, str, sum);
             }
         }
 
         // dump all accessible data
-        void DumpAll(IOutputStream &str) const {
+        void DumpAll(IOutputStream &str) const { 
             for (const auto &x : Segments)
                 x->DumpAll(str);
         }
@@ -249,7 +249,7 @@ namespace NKikimr {
             return lastLsn;
         }
 
-        void OutputHtml(ui32 &index, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
+        void OutputHtml(ui32 &index, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const { 
             for (const auto &x : Segments) {
                 if (x)
                     x->OutputHtml(index, 0, str, sum);

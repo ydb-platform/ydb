@@ -253,7 +253,7 @@ public:
         return rows ? (size / rows) : 0;
     }
 
-    void DebugDump(IOutputStream& str, IPages *env, const NScheme::TTypeRegistry& typeRegistry) const;
+    void DebugDump(IOutputStream& str, IPages *env, const NScheme::TTypeRegistry& typeRegistry) const; 
 
     TKeyRangeCache* GetErasedKeysCache() const;
 

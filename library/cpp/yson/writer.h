@@ -6,8 +6,8 @@
 
 #include <util/generic/noncopyable.h>
 
-class IOutputStream;
-class IZeroCopyInput;
+class IOutputStream; 
+class IZeroCopyInput; 
 
 namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////

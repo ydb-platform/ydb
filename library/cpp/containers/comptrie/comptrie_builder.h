@@ -81,8 +81,8 @@ public:
         return FindLongestPrefix(key.data(), key.size(), prefixLen, value);
     }
 
-    size_t Save(IOutputStream& os) const;
-    size_t SaveAndDestroy(IOutputStream& os);
+    size_t Save(IOutputStream& os) const; 
+    size_t SaveAndDestroy(IOutputStream& os); 
     size_t SaveToFile(const TString& fileName) const {
         TFixedBufferFileOutput out(fileName);
         return Save(out);
@@ -118,10 +118,10 @@ protected:
 // If you want both minimization and fast layout, do the minimization first.
 
 template <class TPacker>
-size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker(), NCompactTrie::EMinimizeMode mode = NCompactTrie::MM_DEFAULT);
+size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker(), NCompactTrie::EMinimizeMode mode = NCompactTrie::MM_DEFAULT); 
 
 template <class TTrieBuilder>
-size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false);
+size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false); 
 
 //----------------------------------------------------------------------------------------------------------------
 // Lay the trie in memory in such a way that there are less cache misses when jumping from root to leaf.
@@ -143,17 +143,17 @@ size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool 
 // (there is not much difference between these papers, actually).
 //
 template <class TPacker>
-size_t CompactTrieMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker());
+size_t CompactTrieMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker()); 
 
 template <class TTrieBuilder>
-size_t CompactTrieMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false);
+size_t CompactTrieMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false); 
 
 // Composition of minimization and fast layout
 template <class TPacker>
-size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker());
+size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker()); 
 
 template <class TTrieBuilder>
-size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false);
+size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false); 
 
 // Implementation details moved here.
 #include "comptrie_builder.inl"

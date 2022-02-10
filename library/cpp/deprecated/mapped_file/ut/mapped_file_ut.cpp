@@ -3,9 +3,9 @@
 
 #include <util/system/fs.h>
 
-Y_UNIT_TEST_SUITE(TMappedFileTest) {
+Y_UNIT_TEST_SUITE(TMappedFileTest) { 
     static const char* FileName_("./mappped_file");
-    Y_UNIT_TEST(TestFileMapEmpty) {
+    Y_UNIT_TEST(TestFileMapEmpty) { 
         TFile file(FileName_, CreateAlways | WrOnly);
         file.Close();
 

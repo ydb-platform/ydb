@@ -27,15 +27,15 @@
 
 struct IBinSaver;
 
-class IObjectBase {
+class IObjectBase { 
 private:
 #ifdef CHECK_YPTR2
-    static Y_POD_THREAD(bool) DisableThreadCheck;
+    static Y_POD_THREAD(bool) DisableThreadCheck; 
     void CheckThreadId() {
         if (dwThreadId == 0)
             dwThreadId = GetCurrentThreadId();
         else
-            Y_ASSERT(dwThreadId == GetCurrentThreadId() || DisableThreadCheck);
+            Y_ASSERT(dwThreadId == GetCurrentThreadId() || DisableThreadCheck); 
     }
     void AddRef() {
         CheckThreadId();
@@ -87,14 +87,14 @@ protected:
     // function should clear contents of object, easy to implement via consequent calls to
     // destructor and constructor, this function should not be called directly, use Clear()
     virtual void DestroyContents() = 0;
-    virtual ~IObjectBase() = default;
-    inline void CopyValidFlag(const IObjectBase& a) {
+    virtual ~IObjectBase() = default; 
+    inline void CopyValidFlag(const IObjectBase& a) { 
         ObjData &= 0x7fffffff;
         ObjData |= a.ObjData & 0x80000000;
     }
 
 public:
-    IObjectBase()
+    IObjectBase() 
         : ObjData(0)
         , RefData(0)
     {
@@ -103,7 +103,7 @@ public:
 #endif
     }
     // do not copy refcount when copy object
-    IObjectBase(const IObjectBase& a)
+    IObjectBase(const IObjectBase& a) 
         : ObjData(0)
         , RefData(0)
     {
@@ -112,7 +112,7 @@ public:
 #endif
         CopyValidFlag(a);
     }
-    IObjectBase& operator=(const IObjectBase& a) {
+    IObjectBase& operator=(const IObjectBase& a) { 
         CopyValidFlag(a);
         return *this;
     }
@@ -121,7 +121,7 @@ public:
         DisableThreadCheck = !val;
     }
     void ResetThreadId() {
-        Y_ASSERT(RefData == 0 && ObjData == 0); // can reset thread check only for ref free objects
+        Y_ASSERT(RefData == 0 && ObjData == 0); // can reset thread check only for ref free objects 
         dwThreadId = 0;
     }
 #else
@@ -152,41 +152,41 @@ public:
     }
 
     struct TRefO {
-        void AddRef(IObjectBase* pObj) {
+        void AddRef(IObjectBase* pObj) { 
             pObj->AddObj(1);
         }
-        void DecRef(IObjectBase* pObj) {
+        void DecRef(IObjectBase* pObj) { 
             pObj->DecObj(1);
         }
-        void Release(IObjectBase* pObj) {
+        void Release(IObjectBase* pObj) { 
             pObj->ReleaseObj(1, 0x000fffff);
         }
     };
     struct TRefM {
-        void AddRef(IObjectBase* pObj) {
+        void AddRef(IObjectBase* pObj) { 
             pObj->AddObj(0x100000);
         }
-        void DecRef(IObjectBase* pObj) {
+        void DecRef(IObjectBase* pObj) { 
             pObj->DecObj(0x100000);
         }
-        void Release(IObjectBase* pObj) {
+        void Release(IObjectBase* pObj) { 
             pObj->ReleaseObj(0x100000, 0x3ff00000);
         }
     };
     struct TRef {
-        void AddRef(IObjectBase* pObj) {
+        void AddRef(IObjectBase* pObj) { 
             pObj->AddRef();
         }
-        void DecRef(IObjectBase* pObj) {
+        void DecRef(IObjectBase* pObj) { 
             pObj->DecRef();
         }
-        void Release(IObjectBase* pObj) {
+        void Release(IObjectBase* pObj) { 
             pObj->ReleaseRef();
         }
     };
-    friend struct IObjectBase::TRef;
-    friend struct IObjectBase::TRefO;
-    friend struct IObjectBase::TRefM;
+    friend struct IObjectBase::TRef; 
+    friend struct IObjectBase::TRefO; 
+    friend struct IObjectBase::TRefM; 
 };
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // macro that helps to create neccessary members for proper operation of refcount system
@@ -196,7 +196,7 @@ public:                                                           \
     virtual const char* GetClassName() const override {           \
         return #classname;                                        \
     }                                                             \
-    static IObjectBase* NewSaveLoadNullItem() {                   \
+    static IObjectBase* NewSaveLoadNullItem() {                   \ 
         return new classname();                                   \
     }                                                             \
                                                                   \
@@ -215,38 +215,38 @@ private:
     Y_PRAGMA_DIAGNOSTIC_PUSH                                                         \
     Y_PRAGMA_NO_UNUSED_FUNCTION                                                      \
     template <>                                                                      \
-    IObjectBase* CastToObjectBaseImpl<classname>(classname * p, void*) {             \
+    IObjectBase* CastToObjectBaseImpl<classname>(classname * p, void*) {             \ 
         return p;                                                                    \
     }                                                                                \
     template <>                                                                      \
-    classname* CastToUserObjectImpl<classname>(IObjectBase * p, classname*, void*) { \
+    classname* CastToUserObjectImpl<classname>(IObjectBase * p, classname*, void*) { \ 
         return dynamic_cast<classname*>(p);                                          \
     }                                                                                \
     Y_PRAGMA_DIAGNOSTIC_POP
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class TUserObj>
-IObjectBase* CastToObjectBaseImpl(TUserObj* p, void*);
+IObjectBase* CastToObjectBaseImpl(TUserObj* p, void*); 
 template <class TUserObj>
-IObjectBase* CastToObjectBaseImpl(TUserObj* p, IObjectBase*) {
+IObjectBase* CastToObjectBaseImpl(TUserObj* p, IObjectBase*) { 
     return p;
 }
 template <class TUserObj>
-TUserObj* CastToUserObjectImpl(IObjectBase* p, TUserObj*, void*);
+TUserObj* CastToUserObjectImpl(IObjectBase* p, TUserObj*, void*); 
 template <class TUserObj>
-TUserObj* CastToUserObjectImpl(IObjectBase* _p, TUserObj*, IObjectBase*) {
+TUserObj* CastToUserObjectImpl(IObjectBase* _p, TUserObj*, IObjectBase*) { 
     return dynamic_cast<TUserObj*>(_p);
 }
 template <class TUserObj>
-inline IObjectBase* CastToObjectBase(TUserObj* p) {
+inline IObjectBase* CastToObjectBase(TUserObj* p) { 
     return CastToObjectBaseImpl(p, p);
 }
 template <class TUserObj>
-inline const IObjectBase* CastToObjectBase(const TUserObj* p) {
+inline const IObjectBase* CastToObjectBase(const TUserObj* p) { 
     return p;
 }
 template <class TUserObj>
-inline TUserObj* CastToUserObject(IObjectBase* p, TUserObj* pu) {
+inline TUserObj* CastToUserObject(IObjectBase* p, TUserObj* pu) { 
     return CastToUserObjectImpl(p, pu, pu);
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -333,7 +333,7 @@ public:
     TUserObj* Get() const {
         return ptr;
     }
-    IObjectBase* GetBarePtr() const {
+    IObjectBase* GetBarePtr() const { 
         return CastToObjectBase(ptr);
     }
     int operator&(IBinSaver& f);
@@ -378,9 +378,9 @@ inline bool IsValid(const TPtrBase<T, TRef>& p) {
         }                                        \
     };
 
-BASIC_PTR_DECLARE(TPtr, IObjectBase::TRef)
-BASIC_PTR_DECLARE(TObj, IObjectBase::TRefO)
-BASIC_PTR_DECLARE(TMObj, IObjectBase::TRefM)
+BASIC_PTR_DECLARE(TPtr, IObjectBase::TRef) 
+BASIC_PTR_DECLARE(TObj, IObjectBase::TRefO) 
+BASIC_PTR_DECLARE(TMObj, IObjectBase::TRefM) 
 // misuse guard
 template <class T>
 inline bool IsValid(TObj<T>* p) {
@@ -395,7 +395,7 @@ inline bool IsValid(TMObj<T>* p) {
     return p->YouHaveMadeMistake();
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// assumes base class is IObjectBase
+// assumes base class is IObjectBase 
 template <class T>
 class TDynamicCast {
     T* ptr;

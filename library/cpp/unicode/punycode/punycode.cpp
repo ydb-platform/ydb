@@ -135,7 +135,7 @@ bool CanBePunycodeHostName(const TStringBuf& host) {
     TStringBuf tail(host);
     while (tail) {
         const TStringBuf label = tail.NextTok('.');
-        if (label.StartsWith(ACE))
+        if (label.StartsWith(ACE)) 
             return true;
     }
 

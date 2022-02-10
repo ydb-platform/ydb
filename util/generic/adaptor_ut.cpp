@@ -32,8 +32,8 @@ struct TState {
     }
 };
 
-Y_UNIT_TEST_SUITE(TReverseAdaptor) {
-    Y_UNIT_TEST(ReadTest) {
+Y_UNIT_TEST_SUITE(TReverseAdaptor) { 
+    Y_UNIT_TEST(ReadTest) { 
         TVector<int> cont = {1, 2, 3};
         TVector<int> etalon = {3, 2, 1};
         size_t idx = 0;
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TReverseAdaptor) {
         }
     }
 
-    Y_UNIT_TEST(WriteTest) {
+    Y_UNIT_TEST(WriteTest) { 
         TVector<int> cont = {1, 2, 3};
         TVector<int> etalon = {3, 6, 9};
         size_t idx = 0;
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TReverseAdaptor) {
         }
     }
 
-    Y_UNIT_TEST(InnerTypeTest) {
+    Y_UNIT_TEST(InnerTypeTest) { 
         using TStub = TVector<int>;
         TStub stub;
         const TStub cstub;
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TReverseAdaptor) {
         UNIT_ASSERT_TYPES_EQUAL(decltype(Reversed(cstub)), TReverseRange<const TStub&>);
     }
 
-    Y_UNIT_TEST(CopyMoveTest) {
+    Y_UNIT_TEST(CopyMoveTest) { 
         TState lvalue;
         const TState clvalue;
         UNIT_ASSERT_NO_EXCEPTION(Reversed(lvalue));

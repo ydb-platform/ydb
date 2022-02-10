@@ -102,7 +102,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
         // Commit all side effects
         return true;
     } catch (...) {
-        Y_FAIL("there must be no leaked exceptions");
+        Y_FAIL("there must be no leaked exceptions"); 
     }
 }
 

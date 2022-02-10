@@ -58,7 +58,7 @@ private:
 /**
  * Input stream that reads from an external `TBuffer`.
  */
-class TBufferInput: public IZeroCopyInputFastReadTo {
+class TBufferInput: public IZeroCopyInputFastReadTo { 
 public:
     /**
      * Constructs a stream that reads from an external buffer. It's up to the

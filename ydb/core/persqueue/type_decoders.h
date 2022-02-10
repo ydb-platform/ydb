@@ -60,7 +60,7 @@ private:
         { }
 
         void Back() override {
-            Y_VERIFY_DEBUG(Index > 0);
+            Y_VERIFY_DEBUG(Index > 0); 
             --Index;
         }
     };
@@ -80,20 +80,20 @@ public:
     }
 
     static inline IChunkDecoder::TPtr ReadNextImpl(const TDataRef& data, const TTypeCodecs* codecs) {
-        Y_VERIFY_DEBUG(data.Size() >= sizeof(TCodecSig));
+        Y_VERIFY_DEBUG(data.Size() >= sizeof(TCodecSig)); 
         const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data());
-        if (Y_LIKELY(sig == Sig())) {
+        if (Y_LIKELY(sig == Sig())) { 
             return new TDerived(data);
         } else {
             auto codec = codecs->GetCodec(sig);
-            Y_VERIFY(codec, "Unknown codec signature.");
+            Y_VERIFY(codec, "Unknown codec signature."); 
             return codec->ReadChunk(data);
         }
     }
 
 protected:
     static inline void VerifySignature(const TDataRef& data) {
-        Y_VERIFY(data.Size() >= sizeof(TCodecSig));
+        Y_VERIFY(data.Size() >= sizeof(TCodecSig)); 
         Y_VERIFY(ReadUnaligned<TCodecSig>(data.Data()) == Sig());
     }
 };
@@ -406,7 +406,7 @@ private:
     }
 
     inline TDataRef GetFromCache(size_t index) const {
-        Y_VERIFY_DEBUG(index < Cache.size());
+        Y_VERIFY_DEBUG(index < Cache.size()); 
         return TDataRef((const char*)&Cache[index], sizeof(TType));
     }
 

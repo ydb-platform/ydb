@@ -8,11 +8,11 @@
 
 #include <util/string/printf.h>
 #include <util/network/socket.h>
-#include <util/stream/file.h>
-#include <util/stream/output.h>
-#include <util/stream/tee.h>
+#include <util/stream/file.h> 
+#include <util/stream/output.h> 
+#include <util/stream/tee.h> 
 #include <util/stream/zlib.h>
-#include <util/stream/null.h>
+#include <util/stream/null.h> 
 
 Y_UNIT_TEST_SUITE(THttpStreamTest) {
     class TTestHttpServer: public THttpServer::ICallBack {
@@ -78,11 +78,11 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         size_t LastRequestSentSize_ = 0;
     };
 
-    Y_UNIT_TEST(TestCodings1) {
+    Y_UNIT_TEST(TestCodings1) { 
         UNIT_ASSERT(SupportedCodings().size() > 0);
     }
 
-    Y_UNIT_TEST(TestHttpInput) {
+    Y_UNIT_TEST(TestHttpInput) { 
         TString res = "I'm a teapot";
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         server.Stop();
     }
 
-    Y_UNIT_TEST(TestHttpInputDelete) {
+    Y_UNIT_TEST(TestHttpInputDelete) { 
         TString res = "I'm a teapot";
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -174,11 +174,11 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         server.Stop();
     }
 
-    Y_UNIT_TEST(TestParseHttpRetCode) {
+    Y_UNIT_TEST(TestParseHttpRetCode) { 
         UNIT_ASSERT_VALUES_EQUAL(ParseHttpRetCode("HTTP/1.1 301"), 301u);
     }
 
-    Y_UNIT_TEST(TestKeepAlive) {
+    Y_UNIT_TEST(TestKeepAlive) { 
         {
             TString s = "GET / HTTP/1.0\r\n\r\n";
             TStringInput si(s);
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         }
     }
 
-    Y_UNIT_TEST(TestMinRequest) {
+    Y_UNIT_TEST(TestMinRequest) { 
         TString res = "qqqqqq";
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         server.Stop();
     }
 
-    Y_UNIT_TEST(TestResponseWithBlanks) {
+    Y_UNIT_TEST(TestResponseWithBlanks) { 
         TString res = "qqqqqq\r\n\r\nsdasdsad\r\n";
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         server.Stop();
     }
 
-    Y_UNIT_TEST(TestOutputFlush) {
+    Y_UNIT_TEST(TestOutputFlush) { 
         TString str;
         TStringOutput strOut(str);
         TBufferedOutput bufOut(&strOut, 8192);
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size());
     }
 
-    Y_UNIT_TEST(TestOutputPostFlush) {
+    Y_UNIT_TEST(TestOutputPostFlush) { 
         TString str;
         TString checkStr;
         TStringOutput strOut(str);
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT(MakeHttpOutputBody(body, true) == SimulateBodyEncoding(body));
     }
 
-    Y_UNIT_TEST(TestOutputFinish) {
+    Y_UNIT_TEST(TestOutputFinish) { 
         TString str;
         TStringOutput strOut(str);
         TBufferedOutput bufOut(&strOut, 8192);
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size());
     }
 
-    Y_UNIT_TEST(TestMultilineHeaders) {
+    Y_UNIT_TEST(TestMultilineHeaders) { 
         const char* headerLine0 = "HTTP/1.1 200 OK";
         const char* headerLine1 = "Content-Language: en";
         const char* headerLine2 = "Vary: Accept-Encoding, ";
@@ -419,7 +419,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString(headerLine4));
     }
 
-    Y_UNIT_TEST(ContentLengthRemoval) {
+    Y_UNIT_TEST(ContentLengthRemoval) { 
         TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n");
         THttpInput i(&request);
         TString result;
@@ -487,7 +487,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT(result.Contains("content-encoding: gzip"));
     }
 
-    Y_UNIT_TEST(HasTrailers) {
+    Y_UNIT_TEST(HasTrailers) { 
         TMemoryInput response(
             "HTTP/1.1 200 OK\r\n"
             "Transfer-Encoding: chunked\r\n"
@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Begin()->ToString(), "Bar: baz");
     }
 
-    Y_UNIT_TEST(NoTrailersWithChunks) {
+    Y_UNIT_TEST(NoTrailersWithChunks) { 
         TMemoryInput response(
             "HTTP/1.1 200 OK\r\n"
             "Transfer-Encoding: chunked\r\n"
@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Count(), 0);
     }
 
-    Y_UNIT_TEST(NoTrailersNoChunks) {
+    Y_UNIT_TEST(NoTrailersNoChunks) { 
         TMemoryInput response(
             "HTTP/1.1 200 OK\r\n"
             "Content-Length: 3\r\n"
@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Count(), 0);
     }
 
-    Y_UNIT_TEST(RequestWithoutContentLength) {
+    Y_UNIT_TEST(RequestWithoutContentLength) { 
         TStringStream request;
         {
             THttpOutput httpOutput(&request);
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         }
     }
 
-    Y_UNIT_TEST(TestInputHasContent) {
+    Y_UNIT_TEST(TestInputHasContent) { 
         {
             TStringStream request;
             request << "POST / HTTP/1.1\r\n"
@@ -611,7 +611,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         }
     }
 
-    Y_UNIT_TEST(TestHttpInputHeadRequest) {
+    Y_UNIT_TEST(TestHttpInputHeadRequest) { 
         class THeadOnlyInput: public IInputStream {
         public:
             THeadOnlyInput() = default;
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "");
     }
 
-    Y_UNIT_TEST(TestHttpOutputResponseToHeadRequestNoZeroChunk) {
+    Y_UNIT_TEST(TestHttpOutputResponseToHeadRequestNoZeroChunk) { 
         TStringStream request;
         request << "HEAD / HTTP/1.1\r\n"
                    "Host: yandex.ru\r\n"

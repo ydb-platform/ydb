@@ -176,11 +176,11 @@ namespace {
 
 }
 
-Y_UNIT_TEST_SUITE(Charge) {
+Y_UNIT_TEST_SUITE(Charge) { 
 
     using namespace NTest;
 
-    Y_UNIT_TEST(Lookups)
+    Y_UNIT_TEST(Lookups) 
     {
         TLayoutCook lay;
 
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(Charge) {
             Thus, need to test TIndex::Lookup () for that cases only. */
     }
 
-    Y_UNIT_TEST(Basics)
+    Y_UNIT_TEST(Basics) 
     {
         using TArr = TTouchEnv::TArr;
 
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         }
     }
 
-    Y_UNIT_TEST(Limits)
+    Y_UNIT_TEST(Limits) 
     {
         /* XXX: Precharger is conservative about row limits, because it
             cannot know how many rows will really be consumed on the

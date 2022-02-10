@@ -21,7 +21,7 @@ public:
     }
 
     template <typename FuncType>
-    void ForInput(const TStringBuf text, const FuncType& func) {
+    void ForInput(const TStringBuf text, const FuncType& func) { 
         TFile tempFile(TFile::Temporary("input_ut"));
         tempFile.Write(text.data(), text.size());
         tempFile.FlushData();
@@ -41,7 +41,7 @@ private:
     int StdInCopy_;
 };
 
-class TNoInput: public IInputStream {
+class TNoInput: public IInputStream { 
 public:
     TNoInput(ui64 size)
         : Size_(size)
@@ -59,7 +59,7 @@ private:
     ui64 Size_;
 };
 
-class TNoOutput: public IOutputStream {
+class TNoOutput: public IOutputStream { 
 public:
     TNoOutput() = default;
 
@@ -68,7 +68,7 @@ protected:
     }
 };
 
-class TSimpleStringInput: public IInputStream {
+class TSimpleStringInput: public IInputStream { 
 public:
     TSimpleStringInput(const TString& string)
         : String_(string)
@@ -77,7 +77,7 @@ public:
 
 protected:
     size_t DoRead(void* buf, size_t len) override {
-        Y_ASSERT(len != 0);
+        Y_ASSERT(len != 0); 
 
         if (String_.empty()) {
             return 0;
@@ -92,8 +92,8 @@ private:
     TString String_;
 };
 
-Y_UNIT_TEST_SUITE(TInputTest) {
-    Y_UNIT_TEST(BigTransfer) {
+Y_UNIT_TEST_SUITE(TInputTest) { 
+    Y_UNIT_TEST(BigTransfer) { 
         ui64 size = 1024ull * 1024ull * 1024ull * 5;
         TNoInput input(size);
         TNoOutput output;
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TInputTest) {
         UNIT_ASSERT_VALUES_EQUAL(transferred, size);
     }
 
-    Y_UNIT_TEST(TestReadTo) {
+    Y_UNIT_TEST(TestReadTo) { 
         /* This one tests default implementation of ReadTo. */
 
         TSimpleStringInput in("0123456789abc");
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TInputTest) {
         UNIT_ASSERT_VALUES_EQUAL(t, "89abc");
     }
 
-    Y_UNIT_TEST(TestReadLine) {
+    Y_UNIT_TEST(TestReadLine) { 
         TSimpleStringInput in("1\n22\n333");
 
         TString t;
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TInputTest) {
         UNIT_ASSERT_VALUES_EQUAL(t, "333");
     }
 
-    Y_UNIT_TEST(TestStdInReadTo) {
+    Y_UNIT_TEST(TestStdInReadTo) { 
         std::pair<std::pair<TStringBuf, char>, TStringBuf> testPairs[] = {
             {{"", '\n'}, ""},
             {{"\n", '\n'}, ""},

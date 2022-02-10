@@ -11,7 +11,7 @@ namespace NKikimr {
     // TODO: remove it after migration to the new format
     class TSyncNeighbors::TOldSer {
     public:
-        TOldSer(IOutputStream &str, const TBlobStorageGroupInfo *info)
+        TOldSer(IOutputStream &str, const TBlobStorageGroupInfo *info) 
             : Str(str)
             , Info(info)
         {}
@@ -25,7 +25,7 @@ namespace NKikimr {
         void Finish() {}
 
     private:
-        IOutputStream &Str;
+        IOutputStream &Str; 
         const TBlobStorageGroupInfo *Info;
     };
 
@@ -34,7 +34,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TSyncNeighbors::TOldDes {
     public:
-        TOldDes(IInputStream &str)
+        TOldDes(IInputStream &str) 
             : Str(str)
         {}
 
@@ -57,7 +57,7 @@ namespace NKikimr {
         ui32 GetGroupGeneration() const { return GroupGeneration; }
 
     private:
-        IInputStream &Str;
+        IInputStream &Str; 
         ui32 GroupId = 0;
         ui32 GroupGeneration = 0;
     };
@@ -68,7 +68,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TSyncNeighbors::TSer {
     public:
-        TSer(IOutputStream &str, const TBlobStorageGroupInfo *info)
+        TSer(IOutputStream &str, const TBlobStorageGroupInfo *info) 
             : LocalProto()
             , Proto(&LocalProto)
             , Str(&str)
@@ -76,7 +76,7 @@ namespace NKikimr {
             , GroupGeneration(info->GroupGeneration)
         {}
 
-        TSer(IOutputStream &str, ui32 groupId, ui32 groupGen)
+        TSer(IOutputStream &str, ui32 groupId, ui32 groupGen) 
             : LocalProto()
             , Proto(&LocalProto)
             , Str(&str)
@@ -107,7 +107,7 @@ namespace NKikimr {
     private:
         NKikimrVDiskData::TSyncerEntryPoint LocalProto;
         NKikimrVDiskData::TSyncerEntryPoint *Proto = nullptr;
-        IOutputStream *Str = nullptr;
+        IOutputStream *Str = nullptr; 
         ui32 GroupId = 0;
         ui32 GroupGeneration = 0;
     };
@@ -118,7 +118,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TSyncNeighbors::TDes {
     public:
-        TDes(IInputStream &str)
+        TDes(IInputStream &str) 
             : Proto(&LocalProto)
         {
             auto res = LocalProto.ParseFromArcadiaStream(&str);

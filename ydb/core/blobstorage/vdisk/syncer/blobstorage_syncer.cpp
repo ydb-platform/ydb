@@ -417,7 +417,7 @@ namespace NKikimr {
             }
         }
 
-        void LogAndPhaseToHtml(IOutputStream &str) const {
+        void LogAndPhaseToHtml(IOutputStream &str) const { 
             HTML(str) {
                 DIV_CLASS("row") {
                     str << "Phase: ";

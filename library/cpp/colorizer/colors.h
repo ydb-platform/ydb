@@ -218,7 +218,7 @@ namespace NColorizer {
 
     /// Choose `TColors` depending on output stream. If passed stream is stderr/stdout, return a corresponding
     /// singletone. Otherwise, return a disabled singletone (which you can, but should *not* enable).
-    TColors& AutoColors(IOutputStream& os);
+    TColors& AutoColors(IOutputStream& os); 
 
     /// Calculate total length of all ANSI escape codes in the text.
     size_t TotalAnsiEscapeCodeLen(TStringBuf text);

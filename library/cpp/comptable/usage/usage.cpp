@@ -69,7 +69,7 @@ int main(int argc, const char* argv[]) {
     DoTest<true>(table, lines);
     DoTest<false>(table, lines);
 
-    Y_UNUSED(argc);
-    Y_UNUSED(argv);
+    Y_UNUSED(argc); 
+    Y_UNUSED(argv); 
     return 0;
 }

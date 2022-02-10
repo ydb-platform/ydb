@@ -41,7 +41,7 @@ public:
                 Y_FAIL("Unexpected case: curValue# %d newValue# %d", int(curValue), int(newValue));
         }
 
-        void Output(IOutputStream &str) {
+        void Output(IOutputStream &str) { 
             TContainer c = Top.GetContainer(); // copy, cause we want to sort it
             auto cmp = [] (const TRec &x, const TRec &y) {
                 return x.Duration > y.Duration;
@@ -73,7 +73,7 @@ public:
         Value = v;
     }
 
-    void Output(const TString &name, IOutputStream &str) {
+    void Output(const TString &name, IOutputStream &str) { 
         str << name << ": " << (Value ? "true" : "false") << " ";
         History.Output(str);
     }

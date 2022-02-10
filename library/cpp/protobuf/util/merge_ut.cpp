@@ -5,7 +5,7 @@
 
 using namespace NProtoBuf;
 
-Y_UNIT_TEST_SUITE(ProtobufMerge) {
+Y_UNIT_TEST_SUITE(ProtobufMerge) { 
     static void InitProto(NProtobufUtilUt::TMergeTest & p, bool isSrc) {
         size_t start = isSrc ? 0 : 100;
 
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(ProtobufMerge) {
         mm3->AddB(start + 13);
     }
 
-    Y_UNIT_TEST(CustomMerge) {
+    Y_UNIT_TEST(CustomMerge) { 
         NProtobufUtilUt::TMergeTest src, dst;
         InitProto(src, true);
         InitProto(dst, false);

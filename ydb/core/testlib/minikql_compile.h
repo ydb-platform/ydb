@@ -57,13 +57,13 @@ public:
     }
 
     virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override {
-        Y_UNUSED(tables);
-        Y_UNUSED(responseTo);
+        Y_UNUSED(tables); 
+        Y_UNUSED(responseTo); 
         ythrow yexception() << "Not implemented";
     }
 
     void AddTable(const IDbSchemeResolver::TTableResult& table) {
-        Y_ENSURE(!!table.TableId, "TableId must be defined");
+        Y_ENSURE(!!table.TableId, "TableId must be defined"); 
         if (!Tables.insert({ table.Table.TableName, table }).second) {
             ythrow yexception() << "Table " << table.Table.TableName << " is already registered";
         }

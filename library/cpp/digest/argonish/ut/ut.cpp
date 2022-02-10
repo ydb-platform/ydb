@@ -2,7 +2,7 @@
 #include <library/cpp/digest/argonish/blake2b.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(ArgonishTest) {
+Y_UNIT_TEST_SUITE(ArgonishTest) { 
     const ui8 GenKatPassword[32] = {
         0x01,
         0x01,
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         0x04,
     };
 
-    Y_UNIT_TEST(Argon2_Fr_Test) {
+    Y_UNIT_TEST(Argon2_Fr_Test) { 
         const ui32 mcost = 16;
         const ui32 tcost = 1;
         TArrayHolder<ui8> memory(new ui8[mcost * 1024]);
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2_Factory_SelfTest) {
+    Y_UNIT_TEST(Argon2_Factory_SelfTest) { 
         try {
             NArgonish::TArgon2Factory factory;
             factory.GetInstructionSet();
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Blake2B_Factory_SelfTest) {
+    Y_UNIT_TEST(Blake2B_Factory_SelfTest) { 
         try {
             NArgonish::TBlake2BFactory factory;
             factory.GetInstructionSet();
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2d) {
+    Y_UNIT_TEST(Argon2d) { 
         const ui8 TResult[32] = {
             0x7b, 0xa5, 0xa1, 0x7a, 0x72, 0xf7, 0xe5, 0x99,
             0x77, 0xf7, 0xf2, 0x3d, 0x10, 0xe6, 0x21, 0x89,
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2i) {
+    Y_UNIT_TEST(Argon2i) { 
         const ui8 TResult[32] = {
             0x87, 0x4d, 0x23, 0xfb, 0x9f, 0x55, 0xe2, 0xff,
             0x66, 0xbc, 0x19, 0x03, 0x46, 0xe7, 0x01, 0x19,
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2id) {
+    Y_UNIT_TEST(Argon2id) { 
         const ui8 TResult[32] = {
             0x99, 0xdf, 0xcf, 0xc2, 0x89, 0x76, 0x93, 0x9d,
             0xa2, 0x97, 0x09, 0x44, 0x34, 0xd8, 0x6f, 0xd0,
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2d_2p) {
+    Y_UNIT_TEST(Argon2d_2p) { 
         const ui8 TResult[32] = {
             0x59, 0xb0, 0x94, 0x62, 0xcf, 0xdc, 0xd2, 0xb4,
             0x0a, 0xbd, 0x17, 0x81, 0x0a, 0x47, 0x4a, 0x8e,
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2i_2p) {
+    Y_UNIT_TEST(Argon2i_2p) { 
         const ui8 TResult[32] = {
             0xc1, 0x0f, 0x00, 0x5e, 0xf8, 0x78, 0xc8, 0x07,
             0x0e, 0x2c, 0xc5, 0x2f, 0x57, 0x75, 0x25, 0xc9,
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2id_2p) {
+    Y_UNIT_TEST(Argon2id_2p) { 
         const ui8 TResult[32] = {
             0x6c, 0x00, 0xb7, 0xa9, 0x00, 0xe5, 0x00, 0x4c,
             0x24, 0x46, 0x9e, 0xc1, 0xe7, 0xc0, 0x1a, 0x99,
@@ -356,7 +356,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2d_2p_2th) {
+    Y_UNIT_TEST(Argon2d_2p_2th) { 
         const ui8 TResult[32] = {
             0x2b, 0x47, 0x35, 0x39, 0x4a, 0x40, 0x3c, 0xc9,
             0x05, 0xfb, 0x51, 0x25, 0x96, 0x68, 0x64, 0x43,
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2id_2p_4th) {
+    Y_UNIT_TEST(Argon2id_2p_4th) { 
         const ui8 TResult[32] = {
             0x4f, 0x93, 0xb5, 0xad, 0x78, 0xa4, 0xa9, 0x49,
             0xfb, 0xe3, 0x55, 0x96, 0xd5, 0xa0, 0xc2, 0xab,
@@ -410,7 +410,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2d_2p_4th) {
+    Y_UNIT_TEST(Argon2d_2p_4th) { 
         const ui8 TResult[32] = {
             0x8f, 0xa2, 0x7c, 0xed, 0x28, 0x38, 0x79, 0x0f,
             0xba, 0x5c, 0x11, 0x85, 0x1c, 0xdf, 0x90, 0x88,
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2i_2p_4th) {
+    Y_UNIT_TEST(Argon2i_2p_4th) { 
         const ui8 TResult[32] = {
             0x61, 0x1c, 0x99, 0x3c, 0xb0, 0xb7, 0x23, 0x16,
             0xbd, 0xa2, 0x6c, 0x4c, 0x2f, 0xe8, 0x2d, 0x39,
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Argon2d_128) {
+    Y_UNIT_TEST(Argon2d_128) { 
         const ui8 TResult[128] = {
             0x4e, 0xc4, 0x6c, 0x4e, 0x8c, 0x32, 0x89, 0x65,
             0xf9, 0x82, 0x2b, 0x00, 0x95, 0x00, 0x50, 0x0a,
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Blake2B_16_ABC) {
+    Y_UNIT_TEST(Blake2B_16_ABC) { 
         const ui8 TResult[16] = {
             0xcf, 0x4a, 0xb7, 0x91, 0xc6, 0x2b, 0x8d, 0x2b,
             0x21, 0x09, 0xc9, 0x02, 0x75, 0x28, 0x78, 0x16};
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
         }
     }
 
-    Y_UNIT_TEST(Blake2B_64_ABC) {
+    Y_UNIT_TEST(Blake2B_64_ABC) { 
         const ui8 TResult[64] = {
             0xba, 0x80, 0xa5, 0x3f, 0x98, 0x1c, 0x4d, 0x0d,
             0x6a, 0x27, 0x97, 0xb6, 0x9f, 0x12, 0xf6, 0xe9,

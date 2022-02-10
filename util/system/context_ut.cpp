@@ -5,7 +5,7 @@
 #include <util/generic/deque.h>
 #include <util/generic/yexception.h>
 
-Y_UNIT_TEST_SUITE(TestContext) {
+Y_UNIT_TEST_SUITE(TestContext) { 
     template <class F>
     static TContClosure Wrap(F& f) {
         struct TW: public ITrampoLine {
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TestContext) {
         return {&tw, TArrayRef(tw.Buf, sizeof(tw.Buf))};
     }
 
-    Y_UNIT_TEST(TestExceptionSafety) {
+    Y_UNIT_TEST(TestExceptionSafety) { 
         TExceptionSafeContext main;
         TExceptionSafeContext* volatile nextPtr = nullptr;
 

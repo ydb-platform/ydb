@@ -150,7 +150,7 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& p
     Generations.reserve(policyPb.GenerationSize());
     for (ui32 i = 0; i < policyPb.GenerationSize(); ++i) {
         const auto& g = policyPb.GetGeneration(i);
-        Y_VERIFY_DEBUG(g.GetGenerationId() == i);
+        Y_VERIFY_DEBUG(g.GetGenerationId() == i); 
         Generations.emplace_back(g);
     }
     if (policyPb.HasShardPolicy()) {

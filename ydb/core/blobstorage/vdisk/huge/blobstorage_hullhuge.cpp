@@ -171,11 +171,11 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             // prepare write
             const ui8 partId = Item->LogoBlobId.PartId();
-            Y_VERIFY(partId != 0);
+            Y_VERIFY(partId != 0); 
 
             const ui32 storedBlobSize = Item->Data.GetSize();
             const ui32 writtenSize = AlignUpAppendBlockSize(storedBlobSize, HugeKeeperCtx->PDiskCtx->Dsk->AppendBlockSize);
-            Y_VERIFY(writtenSize <= HugeSlot.GetSize());
+            Y_VERIFY(writtenSize <= HugeSlot.GetSize()); 
 
             NPDisk::TEvChunkWrite::TPartsPtr partsPtr(new NPDisk::TEvChunkWrite::TRopeAlignedParts(std::move(Item->Data), writtenSize));
             ui32 chunkId = HugeSlot.GetChunkId();
@@ -264,7 +264,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvChunkReserveResult::TPtr &ev, const TActorContext &ctx) {
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
-            Y_VERIFY(ev->Get()->ChunkIds.size() == 1);
+            Y_VERIFY(ev->Get()->ChunkIds.size() == 1); 
             ChunkId = ev->Get()->ChunkIds.front();
             Lsn = HugeKeeperCtx->LsnMngr->AllocLsnForLocalUse().Point();
 
@@ -344,7 +344,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             // prepare log record
-            Y_VERIFY_DEBUG(!ChunksToFree.empty());
+            Y_VERIFY_DEBUG(!ChunksToFree.empty()); 
             NHuge::TFreeChunkRecoveryLogRec logRec(ChunksToFree);
             TString data = logRec.Serialize();
 
@@ -354,7 +354,7 @@ namespace NKikimr {
             // prepare commit record, i.e. commit reserved chunk
             NPDisk::TCommitRecord commitRecord;
             commitRecord.FirstLsnToKeep = 0;
-            Y_VERIFY_DEBUG(!ChunksToFree.empty());
+            Y_VERIFY_DEBUG(!ChunksToFree.empty()); 
             commitRecord.DeleteChunks = ChunksToFree;
             commitRecord.IsStartingPoint = false;
 
@@ -436,7 +436,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
-            Y_VERIFY(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == EntryPointLsn);
+            Y_VERIFY(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == EntryPointLsn); 
 
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
@@ -565,7 +565,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void RenderHtml(IOutputStream &str) {
+        void RenderHtml(IOutputStream &str) { 
             auto boolToString = [] (bool x) { return x ? "true" : "false"; };
             str << "WaitQueueSize: " << WaitQueueSize << "<br>";
             str << "WaitQueueByteSize: " << WaitQueueByteSize << "<br>";
@@ -795,7 +795,7 @@ namespace NKikimr {
                     checkAndSet(State.Pers->LogPos.BarriersDbSlotDelLsn);
                     break;
                 default:
-                    Y_FAIL("Impossible case");
+                    Y_FAIL("Impossible case"); 
             }
             ProcessQueue(ctx);
             FreeChunks(ctx);
@@ -839,7 +839,7 @@ namespace NKikimr {
             const TDiskPart &hugeBlob = msg->HugeBlob;
             NHuge::THugeSlot hugeSlot(State.Pers->Heap->ConvertDiskPartToHugeSlot(hugeBlob));
             auto nErased = State.Pers->AllocatedSlots.erase(hugeSlot);
-            Y_VERIFY(nErased == 1);
+            Y_VERIFY(nErased == 1); 
             // depending on SlotIsUsed...
             if (msg->SlotIsUsed) {
                 Y_VERIFY_S(State.Pers->LogPos.HugeBlobLoggedLsn < msg->RecLsn,
@@ -891,7 +891,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HugeKeeperId);
+            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HugeKeeperId); 
             TStringStream str;
             HTML(str) {
                 DIV_CLASS("panel panel-default") {

@@ -796,9 +796,9 @@ CountingScanner::CountingScanner(const Fsm& re, const Fsm& sep)
 			const Fsm::StatesSet& br = sep_re.Destinations(states[curstate].second, letter);
 
 			if (mr.size() != 1)
-				Y_ASSERT(!"Wrong transition size for main");
+				Y_ASSERT(!"Wrong transition size for main"); 
 			if (br.size() != 1)
-				Y_ASSERT(!"Wrong transition size for backup");
+				Y_ASSERT(!"Wrong transition size for backup"); 
 
 			NewState ns(*mr.begin(), *br.begin());
 			PIRE_IFDEBUG(NewState savedNs = ns);

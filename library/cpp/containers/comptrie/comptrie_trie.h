@@ -11,7 +11,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/memory/blob.h>
-#include <util/stream/input.h>
+#include <util/stream/input.h> 
 #include <utility>
 
 template <class T, class D, class S>
@@ -54,16 +54,16 @@ protected:
 public:
     TCompactTrie() = default;
 
-    TCompactTrie(const char* d, size_t len, TPacker packer);
-    TCompactTrie(const char* d, size_t len)
+    TCompactTrie(const char* d, size_t len, TPacker packer); 
+    TCompactTrie(const char* d, size_t len) 
         : TCompactTrie{d, len, TPacker{}} {
-    }
-
-    TCompactTrie(const TBlob& data, TPacker packer);
-    explicit TCompactTrie(const TBlob& data)
+    } 
+ 
+    TCompactTrie(const TBlob& data, TPacker packer); 
+    explicit TCompactTrie(const TBlob& data) 
         : TCompactTrie{data, TPacker{}} {
-    }
-
+    } 
+ 
     // Skipper should be initialized with &Packer, not with &other.Packer, so you have to redefine these.
     TCompactTrie(const TCompactTrie& other);
     TCompactTrie(TCompactTrie&& other) noexcept;
@@ -185,7 +185,7 @@ public:
     // LowerBound of X cannot be greater than X.
     TConstIterator UpperBound(const TKeyBuf& key) const;
 
-    void Print(IOutputStream& os);
+    void Print(IOutputStream& os); 
 
     size_t Size() const;
 
@@ -212,7 +212,7 @@ private:
     TArrayHolder<char> Storage;
 
 public:
-    TCompactTrieHolder(IInputStream& is, size_t len);
+    TCompactTrieHolder(IInputStream& is, size_t len); 
 };
 
 //------------------------//
@@ -308,7 +308,7 @@ void TCompactTrie<T, D, S>::Init(const TBlob& data, TPacker packer) {
     const char* emptypos = datapos;
     char flags = LeapByte(emptypos, dataend, 0);
     if (emptypos && (flags & MT_FINAL)) {
-        Y_ASSERT(emptypos <= dataend);
+        Y_ASSERT(emptypos <= dataend); 
         EmptyValue = emptypos;
     }
 }
@@ -375,7 +375,7 @@ bool TCompactTrie<T, D, S>::FindTails(const TSymbol* key, size_t keylen, TCompac
 
         if (key == keyend) {
             if (datapos) {
-                Y_ASSERT(datapos >= datastart);
+                Y_ASSERT(datapos >= datastart); 
                 res = TCompactTrie<T, D, S>(TBlob::NoCopy(datapos, dataend - datapos), value);
             } else {
                 res = TCompactTrie<T, D, S>(value);
@@ -406,7 +406,7 @@ inline bool TCompactTrie<T, D, S>::FindTails(TSymbol label, TCompactTrie<T, D, S
         return false;
 
     if (datapos) {
-        Y_ASSERT(datapos >= datastart);
+        Y_ASSERT(datapos >= datastart); 
         res = TCompactTrie<T, D, S>(TBlob::NoCopy(datapos, dataend - datapos), value);
     } else {
         res = TCompactTrie<T, D, S>(value);
@@ -452,7 +452,7 @@ typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::UpperBound
 }
 
 template <class T, class D, class S>
-void TCompactTrie<T, D, S>::Print(IOutputStream& os) {
+void TCompactTrie<T, D, S>::Print(IOutputStream& os) { 
     typedef typename ::TCompactTrieKeySelector<T>::TKeyBuf TSBuffer;
     for (TConstIterator it = Begin(); it != End(); ++it) {
         os << TSBuffer((*it).first.data(), (*it).first.size()) << "\t" << (*it).second << Endl;
@@ -504,7 +504,7 @@ bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keyle
                 return found; // no such arc
             }
 
-            Y_ASSERT(datapos <= dataend);
+            Y_ASSERT(datapos <= dataend); 
             if ((flags & MT_FINAL)) {
                 prefixLen = keylen - (keyend - key) - (i ? 1 : 0);
                 valuepos = datapos;
@@ -558,7 +558,7 @@ void TCompactTrie<T, D, S>::LookupPhrases(
 // TCompactTrieHolder
 
 template <class T, class D, class S>
-TCompactTrieHolder<T, D, S>::TCompactTrieHolder(IInputStream& is, size_t len)
+TCompactTrieHolder<T, D, S>::TCompactTrieHolder(IInputStream& is, size_t len) 
     : Storage(new char[len])
 {
     if (is.Load(Storage.Get(), len) != len) {

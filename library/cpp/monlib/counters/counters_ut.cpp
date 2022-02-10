@@ -8,7 +8,7 @@
 using namespace NMonitoring;
 
 Y_UNIT_TEST_SUITE(TDeprecatedCountersTest) {
-    Y_UNIT_TEST(CounterGroupsAreThreadSafe) {
+    Y_UNIT_TEST(CounterGroupsAreThreadSafe) { 
         const static ui32 GROUPS_COUNT = 1000;
         const static ui32 THREADS_COUNT = 10;
 

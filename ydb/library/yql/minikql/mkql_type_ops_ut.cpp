@@ -10,8 +10,8 @@ using namespace NYql;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
-    Y_UNIT_TEST(DateInOut) {
+Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) { 
+    Y_UNIT_TEST(DateInOut) { 
         ui32 year = 1970;
         ui32 month = 1;
         ui32 day = 1;

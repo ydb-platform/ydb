@@ -292,7 +292,7 @@ namespace NActors {
             handle.Destroy();
             const ui32 eventType = TEvent::EventType;
             WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-                Y_UNUSED(runtime);
+                Y_UNUSED(runtime); 
                 if (event->GetTypeRewrite() != eventType)
                     return false;
 
@@ -306,7 +306,7 @@ namespace NActors {
             }, {}, simTimeout);
 
             if (simTimeout == TDuration::Max())
-                Y_VERIFY(handle);
+                Y_VERIFY(handle); 
 
             if (handle) {
                 return reinterpret_cast<TAutoPtr<TEventHandle<TEvent>>&>(handle)->Get();

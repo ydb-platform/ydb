@@ -192,7 +192,7 @@ namespace NKikimr {
             }
 
             void UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk);
-            void OutputHtml(IOutputStream &str) const;
+            void OutputHtml(IOutputStream &str) const; 
             // returns number of index records
             ui32 Serialize(IOutputStream &s) const;
             ui32 Serialize(IOutputStream &s,
@@ -253,7 +253,7 @@ namespace NKikimr {
                     }
                 } else {
                     // firstLsn >= lsn
-                    Y_VERIFY_DEBUG(it->FirstLsn >= lsn);
+                    Y_VERIFY_DEBUG(it->FirstLsn >= lsn); 
                     if (it->FirstLsn == lsn || it == begin) {
                         // it is good
                     } else {
@@ -261,16 +261,16 @@ namespace NKikimr {
                     }
                 }
                 It = it;
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(Valid()); 
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(Valid()); 
                 ++It;
             }
 
             const TDiskIndexRecord *Get() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(Valid()); 
                 return &*It;
             }
 
@@ -344,7 +344,7 @@ namespace NKikimr {
                 return new TIndexedChunk(ChunkPtr, IndexPtr->DeepCopy());
             }
 
-            void OutputHtml(IOutputStream &str) const;
+            void OutputHtml(IOutputStream &str) const; 
             static std::pair<TIndexedChunkPtr, const char *> Construct(const char *serialized);
             TString ToString() const {
                 TStringStream s;
@@ -377,16 +377,16 @@ namespace NKikimr {
             }
 
             ui64 GetFirstLsn() const {
-                Y_VERIFY_DEBUG(!Empty());
+                Y_VERIFY_DEBUG(!Empty()); 
                 return ManyIdxChunks.front()->GetFirstLsn();
             }
 
             ui64 GetLastLsn() const {
-                Y_VERIFY_DEBUG(!Empty());
+                Y_VERIFY_DEBUG(!Empty()); 
                 return ManyIdxChunks.back()->GetLastLsn();
             }
 
-            void OutputHtml(IOutputStream &str) const;
+            void OutputHtml(IOutputStream &str) const; 
             TString BoundariesToString() const;
             ui32 Serialize(IOutputStream &s, const TDeltaToDiskRecLog &delta) const;
             ui32 LastChunkIdx() const;
@@ -435,7 +435,7 @@ namespace NKikimr {
                 ChunkIt = SnapPtr->ManyIdxChunks.begin();
                 if (ChunkIt != SnapPtr->ManyIdxChunks.end()) {
                     IdxBulkIt = (*ChunkIt)->GetIndexIterator();
-                    Y_VERIFY_DEBUG(IdxBulkIt.Valid());
+                    Y_VERIFY_DEBUG(IdxBulkIt.Valid()); 
                 }
             }
 
@@ -463,7 +463,7 @@ namespace NKikimr {
                 } else {
                     // firstLsn >= lsn
                     ui64 firstLsn = (*it)->GetFirstLsn();
-                    Y_VERIFY_DEBUG(firstLsn >= lsn);
+                    Y_VERIFY_DEBUG(firstLsn >= lsn); 
                     if (firstLsn == lsn || it == begin) {
                         // it is good
                     } else {
@@ -479,25 +479,25 @@ namespace NKikimr {
                 ChunkIt = it;
                 IdxBulkIt = (*ChunkIt)->GetIndexIterator();
                 IdxBulkIt.Seek(lsn);
-                Y_VERIFY_DEBUG(IdxBulkIt.Valid());
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(IdxBulkIt.Valid()); 
+                Y_VERIFY_DEBUG(Valid()); 
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(Valid()); 
                 IdxBulkIt.Next();
                 if (!IdxBulkIt.Valid()) {
                     ++ChunkIt;
                     if (ChunkIt != SnapPtr->ManyIdxChunks.end()) {
                         IdxBulkIt = (*ChunkIt)->GetIndexIterator();
                         IdxBulkIt.SeekToFirst();
-                        Y_VERIFY_DEBUG(IdxBulkIt.Valid(), "ChunkIdx# %u", (*ChunkIt)->GetChunkIdx());
+                        Y_VERIFY_DEBUG(IdxBulkIt.Valid(), "ChunkIdx# %u", (*ChunkIt)->GetChunkIdx()); 
                     }
                 }
             }
 
             std::pair<ui32, const TDiskIndexRecord *> Get() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_VERIFY_DEBUG(Valid()); 
                 return std::pair<ui32, const TDiskIndexRecord *>((*ChunkIt)->GetChunkIdx(), IdxBulkIt.Get());
             }
 
@@ -599,11 +599,11 @@ namespace NKikimr {
                 return ManyIdxChunks.empty();
             }
             ui64 PrivateGetFirstLsn() const {
-                Y_VERIFY_DEBUG(!PrivateEmpty());
+                Y_VERIFY_DEBUG(!PrivateEmpty()); 
                 return ManyIdxChunks.front()->GetFirstLsn();
             }
             ui64 PrivateGetLastLsn() const {
-                Y_VERIFY_DEBUG(!PrivateEmpty());
+                Y_VERIFY_DEBUG(!PrivateEmpty()); 
                 return ManyIdxChunks.back()->GetLastLsn();
             }
             void PrivateUpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages);

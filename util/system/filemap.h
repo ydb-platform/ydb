@@ -26,15 +26,15 @@ struct TMemoryMapCommon {
         }
 
         inline void* MappedData() const noexcept {
-            return Ptr ? (void*)((char*)Ptr + Head) : nullptr;
+            return Ptr ? (void*)((char*)Ptr + Head) : nullptr; 
         }
 
         inline bool IsMapped() const noexcept {
-            return Ptr != nullptr;
+            return Ptr != nullptr; 
         }
 
         inline void Reset() noexcept {
-            Ptr = nullptr;
+            Ptr = nullptr; 
             Size = 0;
             Head = 0;
         }
@@ -195,14 +195,14 @@ private:
 
 public:
     TFileMappedArray()
-        : Ptr_(nullptr)
-        , End_(nullptr)
+        : Ptr_(nullptr) 
+        , End_(nullptr) 
         , Size_(0)
     {
     }
     ~TFileMappedArray() {
-        Ptr_ = nullptr;
-        End_ = nullptr;
+        Ptr_ = nullptr; 
+        End_ = nullptr; 
     }
     void Init(const char* name) {
         DataHolder_.Reset(new TFileMap(name));
@@ -214,15 +214,15 @@ public:
     }
     void Term() {
         DataHolder_.Destroy();
-        Ptr_ = nullptr;
+        Ptr_ = nullptr; 
         Size_ = 0;
-        End_ = nullptr;
+        End_ = nullptr; 
     }
     void Precharge() {
         DataHolder_->Precharge();
     }
     const T& operator[](size_t pos) const {
-        Y_ASSERT(pos < size());
+        Y_ASSERT(pos < size()); 
         return Ptr_[pos];
     }
     /// for STL compatibility only, Size() usage is recommended
@@ -289,7 +289,7 @@ private:
 
 class TMappedAllocation: TMoveOnly {
 public:
-    TMappedAllocation(size_t size = 0, bool shared = false, void* addr = nullptr);
+    TMappedAllocation(size_t size = 0, bool shared = false, void* addr = nullptr); 
     ~TMappedAllocation() {
         Dealloc();
     }
@@ -300,13 +300,13 @@ public:
         this->swap(other);
         return *this;
     }
-    void* Alloc(size_t size, void* addr = nullptr);
+    void* Alloc(size_t size, void* addr = nullptr); 
     void Dealloc();
     void* Ptr() const {
         return Ptr_;
     }
     char* Data(ui32 pos = 0) const {
-        return (char*)(Ptr_ ? ((char*)Ptr_ + pos) : nullptr);
+        return (char*)(Ptr_ ? ((char*)Ptr_ + pos) : nullptr); 
     }
     char* Begin() const noexcept {
         return (char*)Ptr();
@@ -341,11 +341,11 @@ public:
         Destroy();
     }
     T* Create(size_t siz) {
-        Y_ASSERT(MappedSize() == 0 && Ptr() == nullptr);
+        Y_ASSERT(MappedSize() == 0 && Ptr() == nullptr); 
         T* arr = (T*)Alloc((sizeof(T) * siz));
         if (!arr)
-            return nullptr;
-        Y_ASSERT(MappedSize() == sizeof(T) * siz);
+            return nullptr; 
+        Y_ASSERT(MappedSize() == sizeof(T) * siz); 
         for (size_t n = 0; n < siz; n++)
             new (&arr[n]) T();
         return arr;
@@ -359,11 +359,11 @@ public:
         }
     }
     T& operator[](size_t pos) {
-        Y_ASSERT(pos < size());
+        Y_ASSERT(pos < size()); 
         return ((T*)Ptr())[pos];
     }
     const T& operator[](size_t pos) const {
-        Y_ASSERT(pos < size());
+        Y_ASSERT(pos < size()); 
         return ((T*)Ptr())[pos];
     }
     T* begin() {

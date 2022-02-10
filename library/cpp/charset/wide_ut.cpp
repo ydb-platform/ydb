@@ -211,17 +211,17 @@ void TConversionTest::TestYandexEncoding() {
 
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
     wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
-    TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_UTF8);
+    TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_UTF8); 
 
     {
         const char* yandexNonBMP2 = "ab?n";
-        UNIT_ASSERT(yandexNonBMP2 == WideToChar(wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_YANDEX));
+        UNIT_ASSERT(yandexNonBMP2 == WideToChar(wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_YANDEX)); 
 
         TString temp;
-        temp.resize(Y_ARRAY_SIZE(wNonBMPDummy2));
+        temp.resize(Y_ARRAY_SIZE(wNonBMPDummy2)); 
         size_t read = 0;
         size_t written = 0;
-        RecodeFromUnicode(CODES_YANDEX, wNonBMPDummy2, temp.begin(), Y_ARRAY_SIZE(wNonBMPDummy2), temp.size(), read, written);
+        RecodeFromUnicode(CODES_YANDEX, wNonBMPDummy2, temp.begin(), Y_ARRAY_SIZE(wNonBMPDummy2), temp.size(), read, written); 
         temp.remove(written);
 
         UNIT_ASSERT(yandexNonBMP2 == temp);
@@ -337,7 +337,7 @@ void TConversionTest::TestRecodeAppend() {
 }
 
 template <>
-void Out<RECODE_RESULT>(IOutputStream& out, RECODE_RESULT val) {
+void Out<RECODE_RESULT>(IOutputStream& out, RECODE_RESULT val) { 
     out << int(val);
 }
 
@@ -390,7 +390,7 @@ void TConversionTest::TestUnicodeLimit() {
             continue;
 
         const CodePage* page = CodePageByCharset(code);
-        Y_ASSERT(page);
+        Y_ASSERT(page); 
 
         for (int c = 0; c < 256; ++c) {
             UNIT_ASSERT(page->unicode[c] < 1 << 16);

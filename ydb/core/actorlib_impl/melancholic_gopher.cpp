@@ -77,7 +77,7 @@ public:
         , ShotsInRound(shotsInRound)
         , WaitFor(0)
     {
-        Y_VERIFY(!LineProfile.empty());
+        Y_VERIFY(!LineProfile.empty()); 
     }
 
     void Bootstrap(const TActorContext &ctx) {

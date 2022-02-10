@@ -19,8 +19,8 @@ namespace NKikimr {
         Cout << Endl
 #endif
 
-Y_UNIT_TEST_SUITE(ControlImplementationTests) {
-    Y_UNIT_TEST(TestTControl) {
+Y_UNIT_TEST_SUITE(ControlImplementationTests) { 
+    Y_UNIT_TEST(TestTControl) { 
         NPrivate::TMersenne64 randGen(Seed());
         std::array<i64, 3> bounds;
         for (ui64 i = 0; i < 3; ++i) {
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         }
     }
 
-    Y_UNIT_TEST(TestControlWrapperAsI64) {
+    Y_UNIT_TEST(TestControlWrapperAsI64) { 
         NPrivate::TMersenne64 randGen(Seed());
         TControlWrapper wrapper1;
         for (ui64 i = 0; i < TEST_REPEATS; ++i) {
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         }
     }
 
-    Y_UNIT_TEST(TestControlWrapperBounds) {
+    Y_UNIT_TEST(TestControlWrapperBounds) { 
         NPrivate::TMersenne64 randGen(Seed());
         std::array<i64, 3> bounds;
         for (ui64 i = 0; i < 3; ++i) {
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         }
     }
 
-    Y_UNIT_TEST(TestRegisterLocalControl) {
+    Y_UNIT_TEST(TestRegisterLocalControl) { 
         TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control2(2, 2, 2);
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         UNIT_ASSERT_EQUAL(1, 1);
     }
 
-    Y_UNIT_TEST(TestRegisterSharedControl) {
+    Y_UNIT_TEST(TestRegisterSharedControl) { 
         TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control1_origin(control1);
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         UNIT_ASSERT(control2.IsTheSame(control1_origin));
     }
 
-    Y_UNIT_TEST(TestParallelRegisterSharedControl) {
+    Y_UNIT_TEST(TestParallelRegisterSharedControl) { 
         void* (*parallelJob)(void*) = [](void *controlBoard) -> void *{
             TControlBoard *Icb = reinterpret_cast<TControlBoard *>(controlBoard);
             TControlWrapper control1(1, 1, 1);

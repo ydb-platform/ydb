@@ -47,7 +47,7 @@ public:
     }
 
     void ReDim(size_t m, size_t n) {
-        Y_ASSERT(m >= 1 && n >= 1);
+        Y_ASSERT(m >= 1 && n >= 1); 
         size_t newSize = m * n;
         if (newSize > BufSize) {
             T* newBuf = new T[newSize];
@@ -69,25 +69,25 @@ public:
 
     // Access element matrix[i][j]
     T* operator[](size_t i) {
-        Y_ASSERT(i >= 0 && i < M);
+        Y_ASSERT(i >= 0 && i < M); 
         return Arr + i * N;
     }
 
     // Access element matrix[i][j]
     const T* operator[](size_t i) const {
-        Y_ASSERT(i >= 0 && i < M);
+        Y_ASSERT(i >= 0 && i < M); 
         return Arr + i * N;
     }
 
     // Access element matrix(i, j)
     T& operator()(size_t i, size_t j) {
-        Y_ASSERT(i >= 0 && i < M && j >= 0 && j < N);
+        Y_ASSERT(i >= 0 && i < M && j >= 0 && j < N); 
         return Arr[i * N + j];
     }
 
     // Access element matrix(i, j)
     const T& operator()(size_t i, size_t j) const {
-        Y_ASSERT(i >= 0 && i < M && j >= 0 && j < N);
+        Y_ASSERT(i >= 0 && i < M && j >= 0 && j < N); 
         return Arr[i * N + j];
     }
 

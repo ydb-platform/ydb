@@ -19,7 +19,7 @@ namespace NPrivate {
     };
 }
 
-class IInputStream;
+class IInputStream; 
 
 template <class T>
 class TMersenne: public TCommonRNG<T, TMersenne<T>>, public ::NPrivate::TMersenneTraits<T>::TImpl {
@@ -34,7 +34,7 @@ public:
     {
     }
 
-    inline TMersenne(IInputStream& pool)
+    inline TMersenne(IInputStream& pool) 
         : TBase(pool)
     {
     }

@@ -2,7 +2,7 @@
 
 #include "spinlock.h"
 
-Y_UNIT_TEST_SUITE(TSpinLock) {
+Y_UNIT_TEST_SUITE(TSpinLock) { 
     template <typename TLock>
     void TestLock() {
         TLock lock;
@@ -27,11 +27,11 @@ Y_UNIT_TEST_SUITE(TSpinLock) {
         UNIT_ASSERT(!lock.IsLocked());
     }
 
-    Y_UNIT_TEST(TSpinLock_IsLocked) {
+    Y_UNIT_TEST(TSpinLock_IsLocked) { 
         TestLock<TSpinLock>();
     }
 
-    Y_UNIT_TEST(TAdaptiveLock_IsLocked) {
+    Y_UNIT_TEST(TAdaptiveLock_IsLocked) { 
         TestLock<TAdaptiveLock>();
     }
 }

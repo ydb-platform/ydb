@@ -4,8 +4,8 @@
 
 using namespace NMonitoring;
 
-Y_UNIT_TEST_SUITE(THistorgamTest) {
-    Y_UNIT_TEST(TakeSnapshot) {
+Y_UNIT_TEST_SUITE(THistorgamTest) { 
+    Y_UNIT_TEST(TakeSnapshot) { 
         THdrHistogram h(1, 10, 3);
         UNIT_ASSERT(h.RecordValue(1));
         UNIT_ASSERT(h.RecordValue(2));

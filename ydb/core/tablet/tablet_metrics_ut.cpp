@@ -5,8 +5,8 @@
 namespace NKikimr {
 namespace NMetrics {
 
-Y_UNIT_TEST_SUITE(TFlatMetrics) {
-    Y_UNIT_TEST(TimeSeriesAvg4) {
+Y_UNIT_TEST_SUITE(TFlatMetrics) { 
+    Y_UNIT_TEST(TimeSeriesAvg4) { 
         TTimeSeriesValue<ui64, TDuration::Minutes(1).GetValue(), 4> value;
         TInstant time = TInstant::Now();
 
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT_C(avg >= 60 && avg <= 80, avg);
     }
 
-    Y_UNIT_TEST(TimeSeriesAvg16) {
+    Y_UNIT_TEST(TimeSeriesAvg16) { 
         TTimeSeriesValue<ui64, TDuration::Minutes(1).GetValue(), 16> value;
         TInstant time = TInstant::Now();
 
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT_C(avg >= 60 && avg <= 65, avg);
     }
 
-    Y_UNIT_TEST(TimeSeriesAvg16x60) {
+    Y_UNIT_TEST(TimeSeriesAvg16x60) { 
         TTimeSeriesValue<ui64, TDuration::Minutes(1).GetValue(), 16> value;
         TInstant time = TInstant::Now();
 
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT_C(avg >= 55 && avg <= 65, avg);
     }
 
-    Y_UNIT_TEST(TimeSeriesAvg16Signed) {
+    Y_UNIT_TEST(TimeSeriesAvg16Signed) { 
         TTimeSeriesValue<i64, TDuration::Minutes(1).GetValue(), 16> value;
         TInstant time = TInstant::Now();
 
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT_C(avg >= 0 && avg <= 15, avg);
     }
 
-    Y_UNIT_TEST(TimeSeriesKV) {
+    Y_UNIT_TEST(TimeSeriesKV) { 
         TTimeSeriesValue<i64> value;
         TInstant time = TInstant::Now();
         TVector<i64> values = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,7476717,0,529363,-1065564};
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT_C(avg >= 112 && avg <= 114, avg);
     }
 
-    Y_UNIT_TEST(TimeSeriesKV2) {
+    Y_UNIT_TEST(TimeSeriesKV2) { 
         TTimeSeriesValue<i64> value;
         TInstant time = TInstant::Now();
         TVector<i64> values = {0,0,0,0,1502,0,-64006,-100840,-151185,-4088398,-169038,-167227,-74841,-111563,-107191,-146359,-107399,-195925,-140440,-173191,-30211,-128287,-185191,-140449};
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT_C(avg < 0, avg);
     }
 
-    Y_UNIT_TEST(TimeSeriesAVG) {
+    Y_UNIT_TEST(TimeSeriesAVG) { 
         TTimeSeriesValue<i64, 1000000ull * 60 * 5, 20> value;
         TInstant time = TInstant::Now();
         time -= TDuration::Seconds(2);
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT_C(avg == 400, avg);
     }
 
-    Y_UNIT_TEST(DecayingAverageAvg) {
+    Y_UNIT_TEST(DecayingAverageAvg) { 
         TDecayingAverageValue<ui64, NMetrics::DurationPerMinute> value;
         TInstant time = TInstant::Now();
 

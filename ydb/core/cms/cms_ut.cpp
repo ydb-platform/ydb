@@ -40,8 +40,8 @@ void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(TCmsTest) {
-    Y_UNIT_TEST(CollectInfo)
+Y_UNIT_TEST_SUITE(TCmsTest) { 
+    Y_UNIT_TEST(CollectInfo) 
     {
         TCmsTestEnv env(8);
 
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
     }
 
-    Y_UNIT_TEST(StateRequest)
+    Y_UNIT_TEST(StateRequest) 
     {
         TCmsTestEnv env(8);
         auto before = env.GetCurrentTime();
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
     }
 
-    Y_UNIT_TEST(StateRequestNode)
+    Y_UNIT_TEST(StateRequestNode) 
     {
         TCmsTestEnv env(8, TNodeTenantsMap{{1, {"user0"}}});
 
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
     }
 
-    Y_UNIT_TEST(StateRequestUnknownNode)
+    Y_UNIT_TEST(StateRequestUnknownNode) 
     {
         TCmsTestEnv env(8);
 
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.RequestState(request, TStatus::NO_SUCH_HOST);
     }
 
-    Y_UNIT_TEST(StateRequestUnknownMultipleNodes)
+    Y_UNIT_TEST(StateRequestUnknownMultipleNodes) 
     {
         TCmsTestEnv env(8);
 
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.RequestState(request, TStatus::NO_SUCH_HOST);
     }
 
-    Y_UNIT_TEST(RequestRestartServicesOk)
+    Y_UNIT_TEST(RequestRestartServicesOk) 
     {
         TCmsTestEnv env(8);
 
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(action1.GetDuration(), 60000000);
     }
 
-    Y_UNIT_TEST(RequestRestartServicesReject)
+    Y_UNIT_TEST(RequestRestartServicesReject) 
     {
         TCmsTestEnv env(8);
 
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(RequestRestartServicesPartial)
+    Y_UNIT_TEST(RequestRestartServicesPartial) 
     {
         TCmsTestEnv env(8);
 
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(action1.GetDuration(), 60000000);
     }
 
-    Y_UNIT_TEST(RequestRestartServicesRejectSecond)
+    Y_UNIT_TEST(RequestRestartServicesRejectSecond) 
     {
         TCmsTestEnv env(8);
 
@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(RequestRestartServicesWrongHost)
+    Y_UNIT_TEST(RequestRestartServicesWrongHost) 
     {
         TCmsTestEnv env(8);
 
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, "host", 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(RequestRestartServicesMultipleNodes)
+    Y_UNIT_TEST(RequestRestartServicesMultipleNodes) 
     {
         TCmsTestEnv env(8);
 
@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, "::1", 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(RequestRestartServicesNoUser)
+    Y_UNIT_TEST(RequestRestartServicesNoUser) 
     {
         TCmsTestEnv env(8);
 
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, "::1", 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(RequestRestartServicesDryRun)
+    Y_UNIT_TEST(RequestRestartServicesDryRun) 
     {
         TCmsTestEnv env(8);
 
@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
     }
 
-    Y_UNIT_TEST(ManagePermissions)
+    Y_UNIT_TEST(ManagePermissions) 
     {
         TCmsTestEnv env(8);
 
@@ -351,7 +351,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(rec5.PermissionsSize(), 1);
     }
 
-    Y_UNIT_TEST(ManagePermissionWrongRequest)
+    Y_UNIT_TEST(ManagePermissionWrongRequest) 
     {
         TCmsTestEnv env(8);
 
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckRejectPermission("user", id + "-bad", false, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(RequestReplaceDevices)
+    Y_UNIT_TEST(RequestReplaceDevices) 
     {
         TCmsTestEnv env(8);
 
@@ -460,7 +460,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 
-    Y_UNIT_TEST(RequestReplaceBrokenDevices)
+    Y_UNIT_TEST(RequestReplaceBrokenDevices) 
     {
         TCmsTestEnv env(8);
 
@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(1)));
     }
 
-    Y_UNIT_TEST(ManageRequestsWrong)
+    Y_UNIT_TEST(ManageRequestsWrong) 
     {
         TCmsTestEnv env(8);
 
@@ -494,7 +494,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckGetRequest("user1", id1, false, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(ManageRequestsDry)
+    Y_UNIT_TEST(ManageRequestsDry) 
     {
         TCmsTestEnv env(8);
 
@@ -516,7 +516,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckGetRequest("user", rid1, false, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(ManageRequests)
+    Y_UNIT_TEST(ManageRequests) 
     {
         TCmsTestEnv env(8, 4);
 
@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckListRequests( "user", 0);
     }
 
-    Y_UNIT_TEST(WalleTasks)
+    Y_UNIT_TEST(WalleTasks) 
     {
         TCmsTestEnv env(24, 4);
 
@@ -718,7 +718,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1));
     }
 
-    Y_UNIT_TEST(Notifications)
+    Y_UNIT_TEST(Notifications) 
     {
         TCmsTestEnv env(8);
         env.AdvanceCurrentTime(TDuration::Minutes(20));
@@ -786,7 +786,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckGetNotification("user", id1, TStatus::OK);
    }
 
-    Y_UNIT_TEST(PermissionDuration) {
+    Y_UNIT_TEST(PermissionDuration) { 
         TCmsTestEnv env(8);
 
         // Store notification user-1.
@@ -804,7 +804,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(1, 0)));
     }
 
-    Y_UNIT_TEST(ActionWithZeroDuration) {
+    Y_UNIT_TEST(ActionWithZeroDuration) { 
         TCmsTestEnv env(8);
 
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.DispatchEvents(options);
     }
 
-    Y_UNIT_TEST(DynamicConfig)
+    Y_UNIT_TEST(DynamicConfig) 
     {
         TCmsTestEnv env(1);
 

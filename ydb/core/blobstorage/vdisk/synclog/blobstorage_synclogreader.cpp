@@ -339,13 +339,13 @@ namespace NKikimr {
                 // FIXME: optimize, batch reads; use Db->RecommendedReadSize
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
 
-                Y_VERIFY(DiskIt.Valid());
+                Y_VERIFY(DiskIt.Valid()); 
                 std::pair<ui32, const TDiskIndexRecord *> p = DiskIt.Get();
                 ui32 chunkIdx = p.first;
                 const TDiskIndexRecord *idxRec = p.second;
                 auto msg = ev->Get();
                 const TBufferWithGaps &readData = ev->Get()->Data;
-                Y_VERIFY(chunkIdx == msg->ChunkIdx &&
+                Y_VERIFY(chunkIdx == msg->ChunkIdx && 
                          idxRec->OffsetInPages * SnapPtr->AppendBlockSize == msg->Offset &&
                          idxRec->PagesNum * SnapPtr->AppendBlockSize == readData.Size(),
                          "SyncLog read command failed: chunkIdx# %" PRIu32

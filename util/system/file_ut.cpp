@@ -113,7 +113,7 @@ public:
 
         const TString data = TUnbufferedFileInput(tmp.Name()).ReadAll();
         UNIT_ASSERT_EQUAL(data.length(), 12);
-        UNIT_ASSERT(data.StartsWith("12345"));
+        UNIT_ASSERT(data.StartsWith("12345")); 
     }
 };
 
@@ -202,7 +202,7 @@ void TFileTest::TestRW() {
 
 void TFileTest::TestLocale() {
 #ifdef _unix_
-    const char* loc = setlocale(LC_CTYPE, nullptr);
+    const char* loc = setlocale(LC_CTYPE, nullptr); 
     setlocale(LC_CTYPE, "ru_RU.UTF-8");
 #endif
     TFile f("Имя.txt", CreateNew);
@@ -405,8 +405,8 @@ UNIT_ASSERT_VALUES_EQUAL(file.CountCache(0, 12345), -1);
 #endif
 }
 
-Y_UNIT_TEST_SUITE(TTestDecodeOpenMode) {
-    Y_UNIT_TEST(It) {
+Y_UNIT_TEST_SUITE(TTestDecodeOpenMode) { 
+    Y_UNIT_TEST(It) { 
         UNIT_ASSERT_VALUES_EQUAL("0", DecodeOpenMode(0));
         UNIT_ASSERT_VALUES_EQUAL("RdOnly", DecodeOpenMode(RdOnly));
         UNIT_ASSERT_VALUES_EQUAL("RdWr", DecodeOpenMode(RdWr));

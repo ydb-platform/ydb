@@ -6,7 +6,7 @@
 
 using namespace NProtoBuf;
 
-Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
+Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) { 
     static TSample GenSampleForMergeFrom() {
         TSample smf;
         smf.SetOneStr("one str");
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
         return smf;
     }
 
-    Y_UNIT_TEST(MergeFromGeneric) {
+    Y_UNIT_TEST(MergeFromGeneric) { 
         const TSample src(GenSampleForMergeFrom());
         TSample dst;
         const Descriptor* descr = dst.GetDescriptor();
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
         }
     }
 
-    Y_UNIT_TEST(MergeFromSelf) {
+    Y_UNIT_TEST(MergeFromSelf) { 
         const TSample sample(GenSampleForMergeFrom());
         TSample msg(sample);
         const Descriptor* descr = msg.GetDescriptor();
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
         UNIT_ASSERT_VALUES_EQUAL(msg.GetOneMsg().RepIntSize(), sample.GetOneMsg().RepIntSize());
     }
 
-    Y_UNIT_TEST(MergeFromAnotherFD) {
+    Y_UNIT_TEST(MergeFromAnotherFD) { 
         const TSample sample(GenSampleForMergeFrom());
         TSample msg(GenSampleForMergeFrom());
         const Descriptor* descr = msg.GetDescriptor();
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
         }
     }
 
-    Y_UNIT_TEST(RemoveByIndex) {
+    Y_UNIT_TEST(RemoveByIndex) { 
         TSample msg;
 
         const Descriptor* descr = msg.GetDescriptor();
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
         }
     }
 
-    Y_UNIT_TEST(GetFieldByPath) {
+    Y_UNIT_TEST(GetFieldByPath) { 
         // Simple get by path
         {
             TSample msg;

@@ -241,7 +241,7 @@ public:
     }
 
     template <class KeySaver>
-    int save_for_st(IOutputStream* stream, KeySaver& ks) const {
+    int save_for_st(IOutputStream* stream, KeySaver& ks) const { 
         return rep.template save_for_st<KeySaver>(stream, ks);
     }
 

@@ -2,7 +2,7 @@ OWNER(g:python-contrib)
 
 RECURSE(
     aho_corasick
-    aho_corasick/ut
+    aho_corasick/ut 
     archive
     archive/benchmark
     archive/test
@@ -41,7 +41,7 @@ RECURSE(
     compress/tests
     cookiemy
     coredump_filter
-    cores
+    cores 
     coverage
     cpp_test
     cppdemangle
@@ -92,17 +92,17 @@ RECURSE(
     guid
     guid/test
     guid/at_fork_test
-    gunicorn
+    gunicorn 
     hnsw
     ids
-    import_test
+    import_test 
     infected_masks
     infected_masks/ut
     init_log
-    init_log/example
+    init_log/example 
     intrasearch_fetcher
     json
-    json/compare
+    json/compare 
     json/perf
     json/test
     json/test/py2
@@ -112,7 +112,7 @@ RECURSE(
     langs
     luigi
     luigi/data
-    luigi/example
+    luigi/example 
     luigi/luigid_static
     maths
     messagebus
@@ -151,7 +151,7 @@ RECURSE(
     python-django-yauth
     reactor
     redis_utils
-    reservoir_sampling
+    reservoir_sampling 
     refsclient
     resource
     retry
@@ -201,8 +201,8 @@ RECURSE(
     type_info/test
     unique_id
     vault_client
-    watch_dog
-    watch_dog/example
+    watch_dog 
+    watch_dog/example 
     wiki
     windows
     windows/ut

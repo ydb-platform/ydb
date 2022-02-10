@@ -13,10 +13,10 @@ TUseAfterFreeChecker::TUseAfterFreeChecker()
 }
 
 TUseAfterFreeChecker::~TUseAfterFreeChecker() {
-    Y_VERIFY(Magic == VALID, "Corrupted");
+    Y_VERIFY(Magic == VALID, "Corrupted"); 
     Magic = INVALID;
 }
 
 void TUseAfterFreeChecker::CheckNotFreed() const {
-    Y_VERIFY(Magic == VALID, "Freed or corrupted");
+    Y_VERIFY(Magic == VALID, "Freed or corrupted"); 
 }

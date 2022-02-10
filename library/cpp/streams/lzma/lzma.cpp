@@ -58,7 +58,7 @@ namespace {
             TInverseFilter* Parent_;
         };
 
-        class TInput: public IInputStream {
+        class TInput: public IInputStream { 
         public:
             inline TInput(TInverseFilter* parent)
                 : Parent_(parent)
@@ -76,7 +76,7 @@ namespace {
             TInverseFilter* Parent_;
         };
 
-        class TOutput: public IOutputStream {
+        class TOutput: public IOutputStream { 
         public:
             inline TOutput(TInverseFilter* parent)
                 : Parent_(parent)
@@ -95,7 +95,7 @@ namespace {
         };
 
     public:
-        inline TInverseFilter(IOutputStream* slave, T* filter)
+        inline TInverseFilter(IOutputStream* slave, T* filter) 
             : Slave_(slave)
             , Filter_(filter)
             , TrampoLine_(this)
@@ -168,7 +168,7 @@ namespace {
         }
 
         inline void WriteImpl(const void* ptr, size_t len) {
-            Y_ASSERT(!Out_.Avail());
+            Y_ASSERT(!Out_.Avail()); 
 
             Out_.Reset(ptr, len);
 
@@ -205,7 +205,7 @@ namespace {
         }
 
     private:
-        IOutputStream* Slave_;
+        IOutputStream* Slave_; 
         T* Filter_;
         TTrampoLine TrampoLine_;
         char Stack_[16 * 1024];
@@ -221,7 +221,7 @@ namespace {
     public:
         class TLzmaInput: public ISeqInStream {
         public:
-            inline TLzmaInput(IInputStream* slave)
+            inline TLzmaInput(IInputStream* slave) 
                 : Slave_(slave)
             {
                 Read = ReadFunc;
@@ -235,12 +235,12 @@ namespace {
             }
 
         private:
-            IInputStream* Slave_;
+            IInputStream* Slave_; 
         };
 
         class TLzmaOutput: public ISeqOutStream {
         public:
-            inline TLzmaOutput(IOutputStream* slave)
+            inline TLzmaOutput(IOutputStream* slave) 
                 : Slave_(slave)
             {
                 Write = WriteFunc;
@@ -254,7 +254,7 @@ namespace {
             }
 
         private:
-            IOutputStream* Slave_;
+            IOutputStream* Slave_; 
         };
 
         class TAlloc: public ISzAlloc {
@@ -321,7 +321,7 @@ namespace {
             LzmaEnc_Destroy(H_, Alloc(), Alloc());
         }
 
-        inline void operator()(IInputStream* in, IOutputStream* out) {
+        inline void operator()(IInputStream* in, IOutputStream* out) { 
             TLzmaInput input(in);
             TLzmaOutput output(out);
 
@@ -339,7 +339,7 @@ namespace {
 
 class TLzmaCompress::TImpl: public TLzmaCompressBase, public TInverseFilter<TLzmaCompressBase> {
 public:
-    inline TImpl(IOutputStream* slave, size_t level)
+    inline TImpl(IOutputStream* slave, size_t level) 
         : TLzmaCompressBase(level)
         , TInverseFilter<TLzmaCompressBase>(slave, this)
     {
@@ -373,7 +373,7 @@ public:
         pos += bufLen;
 
         if (status == LZMA_STATUS_NEEDS_MORE_INPUT) {
-            Y_ASSERT(InEnd_ == InBegin_);
+            Y_ASSERT(InEnd_ == InBegin_); 
             if (!Fill()) {
                 ythrow yexception() << "incomplete lzma stream";
             }
@@ -395,7 +395,7 @@ protected:
 
 class TLzmaDecompress::TImplStream: public TImpl {
 public:
-    inline TImplStream(IInputStream* slave)
+    inline TImplStream(IInputStream* slave) 
         : Slave_(slave)
     {
         Byte buf[LZMA_PROPS_SIZE];
@@ -417,13 +417,13 @@ private:
     }
 
 private:
-    IInputStream* Slave_;
+    IInputStream* Slave_; 
     char In_[4096];
 };
 
 class TLzmaDecompress::TImplZeroCopy: public TLzmaDecompress::TImpl {
 public:
-    inline TImplZeroCopy(IZeroCopyInput* in)
+    inline TImplZeroCopy(IZeroCopyInput* in) 
         : Input_(in)
     {
         if (!Fill())
@@ -475,10 +475,10 @@ private:
         return false;
     }
 
-    IZeroCopyInput* Input_;
+    IZeroCopyInput* Input_; 
 };
 
-TLzmaCompress::TLzmaCompress(IOutputStream* slave, size_t level)
+TLzmaCompress::TLzmaCompress(IOutputStream* slave, size_t level) 
     : Impl_(new TImpl(slave, level))
 {
 }
@@ -502,12 +502,12 @@ void TLzmaCompress::DoFinish() {
     }
 }
 
-TLzmaDecompress::TLzmaDecompress(IInputStream* slave)
+TLzmaDecompress::TLzmaDecompress(IInputStream* slave) 
     : Impl_(new TImplStream(slave))
 {
 }
 
-TLzmaDecompress::TLzmaDecompress(IZeroCopyInput* input)
+TLzmaDecompress::TLzmaDecompress(IZeroCopyInput* input) 
     : Impl_(new TImplZeroCopy(input))
 {
 }

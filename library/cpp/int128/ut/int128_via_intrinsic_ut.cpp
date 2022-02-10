@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(Int128ViaIntrinsicSuite) {
         return res;
     }
 
-    Y_UNIT_TEST(bigintTest) {
+    Y_UNIT_TEST(bigintTest) { 
         UNIT_ASSERT(guint128_t(127) == toGcc(ui128(127)));
         UNIT_ASSERT(guint128_t(127) * guint128_t(127) == toGcc(ui128(127) * ui128(127)));
         UNIT_ASSERT(guint128_t(127) + guint128_t(127) == toGcc(ui128(127) + ui128(127)));

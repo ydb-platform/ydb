@@ -5,7 +5,7 @@
 #include <util/system/yassert.h>
 
 class TContIOVector {
-    using TPart = IOutputStream::TPart;
+    using TPart = IOutputStream::TPart; 
 
 public:
     inline TContIOVector(TPart* parts, size_t count)

@@ -20,7 +20,7 @@ public:
     //
     const void* ReadAt(ui32 offset, ui32 size) const {
         Y_VERIFY_DEBUG(Buffer.size() >= offset + size);
-        Y_UNUSED(size);
+        Y_UNUSED(size); 
 
         return Buffer.data() + offset;
     }
@@ -114,7 +114,7 @@ public:
         //
         template<typename T>
         void SetValue(const T& value) {
-            Y_VERIFY(sizeof(T) == Size);
+            Y_VERIFY(sizeof(T) == Size); 
             DataStream->WriteAtPosition(Position, (const char*)&value, sizeof(T));
         }
     };
@@ -131,7 +131,7 @@ public:
 
         //
         void SetValue(const T& value) {
-            Y_VERIFY(sizeof(T) == Size);
+            Y_VERIFY(sizeof(T) == Size); 
             DataStream->WriteAtPosition(Position, (const char*)&value, sizeof(T));
         }
     };

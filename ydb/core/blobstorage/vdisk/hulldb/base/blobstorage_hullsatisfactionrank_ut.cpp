@@ -1,18 +1,18 @@
 #include "blobstorage_hullsatisfactionrank.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h>
-
+#include <util/stream/null.h> 
+ 
 #define STR Cnull
 
 namespace NKikimr {
 
     using namespace NSat;
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullDecimal) {
+    Y_UNIT_TEST_SUITE(TBlobStorageHullDecimal) { 
         using TDecimal = ::NKikimr::NSat::TDecimal<3>;
 
-        Y_UNIT_TEST(TestMkRatio) {
+        Y_UNIT_TEST(TestMkRatio) { 
             TDecimal d1 = TDecimal::MkRatio(1, 3);
             STR << d1 << "\n";
             UNIT_ASSERT_VALUES_EQUAL(d1.GetRaw(), 333);
@@ -26,7 +26,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(d3.GetRaw(), 3333);
         }
 
-        Y_UNIT_TEST(TestMkDecimal) {
+        Y_UNIT_TEST(TestMkDecimal) { 
             TDecimal d1 = TDecimal::MkDecimal(1, 400);
             STR << d1 << "\n";
             UNIT_ASSERT_VALUES_EQUAL(d1.GetRaw(), 1400);
@@ -38,7 +38,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL((d2 * d3).GetRaw(), 11438);
         }
 
-        Y_UNIT_TEST(TestMult) {
+        Y_UNIT_TEST(TestMult) { 
             {
                 TDecimal d1 = TDecimal::MkRatio(1, 3);
                 TDecimal d2 = d1 * 5;
@@ -62,7 +62,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(TestRoundToInt) {
+        Y_UNIT_TEST(TestRoundToInt) { 
             // round to 1
             {
                 TDecimal d1 = TDecimal::MkRatio(1, 3);
@@ -101,7 +101,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(TestToUi64) {
+        Y_UNIT_TEST(TestToUi64) { 
             // < 100%
             {
                 TDecimal d1 = TDecimal::MkRatio(1, 3);
@@ -122,7 +122,7 @@ namespace NKikimr {
     }
 
 
-    Y_UNIT_TEST_SUITE(TBlobStorageLinearTrackBar) {
+    Y_UNIT_TEST_SUITE(TBlobStorageLinearTrackBar) { 
 
         template <class TTrackBar, class TDecimal>
         void Update(TTrackBar &tb, TDecimal v, typename TTrackBar::TStatus expectedRes) {
@@ -133,7 +133,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(status, expectedRes);
         }
 
-        Y_UNIT_TEST(TestLinearTrackBarDouble) {
+        Y_UNIT_TEST(TestLinearTrackBarDouble) { 
             using TDecimal = ::NKikimr::NSat::TDecimalViaDouble;
             using TTrackBar = TLinearTrackBar<TDecimal>;
             using TStatus = typename TTrackBar::TStatus;
@@ -147,7 +147,7 @@ namespace NKikimr {
             Update(tb, 0.45, TStatus(true, 2));
         }
 
-        Y_UNIT_TEST(TestLinearTrackBarWithDecimal) {
+        Y_UNIT_TEST(TestLinearTrackBarWithDecimal) { 
             using TDecimal = ::NKikimr::NSat::TDecimal<3>;
             using TTrackBar = TLinearTrackBar<TDecimal>;
             using TStatus = typename TTrackBar::TStatus;

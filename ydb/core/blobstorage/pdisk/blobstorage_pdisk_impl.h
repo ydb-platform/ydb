@@ -277,7 +277,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Whiteboard and HTTP reports creation
     void WhiteboardReport(TWhiteboardReport &whiteboardReport); // Called by actor
-    void RenderState(IOutputStream &str, THttpInfo &httpInfo);
+    void RenderState(IOutputStream &str, THttpInfo &httpInfo); 
     void OutputHtmlOwners(TStringStream &str);
     void OutputHtmlLogChunksDetails(TStringStream &str);
     void OutputHtmlChunksLockUnlockInfo(TStringStream &str);

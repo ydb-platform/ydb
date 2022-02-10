@@ -21,7 +21,7 @@ namespace NKikimr {
                 case NKikimrBlobStorage::UserData:
                     return (hugeBlobSize >= minREALHugeBlobSize ? HugeForeground : Log);
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_FAIL("Unexpected case"); 
             }
         }
 

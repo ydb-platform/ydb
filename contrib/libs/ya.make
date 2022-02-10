@@ -15,7 +15,7 @@ RECURSE(
     avs-device-sdk
     aws-sdk-cpp
     backtrace
-    base64
+    base64 
     bdb
     bdb/ut
     benchmark
@@ -209,9 +209,9 @@ RECURSE(
     llvm11
     llvm12
     llvm8
-    lmdbxx
-    lmdbxx/check
-    lmdbxx/example
+    lmdbxx 
+    lmdbxx/check 
+    lmdbxx/example 
     lua
     lua-cjson
     luajit_21
@@ -269,7 +269,7 @@ RECURSE(
     pffft
     pfr
     picohttpparser
-    #pire/ut
+    #pire/ut 
     pixman
     poco
     portaudio
@@ -277,7 +277,7 @@ RECURSE(
     proj
     protobuf
     protobuf/python
-    protobuf-mutator
+    protobuf-mutator 
     protobuf_std
     protoc_std
     psimd
@@ -312,7 +312,7 @@ RECURSE(
     sqlite3
     srt
     stan
-    stan-math
+    stan-math 
     stan/stan/command
     stxxl
     subversion

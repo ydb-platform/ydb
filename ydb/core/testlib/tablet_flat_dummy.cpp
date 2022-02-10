@@ -70,7 +70,7 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
 
         bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
             Y_UNUSED(txc);
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             return true;
         }
 
@@ -83,7 +83,7 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
     friend struct TTxInit;
 
     void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
+        Y_UNUSED(ev); 
         Become(&TThis::StateBroken);
         ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     }
@@ -101,12 +101,12 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-        Y_UNUSED(ev);
+        Y_UNUSED(ev); 
         Die(ctx);
     }
 
     void DefaultSignalTabletActive(const TActorContext &ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
     }
 
 public:

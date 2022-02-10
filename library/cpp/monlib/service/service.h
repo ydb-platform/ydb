@@ -41,7 +41,7 @@ namespace NMonitoring {
         // by forwarding it to the httpserver
         // @note this call may be blocking; don't use inside coroutines
         // @throws may throw in case of connection error, etc
-        void ProcessRequest(IOutputStream&, const IHttpRequest&);
+        void ProcessRequest(IOutputStream&, const IHttpRequest&); 
 
     private:
         class TConnection;
@@ -101,7 +101,7 @@ namespace NMonitoring {
         void Stop();
 
     protected:
-        void DispatchRequest(IOutputStream& out, const IHttpRequest&);
+        void DispatchRequest(IOutputStream& out, const IHttpRequest&); 
 
     private:
         TCoHttpServer CoServer;

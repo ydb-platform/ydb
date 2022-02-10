@@ -28,32 +28,32 @@ public:
     }
 
     bool AddFilter(TContext& ctx, TNodePtr filter) override {
-        Y_UNUSED(filter);
+        Y_UNUSED(filter); 
         ctx.Error(Pos) << "Source does not allow filtering";
         return false;
     }
 
     bool AddGroupKey(TContext& ctx, const TString& column) override {
-        Y_UNUSED(column);
+        Y_UNUSED(column); 
         ctx.Error(Pos) << "Source does not allow grouping";
         return false;
     }
 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {
-        Y_UNUSED(aggr);
+        Y_UNUSED(aggr); 
         ctx.Error(Pos) << "Source does not allow aggregation";
         return false;
     }
 
     TNodePtr BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode) override {
         Y_UNUSED(ctx);
-        Y_UNUSED(label);
+        Y_UNUSED(label); 
         Y_UNUSED(groundNode);
         return nullptr;
     }
 
     TNodePtr BuildAggregation(const TString& label) override {
-        Y_UNUSED(label);
+        Y_UNUSED(label); 
         return nullptr;
     }
 

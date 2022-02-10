@@ -5,8 +5,8 @@ namespace NKikimr {
 
 namespace NTxDataShard {
 
-Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
-    Y_UNIT_TEST(TestZeroTracks) {
+Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) { 
+    Y_UNIT_TEST(TestZeroTracks) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks;
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
         UNIT_ASSERT(builder.IsComplete());
     }
 
-    Y_UNIT_TEST(TestEmpty) {
+    Y_UNIT_TEST(TestEmpty) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks;
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
         UNIT_ASSERT(builder.IsComplete());
     }
 
-    Y_UNIT_TEST(TestOneSplit) {
+    Y_UNIT_TEST(TestOneSplit) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks;
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
         UNIT_ASSERT(builder.IsComplete());
     }
 
-    Y_UNIT_TEST(TestSimpleSplit) {
+    Y_UNIT_TEST(TestSimpleSplit) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks1;
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
         UNIT_ASSERT(builder.IsComplete());
     }
 
-    Y_UNIT_TEST(TestComplexSplit) {
+    Y_UNIT_TEST(TestComplexSplit) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks1;
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
         UNIT_ASSERT(builder.IsComplete());
     }
 
-    Y_UNIT_TEST(TestComplexSplitWithDuplicates) {
+    Y_UNIT_TEST(TestComplexSplitWithDuplicates) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks1;
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
         UNIT_ASSERT(!res);
     }
 
-    Y_UNIT_TEST(TestSplitWithPartialMergeOne) {
+    Y_UNIT_TEST(TestSplitWithPartialMergeOne) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks1;
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
         UNIT_ASSERT(builder.IsComplete());
     }
 
-    Y_UNIT_TEST(TestSplitWithPartialMergeAll) {
+    Y_UNIT_TEST(TestSplitWithPartialMergeAll) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks1;
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
         UNIT_ASSERT(builder.IsComplete());
     }
 
-    Y_UNIT_TEST(TestSplitWithMergeBack) {
+    Y_UNIT_TEST(TestSplitWithMergeBack) { 
         TBalanceCoverageBuilder builder;
         UNIT_ASSERT(!builder.IsComplete());
         NKikimrTx::TBalanceTrackList tracks1;

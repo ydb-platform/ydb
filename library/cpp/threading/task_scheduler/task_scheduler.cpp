@@ -2,7 +2,7 @@
 
 #include <util/system/thread.h>
 #include <util/string/cast.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 
 TTaskScheduler::ITask::~ITask() {}
 TTaskScheduler::IRepeatedTask::~IRepeatedTask() {}
@@ -10,7 +10,7 @@ TTaskScheduler::IRepeatedTask::~IRepeatedTask() {}
 
 
 class TTaskScheduler::TWorkerThread
-    : public ISimpleThread
+    : public ISimpleThread 
 {
 public:
     TWorkerThread(TTaskScheduler& state)
@@ -152,8 +152,8 @@ const bool debugOutput = false;
 
 void TTaskScheduler::ChangeDebugState(TWorkerThread* thread, const TString& state) {
     if (!debugOutput) {
-        Y_UNUSED(thread);
-        Y_UNUSED(state);
+        Y_UNUSED(thread); 
+        Y_UNUSED(state); 
         return;
     }
 

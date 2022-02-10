@@ -53,7 +53,7 @@ namespace NActors {
             virtual ~IEvHttpInfoRes() {
             }
 
-            virtual void Output(IOutputStream& out) const = 0;
+            virtual void Output(IOutputStream& out) const = 0; 
             virtual EContentType GetContentType() const = 0;
         };
 
@@ -66,7 +66,7 @@ namespace NActors {
             {
             }
 
-            void Output(IOutputStream& out) const override {
+            void Output(IOutputStream& out) const override { 
                 out << Answer;
             }
 

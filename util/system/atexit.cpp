@@ -42,7 +42,7 @@ namespace {
             while (Items_) {
                 auto c = Items_.top();
 
-                Y_ASSERT(c);
+                Y_ASSERT(c); 
 
                 Items_.pop();
 

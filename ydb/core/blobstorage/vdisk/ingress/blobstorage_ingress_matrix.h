@@ -47,7 +47,7 @@ namespace NKikimr {
                 : Vec(vec & EmptyMask[size])
                 , Size(size)
             {
-                Y_VERIFY_DEBUG(size <= 8);
+                Y_VERIFY_DEBUG(size <= 8); 
             }
 
             TVectorType(const TVectorType &v)
@@ -56,13 +56,13 @@ namespace NKikimr {
             {}
 
             void Set(ui8 i) {
-                Y_VERIFY_DEBUG(i < Size);
+                Y_VERIFY_DEBUG(i < Size); 
                 ui8 mask = 0x80 >> i;
                 Vec |= mask;
             }
 
             void Clear(ui8 i) {
-                Y_VERIFY_DEBUG(i < Size);
+                Y_VERIFY_DEBUG(i < Size); 
                 ui8 mask = 0x80 >> i;
                 Vec &= ~mask;
             }
@@ -72,7 +72,7 @@ namespace NKikimr {
             }
 
             bool Get(ui8 i) const {
-                Y_VERIFY_DEBUG(i < Size);
+                Y_VERIFY_DEBUG(i < Size); 
                 ui8 mask = 0x80 >> i;
                 return Vec & mask;
             }
@@ -89,7 +89,7 @@ namespace NKikimr {
             }
 
             ui8 NextPosition(ui8 i) const {
-                Y_VERIFY_DEBUG(i < 8);
+                Y_VERIFY_DEBUG(i < 8); 
                 unsigned shift = 8 - i - 1;
                 unsigned mask = unsigned(-1) >> shift << shift;
                 unsigned v = (unsigned)Vec & ~mask;
@@ -122,7 +122,7 @@ namespace NKikimr {
             }
 
             TVectorType &operator |=(const TVectorType &v) {
-                Y_VERIFY_DEBUG(Size == v.Size);
+                Y_VERIFY_DEBUG(Size == v.Size); 
                 Vec |= v.Vec;
                 return *this;
             }
@@ -139,7 +139,7 @@ namespace NKikimr {
             }
 
             bool operator ==(const TVectorType &v) const {
-                Y_VERIFY_DEBUG(v.Size == Size);
+                Y_VERIFY_DEBUG(v.Size == Size); 
                 return Vec == v.Vec;
             }
 
@@ -185,26 +185,26 @@ namespace NKikimr {
             friend TVectorType operator |(const TVectorType &v1, const TVectorType &v2);
 
             ui8 FirstSetBit(ui8 vec) const {
-                const static unsigned shift = std::numeric_limits<unsigned int>::digits - std::numeric_limits<ui8>::digits;
+                const static unsigned shift = std::numeric_limits<unsigned int>::digits - std::numeric_limits<ui8>::digits; 
                 unsigned mask = unsigned(-1) >> unsigned(Size);
                 unsigned t = (unsigned(vec) << shift) | mask;
-                Y_VERIFY_DEBUG(t != 0);
+                Y_VERIFY_DEBUG(t != 0); 
                 return Clz(t);
             }
         };
 
         inline TVectorType operator -(const TVectorType &v1, const TVectorType &v2) {
-            Y_VERIFY_DEBUG(v1.Size == v2.Size);
+            Y_VERIFY_DEBUG(v1.Size == v2.Size); 
             return TVectorType(v1.Vec ^ (v1.Vec & v2.Vec), v1.Size);
         }
 
         inline TVectorType operator &(const TVectorType &v1, const TVectorType &v2) {
-            Y_VERIFY_DEBUG(v1.Size == v2.Size);
+            Y_VERIFY_DEBUG(v1.Size == v2.Size); 
             return TVectorType(v1.Vec & v2.Vec, v1.Size);
         }
 
         inline TVectorType operator |(const TVectorType &v1, const TVectorType &v2) {
-            Y_VERIFY_DEBUG(v1.Size == v2.Size);
+            Y_VERIFY_DEBUG(v1.Size == v2.Size); 
             return TVectorType(v1.Vec | v2.Vec, v1.Size);
         }
 
@@ -226,7 +226,7 @@ namespace NKikimr {
                 , Beg(b)
                 , End(e)
             {
-                Y_VERIFY_DEBUG(End > Beg);
+                Y_VERIFY_DEBUG(End > Beg); 
             }
 
             void Set(ui8 i) {
@@ -267,7 +267,7 @@ namespace NKikimr {
                 }
 
                 void Next() {
-                    Y_VERIFY_DEBUG(!IsEnd());
+                    Y_VERIFY_DEBUG(!IsEnd()); 
                     Pos++;
                     Mask >>= 1;
                     if (!Mask) {
@@ -298,7 +298,7 @@ namespace NKikimr {
             ui8 End;
 
             void CalcPos(ui8 &byte, ui8 &mask, ui8 i) const {
-                Y_VERIFY_DEBUG(i < (End - Beg));
+                Y_VERIFY_DEBUG(i < (End - Beg)); 
                 ui8 bitPos = Beg + i;
                 byte = bitPos >> 3;
                 ui8 bit = bitPos - (byte << 3);
@@ -329,7 +329,7 @@ namespace NKikimr {
             }
 
             TVectorType ToVector() const {
-                Y_VERIFY_DEBUG(End - Beg <= 8);
+                Y_VERIFY_DEBUG(End - Beg <= 8); 
                 ui8 vec = 0;
                 TIterator it = Begin();
                 while (!it.IsEnd()) {
@@ -356,7 +356,7 @@ namespace NKikimr {
             TShiftedHandoffBitVec(ui8 *ptr, ui8 b, ui8 e)
                 : TShiftedBitVecBase(ptr, b, e)
             {
-                Y_VERIFY_DEBUG(((End - Beg) >> 1 << 1) == (End - Beg));
+                Y_VERIFY_DEBUG(((End - Beg) >> 1 << 1) == (End - Beg)); 
             }
 
             // 00 -- not set
@@ -390,14 +390,14 @@ namespace NKikimr {
             }
 
             TVectorType ToVector() const {
-                Y_VERIFY_DEBUG(End - Beg <= 2 * 8);
+                Y_VERIFY_DEBUG(End - Beg <= 2 * 8); 
                 ui8 vec = 0;
                 TIterator it = Begin();
                 while (!it.IsEnd()) {
                     vec <<= 1;
                     bool firstBit = it.Get();
                     it.Next();
-                    Y_VERIFY_DEBUG(!it.IsEnd());
+                    Y_VERIFY_DEBUG(!it.IsEnd()); 
                     bool secondBit = it.Get();
                     it.Next();
                     vec |= ui8(!firstBit && secondBit);
@@ -417,7 +417,7 @@ namespace NKikimr {
                 , Rows(rows)
                 , Columns(columns)
             {
-                Y_VERIFY_DEBUG(ptr && rows && columns);
+                Y_VERIFY_DEBUG(ptr && rows && columns); 
             }
 
             void Zero() {
@@ -502,7 +502,7 @@ namespace NKikimr {
             };
 
             TPos CalcPos(ui8 row, ui8 column) const {
-                Y_VERIFY_DEBUG(row < Rows && column < Columns);
+                Y_VERIFY_DEBUG(row < Rows && column < Columns); 
                 ui32 bit = (ui32)Columns * (ui32)row + (ui32)column;
                 ui32 byte = bit / BitsInByte;
                 ui32 localBit = byte * BitsInByte + 7 - bit;

@@ -149,7 +149,7 @@ namespace NKiwiAggr {
             histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM ||
             histo.GetType() == HT_ADAPTIVE_HISTOGRAM)
         {
-            Y_VERIFY(histo.FreqSize() == histo.PositionSize(), "Corrupted histo");
+            Y_VERIFY(histo.FreqSize() == histo.PositionSize(), "Corrupted histo"); 
             for (size_t j = 0; j < histo.FreqSize(); ++j) {
                 double value = histo.GetPosition(j);
                 double weight = histo.GetFreq(j);
@@ -189,7 +189,7 @@ namespace NKiwiAggr {
     }
 
     void TBlockHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) {
-        Y_UNUSED(histogramsToMerge);
+        Y_UNUSED(histogramsToMerge); 
         ythrow yexception() << "IHistogram::Merge(TVector<IHistogramPtr>) is not defined for TBlockHistogram";
     }
 
@@ -286,7 +286,7 @@ namespace NKiwiAggr {
     }
 
     void TBlockHistogram::SortAndShrink(size_t intervals, bool final) {
-        Y_VERIFY(intervals > 0);
+        Y_VERIFY(intervals > 0); 
 
         if (Bins.size() <= intervals) {
             return;
@@ -382,7 +382,7 @@ namespace NKiwiAggr {
             ui32 a = (ui32)(bins[b].Prev() - bins);
             ui32 c = (ui32)(bins[b].Next() - bins);
             ui32 d = (ui32)(bins[b].Next()->Next() - bins);
-            Y_VERIFY(Bins[c].second != -1);
+            Y_VERIFY(Bins[c].second != -1); 
 
             double mass = Bins[b].second + Bins[c].second;
             Bins[c].first = (Bins[b].first * Bins[b].second + Bins[c].first * Bins[c].second) / mass;
@@ -411,48 +411,48 @@ namespace NKiwiAggr {
 
         Bins.resize(pos);
         PrevSize = pos;
-        Y_VERIFY(pos == intervals);
+        Y_VERIFY(pos == intervals); 
     }
 
     double TBlockHistogram::GetSumInRange(double leftBound, double rightBound) {
-        Y_UNUSED(leftBound);
-        Y_UNUSED(rightBound);
+        Y_UNUSED(leftBound); 
+        Y_UNUSED(rightBound); 
         ythrow yexception() << "Method is not implemented for TBlockHistogram";
         return 0;
     }
 
     double TBlockHistogram::GetSumAboveBound(double bound) {
-        Y_UNUSED(bound);
+        Y_UNUSED(bound); 
         ythrow yexception() << "Method is not implemented for TBlockHistogram";
         return 0;
     }
 
     double TBlockHistogram::GetSumBelowBound(double bound) {
-        Y_UNUSED(bound);
+        Y_UNUSED(bound); 
         ythrow yexception() << "Method is not implemented for TBlockHistogram";
         return 0;
     }
 
     double TBlockHistogram::CalcUpperBound(double sum) {
-        Y_UNUSED(sum);
+        Y_UNUSED(sum); 
         ythrow yexception() << "Method is not implemented for TBlockHistogram";
         return 0;
     }
 
     double TBlockHistogram::CalcLowerBound(double sum) {
-        Y_UNUSED(sum);
+        Y_UNUSED(sum); 
         ythrow yexception() << "Method is not implemented for TBlockHistogram";
         return 0;
     }
 
     double TBlockHistogram::CalcUpperBoundSafe(double sum) {
-        Y_UNUSED(sum);
+        Y_UNUSED(sum); 
         ythrow yexception() << "Method is not implemented for TBlockHistogram";
         return 0;
     }
 
     double TBlockHistogram::CalcLowerBoundSafe(double sum) {
-        Y_UNUSED(sum);
+        Y_UNUSED(sum); 
         ythrow yexception() << "Method is not implemented for TBlockHistogram";
         return 0;
     }
@@ -528,7 +528,7 @@ namespace NKiwiAggr {
     }
 
     void TBlockWardHistogram::FastGreedyShrink(size_t intervals) {
-        Y_VERIFY(intervals > 0);
+        Y_VERIFY(intervals > 0); 
 
         if (Bins.size() <= intervals) {
             return;

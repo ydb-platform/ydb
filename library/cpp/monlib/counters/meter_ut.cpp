@@ -18,8 +18,8 @@ struct TMockClock {
 
 using TMockMeter = TMeterImpl<TMockClock>;
 
-Y_UNIT_TEST_SUITE(TMeterTest) {
-    Y_UNIT_TEST(StartsOutWithNoRatesOrCount) {
+Y_UNIT_TEST_SUITE(TMeterTest) { 
+    Y_UNIT_TEST(StartsOutWithNoRatesOrCount) { 
         TMeter meter;
         UNIT_ASSERT_EQUAL(meter.GetCount(), 0L);
         UNIT_ASSERT_DOUBLES_EQUAL(meter.GetMeanRate(), 0.0, 0.0001);
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TMeterTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(meter.GetFifteenMinutesRate(), 0.0, 0.0001);
     }
 
-    Y_UNIT_TEST(MarksEventsAndUpdatesRatesAndCount) {
+    Y_UNIT_TEST(MarksEventsAndUpdatesRatesAndCount) { 
         TMockMeter meter;
         meter.Mark();
         meter.Mark(2);

@@ -10,13 +10,13 @@ TAutoPtr<TTabletCountersBase>
 TTabletCountersBase::MakeDiffForAggr(const TTabletCountersBase& baseLine) const {
     TAutoPtr<TTabletCountersBase> retVal = new TTabletCountersBase(*this);
     if (baseLine.HasCounters()) {
-        Y_VERIFY_DEBUG(baseLine.SimpleCounters.Size() == SimpleCounters.Size());
-        Y_VERIFY_DEBUG(baseLine.CumulativeCounters.Size() == CumulativeCounters.Size());
-        Y_VERIFY_DEBUG(baseLine.PercentileCounters.Size() == PercentileCounters.Size());
+        Y_VERIFY_DEBUG(baseLine.SimpleCounters.Size() == SimpleCounters.Size()); 
+        Y_VERIFY_DEBUG(baseLine.CumulativeCounters.Size() == CumulativeCounters.Size()); 
+        Y_VERIFY_DEBUG(baseLine.PercentileCounters.Size() == PercentileCounters.Size()); 
 
-        Y_VERIFY_DEBUG(baseLine.SimpleCountersMetaInfo == SimpleCountersMetaInfo);
-        Y_VERIFY_DEBUG(baseLine.CumulativeCountersMetaInfo == CumulativeCountersMetaInfo);
-        Y_VERIFY_DEBUG(baseLine.PercentileCountersMetaInfo == PercentileCountersMetaInfo);
+        Y_VERIFY_DEBUG(baseLine.SimpleCountersMetaInfo == SimpleCountersMetaInfo); 
+        Y_VERIFY_DEBUG(baseLine.CumulativeCountersMetaInfo == CumulativeCountersMetaInfo); 
+        Y_VERIFY_DEBUG(baseLine.PercentileCountersMetaInfo == PercentileCountersMetaInfo); 
 
         retVal->SimpleCounters.AdjustToBaseLine(baseLine.SimpleCounters);
         retVal->CumulativeCounters.AdjustToBaseLine(baseLine.CumulativeCounters);
@@ -63,11 +63,11 @@ TTabletCountersBase::operator = (const TTabletCountersBase& rp) {
     return *this;
 }
 
-void TTabletSimpleCounterBase::OutputHtml(IOutputStream &os, const char* name) const {
+void TTabletSimpleCounterBase::OutputHtml(IOutputStream &os, const char* name) const { 
     HTML(os) {PRE() {os << name << ": " << Value;}}
 }
 
-void TTabletPercentileCounter::OutputHtml(IOutputStream &os, const char* name) const {
+void TTabletPercentileCounter::OutputHtml(IOutputStream &os, const char* name) const { 
     HTML(os) {
         DIV_CLASS("row") {
             DIV_CLASS("col-md-12") {H4() {os << name;}}
@@ -85,7 +85,7 @@ void TTabletPercentileCounter::OutputHtml(IOutputStream &os, const char* name) c
     }
 }
 
-void TTabletCountersBase::OutputHtml(IOutputStream &os) const {
+void TTabletCountersBase::OutputHtml(IOutputStream &os) const { 
     HTML(os) {
         DIV_CLASS("row") {
             DIV_CLASS("col-md-12") {OutputHtml(os, "Simple", SimpleCountersMetaInfo, "col-md-3", SimpleCounters);}
@@ -98,7 +98,7 @@ void TTabletCountersBase::OutputHtml(IOutputStream &os) const {
 
 ////////////////////////////////////////////
 template<typename T>
-void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* sectionName, const char* const* counterNames, const char* counterClass, const TCountersArray<T>& counters) const {
+void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* sectionName, const char* const* counterNames, const char* counterClass, const TCountersArray<T>& counters) const { 
     HTML(os) {
         DIV_CLASS("row") {
             DIV_CLASS("col-md-12") {H3() {os << sectionName; }}
@@ -178,7 +178,7 @@ TTabletLabeledCountersBase::operator = (const TTabletLabeledCountersBase& rp) {
     return *this;
 }
 
-void TTabletLabeledCountersBase::OutputHtml(IOutputStream &os) const {
+void TTabletLabeledCountersBase::OutputHtml(IOutputStream &os) const { 
     HTML(os) {
         DIV_CLASS("row") {
             DIV_CLASS("col-md-12") {H3() {os << Group; }}
@@ -229,7 +229,7 @@ void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase&
     Drop = Drop || rp.Drop;
 }
 
-IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func) {
+IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func) { 
     switch(func) {
         case TTabletLabeledCountersBase::EAF_MIN:
             out << "EAF_MIN";

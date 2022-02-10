@@ -38,8 +38,8 @@ namespace {
         }
 
         inline void ListCodecs(TCodecList& lst) const {
-            for (const auto& it : Registry) {
-                lst.push_back(it.first);
+            for (const auto& it : Registry) { 
+                lst.push_back(it.first); 
             }
 
             Sort(lst.begin(), lst.end());

@@ -31,7 +31,7 @@ namespace {
         }
 
         void OnReply(TAutoPtr<TBusMessage> mess, TAutoPtr<TBusMessage> reply) override {
-            Y_VERIFY(AtomicGet(SentCompleted), "must be completed");
+            Y_VERIFY(AtomicGet(SentCompleted), "must be completed"); 
 
             TExampleClient::OnReply(mess, reply);
 
@@ -46,7 +46,7 @@ namespace {
 
 }
 
-Y_UNIT_TEST_SUITE(TMessageBusTests) {
+Y_UNIT_TEST_SUITE(TMessageBusTests) { 
     void TestDestinationTemplate(bool useCompression, bool ackMessageBeforeReply,
                                  const TBusServerSessionConfig& sessionConfig) {
         TObjectCountCheck objectCountCheck;
@@ -66,19 +66,19 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         UNIT_ASSERT_EQUAL(client.Session->GetInFlight(), 0);
     }
 
-    Y_UNIT_TEST(TestDestination) {
+    Y_UNIT_TEST(TestDestination) { 
         TestDestinationTemplate(false, false, TBusServerSessionConfig());
     }
 
-    Y_UNIT_TEST(TestDestinationUsingAck) {
+    Y_UNIT_TEST(TestDestinationUsingAck) { 
         TestDestinationTemplate(false, true, TBusServerSessionConfig());
     }
 
-    Y_UNIT_TEST(TestDestinationWithCompression) {
+    Y_UNIT_TEST(TestDestinationWithCompression) { 
         TestDestinationTemplate(true, false, TBusServerSessionConfig());
     }
 
-    Y_UNIT_TEST(TestCork) {
+    Y_UNIT_TEST(TestCork) { 
         TBusServerSessionConfig config;
         config.SendThreshold = 1000000000000;
         config.Cork = TDuration::MilliSeconds(10);
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         // TODO: test for cork hanging
     }
 
-    Y_UNIT_TEST(TestReconnect) {
+    Y_UNIT_TEST(TestReconnect) { 
         if (!IsFixedPortTestAllowed()) {
             return;
         }
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
 
         void OnError(TAutoPtr<TBusMessage> message, EMessageStatus status) override {
-            Y_UNUSED(message);
+            Y_UNUSED(message); 
 
             Y_VERIFY(status == MESSAGE_CONNECT_FAILED, "must be MESSAGE_CONNECT_FAILED, got %s", ToString(status).data());
 
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         UNIT_ASSERT_VALUES_EQUAL(client.Session->GetConfig()->MaxInFlight, count);
     }
 
-    Y_UNIT_TEST(TestHangindServer) {
+    Y_UNIT_TEST(TestHangindServer) { 
         TObjectCountCheck objectCountCheck;
 
         THangingServer server(0);
@@ -202,13 +202,13 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         HangingServerImpl(server.GetPort());
     }
 
-    Y_UNIT_TEST(TestNoServer) {
+    Y_UNIT_TEST(TestNoServer) { 
         TObjectCountCheck objectCountCheck;
 
         TestNoServerImpl(17, false);
     }
 
-    Y_UNIT_TEST(PauseInput) {
+    Y_UNIT_TEST(PauseInput) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -283,15 +283,15 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.ErrorHappened.WaitI();
     }
 
-    Y_UNIT_TEST(NoServer_SendTimeout_Callback_PeriodLess) {
+    Y_UNIT_TEST(NoServer_SendTimeout_Callback_PeriodLess) { 
         NoServer_SendTimeout_Callback_Impl(true);
     }
 
-    Y_UNIT_TEST(NoServer_SendTimeout_Callback_TimeoutLess) {
+    Y_UNIT_TEST(NoServer_SendTimeout_Callback_TimeoutLess) { 
         NoServer_SendTimeout_Callback_Impl(false);
     }
 
-    Y_UNIT_TEST(TestOnReplyCalledAfterOnMessageSent) {
+    Y_UNIT_TEST(TestOnReplyCalledAfterOnMessageSent) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
 
         void OnMessage(TOnMessageContext& mess) override {
-            Y_VERIFY(mess.IsConnectionAlive(), "connection should be alive here");
+            Y_VERIFY(mess.IsConnectionAlive(), "connection should be alive here"); 
             TAutoPtr<TOnMessageContext> delayedMsg(new TOnMessageContext);
             delayedMsg->Swap(mess);
             auto g(Guard(Lock_));
@@ -337,8 +337,8 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         bool CheckClientIsAlive() {
             auto g(Guard(Lock_));
-            for (auto& delayedMessage : DelayedMessages) {
-                if (!delayedMessage->IsConnectionAlive()) {
+            for (auto& delayedMessage : DelayedMessages) { 
+                if (!delayedMessage->IsConnectionAlive()) { 
                     return false;
                 }
             }
@@ -347,8 +347,8 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         bool CheckClientIsDead() const {
             auto g(Guard(Lock_));
-            for (const auto& delayedMessage : DelayedMessages) {
-                if (delayedMessage->IsConnectionAlive()) {
+            for (const auto& delayedMessage : DelayedMessages) { 
+                if (delayedMessage->IsConnectionAlive()) { 
                     return false;
                 }
             }
@@ -377,12 +377,12 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
 
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             Y_VERIFY(status == MESSAGE_SHUTDOWN, "only shutdown allowed, got %s", ToString(status).data());
         }
     };
 
-    Y_UNIT_TEST(TestReplyCalledAfterClientDisconnected) {
+    Y_UNIT_TEST(TestReplyCalledAfterClientDisconnected) { 
         TObjectCountCheck objectCountCheck;
 
         TDelayReplyServer server;
@@ -431,12 +431,12 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
 
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
-            Y_UNUSED(mess);
-            Y_VERIFY(status == MESSAGE_SHUTDOWN, "only shutdown allowed");
+            Y_UNUSED(mess); 
+            Y_VERIFY(status == MESSAGE_SHUTDOWN, "only shutdown allowed"); 
         }
     };
 
-    Y_UNIT_TEST(PackUnpack) {
+    Y_UNIT_TEST(PackUnpack) { 
         TObjectCountCheck objectCountCheck;
 
         TPackUnpackServer server;
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client->SendMessagesWaitReplies(1, TNetAddr("localhost", server.Session->GetActualListenPort()));
     }
 
-    Y_UNIT_TEST(ClientRequestTooLarge) {
+    Y_UNIT_TEST(ClientRequestTooLarge) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -505,11 +505,11 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         void OnError(TAutoPtr<TBusMessage>, EMessageStatus status) override {
             TestSync.WaitForAndIncrement(1);
 
-            Y_VERIFY(status == MESSAGE_MESSAGE_TOO_LARGE, "status");
+            Y_VERIFY(status == MESSAGE_MESSAGE_TOO_LARGE, "status"); 
         }
     };
 
-    Y_UNIT_TEST(ServerResponseTooLarge) {
+    Y_UNIT_TEST(ServerResponseTooLarge) { 
         TObjectCountCheck objectCountCheck;
 
         TServerForResponseTooLarge server;
@@ -555,12 +555,12 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
                 TAutoPtr<TExampleResponse> resp(new TExampleResponse(&Proto.ResponseCount, 10));
                 req.SendReplyMove(resp);
             } else {
-                Y_FAIL("wrong");
+                Y_FAIL("wrong"); 
             }
         }
     };
 
-    Y_UNIT_TEST(ServerRequestTooLarge) {
+    Y_UNIT_TEST(ServerRequestTooLarge) { 
         TObjectCountCheck objectCountCheck;
 
         TServerForRequestTooLarge server;
@@ -578,7 +578,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.WaitForError(MESSAGE_DELIVERY_FAILED);
     }
 
-    Y_UNIT_TEST(ClientResponseTooLarge) {
+    Y_UNIT_TEST(ClientResponseTooLarge) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.WaitForError(MESSAGE_DELIVERY_FAILED);
     }
 
-    Y_UNIT_TEST(ServerUnknownMessage) {
+    Y_UNIT_TEST(ServerUnknownMessage) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -616,7 +616,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.WaitForError(MESSAGE_DELIVERY_FAILED);
     }
 
-    Y_UNIT_TEST(ServerMessageReservedIds) {
+    Y_UNIT_TEST(ServerMessageReservedIds) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -641,7 +641,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.WaitForError(MESSAGE_DELIVERY_FAILED);
     }
 
-    Y_UNIT_TEST(TestGetInFlightForDestination) {
+    Y_UNIT_TEST(TestGetInFlightForDestination) { 
         TObjectCountCheck objectCountCheck;
 
         TDelayReplyServer server;
@@ -703,7 +703,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
     };
 
-    Y_UNIT_TEST(ResetAfterSendOneWayErrorInCallback) {
+    Y_UNIT_TEST(ResetAfterSendOneWayErrorInCallback) { 
         TObjectCountCheck objectCountCheck;
 
         TNetAddr noServerAddr("localhost", 17);
@@ -739,7 +739,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
     };
 
-    Y_UNIT_TEST(ResetAfterSendMessageOneWayDuringShutdown) {
+    Y_UNIT_TEST(ResetAfterSendMessageOneWayDuringShutdown) { 
         TObjectCountCheck objectCountCheck;
 
         TNetAddr noServerAddr("localhost", 17);
@@ -764,7 +764,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         delete message;
     }
 
-    Y_UNIT_TEST(ResetAfterSendOneWayErrorInReturn) {
+    Y_UNIT_TEST(ResetAfterSendOneWayErrorInReturn) { 
         TObjectCountCheck objectCountCheck;
 
         TestNoServerImpl(17, true);
@@ -784,7 +784,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
     };
 
-    Y_UNIT_TEST(ResetAfterSendOneWaySuccess) {
+    Y_UNIT_TEST(ResetAfterSendOneWaySuccess) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -800,7 +800,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.TestSync.WaitForAndIncrement(2);
     }
 
-    Y_UNIT_TEST(GetStatus) {
+    Y_UNIT_TEST(GetStatus) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -818,7 +818,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.Bus->GetStatus();
     }
 
-    Y_UNIT_TEST(BindOnRandomPort) {
+    Y_UNIT_TEST(BindOnRandomPort) { 
         TObjectCountCheck objectCountCheck;
 
         TBusServerSessionConfig serverConfig;
@@ -829,7 +829,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.SendMessagesWaitReplies(3, &addr);
     }
 
-    Y_UNIT_TEST(UnbindOnShutdown) {
+    Y_UNIT_TEST(UnbindOnShutdown) { 
         TBusMessageQueuePtr queue(CreateMessageQueue());
 
         TExampleProtocol proto;
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         THangingServer hangingServer(port);
     }
 
-    Y_UNIT_TEST(VersionNegotiation) {
+    Y_UNIT_TEST(VersionNegotiation) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -928,7 +928,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
     };
 
-    Y_UNIT_TEST(OnClientConnectionEvent_Shutdown) {
+    Y_UNIT_TEST(OnClientConnectionEvent_Shutdown) { 
         TObjectCountCheck objectCountCheck;
 
         TOnConnectionEventServer server;
@@ -946,7 +946,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.Sync.WaitForAndIncrement(3);
     }
 
-    Y_UNIT_TEST(OnClientConnectionEvent_Disconnect) {
+    Y_UNIT_TEST(OnClientConnectionEvent_Disconnect) { 
         TObjectCountCheck objectCountCheck;
 
         THolder<TOnConnectionEventServer> server(new TOnConnectionEventServer);
@@ -1010,7 +1010,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
     };
 
-    Y_UNIT_TEST(WakeReaderOnQuota) {
+    Y_UNIT_TEST(WakeReaderOnQuota) { 
         const size_t test_msg_count = 64;
 
         TBusClientSessionConfig clientConfig;
@@ -1061,7 +1061,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         server.WaitForOnMessageCount(test_msg_count);
     };
 
-    Y_UNIT_TEST(TestConnectionAttempts) {
+    Y_UNIT_TEST(TestConnectionAttempts) { 
         TObjectCountCheck objectCountCheck;
 
         TNetAddr noServerAddr("localhost", 17);
@@ -1093,7 +1093,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
     };
 
-    Y_UNIT_TEST(TestConnectionAttemptsOnNoMessagesAndNotReconnectWhenIdle) {
+    Y_UNIT_TEST(TestConnectionAttemptsOnNoMessagesAndNotReconnectWhenIdle) { 
         TObjectCountCheck objectCountCheck;
 
         TNetAddr noServerAddr("localhost", 17);
@@ -1120,7 +1120,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2);
     };
 
-    Y_UNIT_TEST(TestConnectionAttemptsOnNoMessagesAndReconnectWhenIdle) {
+    Y_UNIT_TEST(TestConnectionAttemptsOnNoMessagesAndReconnectWhenIdle) { 
         TObjectCountCheck objectCountCheck;
 
         TNetAddr noServerAddr("localhost", 17);

@@ -4,8 +4,8 @@
 
 #include <util/charset/wide.h>
 
-Y_UNIT_TEST_SUITE(TStripStringTest) {
-    Y_UNIT_TEST(TestStrip) {
+Y_UNIT_TEST_SUITE(TStripStringTest) { 
+    Y_UNIT_TEST(TestStrip) { 
         struct TTest {
             const char* Str;
             const char* StripLeftRes;
@@ -26,25 +26,25 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
             {"a c", "a c", "a c", "a c"},
         };
 
-        for (const auto& test : tests) {
+        for (const auto& test : tests) { 
             TString inputStr(test.Str);
 
             TString s;
             Strip(inputStr, s);
-            UNIT_ASSERT_EQUAL(s, test.StripRes);
+            UNIT_ASSERT_EQUAL(s, test.StripRes); 
 
-            UNIT_ASSERT_EQUAL(StripString(inputStr), test.StripRes);
-            UNIT_ASSERT_EQUAL(StripStringLeft(inputStr), test.StripLeftRes);
-            UNIT_ASSERT_EQUAL(StripStringRight(inputStr), test.StripRightRes);
+            UNIT_ASSERT_EQUAL(StripString(inputStr), test.StripRes); 
+            UNIT_ASSERT_EQUAL(StripStringLeft(inputStr), test.StripLeftRes); 
+            UNIT_ASSERT_EQUAL(StripStringRight(inputStr), test.StripRightRes); 
 
-            TStringBuf inputStrBuf(test.Str);
-            UNIT_ASSERT_EQUAL(StripString(inputStrBuf), test.StripRes);
-            UNIT_ASSERT_EQUAL(StripStringLeft(inputStrBuf), test.StripLeftRes);
-            UNIT_ASSERT_EQUAL(StripStringRight(inputStrBuf), test.StripRightRes);
+            TStringBuf inputStrBuf(test.Str); 
+            UNIT_ASSERT_EQUAL(StripString(inputStrBuf), test.StripRes); 
+            UNIT_ASSERT_EQUAL(StripStringLeft(inputStrBuf), test.StripLeftRes); 
+            UNIT_ASSERT_EQUAL(StripStringRight(inputStrBuf), test.StripRightRes); 
         };
     }
 
-    Y_UNIT_TEST(TestCustomStrip) {
+    Y_UNIT_TEST(TestCustomStrip) { 
         struct TTest {
             const char* Str;
             const char* Result;
@@ -56,14 +56,14 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
             {"012//", "012"},
         };
 
-        for (auto test : tests) {
+        for (auto test : tests) { 
             UNIT_ASSERT_EQUAL(
                 StripString(TString(test.Str), EqualsStripAdapter('/')),
-                test.Result);
+                test.Result); 
         };
     }
 
-    Y_UNIT_TEST(TestCustomStripLeftRight) {
+    Y_UNIT_TEST(TestCustomStripLeftRight) { 
         struct TTest {
             const char* Str;
             const char* ResultLeft;
@@ -76,30 +76,30 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
             {"012//", "012//", "012"},
         };
 
-        for (const auto& test : tests) {
+        for (const auto& test : tests) { 
             UNIT_ASSERT_EQUAL(
                 StripStringLeft(TString(test.Str), EqualsStripAdapter('/')),
-                test.ResultLeft);
+                test.ResultLeft); 
             UNIT_ASSERT_EQUAL(
                 StripStringRight(TString(test.Str), EqualsStripAdapter('/')),
-                test.ResultRight);
+                test.ResultRight); 
         };
     }
 
-    Y_UNIT_TEST(TestNullStringStrip) {
-        TStringBuf nullString(nullptr, nullptr);
+    Y_UNIT_TEST(TestNullStringStrip) { 
+        TStringBuf nullString(nullptr, nullptr); 
         UNIT_ASSERT_EQUAL(
             StripString(nullString),
             TString());
     }
 
-    Y_UNIT_TEST(TestWtrokaStrip) {
+    Y_UNIT_TEST(TestWtrokaStrip) { 
         UNIT_ASSERT_EQUAL(StripString(TWtringBuf(u" abc ")), u"abc");
         UNIT_ASSERT_EQUAL(StripStringLeft(TWtringBuf(u" abc ")), u"abc ");
         UNIT_ASSERT_EQUAL(StripStringRight(TWtringBuf(u" abc ")), u" abc");
     }
 
-    Y_UNIT_TEST(TestWtrokaCustomStrip) {
+    Y_UNIT_TEST(TestWtrokaCustomStrip) { 
         UNIT_ASSERT_EQUAL(
             StripString(
                 TWtringBuf(u"/abc/"),
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
             u"abc");
     }
 
-    Y_UNIT_TEST(TestCollapse) {
+    Y_UNIT_TEST(TestCollapse) { 
         TString s;
         Collapse(TString("  123    456  "), s);
         UNIT_ASSERT(s == " 123 456 ");
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
 #endif
     }
 
-    Y_UNIT_TEST(TestCollapseText) {
+    Y_UNIT_TEST(TestCollapseText) { 
         TString abs1("Very long description string written in unknown language.");
         TString abs2(abs1);
         TString abs3(abs1);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "va_args.h"
+#include "va_args.h" 
 
 #include <util/system/defaults.h>
 
@@ -115,7 +115,7 @@ public:
     /*
      * can be used in function templates for effective parameters passing
      */
-    using TFuncParam = std::conditional_t<IsValueType, T, const std::remove_reference_t<T>&>;
+    using TFuncParam = std::conditional_t<IsValueType, T, const std::remove_reference_t<T>&>; 
 };
 
 template <>
@@ -162,79 +162,79 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
     struct THas##name                                                                     \
         : TBaseHas##name<T, std::is_class<T>::value || std::is_union<T>::value> {}
 
-#define Y_HAS_MEMBER_IMPL_1(name) Y_HAS_MEMBER_IMPL_2(name, name)
+#define Y_HAS_MEMBER_IMPL_1(name) Y_HAS_MEMBER_IMPL_2(name, name) 
 
-/* @def Y_HAS_MEMBER
- *
- * This macro should be used to define compile-time introspection helper classes for template
- * metaprogramming.
- *
- * Macro accept one or two parameters, when used with two parameters e.g. `Y_HAS_MEMBER(xyz, ABC)`
+/* @def Y_HAS_MEMBER 
+ * 
+ * This macro should be used to define compile-time introspection helper classes for template 
+ * metaprogramming. 
+ * 
+ * Macro accept one or two parameters, when used with two parameters e.g. `Y_HAS_MEMBER(xyz, ABC)` 
  * will define class `THasABC` with static member `value` of type bool. Usage with one parameter
- * e.g. `Y_HAS_MEMBER(xyz)` will produce the same result as `Y_HAS_MEMBER(xyz, xyz)`.
- *
- * @code
- * #include <type_traits>
- *
- * Y_HAS_MEMBER(push_front, PushFront);
- *
- * template <typename T, typename U>
+ * e.g. `Y_HAS_MEMBER(xyz)` will produce the same result as `Y_HAS_MEMBER(xyz, xyz)`. 
+ * 
+ * @code 
+ * #include <type_traits> 
+ * 
+ * Y_HAS_MEMBER(push_front, PushFront); 
+ * 
+ * template <typename T, typename U> 
  * std::enable_if_t<THasPushFront<T>::value, void>
- * PushFront(T& container, const U value) {
- *     container.push_front(x);
- * }
- *
- * template <typename T, typename U>
+ * PushFront(T& container, const U value) { 
+ *     container.push_front(x); 
+ * } 
+ * 
+ * template <typename T, typename U> 
  * std::enable_if_t<!THasPushFront<T>::value, void>
- * PushFront(T& container, const U value) {
- *     container.insert(container.begin(), x);
- * }
- * @endcode
- */
-#define Y_HAS_MEMBER(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_HAS_MEMBER_IMPL_2, Y_HAS_MEMBER_IMPL_1)(__VA_ARGS__))
-
+ * PushFront(T& container, const U value) { 
+ *     container.insert(container.begin(), x); 
+ * } 
+ * @endcode 
+ */ 
+#define Y_HAS_MEMBER(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_HAS_MEMBER_IMPL_2, Y_HAS_MEMBER_IMPL_1)(__VA_ARGS__)) 
+ 
 #define Y_HAS_SUBTYPE_IMPL_2(subtype, name) \
     template <class T, class = void>        \
     struct THas##name: std::false_type {};  \
     template <class T>                      \
     struct THas##name<T, ::TVoidT<typename T::subtype>>: std::true_type {};
 
-#define Y_HAS_SUBTYPE_IMPL_1(name) Y_HAS_SUBTYPE_IMPL_2(name, name)
+#define Y_HAS_SUBTYPE_IMPL_1(name) Y_HAS_SUBTYPE_IMPL_2(name, name) 
 
-/* @def Y_HAS_SUBTYPE
- *
- * This macro should be used to define compile-time introspection helper classes for template
- * metaprogramming.
- *
- * Macro accept one or two parameters, when used with two parameters e.g. `Y_HAS_SUBTYPE(xyz, ABC)`
+/* @def Y_HAS_SUBTYPE 
+ * 
+ * This macro should be used to define compile-time introspection helper classes for template 
+ * metaprogramming. 
+ * 
+ * Macro accept one or two parameters, when used with two parameters e.g. `Y_HAS_SUBTYPE(xyz, ABC)` 
  * will define class `THasABC` with static member `value` of type bool. Usage with one parameter
- * e.g. `Y_HAS_SUBTYPE(xyz)` will produce the same result as `Y_HAS_SUBTYPE(xyz, xyz)`.
- *
- * @code
- * Y_HAS_MEMBER(find, FindMethod);
- * Y_HAS_SUBTYPE(const_iterator, ConstIterator);
- * Y_HAS_SUBTYPE(key_type, KeyType);
- *
- * template <typename T>
- * using TIsAssocCont = std::conditional_t<
+ * e.g. `Y_HAS_SUBTYPE(xyz)` will produce the same result as `Y_HAS_SUBTYPE(xyz, xyz)`. 
+ * 
+ * @code 
+ * Y_HAS_MEMBER(find, FindMethod); 
+ * Y_HAS_SUBTYPE(const_iterator, ConstIterator); 
+ * Y_HAS_SUBTYPE(key_type, KeyType); 
+ * 
+ * template <typename T> 
+ * using TIsAssocCont = std::conditional_t< 
  *     THasFindMethod<T>::value && THasConstIterator<T>::value && THasKeyType<T>::value,
- *     std::true_type,
- *     std::false_type,
- * >;
- *
+ *     std::true_type, 
+ *     std::false_type, 
+ * >; 
+ * 
  * static_assert(TIsAssocCont<TVector<int>>::value == false, "");
  * static_assert(TIsAssocCont<THashMap<int>>::value == true, "");
- * @endcode
- */
-#define Y_HAS_SUBTYPE(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_HAS_SUBTYPE_IMPL_2, Y_HAS_SUBTYPE_IMPL_1)(__VA_ARGS__))
-
+ * @endcode 
+ */ 
+#define Y_HAS_SUBTYPE(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_HAS_SUBTYPE_IMPL_2, Y_HAS_SUBTYPE_IMPL_1)(__VA_ARGS__)) 
+ 
 template <class T1, class T2>
 struct TPodTraits<std::pair<T1, T2>> {
     enum {
         IsPod = TTypeTraits<T1>::IsPod && TTypeTraits<T2>::IsPod
     };
 };
-
+ 
 template <class T>
 struct TIsPointerToConstMemberFunction: std::false_type {
 };

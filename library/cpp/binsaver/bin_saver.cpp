@@ -3,7 +3,7 @@
 TClassFactory<IObjectBase>* pSaverClasses;
 void StartRegisterSaveload() {
     if (!pSaverClasses)
-        pSaverClasses = new TClassFactory<IObjectBase>;
+        pSaverClasses = new TClassFactory<IObjectBase>; 
 }
 struct SBasicChunkInit {
     ~SBasicChunkInit() {
@@ -15,7 +15,7 @@ struct SBasicChunkInit {
 //////////////////////////////////////////////////////////////////////////
 void IBinSaver::StoreObject(IObjectBase* pObject) {
     if (pObject) {
-        Y_ASSERT(pSaverClasses->GetObjectTypeID(pObject) != -1 && "trying to save unregistered object");
+        Y_ASSERT(pSaverClasses->GetObjectTypeID(pObject) != -1 && "trying to save unregistered object"); 
     }
 
     ui64 ptrId = ((char*)pObject) - ((char*)nullptr);
@@ -62,7 +62,7 @@ IObjectBase* IBinSaver::LoadObject() {
         int typeId;
         DataChunk(&typeId, sizeof(typeId));
         IObjectBase* pObj = pSaverClasses->CreateObject(typeId);
-        Y_ASSERT(pObj != nullptr);
+        Y_ASSERT(pObj != nullptr); 
         if (pObj == nullptr) {
             fprintf(stderr, "IBinSaver: trying to load unregistered object\n");
             abort();

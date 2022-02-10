@@ -4,5 +4,5 @@
 using namespace NKikimr;
 using namespace NKikimr::NIncrHuge;
 
-Y_UNIT_TEST_SUITE(TIncrHugeLogMerge) {
+Y_UNIT_TEST_SUITE(TIncrHugeLogMerge) { 
 }

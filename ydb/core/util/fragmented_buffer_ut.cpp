@@ -4,8 +4,8 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
-    Y_UNIT_TEST(TestWriteRead) {
+Y_UNIT_TEST_SUITE(TFragmentedBufferTest) { 
+    Y_UNIT_TEST(TestWriteRead) { 
         const char *data2 = "234";
         TFragmentedBuffer fb;
         fb.Write(1, data2, 3);
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(buffer, data2);
     }
 
-    Y_UNIT_TEST(TestOverwriteRead) {
+    Y_UNIT_TEST(TestOverwriteRead) { 
         const char *data2 = "234";
         const char *data3 = "456";
         TFragmentedBuffer fb;
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(buffer, data3);
     }
 
-    Y_UNIT_TEST(TestIntersectedWriteRead) {
+    Y_UNIT_TEST(TestIntersectedWriteRead) { 
         const char *data2 = "234";
         const char *data3 = "456";
         TFragmentedBuffer fb;
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(buffer, "23456");
     }
 
-    Y_UNIT_TEST(TestIntersectedWriteRead2) {
+    Y_UNIT_TEST(TestIntersectedWriteRead2) { 
         const char *data2 = "234";
         const char *data3 = "456";
         TFragmentedBuffer fb;
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(buffer, "23456");
     }
 
-    Y_UNIT_TEST(TestIntersectedWriteRead3) {
+    Y_UNIT_TEST(TestIntersectedWriteRead3) { 
         const char *data2 = "234";
         const char *data3 = "456";
         const char *data4 = "678";
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(buffer, "2345678");
     }
 
-    Y_UNIT_TEST(Test3WriteRead) {
+    Y_UNIT_TEST(Test3WriteRead) { 
         const char *data2 = "234";
         const char *data3v2 = "5";
         const char *data4 = "678";
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(buffer, "2345678");
     }
 
-    Y_UNIT_TEST(Test5WriteRead) {
+    Y_UNIT_TEST(Test5WriteRead) { 
         const char *data1 = "1";
         const char *data2 = "234";
         const char *data3 = "456";

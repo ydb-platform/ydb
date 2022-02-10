@@ -525,7 +525,7 @@ void TExecutorBorrowLogic::RestoreBorrowedInfo(const TLogoBlobID &blobId, const 
     HasFlag = !BorrowedInfo.empty();
 }
 
-void TExecutorBorrowLogic::OutputHtml(IOutputStream &out) {
+void TExecutorBorrowLogic::OutputHtml(IOutputStream &out) { 
     HTML(out) {
         H4() {out << "Borrowed parts";}
         PRE() {

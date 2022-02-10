@@ -93,7 +93,7 @@ struct TEvTabletBase {
             , BlockedGeneration(0)
             , ErrorReason(reason)
         {
-            Y_VERIFY_DEBUG(status != NKikimrProto::OK);
+            Y_VERIFY_DEBUG(status != NKikimrProto::OK); 
         }
 
         TEvFindLatestLogEntryResult(const TLogoBlobID &latest, ui32 blockedGeneration, const TString &buffer)

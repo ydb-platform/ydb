@@ -10,8 +10,8 @@ namespace {
 
 }
 
-Y_UNIT_TEST_SUITE(TAsyncResult) {
-    Y_UNIT_TEST(AndThen_Here) {
+Y_UNIT_TEST_SUITE(TAsyncResult) { 
+    Y_UNIT_TEST(AndThen_Here) { 
         TAsyncResult<int> r;
 
         int var = 1;
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TAsyncResult) {
         UNIT_ASSERT_VALUES_EQUAL(17, var);
     }
 
-    Y_UNIT_TEST(AndThen_Later) {
+    Y_UNIT_TEST(AndThen_Later) { 
         TAsyncResult<int> r;
 
         int var = 1;

@@ -11,7 +11,7 @@
 // Simple http client based on library/cpp/http/simple.
 
 class TNetworkAddress;
-class IOutputStream;
+class IOutputStream; 
 class TSocket;
 
 class THttpRequestException : public yexception {
@@ -38,15 +38,15 @@ public:
     void SendHttpRequest(const TStringBuf relativeUrl,
                          const TString& body,
                          const TString& method,
-                         IOutputStream* output,
+                         IOutputStream* output, 
                          const THeaders& headers = THeaders()) const;
 
 private:
-    void ReadAndTransferHttp(const TStringBuf relativeUrl, THttpInput& inp, IOutputStream* output) const;
+    void ReadAndTransferHttp(const TStringBuf relativeUrl, THttpInput& inp, IOutputStream* output) const; 
 
     std::unique_ptr<TNetworkAddress> Resolve() const;
     std::unique_ptr<TSocket> Connect(TNetworkAddress& addr) const;
-    void ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output,
+    void ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output, 
         const unsigned statusCode) const;
 
 private:

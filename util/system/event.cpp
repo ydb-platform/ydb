@@ -16,7 +16,7 @@ class TSystemEvent::TEvImpl: public TAtomicRefCount<TSystemEvent::TEvImpl> {
 public:
 #ifdef _win_
     inline TEvImpl(ResetMode rmode) {
-        cond = CreateEvent(nullptr, rmode == rManual ? true : false, false, nullptr);
+        cond = CreateEvent(nullptr, rmode == rManual ? true : false, false, nullptr); 
     }
 
     inline ~TEvImpl() {

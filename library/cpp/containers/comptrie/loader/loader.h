@@ -12,7 +12,7 @@ TrieType LoadTrieFromArchive(const TString& key,
                              bool ignoreErrors = false) {
     TArchiveReader archive(TBlob::NoCopy(data, sizeof(data)));
     if (archive.Has(key)) {
-        TAutoPtr<IInputStream> trie = archive.ObjectByKey(key);
+        TAutoPtr<IInputStream> trie = archive.ObjectByKey(key); 
         return TrieType(TBlob::FromStream(*trie));
     }
     if (!ignoreErrors) {

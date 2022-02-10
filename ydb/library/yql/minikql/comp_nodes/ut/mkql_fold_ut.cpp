@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
-    Y_UNIT_TEST_LLVM(TestFoldOverList) {
+    Y_UNIT_TEST_LLVM(TestFoldOverList) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, 6);
     }
 
-    Y_UNIT_TEST_LLVM(TestFold1OverEmptyList) {
+    Y_UNIT_TEST_LLVM(TestFold1OverEmptyList) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT(!value);
     }
 
-    Y_UNIT_TEST_LLVM(TestFold1OverSingleElementList) {
+    Y_UNIT_TEST_LLVM(TestFold1OverSingleElementList) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 2);
     }
 
-    Y_UNIT_TEST_LLVM(TestFold1OverManyElementList) {
+    Y_UNIT_TEST_LLVM(TestFold1OverManyElementList) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 4);
     }
 
-    Y_UNIT_TEST_LLVM(TestFoldWithAggrAdd) {
+    Y_UNIT_TEST_LLVM(TestFoldWithAggrAdd) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, 47);
     }
 
-    Y_UNIT_TEST_LLVM(TestNestedApply) {
+    Y_UNIT_TEST_LLVM(TestNestedApply) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto pgmReturn = pb.Fold(list, pb.NewDataLiteral<i32>(100),
             [&](TRuntimeNode item, TRuntimeNode state) {
             return pb.Apply(pb.Callable(callType,
-                [&](const TArrayRef<const TRuntimeNode>& args) {
+                [&](const TArrayRef<const TRuntimeNode>& args) { 
                     return pb.Sub(args[1], args[0]);
                 }), {item, state});
         });
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, 94);
     }
 
-    Y_UNIT_TEST_LLVM(TestLogicalOpts) {
+    Y_UNIT_TEST_LLVM(TestLogicalOpts) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestFoldWithListInState) {
+    Y_UNIT_TEST_LLVM(TestFoldWithListInState) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui32>(), 3);
     }
 
-    Y_UNIT_TEST_LLVM(TestManyAppend) {
+    Y_UNIT_TEST_LLVM(TestManyAppend) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -483,7 +483,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         auto fold = pb.Fold(zeroList, state,
             [&](TRuntimeNode item, TRuntimeNode state) {
-                Y_UNUSED(item);
+                Y_UNUSED(item); 
         auto oldList = pb.Member(state, "NewList");
         auto oldCounter = pb.Member(state, "Counter");
                 return pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(i, 1 << n);
     }
 
-    Y_UNIT_TEST_LLVM(TestManyPrepend) {
+    Y_UNIT_TEST_LLVM(TestManyPrepend) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         auto fold = pb.Fold(zeroList, state,
             [&](TRuntimeNode item, TRuntimeNode state) {
-            Y_UNUSED(item);
+            Y_UNUSED(item); 
             auto oldList = pb.Member(state, "NewList");
             auto oldCounter = pb.Member(state, "Counter");
             return pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
@@ -543,7 +543,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(i, 0);
     }
 
-    Y_UNIT_TEST_LLVM(TestManyExtend) {
+    Y_UNIT_TEST_LLVM(TestManyExtend) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         auto fold = pb.Fold(zeroList, state,
             [&](TRuntimeNode item, TRuntimeNode state) {
-            Y_UNUSED(item);
+            Y_UNUSED(item); 
             auto oldList = pb.Member(state, "NewList");
             auto oldCounter = pb.Member(state, "Counter");
             auto oldCounterMul2 = pb.Mul(oldCounter, pb.NewDataLiteral<ui32>(2));
@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(i, 1 << (n + 1));
     }
 
-    Y_UNIT_TEST_LLVM(TestFoldSingular) {
+    Y_UNIT_TEST_LLVM(TestFoldSingular) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -596,13 +596,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto list = pb.NewList(dataType, {data1, data2, data3});
         auto fold1 = pb.Fold(list, pb.NewDataLiteral<ui32>(0),
             [&](TRuntimeNode item, TRuntimeNode state) {
-            Y_UNUSED(state);
+            Y_UNUSED(state); 
             return item;
         });
 
         auto fold2 = pb.Fold(list, pb.NewDataLiteral<ui32>(0),
             [&](TRuntimeNode item, TRuntimeNode state) {
-            Y_UNUSED(item);
+            Y_UNUSED(item); 
             return state;
         });
 
@@ -668,7 +668,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT(graph->GetValue().template Get<bool>());
     }
 
-    Y_UNIT_TEST_LLVM(TestConcat) {
+    Y_UNIT_TEST_LLVM(TestConcat) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -688,7 +688,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(res, "Xaabbbzzzz");
     }
 
-    Y_UNIT_TEST_LLVM(TestConcatOpt) {
+    Y_UNIT_TEST_LLVM(TestConcatOpt) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -729,7 +729,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(str, "PREFIX:very large string:SUFFIX");
     }
 
-    Y_UNIT_TEST_LLVM(TestLongFold) {
+    Y_UNIT_TEST_LLVM(TestLongFold) { 
         for (ui32 i = 0; i < 10; ++i) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;

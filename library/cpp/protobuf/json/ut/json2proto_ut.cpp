@@ -70,8 +70,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TJson2ProtoTest) {
-    Y_UNIT_TEST(TestFlatOptional){
+Y_UNIT_TEST_SUITE(TJson2ProtoTest) { 
+    Y_UNIT_TEST(TestFlatOptional){ 
         {const NJson::TJsonValue& json = CreateFlatJson();
     TFlatOptional proto;
     Json2Proto(json, proto);
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TJson2ProtoTest) {
 #undef DEFINE_FIELD
 } // TestFlatOptional
 
-Y_UNIT_TEST(TestFlatRequired){
+Y_UNIT_TEST(TestFlatRequired){ 
     {const NJson::TJsonValue& json = CreateFlatJson();
 TFlatRequired proto;
 Json2Proto(json, proto);
@@ -118,7 +118,7 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 #undef DEFINE_FIELD
 } // TestFlatRequired
 
-Y_UNIT_TEST(TestNameGenerator) {
+Y_UNIT_TEST(TestNameGenerator) { 
     TJson2ProtoConfig cfg;
     cfg.SetNameGenerator([](const NProtoBuf::FieldDescriptor&) { return "42"; });
 
@@ -131,7 +131,7 @@ Y_UNIT_TEST(TestNameGenerator) {
     UNIT_ASSERT_PROTOS_EQUAL(expected, proto);
 }
 
-Y_UNIT_TEST(TestFlatNoCheckRequired) {
+Y_UNIT_TEST(TestFlatNoCheckRequired) { 
     {
         const NJson::TJsonValue& json = CreateFlatJson();
         TFlatRequired proto;
@@ -157,7 +157,7 @@ Y_UNIT_TEST(TestFlatNoCheckRequired) {
 #undef DEFINE_FIELD
 } // TestFlatNoCheckRequired
 
-Y_UNIT_TEST(TestFlatRepeated){
+Y_UNIT_TEST(TestFlatRepeated){ 
     {const NJson::TJsonValue& json = CreateRepeatedFlatJson();
 TFlatRepeated proto;
 Json2Proto(json, proto);
@@ -182,7 +182,7 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 #undef DEFINE_REPEATED_FIELD
 } // TestFlatRepeated
 
-Y_UNIT_TEST(TestCompositeOptional){
+Y_UNIT_TEST(TestCompositeOptional){ 
     {const NJson::TJsonValue& json = CreateCompositeJson();
 TCompositeOptional proto;
 Json2Proto(json, proto);
@@ -207,7 +207,7 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 #undef DEFINE_FIELD
 } // TestCompositeOptional
 
-Y_UNIT_TEST(TestCompositeOptionalStringBuf){
+Y_UNIT_TEST(TestCompositeOptionalStringBuf){ 
     {NJson::TJsonValue json = CreateCompositeJson();
 json["Part"]["Double"] = 42.5;
 TCompositeOptional proto;
@@ -240,7 +240,7 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 #undef DEFINE_FIELD
 } // TestCompositeOptionalStringBuf
 
-Y_UNIT_TEST(TestCompositeRequired) {
+Y_UNIT_TEST(TestCompositeRequired) { 
     {
         const NJson::TJsonValue& json = CreateCompositeJson();
         TCompositeRequired proto;
@@ -257,7 +257,7 @@ Y_UNIT_TEST(TestCompositeRequired) {
     }
 } // TestCompositeRequired
 
-Y_UNIT_TEST(TestCompositeRepeated) {
+Y_UNIT_TEST(TestCompositeRepeated) { 
     {
         NJson::TJsonValue json;
         NJson::TJsonValue array;
@@ -302,7 +302,7 @@ Y_UNIT_TEST(TestCompositeRepeated) {
     }
 } // TestCompositeRepeated
 
-Y_UNIT_TEST(TestInvalidEnum) {
+Y_UNIT_TEST(TestInvalidEnum) { 
     {
         NJson::TJsonValue json;
         json.InsertValue("Enum", "E_100");
@@ -318,7 +318,7 @@ Y_UNIT_TEST(TestInvalidEnum) {
     }
 }
 
-Y_UNIT_TEST(TestFieldNameMode) {
+Y_UNIT_TEST(TestFieldNameMode) { 
     // Original case 1
     {
         TString modelStr(R"_({"String":"value"})_");
@@ -514,7 +514,7 @@ public:
     }
 };
 
-Y_UNIT_TEST(TestInvalidJson) {
+Y_UNIT_TEST(TestInvalidJson) { 
     NJson::TJsonValue val{"bad value"};
     TFlatOptional proto;
     UNIT_ASSERT_EXCEPTION(Json2Proto(val, proto), yexception);
@@ -527,7 +527,7 @@ Y_UNIT_TEST(TestInvalidRepeatedFieldWithMapAsObject) {
     UNIT_ASSERT_EXCEPTION(Json2Proto(TStringBuf(R"({"Part":{"Boo":{}}})"), proto, config), yexception);
 }
 
-Y_UNIT_TEST(TestStringTransforms) {
+Y_UNIT_TEST(TestStringTransforms) { 
     // Check that strings and bytes are transformed
     {
         TString modelStr(R"_({"String":"value_str", "Bytes": "value_bytes"})_");
@@ -585,7 +585,7 @@ Y_UNIT_TEST(TestStringTransforms) {
     }
 } // TestStringTransforms
 
-Y_UNIT_TEST(TestCastFromString) {
+Y_UNIT_TEST(TestCastFromString) { 
     // single fields
     {
         NJson::TJsonValue json;
@@ -634,7 +634,7 @@ Y_UNIT_TEST(TestCastFromString) {
     }
 } // TestCastFromString
 
-Y_UNIT_TEST(TestMap) {
+Y_UNIT_TEST(TestMap) { 
     TMapType modelProto;
 
     auto& items = *modelProto.MutableItems();
@@ -651,7 +651,7 @@ Y_UNIT_TEST(TestMap) {
     UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 } // TestMap
 
-Y_UNIT_TEST(TestCastRobust) {
+Y_UNIT_TEST(TestCastRobust) { 
     NJson::TJsonValue json;
     json["I32"] = "5";
     json["Bool"] = 1;
@@ -741,7 +741,7 @@ Y_UNIT_TEST(TestValueVectorizer) {
     }
 }
 
-Y_UNIT_TEST(TestMapAsObject) {
+Y_UNIT_TEST(TestMapAsObject) { 
     TMapType modelProto;
 
     auto& items = *modelProto.MutableItems();
@@ -759,7 +759,7 @@ Y_UNIT_TEST(TestMapAsObject) {
     UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 } // TestMapAsObject
 
-Y_UNIT_TEST(TestComplexMapAsObject_I32) {
+Y_UNIT_TEST(TestComplexMapAsObject_I32) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableI32();
@@ -770,7 +770,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_I32) {
         R"_({"I32":{"1":1,"-2":-2,"3":3}})_");
 } // TestComplexMapAsObject_I32
 
-Y_UNIT_TEST(TestComplexMapAsObject_I64) {
+Y_UNIT_TEST(TestComplexMapAsObject_I64) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableI64();
@@ -781,7 +781,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_I64) {
         R"_({"I64":{"2147483649":2147483649,"-2147483650":-2147483650,"2147483651":2147483651}})_");
 } // TestComplexMapAsObject_I64
 
-Y_UNIT_TEST(TestComplexMapAsObject_UI32) {
+Y_UNIT_TEST(TestComplexMapAsObject_UI32) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableUI32();
@@ -792,7 +792,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_UI32) {
         R"_({"UI32":{"1073741825":1073741825,"1073741826":1073741826,"1073741827":1073741827}})_");
 } // TestComplexMapAsObject_UI32
 
-Y_UNIT_TEST(TestComplexMapAsObject_UI64) {
+Y_UNIT_TEST(TestComplexMapAsObject_UI64) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableUI64();
@@ -803,7 +803,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_UI64) {
         R"_({"UI64":{"9223372036854775809":9223372036854775809,"9223372036854775810":9223372036854775810,"9223372036854775811":9223372036854775811}})_");
 } // TestComplexMapAsObject_UI64
 
-Y_UNIT_TEST(TestComplexMapAsObject_SI32) {
+Y_UNIT_TEST(TestComplexMapAsObject_SI32) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableSI32();
@@ -814,7 +814,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_SI32) {
         R"_({"SI32":{"1":1,"-2":-2,"3":3}})_");
 } // TestComplexMapAsObject_SI32
 
-Y_UNIT_TEST(TestComplexMapAsObject_SI64) {
+Y_UNIT_TEST(TestComplexMapAsObject_SI64) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableSI64();
@@ -825,7 +825,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_SI64) {
         R"_({"SI64":{"2147483649":2147483649,"-2147483650":-2147483650,"2147483651":2147483651}})_");
 } // TestComplexMapAsObject_SI64
 
-Y_UNIT_TEST(TestComplexMapAsObject_FI32) {
+Y_UNIT_TEST(TestComplexMapAsObject_FI32) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableFI32();
@@ -836,7 +836,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_FI32) {
         R"_({"FI32":{"1073741825":1073741825,"1073741826":1073741826,"1073741827":1073741827}})_");
 } // TestComplexMapAsObject_FI32
 
-Y_UNIT_TEST(TestComplexMapAsObject_FI64) {
+Y_UNIT_TEST(TestComplexMapAsObject_FI64) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableFI64();
@@ -847,7 +847,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_FI64) {
         R"_({"FI64":{"9223372036854775809":9223372036854775809,"9223372036854775810":9223372036854775810,"9223372036854775811":9223372036854775811}})_");
 } // TestComplexMapAsObject_FI64
 
-Y_UNIT_TEST(TestComplexMapAsObject_SFI32) {
+Y_UNIT_TEST(TestComplexMapAsObject_SFI32) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableSFI32();
@@ -858,7 +858,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_SFI32) {
         R"_({"SFI32":{"1":1,"-2":-2,"3":3}})_");
 } // TestComplexMapAsObject_SFI32
 
-Y_UNIT_TEST(TestComplexMapAsObject_SFI64) {
+Y_UNIT_TEST(TestComplexMapAsObject_SFI64) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableSFI64();
@@ -869,7 +869,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_SFI64) {
         R"_({"SFI64":{"2147483649":2147483649,"-2147483650":-2147483650,"2147483651":2147483651}})_");
 } // TestComplexMapAsObject_SFI64
 
-Y_UNIT_TEST(TestComplexMapAsObject_Bool) {
+Y_UNIT_TEST(TestComplexMapAsObject_Bool) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableBool();
@@ -879,7 +879,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_Bool) {
         R"_({"Bool":{"true":true,"false":false}})_");
 } // TestComplexMapAsObject_Bool
 
-Y_UNIT_TEST(TestComplexMapAsObject_String) {
+Y_UNIT_TEST(TestComplexMapAsObject_String) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableString();
@@ -891,7 +891,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_String) {
         R"_({"String":{"key1":"value1","key2":"value2","key3":"value3","":"value4"}})_");
 } // TestComplexMapAsObject_String
 
-Y_UNIT_TEST(TestComplexMapAsObject_Enum) {
+Y_UNIT_TEST(TestComplexMapAsObject_Enum) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableEnum();
@@ -943,7 +943,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_EnumStringSnakeCaseInsensitive) {
     );
 } // TestComplexMapAsObject_EnumStringCaseInsensetive
 
-Y_UNIT_TEST(TestComplexMapAsObject_Float) {
+Y_UNIT_TEST(TestComplexMapAsObject_Float) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableFloat();
@@ -954,7 +954,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_Float) {
         R"_({"Float":{"key1":0.1,"key2":0.2,"key3":0.3}})_");
 } // TestComplexMapAsObject_Float
 
-Y_UNIT_TEST(TestComplexMapAsObject_Double) {
+Y_UNIT_TEST(TestComplexMapAsObject_Double) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             auto& items = *proto.MutableDouble();
@@ -965,7 +965,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_Double) {
         R"_({"Double":{"key1":0.1,"key2":0.2,"key3":0.3}})_");
 } // TestComplexMapAsObject_Double
 
-Y_UNIT_TEST(TestComplexMapAsObject_Nested) {
+Y_UNIT_TEST(TestComplexMapAsObject_Nested) { 
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
             TComplexMapType inner;
@@ -979,7 +979,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_Nested) {
         R"_({"Nested":{"key1":{"String":{"key":"value"}},"key2":{"String":{"key":"value"}},"key3":{"String":{"key":"value"}}}})_");
 } // TestComplexMapAsObject_Nested
 
-Y_UNIT_TEST(TestMapAsObjectConfigNotSet) {
+Y_UNIT_TEST(TestMapAsObjectConfigNotSet) { 
     TString modelStr(R"_({"Items":{"key":"value"}})_");
 
     TJson2ProtoConfig config;

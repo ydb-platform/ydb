@@ -73,7 +73,7 @@ TRuntimeNode StreamToString(TSetup<UseLLVM>& setup, TRuntimeNode stream) {
 } // unnamed
 
 
-Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
+Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) { 
     Y_UNIT_TEST_LLVM(TestGrouping) {
         TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;

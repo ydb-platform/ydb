@@ -8,7 +8,7 @@
 
 namespace fh = NCodecs::NFloatHuff;
 
-Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
+Y_UNIT_TEST_SUITE(FloatHuffmanTest) { 
     static const float Factors[] = {
         0.340582, 0.000974026, 0.487168, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0.411765, 0.921569,
         0.00390625, 0.109371, 0, 1, 0, 0, 0, 0, 0.523322, 0, 1, 0, 0, 0, 0, 0.285714, 1,
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
         0.947855, 0, 0, 0, 0, 0, 0, 0, 0, 0.847059, 0.679841, 0, 0.156863, 0, 0, 1, 0, 0,
         0, 0, 0.969697, 0, 0, 0.564706, 0, 0, 0, 0, 0, 1, 0.0367282, 0.0395228, 0, 0, 0,
         0, 0, 0.0470588, 0.141176, 0.054902, 0, 0, 0, 0};
-    static const size_t FactorCount = Y_ARRAY_SIZE(Factors);
+    static const size_t FactorCount = Y_ARRAY_SIZE(Factors); 
 
     static const ui8 CodedFactors[] = {
         0x24, 0x06, 0x73, 0xB5, 0xC7, 0x55, 0x7F, 0x3A, 0xB4, 0x70, 0xCB, 0xEF, 0xEE, 0xFE, 0xB3, 0x5B,
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
         0xC8, 0xFE, 0x08, 0xC2, 0x07, 0xC7, 0x27, 0x21, 0xE1, 0xBB, 0x3E, 0xC1, 0x59, 0x68, 0xAA, 0x78,
         0xC8, 0x57, 0x5D, 0x60, 0x20, 0xC6, 0x41, 0x42, 0xE8, 0x3A, 0x38, 0xD8, 0x9B, 0xFF, 0xFF, 0xFF,
         0xC4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-    static const size_t CodedSize = Y_ARRAY_SIZE(CodedFactors);
+    static const size_t CodedSize = Y_ARRAY_SIZE(CodedFactors); 
     static const TStringBuf CodedFactorsBuf(reinterpret_cast<const char*>(CodedFactors), CodedSize);
 
     void FillWithGarbage(float* factors, size_t count) {
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
         Cerr << result.Str() << Endl;
     }
 
-    Y_UNIT_TEST(TestCompress) {
+    Y_UNIT_TEST(TestCompress) { 
         const auto codedFactors = fh::Encode(Factors);
         UNIT_ASSERT_VALUES_EQUAL(codedFactors.size(), CodedSize);
         for (size_t i = 0; i < Min(codedFactors.size(), CodedSize); ++i)
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
         //PrintCompressed(codedFactors);
     }
 
-    Y_UNIT_TEST(TestSimpleDecompress) {
+    Y_UNIT_TEST(TestSimpleDecompress) { 
         TVector<float> factors = fh::Decode(CodedFactorsBuf);
         UNIT_ASSERT_VALUES_EQUAL(factors.size(), FactorCount);
         for (size_t i = 0; i < Min(factors.size(), FactorCount); ++i)
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
         //PrintDecompressed(factors);
     }
 
-    Y_UNIT_TEST(TestSkip) {
+    Y_UNIT_TEST(TestSkip) { 
         float factors[FactorCount];
         FillWithGarbage(factors, FactorCount);
         fh::TDecoder decoder(CodedFactorsBuf);
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
         //PrintDecompressed(factors);
     }
 
-    Y_UNIT_TEST(TestDecompressForgedData) {
+    Y_UNIT_TEST(TestDecompressForgedData) { 
         // this coredumps without end-of-coded-stream check, see SEARCH-1156 for details
         TString brokenBase64Encoded =
             "NLjYltUWs5pqnd3d3f05Li4OAwCAEqrP6mv06jDt7PiAUVu7Y+PiMpuZmdzeM"

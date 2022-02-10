@@ -93,7 +93,7 @@ namespace NKikimr {
                     update(ScrubLsnToKeep, ScrubLastTime, "Scrub");
                     break;
                 default:
-                    Y_FAIL("Unexpected case: %d", msg->Component);
+                    Y_FAIL("Unexpected case: %d", msg->Component); 
             }
 
             Process(ctx);
@@ -146,7 +146,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::LogCutterId);
+            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::LogCutterId); 
 
             TStringStream str;
             str << "\n";

@@ -20,9 +20,9 @@
  * Note that it does not claim ownership of the underlying stream, so it's up
  * to the user to free it.
  */
-class TBufferedInput: public IZeroCopyInput {
+class TBufferedInput: public IZeroCopyInput { 
 public:
-    TBufferedInput(IInputStream* slave, size_t buflen = 8192);
+    TBufferedInput(IInputStream* slave, size_t buflen = 8192); 
 
     TBufferedInput(TBufferedInput&&) noexcept;
     TBufferedInput& operator=(TBufferedInput&&) noexcept;
@@ -35,7 +35,7 @@ public:
      *
      * @param slave                     New underlying stream.
      */
-    void Reset(IInputStream* slave);
+    void Reset(IInputStream* slave); 
 
 protected:
     size_t DoRead(void* buf, size_t len) override;
@@ -69,7 +69,7 @@ public:
      *
      * @param slave                     Underlying stream.
      */
-    TBufferedOutputBase(IOutputStream* slave);
+    TBufferedOutputBase(IOutputStream* slave); 
 
     /**
      * Constructs a buffered stream with the given size of the buffer.
@@ -77,7 +77,7 @@ public:
      * @param slave                     Underlying stream.
      * @param buflen                    Size of the buffer.
      */
-    TBufferedOutputBase(IOutputStream* slave, size_t buflen);
+    TBufferedOutputBase(IOutputStream* slave, size_t buflen); 
 
     TBufferedOutputBase(TBufferedOutputBase&&) noexcept;
     TBufferedOutputBase& operator=(TBufferedOutputBase&&) noexcept;
@@ -129,7 +129,7 @@ private:
  */
 class TBufferedOutput: public TBufferedOutputBase {
 public:
-    TBufferedOutput(IOutputStream* slave, size_t buflen = 8192);
+    TBufferedOutput(IOutputStream* slave, size_t buflen = 8192); 
     ~TBufferedOutput() override;
 
     TBufferedOutput(TBufferedOutput&&) noexcept = default;
@@ -144,7 +144,7 @@ public:
  */
 class TAdaptiveBufferedOutput: public TBufferedOutputBase {
 public:
-    TAdaptiveBufferedOutput(IOutputStream* slave);
+    TAdaptiveBufferedOutput(IOutputStream* slave); 
     ~TAdaptiveBufferedOutput() override;
 
     TAdaptiveBufferedOutput(TAdaptiveBufferedOutput&&) noexcept = default;
@@ -153,7 +153,7 @@ public:
 
 namespace NPrivate {
     struct TMyBufferedOutput: public TBufferedOutput {
-        inline TMyBufferedOutput(IOutputStream* slave, size_t buflen)
+        inline TMyBufferedOutput(IOutputStream* slave, size_t buflen) 
             : TBufferedOutput(slave, buflen)
         {
             SetFinishPropagateMode(true);
@@ -162,7 +162,7 @@ namespace NPrivate {
 
     template <class T>
     struct TBufferedStreamFor {
-        using TResult = std::conditional_t<std::is_base_of<IInputStream, T>::value, TBufferedInput, TMyBufferedOutput>;
+        using TResult = std::conditional_t<std::is_base_of<IInputStream, T>::value, TBufferedInput, TMyBufferedOutput>; 
     };
 }
 

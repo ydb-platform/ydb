@@ -33,7 +33,7 @@
 #include <util/random/mersenne.h>
 #include <library/cpp/regex/pcre/regexp.h>
 #include <util/string/printf.h>
-#include <util/string/subst.h>
+#include <util/string/subst.h> 
 #include <util/system/env.h>
 #include <util/system/sanitizers.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -165,7 +165,7 @@ namespace NKikimr {
         {}
 
         void OnEvent(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            Y_UNUSED(runtime);
+            Y_UNUSED(runtime); 
             if (event->GetTypeRewrite() == TEvStateStorage::EvInfo) {
                 auto info = static_cast<TEvStateStorage::TEvInfo*>(event->GetBase());
                 if (info->Status == NKikimrProto::OK && (Find(TabletIds.begin(), TabletIds.end(), info->TabletID) != TabletIds.end())) {
@@ -192,7 +192,7 @@ namespace NKikimr {
         }
 
         void OnRegistration(TTestActorRuntime& runtime, const TActorId& parentId, const TActorId& actorId) {
-            Y_UNUSED(runtime);
+            Y_UNUSED(runtime); 
             auto it = TabletRelatedActors.find(parentId);
             if (it != TabletRelatedActors.end()) {
                 TabletRelatedActors.insert(std::make_pair(actorId, it->second));
@@ -467,7 +467,7 @@ namespace NKikimr {
                     if (currentItem->DelayedExecution) {
                         if (TRACE_DELAY_TIMING)
                             Cout << "= ";
-                        Y_VERIFY(currentItem->DelayedExecution->Complete);
+                        Y_VERIFY(currentItem->DelayedExecution->Complete); 
                     } else {
                         if (TRACE_DELAY_TIMING)
                             Cout << "+ ";
@@ -486,7 +486,7 @@ namespace NKikimr {
                 CurrentItems.push_back(currentItem->DelayedExecution.Get());
                 return TTestActorRuntime::EEventAction::RESCHEDULE;
             } else {
-                Y_FAIL();
+                Y_FAIL(); 
             }
         }
 
@@ -1078,7 +1078,7 @@ namespace NKikimr {
     class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) {
-            Y_UNUSED(type);
+            Y_UNUSED(type); 
             return nullptr;
         }
 
@@ -1113,7 +1113,7 @@ namespace NKikimr {
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             Die(ctx);
         }
 
@@ -1400,7 +1400,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             Become(&TThis::BrokenState);
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }

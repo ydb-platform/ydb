@@ -1,8 +1,8 @@
-OWNER(
-    pg
-    yazevnul
-)
-
+OWNER( 
+    pg 
+    yazevnul 
+) 
+ 
 Y_BENCHMARK()
 
 SRCS(

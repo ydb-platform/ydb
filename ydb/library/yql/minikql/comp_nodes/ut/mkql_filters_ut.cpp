@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
-    Y_UNIT_TEST_LLVM(TestSkipNullMembers) {
+    Y_UNIT_TEST_LLVM(TestSkipNullMembers) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestFilterOverList) {
+    Y_UNIT_TEST_LLVM(TestFilterOverList) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestFilterOverStream) {
+    Y_UNIT_TEST_LLVM(TestFilterOverStream) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestFilterOverListLazy) {
+    Y_UNIT_TEST_LLVM(TestFilterOverListLazy) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestFilterByString) {
+    Y_UNIT_TEST_LLVM(TestFilterByString) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         UNBOXED_VALUE_STR_EQUAL(result.GetElement(1U), "100");
     }
 
-    Y_UNIT_TEST_LLVM(TestSkipWhile) {
+    Y_UNIT_TEST_LLVM(TestSkipWhile) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestTakeWhile) {
+    Y_UNIT_TEST_LLVM(TestTakeWhile) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 

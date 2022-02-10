@@ -6,7 +6,7 @@
 #include <util/random/fast.h>
 #include <util/random/random.h>
 
-class TStrokaByOneByte: public IZeroCopyInput {
+class TStrokaByOneByte: public IZeroCopyInput { 
 public:
     TStrokaByOneByte(const TString& s)
         : Data(s)
@@ -52,7 +52,7 @@ private:
     }
 
     inline void Test2() {
-        class TExcOutput: public IOutputStream {
+        class TExcOutput: public IOutputStream { 
         public:
             ~TExcOutput() override {
             }
@@ -93,7 +93,7 @@ private:
         {
             TMemoryInput mi(res.data(), res.size());
             TStringOutput so(data1);
-            TLzmaDecompress d((IInputStream*)&mi);
+            TLzmaDecompress d((IInputStream*)&mi); 
 
             TransferData(&d, &so);
         }

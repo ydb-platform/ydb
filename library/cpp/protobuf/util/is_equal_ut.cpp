@@ -5,19 +5,19 @@
 
 #include <google/protobuf/descriptor.h>
 
-Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
+Y_UNIT_TEST_SUITE(ProtobufIsEqual) { 
     const ::google::protobuf::Descriptor* Descr = TSampleForIsEqual::descriptor();
     const ::google::protobuf::FieldDescriptor* NameDescr = Descr->field(0);
     const ::google::protobuf::FieldDescriptor* InnerDescr = Descr->field(1);
 
-    Y_UNIT_TEST(CheckDescriptors) {
+    Y_UNIT_TEST(CheckDescriptors) { 
         UNIT_ASSERT(Descr);
         UNIT_ASSERT(NameDescr);
         UNIT_ASSERT_VALUES_EQUAL(NameDescr->name(), "Name");
         UNIT_ASSERT_VALUES_EQUAL(InnerDescr->name(), "Inner");
     }
 
-    Y_UNIT_TEST(IsEqual1) {
+    Y_UNIT_TEST(IsEqual1) { 
         TSampleForIsEqual a;
         TSampleForIsEqual b;
 
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
         UNIT_ASSERT(!NProtoBuf::IsEqualField(a, b, *NameDescr));
     }
 
-    Y_UNIT_TEST(IsEqual2) {
+    Y_UNIT_TEST(IsEqual2) { 
         TSampleForIsEqual a;
         TSampleForIsEqual b;
 
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
         UNIT_ASSERT(!equalField);
     }
 
-    Y_UNIT_TEST(IsEqual3) {
+    Y_UNIT_TEST(IsEqual3) { 
         TSampleForIsEqual a;
         TSampleForIsEqual b;
 
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
         UNIT_ASSERT(!NProtoBuf::IsEqualField(a, b, *NameDescr));
     }
 
-    Y_UNIT_TEST(IsEqualDefault) {
+    Y_UNIT_TEST(IsEqualDefault) { 
         TSampleForIsEqual a;
         TSampleForIsEqual b;
 

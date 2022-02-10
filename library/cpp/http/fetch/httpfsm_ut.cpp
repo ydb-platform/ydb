@@ -488,7 +488,7 @@ void THttpHeaderParserTestSuite::TestRepeatedContentEncoding() {
 
 UNIT_TEST_SUITE_REGISTRATION(THttpHeaderParserTestSuite);
 
-Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
+Y_UNIT_TEST_SUITE(TestHttpChunkParser) { 
     static THttpChunkParser initParser() {
         THttpChunkParser parser;
         parser.Init();
@@ -513,7 +513,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         return parseByteByByte(blob, states);
     }
 
-    Y_UNIT_TEST(TestWithoutEolHead) {
+    Y_UNIT_TEST(TestWithoutEolHead) { 
         const TStringBuf blob{
             "4\r\n"
             "____\r\n"};
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         parseByteByByte(blob, states);
     }
 
-    Y_UNIT_TEST(TestTrivialChunk) {
+    Y_UNIT_TEST(TestTrivialChunk) { 
         const TStringBuf blob{
             "\r\n"
             "4\r\n"};
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         UNIT_ASSERT_EQUAL(parser.cnt64, 4);
     }
 
-    Y_UNIT_TEST(TestNegative) {
+    Y_UNIT_TEST(TestNegative) { 
         const TStringBuf blob{
             "\r\n"
             "-1"};
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         parseByteByByte(blob, states);
     }
 
-    Y_UNIT_TEST(TestLeadingZero) {
+    Y_UNIT_TEST(TestLeadingZero) { 
         const TStringBuf blob{
             "\r\n"
             "042\r\n"};
@@ -555,7 +555,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         UNIT_ASSERT_EQUAL(parser.chunk_length, 0x42);
     }
 
-    Y_UNIT_TEST(TestIntOverflow) {
+    Y_UNIT_TEST(TestIntOverflow) { 
         const TStringBuf blob{
             "\r\n"
             "deadbeef"};
@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         UNIT_ASSERT_EQUAL(parser.cnt64, 0xdeadbeef);
     }
 
-    Y_UNIT_TEST(TestTrivialChunkWithTail) {
+    Y_UNIT_TEST(TestTrivialChunkWithTail) { 
         const TStringBuf blob{
             "\r\n"
             "4\r\n"
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         parseByteByByte(blob, states);
     }
 
-    Y_UNIT_TEST(TestLastChunk) {
+    Y_UNIT_TEST(TestLastChunk) { 
         // NB: current parser does not permit whitespace before `foo`,
         // but I've never seen the feature in real-life traffic
         const TStringBuf blob{

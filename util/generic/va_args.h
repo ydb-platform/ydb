@@ -16,7 +16,7 @@
  * Used merely for working around an MSVC++ bug.
  * See http://stackoverflow.com/questions/5134523/msvc-doesnt-expand-va-args-correctly
  */
-#define Y_PASS_VA_ARGS(x) x
+#define Y_PASS_VA_ARGS(x) x 
 
 /**
  * Count number of arguments in `__VA_ARGS__`.
@@ -768,16 +768,16 @@
 
 /**
  * Macros for implementing overload by number of arguments.
- *
+ * 
  * Example usage:
- *
+ * 
  * @code{cpp}
  * #define I1(arg1) Cout << Y_STRINGIZE(arg1) << Endl;
  * #define I2(arg1, arg2) Cout << Y_STRINGIZE(arg1) << ';' << Y_STRINGIZE(arg2) << Endl;
- *
+ * 
  * #define Y_PRINT(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, I2, I1)(__VA_ARGS__))
- * @endcode
- */
+ * @endcode 
+ */ 
 /// @{
 #define Y_MACRO_IMPL_DISPATCHER_2(_0, _1, IMPL, ...) IMPL
 #define Y_MACRO_IMPL_DISPATCHER_3(_0, _1, _2, IMPL, ...) IMPL

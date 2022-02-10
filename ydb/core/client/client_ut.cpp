@@ -327,8 +327,8 @@ void ExtractResultInfo(const NKikimrMiniKQL::TResult& result, TVector<TTxInfo>& 
 
 } // namelesspace
 
-Y_UNIT_TEST_SUITE(TClientTest) {
-    Y_UNIT_TEST(TestInspectProxy) {
+Y_UNIT_TEST_SUITE(TClientTest) { 
+    Y_UNIT_TEST(TestInspectProxy) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         auto settings = TServerSettings(port);
@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(NoAffectedProgram) {
+    Y_UNIT_TEST(NoAffectedProgram) { 
         using namespace NScheme;
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadWriteMiniKQL) {
+    Y_UNIT_TEST(ReadWriteMiniKQL) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -486,7 +486,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadWriteViaMiniKQL) {
+    Y_UNIT_TEST(ReadWriteViaMiniKQL) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadWrite_MiniKQL_AfterAlter) {
+    Y_UNIT_TEST(ReadWrite_MiniKQL_AfterAlter) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadWrite_MiniKQL_BeforeAndAfterAlter) {
+    Y_UNIT_TEST(ReadWrite_MiniKQL_BeforeAndAfterAlter) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadWriteViaMiniKQLRecreateDifferentTable) {
+    Y_UNIT_TEST(ReadWriteViaMiniKQLRecreateDifferentTable) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -654,7 +654,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
     }
 
-    Y_UNIT_TEST(ReadWriteViaMiniKQLRecreateSameTable) {
+    Y_UNIT_TEST(ReadWriteViaMiniKQLRecreateSameTable) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -675,7 +675,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadWriteViaMiniKQLShardedHead) {
+    Y_UNIT_TEST(ReadWriteViaMiniKQLShardedHead) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -774,7 +774,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(GetStepTxId) {
+    Y_UNIT_TEST(GetStepTxId) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -788,7 +788,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         GetStepTxIdBody(client, false);
     }
 
-    Y_UNIT_TEST(GetStepTxIdHead) {
+    Y_UNIT_TEST(GetStepTxIdHead) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -877,7 +877,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(CASViaMiniKQL) {
+    Y_UNIT_TEST(CASViaMiniKQL) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -985,7 +985,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(RowEraseViaMiniKQL) {
+    Y_UNIT_TEST(RowEraseViaMiniKQL) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadRangeViaMiniKQL) {
+    Y_UNIT_TEST(ReadRangeViaMiniKQL) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1298,7 +1298,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(SelectRangeOptions) {
+    Y_UNIT_TEST(SelectRangeOptions) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         const auto settings = TServerSettings(port);
@@ -1389,7 +1389,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(TestMultiSelect) {
+    Y_UNIT_TEST(TestMultiSelect) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1440,7 +1440,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(TestMultiSelectFlat) {
+    Y_UNIT_TEST(TestMultiSelectFlat) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1715,7 +1715,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(Diagnostics) {
+    Y_UNIT_TEST(Diagnostics) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1784,7 +1784,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         return str;
     }
 
-    Y_UNIT_TEST(LocalSchemeTxRead) {
+    Y_UNIT_TEST(LocalSchemeTxRead) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1803,7 +1803,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(scheme1), ToString(scheme2));
     }
 
-    Y_UNIT_TEST(LocalSchemeTxModify) {
+    Y_UNIT_TEST(LocalSchemeTxModify) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1853,7 +1853,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update");
     }
 
-    Y_UNIT_TEST(LocalSchemeDropTable) {
+    Y_UNIT_TEST(LocalSchemeDropTable) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1889,7 +1889,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update");
     }
 
-    Y_UNIT_TEST(TestOldTypes) {
+    Y_UNIT_TEST(TestOldTypes) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1969,7 +1969,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         // TODO: check resluts
     }
 
-    Y_UNIT_TEST(TestOldTypeParams) {
+    Y_UNIT_TEST(TestOldTypeParams) { 
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 

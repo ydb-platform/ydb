@@ -22,7 +22,7 @@ inline int SigEmptySet(sigset_t* set) {
 #if defined _unix_
     return sigemptyset(set);
 #else
-    Y_UNUSED(set);
+    Y_UNUSED(set); 
     return 0;
 #endif
 }
@@ -31,7 +31,7 @@ inline int SigFillSet(sigset_t* set) {
 #if defined _unix_
     return sigfillset(set);
 #else
-    Y_UNUSED(set);
+    Y_UNUSED(set); 
     return 0;
 #endif
 }
@@ -40,8 +40,8 @@ inline int SigAddSet(sigset_t* set, int signo) {
 #if defined _unix_
     return sigaddset(set, signo);
 #else
-    Y_UNUSED(set);
-    Y_UNUSED(signo);
+    Y_UNUSED(set); 
+    Y_UNUSED(signo); 
     return 0;
 #endif
 }
@@ -50,8 +50,8 @@ inline int SigDelSet(sigset_t* set, int signo) {
 #if defined _unix_
     return sigdelset(set, signo);
 #else
-    Y_UNUSED(set);
-    Y_UNUSED(signo);
+    Y_UNUSED(set); 
+    Y_UNUSED(signo); 
     return 0;
 #endif
 }
@@ -60,8 +60,8 @@ inline int SigIsMember(const sigset_t* set, int signo) {
 #if defined _unix_
     return sigismember(const_cast<sigset_t*>(set), signo);
 #else
-    Y_UNUSED(set);
-    Y_UNUSED(signo);
+    Y_UNUSED(set); 
+    Y_UNUSED(signo); 
     return 0;
 #endif
 }
@@ -70,9 +70,9 @@ inline int SigProcMask(int how, const sigset_t* set, sigset_t* oset) {
 #if defined _unix_
     return pthread_sigmask(how, set, oset);
 #else
-    Y_UNUSED(set);
-    Y_UNUSED(oset);
-    Y_UNUSED(how);
+    Y_UNUSED(set); 
+    Y_UNUSED(oset); 
+    Y_UNUSED(how); 
     return 0;
 #endif
 }

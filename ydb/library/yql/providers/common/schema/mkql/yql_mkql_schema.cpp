@@ -166,9 +166,9 @@ struct TRuntimeTypeLoader {
     typedef NKikimr::NMiniKQL::TType* TType;
 
     NKikimr::NMiniKQL::TProgramBuilder& Builder;
-    IOutputStream& Err;
+    IOutputStream& Err; 
 
-    TRuntimeTypeLoader(NKikimr::NMiniKQL::TProgramBuilder& builder, IOutputStream& err)
+    TRuntimeTypeLoader(NKikimr::NMiniKQL::TProgramBuilder& builder, IOutputStream& err) 
         : Builder(builder)
         , Err(err)
     {
@@ -302,7 +302,7 @@ NKikimr::NMiniKQL::TType* ParseTypeFromYson(const TStringBuf yson, NKikimr::NMin
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
 }
 
-NKikimr::NMiniKQL::TType* ParseTypeFromYson(const NYT::TNode& node, NKikimr::NMiniKQL::TProgramBuilder& builder, IOutputStream& err) {
+NKikimr::NMiniKQL::TType* ParseTypeFromYson(const NYT::TNode& node, NKikimr::NMiniKQL::TProgramBuilder& builder, IOutputStream& err) { 
     TRuntimeTypeLoader loader(builder, err);
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
 }

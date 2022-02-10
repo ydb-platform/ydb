@@ -25,8 +25,8 @@ static void Max(T& thiz, const T& that) {
 
 template <typename T>
 static void AssertZero(T& thiz, const T& that) {
-    Y_ASSERT(thiz == T());
-    Y_UNUSED(that);
+    Y_ASSERT(thiz == T()); 
+    Y_UNUSED(that); 
 }
 
 TDurationCounter::TDurationCounter()

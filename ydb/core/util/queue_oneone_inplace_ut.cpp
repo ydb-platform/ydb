@@ -6,9 +6,9 @@
 
 #include "queue_oneone_inplace.h"
 
-Y_UNIT_TEST_SUITE(TOneOneQueueTests) {
+Y_UNIT_TEST_SUITE(TOneOneQueueTests) { 
 
-    Y_UNIT_TEST(TestSimpleEnqueueDequeue) {
+    Y_UNIT_TEST(TestSimpleEnqueueDequeue) { 
         using TQueueType = TOneOneQueueInplace<ui64, 32>; // 3 values per chunk
         TQueueType queue;
 
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TOneOneQueueTests) {
         UNIT_ASSERT(queue.Pop() == 0);
     }
 
-    Y_UNIT_TEST(CleanInDestructor) {
+    Y_UNIT_TEST(CleanInDestructor) { 
         using TQueueType = TOneOneQueueInplace<std::shared_ptr<bool> *, 32>;
 
 
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TOneOneQueueTests) {
         UNIT_ASSERT_VALUES_EQUAL(1, p.use_count());
     }
 
-    Y_UNIT_TEST(ReadIterator) {
+    Y_UNIT_TEST(ReadIterator) { 
         using TQueueType = TOneOneQueueInplace<int, 32>;
         TQueueType queue;
 

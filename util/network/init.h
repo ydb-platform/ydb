@@ -49,7 +49,7 @@ struct sockaddr_un {
     #ifndef MSG_NOSIGNAL
         #define MSG_NOSIGNAL 0
     #endif
-#endif // _win_ or _darwin_
+#endif // _win_ or _darwin_ 
 
 void InitNetworkSubSystem();
 

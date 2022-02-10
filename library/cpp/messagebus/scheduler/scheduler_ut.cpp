@@ -7,7 +7,7 @@
 using namespace NBus;
 using namespace NBus::NPrivate;
 
-Y_UNIT_TEST_SUITE(TSchedulerTests) {
+Y_UNIT_TEST_SUITE(TSchedulerTests) { 
     struct TSimpleScheduleItem: public IScheduleItem {
         TTestSync* const TestSync;
 
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTests) {
         }
     };
 
-    Y_UNIT_TEST(Simple) {
+    Y_UNIT_TEST(Simple) { 
         TTestSync testSync;
 
         TScheduler scheduler;

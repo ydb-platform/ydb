@@ -25,7 +25,7 @@ struct TNumPair {
         : Begin(begin)
         , End(end)
     {
-        Y_ASSERT(begin <= end);
+        Y_ASSERT(begin <= end); 
     }
 
     T Length() const {
@@ -264,7 +264,7 @@ public:
     TSplitIterator(const TSplit& split)
         : Split(split)
         , Pos(Split.Begin())
-        , CurrentStroka(nullptr)
+        , CurrentStroka(nullptr) 
     {
     }
 

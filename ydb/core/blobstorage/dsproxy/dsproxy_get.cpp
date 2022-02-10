@@ -188,7 +188,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
         const NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus());
+        Y_VERIFY(record.HasStatus()); 
 
         ui64 totalSize = 0;
         ui64 tabletId = 0;
@@ -349,7 +349,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
     template <typename TPutEvent, typename TPutEventResult>
     void HandleVPutResult(typename TPutEventResult::TPtr &ev) {
-        Y_VERIFY(ev->Get()->Record.HasStatus());
+        Y_VERIFY(ev->Get()->Record.HasStatus()); 
 
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVPutResultReceived, MergedNode = std::move(ev->TraceId));
 

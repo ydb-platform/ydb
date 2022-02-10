@@ -61,7 +61,7 @@ void TTabletListRenderer::RenderHeader(TStringStream& str,
                   const TTabletFilterInfo& filterInfo)
 {
     Y_UNUSED(tabletsToRender);
-    IOutputStream &__stream(str);
+    IOutputStream &__stream(str); 
     H3() {
         str << listName;
         if (filterInfo.FilterNodeId != 0) {
@@ -79,7 +79,7 @@ void TTabletListRenderer::RenderTableHeader(TStringStream& str,
 {
     Y_UNUSED(listName);
     Y_UNUSED(tabletsToRender);
-    IOutputStream &__stream(str);
+    IOutputStream &__stream(str); 
     TABLEHEAD() {
         TABLER() {
             if (filterInfo.FilterNodeId == 0) {
@@ -123,7 +123,7 @@ void TTabletListRenderer::RenderTableBody(TStringStream& str,
                      const TTabletFilterInfo& filterInfo)
 {
     Y_UNUSED(listName);
-    IOutputStream &__stream(str);
+    IOutputStream &__stream(str); 
     TABLEBODY() {
     for (const auto& elem : tabletsToRender) {
         const auto& ti = *elem.TabletStateInfo;
@@ -181,7 +181,7 @@ void TTabletListRenderer::RenderTabletList(TStringStream& str,
                                            const TVector<TTabletListElement>& tabletsToRender,
                                            const TTabletFilterInfo& filterInfo)
 {
-    IOutputStream &__stream(str);
+    IOutputStream &__stream(str); 
     RenderHeader(str, listName, tabletsToRender, filterInfo);
 
     TABLE_SORTABLE_CLASS("table") {

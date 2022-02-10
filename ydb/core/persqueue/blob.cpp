@@ -639,7 +639,7 @@ ui32 THead::GetCount() const
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
 }
 
-IOutputStream& operator <<(IOutputStream& out, const THead& value)
+IOutputStream& operator <<(IOutputStream& out, const THead& value) 
 {
     out << "Offset " << value.Offset << " PartNo " << value.PartNo << " PackedSize " << value.PackedSize << " count " << value.GetCount()
         << " nextOffset " << value.GetNextOffset() << " batches " << value.Batches.size();

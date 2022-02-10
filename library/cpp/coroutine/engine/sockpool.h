@@ -227,7 +227,7 @@ inline void TPooledSocket::TImpl::ReturnToPool() noexcept {
 }
 
 
-class TContIO: public IInputStream, public IOutputStream {
+class TContIO: public IInputStream, public IOutputStream { 
 public:
     TContIO(SOCKET fd, TCont* cont)
         : Fd_(fd)

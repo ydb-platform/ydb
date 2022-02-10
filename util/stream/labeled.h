@@ -13,7 +13,7 @@
  * // Outputs "a = 1, b = 2, c = 3, a + b + c = 6"
  * @endcode
  */
-#define LabeledOutput(...) "" Y_PASS_VA_ARGS(Y_MAP_ARGS_WITH_LAST(__LABELED_OUTPUT_NONLAST__, __LABELED_OUTPUT_IMPL__, __VA_ARGS__))
+#define LabeledOutput(...) "" Y_PASS_VA_ARGS(Y_MAP_ARGS_WITH_LAST(__LABELED_OUTPUT_NONLAST__, __LABELED_OUTPUT_IMPL__, __VA_ARGS__)) 
 
 #define __LABELED_OUTPUT_IMPL__(x) << #x " = " << (x)
 #define __LABELED_OUTPUT_NONLAST__(x) __LABELED_OUTPUT_IMPL__(x) << ", "

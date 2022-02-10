@@ -12,7 +12,7 @@
 using namespace NRainCheck;
 using namespace NActor;
 
-Y_UNIT_TEST_SUITE(Spawn) {
+Y_UNIT_TEST_SUITE(Spawn) { 
     struct TTestTask: public ISimpleTask {
         TTestSync* const TestSync;
 
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(Spawn) {
         }
     };
 
-    Y_UNIT_TEST(Continuation) {
+    Y_UNIT_TEST(Continuation) { 
         TTestSync testSync;
 
         TSimpleEnv env;
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(Spawn) {
         }
     };
 
-    Y_UNIT_TEST(Subtask) {
+    Y_UNIT_TEST(Subtask) { 
         TTestSync testSync;
 
         TTestEnv env;
@@ -124,8 +124,8 @@ Y_UNIT_TEST_SUITE(Spawn) {
                 return nullptr;
             }
 
-            for (auto& subtask : Subtasks) {
-                SpawnSubtask<TNopSimpleTask>(Env, &subtask, "");
+            for (auto& subtask : Subtasks) { 
+                SpawnSubtask<TNopSimpleTask>(Env, &subtask, ""); 
             }
 
             ++I;
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(Spawn) {
         }
     };
 
-    Y_UNIT_TEST(SubtaskLong) {
+    Y_UNIT_TEST(SubtaskLong) { 
         TTestSync testSync;
 
         TTestEnv env;

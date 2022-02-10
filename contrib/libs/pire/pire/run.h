@@ -54,7 +54,7 @@ template<class Scanner>
 PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 void Step(const Scanner& scanner, typename Scanner::State& state, Char ch)
 {
-	Y_ASSERT(ch < MaxCharUnaligned);
+	Y_ASSERT(ch < MaxCharUnaligned); 
 	typename Scanner::Action a = scanner.Next(state, ch);
 	scanner.TakeAction(state, a);
 }
@@ -112,9 +112,9 @@ namespace Impl {
 	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 	Action SafeRunChunk(const Scanner& scanner, typename Scanner::State& state, const size_t* p, size_t pos, size_t size, Pred pred)
 	{
-		Y_ASSERT(pos <= sizeof(size_t));
-		Y_ASSERT(size <= sizeof(size_t));
-		Y_ASSERT(pos + size <= sizeof(size_t));
+		Y_ASSERT(pos <= sizeof(size_t)); 
+		Y_ASSERT(size <= sizeof(size_t)); 
+		Y_ASSERT(pos + size <= sizeof(size_t)); 
 
 		if (PIRE_UNLIKELY(size == 0))
 			return Continue;
@@ -133,9 +133,9 @@ namespace Impl {
 	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 	Action RunChunk(const Scanner& scanner, typename Scanner::State& state, const size_t* p, size_t pos, size_t size, Pred pred)
 	{
-		Y_ASSERT(pos <= sizeof(size_t));
-		Y_ASSERT(size <= sizeof(size_t));
-		Y_ASSERT(pos + size <= sizeof(size_t));
+		Y_ASSERT(pos <= sizeof(size_t)); 
+		Y_ASSERT(size <= sizeof(size_t)); 
+		Y_ASSERT(pos + size <= sizeof(size_t)); 
 
 		if (PIRE_UNLIKELY(size == 0))
 			return Continue;

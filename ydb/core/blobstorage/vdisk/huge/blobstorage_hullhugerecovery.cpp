@@ -203,7 +203,7 @@ namespace NKikimr {
             , Guid(TAppData::RandomProvider->GenRand64())
         {
             ParseFromString(entryPointData);
-            Y_VERIFY(entryPointLsn == LogPos.EntryPointLsn);
+            Y_VERIFY(entryPointLsn == LogPos.EntryPointLsn); 
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
                 Guid, entryPointLsn, ToString().data()));
@@ -276,7 +276,7 @@ namespace NKikimr {
                 cur += NHuge::THugeSlot::SerializedSize;
                 cur += sizeof(ui64); // refPointLsn (for backward compatibility, can be removed)
                 bool inserted = AllocatedSlots.insert(hugeSlot).second;
-                Y_VERIFY(inserted);
+                Y_VERIFY(inserted); 
             }
         }
 
@@ -348,7 +348,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void THullHugeKeeperPersState::RenderHtml(IOutputStream &str) const {
+        void THullHugeKeeperPersState::RenderHtml(IOutputStream &str) const { 
             str << "LogPos: " << LogPos.ToString() << "<br>";
             str << "AllocatedSlots:";
             if (!AllocatedSlots.empty()) {
@@ -482,7 +482,7 @@ namespace NKikimr {
                     logPosDelLsn = &LogPos.BarriersDbSlotDelLsn;
                     break;
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_FAIL("Unexpected case"); 
             }
             if (lsn > *logPosDelLsn) {
                 // apply

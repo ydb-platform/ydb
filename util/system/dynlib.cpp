@@ -33,7 +33,7 @@ inline TString DLLERR() {
 #ifdef _win32_
     char* msg = 0;
     DWORD cnt = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                              nullptr, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (char*)&msg, 0, nullptr);
+                              nullptr, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (char*)&msg, 0, nullptr); 
     if (!msg)
         return "DLLERR() unknown error";
     while (cnt && isspace(msg[cnt - 1]))
@@ -80,7 +80,7 @@ public:
     inline void* Sym(const char* name) {
         void* symbol = SymOptional(name);
 
-        if (symbol == nullptr) {
+        if (symbol == nullptr) { 
             ythrow yexception() << DLLERR().data();
         }
 
@@ -115,7 +115,7 @@ void TDynamicLibrary::Close() noexcept {
 
 void* TDynamicLibrary::SymOptional(const char* name) noexcept {
     if (!IsLoaded()) {
-        return nullptr;
+        return nullptr; 
     }
 
     return Impl_->SymOptional(name);

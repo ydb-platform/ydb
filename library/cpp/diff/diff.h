@@ -44,8 +44,8 @@ namespace NDiff {
         NLCS::MakeLCS<T>(s1, s2, &lcs, &ctx);
 
         // Start points of current common and diff parts
-        const T* c1 = nullptr;
-        const T* c2 = nullptr;
+        const T* c1 = nullptr; 
+        const T* c2 = nullptr; 
         const T* d1 = s1.begin();
         const T* d2 = s2.begin();
 

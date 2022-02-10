@@ -401,8 +401,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
     void MoveEntryToUnresolved(ui64 tabletId, TAutoPtr<TEntry>& entry) {
         TAutoPtr<TEntry>* unresolvedEntryPtr;
-        Y_VERIFY(UnresolvedTablets.Insert(tabletId, entry, unresolvedEntryPtr));
-        Y_VERIFY(ResolvedTablets.Erase(tabletId));
+        Y_VERIFY(UnresolvedTablets.Insert(tabletId, entry, unresolvedEntryPtr)); 
+        Y_VERIFY(ResolvedTablets.Erase(tabletId)); 
     }
 
     void CheckDelayedNodeProblem(ui64 tabletId, const TActorContext &ctx) {
@@ -513,7 +513,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 PushQueue(ev, entry, ctx);
             break;
         default:
-            Y_FAIL();
+            Y_FAIL(); 
         }
     }
 
@@ -565,7 +565,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_FAIL(); 
         }
     }
 
@@ -608,7 +608,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         switch (entry.State) {
         case TEntry::StInit:
-            Y_FAIL("must not happens");
+            Y_FAIL("must not happens"); 
         case TEntry::StInitResolve:
             if (success) {
                 if (msg->CurrentLeaderTablet) {
@@ -668,7 +668,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         case TEntry::StNormal:
             break;
         default:
-            Y_FAIL();
+            Y_FAIL(); 
         }
     }
 
@@ -702,7 +702,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_FAIL(); 
         }
     }
 
@@ -765,7 +765,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_FAIL(); 
         }
     }
 
@@ -814,7 +814,7 @@ public:
         });
 
         ResolvedTablets.SetEvictionCallback([&](const ui64& key, TAutoPtr<TEntry>& value, ui64 size) {
-            Y_UNUSED(size);
+            Y_UNUSED(size); 
 
             if (!value)
                 return;

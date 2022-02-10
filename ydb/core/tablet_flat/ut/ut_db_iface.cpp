@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NTable {
 
-Y_UNIT_TEST_SUITE(DBase) {
+Y_UNIT_TEST_SUITE(DBase) { 
     using namespace NTest;
 
     TAlter MakeAlter(const ui32 table = 1)
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         return alter;
     }
 
-    Y_UNIT_TEST(Basics)
+    Y_UNIT_TEST(Basics) 
     {
         TDbExec me;
 
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(me.GetLog().size() == 10);
     }
 
-    Y_UNIT_TEST(Select)
+    Y_UNIT_TEST(Select) 
     {
         TDbExec me;
 
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(subset->Flatten.size() == 3 && subset->Frozen.size() == 3);
     }
 
-    Y_UNIT_TEST(Defaults)
+    Y_UNIT_TEST(Defaults) 
     {
         TDbExec me;
 
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(DBase) {
             .To(24).HasN("bar", 11_u32, 33_u64, "me", "you", large35);
     }
 
-    Y_UNIT_TEST(Subsets)
+    Y_UNIT_TEST(Subsets) 
     {
         TDbExec me;
 
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         }
     }
 
-    Y_UNIT_TEST(Garbage)
+    Y_UNIT_TEST(Garbage) 
     {
         TDbExec me;
 
@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(me->Counters().Parts.OtherBytes == 0);
     }
 
-    Y_UNIT_TEST(Affects)
+    Y_UNIT_TEST(Affects) 
     {
         TDbExec me;
 
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(40).Replay(EPlay::Boot).Replay(EPlay::Redo);
     }
 
-    Y_UNIT_TEST(WideKey)
+    Y_UNIT_TEST(WideKey) 
     {
         const TIntrusivePtr<TGrowHeap> heap = new TGrowHeap(128 * 1024);
 
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         }
     }
 
-    Y_UNIT_TEST(Annex)
+    Y_UNIT_TEST(Annex) 
     {
         auto alter = MakeAlter(1);
 
@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(closed->Frozen.at(0)->GetBlobs()->Head == 3);
     }
 
-    Y_UNIT_TEST(Outer)
+    Y_UNIT_TEST(Outer) 
     {
         auto alter = MakeAlter(1);
 

@@ -6,9 +6,9 @@
 using namespace NKikimr;
 using namespace NMiniKQL;
 
-Y_UNIT_TEST_SUITE(TStatsRegistryTest) {
+Y_UNIT_TEST_SUITE(TStatsRegistryTest) { 
 
-    Y_UNIT_TEST(Stats) {
+    Y_UNIT_TEST(Stats) { 
         static TStatKey key("key", false);
         auto stats = CreateDefaultStatsRegistry();
 
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TStatsRegistryTest) {
         UNIT_ASSERT_EQUAL(stats->GetStat(key), 34);
     }
 
-    Y_UNIT_TEST(ForEach) {
+    Y_UNIT_TEST(ForEach) { 
         static TStatKey key1("key1", false), key2("key2", true);
         UNIT_ASSERT(!key1.IsDeriv());
         UNIT_ASSERT(key2.IsDeriv());
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TStatsRegistryTest) {
         });
     }
 
-    Y_UNIT_TEST(DuplicateKeys) {
+    Y_UNIT_TEST(DuplicateKeys) { 
         TString error;
         try {
             static TStatKey key("my_key", false), sameKey("my_key", false);

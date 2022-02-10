@@ -5,8 +5,8 @@ OWNER(
     g:base
 )
 
-LIBRARY()
-
+LIBRARY() 
+ 
 GENERATE_ENUM_SERIALIZATION(priority.h)
 
 PEERDIR (
@@ -43,5 +43,5 @@ SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(ut)
+ 
+RECURSE_FOR_TESTS(ut) 

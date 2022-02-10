@@ -378,28 +378,28 @@ void RunTest(IActor *test)
     env.Finalize();
 }
 
-Y_UNIT_TEST_SUITE(TExecutorDb) {
-    Y_UNIT_TEST(RandomOps)
+Y_UNIT_TEST_SUITE(TExecutorDb) { 
+    Y_UNIT_TEST(RandomOps) 
     {
         RunTest(new TFuzzyActor(5, MaxActionCount));
     }
 
-    Y_UNIT_TEST(FullScan)
+    Y_UNIT_TEST(FullScan) 
     {
         RunTest(new TFullScan(MultiPageMaxActionCount));
     }
 
-    Y_UNIT_TEST(CoordinatorSimulation)
+    Y_UNIT_TEST(CoordinatorSimulation) 
     {
         RunTest(new THeThing(MaxActionCount, 42));
     }
 
-    Y_UNIT_TEST(RandomCoordinatorSimulation)
+    Y_UNIT_TEST(RandomCoordinatorSimulation) 
     {
         RunTest(new THeThing(MaxActionCount, TInstant::Now().Seconds()));
     }
 
-    Y_UNIT_TEST(MultiPage)
+    Y_UNIT_TEST(MultiPage) 
     {
         NFake::TFuzzySet fuzzy(false /* no compression */);
 
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(TExecutorDb) {
         RunTest(new TDbTestPlayerActor(tx));
     }
 
-    Y_UNIT_TEST(EncodedPage)
+    Y_UNIT_TEST(EncodedPage) 
     {
         NFake::TFuzzySet fuzzy(true /* compress */);
 

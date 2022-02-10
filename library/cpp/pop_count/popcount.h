@@ -99,7 +99,7 @@ static inline ui32 PopCountImpl(ui64 n) {
 
 template <class T>
 static inline ui32 PopCount(T n) {
-    using TCvt = TFixedWidthUnsignedInt<T>;
+    using TCvt = TFixedWidthUnsignedInt<T>; 
 
     return PopCountImpl((TCvt)n);
 }

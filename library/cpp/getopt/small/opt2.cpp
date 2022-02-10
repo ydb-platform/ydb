@@ -272,16 +272,16 @@ int Opt2::AutoUsage(const char* free_arg_names) {
     fprintf(where, "Usage: %s%s%s%s%s%s%s%s\n", prog, req ? " -" : "", req_str,
             nreq ? " [-" : "", nreq_str, nreq ? "]" : "",
             free_arg_names && *free_arg_names ? " " : "", free_arg_names);
-    for (auto& spec : Specs) {
+    for (auto& spec : Specs) { 
         const char* hlp = !spec.HelpUsage.empty() ? spec.HelpUsage.data() : spec.HasArg ? "<arg>" : "";
-        if (!spec.HasArg || spec.IsRequired)
-            fprintf(where, "  -%c %s\n", spec.opt, hlp);
-        else if (!spec.IsNumeric)
-            fprintf(where, "  -%c %s [Default: %s]\n", spec.opt, hlp, spec.DefValue);
+        if (!spec.HasArg || spec.IsRequired) 
+            fprintf(where, "  -%c %s\n", spec.opt, hlp); 
+        else if (!spec.IsNumeric) 
+            fprintf(where, "  -%c %s [Default: %s]\n", spec.opt, hlp, spec.DefValue); 
         else
-            fprintf(where, "  -%c %s [Def.val: %li]\n", spec.opt, hlp, (long)(uintptr_t)spec.DefValue);
-        if (spec.LongOptName)
-            fprintf(where, "    --%s%s - same as -%c\n", spec.LongOptName, spec.HasArg ? "=<argument>" : "", spec.opt);
+            fprintf(where, "  -%c %s [Def.val: %li]\n", spec.opt, hlp, (long)(uintptr_t)spec.DefValue); 
+        if (spec.LongOptName) 
+            fprintf(where, "    --%s%s - same as -%c\n", spec.LongOptName, spec.HasArg ? "=<argument>" : "", spec.opt); 
     }
     if (OptionMissingArg)
         fprintf(where, " *** Option '%c' is missing required argument\n", OptionMissingArg);
@@ -300,7 +300,7 @@ int Opt2::AutoUsage(const char* free_arg_names) {
         fprintf(where, " *** %i free argument(s) supplied, expected %i to %i\n", (int)Pos.size(), MinArgs, MaxArgs);
     if (BadPosCount && MinArgs == MaxArgs)
         fprintf(where, " *** %i free argument(s) supplied, expected %i\n", (int)Pos.size(), MinArgs);
-    for (const auto& userErrorMessage : UserErrorMessages)
+    for (const auto& userErrorMessage : UserErrorMessages) 
         fprintf(where, " *** %s\n", userErrorMessage.data());
     return UnknownOption == '?' ? 1 : 2;
 }

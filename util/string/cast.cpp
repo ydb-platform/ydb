@@ -30,123 +30,123 @@ using double_conversion::StringToDoubleConverter;
  * ------------------------------ formatters ------------------------------
  */
 
-namespace {
+namespace { 
     constexpr char IntToChar[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
-
-    static_assert(Y_ARRAY_SIZE(IntToChar) == 16, "expect Y_ARRAY_SIZE(IntToChar) == 16");
-
+ 
+    static_assert(Y_ARRAY_SIZE(IntToChar) == 16, "expect Y_ARRAY_SIZE(IntToChar) == 16"); 
+ 
     // clang-format off
     constexpr int LetterToIntMap[] = {
-        20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
-        20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
-        20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
-        20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
-        20, 20, 20, 20, 20, 20, 20, 20, 0, 1,
-        2, 3, 4, 5, 6, 7, 8, 9, 20, 20,
-        20, 20, 20, 20, 20, 10, 11, 12, 13, 14,
-        15, 20, 20, 20, 20, 20, 20, 20, 20, 20,
-        20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
-        20, 20, 20, 20, 20, 20, 20, 10, 11, 12,
-        13, 14, 15,
-    };
+        20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 
+        20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 
+        20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 
+        20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 
+        20, 20, 20, 20, 20, 20, 20, 20, 0, 1, 
+        2, 3, 4, 5, 6, 7, 8, 9, 20, 20, 
+        20, 20, 20, 20, 20, 10, 11, 12, 13, 14, 
+        15, 20, 20, 20, 20, 20, 20, 20, 20, 20, 
+        20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 
+        20, 20, 20, 20, 20, 20, 20, 10, 11, 12, 
+        13, 14, 15, 
+    }; 
     // clang-format on
-
-    template <class T>
+ 
+    template <class T> 
     std::enable_if_t<std::is_signed<T>::value, std::make_unsigned_t<T>> NegateNegativeSigned(T value) noexcept {
         return std::make_unsigned_t<T>(-(value + 1)) + std::make_unsigned_t<T>(1);
     }
 
-    template <class T>
+    template <class T> 
     std::enable_if_t<std::is_unsigned<T>::value, std::make_unsigned_t<T>> NegateNegativeSigned(T) noexcept {
         Y_UNREACHABLE();
-    }
+    } 
 
     template <class T>
     std::make_signed_t<T> NegatePositiveSigned(T value) noexcept {
         return value > 0 ? (-std::make_signed_t<T>(value - 1) - 1) : 0;
     }
 
-    template <class T, unsigned base, class TChar>
-    struct TBasicIntFormatter {
-        static_assert(1 < base && base < 17, "expect 1 < base && base < 17");
+    template <class T, unsigned base, class TChar> 
+    struct TBasicIntFormatter { 
+        static_assert(1 < base && base < 17, "expect 1 < base && base < 17"); 
         static_assert(std::is_unsigned<T>::value, "TBasicIntFormatter can only handle unsigned integers.");
 
-        static inline size_t Format(T value, TChar* buf, size_t len) {
+        static inline size_t Format(T value, TChar* buf, size_t len) { 
             Y_ENSURE(len, TStringBuf("zero length"));
 
-            TChar* tmp = buf;
-
-            do {
+            TChar* tmp = buf; 
+ 
+            do { 
                 // divide only once, do not use mod
                 const T nextVal = static_cast<T>(value / base);
                 *tmp++ = IntToChar[base == 2 || base == 4 || base == 8 || base == 16 ? value & (base - 1) : value - base * nextVal];
                 value = nextVal;
-            } while (value && --len);
-
+            } while (value && --len); 
+ 
             Y_ENSURE(!value, TStringBuf("not enough room in buffer"));
-
-            const size_t result = tmp - buf;
-
-            --tmp;
-
-            while (buf < tmp) {
-                TChar c = *buf;
-
-                *buf = *tmp;
-                *tmp = c;
-                ++buf;
-                --tmp;
-            }
-
-            return result;
+ 
+            const size_t result = tmp - buf; 
+ 
+            --tmp; 
+ 
+            while (buf < tmp) { 
+                TChar c = *buf; 
+ 
+                *buf = *tmp; 
+                *tmp = c; 
+                ++buf; 
+                --tmp; 
+            } 
+ 
+            return result; 
         }
-    };
+    }; 
 
-    template <class T, unsigned base, class TChar>
-    struct TIntFormatter {
-        static_assert(1 < base && base < 17, "expect 1 < base && base < 17");
+    template <class T, unsigned base, class TChar> 
+    struct TIntFormatter { 
+        static_assert(1 < base && base < 17, "expect 1 < base && base < 17"); 
         static_assert(std::is_integral<T>::value, "T must be an integral type.");
 
-        static inline size_t Format(T value, TChar* buf, size_t len) {
+        static inline size_t Format(T value, TChar* buf, size_t len) { 
             using TUFmt = TBasicIntFormatter<std::make_unsigned_t<T>, base, TChar>;
-
+ 
             if (std::is_signed<T>::value && value < 0) {
                 Y_ENSURE(len >= 2, TStringBuf("not enough room in buffer"));
-
-                *buf = '-';
+ 
+                *buf = '-'; 
 
                 return 1 + TUFmt::Format(NegateNegativeSigned(value), buf + 1, len - 1);
-            }
-
+            } 
+ 
             return TUFmt::Format(value, buf, len);
         }
-    };
+    }; 
 
-    template <class T>
-    struct TFltModifiers;
+    template <class T> 
+    struct TFltModifiers; 
 
-    template <class T, int base, class TChar>
+    template <class T, int base, class TChar> 
     Y_NO_INLINE size_t FormatInt(T value, TChar* buf, size_t len) {
-        return TIntFormatter<T, base, TChar>::Format(value, buf, len);
-    }
+        return TIntFormatter<T, base, TChar>::Format(value, buf, len); 
+    } 
 
-    template <class T>
+    template <class T> 
     inline size_t FormatFlt(T t, char* buf, size_t len) {
-        const int ret = snprintf(buf, len, TFltModifiers<T>::ModifierWrite, t);
+        const int ret = snprintf(buf, len, TFltModifiers<T>::ModifierWrite, t); 
 
         Y_ENSURE(ret >= 0 && (size_t)ret <= len, TStringBuf("cannot format float"));
 
-        return (size_t)ret;
+        return (size_t)ret; 
     }
 
-    enum EParseStatus {
-        PS_OK = 0,
-        PS_EMPTY_STRING,
-        PS_PLUS_STRING,
-        PS_MINUS_STRING,
-        PS_BAD_SYMBOL,
-        PS_OVERFLOW,
-    };
+    enum EParseStatus { 
+        PS_OK = 0, 
+        PS_EMPTY_STRING, 
+        PS_PLUS_STRING, 
+        PS_MINUS_STRING, 
+        PS_BAD_SYMBOL, 
+        PS_OVERFLOW, 
+    }; 
 
     constexpr ui8 SAFE_LENS[4][17] = {
         {0, 0, 7, 5, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1},
@@ -177,19 +177,19 @@ namespace {
         return (c >= '0') && ((*digit = (c - '0')) < BASE);
     }
 
-    template <class T, unsigned base, class TChar>
-    struct TBasicIntParser {
-        static_assert(1 < base && base < 17, "Expect 1 < base && base < 17.");
+    template <class T, unsigned base, class TChar> 
+    struct TBasicIntParser { 
+        static_assert(1 < base && base < 17, "Expect 1 < base && base < 17."); 
         static_assert(std::is_unsigned<T>::value, "TBasicIntParser can only handle unsigned integers.");
-
+ 
         enum : unsigned {
             BASE_POW_2 = base * base,
         };
 
         static inline EParseStatus Parse(const TChar** ppos, const TChar* end, T max, T* target) noexcept {
-            Y_ASSERT(*ppos != end); /* This check should be somewhere up the stack. */
+            Y_ASSERT(*ppos != end); /* This check should be somewhere up the stack. */ 
             const size_t maxSafeLen = SAFE_LENS[ConstLog2(sizeof(T))][base];
-
+ 
             // can parse without overflow
             if (size_t(end - *ppos) <= maxSafeLen) {
                 T result;
@@ -205,7 +205,7 @@ namespace {
         }
 
         static inline bool ParseFast(const TChar* pos, const TChar* end, T* target) noexcept {
-            T result = T();
+            T result = T(); 
             T d1;
             T d2;
 
@@ -229,164 +229,164 @@ namespace {
 
         static inline EParseStatus ParseSlow(const TChar** ppos, const TChar* end, T max, T* target) noexcept {
             T result = T();
-            T preMulMax = max / base;
-            const TChar* pos = *ppos;
-
-            while (pos != end) {
-                T digit;
+            T preMulMax = max / base; 
+            const TChar* pos = *ppos; 
+ 
+            while (pos != end) { 
+                T digit; 
 
                 if (!CharToDigit<base>(*pos, &digit)) {
-                    *ppos = pos;
+                    *ppos = pos; 
 
-                    return PS_BAD_SYMBOL;
-                }
+                    return PS_BAD_SYMBOL; 
+                } 
+ 
+                if (result > preMulMax) { 
+                    return PS_OVERFLOW; 
+                } 
+ 
+                result *= base; 
+ 
+                if (result > max - digit) { 
+                    return PS_OVERFLOW; 
+                } 
+ 
+                result += digit; 
+                pos++; 
+            } 
+ 
+            *target = result; 
 
-                if (result > preMulMax) {
-                    return PS_OVERFLOW;
-                }
-
-                result *= base;
-
-                if (result > max - digit) {
-                    return PS_OVERFLOW;
-                }
-
-                result += digit;
-                pos++;
-            }
-
-            *target = result;
-
-            return PS_OK;
-        }
+            return PS_OK; 
+        } 
     };
 
-    template <class T>
-    struct TBounds {
-        T PositiveMax;
-        T NegativeMax;
-    };
+    template <class T> 
+    struct TBounds { 
+        T PositiveMax; 
+        T NegativeMax; 
+    }; 
 
-    template <class T, unsigned base, class TChar>
-    struct TIntParser {
-        static_assert(1 < base && base < 17, "Expect 1 < base && base < 17.");
+    template <class T, unsigned base, class TChar> 
+    struct TIntParser { 
+        static_assert(1 < base && base < 17, "Expect 1 < base && base < 17."); 
         static_assert(std::is_integral<T>::value, "T must be an integral type.");
 
-        enum {
+        enum { 
             IsSigned = std::is_signed<T>::value
-        };
-
-        using TUnsigned = std::make_unsigned_t<T>;
-
-        static inline EParseStatus Parse(const TChar** ppos, const TChar* end, const TBounds<TUnsigned>& bounds, T* target) {
-            const TChar* pos = *ppos;
-            if (pos == end) {
-                return PS_EMPTY_STRING;
+        }; 
+ 
+        using TUnsigned = std::make_unsigned_t<T>; 
+ 
+        static inline EParseStatus Parse(const TChar** ppos, const TChar* end, const TBounds<TUnsigned>& bounds, T* target) { 
+            const TChar* pos = *ppos; 
+            if (pos == end) { 
+                return PS_EMPTY_STRING; 
             }
 
             bool negative = false;
-            TUnsigned max;
-            if (*pos == '+') {
-                pos++;
-                max = bounds.PositiveMax;
-
-                if (pos == end) {
-                    return PS_PLUS_STRING;
-                }
-            } else if (IsSigned && *pos == '-') {
-                pos++;
-                max = bounds.NegativeMax;
-                negative = true;
-
-                if (pos == end) {
-                    return PS_MINUS_STRING;
-                }
-            } else {
-                max = bounds.PositiveMax;
-            }
-
-            TUnsigned result;
-            EParseStatus error = TBasicIntParser<TUnsigned, base, TChar>::Parse(&pos, end, max, &result);
-            if (error != PS_OK) {
+            TUnsigned max; 
+            if (*pos == '+') { 
+                pos++; 
+                max = bounds.PositiveMax; 
+ 
+                if (pos == end) { 
+                    return PS_PLUS_STRING; 
+                } 
+            } else if (IsSigned && *pos == '-') { 
+                pos++; 
+                max = bounds.NegativeMax; 
+                negative = true; 
+ 
+                if (pos == end) { 
+                    return PS_MINUS_STRING; 
+                } 
+            } else { 
+                max = bounds.PositiveMax; 
+            } 
+ 
+            TUnsigned result; 
+            EParseStatus error = TBasicIntParser<TUnsigned, base, TChar>::Parse(&pos, end, max, &result); 
+            if (error != PS_OK) { 
                 *ppos = pos;
-                return error;
-            }
-
-            if (IsSigned) {
+                return error; 
+            } 
+ 
+            if (IsSigned) { 
                 *target = negative ? NegatePositiveSigned(result) : static_cast<T>(result);
-            } else {
-                *target = result;
-            }
-            return PS_OK;
+            } else { 
+                *target = result; 
+            } 
+            return PS_OK; 
         }
-    };
+    }; 
 
-    template <class TChar>
+    template <class TChar> 
     [[noreturn]] static Y_NO_INLINE void ThrowParseError(EParseStatus status, const TChar* data, size_t len, const TChar* pos) {
-        Y_ASSERT(status != PS_OK);
-
+        Y_ASSERT(status != PS_OK); 
+ 
         typedef TBasicString<TChar> TStringType;
-
-        switch (status) {
-            case PS_EMPTY_STRING:
+ 
+        switch (status) { 
+            case PS_EMPTY_STRING: 
                 ythrow TFromStringException() << TStringBuf("Cannot parse empty string as number. ");
-            case PS_PLUS_STRING:
+            case PS_PLUS_STRING: 
                 ythrow TFromStringException() << TStringBuf("Cannot parse string \"+\" as number. ");
-            case PS_MINUS_STRING:
+            case PS_MINUS_STRING: 
                 ythrow TFromStringException() << TStringBuf("Cannot parse string \"-\" as number. ");
-            case PS_BAD_SYMBOL:
+            case PS_BAD_SYMBOL: 
                 ythrow TFromStringException() << TStringBuf("Unexpected symbol \"") << EscapeC(*pos) << TStringBuf("\" at pos ") << (pos - data) << TStringBuf(" in string ") << TStringType(data, len).Quote() << TStringBuf(". ");
-            case PS_OVERFLOW:
+            case PS_OVERFLOW: 
                 ythrow TFromStringException() << TStringBuf("Integer overflow in string ") << TStringType(data, len).Quote() << TStringBuf(". ");
-            default:
+            default: 
                 ythrow yexception() << TStringBuf("Unknown error code in string converter. ");
-        }
+        } 
     }
 
-    template <typename T, typename TUnsigned, int base, typename TChar>
+    template <typename T, typename TUnsigned, int base, typename TChar> 
     Y_NO_INLINE T ParseInt(const TChar* data, size_t len, const TBounds<TUnsigned>& bounds) {
-        T result;
-        const TChar* pos = data;
-        EParseStatus status = TIntParser<T, base, TChar>::Parse(&pos, pos + len, bounds, &result);
+        T result; 
+        const TChar* pos = data; 
+        EParseStatus status = TIntParser<T, base, TChar>::Parse(&pos, pos + len, bounds, &result); 
 
-        if (status == PS_OK) {
-            return result;
-        } else {
-            ThrowParseError(status, data, len, pos);
-        }
-    }
+        if (status == PS_OK) { 
+            return result; 
+        } else { 
+            ThrowParseError(status, data, len, pos); 
+        } 
+    } 
 
-    template <typename T, typename TUnsigned, int base, typename TChar>
+    template <typename T, typename TUnsigned, int base, typename TChar> 
     Y_NO_INLINE bool TryParseInt(const TChar* data, size_t len, const TBounds<TUnsigned>& bounds, T* result) {
-        return TIntParser<T, base, TChar>::Parse(&data, data + len, bounds, result) == PS_OK;
-    }
-
-    template <class T>
+        return TIntParser<T, base, TChar>::Parse(&data, data + len, bounds, result) == PS_OK; 
+    } 
+ 
+    template <class T> 
     inline T ParseFlt(const char* data, size_t len) {
-        /*
-         * TODO
-         */
-
-        if (len > 256) {
-            len = 256;
-        }
-
-        char* c = (char*)alloca(len + 1);
-        memcpy(c, data, len);
-        c[len] = 0;
-
-        T ret;
-        char ec;
-
-        // try to read a value and an extra character in order to catch cases when
-        // the string start with a valid float but is followed by unexpected characters
-        if (sscanf(c, TFltModifiers<T>::ModifierReadAndChar, &ret, &ec) == 1) {
-            return ret;
-        }
-
+        /* 
+         * TODO 
+         */ 
+ 
+        if (len > 256) { 
+            len = 256; 
+        } 
+ 
+        char* c = (char*)alloca(len + 1); 
+        memcpy(c, data, len); 
+        c[len] = 0; 
+ 
+        T ret; 
+        char ec; 
+ 
+        // try to read a value and an extra character in order to catch cases when 
+        // the string start with a valid float but is followed by unexpected characters 
+        if (sscanf(c, TFltModifiers<T>::ModifierReadAndChar, &ret, &ec) == 1) { 
+            return ret; 
+        } 
+ 
         ythrow TFromStringException() << TStringBuf("cannot parse float(") << TStringBuf(data, len) << TStringBuf(")");
-    }
-
+    } 
+ 
 #define DEF_FLT_MOD(type, modifierWrite, modifierRead)                    \
     template <>                                                           \
     struct TFltModifiers<type> {                                          \
@@ -397,14 +397,14 @@ namespace {
     const char* const TFltModifiers<type>::ModifierWrite = modifierWrite; \
     const char* const TFltModifiers<type>::ModifierReadAndChar = modifierRead "%c";
 
-    DEF_FLT_MOD(long double, "%.10Lg", "%Lg")
+    DEF_FLT_MOD(long double, "%.10Lg", "%Lg") 
 
 #undef DEF_FLT_MOD
 
-    /* The following constants are initialized in terms of <climits> constants to make
-     * sure they go into binary as actual values and there is no associated
-     * initialization code.
-     * */
+    /* The following constants are initialized in terms of <climits> constants to make 
+     * sure they go into binary as actual values and there is no associated 
+     * initialization code. 
+     * */ 
     constexpr TBounds<ui64> bSBounds = {static_cast<ui64>(SCHAR_MAX), static_cast<ui64>(UCHAR_MAX - SCHAR_MAX)};
     constexpr TBounds<ui64> bUBounds = {static_cast<ui64>(UCHAR_MAX), 0};
     constexpr TBounds<ui64> sSBounds = {static_cast<ui64>(SHRT_MAX), static_cast<ui64>(USHRT_MAX - SHRT_MAX)};
@@ -450,8 +450,8 @@ size_t ToStringImpl<char8_t>(char8_t value, char* buf, size_t len) {
 }
 #endif
 
-using TCharIType = std::conditional_t<std::is_signed<char>::value, i64, ui64>;
-using TWCharIType = std::conditional_t<std::is_signed<wchar_t>::value, i64, ui64>;
+using TCharIType = std::conditional_t<std::is_signed<char>::value, i64, ui64>; 
+using TWCharIType = std::conditional_t<std::is_signed<wchar_t>::value, i64, ui64>; 
 
 DEF_INT_SPEC_I(char, TCharIType)
 DEF_INT_SPEC_I(wchar_t, TWCharIType)
@@ -472,13 +472,13 @@ DEF_FLT_SPEC(long double)
 
 #undef DEF_FLT_SPEC
 
-template <>
-size_t ToStringImpl<bool>(bool t, char* buf, size_t len) {
+template <> 
+size_t ToStringImpl<bool>(bool t, char* buf, size_t len) { 
     Y_ENSURE(len, TStringBuf("zero length"));
-    *buf = t ? '1' : '0';
-    return 1;
-}
-
+    *buf = t ? '1' : '0'; 
+    return 1; 
+} 
+ 
 /*
  * ------------------------------ parsers ------------------------------
  */
@@ -543,12 +543,12 @@ TWtringBuf FromStringImpl<TWtringBuf>(const wchar16* data, size_t len) {
 
 // Try-versions
 template <>
-bool TryFromStringImpl<TStringBuf>(const char* data, size_t len, TStringBuf& result) {
-    result = {data, len};
-    return true;
-}
-
-template <>
+bool TryFromStringImpl<TStringBuf>(const char* data, size_t len, TStringBuf& result) { 
+    result = {data, len}; 
+    return true; 
+} 
+ 
+template <> 
 bool TryFromStringImpl<TString>(const char* data, size_t len, TString& result) {
     result = TString(data, len);
     return true;
@@ -561,12 +561,12 @@ bool TryFromStringImpl<std::string>(const char* data, size_t len, std::string& r
 }
 
 template <>
-bool TryFromStringImpl<TWtringBuf>(const wchar16* data, size_t len, TWtringBuf& result) {
-    result = {data, len};
-    return true;
-}
-
-template <>
+bool TryFromStringImpl<TWtringBuf>(const wchar16* data, size_t len, TWtringBuf& result) { 
+    result = {data, len}; 
+    return true; 
+} 
+ 
+template <> 
 bool TryFromStringImpl<TUtf16String>(const wchar16* data, size_t len, TUtf16String& result) {
     result = TUtf16String(data, len);
     return true;
@@ -648,7 +648,7 @@ bool TryFromStringImpl<double>(const char* data, size_t len, double& result) {
         return false;
     }
 
-    char* se = nullptr;
+    char* se = nullptr; 
     double d = StrToD(data, data + len, &se);
 
     if (se != data + len) {

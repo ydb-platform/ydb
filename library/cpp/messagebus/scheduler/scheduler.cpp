@@ -23,7 +23,7 @@ TScheduler::TScheduler()
 }
 
 TScheduler::~TScheduler() {
-    Y_VERIFY(StopThread, "state check");
+    Y_VERIFY(StopThread, "state check"); 
 }
 
 size_t TScheduler::Size() const {
@@ -34,7 +34,7 @@ size_t TScheduler::Size() const {
 void TScheduler::Stop() {
     {
         TGuard<TLock> guard(Lock);
-        Y_VERIFY(!StopThread, "Scheduler already stopped");
+        Y_VERIFY(!StopThread, "Scheduler already stopped"); 
         StopThread = true;
         CondVar.Signal();
     }
@@ -44,8 +44,8 @@ void TScheduler::Stop() {
         NextItem.Destroy();
     }
 
-    for (auto& item : Items) {
-        item.Destroy();
+    for (auto& item : Items) { 
+        item.Destroy(); 
     }
 }
 
@@ -98,7 +98,7 @@ void TScheduler::SchedulerThread() {
             }
 
             // signal comes if either scheduler is to be stopped of there's work to do
-            Y_VERIFY(!!NextItem, "state check");
+            Y_VERIFY(!!NextItem, "state check"); 
 
             if (TInstant::Now() < NextItem->GetScheduleTime()) {
                 // NextItem is updated since WaitD

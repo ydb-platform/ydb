@@ -7,7 +7,7 @@ template <typename T>
 const T ReturnConstTemp();
 
 Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
-    Y_UNIT_TEST(Lvalue) {
+    Y_UNIT_TEST(Lvalue) { 
         TString str = "Hello, World!";
         TStringInput input(str);
 
@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         UNIT_ASSERT_VALUES_EQUAL(result, str);
     }
 
-    Y_UNIT_TEST(ConstRef) {
+    Y_UNIT_TEST(ConstRef) { 
         TString str = "Hello, World!";
         const TString& r = str;
         TStringInput input(r);
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         UNIT_ASSERT_VALUES_EQUAL(result, str);
     }
 
-    Y_UNIT_TEST(NonConstRef) {
+    Y_UNIT_TEST(NonConstRef) { 
         TString str = "Hello, World!";
         TString& r = str;
         TStringInput input(r);
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         UNIT_ASSERT_VALUES_EQUAL(result, str);
     }
 
-    Y_UNIT_TEST(Transfer) {
+    Y_UNIT_TEST(Transfer) { 
         TString inputString = "some_string";
         TStringInput input(inputString);
 
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         UNIT_ASSERT_VALUES_EQUAL(inputString, outputString);
     }
 
-    Y_UNIT_TEST(SkipReadAll) {
+    Y_UNIT_TEST(SkipReadAll) { 
         TString string0 = "All animals are equal, but some animals are more equal than others.";
 
         TString string1;
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         UNIT_ASSERT_VALUES_EQUAL(string2, string1.substr(5));
     }
 
-    Y_UNIT_TEST(OperatorBool) {
+    Y_UNIT_TEST(OperatorBool) { 
         TStringStream str;
         UNIT_ASSERT(!str);
         str << "data";
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         UNIT_ASSERT(!str);
     }
 
-    Y_UNIT_TEST(TestReadTo) {
+    Y_UNIT_TEST(TestReadTo) { 
         TString s("0123456789abc");
         TString t;
 
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         UNIT_ASSERT_STRINGS_EQUAL(str1, str2);
     }
 
-    Y_UNIT_TEST(Write) {
+    Y_UNIT_TEST(Write) { 
         TString str;
         TStringOutput output(str);
         output << "1"
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
                                        "55555");
     }
 
-    Y_UNIT_TEST(WriteChars) {
+    Y_UNIT_TEST(WriteChars) { 
         TString str;
         TStringOutput output(str);
         output << '1' << '2' << '3' << '4' << '5' << '6' << '7' << '8' << '9' << '0';

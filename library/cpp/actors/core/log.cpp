@@ -236,7 +236,7 @@ namespace NActors {
     }
 
     void TLoggerActor::HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx) {
-        Y_UNUSED(ev);
+        Y_UNUSED(ev); 
         LogIgnoredCount(ctx.Now());
         IgnoredCount = 0;
         PassedCount = 0;
@@ -309,7 +309,7 @@ namespace NActors {
         ctx.Send(ev->Sender, new TLogComponentLevelResponse(code, explanation));
     }
 
-    void TLoggerActor::RenderComponentPriorities(IOutputStream& str) {
+    void TLoggerActor::RenderComponentPriorities(IOutputStream& str) { 
         using namespace NLog;
         HTML(str) {
             H4() {
@@ -690,7 +690,7 @@ namespace NActors {
                     isOk = true;
                 } catch (TSystemError err) {
                     // Interrupted system call
-                    Y_UNUSED(err);
+                    Y_UNUSED(err); 
                 }
             } while (!isOk);
         }

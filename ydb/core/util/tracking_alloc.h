@@ -81,7 +81,7 @@ public:
     }
 
     void deallocate(pointer p, size_type n) {
-        Y_ASSERT(*Allocated >= n * sizeof(T));
+        Y_ASSERT(*Allocated >= n * sizeof(T)); 
         *Allocated -= n * sizeof(T);
         std::allocator<T>::deallocate(p, n);
     }

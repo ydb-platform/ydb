@@ -7,7 +7,7 @@
 using namespace NYsonPull;
 
 template <>
-void Out<TScalar>(IOutputStream& out, const TScalar& value) {
+void Out<TScalar>(IOutputStream& out, const TScalar& value) { 
     out << '(' << value.Type();
     if (value.Type() != EScalarType::Entity) {
         out << ' ';

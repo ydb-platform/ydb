@@ -16,7 +16,7 @@ namespace NDataShard {
     }
 
     void TDataShard::TTxProgressResendRS::Complete(const TActorContext &ctx) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         /* no-op */
     }
 }

@@ -71,8 +71,8 @@ public:
         int data[] = {1, 2, 3, 5, 2, 2, 3, 2, 4, 3, 2};
         TKMPSimpleCallback callback(pattern, pattern + 2);
         TKMPStreamMatcher<int> matcher(pattern, pattern + 2, &callback);
-        for (auto& i : data)
-            matcher.Push(i);
+        for (auto& i : data) 
+            matcher.Push(i); 
         UNIT_ASSERT_EQUAL(2, callback.GetCount());
     }
 };

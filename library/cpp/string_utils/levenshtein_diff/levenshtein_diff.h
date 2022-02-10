@@ -112,7 +112,7 @@ namespace NLevenshtein {
         }
         // Tracing the path from final point
         res.clear();
-        res.reserve(Max<size_t>(l1, l2));
+        res.reserve(Max<size_t>(l1, l2)); 
         for (int i = l1, j = l2; ma[i][j].second != EMT_SPECIAL;) {
             res.push_back(ma[i][j].second);
             switch (ma[i][j].second) {

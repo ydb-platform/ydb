@@ -293,7 +293,7 @@ private:                                                   \
     /* If you see this message - delete multiple UNIT_TEST(TestName) with same TestName. */ \
     /* It's forbidden to declare same test twice because it breaks --fork-tests logic.  */  \
     int You_have_declared_test_##F##_multiple_times_This_is_forbidden;                      \
-    Y_UNUSED(You_have_declared_test_##F##_multiple_times_This_is_forbidden);
+    Y_UNUSED(You_have_declared_test_##F##_multiple_times_This_is_forbidden); 
 
 #define UNIT_TEST_RUN(F, FF, context)                                                             \
     this->BeforeTest((#F));                                                                       \
@@ -914,7 +914,7 @@ public:                       \
 #define UNIT_TEST_SUITE_REGISTRATION(T) \
     static const ::NUnitTest::TTestBaseFactory<T> Y_GENERATE_UNIQUE_ID(UTREG_);
 
-#define Y_UNIT_TEST_SUITE_IMPL_F(N, T, F)                                                                          \
+#define Y_UNIT_TEST_SUITE_IMPL_F(N, T, F)                                                                          \ 
     namespace NTestSuite##N {                                                                                           \
         class TCurrentTestCase: public F {                                                                              \
         };                                                                                                              \
@@ -982,12 +982,12 @@ public:                       \
     }                                                                                                                   \
     namespace NTestSuite##N
 
-#define Y_UNIT_TEST_SUITE_IMPL(N, T) Y_UNIT_TEST_SUITE_IMPL_F(N, T, ::NUnitTest::TBaseTestCase)
-#define Y_UNIT_TEST_SUITE(N) Y_UNIT_TEST_SUITE_IMPL(N, TTestBase)
-#define Y_UNIT_TEST_SUITE_F(N, F) Y_UNIT_TEST_SUITE_IMPL_F(N, TTestBase, F)
-#define RUSAGE_UNIT_TEST_SUITE(N) Y_UNIT_TEST_SUITE_IMPL(N, NUnitTest::TRusageTest, ::NUnitTest::TBaseTestCase)
+#define Y_UNIT_TEST_SUITE_IMPL(N, T) Y_UNIT_TEST_SUITE_IMPL_F(N, T, ::NUnitTest::TBaseTestCase) 
+#define Y_UNIT_TEST_SUITE(N) Y_UNIT_TEST_SUITE_IMPL(N, TTestBase) 
+#define Y_UNIT_TEST_SUITE_F(N, F) Y_UNIT_TEST_SUITE_IMPL_F(N, TTestBase, F) 
+#define RUSAGE_UNIT_TEST_SUITE(N) Y_UNIT_TEST_SUITE_IMPL(N, NUnitTest::TRusageTest, ::NUnitTest::TBaseTestCase) 
 
-#define Y_UNIT_TEST_IMPL_REGISTER(N, FF, F)            \
+#define Y_UNIT_TEST_IMPL_REGISTER(N, FF, F)            \ 
     struct TTestCase##N : public F {                        \
         TTestCase##N()                                      \
             : F()                                           \
@@ -1007,21 +1007,21 @@ public:                       \
     };                                                      \
     static const TTestRegistration##N testRegistration##N;
 
-#define Y_UNIT_TEST_IMPL(N, FF, F)      \
-    Y_UNIT_TEST_IMPL_REGISTER(N, FF, F) \
+#define Y_UNIT_TEST_IMPL(N, FF, F)      \ 
+    Y_UNIT_TEST_IMPL_REGISTER(N, FF, F) \ 
     void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
-#define Y_UNIT_TEST(N) Y_UNIT_TEST_IMPL(N, false, TCurrentTestCase)
-#define Y_UNIT_TEST_F(N, F) Y_UNIT_TEST_IMPL(N, false, F)
-#define SIMPLE_UNIT_FORKED_TEST(N) Y_UNIT_TEST_IMPL(N, true, TCurrentTestCase)
+#define Y_UNIT_TEST(N) Y_UNIT_TEST_IMPL(N, false, TCurrentTestCase) 
+#define Y_UNIT_TEST_F(N, F) Y_UNIT_TEST_IMPL(N, false, F) 
+#define SIMPLE_UNIT_FORKED_TEST(N) Y_UNIT_TEST_IMPL(N, true, TCurrentTestCase) 
 
-#define Y_UNIT_TEST_SUITE_IMPLEMENTATION(N) \
+#define Y_UNIT_TEST_SUITE_IMPLEMENTATION(N) \ 
     namespace NTestSuite##N
 
-#define Y_UNIT_TEST_DECLARE(N) \
+#define Y_UNIT_TEST_DECLARE(N) \ 
     struct TTestCase##N
 
-#define Y_UNIT_TEST_FRIEND(N, T) \
+#define Y_UNIT_TEST_FRIEND(N, T) \ 
     friend NTestSuite##N::TTestCase##T \
 
     TString RandomString(size_t len, ui32 seed = 0);

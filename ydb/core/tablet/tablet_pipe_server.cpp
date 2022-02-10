@@ -26,7 +26,7 @@ namespace NTabletPipe {
             , Leader(true)
             , Connected(false)
         {
-            Y_VERIFY(tabletId != 0);
+            Y_VERIFY(tabletId != 0); 
         }
 
     private:
@@ -62,7 +62,7 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvTabletPipe::TEvPush::TPtr& ev, const TActorContext& ctx) {
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId); 
             const auto& record = ev->Get()->Record;
             const TActorId sender = ActorIdFromProto(record.GetSender());
             LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
@@ -161,13 +161,13 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             SendToClient(ctx, new TEvTabletPipe::TEvPeerClosed(TabletId, ClientId, ctx.SelfID));
             Reset(ctx);
         }
 
         void Handle(TEvTabletPipe::TEvPeerClosed::TPtr& ev, const TActorContext& ctx) {
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId); 
             LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Got PeerClosed from# " << ev->Sender);
             Reset(ctx);
@@ -204,7 +204,7 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             OnConnected(ctx);
         }
 
@@ -264,7 +264,7 @@ namespace NTabletPipe {
         }
 
         TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, TActorId recipientId, bool leader) override {
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId); 
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
             TActorId serverId = TActivationContext::Register(server);
@@ -276,7 +276,7 @@ namespace NTabletPipe {
         }
 
         void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader) override {
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId); 
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Reject Connect Originator# " << ev->Sender);
@@ -304,7 +304,7 @@ namespace NTabletPipe {
 
         TActorId Enqueue(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner) override {
             Y_UNUSED(owner);
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId); 
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
             TActorId serverId = TActivationContext::Register(server);

@@ -295,7 +295,7 @@ virtual void Scenario(const TActorContext &ctx) {
         };
         auto checkFunc = [&done](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
-            Y_VERIFY(msg->Record.GetStatus() == NKikimrProto::OK);
+            Y_VERIFY(msg->Record.GetStatus() == NKikimrProto::OK); 
             done = msg->Record.ResultSize() == 0;
             LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: emptyDb=%s", (done ? "true" : "false"));
         };

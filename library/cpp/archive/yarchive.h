@@ -2,15 +2,15 @@
 
 #include "models_archive_reader.h"
 
-#include <util/generic/fwd.h>
+#include <util/generic/fwd.h> 
 #include <util/generic/ptr.h>
 
 
-class IInputStream;
-class IOutputStream;
-
-class TBlob;
-
+class IInputStream; 
+class IOutputStream; 
+ 
+class TBlob; 
+ 
 //noncompressed data will be stored with default alignment DEVTOOLS-4384
 static constexpr size_t ArchiveWriterDefaultDataAlignment = 16;
 
@@ -21,7 +21,7 @@ public:
 
     void Flush();
     void Finish();
-    void Add(const TString& key, IInputStream* src);
+    void Add(const TString& key, IInputStream* src); 
     void AddSynonym(const TString& existingKey, const TString& newKey);
 
 private:

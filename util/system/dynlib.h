@@ -5,8 +5,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
-#define Y_GET_FUNC(dll, name) FUNC_##name((dll).Sym(#name))
-#define Y_GET_FUNC_OPTIONAL(dll, name) FUNC_##name((dll).SymOptional(#name))
+#define Y_GET_FUNC(dll, name) FUNC_##name((dll).Sym(#name)) 
+#define Y_GET_FUNC_OPTIONAL(dll, name) FUNC_##name((dll).SymOptional(#name)) 
 
 #ifdef _win32_
     #define DEFAULT_DLLOPEN_FLAGS 0

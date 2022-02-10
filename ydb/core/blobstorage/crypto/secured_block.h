@@ -15,7 +15,7 @@
 template <class T1, class T2>
 inline T2 ModPowerOf2(const T1& a, const T2& b)
 {
-    Y_ASSERT(IsPowerOf2(b));
+    Y_ASSERT(IsPowerOf2(b)); 
     return T2(a) & (b-1);
 }
 
@@ -94,15 +94,15 @@ class TFixedAllocator
 {
 public:
     ui8* Allocate(size_t n) {
-        Y_UNUSED(n);
+        Y_UNUSED(n); 
 
         // TODO: use static assert
-        Y_ASSERT(IsAlignedOn(Array_, alignment));
+        Y_ASSERT(IsAlignedOn(Array_, alignment)); 
         return GetAlignedArray();
     }
 
     void Deallocate(ui8* ptr, size_t n) {
-        Y_UNUSED(n);
+        Y_UNUSED(n); 
         Y_UNUSED(ptr);
 
         ui8 *p = GetAlignedArray();
@@ -110,7 +110,7 @@ public:
     }
 
     ui8* Reallocate(ui8* ptr, size_t oldSize, size_t newSize, bool preserve) {
-        Y_UNUSED(preserve);
+        Y_UNUSED(preserve); 
 
         if (oldSize > newSize)
             SecureWipeBuffer(ptr + newSize, oldSize - newSize);

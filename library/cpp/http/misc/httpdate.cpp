@@ -71,13 +71,13 @@ char* format_http_date(time_t when, char* buf, size_t buflen) {
         return nullptr;
     }
 
-    Y_ASSERT(len > 0 && size_t(len) < buflen);
+    Y_ASSERT(len > 0 && size_t(len) < buflen); 
 
     return buf;
 }
 
 TString FormatHttpDate(time_t when) {
     char str[64] = {0};
-    format_http_date(str, Y_ARRAY_SIZE(str), when);
+    format_http_date(str, Y_ARRAY_SIZE(str), when); 
     return TString(str);
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/fwd.h>
+#include <util/generic/fwd.h> 
 #include <util/generic/strbuf.h>
 
 namespace NUrl {
@@ -60,9 +60,9 @@ TStringBuf CutSchemePrefix(const TStringBuf url) noexcept;
 //! @note if URL has scheme prefix already the function returns unchanged URL
 TString AddSchemePrefix(const TString& url, const TStringBuf scheme);
 
-//! Same as `AddSchemePrefix(url, "http")`.
+//! Same as `AddSchemePrefix(url, "http")`. 
 TString AddSchemePrefix(const TString& url);
-
+ 
 Y_PURE_FUNCTION
 TStringBuf GetHost(const TStringBuf url) noexcept;
 
@@ -159,8 +159,8 @@ TStringBuf CutMPrefix(const TStringBuf url) noexcept;
 Y_PURE_FUNCTION
 TStringBuf GetDomain(const TStringBuf host) noexcept; // should not be used
 
-size_t NormalizeUrlName(char* dest, const TStringBuf source, size_t dest_size);
-size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, ui16 defport = 80);
+size_t NormalizeUrlName(char* dest, const TStringBuf source, size_t dest_size); 
+size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, ui16 defport = 80); 
 
 Y_PURE_FUNCTION
 TStringBuf RemoveFinalSlash(TStringBuf str) noexcept;

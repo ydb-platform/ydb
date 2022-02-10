@@ -282,7 +282,7 @@ struct TErasureType {
     }
 
     TString ToString() const {
-        Y_VERIFY((ui64)ErasureSpecies < ErasureSpeciesCount);
+        Y_VERIFY((ui64)ErasureSpecies < ErasureSpeciesCount); 
         return ErasureName[ErasureSpecies];
     }
 

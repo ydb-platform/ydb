@@ -110,7 +110,7 @@ public:
         , Finish(finish)
         , Reversed(reversed)
     {
-        Y_VERIFY(Start <= Finish && Finish <= List.size());
+        Y_VERIFY(Start <= Finish && Finish <= List.size()); 
     }
 
 private:
@@ -131,7 +131,7 @@ private:
     }
 
     NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override {
-        Y_UNUSED(builder);
+        Y_UNUSED(builder); 
         return new TSelf(this->GetMemInfo(), List, ItemFactory, Start, Finish, !Reversed);
     }
 
@@ -156,7 +156,7 @@ private:
     }
 
     NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
-        Y_UNUSED(builder);
+        Y_UNUSED(builder); 
         return const_cast<TVectorListAdapter*>(this);
     }
 

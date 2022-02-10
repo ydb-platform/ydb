@@ -49,7 +49,7 @@ constexpr long seconds(const struct tm& theTm) {
     return 60 * (60 * theTm.tm_hour + theTm.tm_min) + theTm.tm_sec;
 }
 
-void sprint_gm_date(char* buf, time_t when, long* sec = nullptr);
+void sprint_gm_date(char* buf, time_t when, long* sec = nullptr); 
 bool sscan_date(const char* date, struct tm& theTm);
 
 const int DATE_8601_LEN = 21; // strlen("YYYY-MM-DDThh:mm:ssZ") = 20 + '\0'
@@ -120,7 +120,7 @@ public:
     }
 
     constexpr double SecondsFloat() const noexcept {
-        return Value_ * (1 / 1000000.0);
+        return Value_ * (1 / 1000000.0); 
     }
 
     constexpr double MillisecondsFloat() const noexcept {
@@ -152,7 +152,7 @@ public:
     }
 
     constexpr TValue NanoSeconds() const noexcept {
-        return MicroSeconds() >= (Max<TValue>() / (TValue)1000) ? Max<TValue>() : MicroSeconds() * (TValue)1000;
+        return MicroSeconds() >= (Max<TValue>() / (TValue)1000) ? Max<TValue>() : MicroSeconds() * (TValue)1000; 
     }
 
     constexpr ui32 MicroSecondsOfSecond() const noexcept {
@@ -308,11 +308,11 @@ public:
     }
 
     /// parses strings like 10s, 15ms, 15.05s, 20us, or just 25 (s). See parser_ut.cpp for details
-    static TDuration Parse(const TStringBuf input);
+    static TDuration Parse(const TStringBuf input); 
 
-    static bool TryParse(const TStringBuf input, TDuration& result);
+    static bool TryParse(const TStringBuf input, TDuration& result); 
 
-    // note global Out method is defined for TDuration, so it could be written to IOutputStream as text
+    // note global Out method is defined for TDuration, so it could be written to IOutputStream as text 
 
     template <class T>
     inline TDuration& operator+=(const T& t) noexcept {
@@ -337,7 +337,7 @@ public:
     TString ToString() const;
 };
 
-Y_DECLARE_PODTYPE(TDuration);
+Y_DECLARE_PODTYPE(TDuration); 
 
 template <>
 struct THash<TDuration> {
@@ -447,7 +447,7 @@ public:
      * Formats the instant using the UTC time zone, with microsecond precision.
      *
      * @returns An ISO 8601 formatted string, e.g. '2015-11-21T23:30:27.991669Z'.
-     * @note Global Out method is defined to TInstant, so it can be written as text to IOutputStream.
+     * @note Global Out method is defined to TInstant, so it can be written as text to IOutputStream. 
      */
     TString ToString() const;
 
@@ -507,45 +507,45 @@ public:
     TString FormatLocalTime(const char* format) const noexcept;
     TString FormatGmTime(const char* format) const noexcept;
 
-    /// See #TryParseIso8601.
-    static TInstant ParseIso8601(TStringBuf);
-    /// See #TryParseRfc822.
+    /// See #TryParseIso8601. 
+    static TInstant ParseIso8601(TStringBuf); 
+    /// See #TryParseRfc822. 
     static TInstant ParseRfc822(TStringBuf);
-    /// See #TryParseHttp.
-    static TInstant ParseHttp(TStringBuf);
-    /// See #TryParseX509.
-    static TInstant ParseX509Validity(TStringBuf);
+    /// See #TryParseHttp. 
+    static TInstant ParseHttp(TStringBuf); 
+    /// See #TryParseX509. 
+    static TInstant ParseX509Validity(TStringBuf); 
 
-    /// ISO 8601 Representation of Dates and Times
-    ///
-    /// @link https://www.iso.org/standard/40874.html Description of format.
-    static bool TryParseIso8601(TStringBuf input, TInstant& instant);
+    /// ISO 8601 Representation of Dates and Times 
+    /// 
+    /// @link https://www.iso.org/standard/40874.html Description of format. 
+    static bool TryParseIso8601(TStringBuf input, TInstant& instant); 
+ 
+    /// RFC 822 Date and Time specification 
+    /// 
+    /// @link https://tools.ietf.org/html/rfc822#section-5 Description of format. 
+    static bool TryParseRfc822(TStringBuf input, TInstant& instant); 
 
-    /// RFC 822 Date and Time specification
-    ///
-    /// @link https://tools.ietf.org/html/rfc822#section-5 Description of format.
-    static bool TryParseRfc822(TStringBuf input, TInstant& instant);
+    /// RFC 2616 3.3.1 Full Date 
+    /// 
+    /// @link https://tools.ietf.org/html/rfc2616#section-3.3.1 Description of format. 
+    static bool TryParseHttp(TStringBuf input, TInstant& instant); 
 
-    /// RFC 2616 3.3.1 Full Date
-    ///
-    /// @link https://tools.ietf.org/html/rfc2616#section-3.3.1 Description of format.
-    static bool TryParseHttp(TStringBuf input, TInstant& instant);
-
-    /// X.509 certificate validity time (see rfc5280 4.1.2.5.*)
-    ///
-    /// @link https://tools.ietf.org/html/rfc5280#section-4.1.2.5 Description of format.
-    static bool TryParseX509(TStringBuf input, TInstant& instant);
-
-    static TInstant ParseIso8601Deprecated(TStringBuf);
-    static TInstant ParseRfc822Deprecated(TStringBuf);
-    static TInstant ParseHttpDeprecated(TStringBuf);
-    static TInstant ParseX509ValidityDeprecated(TStringBuf);
-
-    static bool TryParseIso8601Deprecated(TStringBuf input, TInstant& instant);
-    static bool TryParseRfc822Deprecated(TStringBuf input, TInstant& instant);
-    static bool TryParseHttpDeprecated(TStringBuf input, TInstant& instant);
-    static bool TryParseX509Deprecated(TStringBuf input, TInstant& instant);
-
+    /// X.509 certificate validity time (see rfc5280 4.1.2.5.*) 
+    /// 
+    /// @link https://tools.ietf.org/html/rfc5280#section-4.1.2.5 Description of format. 
+    static bool TryParseX509(TStringBuf input, TInstant& instant); 
+ 
+    static TInstant ParseIso8601Deprecated(TStringBuf); 
+    static TInstant ParseRfc822Deprecated(TStringBuf); 
+    static TInstant ParseHttpDeprecated(TStringBuf); 
+    static TInstant ParseX509ValidityDeprecated(TStringBuf); 
+ 
+    static bool TryParseIso8601Deprecated(TStringBuf input, TInstant& instant); 
+    static bool TryParseRfc822Deprecated(TStringBuf input, TInstant& instant); 
+    static bool TryParseHttpDeprecated(TStringBuf input, TInstant& instant); 
+    static bool TryParseX509Deprecated(TStringBuf input, TInstant& instant); 
+ 
     template <class T>
     inline TInstant& operator+=(const T& t) noexcept {
         return (*this = (*this + t));
@@ -557,7 +557,7 @@ public:
     }
 };
 
-Y_DECLARE_PODTYPE(TInstant);
+Y_DECLARE_PODTYPE(TInstant); 
 
 template <>
 struct THash<TInstant> {
@@ -578,9 +578,9 @@ namespace NPrivate {
     };
 }
 
-/** @name Helpers for printing local times to `IOutputStream`s.
+/** @name Helpers for printing local times to `IOutputStream`s. 
  *        The FormatLocal* functions create an opaque object that, when written to
- *        a `IOutputStream`, outputs this instant as an ISO 8601 formatted string
+ *        a `IOutputStream`, outputs this instant as an ISO 8601 formatted string 
  *        using the system time zone.
  *
  *  @note The only reason behind this set of functions is to avoid excessive
@@ -634,14 +634,14 @@ static constexpr bool operator>=(const TTimeBase<S>& l, const TTimeBase<S>& r) n
 namespace NDateTimeHelpers {
     template <typename T>
     static constexpr T SumWithSaturation(T a, T b) {
-        static_assert(!std::numeric_limits<T>::is_signed, "expect !std::numeric_limits<T>::is_signed");
+        static_assert(!std::numeric_limits<T>::is_signed, "expect !std::numeric_limits<T>::is_signed"); 
 
         return Max<T>() - a < b ? Max<T>() : a + b;
     }
 
     template <typename T>
     static constexpr T DiffWithSaturation(T a, T b) {
-        static_assert(!std::numeric_limits<T>::is_signed, "expect !std::numeric_limits<T>::is_signed");
+        static_assert(!std::numeric_limits<T>::is_signed, "expect !std::numeric_limits<T>::is_signed"); 
 
         return a < b ? 0 : a - b;
     }
@@ -773,8 +773,8 @@ constexpr TInstant operator-(const TInstant& l, const std::chrono::duration<T, T
 
 template <class T>
 inline TDuration operator*(TDuration d, T t) noexcept {
-    Y_ASSERT(t >= T());
-    Y_ASSERT(t == T() || Max<TDuration::TValue>() / t >= d.GetValue());
+    Y_ASSERT(t >= T()); 
+    Y_ASSERT(t == T() || Max<TDuration::TValue>() / t >= d.GetValue()); 
     return TDuration::FromValue(d.GetValue() * t);
 }
 
@@ -794,7 +794,7 @@ inline TDuration operator*(T t, TDuration d) noexcept {
     return d * t;
 }
 
-template <class T, std::enable_if_t<!std::is_same<TDuration, T>::value, int> = 0>
+template <class T, std::enable_if_t<!std::is_same<TDuration, T>::value, int> = 0> 
 constexpr TDuration operator/(const TDuration& d, const T& t) noexcept {
     return TDuration::FromValue(d.GetValue() / t);
 }

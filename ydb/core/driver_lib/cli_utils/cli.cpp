@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-void DumpProxyErrorCodes(IOutputStream &o, const NKikimrClient::TResponse &response) {
+void DumpProxyErrorCodes(IOutputStream &o, const NKikimrClient::TResponse &response) { 
     o << "status: " << response.GetStatus() << Endl;
     o << "status transcript: " << static_cast<NMsgBusProxy::EResponseStatus>(response.GetStatus()) << Endl;
     if (response.HasProxyErrorCode()) {

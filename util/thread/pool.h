@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "factory.h"
 
 #include <util/system/yassert.h>
@@ -217,12 +217,12 @@ public:
      * Created resource is passed to IObjectInQueue::Proccess function.
      */
     virtual void* CreateThreadSpecificResource() {
-        return nullptr;
+        return nullptr; 
     }
 
     virtual void DestroyThreadSpecificResource(void* resource) {
-        if (resource != nullptr) {
-            Y_ASSERT(resource == nullptr);
+        if (resource != nullptr) { 
+            Y_ASSERT(resource == nullptr); 
         }
     }
 

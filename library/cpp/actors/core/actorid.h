@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include <util/stream/output.h> // for IOutputStream
+#include <util/stream/output.h> // for IOutputStream 
 #include <util/generic/hash.h>
 
 namespace NActors {
@@ -175,7 +175,7 @@ namespace NActors {
         };
 
         TString ToString() const;
-        void Out(IOutputStream& o) const;
+        void Out(IOutputStream& o) const; 
         bool Parse(const char* buf, ui32 sz);
     };
 

@@ -234,8 +234,8 @@ public:
                     MakeFuture(TAsyncTransformCallback([resultNode](const TExprNode::TPtr& input,
                         TExprNode::TPtr& output, TExprContext& ctx)
                     {
-                        Y_UNUSED(output);
-                        Y_UNUSED(ctx);
+                        Y_UNUSED(output); 
+                        Y_UNUSED(ctx); 
 
                         input->SetState(TExprNode::EState::ExecutionComplete);
                         input->SetResult(TExprNode::TPtr(resultNode));

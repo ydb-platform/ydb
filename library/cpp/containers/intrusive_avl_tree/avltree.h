@@ -28,11 +28,11 @@ class TAvlTree: public TNonCopyable {
         }
 
         inline bool IsEnd() const noexcept {
-            return Ptr_ == nullptr;
+            return Ptr_ == nullptr; 
         }
 
         inline bool IsBegin() const noexcept {
-            return Ptr_ == nullptr;
+            return Ptr_ == nullptr; 
         }
 
         inline bool IsFirst() const noexcept {
@@ -107,10 +107,10 @@ class TAvlTree: public TNonCopyable {
         }
 
         inline static TIteratorBase FindPrev(TTreeItem* el) noexcept {
-            if (el->Left_ != nullptr) {
+            if (el->Left_ != nullptr) { 
                 el = el->Left_;
 
-                while (el->Right_ != nullptr) {
+                while (el->Right_ != nullptr) { 
                     el = el->Right_;
                 }
             } else {
@@ -118,7 +118,7 @@ class TAvlTree: public TNonCopyable {
                     TTreeItem* last = el;
                     el = el->Parent_;
 
-                    if (el == nullptr || el->Right_ == last) {
+                    if (el == nullptr || el->Right_ == last) { 
                         break;
                     }
                 }
@@ -128,7 +128,7 @@ class TAvlTree: public TNonCopyable {
         }
 
         static TTreeItem* FindNext(TTreeItem* el) {
-            if (el->Right_ != nullptr) {
+            if (el->Right_ != nullptr) { 
                 el = el->Right_;
 
                 while (el->Left_) {
@@ -139,7 +139,7 @@ class TAvlTree: public TNonCopyable {
                     TTreeItem* last = el;
                     el = el->Parent_;
 
-                    if (el == nullptr || el->Left_ == last) {
+                    if (el == nullptr || el->Left_ == last) { 
                         break;
                     }
                 }
@@ -202,14 +202,14 @@ public:
         el->Tree_ = this;
 
         TTreeItem* curEl = Root_;
-        TTreeItem* parentEl = nullptr;
-        TTreeItem* lastLess = nullptr;
+        TTreeItem* parentEl = nullptr; 
+        TTreeItem* lastLess = nullptr; 
 
         while (true) {
-            if (curEl == nullptr) {
+            if (curEl == nullptr) { 
                 AttachRebal(el, parentEl, lastLess);
 
-                if (lastFound != nullptr) {
+                if (lastFound != nullptr) { 
                     *lastFound = el;
                 }
 
@@ -223,11 +223,11 @@ public:
                 parentEl = curEl;
                 curEl = curEl->Right_;
             } else {
-                if (lastFound != nullptr) {
+                if (lastFound != nullptr) { 
                     *lastFound = curEl;
                 }
 
-                return nullptr;
+                return nullptr; 
             }
         }
     }
@@ -245,12 +245,12 @@ public:
             }
         }
 
-        return nullptr;
+        return nullptr; 
     }
 
     inline T* LowerBound(const TTreeItem* el) const noexcept {
         TTreeItem* curEl = Root_;
-        TTreeItem* lowerBound = nullptr;
+        TTreeItem* lowerBound = nullptr; 
 
         while (curEl) {
             if (Compare(*el, *curEl)) {
@@ -271,11 +271,11 @@ public:
             return this->EraseImpl(el);
         }
 
-        return nullptr;
+        return nullptr; 
     }
 
     inline T* EraseImpl(TTreeItem* el) noexcept {
-        el->Tree_ = nullptr;
+        el->Tree_ = nullptr; 
 
         TTreeItem* replacement;
         TTreeItem* fixfrom;
@@ -330,10 +330,10 @@ public:
                 Tail_ = el->Parent_;
             }
 
-            RemoveEl(el, nullptr);
+            RemoveEl(el, nullptr); 
         }
 
-        if (fixfrom == nullptr) {
+        if (fixfrom == nullptr) { 
             return AsT(el);
         }
 
@@ -422,7 +422,7 @@ public:
     }
 
     inline iterator End() noexcept {
-        return iterator(nullptr, this);
+        return iterator(nullptr, this); 
     }
 
     inline iterator begin() noexcept {
@@ -507,7 +507,7 @@ private:
             }
         }
 
-        if (ggp == nullptr) {
+        if (ggp == nullptr) { 
             Root_ = b;
         } else if (ggp->Left_ == gp) {
             ggp->Left_ = b;
@@ -522,25 +522,25 @@ private:
         c->Parent_ = b;
         a->Left_ = t1;
 
-        if (t1 != nullptr) {
+        if (t1 != nullptr) { 
             t1->Parent_ = a;
         }
 
         a->Right_ = t2;
 
-        if (t2 != nullptr) {
+        if (t2 != nullptr) { 
             t2->Parent_ = a;
         }
 
         c->Left_ = t3;
 
-        if (t3 != nullptr) {
+        if (t3 != nullptr) { 
             t3->Parent_ = c;
         }
 
         c->Right_ = t4;
 
-        if (t4 != nullptr) {
+        if (t4 != nullptr) { 
             t4->Parent_ = c;
         }
 
@@ -584,13 +584,13 @@ private:
         long lheight, rheight, balanceProp;
         TTreeItem* gp;
 
-        if (el == nullptr || el->Parent_ == nullptr || el->Parent_->Parent_ == nullptr) {
-            return nullptr;
+        if (el == nullptr || el->Parent_ == nullptr || el->Parent_->Parent_ == nullptr) { 
+            return nullptr; 
         }
 
         gp = el->Parent_->Parent_;
 
-        while (gp != nullptr) {
+        while (gp != nullptr) { 
             lheight = gp->Left_ ? gp->Left_->Height_ : 0;
             rheight = gp->Right_ ? gp->Right_->Height_ : 0;
             balanceProp = lheight - rheight;
@@ -603,12 +603,12 @@ private:
             gp = gp->Parent_;
         }
 
-        return nullptr;
+        return nullptr; 
     }
 
     inline TTreeItem* FindFirstUnbalEl(TTreeItem* el) noexcept {
-        if (el == nullptr) {
-            return nullptr;
+        if (el == nullptr) { 
+            return nullptr; 
         }
 
         while (el) {
@@ -623,7 +623,7 @@ private:
             el = el->Parent_;
         }
 
-        return nullptr;
+        return nullptr; 
     }
 
     inline void ReplaceEl(TTreeItem* el, TTreeItem* replacement) noexcept {
@@ -680,11 +680,11 @@ private:
 
     inline void AttachRebal(TTreeItem* el, TTreeItem* parentEl, TTreeItem* lastLess) {
         el->Parent_ = parentEl;
-        el->Left_ = nullptr;
-        el->Right_ = nullptr;
+        el->Left_ = nullptr; 
+        el->Right_ = nullptr; 
         el->Height_ = 1;
 
-        if (parentEl != nullptr) {
+        if (parentEl != nullptr) { 
             if (lastLess == parentEl) {
                 parentEl->Left_ = el;
             } else {
@@ -707,7 +707,7 @@ private:
 
         TTreeItem* ub = FindFirstUnbalGP(el);
 
-        if (ub != nullptr) {
+        if (ub != nullptr) { 
             Rebalance(ub);
         }
     }

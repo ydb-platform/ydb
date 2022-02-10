@@ -132,8 +132,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TLastGetoptTests) {
-    Y_UNIT_TEST(TestEqual) {
+Y_UNIT_TEST_SUITE(TLastGetoptTests) { 
+    Y_UNIT_TEST(TestEqual) { 
         TOptsNoDefault opts;
         opts.AddLongOption("from");
         opts.AddLongOption("to");
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_EXCEPTION(r.Get("left"), TException);
     }
 
-    Y_UNIT_TEST(TestCharOptions) {
+    Y_UNIT_TEST(TestCharOptions) { 
         TOptsNoDefault opts;
         opts.AddCharOption('R', NO_ARGUMENT);
         opts.AddCharOption('l', NO_ARGUMENT);
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL("/tmp/etc", r.GetFreeArgs()[1]);
     }
 
-    Y_UNIT_TEST(TestFreeArgs) {
+    Y_UNIT_TEST(TestFreeArgs) { 
         TOptsNoDefault opts;
         opts.SetFreeArgsNum(1, 3);
         TOptsParseResultTestWrapper r11(&opts, V({"cp", "/etc"}));
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         TOptsParseResultTestWrapper r22(&opts, V({"cp", "/etc", "/var/tmp"}));
     }
 
-    Y_UNIT_TEST(TestCharOptionsRequiredOptional) {
+    Y_UNIT_TEST(TestCharOptionsRequiredOptional) { 
         TOptsNoDefault opts;
         opts.AddCharOption('d', REQUIRED_ARGUMENT);
         opts.AddCharOption('e', REQUIRED_ARGUMENT);
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL("44", r.Get('y'));
     }
 
-    Y_UNIT_TEST(TestReturnInOrder) {
+    Y_UNIT_TEST(TestReturnInOrder) { 
         TOptsParserTester tester;
         tester.Opts_.AddLongOption('v', "value");
         tester.Opts_.ArgPermutation_ = RETURN_IN_ORDER;
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         tester.AcceptEndOfFreeArgs();
     }
 
-    Y_UNIT_TEST(TestRequireOrder) {
+    Y_UNIT_TEST(TestRequireOrder) { 
         TOptsParserTester tester;
         tester.Opts_.ArgPermutation_ = REQUIRE_ORDER;
         tester.Opts_.AddLongOption('v', "value");
@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         tester.AcceptEndOfFreeArgs();
     }
 
-    Y_UNIT_TEST(TestPlusForLongOption) {
+    Y_UNIT_TEST(TestPlusForLongOption) { 
         TOptsParserTester tester;
         tester.Opts_.AddLongOption('v', "value");
         tester.Opts_.AllowPlusForLong_ = true;
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         tester.AcceptEndOfFreeArgs();
     }
 
-    Y_UNIT_TEST(TestBug1) {
+    Y_UNIT_TEST(TestBug1) { 
         TOptsParserTester tester;
         tester.Opts_.AddCharOptions("A:b:cd:");
 
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         tester.AcceptEndOfFreeArgs();
     }
 
-    Y_UNIT_TEST(TestPermuteComplex) {
+    Y_UNIT_TEST(TestPermuteComplex) { 
         TOptsParserTester tester;
 
         tester.Opts_.AddCharOption('x').NoArgument();
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         tester.AcceptEndOfFreeArgs();
     }
 
-    Y_UNIT_TEST(TestFinalDashDash) {
+    Y_UNIT_TEST(TestFinalDashDash) { 
         TOptsParserTester tester;
         tester.Opts_.AddLongOption("size");
 
@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         tester.AcceptEndOfFreeArgs();
     }
 
-    Y_UNIT_TEST(TestDashDashAfterDashDash) {
+    Y_UNIT_TEST(TestDashDashAfterDashDash) { 
         TOptsParserTester tester;
         tester.Opts_.AddLongOption("size");
 
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         tester.AcceptEndOfFreeArgs();
     }
 
-    Y_UNIT_TEST(TestUnexpectedUnknownOption) {
+    Y_UNIT_TEST(TestUnexpectedUnknownOption) { 
         TOptsParserTester tester;
 
         tester.Argv_.push_back("cmd");
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         tester.AcceptUnexpectedOption();
     }
 
-    Y_UNIT_TEST(TestDuplicatedOptionCrash) {
+    Y_UNIT_TEST(TestDuplicatedOptionCrash) { 
         // this test is broken, cause UNIT_ASSERT(false) always throws
         return;
 
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT(exception);
     }
 
-    Y_UNIT_TEST(TestPositionWhenNoArgs) {
+    Y_UNIT_TEST(TestPositionWhenNoArgs) { 
         TOptsParserTester tester;
 
         tester.Argv_.push_back("cmd");
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL(1u, tester.Parser_->Pos_);
     }
 
-    Y_UNIT_TEST(TestExpectedUnknownCharOption) {
+    Y_UNIT_TEST(TestExpectedUnknownCharOption) { 
         TOptsParserTester tester;
 
         tester.Argv_.push_back("cmd");
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
 #if 0
-    Y_UNIT_TEST(TestRequiredParams) {
+    Y_UNIT_TEST(TestRequiredParams) { 
         TOptsParserTester tester;
 
         tester.Argv_.push_back("cmd");
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 #endif
 
-    Y_UNIT_TEST(TestStoreResult) {
+    Y_UNIT_TEST(TestStoreResult) { 
         TOptsNoDefault opts;
         TString data;
         int number;
@@ -436,7 +436,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL(*optionalNumber1, 8);
     }
 
-    Y_UNIT_TEST(TestStoreValue) {
+    Y_UNIT_TEST(TestStoreValue) { 
         int a = 0, b = 0;
         size_t c = 0;
         EHasArg e = NO_ARGUMENT;
@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL(12345u, c);
     }
 
-    Y_UNIT_TEST(TestSetFlag) {
+    Y_UNIT_TEST(TestSetFlag) { 
         bool a = false, b = true, c = false, d = true;
 
         TOptsNoDefault opts;
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT(!d);
     }
 
-    Y_UNIT_TEST(TestDefaultValue) {
+    Y_UNIT_TEST(TestDefaultValue) { 
         TOptsNoDefault opts;
         opts.AddLongOption("path").DefaultValue("/etc");
         int value = 42;
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL(32, value);
     }
 
-    Y_UNIT_TEST(TestSplitValue) {
+    Y_UNIT_TEST(TestSplitValue) { 
         TOptsNoDefault opts;
         TVector<TString> vals;
         opts.AddLongOption('s', "split").SplitHandler(&vals, ',');
@@ -492,7 +492,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_EQUAL(vals[2], "c");
     }
 
-    Y_UNIT_TEST(TestRangeSplitValue) {
+    Y_UNIT_TEST(TestRangeSplitValue) { 
         TOptsNoDefault opts;
         TVector<ui32> vals;
         opts.AddLongOption('s', "split").RangeSplitHandler(&vals, ',', '-');
@@ -507,7 +507,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_EQUAL(vals[6], 14);
     }
 
-    Y_UNIT_TEST(TestParseArgs) {
+    Y_UNIT_TEST(TestParseArgs) { 
         TOptsNoDefault o("AbCx:y:z::");
         UNIT_ASSERT_EQUAL(o.GetCharOption('A').HasArg_, NO_ARGUMENT);
         UNIT_ASSERT_EQUAL(o.GetCharOption('b').HasArg_, NO_ARGUMENT);
@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_EQUAL(o.GetCharOption('z').HasArg_, OPTIONAL_ARGUMENT);
     }
 
-    Y_UNIT_TEST(TestRequiredOpts) {
+    Y_UNIT_TEST(TestRequiredOpts) { 
         TOptsNoDefault opts;
         TOpt& opt_d = opts.AddCharOption('d');
 
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
             *Flag = true;
         }
     };
-    Y_UNIT_TEST(TestHandlers) {
+    Y_UNIT_TEST(TestHandlers) { 
         {
             TOptsNoDefault opts;
             bool flag = false;
@@ -574,7 +574,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         }
     }
 
-    Y_UNIT_TEST(TestTitleAndPrintUsage) {
+    Y_UNIT_TEST(TestTitleAndPrintUsage) { 
         TOpts opts;
         const char* prog = "my_program";
         TString title = TString("Sample ") + TString(prog).Quote() + " application";
@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT(out.Str().find(" " + TString(prog) + " ") != TString::npos);
     }
 
-    Y_UNIT_TEST(TestCustomCmdLineDescr) {
+    Y_UNIT_TEST(TestCustomCmdLineDescr) { 
         TOpts opts;
         const char* prog = "my_program";
         TString customDescr = "<FILE|TABLE> USER [OPTIONS]";
@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT(out.Str().find(customDescr) != TString::npos);
     }
 
-    Y_UNIT_TEST(TestColorPrint) {
+    Y_UNIT_TEST(TestColorPrint) { 
         TOpts opts;
         const char* prog = "my_program";
         opts.AddLongOption("long_option").Required();
@@ -658,7 +658,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT(out2.Str().find(colors.OldColor()) == TString::npos);
     }
 
-    Y_UNIT_TEST(TestPadding) {
+    Y_UNIT_TEST(TestPadding) { 
         const bool withColorsOpt[] = {false, true};
         for (bool withColors : withColorsOpt) {
             TOpts opts;
@@ -700,7 +700,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         }
     }
 
-    Y_UNIT_TEST(TestAppendTo) {
+    Y_UNIT_TEST(TestAppendTo) { 
         TVector<int> ints;
 
         TOptsNoDefault opts;
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL("//nice", std::get<0>(richPaths.at(1)));
     }
 
-    Y_UNIT_TEST(TestKVHandler) {
+    Y_UNIT_TEST(TestKVHandler) { 
         TStringBuilder keyvals;
 
         TOptsNoDefault opts;
@@ -737,7 +737,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL(keyvals, "x:1,y:2,z:3,");
     }
 
-    Y_UNIT_TEST(TestEasySetup) {
+    Y_UNIT_TEST(TestEasySetup) { 
         TEasySetup opts;
         bool flag = false;
         opts('v', "version", "print version information")('a', "abstract", "some abstract param", true)('b', "buffer", "SIZE", "some param with argument")('c', "count", "SIZE", "some param with required argument")('t', "true", HandlerStoreTrue(&flag), "Some arg with handler")("global", SimpleHander, "Another arg with handler");
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         }
     }
 
-    Y_UNIT_TEST(TestTOptsParseResultException) {
+    Y_UNIT_TEST(TestTOptsParseResultException) { 
         // verify that TOptsParseResultException actually throws a TUsageException instead of exit()
         // not using wrapper here because it can hide bugs (see review #243810 and r2737774)
         TOptsNoDefault opts;

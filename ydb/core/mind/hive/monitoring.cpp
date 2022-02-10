@@ -88,10 +88,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
     }
 
-    void RenderHTMLPage(IOutputStream &out) {
+    void RenderHTMLPage(IOutputStream &out) { 
         HTML(out) {
              UL_CLASS("nav nav-tabs") {
                  LI_CLASS("active") {
@@ -206,7 +206,7 @@ public:
         if (params.contains("sort")) {
             Sort = params.Get("sort");
         }
-        Y_UNUSED(txc);
+        Y_UNUSED(txc); 
         TStringStream str;
         RenderHTMLPage(str);
         ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
@@ -214,7 +214,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
     }
 
     void RenderHTMLPage(IOutputStream &out) {
@@ -878,7 +878,7 @@ public:
         }
     }
 
-    void RenderHTMLPage(IOutputStream& out, const TActorContext&/* ctx*/) {
+    void RenderHTMLPage(IOutputStream& out, const TActorContext&/* ctx*/) { 
         out << "<head></head><body>";
         out << "<script>$('.container > h2').html('Settings');</script>";
         out << "<div class='form-group'>";
@@ -1046,7 +1046,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_LANDING; }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        Y_UNUSED(txc);
+        Y_UNUSED(txc); 
         TStringStream str;
         RenderHTMLPage(str);
         ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
@@ -1054,7 +1054,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
     }
 
     static TString GetTabletType(TTabletTypes::EType type) {
@@ -1099,7 +1099,7 @@ public:
         }
     }
 
-    void RenderHTMLPage(IOutputStream &out) {
+    void RenderHTMLPage(IOutputStream &out) { 
         ui64 nodes = 0;
         ui64 tablets = 0;
         ui64 runningTablets = 0;
@@ -1732,7 +1732,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_LANDING_DATA; }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        Y_UNUSED(txc);
+        Y_UNUSED(txc); 
         TStringStream str;
         RenderJSONPage(str);
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(str.Str()));
@@ -1740,10 +1740,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
     }
 
-    void RenderJSONPage(IOutputStream &out) {
+    void RenderJSONPage(IOutputStream &out) { 
         ui64 nodes = 0;
         ui64 tablets = 0;
         ui64 runningTablets = 0;

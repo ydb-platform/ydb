@@ -17,7 +17,7 @@
 namespace NKikimr {
     using namespace NActors;
 
-Y_UNIT_TEST_SUITE(TInterconnectTest) {
+Y_UNIT_TEST_SUITE(TInterconnectTest) { 
     class TWall : public NActors::TActor<TWall> {
     public:
         TWall() noexcept
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         return serev;
     }
 
-    Y_UNIT_TEST(TestSimplePingPong) {
+    Y_UNIT_TEST(TestSimplePingPong) { 
         TTestBasicRuntime runtime(2);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT,
                                NActors::NLog::PRI_DEBUG);
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(handle->GetChannel(), 7);
     }
 
-    Y_UNIT_TEST(TestManyEvents) {
+    Y_UNIT_TEST(TestManyEvents) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }
 
-    Y_UNIT_TEST(TestCrossConnect) {
+    Y_UNIT_TEST(TestCrossConnect) { 
         TInstant time = TInstant::Now();
         constexpr ui64 iterations = NSan::PlainOrUnderSanitizer(200, 50);
         for (ui64 i = 0; i < iterations; ++i) {
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestConnectAndDisconnect) {
+    Y_UNIT_TEST(TestConnectAndDisconnect) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
     }
 
-    Y_UNIT_TEST(TestBlobEvent) {
+    Y_UNIT_TEST(TestBlobEvent) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(1);
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(event->Blob, blob);
     }
 
-    Y_UNIT_TEST(TestBlobEventPreSerialized) {
+    Y_UNIT_TEST(TestBlobEventPreSerialized) { 
         TTestBasicRuntime runtime(2);
         runtime.SetDispatchTimeout(TDuration::Seconds(1));
         runtime.Initialize(TAppPrepare().Unwrap());
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestNotifyUndelivered) {
+    Y_UNIT_TEST(TestNotifyUndelivered) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge0 = runtime.AllocateEdgeActor(0);
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(event->Reason, TEvents::TEvUndelivered::Disconnected);
     }
 
-    Y_UNIT_TEST(TestSubscribeByFlag) {
+    Y_UNIT_TEST(TestSubscribeByFlag) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestReconnect) {
+    Y_UNIT_TEST(TestReconnect) { 
         TTestBasicRuntime runtime(2);
         runtime.SetUseRealInterconnect();
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(handle->Sender, session);
     }
 
-    Y_UNIT_TEST(TestSubscribeAndUnsubsribeByEvent) {
+    Y_UNIT_TEST(TestSubscribeAndUnsubsribeByEvent) { 
         TTestBasicRuntime runtime(3);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge0 = runtime.AllocateEdgeActor(0);
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestManyEventsWithReconnect) {
+    Y_UNIT_TEST(TestManyEventsWithReconnect) { 
         TTestBasicRuntime runtime(2);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
         SOCKET s = INVALID_SOCKET;
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }
 
-    Y_UNIT_TEST(TestBlobEvent220Bytes) {
+    Y_UNIT_TEST(TestBlobEvent220Bytes) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(1);
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(event->Blob, blob);
     }
 
-    Y_UNIT_TEST(TestBlobEvent220BytesPreSerialized) {
+    Y_UNIT_TEST(TestBlobEvent220BytesPreSerialized) { 
         TTestBasicRuntime runtime(2);
         runtime.SetDispatchTimeout(TDuration::Seconds(1));
         runtime.Initialize(TAppPrepare().Unwrap());
@@ -431,7 +431,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(event->Blob, blob);
     }
 
-    Y_UNIT_TEST(TestBlobEventDifferentSizes) {
+    Y_UNIT_TEST(TestBlobEventDifferentSizes) { 
         TTestBasicRuntime runtime(2);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
         runtime.Initialize(TAppPrepare().Unwrap());
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestBlobEventDifferentSizesPreSerialized) {
+    Y_UNIT_TEST(TestBlobEventDifferentSizesPreSerialized) { 
         TTestBasicRuntime runtime(2);
         runtime.SetDispatchTimeout(TDuration::Seconds(1));
         runtime.Initialize(TAppPrepare().Unwrap());
@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestBlobEventDifferentSizesPreSerializedAndRaw) {
+    Y_UNIT_TEST(TestBlobEventDifferentSizesPreSerializedAndRaw) { 
         TTestBasicRuntime runtime(2);
         runtime.SetDispatchTimeout(TDuration::Seconds(1));
         runtime.Initialize(TAppPrepare().Unwrap());
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestNotifyUndeliveredOnMissedActor) {
+    Y_UNIT_TEST(TestNotifyUndeliveredOnMissedActor) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(event->Reason, TEvents::TEvUndelivered::ReasonActorUnknown);
     }
 
-    Y_UNIT_TEST(TestBlobEventUpToMebibytes) {
+    Y_UNIT_TEST(TestBlobEventUpToMebibytes) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(1);
@@ -545,7 +545,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestPreSerializedBlobEventUpToMebibytes) {
+    Y_UNIT_TEST(TestPreSerializedBlobEventUpToMebibytes) { 
         TTestBasicRuntime runtime(2);
         runtime.SetDispatchTimeout(TDuration::Seconds(1));
         runtime.Initialize(TAppPrepare().Unwrap());
@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestPingPongThroughSubChannel) {
+    Y_UNIT_TEST(TestPingPongThroughSubChannel) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
@@ -582,7 +582,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(handle->GetSubChannel(), wall.LocalId());
     }
 
-    Y_UNIT_TEST(TestBlobEventsThroughSubChannels) {
+    Y_UNIT_TEST(TestBlobEventsThroughSubChannels) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
 
@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
     }
 
-    Y_UNIT_TEST(TestTraceIdPassThrough) {
+    Y_UNIT_TEST(TestTraceIdPassThrough) { 
         TTestBasicRuntime runtime(2);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT,
                                NActors::NLog::PRI_DEBUG);
@@ -633,7 +633,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT(handle->TraceId.IsFromSameTree(sentTraceId));
     }
 
-    Y_UNIT_TEST(TestAddressResolve) {
+    Y_UNIT_TEST(TestAddressResolve) { 
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);

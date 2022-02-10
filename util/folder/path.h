@@ -3,15 +3,15 @@
 #include "fwd.h"
 #include "pathsplit.h"
 
-#include <util/generic/ptr.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/ptr.h> 
+#include <util/generic/strbuf.h> 
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
-#include <util/string/cast.h>
+#include <util/generic/vector.h> 
+#include <util/string/cast.h> 
 #include <util/system/fstat.h>
 #include <util/system/platform.h>
 #include <util/system/sysstat.h>
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 
 #include <utility>
 
@@ -26,7 +26,7 @@ private:
 public:
     TFsPath();
     TFsPath(const TString& path);
-    TFsPath(const TStringBuf path);
+    TFsPath(const TStringBuf path); 
     TFsPath(const char* path);
 
     TFsPath(const std::string& path)

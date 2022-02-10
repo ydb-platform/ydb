@@ -21,7 +21,7 @@ TDigest::TDigest(const TString& serializedDigest)
     : N(0)
 {
     NTDigest::TDigest digest;
-    Y_VERIFY(digest.ParseFromString(serializedDigest));
+    Y_VERIFY(digest.ParseFromString(serializedDigest)); 
     Delta = digest.GetDelta();
     K = digest.GetK();
     for (int i = 0; i < digest.centroids_size(); ++i) {

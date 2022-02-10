@@ -1,15 +1,15 @@
-OWNER(
-    prettyboy
+OWNER( 
+    prettyboy 
     g:yatest
-)
-
-PY23_LIBRARY()
-
+) 
+ 
+PY23_LIBRARY() 
+ 
 PY_SRCS(__init__.py)
-
-PEERDIR(
+ 
+PEERDIR( 
     contrib/python/six
-    library/python/reservoir_sampling
-)
-
-END()
+    library/python/reservoir_sampling 
+) 
+ 
+END() 

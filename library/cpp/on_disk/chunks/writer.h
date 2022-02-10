@@ -4,11 +4,11 @@
 #include <util/stream/output.h>
 
 template <typename T>
-inline void WriteBin(IOutputStream* out, typename TTypeTraits<T>::TFuncParam t) {
+inline void WriteBin(IOutputStream* out, typename TTypeTraits<T>::TFuncParam t) { 
     out->Write(&t, sizeof(T));
 }
 
-class TChunkedDataWriter: public IOutputStream {
+class TChunkedDataWriter: public IOutputStream { 
 public:
     TChunkedDataWriter(IOutputStream& slave);
     ~TChunkedDataWriter() override;

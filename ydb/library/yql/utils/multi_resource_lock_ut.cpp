@@ -6,8 +6,8 @@
 namespace NYql {
 using namespace NThreading;
 
-Y_UNIT_TEST_SUITE(TMultiResourceLock) {
-    Y_UNIT_TEST(ManyResources) {
+Y_UNIT_TEST_SUITE(TMultiResourceLock) { 
+    Y_UNIT_TEST(ManyResources) { 
         TMultiResourceLock multiLock;
         const int workersCount = 3;
         TVector<TVector<int>> workersData;

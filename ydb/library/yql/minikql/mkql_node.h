@@ -25,7 +25,7 @@ class TTaggedPointer {
 public:
     TTaggedPointer() {}
     TTaggedPointer(T* ptr, bool mark) {
-        Y_VERIFY_DEBUG((uintptr_t(ptr) & 1) == 0);
+        Y_VERIFY_DEBUG((uintptr_t(ptr) & 1) == 0); 
         Raw = (void*)(uintptr_t(ptr) | (mark ? 1 : 0));
     }
 
@@ -624,17 +624,17 @@ public:
     }
 
     TStringBuf GetMemberName(ui32 index) const {
-        Y_VERIFY_DEBUG(index < MembersCount);
+        Y_VERIFY_DEBUG(index < MembersCount); 
         return Members[index].first.Str();
     }
 
     TInternName GetMemberNameStr(ui32 index) const {
-        Y_VERIFY_DEBUG(index < MembersCount);
+        Y_VERIFY_DEBUG(index < MembersCount); 
         return Members[index].first;
     }
 
     TType* GetMemberType(ui32 index) const {
-        Y_VERIFY_DEBUG(index < MembersCount);
+        Y_VERIFY_DEBUG(index < MembersCount); 
         return Members[index].second;
     }
 
@@ -666,7 +666,7 @@ public:
     }
 
     TRuntimeNode GetValue(ui32 index) const {
-        Y_VERIFY_DEBUG(index < GetValuesCount());
+        Y_VERIFY_DEBUG(index < GetValuesCount()); 
         return Values[index];
     }
 
@@ -838,7 +838,7 @@ public:
     }
 
     TRuntimeNode GetItem() const {
-        Y_VERIFY_DEBUG(Item.GetNode());
+        Y_VERIFY_DEBUG(Item.GetNode()); 
         return Item;
     }
 
@@ -902,7 +902,7 @@ public:
     }
 
     std::pair<TRuntimeNode, TRuntimeNode> GetItem(ui32 index) const {
-        Y_VERIFY_DEBUG(index < ItemsCount);
+        Y_VERIFY_DEBUG(index < ItemsCount); 
         return Items[index];
     }
 
@@ -955,7 +955,7 @@ public:
     }
 
     TType* GetArgumentType(ui32 index) const {
-        Y_VERIFY_DEBUG(index < ArgumentsCount);
+        Y_VERIFY_DEBUG(index < ArgumentsCount); 
         return Arguments[index];
     }
 
@@ -1003,7 +1003,7 @@ public:
     }
 
     TRuntimeNode GetInput(ui32 index) const {
-        Y_VERIFY_DEBUG(index < InputsCount);
+        Y_VERIFY_DEBUG(index < InputsCount); 
         return Inputs[index];
     }
 
@@ -1012,7 +1012,7 @@ public:
     }
 
     TRuntimeNode GetResult() const {
-        Y_VERIFY_DEBUG(!!Result.GetNode());
+        Y_VERIFY_DEBUG(!!Result.GetNode()); 
         return Result;
     }
 
@@ -1046,7 +1046,7 @@ inline TType::TType(EKind kind, TTypeType* type)
     : TNode(type)
     , Kind(kind)
 {
-    Y_VERIFY_DEBUG(kind != EKind::Type);
+    Y_VERIFY_DEBUG(kind != EKind::Type); 
 }
 
 
@@ -1132,7 +1132,7 @@ public:
     }
 
     TType* GetElementType(ui32 index) const {
-        Y_VERIFY_DEBUG(index < ElementsCount);
+        Y_VERIFY_DEBUG(index < ElementsCount); 
         return Elements[index];
     }
 
@@ -1161,7 +1161,7 @@ public:
     }
 
     TRuntimeNode GetValue(ui32 index) const {
-        Y_VERIFY_DEBUG(index < GetValuesCount());
+        Y_VERIFY_DEBUG(index < GetValuesCount()); 
         return Values[index];
     }
 

@@ -9,7 +9,7 @@
 
 #include <util/system/yassert.h> // FAIL, VERIFY_DEBUG
 #include <util/generic/utility.h> // Min, Max
-#include <util/generic/yexception.h> // Y_ENSURE
+#include <util/generic/yexception.h> // Y_ENSURE 
 #include <util/system/compiler.h> // Y_FORCE_INLINE
 
 #include <algorithm>

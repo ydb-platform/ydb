@@ -6,7 +6,7 @@
 #include <util/stream/buffered.h>
 #include <util/stream/length.h>
 #include <util/stream/multi.h>
-#include <util/stream/null.h>
+#include <util/stream/null.h> 
 #include <util/stream/tee.h>
 
 #include <util/system/compat.h>
@@ -15,7 +15,7 @@
 #include <util/network/socket.h>
 
 #include <util/string/cast.h>
-#include <util/string/strip.h>
+#include <util/string/strip.h> 
 
 #include <util/generic/string.h>
 #include <util/generic/utility.h>
@@ -134,7 +134,7 @@ class THttpInput::TImpl {
     typedef THashSet<TString> TAcceptCodings;
 
 public:
-    inline TImpl(IInputStream* slave)
+    inline TImpl(IInputStream* slave) 
         : Slave_(slave)
         , Buffered_(Slave_, SuggestBufferSize())
         , ChunkedInput_(nullptr)
@@ -148,7 +148,7 @@ public:
         , Expect100Continue_(false)
     {
         BuildInputChain();
-        Y_ASSERT(Input_);
+        Y_ASSERT(Input_); 
     }
 
     static TString ReadFirstLine(TBufferedInput& in) {
@@ -361,19 +361,19 @@ private:
     }
 
 private:
-    IInputStream* Slave_;
+    IInputStream* Slave_; 
 
     /*
      * input helpers
      */
     TBufferedInput Buffered_;
-    TStreams<IInputStream, 8> Streams_;
-    IInputStream* ChunkedInput_;
+    TStreams<IInputStream, 8> Streams_; 
+    IInputStream* ChunkedInput_; 
 
     /*
      * final input stream
      */
-    IInputStream* Input_;
+    IInputStream* Input_; 
 
     TString FirstLine_;
     THttpHeaders Headers_;
@@ -389,7 +389,7 @@ private:
     bool Expect100Continue_;
 };
 
-THttpInput::THttpInput(IInputStream* slave)
+THttpInput::THttpInput(IInputStream* slave) 
     : Impl_(new TImpl(slave))
 {
 }
@@ -457,7 +457,7 @@ bool THttpInput::HasExpect100Continue() const noexcept {
 }
 
 class THttpOutput::TImpl {
-    class TSizeCalculator: public IOutputStream {
+    class TSizeCalculator: public IOutputStream { 
     public:
         inline TSizeCalculator() noexcept {
         }
@@ -484,19 +484,19 @@ class THttpOutput::TImpl {
     };
 
     struct TFlush {
-        inline void operator()(IOutputStream* s) {
+        inline void operator()(IOutputStream* s) { 
             s->Flush();
         }
     };
 
     struct TFinish {
-        inline void operator()(IOutputStream* s) {
+        inline void operator()(IOutputStream* s) { 
             s->Finish();
         }
     };
 
 public:
-    inline TImpl(IOutputStream* slave, THttpInput* request)
+    inline TImpl(IOutputStream* slave, THttpInput* request) 
         : Slave_(slave)
         , State_(Begin)
         , Output_(Slave_)
@@ -710,7 +710,7 @@ private:
     }
 
     inline void Process(const TString& s) {
-        Y_ASSERT(State_ != HeadersSent);
+        Y_ASSERT(State_ != HeadersSent); 
 
         if (State_ == Begin) {
             FirstLine_ = s;
@@ -722,12 +722,12 @@ private:
                 WriteCached();
                 State_ = HeadersSent;
             } else {
-                AddHeader(THttpInputHeader(s));
+                AddHeader(THttpInputHeader(s)); 
             }
         }
     }
 
-    inline void WriteCachedImpl(IOutputStream* s) const {
+    inline void WriteCachedImpl(IOutputStream* s) const { 
         s->Write(FirstLine_.data(), FirstLine_.size());
         s->Write("\r\n", 2);
         Headers_.OutTo(s);
@@ -855,10 +855,10 @@ private:
     }
 
 private:
-    IOutputStream* Slave_;
+    IOutputStream* Slave_; 
     TState State_;
-    IOutputStream* Output_;
-    TStreams<IOutputStream, 8> Streams_;
+    IOutputStream* Output_; 
+    TStreams<IOutputStream, 8> Streams_; 
     TString Line_;
     TString FirstLine_;
     THttpHeaders Headers_;
@@ -876,12 +876,12 @@ private:
     TSizeCalculator SizeCalculator_;
 };
 
-THttpOutput::THttpOutput(IOutputStream* slave)
+THttpOutput::THttpOutput(IOutputStream* slave) 
     : Impl_(new TImpl(slave, nullptr))
 {
 }
 
-THttpOutput::THttpOutput(IOutputStream* slave, THttpInput* request)
+THttpOutput::THttpOutput(IOutputStream* slave, THttpInput* request) 
     : Impl_(new TImpl(slave, request))
 {
 }
@@ -979,21 +979,21 @@ void SendMinimalHttpRequest(TSocket& s, const TStringBuf& host, const TStringBuf
     output.EnableKeepAlive(false);
     output.EnableCompression(false);
 
-    const IOutputStream::TPart parts[] = {
+    const IOutputStream::TPart parts[] = { 
         IOutputStream::TPart(TStringBuf("GET ")),
-        IOutputStream::TPart(request),
+        IOutputStream::TPart(request), 
         IOutputStream::TPart(TStringBuf(" HTTP/1.1")),
-        IOutputStream::TPart::CrLf(),
+        IOutputStream::TPart::CrLf(), 
         IOutputStream::TPart(TStringBuf("Host: ")),
-        IOutputStream::TPart(host),
-        IOutputStream::TPart::CrLf(),
+        IOutputStream::TPart(host), 
+        IOutputStream::TPart::CrLf(), 
         IOutputStream::TPart(TStringBuf("User-Agent: ")),
-        IOutputStream::TPart(agent),
-        IOutputStream::TPart::CrLf(),
+        IOutputStream::TPart(agent), 
+        IOutputStream::TPart::CrLf(), 
         IOutputStream::TPart(TStringBuf("From: ")),
-        IOutputStream::TPart(from),
-        IOutputStream::TPart::CrLf(),
-        IOutputStream::TPart::CrLf(),
+        IOutputStream::TPart(from), 
+        IOutputStream::TPart::CrLf(), 
+        IOutputStream::TPart::CrLf(), 
     };
 
     output.Write(parts, sizeof(parts) / sizeof(*parts));

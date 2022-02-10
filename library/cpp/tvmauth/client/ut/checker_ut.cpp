@@ -11,7 +11,7 @@
 
 using namespace NTvmAuth;
 
-Y_UNIT_TEST_SUITE(ClientChecker) {
+Y_UNIT_TEST_SUITE(ClientChecker) { 
     static const TTvmId OK_CLIENT = 100500;
     static const TString PROD_TICKET = "3:user:CAsQ__________9_Gg4KAgh7EHsg0oXYzAQoAA:N8PvrDNLh-5JywinxJntLeQGDEHBUxfzjuvB8-_BEUv1x9CALU7do8irDlDYVeVVDr4AIpR087YPZVzWPAqmnBuRJS0tJXekmDDvrivLnbRrzY4IUXZ_fImB0fJhTyVetKv6RD11bGqnAJeDpIukBwPTbJc_EMvKDt8V490CJFw";
     static const TString TEST_TICKET = "3:user:CA0Q__________9_Gg4KAgh7EHsg0oXYzAQoAQ:FSADps3wNGm92Vyb1E9IVq5M6ZygdGdt1vafWWEhfDDeCLoVA-sJesxMl2pGW4OxJ8J1r_MfpG3ZoBk8rLVMHUFrPa6HheTbeXFAWl8quEniauXvKQe4VyrpA1SPgtRoFqi5upSDIJzEAe1YRJjq1EClQ_slMt8R0kA_JjKUX54";
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(ClientChecker) {
     static const TString STRESS_TICKET = "3:user:CA8Q__________9_Gg4KAgh7EHsg0oXYzAQoBA:GBuG_TLo6SL2OYFxp7Zly04HPNzmAF7Fu2E8E9SnwQDoxq9rf7VThSPtTmnBSAl5UVRRPkMsRtzzHZ87qtj6l-PvF0K7PrDu7-yS_xiFTgAl9sEfXAIHJVzZLoksGRgpoBtpBUg9vVaJsPns0kWFKJgq8M-Mk9agrSk7sb2VUeQ";
     static const TString SRV_TICKET = "3:serv:CBAQ__________9_IgYIexCUkQY:GioCM49Ob6_f80y6FY0XBVN4hLXuMlFeyMvIMiDuQnZkbkLpRpQOuQo5YjWoBjM0Vf-XqOm8B7xtrvxSYHDD7Q4OatN2l-Iwg7i71lE3scUeD36x47st3nd0OThvtjrFx_D8mw_c0GT5KcniZlqq1SjhLyAk1b_zJsx8viRAhCU";
 
-    Y_UNIT_TEST(User) {
+    Y_UNIT_TEST(User) { 
         NTvmApi::TClientSettings s;
         s.SetSelfTvmId(OK_CLIENT);
         s.EnableServiceTicketChecking();
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(ClientChecker) {
         }
     }
 
-    Y_UNIT_TEST(Service) {
+    Y_UNIT_TEST(Service) { 
         NTvmApi::TClientSettings s;
         s.EnableUserTicketChecking(EBlackboxEnv::Stress);
         s.SetSelfTvmId(OK_CLIENT);
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(ClientChecker) {
         UNIT_ASSERT_C(l->Stream.Str().find("was successfully fetched") == TString::npos, l->Stream.Str());
     }
 
-    Y_UNIT_TEST(Tickets) {
+    Y_UNIT_TEST(Tickets) { 
         NTvmApi::TClientSettings s;
         s.SetSelfTvmId(OK_CLIENT);
         s.EnableServiceTicketsFetchOptions("qwerty", {{"blackbox", 19}});

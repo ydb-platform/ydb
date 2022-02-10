@@ -9,7 +9,7 @@ namespace NJson {
     struct TJsonWriterConfig;
 }
 
-class IOutputStream;
+class IOutputStream; 
 class TStringStream;
 
 namespace NProtobufJson {

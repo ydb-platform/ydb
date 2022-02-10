@@ -7,7 +7,7 @@
 #include <util/generic/overloaded.h>
 
 namespace NYT {
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TNode::TNull::operator==(const TNull&) const {
@@ -346,51 +346,51 @@ TNode::TMapType& TNode::AsMap()
     return std::get<TMapType>(Value_);
 }
 
-const TString& TNode::UncheckedAsString() const noexcept
-{
+const TString& TNode::UncheckedAsString() const noexcept 
+{ 
     return std::get<TString>(Value_);
-}
-
-i64 TNode::UncheckedAsInt64() const noexcept
-{
+} 
+ 
+i64 TNode::UncheckedAsInt64() const noexcept 
+{ 
     return std::get<i64>(Value_);
-}
-
-ui64 TNode::UncheckedAsUint64() const noexcept
-{
+} 
+ 
+ui64 TNode::UncheckedAsUint64() const noexcept 
+{ 
     return std::get<ui64>(Value_);
-}
-
-double TNode::UncheckedAsDouble() const noexcept
-{
+} 
+ 
+double TNode::UncheckedAsDouble() const noexcept 
+{ 
     return std::get<double>(Value_);
-}
-
-bool TNode::UncheckedAsBool() const noexcept
-{
+} 
+ 
+bool TNode::UncheckedAsBool() const noexcept 
+{ 
     return std::get<bool>(Value_);
-}
-
+} 
+ 
 const TNode::TListType& TNode::UncheckedAsList() const noexcept
-{
+{ 
     return std::get<TListType>(Value_);
-}
-
+} 
+ 
 const TNode::TMapType& TNode::UncheckedAsMap() const noexcept
-{
+{ 
     return std::get<TMapType>(Value_);
-}
-
+} 
+ 
 TNode::TListType& TNode::UncheckedAsList() noexcept
-{
+{ 
     return std::get<TListType>(Value_);
-}
-
+} 
+ 
 TNode::TMapType& TNode::UncheckedAsMap() noexcept
-{
+{ 
     return std::get<TMapType>(Value_);
-}
-
+} 
+ 
 TNode TNode::CreateList()
 {
     TNode node;
@@ -850,12 +850,12 @@ void TNode::CreateAttributes()
     Attributes_->Value_ = TMapType();
 }
 
-void TNode::Save(IOutputStream* out) const
+void TNode::Save(IOutputStream* out) const 
 {
     NodeToYsonStream(*this, out, NYson::EYsonFormat::Binary);
 }
 
-void TNode::Load(IInputStream* in)
+void TNode::Load(IInputStream* in) 
 {
     Clear();
     *this = NodeFromYsonStream(in, ::NYson::EYsonType::Node);

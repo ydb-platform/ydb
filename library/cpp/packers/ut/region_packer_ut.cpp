@@ -9,7 +9,7 @@ void TestPacker() {
     TRegionPacker<TValue> p;
 
     using TValues = TArrayRef<TValue>;
-    TValues valueRegion = TValues(values, Y_ARRAY_SIZE(values));
+    TValues valueRegion = TValues(values, Y_ARRAY_SIZE(values)); 
     size_t sz = p.MeasureLeaf(valueRegion);
     UNIT_ASSERT_VALUES_EQUAL(sz, 1 + sizeof(values));
 
@@ -23,8 +23,8 @@ void TestPacker() {
     UNIT_ASSERT_EQUAL(0, memcmp(values, valueRegion.data(), sizeof(values)));
 }
 
-Y_UNIT_TEST_SUITE(RegionPacker) {
-    Y_UNIT_TEST(Test0) {
+Y_UNIT_TEST_SUITE(RegionPacker) { 
+    Y_UNIT_TEST(Test0) { 
         TestPacker<char>();
         TestPacker<signed char>();
         TestPacker<unsigned char>();

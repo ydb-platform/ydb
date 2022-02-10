@@ -9,7 +9,7 @@
 using namespace NBus;
 using namespace NBus::NTest;
 
-Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
+Y_UNIT_TEST_SUITE(ModuleClientOneWay) { 
     struct TTestServer: public TBusServerHandlerError {
         TExampleProtocol Proto;
 
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
         }
     };
 
-    Y_UNIT_TEST(Simple) {
+    Y_UNIT_TEST(Simple) { 
         TTestSync testSync;
 
         TTestServer server(&testSync);
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
         }
     };
 
-    Y_UNIT_TEST(SendError) {
+    Y_UNIT_TEST(SendError) { 
         TTestSync testSync;
 
         TBusQueueConfig queueConfig;

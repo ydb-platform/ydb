@@ -51,7 +51,7 @@ public:
 
     template <size_t NUMBER_OF_THREADS>
     void RepeatPush1Pop1_InManyThreads() {
-        class TCycleThread: public ISimpleThread {
+        class TCycleThread: public ISimpleThread { 
         public:
             void* ThreadProc() override {
                 TQueueType queue;

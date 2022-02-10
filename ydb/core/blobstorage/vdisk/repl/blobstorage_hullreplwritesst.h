@@ -57,7 +57,7 @@ namespace NKikimr {
         {}
 
         void Begin() {
-            Y_VERIFY(State == EState::STOPPED);
+            Y_VERIFY(State == EState::STOPPED); 
 
             // ensure that we have no pending message and create new one to allocate some chunks for replicated SST
             Y_VERIFY(!PendingPDiskMsg);
@@ -144,8 +144,8 @@ namespace NKikimr {
         }
 
         bool AddRecoveredBlob(TRecoveredBlobInfo& record) {
-            Y_VERIFY(State == EState::COLLECT);
-            Y_VERIFY(record.Id > PrevID);
+            Y_VERIFY(State == EState::COLLECT); 
+            Y_VERIFY(record.Id > PrevID); 
             Y_VERIFY(!record.Id.PartId());
 
             // generate merged ingress for all locally recovered parts
@@ -209,21 +209,21 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_VERIFY(State == EState::COLLECT, "unexpected State# %" PRIu32, static_cast<ui32>(State));
+            Y_VERIFY(State == EState::COLLECT, "unexpected State# %" PRIu32, static_cast<ui32>(State)); 
             FlushNextPart();
         }
 
         std::unique_ptr<TEvAddBulkSst> GetPendingCommitMsg() {
-            Y_VERIFY(State == EState::COMMIT_PENDING);
+            Y_VERIFY(State == EState::COMMIT_PENDING); 
             std::unique_ptr<TEvAddBulkSst> msg;
             msg.swap(PendingCommitMsg);
-            Y_VERIFY(msg);
+            Y_VERIFY(msg); 
             State = EState::WAITING_FOR_COMMIT;
             return msg;
         }
 
         void ApplyCommit() {
-            Y_VERIFY(State == EState::WAITING_FOR_COMMIT);
+            Y_VERIFY(State == EState::WAITING_FOR_COMMIT); 
             State = EState::STOPPED;
         }
 

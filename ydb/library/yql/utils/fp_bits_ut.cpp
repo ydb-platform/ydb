@@ -85,16 +85,16 @@ void CanonizeFpBitsTest() {
 }
 }
 
-Y_UNIT_TEST_SUITE(TFpBits) {
-    Y_UNIT_TEST(CanonizeFloat) {
+Y_UNIT_TEST_SUITE(TFpBits) { 
+    Y_UNIT_TEST(CanonizeFloat) { 
         CanonizeFpBitsTest<float>();
     }
 
-    Y_UNIT_TEST(CanonizeDouble) {
+    Y_UNIT_TEST(CanonizeDouble) { 
         CanonizeFpBitsTest<double>();
     }
 
-    Y_UNIT_TEST(CanonizeLongDouble) {
+    Y_UNIT_TEST(CanonizeLongDouble) { 
         if (NValgrind::ValgrindIsOn()) {
             return; // TODO https://st.yandex-team.ru/KIKIMR-3431
         }

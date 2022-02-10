@@ -73,12 +73,12 @@ namespace {
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(Reader) {
-    Y_UNIT_TEST(ScalarEntity) {
+Y_UNIT_TEST_SUITE(Reader) { 
+    Y_UNIT_TEST(ScalarEntity) { 
         test_scalar(TStringBuf("#"), NYsonPull::TScalar{});
     }
 
-    Y_UNIT_TEST(ScalarBoolean) {
+    Y_UNIT_TEST(ScalarBoolean) { 
         test_scalar(TStringBuf("%true"), true);
         test_scalar(TStringBuf("%false"), false);
 
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         REJECT("%hithere");
     }
 
-    Y_UNIT_TEST(ScalarInt64) {
+    Y_UNIT_TEST(ScalarInt64) { 
         test_scalar(TStringBuf("1"), i64{1});
         test_scalar(TStringBuf("+1"), i64{1});
         test_scalar(TStringBuf("100000"), i64{100000});
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         REJECT("1+0");
     }
 
-    Y_UNIT_TEST(SclarUInt64) {
+    Y_UNIT_TEST(SclarUInt64) { 
         test_scalar(TStringBuf("1u"), ui64{1});
         test_scalar(TStringBuf("+1u"), ui64{1});
         test_scalar(TStringBuf("100000u"), ui64{100000});
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         // TODO: binary
     }
 
-    Y_UNIT_TEST(ScalarFloat64) {
+    Y_UNIT_TEST(ScalarFloat64) { 
         test_scalar(TStringBuf("0.0"), double{0.0});
         test_scalar(TStringBuf("+0.0"), double{0.0});
         test_scalar(TStringBuf("+.0"), double{0.0});
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         REJECT("%-in");
     }
 
-    Y_UNIT_TEST(ScalarString) {
+    Y_UNIT_TEST(ScalarString) { 
         test_scalar(TStringBuf(R"(foobar)"), TStringBuf("foobar"));
         test_scalar(TStringBuf(R"(foobar11)"), TStringBuf("foobar11"));
         test_scalar(TStringBuf(R"("foobar")"), TStringBuf("foobar"));
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         REJECT("\x01\x0d" "foobar"sv); // negative length
     }
 
-    Y_UNIT_TEST(EmptyList) {
+    Y_UNIT_TEST(EmptyList) { 
         auto reader = memory_reader("[]", NYsonPull::EStreamType::Node);
 
         UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::BeginStream, reader.NextEvent().Type());
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         REJECT("]");
     }
 
-    Y_UNIT_TEST(EmptyMap) {
+    Y_UNIT_TEST(EmptyMap) { 
         auto reader = memory_reader("{}", NYsonPull::EStreamType::Node);
 
         UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::BeginStream, reader.NextEvent().Type());
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         REJECT("}");
     }
 
-    Y_UNIT_TEST(Sample) {
+    Y_UNIT_TEST(Sample) { 
         auto reader = memory_reader(
             R"({"11"=11;"nothing"=#;"zero"=0.;"foo"="bar";"list"=[1;2;3]})",
             NYsonPull::EStreamType::Node);
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::EndStream, reader.NextEvent().Type());
     }
 
-    Y_UNIT_TEST(Accept) {
+    Y_UNIT_TEST(Accept) { 
         ACCEPT("[]");
         ACCEPT("{}");
         ACCEPT("<>[]");
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         ACCEPT("{foo=<foo=foo>[foo;foo]}");
     }
 
-    Y_UNIT_TEST(Reject) {
+    Y_UNIT_TEST(Reject) { 
         REJECT("[");
         REJECT("{");
         REJECT("<");
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         REJECT("@");
     }
 
-    Y_UNIT_TEST(ReadPastEnd) {
+    Y_UNIT_TEST(ReadPastEnd) { 
         auto reader = memory_reader("#", NYsonPull::EStreamType::Node);
         UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::BeginStream, reader.NextEvent().Type());
         UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::Scalar, reader.NextEvent().Type());
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         UNIT_ASSERT_EXCEPTION(reader.NextEvent(), NYsonPull::NException::TBadInput);
     }
 
-    Y_UNIT_TEST(StreamType) {
+    Y_UNIT_TEST(StreamType) { 
         REJECT2("", NYsonPull::EStreamType::Node);
         ACCEPT2("", NYsonPull::EStreamType::ListFragment);
         ACCEPT2("", NYsonPull::EStreamType::MapFragment);
@@ -407,4 +407,4 @@ Y_UNIT_TEST_SUITE(Reader) {
         ACCEPT2("a=[1]; b=foobar", NYsonPull::EStreamType::MapFragment);
     }
 
-} // Y_UNIT_TEST_SUITE(Reader)
+} // Y_UNIT_TEST_SUITE(Reader) 

@@ -14,7 +14,7 @@ static ui64 gSeed = 42;
 
 template<typename T>
 static T PseudoRandom(T max = Max<T>()) {
-    Y_ASSERT(max != 0);
+    Y_ASSERT(max != 0); 
     // stupid and non-threadsafe, but very predictable chaos generator
     gSeed += 1;
     gSeed *= 419;
@@ -24,7 +24,7 @@ static T PseudoRandom(T max = Max<T>()) {
 #endif
 }
 
-Y_UNIT_TEST_SUITE(TPackedTest) {
+Y_UNIT_TEST_SUITE(TPackedTest) { 
     void TestPackUi32Sub(ui32 v, const TVector<char>& p) {
         TBufferOutput out;
         PackUI32(out, v);
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
         }
     }
 
-    Y_UNIT_TEST(TestPackUi32) {
+    Y_UNIT_TEST(TestPackUi32) { 
         ui32 v;
         TVector<char> pv;
 
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
     }
 
 #if 0
-    Y_UNIT_TEST(ReadWrite32) {
+    Y_UNIT_TEST(ReadWrite32) { 
         TBuffer buffer(65536);
 
         char* writePtr = buffer.Data();
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadWrite64) {
+    Y_UNIT_TEST(ReadWrite64) { 
         TBuffer buffer(65536);
 
         char* writePtr = buffer.Data();

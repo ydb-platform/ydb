@@ -205,7 +205,7 @@ namespace NKikimr {
                          const NBackpressure::TMessageId &msgId, ui64 cost, const TInstant &deadline,
                          NKikimrBlobStorage::EVDiskQueueId extQueueId, TFront& front,
                          const NBackpressure::TQueueClientId& clientId) {
-                Y_UNUSED(front);
+                Y_UNUSED(front); 
                 if (!Queue->Head() && CanSendToSkeleton(cost)) {
                     // send to Skeleton for further processing
                     ctx.ExecutorThread.Send(converted.release());
@@ -244,7 +244,7 @@ namespace NKikimr {
                     const ui64 cost = rec->Cost;
                     if (CanSendToSkeleton(cost) || forceError) {
                         ui32 recByteSize = rec->ByteSize;
-                        Y_VERIFY_DEBUG(DelayedCount > 0 && DelayedBytes >= recByteSize);
+                        Y_VERIFY_DEBUG(DelayedCount > 0 && DelayedBytes >= recByteSize); 
 
                         --DelayedCount;
                         DelayedBytes -= recByteSize;
@@ -351,7 +351,7 @@ namespace NKikimr {
             // val -- current value
             // if val is greater than maxVal, output current record in 'light' color
             void OutputRecord(const char *name,
-                              IOutputStream &str,
+                              IOutputStream &str, 
                               ui64 val,
                               NKikimrWhiteboard::EFlag light) const {
                 if (light != NKikimrWhiteboard::EFlag::Green) {
@@ -626,7 +626,7 @@ namespace NKikimr {
 
         template <class T>
         void NotifyIfNotReady(T &ev, const TActorContext &ctx) {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             if (ev->Get()->Record.GetNotifyIfNotReady()) {
                 NotificationIDs.insert(ev->Sender);
             }
@@ -929,7 +929,7 @@ namespace NKikimr {
 
         template <class TEventPtr>
         inline void CheckEvent(TEventPtr &ev, const char *msgName) {
-            Y_VERIFY_DEBUG(CostModel);
+            Y_VERIFY_DEBUG(CostModel); 
             Y_VERIFY(ev->Get(), "Incoming message of type %s is null at the VDisk border. This MUST never happens, "
                    "check VDisk clients: bufSize# %u", msgName, unsigned(ev->GetSize()));
         }
@@ -1037,7 +1037,7 @@ namespace NKikimr {
             // we don't work if queues are incompatible
 
             bool compatible = Compatible(extQueueId, intQueueId);
-            Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
+            Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s", 
                    VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
                    NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
 
@@ -1506,7 +1506,7 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeBackground:
                     intQueue = IntQueueHugePutsBackground.get();
                     break;
-                default: Y_FAIL("Unexpected case");
+                default: Y_FAIL("Unexpected case"); 
             }
             return *intQueue;
         }
@@ -1797,7 +1797,7 @@ namespace NKikimr {
                 HFuncStatus(TEvBlobStorage::TEvVGetBlock, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVCollectGarbage, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVGetBarrier, status, errorReason, now, wstatus);
-                default: Y_VERIFY_DEBUG(false, "Unsupported message %d", ev->GetTypeRewrite());
+                default: Y_VERIFY_DEBUG(false, "Unsupported message %d", ev->GetTypeRewrite()); 
             }
         }
 

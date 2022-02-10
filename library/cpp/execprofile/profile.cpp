@@ -136,7 +136,7 @@ private:
         }
 
         ucontext_t* ucontext = reinterpret_cast<ucontext_t*>(context);
-        Y_ASSERT(SInstance != nullptr);
+        Y_ASSERT(SInstance != nullptr); 
 
         SInstance->CaptureIP(GetIp(&ucontext->uc_mcontext));
     }
@@ -241,7 +241,7 @@ private:
 
     void
     Clear() {
-        Y_ASSERT(WriteFlag == 1);
+        Y_ASSERT(WriteFlag == 1); 
 
         for (size_t i = 0; i < SZ; ++i) {
             Ips[i] = std::make_pair((void*)nullptr, (size_t)0);

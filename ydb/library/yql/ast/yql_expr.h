@@ -237,7 +237,7 @@ public:
     bool Equals(const TTypeAnnotationNode& node) const;
     void Accept(TTypeAnnotationVisitor& visitor) const;
 
-    void Out(IOutputStream& out) const {
+    void Out(IOutputStream& out) const { 
         out << FormatType(this);
     }
 
@@ -287,7 +287,7 @@ public:
     }
 
     bool operator==(const TUnitExprType& other) const {
-        Y_UNUSED(other);
+        Y_UNUSED(other); 
         return true;
     }
 };
@@ -710,7 +710,7 @@ public:
     }
 
     bool operator==(const TWorldExprType& other) const {
-        Y_UNUSED(other);
+        Y_UNUSED(other); 
         return true;
     }
 };
@@ -862,7 +862,7 @@ public:
     }
 
     bool operator==(const TVoidExprType& other) const {
-        Y_UNUSED(other);
+        Y_UNUSED(other); 
         return true;
     }
 };
@@ -1027,7 +1027,7 @@ public:
     }
 
     bool operator==(const TGenericExprType& other) const {
-        Y_UNUSED(other);
+        Y_UNUSED(other); 
         return true;
     }
 };
@@ -2569,7 +2569,7 @@ TExprNode::TListType GetLambdaBody(const TExprNode& lambda);
 
 template<>
 inline void Out<NYql::TTypeAnnotationNode>(
-        IOutputStream &out, const NYql::TTypeAnnotationNode& type)
+        IOutputStream &out, const NYql::TTypeAnnotationNode& type) 
 {
     type.Out(out);
 }

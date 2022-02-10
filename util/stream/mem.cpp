@@ -14,7 +14,7 @@ TMemoryInput::TMemoryInput(const void* buf, size_t len) noexcept
 {
 }
 
-TMemoryInput::TMemoryInput(const TStringBuf buf) noexcept
+TMemoryInput::TMemoryInput(const TStringBuf buf) noexcept 
     : Buf_(buf.data())
     , Len_(buf.size())
 {

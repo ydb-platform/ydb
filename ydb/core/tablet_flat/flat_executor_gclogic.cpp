@@ -66,7 +66,7 @@ TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) {
     TGCLogEntry snapshot(snapshotTime);
     for (const auto& chIt : ChannelInfo) {
         for (const auto& le : chIt.second.CommittedDelta) {
-            Y_VERIFY(le.first <= snapshotTime);
+            Y_VERIFY(le.first <= snapshotTime); 
             TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, le.second.Created);
             TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, le.second.Deleted);
         }
@@ -164,7 +164,7 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     for (const TLogoBlobID &blobId : delta.Created) {
         auto &channel = ChannelInfo[blobId.Channel()];
         TGCTime gcTime(blobId.Generation(), blobId.Step());
-        Y_VERIFY(channel.KnownGcBarrier < gcTime);
+        Y_VERIFY(channel.KnownGcBarrier < gcTime); 
         channel.CommittedDelta[gcTime].Created.push_back(blobId);
     }
 
@@ -388,7 +388,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
         KnownGcBarrier = collectBarrier;
 
         const auto *channelInfo = tabletStorageInfo->ChannelInfo(channel);
-        Y_VERIFY(channelInfo);
+        Y_VERIFY(channelInfo); 
 
 
         const ui32 lastCommitedGcBarrier = CommitedGcBarrier.Generation;

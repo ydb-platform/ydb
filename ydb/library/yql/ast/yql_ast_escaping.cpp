@@ -12,7 +12,7 @@ static char HexDigit(char c)
     return (c < 10 ? '0' + c : 'A' + (c - 10));
 }
 
-static void EscapedPrintChar(ui8 c, IOutputStream* out)
+static void EscapedPrintChar(ui8 c, IOutputStream* out) 
 {
     switch (c) {
         case '\\': out->Write("\\\\", 2); break;
@@ -36,7 +36,7 @@ static void EscapedPrintChar(ui8 c, IOutputStream* out)
     }
 }
 
-static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
+static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out) 
 {
     static const int MAX_ESCAPE_LEN = 10;
 
@@ -132,7 +132,7 @@ TStringBuf UnescapeResultToString(EUnescapeResult result)
     return "Unknown unescape error";
 }
 
-void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
+void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out) 
 {
     out->Write(quoteChar);
     const ui8 *p = reinterpret_cast<const ui8*>(atom.begin()),
@@ -152,7 +152,7 @@ void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 }
 
 EUnescapeResult UnescapeArbitraryAtom(
-        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes)
+        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes) 
 {
     const char *p = atom.begin(),
                *e = atom.end();
@@ -238,7 +238,7 @@ EUnescapeResult UnescapeArbitraryAtom(
     return EUnescapeResult::INVALID_END;
 }
 
-void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
+void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out) 
 {
     char prefix[] = { 'x', quoteChar };
     out->Write(prefix, 2);
@@ -247,7 +247,7 @@ void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 }
 
 EUnescapeResult UnescapeBinaryAtom(
-        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes)
+        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes) 
 {
     const char *p = atom.begin(),
                *e = atom.end();

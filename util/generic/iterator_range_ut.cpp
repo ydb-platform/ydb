@@ -4,8 +4,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
 
-Y_UNIT_TEST_SUITE(IteratorRange) {
-    Y_UNIT_TEST(DefaultConstructor) {
+Y_UNIT_TEST_SUITE(IteratorRange) { 
+    Y_UNIT_TEST(DefaultConstructor) { 
         TIteratorRange<int*> range;
         UNIT_ASSERT(range.empty());
     }
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         UNIT_ASSERT(range.empty());
     }
 
-    Y_UNIT_TEST(RangeBasedForLoop) {
+    Y_UNIT_TEST(RangeBasedForLoop) { 
         // compileability test
         for (int i : TIteratorRange<int*>()) {
             Y_UNUSED(i);
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         }
     }
 
-    Y_UNIT_TEST(Works) {
+    Y_UNIT_TEST(Works) { 
         const int values[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
         auto range = MakeIteratorRange(values, values + Y_ARRAY_SIZE(values));
         UNIT_ASSERT_VALUES_EQUAL(range.size(), Y_ARRAY_SIZE(values));
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         UNIT_ASSERT_VALUES_EQUAL(i, 10);
     }
 
-    Y_UNIT_TEST(OperatorsAndReferences) {
+    Y_UNIT_TEST(OperatorsAndReferences) { 
         TVector<size_t> values{1, 2, 3, 4, 5};
         auto range = MakeIteratorRange(values.begin(), values.end());
         UNIT_ASSERT_VALUES_EQUAL(range[2], 3);
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         UNIT_ASSERT_VALUES_EQUAL(rangeBVector[6], false);
     }
 
-    Y_UNIT_TEST(CanUseInAlgorithms) {
+    Y_UNIT_TEST(CanUseInAlgorithms) { 
         const int values[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
         auto range = MakeIteratorRange(values, values + Y_ARRAY_SIZE(values));
         // more like compileability test

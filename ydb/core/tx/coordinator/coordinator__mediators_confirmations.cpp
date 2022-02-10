@@ -21,7 +21,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         const TTabletId mediatorId = Confirmations->MediatorId;
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         CompleteTransactions = 0;
         NIceDb::TNiceDb db(txc.DB);
 
@@ -78,7 +78,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
         *Self->MonCounters.TxInFly -= CompleteTransactions;
         Self->MonCounters.CurrentTxInFly -= CompleteTransactions;
 
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
     }
 };
 

@@ -30,14 +30,14 @@ namespace {
         {}
 
         void Visit(TTypeType& node) override {
-            Y_UNUSED(node);
+            Y_UNUSED(node); 
             WriteIndentation();
             Out << "Type (Type)";
             WriteNewline();
         }
 
         void Visit(TVoidType& node) override {
-            Y_UNUSED(node);
+            Y_UNUSED(node); 
             WriteIndentation();
             Out << "Type (Void) ";
             WriteNewline();
@@ -346,7 +346,7 @@ namespace {
         }
 
         void Visit(TAnyType& node) override {
-            Y_UNUSED(node);
+            Y_UNUSED(node); 
             WriteIndentation();
             Out << "Type (Any) ";
             WriteNewline();
@@ -381,7 +381,7 @@ namespace {
         }
 
         void Visit(TResourceType& node) override {
-            Y_UNUSED(node);
+            Y_UNUSED(node); 
             WriteIndentation();
             Out << "Type (Resource) (" << node.GetTag() << ")";
             WriteNewline();
@@ -833,7 +833,7 @@ TString PrintNode(const TNode* node, bool singleLine) {
 
 template <>
 void Out<NKikimr::NMiniKQL::TType>(
-    IOutputStream& os,
+    IOutputStream& os, 
     TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam t
 )
 {

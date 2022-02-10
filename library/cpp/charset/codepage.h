@@ -85,7 +85,7 @@ struct CodePage {
     static void Initialize();
 
     inline bool SingleByteCodepage() const {
-        return DefaultChar != nullptr;
+        return DefaultChar != nullptr; 
     }
     inline bool NativeCodepage() const {
         return SingleByteCodepage() || CPEnum == CODES_UTF8;
@@ -103,7 +103,7 @@ namespace NCodepagePrivate {
 
     private:
         inline const CodePage* GetPrivate(ECharset e) const {
-            Y_ASSERT(e + DataShift >= 0 && e + DataShift < DataSize);
+            Y_ASSERT(e + DataShift >= 0 && e + DataShift < DataSize); 
             return Data[e + DataShift];
         }
 
@@ -115,7 +115,7 @@ namespace NCodepagePrivate {
         inline const CodePage* Get(ECharset e) const {
             const CodePage* res = GetPrivate(e);
             if (!res->SingleByteCodepage()) {
-                ythrow yexception() << "CodePage (" << (int)e << ") structure can only be used for single byte encodings";
+                ythrow yexception() << "CodePage (" << (int)e << ") structure can only be used for single byte encodings"; 
             }
 
             return res;
@@ -170,7 +170,7 @@ inline const char* NameByCharsetSafe(ECharset e) {
     if (CODES_UNKNOWN < e && e < CODES_MAX)
         return ::NCodepagePrivate::TCodepagesMap::Instance().NameByCharset(e);
     else
-        ythrow yexception() << "unknown encoding: " << (int)e;
+        ythrow yexception() << "unknown encoding: " << (int)e; 
 }
 
 inline const char* NameByCodePage(const CodePage* CP) {
@@ -180,7 +180,7 @@ inline const char* NameByCodePage(const CodePage* CP) {
 inline const CodePage* CodePageByName(const char* name) {
     ECharset code = CharsetByName(name);
     if (code == CODES_UNKNOWN)
-        return nullptr;
+        return nullptr; 
 
     return CodePageByCharset(code);
 }
@@ -204,7 +204,7 @@ struct Encoder {
         char code = Code(ch);
         if (code == 0 && ch != 0)
             code = DefaultChar[NUnicode::CharType(ch)];
-        Y_ASSERT(code != 0 || ch == 0);
+        Y_ASSERT(code != 0 || ch == 0); 
         return code;
     }
 

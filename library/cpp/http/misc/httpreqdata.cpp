@@ -29,7 +29,7 @@ TBaseServerRequestData::TBaseServerRequestData(const char* qs, SOCKET s)
 
 void TBaseServerRequestData::AppendQueryString(const char* str, size_t length) {
     if (Y_UNLIKELY(Search)) {
-        Y_ASSERT(strlen(Search) == SearchLength);
+        Y_ASSERT(strlen(Search) == SearchLength); 
         ModifiedQueryString.Reserve(SearchLength + length + 2);
         ModifiedQueryString.Assign(Search, SearchLength);
         if (SearchLength > 0 && Search[SearchLength - 1] != '&' &&
@@ -170,7 +170,7 @@ bool TBaseServerRequestData::Parse(const char* origReq) {
         ptrdiff_t delta = fragment - Search;
         // indeed, second case is a parse error
         SearchLength = (delta >= 0) ? delta : (urlEnd - Search);
-        Y_ASSERT(strlen(Search) == SearchLength);
+        Y_ASSERT(strlen(Search) == SearchLength); 
     } else {
         SearchLength = 0;
     }

@@ -10,7 +10,7 @@ namespace {
         }
 }
 
-Y_UNIT_TEST_SUITE(TPunycodeTest) {
+Y_UNIT_TEST_SUITE(TPunycodeTest) { 
     static bool TestRaw(const TString& utf8, const TString& punycode) {
         TUtf16String unicode = UTF8ToWide(utf8);
         TString buf1;
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TPunycodeTest) {
         return HasSameBuffer(WideToPunycode(unicode, buf1), buf1) && buf1 == punycode && HasSameBuffer(PunycodeToWide(punycode, buf2), buf2) && buf2 == unicode && WideToPunycode(unicode) == punycode && PunycodeToWide(punycode) == unicode;
     }
 
-    Y_UNIT_TEST(RawEncodeDecode) {
+    Y_UNIT_TEST(RawEncodeDecode) { 
         UNIT_ASSERT(TestRaw("", ""));
         UNIT_ASSERT(TestRaw(" ", " -"));
         UNIT_ASSERT(TestRaw("-", "--"));
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TPunycodeTest) {
         return ForceHostNameToPunycode(UTF8ToWide(bad)) == bad && ForcePunycodeToHostName(bad) == UTF8ToWide(bad);
     }
 
-    Y_UNIT_TEST(HostNameEncodeDecode) {
+    Y_UNIT_TEST(HostNameEncodeDecode) { 
         UNIT_ASSERT(TestHostName("президент.рф", "xn--d1abbgf6aiiy.xn--p1ai", true));
         UNIT_ASSERT(TestHostName("яндекс.ru", "xn--d1acpjx3f.ru", true));
         UNIT_ASSERT(TestHostName("пример", "xn--e1afmkfd", true));

@@ -8,7 +8,7 @@
 #include <util/stream/file.h>
 #include <util/stream/format.h>
 #include <util/system/hostname.h>
-#include <util/string/printf.h>
+#include <util/string/printf.h> 
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -79,42 +79,42 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
 
 void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResult& res) {
     if (res.Has("sys-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("sys-file"), Config.AppConfig.MutableActorSystemConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("sys-file"), Config.AppConfig.MutableActorSystemConfig())); 
     } else {
         auto sysConfig = DummyActorSystemConfig();
         Config.AppConfig.MutableActorSystemConfig()->CopyFrom(*sysConfig);
     }
 
     if (res.Has("naming-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("naming-file"), Config.AppConfig.MutableNameserviceConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("naming-file"), Config.AppConfig.MutableNameserviceConfig())); 
     }
 
     if (res.Has("domains-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("domains-file"), Config.AppConfig.MutableDomainsConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("domains-file"), Config.AppConfig.MutableDomainsConfig())); 
     }
 
     if (res.Has("bs-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("bs-file"), Config.AppConfig.MutableBlobStorageConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("bs-file"), Config.AppConfig.MutableBlobStorageConfig())); 
     }
 
     if (res.Has("log-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("log-file"), Config.AppConfig.MutableLogConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("log-file"), Config.AppConfig.MutableLogConfig())); 
     }
 
     if (res.Has("ic-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("ic-file"), Config.AppConfig.MutableInterconnectConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("ic-file"), Config.AppConfig.MutableInterconnectConfig())); 
     }
 
     if (res.Has("channels-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("channels-file"), Config.AppConfig.MutableChannelProfileConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("channels-file"), Config.AppConfig.MutableChannelProfileConfig())); 
     }
 
     if (res.Has("bootstrap-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("bootstrap-file"), Config.AppConfig.MutableBootstrapConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("bootstrap-file"), Config.AppConfig.MutableBootstrapConfig())); 
     }
 
     if (res.Has("vdisk-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("vdisk-file"), Config.AppConfig.MutableVDiskConfig()));
+        Y_VERIFY(ParsePBFromFile(res.Get("vdisk-file"), Config.AppConfig.MutableVDiskConfig())); 
     }
 
     if (res.Has("drivemodel-file")) {
@@ -274,7 +274,7 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
         RunOpts.ProxyBusQueueConfig.ConfigureLastGetopt(msgBusOpts, "");
         RunOpts.ProxyBusSessionConfig.ConfigureLastGetopt(msgBusOpts, "");
         TOptsParseResult mbusRes(&msgBusOpts, argc, argv);
-        Y_UNUSED(mbusRes);
+        Y_UNUSED(mbusRes); 
         RunOpts.StartTracingBusProxy = !RunOpts.TracePath.empty();
         RunOpts.StartBusProxy = true;
     }

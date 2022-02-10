@@ -24,6 +24,6 @@ THolder<IStream> NOutput::FromString(TString* output, size_t buffer_size) {
     return MakeHolder<TOwned<TStringOutput>>(buffer_size, *output);
 }
 
-THolder<IStream> NOutput::FromOutputStream(IOutputStream* output, size_t buffer_size) {
+THolder<IStream> NOutput::FromOutputStream(IOutputStream* output, size_t buffer_size) { 
     return MakeHolder<TStream>(output, buffer_size);
 }

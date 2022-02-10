@@ -2,15 +2,15 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TCGIEscapeTest) {
-    Y_UNIT_TEST(ReturnsEndOfTo) {
+Y_UNIT_TEST_SUITE(TCGIEscapeTest) { 
+    Y_UNIT_TEST(ReturnsEndOfTo) { 
         char r[10];
         const char* returned = CGIEscape(r, "123");
         UNIT_ASSERT_VALUES_EQUAL(r + strlen("123"), returned);
         UNIT_ASSERT_VALUES_EQUAL('\0', *returned);
     }
 
-    Y_UNIT_TEST(NotZeroTerminated) {
+    Y_UNIT_TEST(NotZeroTerminated) { 
         char r[] = {'1', '2', '3', '4'};
         char buf[sizeof(r) * 3 + 2];
 
@@ -19,13 +19,13 @@ Y_UNIT_TEST_SUITE(TCGIEscapeTest) {
         UNIT_ASSERT_EQUAL(ret, "1234");
     }
 
-    Y_UNIT_TEST(StringBuf) {
+    Y_UNIT_TEST(StringBuf) { 
         char tmp[100];
 
         UNIT_ASSERT_VALUES_EQUAL(CgiEscape(tmp, "!@#$%^&*(){}[]\" "), TStringBuf("!@%23$%25^%26*%28%29%7B%7D%5B%5D%22+"));
     }
 
-    Y_UNIT_TEST(StrokaRet) {
+    Y_UNIT_TEST(StrokaRet) { 
         UNIT_ASSERT_VALUES_EQUAL(CGIEscapeRet("!@#$%^&*(){}[]\" "), TString("!@%23$%25^%26*%28%29%7B%7D%5B%5D%22+"));
     }
 
@@ -47,14 +47,14 @@ Y_UNIT_TEST_SUITE(TCGIEscapeTest) {
 
 }
 
-Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
-    Y_UNIT_TEST(StringBuf) {
+Y_UNIT_TEST_SUITE(TCGIUnescapeTest) { 
+    Y_UNIT_TEST(StringBuf) { 
         char tmp[100];
 
         UNIT_ASSERT_VALUES_EQUAL(CgiUnescape(tmp, "!@%23$%25^%26*%28%29"), TStringBuf("!@#$%^&*()"));
     }
 
-    Y_UNIT_TEST(TestValidZeroTerm) {
+    Y_UNIT_TEST(TestValidZeroTerm) { 
         char r[10];
 
         CGIUnescape(r, "1234");
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         UNIT_ASSERT_VALUES_EQUAL(r, "12=34");
     }
 
-    Y_UNIT_TEST(TestInvalidZeroTerm) {
+    Y_UNIT_TEST(TestInvalidZeroTerm) { 
         char r[10];
 
         CGIUnescape(r, "%");
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         UNIT_ASSERT_VALUES_EQUAL(r, "%3u123");
     }
 
-    Y_UNIT_TEST(TestValidNotZeroTerm) {
+    Y_UNIT_TEST(TestValidNotZeroTerm) { 
         char r[10];
 
         CGIUnescape(r, "123456789", 4);
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         UNIT_ASSERT_VALUES_EQUAL(r, "12=34");
     }
 
-    Y_UNIT_TEST(TestInvalidNotZeroTerm) {
+    Y_UNIT_TEST(TestInvalidNotZeroTerm) { 
         char r[10];
 
         CGIUnescape(r, "%3d", 1);
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         UNIT_ASSERT_VALUES_EQUAL(r, "%3u1");
     }
 
-    Y_UNIT_TEST(StrokaOutParameterInplace) {
+    Y_UNIT_TEST(StrokaOutParameterInplace) { 
         TString s;
 
         s = "hello%3dworld";
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         UNIT_ASSERT_VALUES_EQUAL(s, "");
     }
 
-    Y_UNIT_TEST(StrokaOutParameterNotInplace) {
+    Y_UNIT_TEST(StrokaOutParameterNotInplace) { 
         TString s, sCopy;
 
         s = "hello%3dworld";
@@ -230,8 +230,8 @@ Y_UNIT_TEST_SUITE(TUrlEscapeTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TUrlUnescapeTest) {
-    Y_UNIT_TEST(StrokaOutParameterInplace) {
+Y_UNIT_TEST_SUITE(TUrlUnescapeTest) { 
+    Y_UNIT_TEST(StrokaOutParameterInplace) { 
         TString s;
 
         s = "hello%3dworld";
@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(TUrlUnescapeTest) {
         UNIT_ASSERT_VALUES_EQUAL(s, "");
     }
 
-    Y_UNIT_TEST(StrokaOutParameterNotInplace) {
+    Y_UNIT_TEST(StrokaOutParameterNotInplace) { 
         TString s, sCopy;
 
         s = "hello%3dworld";
@@ -285,15 +285,15 @@ Y_UNIT_TEST_SUITE(TUrlUnescapeTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TQuoteTest) {
-    Y_UNIT_TEST(ReturnsEndOfTo) {
+Y_UNIT_TEST_SUITE(TQuoteTest) { 
+    Y_UNIT_TEST(ReturnsEndOfTo) { 
         char r[10];
         const char* returned = Quote(r, "123");
         UNIT_ASSERT_VALUES_EQUAL(r + strlen("123"), returned);
         UNIT_ASSERT_VALUES_EQUAL('\0', *returned);
     }
 
-    Y_UNIT_TEST(SlashIsSafeByDefault) {
+    Y_UNIT_TEST(SlashIsSafeByDefault) { 
         char r[100];
         Quote(r, "/path;tail/path,tail/");
         UNIT_ASSERT_VALUES_EQUAL("/path%3Btail/path%2Ctail/", r);
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TQuoteTest) {
         UNIT_ASSERT_VALUES_EQUAL("/path%3Btail/path%2Ctail/", s.c_str());
     }
 
-    Y_UNIT_TEST(SafeColons) {
+    Y_UNIT_TEST(SafeColons) { 
         char r[100];
         Quote(r, "/path;tail/path,tail/", ";,");
         UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", r);
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TQuoteTest) {
         UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", s.c_str());
     }
 
-    Y_UNIT_TEST(StringBuf) {
+    Y_UNIT_TEST(StringBuf) { 
         char r[100];
         char* end = Quote(r, "abc\0/path", "");
         UNIT_ASSERT_VALUES_EQUAL("abc\0%2Fpath", TStringBuf(r, end));

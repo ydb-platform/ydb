@@ -39,14 +39,14 @@ private:
     }
 
     TStatus HandleLength(TExprBase node, TExprContext& ctx) override {
-        Y_UNUSED(node);
-        Y_UNUSED(ctx);
+        Y_UNUSED(node); 
+        Y_UNUSED(ctx); 
         return TStatus::Ok;
     }
 
     TStatus HandleConfigure(TExprBase node, TExprContext& ctx) override {
-        Y_UNUSED(node);
-        Y_UNUSED(ctx);
+        Y_UNUSED(node); 
+        Y_UNUSED(ctx); 
         return TStatus::Ok;
     }
 
@@ -148,7 +148,7 @@ public:
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        Y_UNUSED(input);
+        Y_UNUSED(input); 
         return AsyncFuture;
     }
 
@@ -285,10 +285,10 @@ public:
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx))
 
     {
-        Y_UNUSED(FunctionRegistry);
-        Y_UNUSED(Types);
+        Y_UNUSED(FunctionRegistry); 
+        Y_UNUSED(Types); 
 
-        Y_VERIFY_DEBUG(gateway);
+        Y_VERIFY_DEBUG(gateway); 
         Y_VERIFY_DEBUG(sessionCtx);
     }
 
@@ -578,7 +578,7 @@ public:
     }
 
     TString GetProviderPath(const TExprNode& node) override {
-        Y_UNUSED(node);
+        Y_UNUSED(node); 
 
         return TString(KikimrProviderName);
     }

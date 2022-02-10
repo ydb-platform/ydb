@@ -98,7 +98,7 @@ public:
                 } else if (AddedKeysIterator != KeySet.AddedKeys.end()) {
                     return *AddedKeysIterator;
                 } else {
-                    Y_FAIL("operator*() called on invalid iterator");
+                    Y_FAIL("operator*() called on invalid iterator"); 
                 }
             }
 
@@ -145,7 +145,7 @@ public:
                 } else if (AddedKeysIterator != KeySet.AddedKeys.end()) {
                     ++AddedKeysIterator;
                 } else {
-                    Y_FAIL("operator++() called on invalid iterator");
+                    Y_FAIL("operator++() called on invalid iterator"); 
                 }
             }
 
@@ -438,7 +438,7 @@ public:
     void OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx, const TTabletStorageInfo *info);
     bool PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THolder<TIntermediate> &intermediate,
         TRequestType::EType &inOutRequestType, const TActorContext &ctx, const TTabletStorageInfo *info);
-    void RenderHTMLPage(IOutputStream &out) const;
+    void RenderHTMLPage(IOutputStream &out) const; 
     void MonChannelStat(NJson::TJsonValue& out) const;
 
     bool CheckDeadline(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,

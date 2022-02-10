@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/fwd.h>
+#include <util/generic/fwd.h> 
 
 /// Converts a text into HTML-code. Special characters of HTML («<», «>», ...) replaced with entities.
 TString EncodeHtmlPcdata(const TStringBuf str, bool qAmp = true);

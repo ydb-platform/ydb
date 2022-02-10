@@ -111,7 +111,7 @@ public:
     bool IsInclusive() const { return Inclusive; }
     NNodes::TMaybeNode<NNodes::TExprBase> GetValue(size_t index) const { return Values[index]; }
 
-    void Print(IOutputStream& output) const;
+    void Print(IOutputStream& output) const; 
 
 private:
     TExprContext* Ctx;
@@ -167,7 +167,7 @@ public:
         return ToTuple;
     }
 
-    void Print(IOutputStream& output) const;
+    void Print(IOutputStream& output) const; 
 
 private:
     TExprContext* Ctx;
@@ -226,7 +226,7 @@ public:
         return IsSingleRange() && KeyRanges.front().IsFullScan();
     }
 
-    void Print(IOutputStream& output) const;
+    void Print(IOutputStream& output) const; 
 
 private:
     TVector<TString> KeyColumns;

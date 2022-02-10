@@ -69,13 +69,13 @@ void TRemoteServerSession::OnMessageReceived(TRemoteConnection* c, TVectorSwaps<
         workQueueTemp.GetVector()->reserve(messages.size());
     }
 
-    for (auto& message : messages) {
+    for (auto& message : messages) { 
         // TODO: incref once
         TIntrusivePtr<TRemoteServerConnection> connection(CheckedCast<TRemoteServerConnection*>(c));
         if (executeInPool) {
-            workQueueTemp.GetVector()->push_back(new TInvokeOnMessage(this, message, connection));
+            workQueueTemp.GetVector()->push_back(new TInvokeOnMessage(this, message, connection)); 
         } else {
-            InvokeOnMessage(message, connection);
+            InvokeOnMessage(message, connection); 
         }
     }
 
@@ -86,7 +86,7 @@ void TRemoteServerSession::OnMessageReceived(TRemoteConnection* c, TVectorSwaps<
 }
 
 void TRemoteServerSession::InvokeOnMessage(TBusMessagePtrAndHeader& request, TIntrusivePtr<TRemoteServerConnection>& conn) {
-    if (Y_UNLIKELY(AtomicGet(Down))) {
+    if (Y_UNLIKELY(AtomicGet(Down))) { 
         ReleaseInWorkRequests(*conn.Get(), request.MessagePtr.Get());
         InvokeOnError(request.MessagePtr.Release(), MESSAGE_SHUTDOWN);
     } else {
@@ -97,7 +97,7 @@ void TRemoteServerSession::InvokeOnMessage(TBusMessagePtrAndHeader& request, TIn
         ident.Connection.Swap(conn);
         request.MessagePtr->GetIdentity(ident);
 
-        Y_ASSERT(request.MessagePtr->LocalFlags & MESSAGE_IN_WORK);
+        Y_ASSERT(request.MessagePtr->LocalFlags & MESSAGE_IN_WORK); 
         DoSwap(request.MessagePtr->LocalFlags, ident.LocalFlags);
 
         ident.RecvTime = request.MessagePtr->RecvTime;
@@ -146,7 +146,7 @@ void TRemoteServerSession::FillStatus() {
 void TRemoteServerSession::AcquireInWorkRequests(TArrayRef<const TBusMessagePtrAndHeader> messages) {
     TAtomicBase size = 0;
     for (auto message = messages.begin(); message != messages.end(); ++message) {
-        Y_ASSERT(!(message->MessagePtr->LocalFlags & MESSAGE_IN_WORK));
+        Y_ASSERT(!(message->MessagePtr->LocalFlags & MESSAGE_IN_WORK)); 
         message->MessagePtr->LocalFlags |= MESSAGE_IN_WORK;
         size += message->MessagePtr->GetHeader()->Size;
     }
@@ -157,7 +157,7 @@ void TRemoteServerSession::AcquireInWorkRequests(TArrayRef<const TBusMessagePtrA
 void TRemoteServerSession::ReleaseInWorkResponses(TArrayRef<const TBusMessagePtrAndHeader> responses) {
     TAtomicBase size = 0;
     for (auto response = responses.begin(); response != responses.end(); ++response) {
-        Y_ASSERT((response->MessagePtr->LocalFlags & MESSAGE_REPLY_IS_BEGING_SENT));
+        Y_ASSERT((response->MessagePtr->LocalFlags & MESSAGE_REPLY_IS_BEGING_SENT)); 
         response->MessagePtr->LocalFlags &= ~MESSAGE_REPLY_IS_BEGING_SENT;
         size += response->MessagePtr->RequestSize;
     }
@@ -166,7 +166,7 @@ void TRemoteServerSession::ReleaseInWorkResponses(TArrayRef<const TBusMessagePtr
 }
 
 void TRemoteServerSession::ReleaseInWorkRequests(TRemoteConnection& con, TBusMessage* request) {
-    Y_ASSERT((request->LocalFlags & MESSAGE_IN_WORK));
+    Y_ASSERT((request->LocalFlags & MESSAGE_IN_WORK)); 
     request->LocalFlags &= ~MESSAGE_IN_WORK;
 
     const size_t size = request->GetHeader()->Size;
@@ -186,7 +186,7 @@ void TRemoteServerSession::ConvertInWork(TBusIdentity& req, TBusMessage* reply) 
     reply->SetIdentity(req);
 
     req.SetInWork(false);
-    Y_ASSERT(!(reply->LocalFlags & MESSAGE_REPLY_IS_BEGING_SENT));
+    Y_ASSERT(!(reply->LocalFlags & MESSAGE_REPLY_IS_BEGING_SENT)); 
     reply->LocalFlags |= MESSAGE_REPLY_IS_BEGING_SENT;
     reply->RequestSize = req.Size;
 }
@@ -201,6 +201,6 @@ void TRemoteServerSession::PauseInput(bool pause) {
 }
 
 unsigned TRemoteServerSession::GetActualListenPort() {
-    Y_VERIFY(Config.ListenPort > 0, "state check");
+    Y_VERIFY(Config.ListenPort > 0, "state check"); 
     return Config.ListenPort;
 }

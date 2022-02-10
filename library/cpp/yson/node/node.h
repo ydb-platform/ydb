@@ -12,8 +12,8 @@
 #include <cmath>
 #include <variant>
 
-class IInputStream;
-class IOutputStream;
+class IInputStream; 
+class IOutputStream; 
 
 namespace NYT {
 
@@ -149,16 +149,16 @@ public:
     TListType& AsList();
     TMapType& AsMap();
 
-    const TString& UncheckedAsString() const noexcept;
-    i64 UncheckedAsInt64() const noexcept;
-    ui64 UncheckedAsUint64() const noexcept;
-    double UncheckedAsDouble() const noexcept;
-    bool UncheckedAsBool() const noexcept;
+    const TString& UncheckedAsString() const noexcept; 
+    i64 UncheckedAsInt64() const noexcept; 
+    ui64 UncheckedAsUint64() const noexcept; 
+    double UncheckedAsDouble() const noexcept; 
+    bool UncheckedAsBool() const noexcept; 
     const TListType& UncheckedAsList() const noexcept;
     const TMapType& UncheckedAsMap() const noexcept;
     TListType& UncheckedAsList() noexcept;
     TMapType& UncheckedAsMap() noexcept;
-
+ 
     // integer types cast
     // makes overflow checks
     template<typename T>
@@ -264,8 +264,8 @@ public:
 
     // Serialize TNode using binary yson format.
     // Methods for ysaveload.
-    void Save(IOutputStream* output) const;
-    void Load(IInputStream* input);
+    void Save(IOutputStream* output) const; 
+    void Load(IInputStream* input); 
 
 private:
     void Move(TNode&& rhs);

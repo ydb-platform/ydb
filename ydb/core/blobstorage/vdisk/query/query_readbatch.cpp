@@ -159,7 +159,7 @@ namespace NKikimr {
 
         // sort read requests
         Sort(Result->DiskDataItemPtrs.begin(), Result->DiskDataItemPtrs.end(), TDataItem::DiskPartLess);
-        Y_VERIFY(CheckDiskDataItemsOrdering(true));
+        Y_VERIFY(CheckDiskDataItemsOrdering(true)); 
 
         // plan real requests
         TGlueRead *back = nullptr;
@@ -175,7 +175,7 @@ namespace NKikimr {
                 } else {
                     ui32 prevEnd = back->Part.Offset + back->Part.Size;
                     ui32 nextBeg = item->ActualRead.Offset;
-                    Y_VERIFY(prevEnd <= nextBeg, "back: %s item: %s dataItems: %s",
+                    Y_VERIFY(prevEnd <= nextBeg, "back: %s item: %s dataItems: %s", 
                            back->Part.ToString().data(), item->ActualRead.ToString().data(), DiskDataItemsToString().data());
 
                     if (nextBeg <= prevEnd + Ctx->PDiskCtx->Dsk->GlueRequestDistanceBytes) {

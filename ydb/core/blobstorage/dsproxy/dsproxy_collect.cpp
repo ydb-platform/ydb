@@ -35,9 +35,9 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         ProcessReplyFromQueue(ev);
         ResponsesReceived++;
         const NKikimrBlobStorage::TEvVCollectGarbageResult &record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus());
+        Y_VERIFY(record.HasStatus()); 
         const NKikimrProto::EReplyStatus status = record.GetStatus();
-        Y_VERIFY(record.HasVDiskID());
+        Y_VERIFY(record.HasVDiskID()); 
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
         A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPC01", "received"

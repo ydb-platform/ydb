@@ -19,8 +19,8 @@ DeclareTuneTypeParam(TweakStructB, TStructB);
 DeclareTuneValueParam(TweakParam1, ui32, Param1);
 DeclareTuneValueParam(TweakParam2, ui32, Param2);
 
-Y_UNIT_TEST_SUITE(TestTuning) {
-    Y_UNIT_TEST(Defaults) {
+Y_UNIT_TEST_SUITE(TestTuning) { 
+    Y_UNIT_TEST(Defaults) { 
         using TTuned = TTune<TDefaults>;
         using TunedA = TTuned::TStructA;
         using TunedB = TTuned::TStructB;
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TestTuning) {
         UNIT_ASSERT_EQUAL(param2, 42);
     }
 
-    Y_UNIT_TEST(TuneStructA) {
+    Y_UNIT_TEST(TuneStructA) { 
         struct TMyStruct {
         };
 
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TestTuning) {
         UNIT_ASSERT_EQUAL(param2, 42);
     }
 
-    Y_UNIT_TEST(TuneParam1) {
+    Y_UNIT_TEST(TuneParam1) { 
         using TTuned = TTune<TDefaults, TweakParam1<24>>;
 
         using TunedA = TTuned::TStructA;
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TestTuning) {
         UNIT_ASSERT_EQUAL(param2, 42);
     }
 
-    Y_UNIT_TEST(TuneStructAAndParam1) {
+    Y_UNIT_TEST(TuneStructAAndParam1) { 
         struct TMyStruct {
         };
 
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TestTuning) {
         UNIT_ASSERT_EQUAL(param2, 42);
     }
 
-    Y_UNIT_TEST(TuneParam1AndStructA) {
+    Y_UNIT_TEST(TuneParam1AndStructA) { 
         struct TMyStruct {
         };
 

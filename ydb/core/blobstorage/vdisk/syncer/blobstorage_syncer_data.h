@@ -50,12 +50,12 @@ namespace NKikimr {
             TInstant LastGood = {};
 
             TPeerSyncState();
-            void Serialize(IOutputStream &s) const;
+            void Serialize(IOutputStream &s) const; 
             void ParseFromArcadiaStream(IInputStream &str);
             void Serialize(NKikimrVDiskData::TSyncerVDiskEntry &pb) const;
             void Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb);
             TString ToString() const;
-            void OutputHtml(IOutputStream &str) const;
+            void OutputHtml(IOutputStream &str) const; 
 
             static bool Good(ESyncStatus status) {
                 return status == TSyncStatusVal::SyncDone ||
@@ -74,7 +74,7 @@ namespace NKikimr {
             void Serialize(NKikimrVDiskData::TSyncerVDiskEntry &pb) const;
             void Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb);
             TString ToString() const;
-            void OutputHtml(IOutputStream &str) const;
+            void OutputHtml(IOutputStream &str) const; 
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -87,12 +87,12 @@ namespace NKikimr {
             TPeerSyncState PeerSyncState;
             TPeerGuidInfo PeerGuidInfo;
 
-            void Serialize(IOutputStream &s) const;
+            void Serialize(IOutputStream &s) const; 
             void ParseFromArcadiaStream(IInputStream &str);
             void Serialize(NKikimrVDiskData::TSyncerVDiskEntry &pb) const;
             void Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb);
             TString ToString() const;
-            void OutputHtml(IOutputStream &str) const;
+            void OutputHtml(IOutputStream &str) const; 
         };
 
     } // NSyncer
@@ -134,7 +134,7 @@ namespace NKikimr {
         const TValue &operator [](const TVDiskIdShort &vdisk) const { return Neighbors[vdisk]; }
 
         template <class TPrinter>
-        void OutputHtml(IOutputStream &str,
+        void OutputHtml(IOutputStream &str, 
                         TPrinter &printer,
                         const TString &name,
                         const TString &divClass) const {
@@ -142,7 +142,7 @@ namespace NKikimr {
         }
 
         template <class TPrinter>
-        void OutputHtmlTable(IOutputStream &str, TPrinter &printer) const {
+        void OutputHtmlTable(IOutputStream &str, TPrinter &printer) const { 
             Neighbors.OutputHtmlTable<TPrinter>(str, printer);
         }
 
@@ -150,12 +150,12 @@ namespace NKikimr {
         class TOldDes;
         class TSer;
         class TDes;
-        void OldSerialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const;
-        void OldParse(IInputStream &str);
+        void OldSerialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const; 
+        void OldParse(IInputStream &str); 
         void OldParse(const TString &data);
-        void Serialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const;
+        void Serialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const; 
         void Serialize(NKikimrVDiskData::TSyncerEntryPoint *pb, const TBlobStorageGroupInfo *info) const;
-        void Parse(IInputStream &str);
+        void Parse(IInputStream &str); 
         void Parse(const TString &data);
         void Parse(const NKikimrVDiskData::TSyncerEntryPoint &pb);
         void ApplyChanges(const TActorContext &ctx,

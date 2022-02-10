@@ -8,8 +8,8 @@ using namespace NKikimr;
 
 #define STR Cnull
 
-Y_UNIT_TEST_SUITE(ReadBatcher) {
-    Y_UNIT_TEST(Range) {
+Y_UNIT_TEST_SUITE(ReadBatcher) { 
+    Y_UNIT_TEST(Range) { 
         TVector<std::pair<ui32, ui32>> ranges;
         const ui32 len = 8;
         for (ui32 start = 0; start <= len; ++start) {
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
         }
     }
 
-    Y_UNIT_TEST(ReadBatcher) {
+    Y_UNIT_TEST(ReadBatcher) { 
         struct TPayload {
             TChunkIdx ChunkIdx;
             ui32 Offset;

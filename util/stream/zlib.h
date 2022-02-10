@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "input.h"
 #include "output.h"
 #include "buffered.h"
@@ -45,7 +45,7 @@ namespace ZLib {
  * benchmark). For fast buffered ZLib stream reading use `TBufferedZLibDecompress`
  * aka `TZDecompress`.
  */
-class TZLibDecompress: public IInputStream {
+class TZLibDecompress: public IInputStream { 
 public:
     TZLibDecompress(IZeroCopyInput* input, ZLib::StreamType type = ZLib::Auto, TStringBuf dict = {});
     TZLibDecompress(IInputStream* input, ZLib::StreamType type = ZLib::Auto, size_t buflen = ZLib::ZLIB_BUF_LEN,
@@ -56,7 +56,7 @@ public:
      *
      * If multiple streams are allowed, their decompressed content will be concatenated.
      * If multiple streams are disabled, then only first stream is decompressed. After that end
-     * of IInputStream will have happen, i.e. method Read() will return 0.
+     * of IInputStream will have happen, i.e. method Read() will return 0. 
      *
      * @param allowMultipleStreams - flag to allow (true) or disable (false) multiple streams.
      */
@@ -75,10 +75,10 @@ public:
 /**
  * Non-buffered ZLib compressing stream.
  */
-class TZLibCompress: public IOutputStream {
+class TZLibCompress: public IOutputStream { 
 public:
     struct TParams {
-        inline TParams(IOutputStream* out)
+        inline TParams(IOutputStream* out) 
             : Out(out)
             , Type(ZLib::ZLib)
             , CompressionLevel(6)
@@ -104,13 +104,13 @@ public:
             return *this;
         }
 
-        inline TParams& SetDict(const TStringBuf dict) noexcept {
+        inline TParams& SetDict(const TStringBuf dict) noexcept { 
             Dict = dict;
 
             return *this;
         }
 
-        IOutputStream* Out;
+        IOutputStream* Out; 
         ZLib::StreamType Type;
         size_t CompressionLevel;
         size_t BufLen;
@@ -121,15 +121,15 @@ public:
         Init(params);
     }
 
-    inline TZLibCompress(IOutputStream* out, ZLib::StreamType type) {
+    inline TZLibCompress(IOutputStream* out, ZLib::StreamType type) { 
         Init(TParams(out).SetType(type));
     }
 
-    inline TZLibCompress(IOutputStream* out, ZLib::StreamType type, size_t compression_level) {
+    inline TZLibCompress(IOutputStream* out, ZLib::StreamType type, size_t compression_level) { 
         Init(TParams(out).SetType(type).SetCompressionLevel(compression_level));
     }
 
-    inline TZLibCompress(IOutputStream* out, ZLib::StreamType type, size_t compression_level, size_t buflen) {
+    inline TZLibCompress(IOutputStream* out, ZLib::StreamType type, size_t compression_level, size_t buflen) { 
         Init(TParams(out).SetType(type).SetCompressionLevel(compression_level).SetBufLen(buflen));
     }
 

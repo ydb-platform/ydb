@@ -16,7 +16,7 @@
 using namespace NYql;
 using namespace NThreading;
 
-Y_UNIT_TEST_SUITE(TFileStorageTests) {
+Y_UNIT_TEST_SUITE(TFileStorageTests) { 
 
     static TString ReadFileContent(const TString& path) {
         return TIFStream(path).ReadAll();
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         return "W/" + strongETag;
     }
 
-    Y_UNIT_TEST(PutUrlNoTokenNoETag) {
+    Y_UNIT_TEST(PutUrlNoTokenNoETag) { 
         auto server = CreateTestHttpServer();
 
         int downloadCount = 0;
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_EQUAL("ABC", ReadFileContent(link2->GetPath()));
     }
 
-    Y_UNIT_TEST(PutUrlNoAccessForBadToken) {
+    Y_UNIT_TEST(PutUrlNoAccessForBadToken) { 
         auto server = CreateTestHttpServer();
 
         TString okToken = "TOKEN_1";
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl(url, badToken), std::exception, "Failed to fetch url");
     }
 
-    Y_UNIT_TEST(PutUrlETagChange) {
+    Y_UNIT_TEST(PutUrlETagChange) { 
         auto server = CreateTestHttpServer();
 
         TString currentETag = "TAG_1";
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_EQUAL(link3->GetMd5(), link4->GetMd5());
     }
 
-    Y_UNIT_TEST(PutUrlETagChangeButNoSupportForIfNoneMatch) {
+    Y_UNIT_TEST(PutUrlETagChangeButNoSupportForIfNoneMatch) { 
         auto server = CreateTestHttpServer();
 
         TString currentETag = "TAG_1";
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_EQUAL(link3->GetMd5(), link4->GetMd5());
     }
 
-    Y_UNIT_TEST(PutUrlWeakETagChange) {
+    Y_UNIT_TEST(PutUrlWeakETagChange) { 
         auto server = CreateTestHttpServer();
 
         TString currentETag = "TAG_1";
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_EQUAL("XYZPQAZWSXEDC", ReadFileContent(link4->GetPath()));
     }
 
-    Y_UNIT_TEST(SecondPutUrlNoETagButFileRemoved) {
+    Y_UNIT_TEST(SecondPutUrlNoETagButFileRemoved) { 
         auto server = CreateTestHttpServer();
 
         int downloadCount = 0;
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_EQUAL("ABC", ReadFileContent(link2->GetPath()));
     }
 
-    Y_UNIT_TEST(SecondPutUrlETagButFileRemoved) {
+    Y_UNIT_TEST(SecondPutUrlETagButFileRemoved) { 
         auto server = CreateTestHttpServer();
 
         int downloadCount = 0;
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_EQUAL("ABC", ReadFileContent(link2->GetPath()));
     }
 
-    Y_UNIT_TEST(SecondPutUrlETagButMetaRemoved) {
+    Y_UNIT_TEST(SecondPutUrlETagButMetaRemoved) { 
         auto server = CreateTestHttpServer();
 
         int downloadCount = 0;
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_EQUAL("ABC", ReadFileContent(link2->GetPath()));
     }
 
-    Y_UNIT_TEST(Md5ForPutFiles) {
+    Y_UNIT_TEST(Md5ForPutFiles) { 
         TString currentContent = "ABC";
 
         TFileStoragePtr fs = CreateTestFS();
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_UNEQUAL(link3->GetMd5(), link4->GetMd5());
     }
 
-    Y_UNIT_TEST(NoUrlDownloadRetryOnBadCode) {
+    Y_UNIT_TEST(NoUrlDownloadRetryOnBadCode) { 
         auto server = CreateTestHttpServer();
 
         int downloadCount = 0;

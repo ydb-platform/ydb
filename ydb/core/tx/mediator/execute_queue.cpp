@@ -25,7 +25,7 @@ namespace NTxMediator {
 
         TBucket& SelectBucket(TTabletId tablet) {
             const ui32 bucketIdx = BucketSelector.Select(tablet);
-            Y_VERIFY_DEBUG(bucketIdx < Buckets.size());
+            Y_VERIFY_DEBUG(bucketIdx < Buckets.size()); 
             return Buckets[bucketIdx];
         }
 
@@ -183,11 +183,11 @@ namespace NTxMediator {
             , HashRange(hashRange)
             , BucketSelector(timecastBuckets)
         {
-            Y_UNUSED(HashRange);
+            Y_UNUSED(HashRange); 
         }
 
         TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId& parentId) override {
-            Y_UNUSED(parentId);
+            Y_UNUSED(parentId); 
             return new IEventHandle(self, self, new TEvents::TEvBootstrap());
         }
 

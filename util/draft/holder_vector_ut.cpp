@@ -2,14 +2,14 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(THolderVectorTest) {
-    Y_UNIT_TEST(TestCreateEmpty) {
+Y_UNIT_TEST_SUITE(THolderVectorTest) { 
+    Y_UNIT_TEST(TestCreateEmpty) { 
         THolderVector<int> ints;
         UNIT_ASSERT_EQUAL(ints.Size(), 0);
         UNIT_ASSERT(!ints);
     }
 
-    Y_UNIT_TEST(TestCreateNonEmpty) {
+    Y_UNIT_TEST(TestCreateNonEmpty) { 
         THolderVector<int> ints(5);
         UNIT_ASSERT_EQUAL(ints.Size(), 5);
         UNIT_ASSERT(ints);
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
         }
     }
 
-    Y_UNIT_TEST(TestResetValue) {
+    Y_UNIT_TEST(TestResetValue) { 
         THolderVector<int> ints;
         ints.PushBack(new int(0));
         ints.PushBack(new int(1));
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
         UNIT_ASSERT_VALUES_EQUAL(*ints[1], 3);
     }
 
-    Y_UNIT_TEST(TestResetNoValue) {
+    Y_UNIT_TEST(TestResetNoValue) { 
         THolderVector<int> ints;
         ints.Resize(1);
         UNIT_ASSERT_EQUAL(ints[0], (int*)nullptr);
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
         UNIT_ASSERT_VALUES_EQUAL(*ints[0], 1);
     }
 
-    Y_UNIT_TEST(TestResetSmartPtr) {
+    Y_UNIT_TEST(TestResetSmartPtr) { 
         THolderVector<int> ints;
         ints.Resize(2);
 
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
         UNIT_ASSERT(!holder);
     }
 
-    Y_UNIT_TEST(TestSwap) {
+    Y_UNIT_TEST(TestSwap) { 
         THolderVector<int> v1;
         v1.PushBack(new int(1));
 
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
         UNIT_ASSERT(v1.empty() && v2.size() == 1 && *v2.front() == 1);
     }
 
-    Y_UNIT_TEST(TestUniquePtr) {
+    Y_UNIT_TEST(TestUniquePtr) { 
         THolderVector<TString> v;
         std::unique_ptr<TString> str(new TString("hello"));
         v.PushBack(std::move(str));

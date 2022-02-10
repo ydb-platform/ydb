@@ -475,7 +475,7 @@ namespace NActors {
         else if (state == TExecutionState::FreeExecuting)
             AtomicStore(&ExecutionState, (ui32)TExecutionState::FreeLeaving);
         else
-            Y_FAIL();
+            Y_FAIL(); 
         AtomicBarrier();
     }
 

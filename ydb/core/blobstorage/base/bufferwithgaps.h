@@ -66,19 +66,19 @@ namespace NKikimr {
         }
 
         TString ToString() const {
-            Y_VERIFY(IsReadable(), "returned data is corrupt (or was never written) and therefore could not be used safely");
+            Y_VERIFY(IsReadable(), "returned data is corrupt (or was never written) and therefore could not be used safely"); 
             return Data;
         }
 
         TString Substr(ui32 offset, ui32 len) const {
-            Y_VERIFY(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" PRIu32
+            Y_VERIFY(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" PRIu32 
                    " len# %" PRIu32 " and therefore could not be used safely", offset, len);
             return Data.substr(offset, len);
         }
 
         template<typename T>
         const T *DataPtr(ui32 offset, ui32 len = sizeof(T)) const {
-            Y_VERIFY(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" PRIu32
+            Y_VERIFY(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" PRIu32 
                    " len# %" PRIu32 " and therefore could not be used safely", offset, len);
             return reinterpret_cast<T *>(Data.data() + offset);
         }

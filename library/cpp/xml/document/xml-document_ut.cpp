@@ -3,8 +3,8 @@
 
 #include "xml-document.h"
 
-Y_UNIT_TEST_SUITE(TestXmlDocument) {
-    Y_UNIT_TEST(Iteration) {
+Y_UNIT_TEST_SUITE(TestXmlDocument) { 
+    Y_UNIT_TEST(Iteration) { 
         NXml::TDocument xml(
             "<?xml version=\"1.0\"?>\n"
             "<root>qq<a><b></b></a>ww<c></c></root>",
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EQUAL(n.Name(), "c");
     }
 
-    Y_UNIT_TEST(ParseString) {
+    Y_UNIT_TEST(ParseString) { 
         NXml::TDocument xml(
             "<?xml version=\"1.0\"?>\n"
             "<root>\n"
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         NXml::TConstNode text = root.Node("text");
         UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст");
     }
-    Y_UNIT_TEST(SerializeString) {
+    Y_UNIT_TEST(SerializeString) { 
         NXml::TDocument xml("frob", NXml::TDocument::RootName);
         xml.Root().SetAttr("xyzzy", "Frobozz");
         xml.Root().SetAttr("kulness", 0.3);
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
                                                       "<frob xyzzy=\"привет =)\"/>\n");
         }
     }
-    Y_UNIT_TEST(XPathNs) {
+    Y_UNIT_TEST(XPathNs) { 
         using namespace NXml;
         TDocument xml(
             "<?xml version=\"1.0\"?>\n"
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EXCEPTION(root.Node("text", false, *ctxt), yexception);
         UNIT_ASSERT_EQUAL(root.Node("h:text", false, *ctxt).Value<TString>(), "Некоторый текст");
     }
-    Y_UNIT_TEST(XmlNodes) {
+    Y_UNIT_TEST(XmlNodes) { 
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"
                       "<root>qq<a><b>asdfg</b></a>ww<c></c></root>",
@@ -151,14 +151,14 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EXCEPTION(node.Value<TString>(), yexception);
         UNIT_ASSERT_EXCEPTION(node.IsText(), yexception);
     }
-    Y_UNIT_TEST(DefVal) {
+    Y_UNIT_TEST(DefVal) { 
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"
                       "<root><a></a></root>",
                       NXml::TDocument::String);
         UNIT_ASSERT_EQUAL(xml.Root().Node("a", true).Node("b", true).Value<int>(3), 3);
     }
-    Y_UNIT_TEST(NodesVsXPath) {
+    Y_UNIT_TEST(NodesVsXPath) { 
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"
                       "<root><a x=\"y\"></a></root>",
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EXCEPTION(xml.Root().Nodes("/root/a/@x"), yexception);
         UNIT_ASSERT_VALUES_EQUAL(xml.Root().XPath("/root/a/@x").Size(), 1);
     }
-    Y_UNIT_TEST(NodeIsFirst) {
+    Y_UNIT_TEST(NodeIsFirst) { 
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"
                       "<root><a x=\"y\">first</a>"
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EXCEPTION(xml.Root().Node("/root/a/@x"), yexception);
         UNIT_ASSERT_STRINGS_EQUAL(xml.Root().Node("/root/a").Value<TString>(), "first");
     }
-    Y_UNIT_TEST(CopyNode) {
+    Y_UNIT_TEST(CopyNode) { 
         using namespace NXml;
         // default-construct empty node
         TNode empty;
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
                                  "<root><a><node><b>bold</b><i>ita</i></node></a></root>\n");
     }
 
-    Y_UNIT_TEST(RenderNode) {
+    Y_UNIT_TEST(RenderNode) { 
         using namespace NXml;
         {
             // no namespaces
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         }
     }
 
-    Y_UNIT_TEST(ReuseXPathContext) {
+    Y_UNIT_TEST(ReuseXPathContext) { 
         using namespace NXml;
 
         TDocument xml(
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EQUAL(ys[0].Value<int>(), 20);
     }
 
-    Y_UNIT_TEST(Html) {
+    Y_UNIT_TEST(Html) { 
         using namespace NXml;
 
         TDocument htmlChunk("video", TDocument::RootName);

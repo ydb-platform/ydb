@@ -7,7 +7,7 @@
 using namespace NRainCheck;
 using namespace NActor;
 
-Y_UNIT_TEST_SUITE(Sleep) {
+Y_UNIT_TEST_SUITE(Sleep) { 
     struct TTestTask: public ISimpleTask {
         TSimpleEnv* const Env;
         TTestSync* const TestSync;
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(Sleep) {
         }
     };
 
-    Y_UNIT_TEST(Test) {
+    Y_UNIT_TEST(Test) { 
         TTestSync testSync;
 
         TSimpleEnv env;

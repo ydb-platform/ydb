@@ -80,7 +80,7 @@ public:
         , ChannelInfo(Info->ChannelInfo(0))
         , CurrentHistoryIndex(ChannelInfo->History.size())
     {
-        Y_VERIFY(CurrentHistoryIndex > 0);
+        Y_VERIFY(CurrentHistoryIndex > 0); 
     }
 
     void Bootstrap() {

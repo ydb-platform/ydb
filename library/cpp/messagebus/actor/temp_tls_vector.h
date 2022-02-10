@@ -19,7 +19,7 @@ public:
 
     TTempTlsVector() {
         Vector = FastTlsSingletonWithTag<TVectorType<T, std::allocator<T>>, TTagForTls>();
-        Y_ASSERT(Vector->empty());
+        Y_ASSERT(Vector->empty()); 
     }
 
     ~TTempTlsVector() {

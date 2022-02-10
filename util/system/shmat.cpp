@@ -91,7 +91,7 @@ namespace {
 
 TSharedMemory::TSharedMemory()
     : Handle(INVALID_FHANDLE)
-    , Data(nullptr)
+    , Data(nullptr) 
     , Size(0)
 {
 }
@@ -102,7 +102,7 @@ static void FormatName(char* buf, const TGUID& id) {
 }
 
 bool TSharedMemory::Open(const TGUID& id, int size) {
-    //Y_ASSERT(Data == 0);
+    //Y_ASSERT(Data == 0); 
     Id = id;
     Size = size;
 
@@ -117,7 +117,7 @@ bool TSharedMemory::Open(const TGUID& id, int size) {
     Data = MapViewOfFile(Handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
 
     if (Data == 0) {
-        //Y_ASSERT(0);
+        //Y_ASSERT(0); 
         CloseHandle(Handle);
         Handle = INVALID_OS_HANDLE;
 
@@ -128,7 +128,7 @@ bool TSharedMemory::Open(const TGUID& id, int size) {
 }
 
 bool TSharedMemory::Create(int size) {
-    //Y_ASSERT(Data == 0);
+    //Y_ASSERT(Data == 0); 
     Size = size;
 
     CreateGuid(&Id);
@@ -138,14 +138,14 @@ bool TSharedMemory::Create(int size) {
     Handle = CreateFileMappingA(INVALID_OS_HANDLE, nullptr, PAGE_READWRITE, 0, size, name);
 
     if (Handle == 0) {
-        //Y_ASSERT(0);
+        //Y_ASSERT(0); 
         return false;
     }
 
     Data = MapViewOfFile(Handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
 
     if (Data == 0) {
-        //Y_ASSERT(0);
+        //Y_ASSERT(0); 
         CloseHandle(Handle);
         Handle = INVALID_OS_HANDLE;
 
@@ -172,7 +172,7 @@ static key_t GetKey(const TGUID& id) {
 bool TSharedMemory::Open(const TGUID& id, int size) {
     Y_VERIFY(id, "invalid shared memory guid: %s", GetGuidAsString(id).data());
 
-    //Y_ASSERT(Data == 0);
+    //Y_ASSERT(Data == 0); 
     Size = size;
 
     key_t k = GetKey(id);
@@ -182,10 +182,10 @@ bool TSharedMemory::Open(const TGUID& id, int size) {
         return false;
     }
 
-    Data = shmat(shmId, nullptr, 0);
+    Data = shmat(shmId, nullptr, 0); 
 
-    if (Data == nullptr) {
-        //Y_ASSERT(0);
+    if (Data == nullptr) { 
+        //Y_ASSERT(0); 
         return false;
     }
 
@@ -193,7 +193,7 @@ bool TSharedMemory::Open(const TGUID& id, int size) {
 }
 
 bool TSharedMemory::Create(int size) {
-    //Y_ASSERT(Data == 0);
+    //Y_ASSERT(Data == 0); 
     Size = size;
 
     CreateGuid(&Id);
@@ -202,14 +202,14 @@ bool TSharedMemory::Create(int size) {
     Handle = shmget(k, Size, IPC_CREAT | IPC_EXCL | 0777);
 
     if (Handle < 0) {
-        //Y_ASSERT(0);
+        //Y_ASSERT(0); 
         return false;
     }
 
     Data = shmat(Handle, nullptr, 0);
 
     if (Data == (void*)-1) {
-        //Y_ASSERT(0);
+        //Y_ASSERT(0); 
         shmctl(Handle, IPC_RMID, nullptr);
         Handle = -1;
 

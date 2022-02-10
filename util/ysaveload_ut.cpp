@@ -34,11 +34,11 @@ class TSaveLoadTest: public TTestBase {
     UNIT_TEST_SUITE_END();
 
     struct TSaveHelper {
-        inline void Save(IOutputStream* o) const {
+        inline void Save(IOutputStream* o) const { 
             o->Write("qwerty", 7);
         }
 
-        inline void Load(IInputStream* i) {
+        inline void Load(IInputStream* i) { 
             char buf[7];
 
             UNIT_ASSERT_EQUAL(i->Load(buf, 7), 7);
@@ -59,7 +59,7 @@ class TSaveLoadTest: public TTestBase {
         TString Str;
         ui32 Int;
 
-        Y_SAVELOAD_DEFINE(Str, Int)
+        Y_SAVELOAD_DEFINE(Str, Int) 
     };
 
 private:

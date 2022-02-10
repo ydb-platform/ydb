@@ -1,16 +1,16 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     pg
     yazevnul
 )
-
-SRCS(
+ 
+SRCS( 
     GLOBAL main.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     library/cpp/testing/benchmark
-)
-
-END()
+) 
+ 
+END() 

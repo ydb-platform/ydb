@@ -30,10 +30,10 @@ public:
 
     void RegisterType(const IType *type) {
         const TTypeId typeId = type->GetTypeId();
-        Y_VERIFY(typeId <= Max<TTypeId>());
+        Y_VERIFY(typeId <= Max<TTypeId>()); 
 
-        Y_VERIFY(TypeByIdMap.insert({ typeId, type }).second);
-        Y_VERIFY(TypeByNameMap.insert({ type->GetName(), type }).second);
+        Y_VERIFY(TypeByIdMap.insert({ typeId, type }).second); 
+        Y_VERIFY(TypeByNameMap.insert({ type->GetName(), type }).second); 
 
         TypeMetadataRegistry.Register(type);
     }
@@ -43,7 +43,7 @@ public:
         if (typeId) {
             auto iter = TypeByIdMap.find(typeId);
             if (iter != TypeByIdMap.end()) {
-                Y_VERIFY_DEBUG(iter->second);
+                Y_VERIFY_DEBUG(iter->second); 
                 return iter->second;
             }
         }
@@ -63,7 +63,7 @@ public:
             ythrow yexception() << "Type id must be non zero";
 
         auto type = GetType(typeId);
-        if (Y_LIKELY(type))
+        if (Y_LIKELY(type)) 
             return type;
         ythrow yexception() << "Unknown type: " << typeId;
     }
@@ -75,7 +75,7 @@ public:
 
     const IType* GetKnownType(const TStringBuf& name) const {
         auto type = GetType(name);
-        if (Y_LIKELY(type))
+        if (Y_LIKELY(type)) 
             return type;
         ythrow yexception() << "Unknown type: " << name;
     }

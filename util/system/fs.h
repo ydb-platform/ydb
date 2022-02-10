@@ -6,18 +6,18 @@
 
 namespace NFs {
     enum EFilePermission {
-        FP_ALL_EXEC = 01,
-        FP_ALL_WRITE = 02,
-        FP_ALL_READ = 04,
-        FP_GROUP_READ = 040,
-        FP_GROUP_WRITE = 020,
-        FP_GROUP_EXEC = 010,
-        FP_OWNER_READ = 0400,
-        FP_OWNER_WRITE = 0200,
-        FP_OWNER_EXEC = 0100,
+        FP_ALL_EXEC = 01, 
+        FP_ALL_WRITE = 02, 
+        FP_ALL_READ = 04, 
+        FP_GROUP_READ = 040, 
+        FP_GROUP_WRITE = 020, 
+        FP_GROUP_EXEC = 010, 
+        FP_OWNER_READ = 0400, 
+        FP_OWNER_WRITE = 0200, 
+        FP_OWNER_EXEC = 0100, 
 
-        FP_COMMON_FILE = 0777,
-        FP_SECRET_FILE = 0700,
+        FP_COMMON_FILE = 0777, 
+        FP_SECRET_FILE = 0700, 
         FP_NONSECRET_FILE = 0744,
     };
 
@@ -148,7 +148,7 @@ namespace NFs {
     /// @param[in] path          Path to check
     /// @returns                 input argument
     inline const TString& EnsureExists(const TString& path) {
-        Y_ENSURE_EX(Exists(path), TFileError{} << "Path " << path << " does not exists (checked from cwd:" << NFs::CurrentWorkingDirectory() << ")");
+        Y_ENSURE_EX(Exists(path), TFileError{} << "Path " << path << " does not exists (checked from cwd:" << NFs::CurrentWorkingDirectory() << ")"); 
         return path;
     }
 }

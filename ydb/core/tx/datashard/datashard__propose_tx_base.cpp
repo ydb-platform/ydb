@@ -143,14 +143,14 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
             "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
         return false;
     } catch (const TSchemeErrorTabletException &ex) {
-        Y_UNUSED(ex);
-        Y_FAIL();
+        Y_UNUSED(ex); 
+        Y_FAIL(); 
     } catch (const TMemoryLimitExceededException &ex) {
         Y_FAIL("there must be no leaked exceptions: TMemoryLimitExceededException");
     } catch (const std::exception &e) {
         Y_FAIL("there must be no leaked exceptions: %s", e.what());
     } catch (...) {
-        Y_FAIL("there must be no leaked exceptions");
+        Y_FAIL("there must be no leaked exceptions"); 
     }
 }
 

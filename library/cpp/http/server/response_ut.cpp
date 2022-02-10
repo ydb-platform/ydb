@@ -4,20 +4,20 @@
 
 #include <util/string/cast.h>
 
-Y_UNIT_TEST_SUITE(TestHttpResponse) {
-    Y_UNIT_TEST(TestCodeOnly) {
+Y_UNIT_TEST_SUITE(TestHttpResponse) { 
+    Y_UNIT_TEST(TestCodeOnly) { 
         UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse()), "HTTP/1.1 200 Ok\r\n\r\n");
         UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse(HTTP_NOT_FOUND)), "HTTP/1.1 404 Not found\r\n\r\n");
     }
 
-    Y_UNIT_TEST(TestRedirect) {
+    Y_UNIT_TEST(TestRedirect) { 
         THttpResponse resp = THttpResponse(HTTP_FOUND).AddHeader("Location", "yandex.ru");
         UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), "HTTP/1.1 302 Moved temporarily\r\n"
                                                   "Location: yandex.ru\r\n"
                                                   "\r\n");
     }
 
-    Y_UNIT_TEST(TestAddHeader) {
+    Y_UNIT_TEST(TestAddHeader) { 
         THttpResponse resp(HTTP_FORBIDDEN);
         resp.AddHeader(THttpInputHeader("X-Header-1", "ValueOne"));
         resp.AddHeader("X-Header-2", 10);
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
         UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), EXPECTED);
     }
 
-    Y_UNIT_TEST(TestAddMultipleHeaders) {
+    Y_UNIT_TEST(TestAddMultipleHeaders) { 
         THttpHeaders headers;
         headers.AddHeader(THttpInputHeader("X-Header-1", "ValueOne"));
         headers.AddHeader(THttpInputHeader("X-Header-2", "ValueTwo"));
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
     }
 
 
-    Y_UNIT_TEST(TestSetContent) {
+    Y_UNIT_TEST(TestSetContent) { 
         const char* EXPECTED = "HTTP/1.1 200 Ok\r\n"
                                "Content-Length: 10\r\n"
                                "\r\n"
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
                                   EXPECTED);
     }
 
-    Y_UNIT_TEST(TestSetContentWithContentType) {
+    Y_UNIT_TEST(TestSetContentWithContentType) { 
         const char* EXPECTED = "HTTP/1.1 200 Ok\r\n"
                                "Content-Type: text/xml\r\n"
                                "Content-Length: 28\r\n"
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
         UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), EXPECTED);
     }
 
-    Y_UNIT_TEST(TestCopyConstructor) {
+    Y_UNIT_TEST(TestCopyConstructor) { 
         THttpResponse resp(HTTP_FORBIDDEN);
         resp.AddHeader(THttpInputHeader("X-Header-1", "ValueOne"))
             .AddHeader("X-Header-2", "ValueTwo")
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
         UNIT_ASSERT_STRINGS_EQUAL(ToString(copy), ToString(resp));
     }
 
-    Y_UNIT_TEST(TestAssignment) {
+    Y_UNIT_TEST(TestAssignment) { 
         THttpResponse resp(HTTP_FORBIDDEN);
         resp.AddHeader(THttpInputHeader("X-Header-1", "ValueOne"));
         resp.AddHeader(THttpInputHeader("X-Header-2", "ValueTwo"));
@@ -109,11 +109,11 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
         UNIT_ASSERT_STRINGS_EQUAL(ToString(copy), ToString(resp));
     }
 
-    Y_UNIT_TEST(TestEmptyContent) {
+    Y_UNIT_TEST(TestEmptyContent) { 
         UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse().SetContent("")), "HTTP/1.1 200 Ok\r\n\r\n");
     }
 
-    Y_UNIT_TEST(TestReturnReference) {
+    Y_UNIT_TEST(TestReturnReference) { 
         THttpResponse resp;
         UNIT_ASSERT_EQUAL(&resp, &resp.AddHeader("Header1", 1));
         UNIT_ASSERT_EQUAL(&resp, &resp.AddHeader(THttpInputHeader("Header2", "2")));

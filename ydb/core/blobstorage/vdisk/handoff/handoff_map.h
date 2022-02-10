@@ -90,9 +90,9 @@ namespace NKikimr {
                 const TActorId &notifyID)
         {
             // do nothing by default, all work is done in template specialization for logo blobs
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             Y_UNUSED(levelSnap);
-            Y_UNUSED(i);
+            Y_UNUSED(i); 
             NotifyID = notifyID;
             return ProxyID;
         }
@@ -102,8 +102,8 @@ namespace NKikimr {
         const TTransformedItem *Transform(const TActorContext &ctx, const TKey &key, const TMemRec *memRec,
                                           const TDataMerger *dataMerger, bool keepData) {
             // do nothing by default, all work is done in template specialization for logo blobs
-            Y_UNUSED(ctx);
-            Y_UNUSED(keepData);
+            Y_UNUSED(ctx); 
+            Y_UNUSED(keepData); 
             Counter++;
             Y_VERIFY(dataMerger->Empty());
             return TrRes.SetRaw(key, memRec, dataMerger);

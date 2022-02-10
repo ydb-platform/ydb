@@ -60,7 +60,7 @@ namespace NPrivate {
 #endif
 }
 
-constexpr bool IsAscii(const int c) noexcept {
+constexpr bool IsAscii(const int c) noexcept { 
     return !(c & ~0x7f);
 }
 

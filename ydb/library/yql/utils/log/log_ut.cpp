@@ -19,9 +19,9 @@
 using namespace NYql;
 using namespace NLog;
 
-Y_UNIT_TEST_SUITE(TLogTest)
+Y_UNIT_TEST_SUITE(TLogTest) 
 {
-    Y_UNIT_TEST(Format) {
+    Y_UNIT_TEST(Format) { 
         TStringStream out;
         YqlLoggerScope logger(&out);
         YqlLogger().UpdateProcInfo("my_proc");
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, message);
     }
 
-    Y_UNIT_TEST(Levels) {
+    Y_UNIT_TEST(Levels) { 
         TStringStream out;
         YqlLoggerScope logger(&out); // default log level INFO
 
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Components) {
+    Y_UNIT_TEST(Components) { 
         TStringStream out;
         YqlLoggerScope logger(&out);
 
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Conditional) {
+    Y_UNIT_TEST(Conditional) { 
         TStringStream out;
         YqlLoggerScope logger(&out);
 
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Contexts) {
+    Y_UNIT_TEST(Contexts) { 
         TStringStream out;
         YqlLoggerScope logger(&out);
 
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(ThrowWithContext) {
+    Y_UNIT_TEST(ThrowWithContext) { 
         bool isThrown = false;
         YQL_LOG_CTX_SCOPE("first");
         try {
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         UNIT_ASSERT_C(isThrown, "exception was not thrown");
     }
 
-    Y_UNIT_TEST(ContextOverride) {
+    Y_UNIT_TEST(ContextOverride) { 
         TStringStream out;
         YqlLoggerScope logger(&out);
 
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Profiling) {
+    Y_UNIT_TEST(Profiling) { 
         TStringStream out;
         YqlLoggerScope logger(&out);
 
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         return a + b;
     }
 
-    Y_UNIT_TEST(ProfilingFuncs) {
+    Y_UNIT_TEST(ProfilingFuncs) { 
         TStringStream out;
         YqlLoggerScope logger(&out);
 

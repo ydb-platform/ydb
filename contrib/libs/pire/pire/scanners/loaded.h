@@ -188,9 +188,9 @@ public:
 
 	void SetJump(size_t oldState, Char c, size_t newState, Action action)
 	{
-		Y_ASSERT(m_buffer);
-		Y_ASSERT(oldState < m.statesCount);
-		Y_ASSERT(newState < m.statesCount);
+		Y_ASSERT(m_buffer); 
+		Y_ASSERT(oldState < m.statesCount); 
+		Y_ASSERT(newState < m.statesCount); 
 
 		size_t shift = (newState - oldState) * StateSize();
 		Transition tr;
@@ -201,8 +201,8 @@ public:
 
 	Action RemapAction(Action action) { return action; }
 
-	void SetInitial(size_t state) { Y_ASSERT(m_buffer); m.initial = reinterpret_cast<size_t>(m_jumps + state * m.lettersCount); }
-	void SetTag(size_t state, Tag tag) { Y_ASSERT(m_buffer); m_tags[state] = tag; }
+	void SetInitial(size_t state) { Y_ASSERT(m_buffer); m.initial = reinterpret_cast<size_t>(m_jumps + state * m.lettersCount); } 
+	void SetTag(size_t state, Tag tag) { Y_ASSERT(m_buffer); m_tags[state] = tag; } 
 	void FinishBuild() {}
 
 	size_t StateIdx(InternalState s) const

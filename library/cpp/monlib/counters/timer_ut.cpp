@@ -16,8 +16,8 @@ public:
     int Value_;
 };
 
-Y_UNIT_TEST_SUITE(TTimerTest) {
-    Y_UNIT_TEST(RecordValue) {
+Y_UNIT_TEST_SUITE(TTimerTest) { 
+    Y_UNIT_TEST(RecordValue) { 
         TTimerNs timerNs(1ns, 1s);
         UNIT_ASSERT(timerNs.RecordValue(10us));
 
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(snapshot.StdDeviation, 0.0, 1e-6);
     }
 
-    Y_UNIT_TEST(Measure) {
+    Y_UNIT_TEST(Measure) { 
         TTimerNs timer(1ns, 1s);
         timer.Measure([]() {
             Sleep(TDuration::MilliSeconds(1));
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(snapshot.StdDeviation, 0.0, 1e-6);
     }
 
-    Y_UNIT_TEST(TimerScope) {
+    Y_UNIT_TEST(TimerScope) { 
         TTimerUs timer(1us, 1000s);
         {
             TTimerScope<TTimerUs> scope(&timer);
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(snapshot.StdDeviation, 0.0, 1e-6);
     }
 
-    Y_UNIT_TEST(TimerScopeWithCallback) {
+    Y_UNIT_TEST(TimerScopeWithCallback) { 
         TCallback callback(0);
         TTimerUs timer(1us, 1000s);
         {

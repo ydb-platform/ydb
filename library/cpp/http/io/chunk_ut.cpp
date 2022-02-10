@@ -4,11 +4,11 @@
 
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>
-#include <util/stream/null.h>
+#include <util/stream/null.h> 
 
 #define CDATA "./chunkedio"
 
-Y_UNIT_TEST_SUITE(TestChunkedIO) {
+Y_UNIT_TEST_SUITE(TestChunkedIO) { 
     static const char test_data[] = "87s6cfbsudg cuisg s igasidftasiy tfrcua6s";
 
     TString CombString(const TString& s, size_t chunkSize) {
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
         return result;
     }
 
-    void WriteTestData(IOutputStream * stream, TString * contents) {
+    void WriteTestData(IOutputStream * stream, TString * contents) { 
         contents->clear();
         for (size_t i = 0; i < sizeof(test_data); ++i) {
             stream->Write(test_data, i);
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
         }
     }
 
-    void ReadInSmallChunks(IInputStream * stream, TString * contents) {
+    void ReadInSmallChunks(IInputStream * stream, TString * contents) { 
         char buf[11];
         size_t read = 0;
 
@@ -37,8 +37,8 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
         } while (read > 0);
     }
 
-    void ReadCombed(IInputStream * stream, TString * contents, size_t chunkSize) {
-        Y_ASSERT(chunkSize < 128);
+    void ReadCombed(IInputStream * stream, TString * contents, size_t chunkSize) { 
+        Y_ASSERT(chunkSize < 128); 
         char buf[128];
 
         contents->clear();
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
         }
     }
 
-    Y_UNIT_TEST(TestChunkedIo) {
+    Y_UNIT_TEST(TestChunkedIo) { 
         TTempFile tmpFile(CDATA);
         TString tmp;
 
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
         }
     }
 
-    Y_UNIT_TEST(TestBadChunk) {
+    Y_UNIT_TEST(TestBadChunk) { 
         bool hasError = false;
 
         try {

@@ -6,7 +6,7 @@
 
 using namespace NMonitoring;
 
-Y_UNIT_TEST_SUITE(TTextText) {
+Y_UNIT_TEST_SUITE(TTextText) { 
     template <typename TFunc>
     TString EncodeToString(bool humanReadableTs, TFunc fn) {
         TStringStream ss;
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TTextText) {
         return ss.Str();
     }
 
-    Y_UNIT_TEST(Empty) {
+    Y_UNIT_TEST(Empty) { 
         auto result = EncodeToString(true, [](IMetricEncoder* e) {
             e->OnStreamBegin();
             e->OnStreamEnd();
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TTextText) {
         UNIT_ASSERT_STRINGS_EQUAL(result, "");
     }
 
-    Y_UNIT_TEST(CommonPart) {
+    Y_UNIT_TEST(CommonPart) { 
         auto result = EncodeToString(true, [](IMetricEncoder* e) {
             e->OnStreamBegin();
             e->OnCommonTime(TInstant::ParseIso8601Deprecated("2017-01-02T03:04:05.006Z"));
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TTextText) {
                                   "common labels: {project='solomon', cluster='man', service='stockpile'}\n");
     }
 
-    Y_UNIT_TEST(Gauges) {
+    Y_UNIT_TEST(Gauges) { 
         auto result = EncodeToString(true, [](IMetricEncoder* e) {
             e->OnStreamBegin();
             { // no values
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TTextText) {
                                   "   IGAUGE bytesRx{host='solomon-sas-01', dc='sas'} [(2017-12-02T12:00:00Z, 2), (2017-12-02T12:00:05Z, 4), (2017-12-02T12:00:10Z, 8)]\n");
     }
 
-    Y_UNIT_TEST(Counters) {
+    Y_UNIT_TEST(Counters) { 
         auto doEncode = [](IMetricEncoder* e) {
             e->OnStreamBegin();
             { // no values

@@ -9,9 +9,9 @@ SRCS(
     md5.cpp
 )
 
-PEERDIR(
+PEERDIR( 
     contrib/libs/nayuki_md5
     library/cpp/string_utils/base64
-)
-
+) 
+ 
 END()

@@ -5,8 +5,8 @@
 
 using namespace NYql::NUdf;
 
-Y_UNIT_TEST_SUITE(TUdfValueBuilder) {
-    Y_UNIT_TEST(LockMethodsTable) {
+Y_UNIT_TEST_SUITE(TUdfValueBuilder) { 
+    Y_UNIT_TEST(LockMethodsTable) { 
         UNIT_ASSERT_VALUES_EQUAL(2, GetMethodIndex(&IValueBuilder::NewStringNotFilled));
         UNIT_ASSERT_VALUES_EQUAL(3, GetMethodIndex(&IValueBuilder::NewString));
         UNIT_ASSERT_VALUES_EQUAL(4, GetMethodIndex(&IValueBuilder::ConcatStrings));

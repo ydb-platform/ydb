@@ -17,27 +17,27 @@ namespace NDbgDump {
         struct TPlain {
             // Foreground color modifiers
             DBG_OUTPUT_COLOR_HANDLER(Markup) {
-                Y_UNUSED(stream);
+                Y_UNUSED(stream); 
             }
             DBG_OUTPUT_COLOR_HANDLER(String) {
-                Y_UNUSED(stream);
+                Y_UNUSED(stream); 
             }
             DBG_OUTPUT_COLOR_HANDLER(Literal) {
-                Y_UNUSED(stream);
+                Y_UNUSED(stream); 
             }
             DBG_OUTPUT_COLOR_HANDLER(ResetType) {
-                Y_UNUSED(stream);
+                Y_UNUSED(stream); 
             }
 
             // Background color modifiers
             DBG_OUTPUT_COLOR_HANDLER(Key) {
-                Y_UNUSED(stream);
+                Y_UNUSED(stream); 
             }
             DBG_OUTPUT_COLOR_HANDLER(Value) {
-                Y_UNUSED(stream);
+                Y_UNUSED(stream); 
             }
             DBG_OUTPUT_COLOR_HANDLER(ResetRole) {
-                Y_UNUSED(stream);
+                Y_UNUSED(stream); 
             }
         };
 

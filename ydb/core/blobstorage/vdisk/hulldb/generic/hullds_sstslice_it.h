@@ -100,7 +100,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_VERIFY_DEBUG(Valid()); 
             IntraLevelIt.Next();
             if (!IntraLevelIt.Valid()) {
                 ++CurLevelIt;
@@ -110,7 +110,7 @@ namespace NKikimr {
         }
 
         TLevelSstPtr Get() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_VERIFY_DEBUG(Valid()); 
             return TLevelSstPtr(CurLevelNum, IntraLevelIt.Get());
         }
 
@@ -155,7 +155,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_VERIFY_DEBUG(Valid()); 
             if (Level0It.Valid())
                 Level0It.Next();
             else
@@ -163,7 +163,7 @@ namespace NKikimr {
         }
 
         TLevelSstPtr Get() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_VERIFY_DEBUG(Valid()); 
             if (Level0It.Valid())
                 return TLevelSstPtr(0, Level0It.Get());
             else

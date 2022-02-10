@@ -61,25 +61,25 @@ TEST(ETest, Test1) {
     UNIT_CHECK_GENERATED_NO_EXCEPTION(true, yexception);
 }
 
-Y_UNIT_TEST_SUITE(TestSingleTestFixture)
+Y_UNIT_TEST_SUITE(TestSingleTestFixture) 
 {
-    Y_UNIT_TEST_F(Test3, TSimpleFixture) {
+    Y_UNIT_TEST_F(Test3, TSimpleFixture) { 
         UNIT_ASSERT_EQUAL(Value, 24);
     }
 }
 
-Y_UNIT_TEST_SUITE_F(TestSuiteFixture, TSimpleFixture)
+Y_UNIT_TEST_SUITE_F(TestSuiteFixture, TSimpleFixture) 
 {
-    Y_UNIT_TEST(Test1) {
+    Y_UNIT_TEST(Test1) { 
         UNIT_ASSERT(Value == 24);
         Value = 25;
     }
 
-    Y_UNIT_TEST(Test2) {
+    Y_UNIT_TEST(Test2) { 
         UNIT_ASSERT_EQUAL(Value, 24);
     }
 
-    Y_UNIT_TEST_F(Test3, TOtherFixture) {
+    Y_UNIT_TEST_F(Test3, TOtherFixture) { 
         UNIT_ASSERT_EQUAL(TheAnswer, 42);
     }
 }

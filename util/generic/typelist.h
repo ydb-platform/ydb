@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/system/types.h>
-
+#include <util/system/types.h> 
+ 
 #include <util/generic/typetraits.h>
 
 #include <type_traits>
@@ -109,6 +109,6 @@ using TFixedWidthSignedInt = typename TFixedWidthSignedInts::template TSelectBy<
 
 template <typename T>
 using TFixedWidthUnsignedInt = typename TFixedWidthUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
-
-template <typename T>
-using TFixedWidthFloat = typename TFloats::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
+ 
+template <typename T> 
+using TFixedWidthFloat = typename TFloats::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type; 

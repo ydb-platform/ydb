@@ -4,8 +4,8 @@
 
 using namespace NSlidingWindow;
 
-Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
-    Y_UNIT_TEST(TestSlidingWindowMax) {
+Y_UNIT_TEST_SUITE(TSlidingWindowTest) { 
+    Y_UNIT_TEST(TestSlidingWindowMax) { 
         TSlidingWindow<TMaxOperation<unsigned>> w(TDuration::Minutes(5), 5);
         TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds());
         TInstant now = start;
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
         UNIT_ASSERT_VALUES_EQUAL(w.Update(now), 0);
     }
 
-    Y_UNIT_TEST(TestSlidingWindowMin) {
+    Y_UNIT_TEST(TestSlidingWindowMin) { 
         TSlidingWindow<TMinOperation<unsigned>> w(TDuration::Minutes(5), 5);
         TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds());
         TInstant now = start;
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
         UNIT_ASSERT_VALUES_EQUAL(w.Update(now), std::numeric_limits<unsigned>::max());
     }
 
-    Y_UNIT_TEST(TestSlidingWindowSum) {
+    Y_UNIT_TEST(TestSlidingWindowSum) { 
         TSlidingWindow<TSumOperation<unsigned>> w(TDuration::Minutes(5), 5);
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 0); // current sum
 

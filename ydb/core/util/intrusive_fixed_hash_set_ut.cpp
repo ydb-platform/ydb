@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TIntrusiveFixedHashSetTest) {
+Y_UNIT_TEST_SUITE(TIntrusiveFixedHashSetTest) { 
     struct TSimpleItem {
         TSimpleItem *Next = nullptr;
         ui64 X = 0;
@@ -28,14 +28,14 @@ Y_UNIT_TEST_SUITE(TIntrusiveFixedHashSetTest) {
         {}
     };
 
-    Y_UNIT_TEST(TestEmptyFind) {
+    Y_UNIT_TEST(TestEmptyFind) { 
         TIntrusiveFixedHashSet<TSimpleItem, &TSimpleItem::Next, &TSimpleItem::Hash, &TSimpleItem::Equals> set(100);
         TSimpleItem item;
         TSimpleItem *res = set.Find(&item);
         UNIT_ASSERT_EQUAL(res, nullptr);
     }
 
-    Y_UNIT_TEST(TestPushFindClear) {
+    Y_UNIT_TEST(TestPushFindClear) { 
         TIntrusiveFixedHashSet<TSimpleItem, &TSimpleItem::Next, &TSimpleItem::Hash, &TSimpleItem::Equals> set(100);
         TDeque<TSimpleItem> items;
         for (ui64 i = 0; i < 100; ++i) {

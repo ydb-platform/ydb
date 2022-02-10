@@ -3,8 +3,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(SchLab) {
-    Y_UNIT_TEST(TestSchootGenCfgSet1) {
+Y_UNIT_TEST_SUITE(SchLab) { 
+    Y_UNIT_TEST(TestSchootGenCfgSet1) { 
         TString json = R"__EOF__({
             "cfg":[{
                 "label": "mygen1",
@@ -30,14 +30,14 @@ Y_UNIT_TEST_SUITE(SchLab) {
         UNIT_ASSERT_C(cfg.IsValid, "ErrorDetails# " << cfg.ErrorDetails);
     }
 
-    Y_UNIT_TEST(TestSchootGenCfgSet2) {
+    Y_UNIT_TEST(TestSchootGenCfgSet2) { 
         TString json = R"__EOF__({"cfg":[{"label":"gen0","startTime":0,"period":100,"periodCount":1,
                 "reqSizeBytes":1024,"reqCount":1,"reqInterval":10,"user":"vdisk0","desc":"write"}]})__EOF__";
         NKikimr::NSchLab::TSchOotGenCfgSet cfg(json);
         UNIT_ASSERT_C(cfg.IsValid, "ErrorDetails# " << cfg.ErrorDetails);
     }
 
-    Y_UNIT_TEST(TestSchootGenCfgSetInvalid1) {
+    Y_UNIT_TEST(TestSchootGenCfgSetInvalid1) { 
         TString json = R"__EOF__({
             "cfg":[{
                 "label": "mygen1i",
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(SchLab) {
         UNIT_ASSERT(!cfg.IsValid);
     }
 
-    Y_UNIT_TEST(TestSchootGenCfgSetInvalid2) {
+    Y_UNIT_TEST(TestSchootGenCfgSetInvalid2) { 
         TString json = R"__EOF__({
             "cfg":[{
                 "label": "mygen2i",
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(SchLab) {
         UNIT_ASSERT(!cfg.IsValid);
     }
 
-    Y_UNIT_TEST(TestSchootGen1) {
+    Y_UNIT_TEST(TestSchootGen1) { 
         TString json = R"__EOF__({
             "cfg":[{
                 "label": "mygen1",

@@ -4,12 +4,12 @@
 
 using namespace NYql;
 
-Y_UNIT_TEST_SUITE(TRangeWalkerTests) {
-    Y_UNIT_TEST(InvalidRange) {
+Y_UNIT_TEST_SUITE(TRangeWalkerTests) { 
+    Y_UNIT_TEST(InvalidRange) { 
         UNIT_ASSERT_EXCEPTION_CONTAINS(TRangeWalker<int>(2, 1), yexception, "Invalid range for walker");
     }
 
-    Y_UNIT_TEST(SingleValueRange) {
+    Y_UNIT_TEST(SingleValueRange) { 
         TRangeWalker<int> w(5, 5);
         UNIT_ASSERT_EQUAL(5, w.GetStart());
         UNIT_ASSERT_EQUAL(5, w.GetFinish());
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TRangeWalkerTests) {
         }
     }
 
-    Y_UNIT_TEST(ManyValuesRange) {
+    Y_UNIT_TEST(ManyValuesRange) { 
         TRangeWalker<int> w(5, 7);
         UNIT_ASSERT_EQUAL(5, w.GetStart());
         UNIT_ASSERT_EQUAL(7, w.GetFinish());

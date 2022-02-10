@@ -42,7 +42,7 @@ namespace NKikimr {
 
     // Below are some performance tests for Lsn allocation with and without contention
 
-    Y_UNIT_TEST_SUITE(TLsnMngrTests) {
+    Y_UNIT_TEST_SUITE(TLsnMngrTests) { 
 
         struct TParam {
             TLsnMngr *Mngr;
@@ -60,7 +60,7 @@ namespace NKikimr {
             return nullptr;
         }
 
-        Y_UNIT_TEST(AllocLsnForLocalUse) {
+        Y_UNIT_TEST(AllocLsnForLocalUse) { 
             TLsnMngr mngr(0, 0, false);
             TParam p {&mngr, Its};
             auto start = Now();
@@ -69,7 +69,7 @@ namespace NKikimr {
             STR << "Working time: " << (finish - start) << "\n";
         }
 
-        Y_UNIT_TEST(AllocLsnForLocalUse2Threads) {
+        Y_UNIT_TEST(AllocLsnForLocalUse2Threads) { 
             TLsnMngr mngr(0, 0, false);
             TParam p {&mngr, Its / 2};
             auto start = Now();
@@ -83,7 +83,7 @@ namespace NKikimr {
             STR << "Working time: " << (finish - start) << "\n";
         }
 
-        Y_UNIT_TEST(AllocLsnForLocalUse10Threads) {
+        Y_UNIT_TEST(AllocLsnForLocalUse10Threads) { 
             const ui64 threads = 10;
             TLsnMngr mngr(0, 0, false);
             TParam p {&mngr, Its / threads};

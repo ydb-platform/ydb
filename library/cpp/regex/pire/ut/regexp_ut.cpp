@@ -3,20 +3,20 @@
 #include <library/cpp/regex/pire/regexp.h>
 #include <library/cpp/regex/pire/pcre2pire.h>
 
-Y_UNIT_TEST_SUITE(TRegExp) {
+Y_UNIT_TEST_SUITE(TRegExp) { 
     using namespace NRegExp;
 
-    Y_UNIT_TEST(False) {
+    Y_UNIT_TEST(False) { 
         UNIT_ASSERT(!TMatcher(TFsm::False()).Match("").Final());
         UNIT_ASSERT(!TMatcher(TFsm::False()).Match(TStringBuf{}).Final());
     }
 
-    Y_UNIT_TEST(Surround) {
+    Y_UNIT_TEST(Surround) { 
         UNIT_ASSERT(TMatcher(TFsm("qw", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
         UNIT_ASSERT(!TMatcher(TFsm("qw", TFsm::TOptions().SetSurround(false))).Match("aqwb").Final());
     }
 
-    Y_UNIT_TEST(Boundaries) {
+    Y_UNIT_TEST(Boundaries) { 
         UNIT_ASSERT(!TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
         UNIT_ASSERT(!TMatcher(TFsm("^aqw", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
         UNIT_ASSERT(TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
                         .Final());
     }
 
-    Y_UNIT_TEST(Case) {
+    Y_UNIT_TEST(Case) { 
         UNIT_ASSERT(TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(true))).Match("Qw").Final());
         UNIT_ASSERT(!TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(false))).Match("Qw").Final());
     }
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT(!TMatcher(TFsm("\\x{61}\\x{62}", TFsm::TOptions().SetCaseInsensitive(false))).Match("Ab").Final());
     }
 
-    Y_UNIT_TEST(Utf) {
+    Y_UNIT_TEST(Utf) { 
         NRegExp::TFsmBase::TOptions opts;
         opts.Charset = CODES_UTF8;
         opts.Surround = true;
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         }
     }
 
-    Y_UNIT_TEST(Glue) {
+    Y_UNIT_TEST(Glue) { 
         TFsm glued =
             TFsm("qw", TFsm::TOptions().SetCaseInsensitive(true)) |
             TFsm("qw", TFsm::TOptions().SetCaseInsensitive(false)) |
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT(!TMatcher(glued).Match("Abc").Final());
     }
 
-    Y_UNIT_TEST(Capture1) {
+    Y_UNIT_TEST(Capture1) { 
         TCapturingFsm fsm("here we have user_id=([a-z0-9]+);");
 
         TSearcher searcher(fsm);
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("0x0d0a"));
     }
 
-    Y_UNIT_TEST(Capture2) {
+    Y_UNIT_TEST(Capture2) { 
         TCapturingFsm fsm("w([abcdez]+)f");
 
         TSearcher searcher(fsm);
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("abcde"));
     }
 
-    Y_UNIT_TEST(Capture3) {
+    Y_UNIT_TEST(Capture3) { 
         TCapturingFsm fsm("http://vk(ontakte[.]ru|[.]com)/id(\\d+)([^0-9]|$)",
                           TFsm::TOptions().SetCapture(2));
 
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("100500"));
     }
 
-    Y_UNIT_TEST(Capture4) {
+    Y_UNIT_TEST(Capture4) { 
         TCapturingFsm fsm("Здравствуйте, ((\\s|\\w|[()]|-)+)!",
                           TFsm::TOptions().SetCharset(CODES_UTF8));
 
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("Уважаемый (-ая)"));
     }
 
-    Y_UNIT_TEST(Capture5) {
+    Y_UNIT_TEST(Capture5) { 
         TCapturingFsm fsm("away\\.php\\?to=http:([^\"])+\"");
         TSearcher searcher(fsm);
         searcher.Search("\"/away.php?to=http:some.addr\"&id=1");
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         //UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("some.addr"));
     }
 
-    Y_UNIT_TEST(Capture6) {
+    Y_UNIT_TEST(Capture6) { 
         TCapturingFsm fsm("(/to-match-with)");
         TSearcher searcher(fsm);
         searcher.Search("/some/table/path/to-match-with");
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("/to-match-with"));
     }
 
-    Y_UNIT_TEST(Capture7) {
+    Y_UNIT_TEST(Capture7) { 
         TCapturingFsm fsm("(pref.*suff)");
         TSearcher searcher(fsm);
         searcher.Search("ala pref bla suff cla");
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT(!searcher.Captured());
     }
 
-    Y_UNIT_TEST(Pcre2PireTest) {
+    Y_UNIT_TEST(Pcre2PireTest) { 
         UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)"), "(fake)");
         UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)??"), "(fake)?");
         UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)*?fake"), "(fake)*fake");

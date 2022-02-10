@@ -1,14 +1,14 @@
-import itertools
-import json
-import logging
+import itertools 
+import json 
+import logging 
 import argparse
-import os
+import os 
 import random
-import subprocess
+import subprocess 
 import sys
 import time
-import urllib2
-import uuid
+import urllib2 
+import uuid 
 
 import fetch_from
 
@@ -74,25 +74,25 @@ def download_by_skynet(resource_info, file_name):
     return os.path.join(temp_dir, file_name)
 
 
-def _urlopen(url, data=None, headers=None):
+def _urlopen(url, data=None, headers=None): 
     n = 10
-    tout = 30
-    started = time.time()
-    reqid = uuid.uuid4()
+    tout = 30 
+    started = time.time() 
+    reqid = uuid.uuid4() 
 
-    request = urllib2.Request(url, data=data, headers=headers or {})
-    request.add_header('X-Request-Timeout', str(tout))
-    request.add_header('X-Request-Id', str(reqid))
-    request.add_header('User-Agent', 'fetch_from_sandbox.py')
+    request = urllib2.Request(url, data=data, headers=headers or {}) 
+    request.add_header('X-Request-Timeout', str(tout)) 
+    request.add_header('X-Request-Id', str(reqid)) 
+    request.add_header('User-Agent', 'fetch_from_sandbox.py') 
     for i in xrange(n):
-        retry_after = i
+        retry_after = i 
         try:
-            request.add_header('X-Request-Duration', str(int(time.time() - started)))
-            return urllib2.urlopen(request, timeout=tout).read()
+            request.add_header('X-Request-Duration', str(int(time.time() - started))) 
+            return urllib2.urlopen(request, timeout=tout).read() 
 
         except urllib2.HTTPError as e:
             logging.warning('failed to fetch URL %s with HTTP code %d: %s', url, e.code, e)
-            retry_after = int(e.headers.get('Retry-After', str(retry_after)))
+            retry_after = int(e.headers.get('Retry-After', str(retry_after))) 
 
             if e.code not in TEMPORARY_ERROR_CODES:
                 raise
@@ -103,29 +103,29 @@ def _urlopen(url, data=None, headers=None):
         if i + 1 == n:
             raise e
 
-        time.sleep(retry_after)
+        time.sleep(retry_after) 
 
 
 def _query(url):
     return json.loads(_urlopen(url))
 
 
-_SANDBOX_BASE_URL = 'https://sandbox.yandex-team.ru/api/v1.0'
+_SANDBOX_BASE_URL = 'https://sandbox.yandex-team.ru/api/v1.0' 
 
 
-def get_resource_info(resource_id, touch=False, no_links=False):
-    url = ''.join((_SANDBOX_BASE_URL, '/resource/', str(resource_id)))
-    headers = {}
-    if touch:
-        headers.update({'X-Touch-Resource': '1'})
-    if no_links:
-        headers.update({'X-No-Links': '1'})
-    return _query(url)
+def get_resource_info(resource_id, touch=False, no_links=False): 
+    url = ''.join((_SANDBOX_BASE_URL, '/resource/', str(resource_id))) 
+    headers = {} 
+    if touch: 
+        headers.update({'X-Touch-Resource': '1'}) 
+    if no_links: 
+        headers.update({'X-No-Links': '1'}) 
+    return _query(url) 
 
 
 def get_resource_http_links(resource_id):
-    url = ''.join((_SANDBOX_BASE_URL, '/resource/', str(resource_id), '/data/http'))
-    return [r['url'] + ORIGIN_SUFFIX for r in _query(url)]
+    url = ''.join((_SANDBOX_BASE_URL, '/resource/', str(resource_id), '/data/http')) 
+    return [r['url'] + ORIGIN_SUFFIX for r in _query(url)] 
 
 
 def fetch_via_script(script, resource_id):
@@ -134,7 +134,7 @@ def fetch_via_script(script, resource_id):
 
 def fetch(resource_id, custom_fetcher):
     try:
-        resource_info = get_resource_info(resource_id, touch=True, no_links=True)
+        resource_info = get_resource_info(resource_id, touch=True, no_links=True) 
     except Exception as e:
         sys.stderr.write(
             "Failed to fetch resource {}: {}\n".format(resource_id, str(e))

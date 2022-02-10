@@ -54,10 +54,10 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TPart) {
+Y_UNIT_TEST_SUITE(TPart) { 
     using namespace NTest;
 
-    Y_UNIT_TEST(State)
+    Y_UNIT_TEST(State) 
     {
         TRowState row(2);
 
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         UNIT_ASSERT(row.Need() == 1 && row.Left() == 0);
     }
 
-    Y_UNIT_TEST(Trivials)
+    Y_UNIT_TEST(Trivials) 
     {
         TLayoutCook lay;
 
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         }
     }
 
-    Y_UNIT_TEST(Basics)
+    Y_UNIT_TEST(Basics) 
     {
         TLayoutCook lay;
 
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         wrap.To(10).Has(foo).Has(bar);
     }
 
-    Y_UNIT_TEST(Nulls)
+    Y_UNIT_TEST(Nulls) 
     {
         TLayoutCook lay, fake;
 
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         wrap.To(29).Seek(upp, ESeek::Exact).Is(EReady::Gone);
     }
 
-    Y_UNIT_TEST(Matter)
+    Y_UNIT_TEST(Matter) 
     {
         TLayoutCook lay;
 
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         DumpPart(*(*wrap).Eggs.Lone(), 10);
     }
 
-    Y_UNIT_TEST(External)
+    Y_UNIT_TEST(External) 
     {
         TLayoutCook lay;
 
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         DumpPart(*(*wrap).Eggs.Lone(), 10);
     }
 
-    Y_UNIT_TEST(Outer)
+    Y_UNIT_TEST(Outer) 
     {
         using namespace NTable::NTest;
 
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         DumpPart(*(*wrap).Eggs.Lone(), 10);
     }
 
-    Y_UNIT_TEST(MassCheck)
+    Y_UNIT_TEST(MassCheck) 
     {
         UNIT_ASSERT_C(Eggs0().Parts.size() == 1, "Eggs0 has " << Eggs0().Parts.size() << "p");
 
@@ -389,17 +389,17 @@ Y_UNIT_TEST_SUITE(TPart) {
         DumpPart(*Eggs0().Lone(), 1);
     }
 
-    Y_UNIT_TEST(WreckPart)
+    Y_UNIT_TEST(WreckPart) 
     {
         TWreck<TCheckIt, TPartEggs>(Mass0(), 666).Do(EWreck::Cached, Eggs0());
     }
 
-    Y_UNIT_TEST(PageFailEnv)
+    Y_UNIT_TEST(PageFailEnv) 
     {
         TWreck<TCheckIt, TPartEggs>(Mass0(), 666).Do(EWreck::Evicted, Eggs0());
     }
 
-    Y_UNIT_TEST(ForwardEnv)
+    Y_UNIT_TEST(ForwardEnv) 
     {
         TWreck<TCheckIt, TPartEggs>(Mass0(), 666).Do(EWreck::Forward, Eggs0());
     }

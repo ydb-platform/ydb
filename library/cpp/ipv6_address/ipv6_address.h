@@ -233,6 +233,6 @@ NAddr::IRemoteAddr* ToIRemoteAddr(const TIpv6Address& Address, TIpPort Port);
 // template <>
 // class TSerializer<TIpv6Address> {
 // public:
-//    static void Save(IOutputStream *out, const TIpv6Address &ip);
-//    static void Load(IInputStream *in, TIpv6Address &ip);
+//    static void Save(IOutputStream *out, const TIpv6Address &ip); 
+//    static void Load(IInputStream *in, TIpv6Address &ip); 
 //};

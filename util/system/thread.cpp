@@ -128,9 +128,9 @@ namespace {
             //do not do this, kids, at home
             P_->Ref();
     #if _WIN32_WINNT < 0x0502
-            Handle = reinterpret_cast<HANDLE>(::_beginthreadex(nullptr, (unsigned)StackSize(*P_), Proxy, (void*)P_.Get(), 0, &ThreadId));
+            Handle = reinterpret_cast<HANDLE>(::_beginthreadex(nullptr, (unsigned)StackSize(*P_), Proxy, (void*)P_.Get(), 0, &ThreadId)); 
     #else
-            Handle = reinterpret_cast<HANDLE>(::_beginthreadex(nullptr, (unsigned)StackSize(*P_), Proxy, (void*)P_.Get(), 0, nullptr));
+            Handle = reinterpret_cast<HANDLE>(::_beginthreadex(nullptr, (unsigned)StackSize(*P_), Proxy, (void*)P_.Get(), 0, nullptr)); 
     #endif
 
             if (!Handle) {
@@ -163,7 +163,7 @@ namespace {
     public:
         inline TPosixThread(const TParams& params)
             : P_(new TParams(params))
-            , H_()
+            , H_() 
         {
             static_assert(sizeof(H_) == sizeof(TId), "expect sizeof(H_) == sizeof(TId)");
         }
@@ -173,7 +173,7 @@ namespace {
         }
 
         inline void* Join() {
-            void* tec = nullptr;
+            void* tec = nullptr; 
             PCHECK(pthread_join(H_, &tec), "can not join thread");
 
             return tec;
@@ -188,7 +188,7 @@ namespace {
         }
 
         inline void Start() {
-            pthread_attr_t* pattrs = nullptr;
+            pthread_attr_t* pattrs = nullptr; 
             pthread_attr_t attrs;
 
             if (P_->StackSize > 0) {
@@ -302,7 +302,7 @@ void* TThread::Join() {
         return ret;
     }
 
-    return nullptr;
+    return nullptr; 
 }
 
 void TThread::Detach() {
@@ -363,8 +363,8 @@ namespace {
     }
 }
 
-ISimpleThread::ISimpleThread(size_t stackSize)
-    : TThread(TParams(ThreadProcWrapper<ISimpleThread>, reinterpret_cast<void*>(this), stackSize))
+ISimpleThread::ISimpleThread(size_t stackSize) 
+    : TThread(TParams(ThreadProcWrapper<ISimpleThread>, reinterpret_cast<void*>(this), stackSize)) 
 {
 }
 
@@ -470,36 +470,36 @@ void TThread::SetCurrentThreadName(const char* name) {
 }
 
 TString TThread::CurrentThreadName() {
-#if defined(_freebsd_)
+#if defined(_freebsd_) 
 // TODO: check pthread_get_name_np API availability
-#elif defined(_linux_)
-    // > The buffer should allow space for up to 16 bytes; the returned string  will be
-    // > null-terminated.
-    // via `man prctl`
-    char name[16];
-    memset(name, 0, sizeof(name));
-    Y_VERIFY(prctl(PR_GET_NAME, name, 0, 0, 0) == 0, "pctl failed: %s", strerror(errno));
-    return name;
-#elif defined(_darwin_)
-    // available on Mac OS 10.6+
-    const auto thread = pthread_self();
-    char name[256];
-    memset(name, 0, sizeof(name));
-    Y_VERIFY(pthread_getname_np(thread, name, sizeof(name)) == 0, "pthread_getname_np failed: %s", strerror(errno));
-    return name;
+#elif defined(_linux_) 
+    // > The buffer should allow space for up to 16 bytes; the returned string  will be 
+    // > null-terminated. 
+    // via `man prctl` 
+    char name[16]; 
+    memset(name, 0, sizeof(name)); 
+    Y_VERIFY(prctl(PR_GET_NAME, name, 0, 0, 0) == 0, "pctl failed: %s", strerror(errno)); 
+    return name; 
+#elif defined(_darwin_) 
+    // available on Mac OS 10.6+ 
+    const auto thread = pthread_self(); 
+    char name[256]; 
+    memset(name, 0, sizeof(name)); 
+    Y_VERIFY(pthread_getname_np(thread, name, sizeof(name)) == 0, "pthread_getname_np failed: %s", strerror(errno)); 
+    return name; 
 #elif defined(_win_)
     auto api = Singleton<TWinThreadDescrAPI>();
     if (api->HasAPI()) {
         return api->GetDescr();
     }
     return {};
-#else
+#else 
 // no idea
-#endif // OS
-
-    return {};
-}
-
+#endif // OS 
+ 
+    return {}; 
+} 
+ 
 bool TThread::CanGetCurrentThreadName() {
 #if defined(_linux_) || defined(_darwin_)
     return true;

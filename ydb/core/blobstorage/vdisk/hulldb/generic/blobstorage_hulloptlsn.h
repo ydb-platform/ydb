@@ -47,7 +47,7 @@ namespace NKikimr {
             return Lsn;
         }
 
-        void Output(IOutputStream &out) const {
+        void Output(IOutputStream &out) const { 
             if (Lsn == NotSetLsn)
                 out << "NotSet";
             else

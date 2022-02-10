@@ -49,7 +49,7 @@ namespace NCodecs {
                 out.Append((const char *)&n, sizeof(n));
             }
 
-            Y_ASSERT(pos == end);
+            Y_ASSERT(pos == end); 
         }
 
     protected:

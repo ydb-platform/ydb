@@ -41,7 +41,7 @@ namespace NKikimr {
                 , NodesInfo(nodesInfo)
             {}
 
-            void operator() (IOutputStream &str, TSyncNeighbors::TConstIterator it) {
+            void operator() (IOutputStream &str, TSyncNeighbors::TConstIterator it) { 
                 HTML(str) {
                     SMALL() {
                         STRONG() {
@@ -299,7 +299,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::SyncerInfoId); 
             // create an actor to handle request
             auto actor = std::make_unique<TSyncerSchedulerHttpActor>(SyncerContext, GInfo, SyncerData, ev, ctx.SelfID);
             auto aid = ctx.RegisterWithSameMailbox(actor.release());

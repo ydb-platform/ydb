@@ -7,11 +7,11 @@
 #include <array>
 #include <algorithm>
 
-Y_UNIT_TEST_SUITE(HyperscanWrappers) {
+Y_UNIT_TEST_SUITE(HyperscanWrappers) { 
     using namespace NHyperscan;
     using namespace NHyperscan::NPrivate;
 
-    Y_UNIT_TEST(CompileAndScan) {
+    Y_UNIT_TEST(CompileAndScan) { 
         TDatabase db = Compile("a.c", HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
         TScratch scratch = MakeScratch(db);
 
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         UNIT_ASSERT_EQUAL(foundId, 0);
     }
 
-    Y_UNIT_TEST(Matches) {
+    Y_UNIT_TEST(Matches) { 
         NHyperscan::TDatabase db = NHyperscan::Compile(
             "a.c",
             HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         UNIT_ASSERT(!NHyperscan::Matches(db, scratch, "foo"));
     }
 
-    Y_UNIT_TEST(Multi) {
+    Y_UNIT_TEST(Multi) { 
         NHyperscan::TDatabase db = NHyperscan::CompileMulti(
             {
                 "foo",
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
     }
 
     // https://ml.yandex-team.ru/thread/2370000002965712422/
-    Y_UNIT_TEST(MultiRegression) {
+    Y_UNIT_TEST(MultiRegression) { 
         NHyperscan::CompileMulti(
             {
                 "aa.bb/cc.dd",
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             });
     }
 
-    Y_UNIT_TEST(Serialize) {
+    Y_UNIT_TEST(Serialize) { 
         NHyperscan::TDatabase db = NHyperscan::Compile(
             "foo",
             HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         UNIT_ASSERT(!NHyperscan::Matches(db2, scratch, "FOO"));
     }
 
-    Y_UNIT_TEST(GrowScratch) {
+    Y_UNIT_TEST(GrowScratch) { 
         NHyperscan::TDatabase db1 = NHyperscan::Compile(
             "foo",
             HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         UNIT_ASSERT(NHyperscan::Matches(db2, scratch, "longerWWWpattern"));
     }
 
-    Y_UNIT_TEST(CloneScratch) {
+    Y_UNIT_TEST(CloneScratch) { 
         NHyperscan::TDatabase db = NHyperscan::Compile(
             "foo",
             HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);

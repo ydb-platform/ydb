@@ -37,7 +37,7 @@ static TAutoPtr<TTransactionProposal> MakeTransactionProposal(TEvTxProxy::TEvPro
         auto &s = proposal->AffectedSet[i];
         s.TabletId = x.GetTabletId();
 
-        Y_ASSERT(x.GetFlags() > 0 && x.GetFlags() <= 3);
+        Y_ASSERT(x.GetFlags() > 0 && x.GetFlags() <= 3); 
         s.AffectedFlags = x.GetFlags();
     }
 
@@ -167,7 +167,7 @@ void TTxCoordinator::HandleEnqueue(TEvTxProxy::TEvProposeTransaction::TPtr &ev, 
 }
 
 void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev);
+    Y_UNUSED(ev); 
     //LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " HANDLE EvPlanTick LastPlanned " << VolatileState.LastPlanned);
 
     if (VolatileState.Queue.Unsorted) {

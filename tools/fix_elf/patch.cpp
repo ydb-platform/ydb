@@ -107,7 +107,7 @@ private:
     TSection StrSect;
 };
 
-void Patch(const TString& path, const TString& library, IOutputStream& verboseOut) {
+void Patch(const TString& path, const TString& library, IOutputStream& verboseOut) { 
     TElf elf(path);
 
     TVerneedSection verneedSect(&elf);
@@ -237,7 +237,7 @@ int main(int argc, char* argv[]) {
     TOptsParseResult res(&opts, argc, argv);
     TVector<TString> files = res.GetFreeArgs();
 
-    IOutputStream& verboseOut = verbose ? Cout : Cnull;
+    IOutputStream& verboseOut = verbose ? Cout : Cnull; 
 
     bool first = true;
     for (auto path : files) {

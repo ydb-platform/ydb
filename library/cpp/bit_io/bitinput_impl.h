@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/generic/bitops.h>
+#include <util/generic/bitops.h> 
 #include <util/system/unaligned_mem.h>
-
+ 
 namespace NBitIO {
     class TBitInputImpl {
         i64 RealStart;
@@ -51,7 +51,7 @@ namespace NBitIO {
             BOffset += bits;
             if (BOffset < FakeStart)
                 return true;
-            if (Y_UNLIKELY(BOffset > Length)) {
+            if (Y_UNLIKELY(BOffset > Length)) { 
                 result = 0;
                 BOffset -= bits;
                 return false;
@@ -84,7 +84,7 @@ namespace NBitIO {
 
         template <typename T>
         Y_FORCE_INLINE static void CopyToResult(T& result, ui64 r64, ui64 bits, ui64 skipbits) {
-            result = (result & InverseMaskLowerBits(bits, skipbits)) | (r64 << skipbits);
+            result = (result & InverseMaskLowerBits(bits, skipbits)) | (r64 << skipbits); 
         }
 
     public:

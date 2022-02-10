@@ -6,7 +6,7 @@
 
 #include <util/generic/ylimits.h>
 
-Y_UNIT_TEST_SUITE(TRandUtilsTest) {
+Y_UNIT_TEST_SUITE(TRandUtilsTest) { 
     template <typename... A>
     static void TestRange(A&&... args) {
         TString s0, s1;
@@ -55,19 +55,19 @@ Y_UNIT_TEST_SUITE(TRandUtilsTest) {
         TestRange(prng);
     }
 
-    Y_UNIT_TEST(TestShuffleMersenne32) {
+    Y_UNIT_TEST(TestShuffleMersenne32) { 
         TMersenne<ui32> prng(24);
 
         TestIter(prng);
     }
 
-    Y_UNIT_TEST(TestShuffleFast32) {
+    Y_UNIT_TEST(TestShuffleFast32) { 
         TFastRng32 prng(24, 0);
 
         TestIter(prng);
     }
 
-    Y_UNIT_TEST(TestShuffleFast64) {
+    Y_UNIT_TEST(TestShuffleFast64) { 
         TFastRng64 prng(24, 0, 25, 1);
 
         TestIter(prng);

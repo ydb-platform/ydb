@@ -132,7 +132,7 @@ public:
     /// strsep + remember character that was destroyed
     char* sep(char*& s, char& sep_char) const {
         if (!s)
-            return nullptr;
+            return nullptr; 
         char* ret = s;
         char* next = brk(ret);
         if (*next) {
@@ -141,7 +141,7 @@ public:
             s = next + 1;
         } else {
             sep_char = 0;
-            s = nullptr;
+            s = nullptr; 
         }
         return ret;
     }

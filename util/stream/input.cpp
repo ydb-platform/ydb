@@ -13,11 +13,11 @@
 
 #include <cstdlib>
 
-IInputStream::IInputStream() noexcept = default;
+IInputStream::IInputStream() noexcept = default; 
 
-IInputStream::~IInputStream() = default;
+IInputStream::~IInputStream() = default; 
 
-size_t IInputStream::DoReadTo(TString& st, char to) {
+size_t IInputStream::DoReadTo(TString& st, char to) { 
     char ch;
 
     if (!Read(&ch, 1)) {
@@ -40,7 +40,7 @@ size_t IInputStream::DoReadTo(TString& st, char to) {
     return result;
 }
 
-ui64 IInputStream::DoReadAll(IOutputStream& out) {
+ui64 IInputStream::DoReadAll(IOutputStream& out) { 
     TTempBuf buffer;
     void* ptr = buffer.Data();
     size_t size = buffer.Size();
@@ -54,7 +54,7 @@ ui64 IInputStream::DoReadAll(IOutputStream& out) {
     return result;
 }
 
-size_t IInputStream::Load(void* buf_in, size_t len) {
+size_t IInputStream::Load(void* buf_in, size_t len) { 
     char* buf = (char*)buf_in;
 
     while (len) {
@@ -71,14 +71,14 @@ size_t IInputStream::Load(void* buf_in, size_t len) {
     return buf - (char*)buf_in;
 }
 
-void IInputStream::LoadOrFail(void* buf, size_t len) {
+void IInputStream::LoadOrFail(void* buf, size_t len) { 
     const size_t realLen = Load(buf, len);
-    if (Y_UNLIKELY(realLen != len)) {
+    if (Y_UNLIKELY(realLen != len)) { 
         ythrow yexception() << "Failed to read required number of bytes from stream! Expected: " << len << ", gained: " << realLen << "!";
     }
 }
 
-size_t IInputStream::ReadLine(TString& st) {
+size_t IInputStream::ReadLine(TString& st) { 
     const size_t ret = ReadTo(st, '\n');
 
     if (ret && !st.empty() && st.back() == '\r') {
@@ -88,7 +88,7 @@ size_t IInputStream::ReadLine(TString& st) {
     return ret;
 }
 
-size_t IInputStream::ReadLine(TUtf16String& w) {
+size_t IInputStream::ReadLine(TUtf16String& w) { 
     TString s;
     size_t result = ReadLine(s);
 
@@ -99,7 +99,7 @@ size_t IInputStream::ReadLine(TUtf16String& w) {
     return result;
 }
 
-TString IInputStream::ReadLine() {
+TString IInputStream::ReadLine() { 
     TString ret;
 
     if (!ReadLine(ret)) {
@@ -109,7 +109,7 @@ TString IInputStream::ReadLine() {
     return ret;
 }
 
-TString IInputStream::ReadTo(char ch) {
+TString IInputStream::ReadTo(char ch) { 
     TString ret;
 
     if (!ReadTo(ret, ch)) {
@@ -119,11 +119,11 @@ TString IInputStream::ReadTo(char ch) {
     return ret;
 }
 
-size_t IInputStream::Skip(size_t sz) {
+size_t IInputStream::Skip(size_t sz) { 
     return DoSkip(sz);
 }
 
-size_t IInputStream::DoSkip(size_t sz) {
+size_t IInputStream::DoSkip(size_t sz) { 
     if (sz < 128) {
         return Load(alloca(sz), sz);
     }
@@ -145,7 +145,7 @@ size_t IInputStream::DoSkip(size_t sz) {
     return total;
 }
 
-TString IInputStream::ReadAll() {
+TString IInputStream::ReadAll() { 
     TString result;
     TStringOutput stream(result);
 
@@ -154,16 +154,16 @@ TString IInputStream::ReadAll() {
     return result;
 }
 
-ui64 IInputStream::ReadAll(IOutputStream& out) {
+ui64 IInputStream::ReadAll(IOutputStream& out) { 
     return DoReadAll(out);
 }
 
-ui64 TransferData(IInputStream* in, IOutputStream* out) {
+ui64 TransferData(IInputStream* in, IOutputStream* out) { 
     return in->ReadAll(*out);
 }
 
 namespace {
-    struct TStdIn: public IInputStream {
+    struct TStdIn: public IInputStream { 
         ~TStdIn() override = default;
 
         size_t DoRead(void* buf, size_t len) override {
@@ -250,7 +250,7 @@ namespace {
 #endif
 }
 
-IInputStream& NPrivate::StdInStream() noexcept {
+IInputStream& NPrivate::StdInStream() noexcept { 
     return *SingletonWithPriority<TGetLine, 4>();
 }
 
@@ -262,7 +262,7 @@ static inline bool IsStdDelimiter(char c) {
     return (c == '\0') || (c == ' ') || (c == '\r') || (c == '\n') || (c == '\t');
 }
 
-static void ReadUpToDelimiter(IInputStream& i, TString& s) {
+static void ReadUpToDelimiter(IInputStream& i, TString& s) { 
     char c;
     while (i.ReadChar(c)) { // skip delimiters
         if (!IsStdDelimiter(c)) {
@@ -278,13 +278,13 @@ static void ReadUpToDelimiter(IInputStream& i, TString& s) {
 // specialization for string-related stuff
 
 template <>
-void In<TString>(IInputStream& i, TString& s) {
+void In<TString>(IInputStream& i, TString& s) { 
     s.resize(0);
     ReadUpToDelimiter(i, s);
 }
 
 template <>
-void In<TUtf16String>(IInputStream& i, TUtf16String& w) {
+void In<TUtf16String>(IInputStream& i, TUtf16String& w) { 
     TString s;
     ReadUpToDelimiter(i, s);
 
@@ -299,7 +299,7 @@ void In<TUtf16String>(IInputStream& i, TUtf16String& w) {
 
 #define SPEC_FOR_CHAR(T)                  \
     template <>                           \
-    void In<T>(IInputStream & i, T & t) { \
+    void In<T>(IInputStream & i, T & t) { \ 
         i.ReadChar((char&)t);             \
     }
 
@@ -313,7 +313,7 @@ SPEC_FOR_CHAR(signed char)
 
 #define SPEC_FOR_NUMBER(T)                                                       \
     template <>                                                                  \
-    void In<T>(IInputStream & i, T & t) {                                        \
+    void In<T>(IInputStream & i, T & t) {                                        \ 
         char buf[128];                                                           \
         size_t pos = 0;                                                          \
         while (i.ReadChar(buf[0])) {                                             \

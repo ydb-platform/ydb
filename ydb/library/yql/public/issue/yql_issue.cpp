@@ -105,7 +105,7 @@ void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void
 
 namespace {
 
-Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) {
+Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) { 
     char* whitespaces = reinterpret_cast<char*>(alloca(indentation));
     memset(whitespaces, ' ', indentation);
     out.Write(whitespaces, indentation);
@@ -179,7 +179,7 @@ void TIssues::PrintTo(IOutputStream& out, bool oneLine) const
 }
 
 void TIssues::PrintWithProgramTo(
-        IOutputStream& out,
+        IOutputStream& out, 
         const TString& programFilename,
         const TString& programText) const
 {
@@ -265,7 +265,7 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
 } // namspace NYql
 
 template <>
-void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos) {
+void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos) { 
     out << (pos.File ? pos.File : "<main>");
     if (pos) {
         out << ":" << pos.Row << ':' << pos.Column;
@@ -273,7 +273,7 @@ void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos) {
 }
 
 template<>
-void Out<NYql::TRange>(IOutputStream & out, const NYql::TRange & range) {
+void Out<NYql::TRange>(IOutputStream & out, const NYql::TRange & range) { 
     if (range.IsRange()) {
         out << '[' << range.Position << '-' << range.EndPosition << ']';
     } else {
@@ -282,6 +282,6 @@ void Out<NYql::TRange>(IOutputStream & out, const NYql::TRange & range) {
 }
 
 template <>
-void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error) {
+void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error) { 
     error.PrintTo(out);
 }

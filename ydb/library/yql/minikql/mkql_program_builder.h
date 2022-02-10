@@ -171,10 +171,10 @@ public:
     TType* NewListType(TType* itemType);
     TRuntimeNode NewEmptyList(TType* itemType);
     TRuntimeNode NewEmptyListOfVoid();
-    TRuntimeNode NewList(TType* itemType, const TArrayRef<const TRuntimeNode>& items);
+    TRuntimeNode NewList(TType* itemType, const TArrayRef<const TRuntimeNode>& items); 
 
     TType* NewDictType(TType* keyType, TType* payloadType, bool multi);
-    TRuntimeNode NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items);
+    TRuntimeNode NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items); 
 
     TType* NewStreamType(TType* itemType);
     TType* NewFlowType(TType* itemType);
@@ -182,11 +182,11 @@ public:
     TType* NewBlockType(TType* itemType, TBlockType::EShape shape);
 
     TType* NewEmptyTupleType();
-    TType* NewTupleType(const TArrayRef<TType* const>& elements);
+    TType* NewTupleType(const TArrayRef<TType* const>& elements); 
     TType* NewArrayType(const TArrayRef<TType* const>& elements);
     TRuntimeNode NewEmptyTuple();
-    TRuntimeNode NewTuple(TType* tupleType, const TArrayRef<const TRuntimeNode>& elements);
-    TRuntimeNode NewTuple(const TArrayRef<const TRuntimeNode>& elements);
+    TRuntimeNode NewTuple(TType* tupleType, const TArrayRef<const TRuntimeNode>& elements); 
+    TRuntimeNode NewTuple(const TArrayRef<const TRuntimeNode>& elements); 
     TType* NewResourceType(const std::string_view& tag);
     TType* NewVariantType(TType* underlyingType);
     TRuntimeNode NewVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
@@ -213,11 +213,11 @@ public:
     TRuntimeNode FromBytes(TRuntimeNode data, NUdf::TDataTypeId schemeType);
     TRuntimeNode InversePresortString(TRuntimeNode data);
     TRuntimeNode InverseString(TRuntimeNode data);
-    TRuntimeNode Random(const TArrayRef<const TRuntimeNode>& dependentNodes);
-    TRuntimeNode RandomNumber(const TArrayRef<const TRuntimeNode>& dependentNodes);
+    TRuntimeNode Random(const TArrayRef<const TRuntimeNode>& dependentNodes); 
+    TRuntimeNode RandomNumber(const TArrayRef<const TRuntimeNode>& dependentNodes); 
     TRuntimeNode RandomUuid(const TArrayRef<const TRuntimeNode>& dependentNodes);
 
-    TRuntimeNode Now(const TArrayRef<const TRuntimeNode>& dependentNodes);
+    TRuntimeNode Now(const TArrayRef<const TRuntimeNode>& dependentNodes); 
     TRuntimeNode CurrentUtcDate(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode CurrentUtcDatetime(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode CurrentUtcTimestamp(const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -294,11 +294,11 @@ public:
     TRuntimeNode Append(TRuntimeNode list, TRuntimeNode item);
     TRuntimeNode Prepend(TRuntimeNode item, TRuntimeNode list);
     TRuntimeNode Extend(TRuntimeNode list1, TRuntimeNode list2);
-    TRuntimeNode Extend(const TArrayRef<const TRuntimeNode>& lists);
+    TRuntimeNode Extend(const TArrayRef<const TRuntimeNode>& lists); 
     // returns list of tuples with items, stops at the shortest list
-    TRuntimeNode Zip(const TArrayRef<const TRuntimeNode>& lists);
+    TRuntimeNode Zip(const TArrayRef<const TRuntimeNode>& lists); 
     // returns list of tuples with optional of items, has length of the longest list
-    TRuntimeNode ZipAll(const TArrayRef<const TRuntimeNode>& lists);
+    TRuntimeNode ZipAll(const TArrayRef<const TRuntimeNode>& lists); 
     TRuntimeNode Enumerate(TRuntimeNode list);
     TRuntimeNode Enumerate(TRuntimeNode list, TRuntimeNode start, TRuntimeNode step);
     TRuntimeNode Fold(TRuntimeNode list, TRuntimeNode state, const TBinaryLambda& handler);
@@ -373,14 +373,14 @@ public:
     TRuntimeNode WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& handler);
 
     TRuntimeNode Length(TRuntimeNode listOrDict);
-    TRuntimeNode Iterator(TRuntimeNode list, const TArrayRef<const TRuntimeNode>& dependentNodes);
+    TRuntimeNode Iterator(TRuntimeNode list, const TArrayRef<const TRuntimeNode>& dependentNodes); 
     TRuntimeNode EmptyIterator(TType* streamType);
     TRuntimeNode Collect(TRuntimeNode listOrStream);
     TRuntimeNode LazyList(TRuntimeNode list);
     TRuntimeNode ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step);
     TRuntimeNode ForwardList(TRuntimeNode stream);
     TRuntimeNode Switch(TRuntimeNode stream,
-        const TArrayRef<const TSwitchInput>& handlerInputs,
+        const TArrayRef<const TSwitchInput>& handlerInputs, 
         std::function<TRuntimeNode(ui32 index, TRuntimeNode item)> handler,
         ui64 memoryLimitBytes, TType* returnType);
     TRuntimeNode HasItems(TRuntimeNode listOrDict);
@@ -396,7 +396,7 @@ public:
     TRuntimeNode ListIf(TRuntimeNode predicate, TRuntimeNode item);
 
     TRuntimeNode AsList(TRuntimeNode item);
-    TRuntimeNode AsList(const TArrayRef<const TRuntimeNode>& items);
+    TRuntimeNode AsList(const TArrayRef<const TRuntimeNode>& items); 
     TRuntimeNode MapJoinCore(TRuntimeNode flow, TRuntimeNode dict, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftRenames,
         const TArrayRef<const ui32>& rightRenames, TType* returnType);
@@ -580,10 +580,10 @@ public:
     TRuntimeNode AggrAdd(TRuntimeNode data1, TRuntimeNode data2);
 
     //-- queue functions
-    TRuntimeNode QueueCreate(TRuntimeNode initCapacity, TRuntimeNode initCreate, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
+    TRuntimeNode QueueCreate(TRuntimeNode initCapacity, TRuntimeNode initCreate, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType); 
     TRuntimeNode QueuePush(TRuntimeNode resource, TRuntimeNode value);
     TRuntimeNode QueuePop(TRuntimeNode resource);
-    TRuntimeNode QueuePeek(TRuntimeNode resource, TRuntimeNode index, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
+    TRuntimeNode QueuePeek(TRuntimeNode resource, TRuntimeNode index, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType); 
     TRuntimeNode QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
 
     TRuntimeNode PreserveStream(TRuntimeNode stream, TRuntimeNode preserve, TRuntimeNode outpace);

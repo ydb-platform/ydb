@@ -1351,11 +1351,11 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
                 try {
                     const auto& results = future.GetValue();
                     auto& tablesToResolve = ctx->GetTablesToResolve();
-                    Y_VERIFY_DEBUG(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()");
+                    Y_VERIFY_DEBUG(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()"); 
                     ui32 i = 0;
                     for (auto& x : tablesToResolve) {
                         const auto& response = results[i];
-                        Y_ENSURE_EX(response.Status == IDbSchemeResolver::TTableResult::Ok,
+                        Y_ENSURE_EX(response.Status == IDbSchemeResolver::TTableResult::Ok, 
                             TNodeException() << "Failed to resolve table " << x.second.Request.TableName
                             << ", error: " << response.Reason);
                         x.second.Response = response;
@@ -1498,7 +1498,7 @@ private:
         try {
             const auto& results = ev->Get()->Result;
             auto& tablesToResolve = CompileCtx->GetTablesToResolve();
-            Y_VERIFY_DEBUG(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()");
+            Y_VERIFY_DEBUG(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()"); 
 
             TVector<NYql::TIssue> resolveErrors;
             ui32 i = 0;
@@ -1577,7 +1577,7 @@ private:
         do {
             status = ExpandApply(Expr->Root, Expr->Root, Expr->Context);
         } while (status.Level == IGraphTransformer::TStatus::Repeat);
-        Y_VERIFY_DEBUG(status.Level == IGraphTransformer::TStatus::Ok ||
+        Y_VERIFY_DEBUG(status.Level == IGraphTransformer::TStatus::Ok || 
                      status.Level == IGraphTransformer::TStatus::Error);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             errors = Expr->Context.IssueManager.GetIssues();

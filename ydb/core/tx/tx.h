@@ -49,7 +49,7 @@ struct TEvTxProxy {
         TEvProposeTransactionStatus(EStatus status, ui64 txid, ui64 stepId);
 
         EStatus GetStatus() const {
-            Y_VERIFY_DEBUG(Record.HasStatus());
+            Y_VERIFY_DEBUG(Record.HasStatus()); 
             return static_cast<EStatus>(Record.GetStatus());
         }
     };
@@ -157,7 +157,7 @@ TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const T
 }
 
 template<>
-inline void Out<NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus>(IOutputStream& o,
+inline void Out<NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus>(IOutputStream& o, 
         NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus x) {
     o << (ui32)x;
 }

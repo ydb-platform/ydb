@@ -9855,8 +9855,8 @@ int main(int argc, char** argv) {
 }
 #endif
 
-Y_UNIT_TEST_SUITE(FarmhashTest) {
-  Y_UNIT_TEST(Test) {
+Y_UNIT_TEST_SUITE(FarmhashTest) { 
+  Y_UNIT_TEST(Test) { 
       UNIT_ASSERT(farmhashccTest::RunTest() == 0);
       UNIT_ASSERT(farmhashmkTest::RunTest() == 0);
       UNIT_ASSERT(farmhashnaTest::RunTest() == 0);

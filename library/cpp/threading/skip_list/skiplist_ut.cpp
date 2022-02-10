@@ -35,15 +35,15 @@ namespace NThreading {
 
     ////////////////////////////////////////////////////////////////////////////////
 
-    Y_UNIT_TEST_SUITE(TSkipListTest) {
-        Y_UNIT_TEST(ShouldBeEmptyAfterCreation) {
+    Y_UNIT_TEST_SUITE(TSkipListTest) { 
+        Y_UNIT_TEST(ShouldBeEmptyAfterCreation) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
             UNIT_ASSERT_EQUAL(list.GetSize(), 0);
         }
 
-        Y_UNIT_TEST(ShouldAllowInsertion) {
+        Y_UNIT_TEST(ShouldAllowInsertion) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -51,7 +51,7 @@ namespace NThreading {
             UNIT_ASSERT_EQUAL(list.GetSize(), 1);
         }
 
-        Y_UNIT_TEST(ShouldNotAllowDuplicates) {
+        Y_UNIT_TEST(ShouldNotAllowDuplicates) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -62,7 +62,7 @@ namespace NThreading {
             UNIT_ASSERT_EQUAL(list.GetSize(), 1);
         }
 
-        Y_UNIT_TEST(ShouldContainInsertedItem) {
+        Y_UNIT_TEST(ShouldContainInsertedItem) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -70,7 +70,7 @@ namespace NThreading {
             UNIT_ASSERT(list.Contains(12345678));
         }
 
-        Y_UNIT_TEST(ShouldNotContainNotInsertedItem) {
+        Y_UNIT_TEST(ShouldNotContainNotInsertedItem) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -78,7 +78,7 @@ namespace NThreading {
             UNIT_ASSERT(!list.Contains(87654321));
         }
 
-        Y_UNIT_TEST(ShouldIterateAllItems) {
+        Y_UNIT_TEST(ShouldIterateAllItems) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -95,7 +95,7 @@ namespace NThreading {
             UNIT_ASSERT(!it.IsValid());
         }
 
-        Y_UNIT_TEST(ShouldIterateAllItemsInReverseDirection) {
+        Y_UNIT_TEST(ShouldIterateAllItemsInReverseDirection) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -112,7 +112,7 @@ namespace NThreading {
             UNIT_ASSERT(!it.IsValid());
         }
 
-        Y_UNIT_TEST(ShouldSeekToFirstItem) {
+        Y_UNIT_TEST(ShouldSeekToFirstItem) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -125,7 +125,7 @@ namespace NThreading {
             UNIT_ASSERT_EQUAL(it.GetValue(), 1);
         }
 
-        Y_UNIT_TEST(ShouldSeekToLastItem) {
+        Y_UNIT_TEST(ShouldSeekToLastItem) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -138,7 +138,7 @@ namespace NThreading {
             UNIT_ASSERT_EQUAL(it.GetValue(), 9);
         }
 
-        Y_UNIT_TEST(ShouldSeekToExistingItem) {
+        Y_UNIT_TEST(ShouldSeekToExistingItem) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -148,7 +148,7 @@ namespace NThreading {
             UNIT_ASSERT(it.IsValid());
         }
 
-        Y_UNIT_TEST(ShouldSeekAfterMissedItem) {
+        Y_UNIT_TEST(ShouldSeekAfterMissedItem) { 
             TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
@@ -164,7 +164,7 @@ namespace NThreading {
             UNIT_ASSERT_EQUAL(it.GetValue(), 100);
         }
 
-        Y_UNIT_TEST(ShouldCallDtorsOfNonPodTypes) {
+        Y_UNIT_TEST(ShouldCallDtorsOfNonPodTypes) { 
             UNIT_ASSERT(!TTypeTraits<TTestObject>::IsPod);
             UNIT_ASSERT_EQUAL(TTestObject::Count, 0);
 

@@ -130,10 +130,10 @@ namespace NMonitoring {
         }
     }
 
-    Y_UNIT_TEST_SUITE(TDynamicCountersEncodeTest) {
+    Y_UNIT_TEST_SUITE(TDynamicCountersEncodeTest) { 
         TTestData Data;
 
-        Y_UNIT_TEST(Json) {
+        Y_UNIT_TEST(Json) { 
             TString result;
             {
                 TStringOutput out(result);
@@ -150,7 +150,7 @@ namespace NMonitoring {
             AssertResult(samples);
         }
 
-        Y_UNIT_TEST(Spack) {
+        Y_UNIT_TEST(Spack) { 
             TBuffer result;
             {
                 TBufferOutput out(result);

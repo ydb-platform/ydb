@@ -38,7 +38,7 @@ void Out<NMonitoring::NProto::TSingleSample::ValueCase>(IOutputStream& os, NMoni
 }
 
 Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
-    Y_UNIT_TEST(Gauge) {
+    Y_UNIT_TEST(Gauge) { 
         TMetricRegistry registry(TLabels{{"common", "label"}});
         TGauge* g = registry.Gauge({{"my", "gauge"}});
 
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
     }
 
-    Y_UNIT_TEST(Counter) {
+    Y_UNIT_TEST(Counter) { 
         TMetricRegistry registry(TLabels{{"common", "label"}});
         TCounter* c = registry.Counter({{"my", "counter"}});
 
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_VALUES_EQUAL(r->Get(), 42);
     }
 
-    Y_UNIT_TEST(DoubleCounter) {
+    Y_UNIT_TEST(DoubleCounter) { 
         TMetricRegistry registry(TLabels{{"common", "label"}});
 
         TCounter* c = registry.Counter({{"my", "counter"}});
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_VALUES_EQUAL(c->Get(), 10);
     }
 
-    Y_UNIT_TEST(Sample) {
+    Y_UNIT_TEST(Sample) { 
         TMetricRegistry registry(TLabels{{"common", "label"}});
 
         TGauge* g = registry.Gauge({{"my", "gauge"}});

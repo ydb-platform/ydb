@@ -65,7 +65,7 @@ namespace NMiniKQL {
         IComputationPattern::TPtr Pattern;
     };
 
-Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
+Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) { 
 
     void VerifySerialization(TNode* pgm, const TTypeEnvironment& env) {
         TString s = PrintNode(pgm);
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         VerifySerialization(pgm, env);
     }
 
-    Y_UNIT_TEST(TestEraseRowStaticKey) {
+    Y_UNIT_TEST(TestEraseRowStaticKey) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
     }
 
-    Y_UNIT_TEST(TestEraseRowPartialDynamicKey) {
+    Y_UNIT_TEST(TestEraseRowPartialDynamicKey) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
     }
 
-    Y_UNIT_TEST(TestEraseRowDynamicKey) {
+    Y_UNIT_TEST(TestEraseRowDynamicKey) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<char*>::Id);
     }
 
-    Y_UNIT_TEST(TestSelectRow) {
+    Y_UNIT_TEST(TestSelectRow) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
     }
 
-    Y_UNIT_TEST(TestUpdateRowStaticKey) {
+    Y_UNIT_TEST(TestUpdateRowStaticKey) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
     }
 
-    Y_UNIT_TEST(TestUpdateRowDynamicKey) {
+    Y_UNIT_TEST(TestUpdateRowDynamicKey) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
     }
 
-    Y_UNIT_TEST(TestSelectFromInclusiveRange) {
+    Y_UNIT_TEST(TestSelectFromInclusiveRange) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
     }
 
-    Y_UNIT_TEST(TestSelectFromExclusiveRange) {
+    Y_UNIT_TEST(TestSelectFromExclusiveRange) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
     }
 
-    Y_UNIT_TEST(TestSelectToInclusiveRange) {
+    Y_UNIT_TEST(TestSelectToInclusiveRange) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -526,7 +526,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
     }
 
-    Y_UNIT_TEST(TestSelectToExclusiveRange) {
+    Y_UNIT_TEST(TestSelectToExclusiveRange) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
     }
 
-    Y_UNIT_TEST(TestSelectBothFromInclusiveToInclusiveRange) {
+    Y_UNIT_TEST(TestSelectBothFromInclusiveToInclusiveRange) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -631,7 +631,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
     }
 
-    Y_UNIT_TEST(TestSelectBothFromExclusiveToExclusiveRange) {
+    Y_UNIT_TEST(TestSelectBothFromExclusiveToExclusiveRange) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -683,7 +683,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
     }
 
-    Y_UNIT_TEST(TestAcquireLocks) {
+    Y_UNIT_TEST(TestAcquireLocks) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -696,7 +696,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         VerifyProgram(pgm, env);
     }
 
-    Y_UNIT_TEST(TestDiagnostics) {
+    Y_UNIT_TEST(TestDiagnostics) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -708,7 +708,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         VerifyProgram(pgm, env);
     }
 
-    Y_UNIT_TEST(TestInvalidParameterName) {
+    Y_UNIT_TEST(TestInvalidParameterName) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -729,7 +729,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_FAIL("Expected exception.");
     }
 
-    Y_UNIT_TEST(TestInvalidParameterType) {
+    Y_UNIT_TEST(TestInvalidParameterType) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());

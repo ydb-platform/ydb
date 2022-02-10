@@ -6,7 +6,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/generic/is_in.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/system/thread.h>
 
 class TPointerTest: public TTestBase {
@@ -41,7 +41,7 @@ private:
         struct S: public TAtomicRefCount<S> {
         };
 
-        struct TLocalThread: public ISimpleThread {
+        struct TLocalThread: public ISimpleThread { 
             void* ThreadProc() override {
                 TSimpleIntrusivePtr<S> ptr;
                 return nullptr;
@@ -259,23 +259,23 @@ void TPointerTest::TestAutoToHolder() {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
-
-    {
-        TAutoPtr<A> x(new A());
-        THolder<const A> y = x;
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
-
-    {
+ 
+    { 
+        TAutoPtr<A> x(new A()); 
+        THolder<const A> y = x; 
+    } 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 0); 
+ 
+    { 
         class B1: public A {
-        };
-
+        }; 
+ 
         TAutoPtr<B1> x(new B1());
-        THolder<A> y = x;
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+        THolder<A> y = x; 
+    } 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 0); 
 }
 
 void TPointerTest::TestCopyPtr() {

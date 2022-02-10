@@ -157,7 +157,7 @@ namespace {
     XX(StartsWith, StartsWith)  \
     XX(EndsWith, EndsWith)      \
     XX(HasPrefix, StartsWith)   \
-    XX(HasSuffix, EndsWith)
+    XX(HasSuffix, EndsWith) 
 
 #define STRING_TWO_ARGS_UDF_MAP(XX)                    \
     XX(StartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \

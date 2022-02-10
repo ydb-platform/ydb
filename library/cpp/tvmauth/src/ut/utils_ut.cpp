@@ -4,12 +4,12 @@
 
 #include <util/generic/maybe.h>
 
-Y_UNIT_TEST_SUITE(UtilsTestSuite) {
+Y_UNIT_TEST_SUITE(UtilsTestSuite) { 
     static const TString VALID_SERVICE_TICKET_1 = "3:serv:CBAQ__________9_IhkI5QEQHBoIYmI6c2VzczEaCGJiOnNlc3My:WUPx1cTf05fjD1exB35T5j2DCHWH1YaLJon_a4rN-D7JfXHK1Ai4wM4uSfboHD9xmGQH7extqtlEk1tCTCGm5qbRVloJwWzCZBXo3zKX6i1oBYP_89WcjCNPVe1e8jwGdLsnu6PpxL5cn0xCksiStILH5UmDR6xfkJdnmMG94o8";
     static const TString EXPIRED_SERVICE_TICKET = "3:serv:CBAQACIZCOUBEBwaCGJiOnNlc3MxGghiYjpzZXNzMg:IwfMNJYEqStY_SixwqJnyHOMCPR7-3HHk4uylB2oVRkthtezq-OOA7QizDvx7VABLs_iTlXuD1r5IjufNei_EiV145eaa3HIg4xCdJXCojMexf2UYJz8mF2b0YzFAy6_KWagU7xo13CyKAqzJuQf5MJcSUf0ecY9hVh36cJ51aw";
     using namespace NTvmAuth;
 
-    Y_UNIT_TEST(base64Test) {
+    Y_UNIT_TEST(base64Test) { 
         UNIT_ASSERT_VALUES_EQUAL("-hHx", NUtils::Bin2base64url("\xfa\x11\xf1"));
         UNIT_ASSERT_VALUES_EQUAL("-hHx_g", NUtils::Bin2base64url("\xfa\x11\xf1\xfe"));
         UNIT_ASSERT_VALUES_EQUAL("-hHx_v8", NUtils::Bin2base64url("\xfa\x11\xf1\xfe\xff"));
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(UtilsTestSuite) {
                                  NUtils::Base64url2bin(("VGhlIE1hZ2ljIFdvcmRzIGFyZSBTcXVlYW1pc2ggT3NzaWZyYWdl")));
     }
 
-    Y_UNIT_TEST(sign) {
+    Y_UNIT_TEST(sign) { 
         UNIT_ASSERT_VALUES_EQUAL("wkGfeuopf709ozPAeGcDMqtZXPzsWvuNJ1BL586dSug",
                                  NUtils::SignCgiParamsForTvm(NUtils::Base64url2bin("GRMJrKnj4fOVnvOqe-WyD1"),
                                                              "1490000000",

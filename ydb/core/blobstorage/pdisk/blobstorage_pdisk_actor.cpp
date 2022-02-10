@@ -177,7 +177,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
             return LastFlag;
         }
 
-        void Render(IOutputStream& os) const {
+        void Render(IOutputStream& os) const { 
             switch (LastFlag) {
             case NKikimrWhiteboard::Grey:
                 break;

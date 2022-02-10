@@ -73,7 +73,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 , LsnSegmentStart(lsnSegmentStart)
                 , Lsn(lsn)
             {
-                Y_VERIFY_DEBUG(lsn >= lsnSegmentStart);
+                Y_VERIFY_DEBUG(lsn >= lsnSegmentStart); 
             }
 
             struct TGreater {
@@ -97,7 +97,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         friend class TActorBootstrapped<TRecoveryLogWriter>;
 
         void Bootstrap(const TActorContext &ctx) {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             Become(&TThis::StateFunc);
         }
 
@@ -184,7 +184,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         }
 
         void Handle(TEvBlobStorage::TEvVCompact::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             ui64 lsn = CurSentLsn + 1;
             ctx.Send(SkeletonID, new NPDisk::TEvCutLog(Owner, OwnerRound, lsn, 0, 0, 0, 0));
         }

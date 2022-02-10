@@ -2,8 +2,8 @@
 
 #include "latch.h"
 
-Y_UNIT_TEST_SUITE(TLatch) {
-    Y_UNIT_TEST(Simple) {
+Y_UNIT_TEST_SUITE(TLatch) { 
+    Y_UNIT_TEST(Simple) { 
         TLatch latch;
         UNIT_ASSERT(latch.TryWait());
         latch.Lock();

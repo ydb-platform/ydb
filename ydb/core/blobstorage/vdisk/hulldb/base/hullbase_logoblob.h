@@ -167,7 +167,7 @@ namespace NKikimr {
         }
 
         void SetType(TBlobType::EType t) {
-            Y_VERIFY_DEBUG(t == TBlobType::DiskBlob || t == TBlobType::HugeBlob || t == TBlobType::ManyHugeBlobs);
+            Y_VERIFY_DEBUG(t == TBlobType::DiskBlob || t == TBlobType::HugeBlob || t == TBlobType::ManyHugeBlobs); 
             Type = t;
         }
 
@@ -176,7 +176,7 @@ namespace NKikimr {
             if (t == TBlobType::DiskBlob || t == TBlobType::HugeBlob) {
                 extr->Set(t, TDiskPart(Id, Offset, Size));
             } else {
-                Y_VERIFY(t == TBlobType::ManyHugeBlobs && outbound);
+                Y_VERIFY(t == TBlobType::ManyHugeBlobs && outbound); 
                 const TDiskPart *begin = &(outbound[Id]);
                 extr->Set(TBlobType::ManyHugeBlobs, begin, begin + Offset);
             }
@@ -184,7 +184,7 @@ namespace NKikimr {
         }
 
         TMemPart GetMemData() const {
-            Y_VERIFY_DEBUG(GetType() == TBlobType::MemBlob);
+            Y_VERIFY_DEBUG(GetType() == TBlobType::MemBlob); 
             return TMemPart(ui64(Id) << 32 | Offset, Size);
         }
 
@@ -205,7 +205,7 @@ namespace NKikimr {
         }
 
         TString ToString(const TIngressCache *cache, const TDiskPart *outbound) const {
-            Y_UNUSED(cache);
+            Y_UNUSED(cache); 
             TStringStream str;
             TBlobType::EType t = GetType();
             str << "{" << TBlobType::TypeToStr(t) << " " << CollectMode2String(Ingress.GetCollectMode(

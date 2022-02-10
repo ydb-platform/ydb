@@ -16,7 +16,7 @@ void Encoder::Tr(const wchar32* in, char* out) const {
 void Recoder::Create(const CodePage& source, const Encoder* wideTarget) {
     for (size_t i = 0; i != 256; ++i) {
         Table[i] = wideTarget->Tr(source.unicode[i]);
-        Y_ASSERT(Table[i] != 0 || i == 0);
+        Y_ASSERT(Table[i] != 0 || i == 0); 
     }
 }
 

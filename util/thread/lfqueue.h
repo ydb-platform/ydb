@@ -1,7 +1,7 @@
 #pragma once
 
-#include "fwd.h"
-
+#include "fwd.h" 
+ 
 #include <util/generic/ptr.h>
 #include <util/system/atomic.h>
 #include <util/system/yassert.h>
@@ -23,8 +23,8 @@ struct TDefaultLFCounter {
 // @tparam TCounter, a observer class to count number of items in queue
 //                   be carifull, IncCount and DecCount can be called on a moved object and
 //                   it is TCounter class responsibility to check validity of passed object
-template <class T, class TCounter>
-class TLockFreeQueue: public TNonCopyable {
+template <class T, class TCounter> 
+class TLockFreeQueue: public TNonCopyable { 
     struct TListNode {
         template <typename U>
         TListNode(U&& u, TListNode* next)
@@ -51,10 +51,10 @@ class TLockFreeQueue: public TNonCopyable {
         TRootNode* volatile NextFree;
 
         TRootNode()
-            : PushQueue(nullptr)
-            , PopQueue(nullptr)
-            , ToDelete(nullptr)
-            , NextFree(nullptr)
+            : PushQueue(nullptr) 
+            , PopQueue(nullptr) 
+            , ToDelete(nullptr) 
+            , NextFree(nullptr) 
         {
         }
         void CopyCounter(TRootNode* x) {
@@ -78,7 +78,7 @@ class TLockFreeQueue: public TNonCopyable {
     void TryToFreeAsyncMemory() {
         TAtomic keepCounter = AtomicAdd(FreeingTaskCounter, 0);
         TRootNode* current = AtomicGet(FreePtr);
-        if (current == nullptr)
+        if (current == nullptr) 
             return;
         if (AtomicAdd(FreememCounter, 0) == 1) {
             // we are the last thread, try to cleanup
@@ -86,7 +86,7 @@ class TLockFreeQueue: public TNonCopyable {
             if (keepCounter != AtomicAdd(FreeingTaskCounter, 0)) {
                 return;
             }
-            if (AtomicCas(&FreePtr, (TRootNode*)nullptr, current)) {
+            if (AtomicCas(&FreePtr, (TRootNode*)nullptr, current)) { 
                 // free list
                 while (current) {
                     TRootNode* p = AtomicGet(current->NextFree);
@@ -131,29 +131,29 @@ class TLockFreeQueue: public TNonCopyable {
         TListNode* PrevFirst;
 
         TListInvertor()
-            : Copy(nullptr)
-            , Tail(nullptr)
-            , PrevFirst(nullptr)
+            : Copy(nullptr) 
+            , Tail(nullptr) 
+            , PrevFirst(nullptr) 
         {
         }
         ~TListInvertor() {
             EraseList(Copy);
         }
         void CopyWasUsed() {
-            Copy = nullptr;
-            Tail = nullptr;
-            PrevFirst = nullptr;
+            Copy = nullptr; 
+            Tail = nullptr; 
+            PrevFirst = nullptr; 
         }
         void DoCopy(TListNode* ptr) {
             TListNode* newFirst = ptr;
-            TListNode* newCopy = nullptr;
-            TListNode* newTail = nullptr;
+            TListNode* newCopy = nullptr; 
+            TListNode* newTail = nullptr; 
             while (ptr) {
                 if (ptr == PrevFirst) {
                     // short cut, we have copied this part already
                     AtomicSet(Tail->Next, newCopy);
                     newCopy = Copy;
-                    Copy = nullptr; // do not destroy prev try
+                    Copy = nullptr; // do not destroy prev try 
                     if (!newTail)
                         newTail = Tail; // tried to invert same list
                     break;
@@ -188,7 +188,7 @@ class TLockFreeQueue: public TNonCopyable {
             }
 
             if (AtomicCas(&JobQueue, newRoot, curRoot)) {
-                AsyncUnref(curRoot, nullptr);
+                AsyncUnref(curRoot, nullptr); 
                 break;
             }
         }
@@ -229,7 +229,7 @@ public:
         : JobQueue(new TRootNode)
         , FreememCounter(0)
         , FreeingTaskCounter(0)
-        , FreePtr(nullptr)
+        , FreePtr(nullptr) 
     {
     }
     ~TLockFreeQueue() {
@@ -272,7 +272,7 @@ public:
         EnqueueImpl(node, tail);
     }
     bool Dequeue(T* data) {
-        TRootNode* newRoot = nullptr;
+        TRootNode* newRoot = nullptr; 
         TListInvertor listInvertor;
         AsyncRef();
         for (;;) {
@@ -310,7 +310,7 @@ public:
             newRoot->CopyCounter(curRoot);
             Y_ASSERT(AtomicGet(curRoot->PopQueue) == nullptr);
             if (AtomicCas(&JobQueue, newRoot, curRoot)) {
-                newRoot = nullptr;
+                newRoot = nullptr; 
                 listInvertor.CopyWasUsed();
                 AsyncDel(curRoot, AtomicGet(curRoot->PushQueue));
             } else {
@@ -359,7 +359,7 @@ public:
     }
 };
 
-template <class T, class TCounter>
+template <class T, class TCounter> 
 class TAutoLockFreeQueue {
 public:
     using TRef = THolder<T>;
@@ -372,7 +372,7 @@ public:
     }
 
     inline bool Dequeue(TRef* t) {
-        T* res = nullptr;
+        T* res = nullptr; 
 
         if (Queue.Dequeue(&res)) {
             t->Reset(res);

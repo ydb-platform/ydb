@@ -150,7 +150,7 @@ TTester::TKeyResolver TTester::GetKeyResolver() const {
 void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister) {
     TActorId actorId = CreateTestBootstrapper(Runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_DATASHARD),
         &::NKikimr::CreateDataShard);
-    Y_UNUSED(actorId);
+    Y_UNUSED(actorId); 
 
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -1016,7 +1016,7 @@ TTestActorRuntime::TEventFilter TDatashardInitialEventsFilter::Prepare() {
 }
 
 bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-    Y_UNUSED(runtime);
+    Y_UNUSED(runtime); 
     if (event->GetTypeRewrite() == TEvTxProcessing::EvPlanStepAck) {
         ui64 tabletId = reinterpret_cast<TEvTxProcessing::TEvPlanStepAck::TPtr&>(event)->Get()->Record.GetTabletId();
         auto it = Find(RemainTablets.begin(), RemainTablets.end(), tabletId);

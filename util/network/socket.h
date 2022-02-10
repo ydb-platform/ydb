@@ -5,8 +5,8 @@
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
 #include <util/system/error.h>
-#include <util/stream/output.h>
-#include <util/stream/input.h>
+#include <util/stream/output.h> 
+#include <util/stream/input.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 #include <util/generic/noncopyable.h>
@@ -223,7 +223,7 @@ public:
     }
 
     inline TIterator End() const noexcept {
-        return TIterator(nullptr);
+        return TIterator(nullptr); 
     }
 
 private:
@@ -297,7 +297,7 @@ private:
 
 class TSocket {
 public:
-    using TPart = IOutputStream::TPart;
+    using TPart = IOutputStream::TPart; 
 
     class TOps {
     public:
@@ -389,7 +389,7 @@ private:
     TSimpleIntrusivePtr<TImpl> Impl_;
 };
 
-class TSocketInput: public IInputStream {
+class TSocketInput: public IInputStream { 
 public:
     TSocketInput(const TSocket& s) noexcept;
     ~TSocketInput() override;
@@ -408,7 +408,7 @@ private:
     TSocket S_;
 };
 
-class TSocketOutput: public IOutputStream {
+class TSocketOutput: public IOutputStream { 
 public:
     TSocketOutput(const TSocket& s) noexcept;
     ~TSocketOutput() override;

@@ -85,8 +85,8 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
 }
 
 
-Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
-    Y_UNIT_TEST(SimpleAggregation) {
+Y_UNIT_TEST_SUITE(TTabletCountersAggregator) { 
+    Y_UNIT_TEST(SimpleAggregation) { 
         TVector<TActorId> cc;
         TActorId aggregatorId;
 
@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
     }
 
 
-    Y_UNIT_TEST(HeavyAggregation) {
+    Y_UNIT_TEST(HeavyAggregation) { 
         TestHeavy(2, 10);
         TestHeavy(2, 20);
         TestHeavy(2, 1);

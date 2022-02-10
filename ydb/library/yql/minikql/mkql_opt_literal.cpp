@@ -65,7 +65,7 @@ TNode* LiteralRemoveMember(
 }
 
 TRuntimeNode OptimizeIf(TCallable& callable, const TTypeEnvironment& env) {
-    Y_UNUSED(env);
+    Y_UNUSED(env); 
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arguments");
 
     auto predicateInput = callable.GetInput(0);
@@ -141,7 +141,7 @@ TRuntimeNode OptimizeRemoveMember(TCallable& callable, const TTypeEnvironment& e
 }
 
 TRuntimeNode OptimizeMember(TCallable& callable, const TTypeEnvironment& env) {
-    Y_UNUSED(env);
+    Y_UNUSED(env); 
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments");
 
     auto structInput = callable.GetInput(0);
@@ -230,7 +230,7 @@ TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
 }
 
 TRuntimeNode OptimizeCoalesce(TCallable& callable, const TTypeEnvironment& env) {
-    Y_UNUSED(env);
+    Y_UNUSED(env); 
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments");
 
     auto optionalInput = callable.GetInput(0);
@@ -262,7 +262,7 @@ TRuntimeNode OptimizeExists(TCallable& callable, const TTypeEnvironment& env) {
 }
 
 TRuntimeNode OptimizeNth(TCallable& callable, const TTypeEnvironment& env) {
-    Y_UNUSED(env);
+    Y_UNUSED(env); 
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments");
 
     auto tupleInput = callable.GetInput(0);

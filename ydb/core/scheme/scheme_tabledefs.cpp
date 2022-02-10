@@ -16,7 +16,7 @@ bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const
     return (cmp < 0);
 }
 
-void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) {
+void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) { 
 #define KEYDESCRIPTION_STATUS_TO_STRING_IMPL(name, ...) \
     case EStatus::name: \
         o << #name; \

@@ -56,7 +56,7 @@ bool TEngineHost::IsReadonly() const {
 
 
 bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const {
-    Y_UNUSED(maxSnapshotTime);
+    Y_UNUSED(maxSnapshotTime); 
 
     auto* tableInfo = Scheme.GetTableInfo(LocalTableId(key.TableId));
 
@@ -270,10 +270,10 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     // And that struct type has column tags stored inside it's member names as numbers
 
     Y_UNUSED(returnType);
-    Y_UNUSED(readTarget);
+    Y_UNUSED(readTarget); 
 
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_VERIFY(localTid, "table not exist"); 
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
     TSmallVec<TRawTypeValue> key;
     ConvertKeys(tableInfo, row, key);
@@ -799,13 +799,13 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
     //        >
     // And that struct type has column tags stored inside it's member names (ugly hack)
 
-    Y_UNUSED(readTarget);
+    Y_UNUSED(readTarget); 
 
     // TODO[serxa]: support for Point in SelectRange()
     Y_VERIFY(!range.Point, "point request in TEngineHost::SelectRange");
 
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_VERIFY(localTid, "table not exist"); 
 
     // Analyze resultType
     TStructType* outerStructType = AS_TYPE(TStructType, returnType);
@@ -852,7 +852,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
 // Updates the single row. Column in commands must be unique.
 void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) {
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_VERIFY(localTid, "table not exist"); 
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
     TSmallVec<TRawTypeValue> key;
     ui64 keyBytes = 0;
@@ -862,7 +862,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     TSmallVec<NTable::TUpdateOp> ops;
     for (size_t i = 0; i < commands.size(); i++) {
         const TUpdateCommand& upd = commands[i];
-        Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
+        Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row 
         NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
         ops.emplace_back(upd.Column, NTable::ECellOp::Set,
             upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtype));
@@ -891,7 +891,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
 // Erases the single row.
 void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) {
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_VERIFY(localTid, "table not exist"); 
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
     TSmallVec<TRawTypeValue> key;
     ui64 keyBytes = 0;
@@ -924,7 +924,7 @@ bool TEngineHost::IsPathErased(const TTableId& tableId) const {
 
 // Returns whether row belong this shard.
 bool TEngineHost::IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const {
-    Y_UNUSED(tableId); Y_UNUSED(row);
+    Y_UNUSED(tableId); Y_UNUSED(row); 
     return true;
 }
 

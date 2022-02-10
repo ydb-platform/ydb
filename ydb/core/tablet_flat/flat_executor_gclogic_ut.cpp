@@ -4,13 +4,13 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
+Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) { 
     bool TestDeduplication(TVector<TLogoBlobID> keep, TVector<TLogoBlobID> dontkeep, ui32 gen, ui32 step, TVector<TLogoBlobID> expectKeep, TVector<TLogoBlobID> expectnot) {
         DeduplicateGCKeepVectors(&keep, &dontkeep, gen, step);
         return (keep == expectKeep) && (dontkeep == expectnot);
     }
 
-    Y_UNIT_TEST(TestGCVectorDeduplicaton) {
+    Y_UNIT_TEST(TestGCVectorDeduplicaton) { 
         UNIT_ASSERT(TestDeduplication(
             {
                 TLogoBlobID(1, 1, 1, 1, 0, 0),

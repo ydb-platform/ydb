@@ -24,7 +24,7 @@ private:
 public:
     void SetResult(const T& result) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(!Result, "cannot set result twice");
+        Y_VERIFY(!Result, "cannot set result twice"); 
         Result = result;
         CondVar.BroadCast();
 
@@ -47,7 +47,7 @@ public:
         if (!!Result) {
             onResult(*Result);
         } else {
-            Y_ASSERT(!OnResult);
+            Y_ASSERT(!OnResult); 
             OnResult = std::function<TOnResult>(onResult);
         }
     }

@@ -34,7 +34,7 @@ namespace {
 
     class TSer {
     public:
-        TSer(IOutputStream &str)
+        TSer(IOutputStream &str) 
             : Str(str)
         {}
 
@@ -45,12 +45,12 @@ namespace {
         void Finish() {}
 
     private:
-        IOutputStream &Str;
+        IOutputStream &Str; 
     };
 
     class TDes {
     public:
-        TDes(IInputStream &str)
+        TDes(IInputStream &str) 
             : Str(str)
         {}
 
@@ -65,14 +65,14 @@ namespace {
         }
 
     private:
-        IInputStream &Str;
+        IInputStream &Str; 
     };
 
 }
 
-Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
+Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) { 
 
-    Y_UNIT_TEST(IterateOverAllDisks) {
+    Y_UNIT_TEST(IterateOverAllDisks) { 
         const ui32 numDomains = 8;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
         TVector<TVDiskID> vdisks = GetVDisks(info);
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         UNIT_ASSERT_VALUES_EQUAL(temp.size(), 0);
     }
 
-    Y_UNIT_TEST(CheckRevLookup) {
+    Y_UNIT_TEST(CheckRevLookup) { 
         const ui32 numDomains = 8;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
         TVector<TVDiskID> vdisks = GetVDisks(info);
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(CheckIsMyDomain) {
+    Y_UNIT_TEST(CheckIsMyDomain) { 
         const ui32 numDomains = 8;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
         TVector<TVDiskID> vdisks = GetVDisks(info);
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(SerDes) {
+    Y_UNIT_TEST(SerDes) { 
         const ui32 numDomains = 8;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
         TVector<TVDiskID> vdisks = GetVDisks(info);
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(CheckVDiskIterators) {
+    Y_UNIT_TEST(CheckVDiskIterators) { 
         TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 2, 3, 3);
         const TBlobStorageGroupInfo::TTopology& topo = info.GetTopology();
         for (ui32 i = 0; i < topo.GetTotalVDisksNum(); ++i) {
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(CheckFailDomainsIterators) {
+    Y_UNIT_TEST(CheckFailDomainsIterators) { 
         TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 2, 3, 3);
         const TBlobStorageGroupInfo::TTopology& topo = info.GetTopology();
         for (ui32 i = 0; i < topo.GetTotalVDisksNum(); ++i) {
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(CheckVDiskDistance) {
+    Y_UNIT_TEST(CheckVDiskDistance) { 
         TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 2, 3, 3);
         const TBlobStorageGroupInfo::TTopology& topo = info.GetTopology();
         const TVDiskIdShort& self = topo.GetVDiskId(0);

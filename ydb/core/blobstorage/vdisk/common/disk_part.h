@@ -83,23 +83,23 @@ namespace NKikimr {
 
         bool Empty() const {
             bool empty = ChunkIdx == 0;
-            Y_VERIFY_DEBUG((empty && Offset == 0 && Size == 0) || !empty);
+            Y_VERIFY_DEBUG((empty && Offset == 0 && Size == 0) || !empty); 
             return empty;
         }
 
-        void Save(IOutputStream *s) const {
+        void Save(IOutputStream *s) const { 
             ::Save(s, ChunkIdx);
             ::Save(s, Offset);
             ::Save(s, Size);
         }
 
-        void Load(IInputStream *s) {
+        void Load(IInputStream *s) { 
             ::Load(s, ChunkIdx);
             ::Load(s, Offset);
             ::Load(s, Size);
         }
 
-        void Serialize(IOutputStream &s) const {
+        void Serialize(IOutputStream &s) const { 
             s.Write(&ChunkIdx, sizeof(ui32));
             s.Write(&Offset, sizeof(ui32));
             s.Write(&Size, sizeof(ui32));
@@ -206,7 +206,7 @@ namespace NKikimr {
         }
 
         static bool Check(const TString &data) {
-            Y_UNUSED(data);
+            Y_UNUSED(data); 
             return true;
         }
 

@@ -72,7 +72,7 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
             NProtobufJson::ToSnakeCaseDense(&name);
             break;
         default:
-            Y_VERIFY_DEBUG(false, "Unknown FieldNameMode.");
+            Y_VERIFY_DEBUG(false, "Unknown FieldNameMode."); 
     }
     return name;
 }
@@ -85,7 +85,7 @@ JsonString2Field(const NJson::TJsonValue& json,
     using namespace google::protobuf;
 
     const Reflection* reflection = proto.GetReflection();
-    Y_ASSERT(!!reflection);
+    Y_ASSERT(!!reflection); 
 
     if (!json.IsString() && !config.CastRobust) {
         ythrow yexception() << "Invalid type of JSON field '" << field.name() << "': "
@@ -94,7 +94,7 @@ JsonString2Field(const NJson::TJsonValue& json,
     }
     TString value = json.GetStringRobust();
     for (size_t i = 0, endI = config.StringTransforms.size(); i < endI; ++i) {
-        Y_ASSERT(!!config.StringTransforms[i]);
+        Y_ASSERT(!!config.StringTransforms[i]); 
         if (!!config.StringTransforms[i]) {
             if (field.type() == google::protobuf::FieldDescriptor::TYPE_BYTES) {
                 config.StringTransforms[i]->TransformBytes(value);
@@ -130,10 +130,10 @@ JsonEnum2Field(const NJson::TJsonValue& json,
     using namespace google::protobuf;
 
     const Reflection* reflection = proto.GetReflection();
-    Y_ASSERT(!!reflection);
+    Y_ASSERT(!!reflection); 
 
     const EnumDescriptor* enumField = field.enum_type();
-    Y_ASSERT(!!enumField);
+    Y_ASSERT(!!enumField); 
 
     /// @todo configure name/numerical value
     const EnumValueDescriptor* enumFieldValue = nullptr;
@@ -343,7 +343,7 @@ Json2RepeatedField(const NJson::TJsonValue& json,
     }
 
     const Reflection* reflection = proto.GetReflection();
-    Y_ASSERT(!!reflection);
+    Y_ASSERT(!!reflection); 
 
     if (isMap) {
         const THashMap<TString, NJson::TJsonValue> jsonMap = fieldJson.GetMap();

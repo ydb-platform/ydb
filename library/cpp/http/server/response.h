@@ -7,7 +7,7 @@
 #include <util/string/cast.h>
 
 class THttpHeaders;
-class IOutputStream;
+class IOutputStream; 
 
 class THttpResponse {
 public:
@@ -42,8 +42,8 @@ public:
 
     /**
      * @note If @arg content isn't empty its size is automatically added as a
-     * "Content-Length" header during output to IOutputStream.
-     * @see IOutputStream& operator << (IOutputStream&, const THttpResponse&)
+     * "Content-Length" header during output to IOutputStream. 
+     * @see IOutputStream& operator << (IOutputStream&, const THttpResponse&) 
      */
     THttpResponse& SetContent(const TString& content) {
         Content = content;
@@ -57,8 +57,8 @@ public:
 
     /**
      * @note If @arg content isn't empty its size is automatically added as a
-     * "Content-Length" header during output to IOutputStream.
-     * @see IOutputStream& operator << (IOutputStream&, const THttpResponse&)
+     * "Content-Length" header during output to IOutputStream. 
+     * @see IOutputStream& operator << (IOutputStream&, const THttpResponse&) 
      */
     THttpResponse& SetContent(const TString& content, const TStringBuf& contentType) {
         return SetContent(content).SetContentType(contentType);
@@ -73,7 +73,7 @@ public:
         return *this;
     }
 
-    void OutTo(IOutputStream& out) const;
+    void OutTo(IOutputStream& out) const; 
 
 private:
     HttpCodes Code;

@@ -22,7 +22,7 @@ namespace NBus {
             , WakeLev(wake < 1 ? Max<size_t>(1, tokens / 2) : 0)
             , Tokens_(tokens)
         {
-            Y_UNUSED(padd_);
+            Y_UNUSED(padd_); 
         }
 
         bool Acquire(TAtomic level = 1, bool force = false) {
@@ -37,7 +37,7 @@ namespace NBus {
 
         void Consume(size_t items) {
             if (Enabled) {
-                Y_ASSERT(Acquired >= TAtomicBase(items));
+                Y_ASSERT(Acquired >= TAtomicBase(items)); 
 
                 Acquired -= items;
             }

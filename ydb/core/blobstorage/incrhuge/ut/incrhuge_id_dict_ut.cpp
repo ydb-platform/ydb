@@ -3,8 +3,8 @@
 
 using namespace NKikimr::NIncrHuge;
 
-Y_UNIT_TEST_SUITE(TIncrHugeBlobIdDict) {
-    Y_UNIT_TEST(Basic) {
+Y_UNIT_TEST_SUITE(TIncrHugeBlobIdDict) { 
+    Y_UNIT_TEST(Basic) { 
         TVector<std::pair<TIncrHugeBlobId, ui8>> values;
         auto callback = [&](TIncrHugeBlobId id, ui8 value) {
             values.emplace_back(id, value);

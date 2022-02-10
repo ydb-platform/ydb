@@ -1,14 +1,14 @@
 #pragma once
 
-#include "cast.h"
+#include "cast.h" 
 #include "split.h"
-
+ 
 #include <util/generic/map.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 
 #define KEEP_EMPTY_TOKENS 0x01
 
@@ -120,8 +120,8 @@ inline TString JoinVectorIntoString(const TVector<T>& v, size_t index, size_t co
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim);
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim);
 
-//! Converts vector of strings to vector of type T variables
-template <typename T, typename TStringType>
+//! Converts vector of strings to vector of type T variables 
+template <typename T, typename TStringType> 
 TVector<T> Scan(const TVector<TStringType>& input) {
     TVector<T> output;
     output.reserve(input.size());

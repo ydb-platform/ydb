@@ -227,8 +227,8 @@ private:
     }
 
     TStatus HandleCommit(TCoCommit node, TExprContext& ctx) override {
-        Y_UNUSED(node);
-        Y_UNUSED(ctx);
+        Y_UNUSED(node); 
+        Y_UNUSED(ctx); 
 
         return TStatus::Ok;
     }
@@ -256,7 +256,7 @@ private:
     }
 
     TStatus HandleKql(TCallable node, TExprContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
 
         if (auto call = node.Maybe<TKiSelectRow>()) {
             auto cluster = call.Cast().Cluster().Value();
@@ -318,10 +318,10 @@ public:
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
         , PlanInfoTransformer(CreateKiSinkPlanInfoTransformer(queryExecutor))
     {
-        Y_UNUSED(FunctionRegistry);
-        Y_UNUSED(Types);
+        Y_UNUSED(FunctionRegistry); 
+        Y_UNUSED(Types); 
 
-        Y_VERIFY_DEBUG(gateway);
+        Y_VERIFY_DEBUG(gateway); 
         Y_VERIFY_DEBUG(sessionCtx);
         Y_VERIFY_DEBUG(queryExecutor);
     }

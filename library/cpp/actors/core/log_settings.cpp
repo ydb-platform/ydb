@@ -50,7 +50,7 @@ namespace NActors {
 
         void TSettings::Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func) {
             Y_VERIFY(minVal >= 0, "NLog::TSettings: minVal must be non-negative");
-            Y_VERIFY(maxVal > minVal, "NLog::TSettings: maxVal must be greater than minVal");
+            Y_VERIFY(maxVal > minVal, "NLog::TSettings: maxVal must be greater than minVal"); 
 
             // update bounds
             if (!MaxVal || minVal < MinVal) {

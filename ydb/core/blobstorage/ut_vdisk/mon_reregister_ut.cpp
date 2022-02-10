@@ -22,7 +22,7 @@
 using namespace NKikimr;
 
 
-Y_UNIT_TEST_SUITE(TMonitoring) {
+Y_UNIT_TEST_SUITE(TMonitoring) { 
 
     ////////////////////////////////////////////////////////////////////
     // TMyWorker
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
     ////////////////////////////////////////////////////////////////////
     // Unit test
     ////////////////////////////////////////////////////////////////////
-    Y_UNIT_TEST(ReregisterTest) {
+    Y_UNIT_TEST(ReregisterTest) { 
         std::shared_ptr<TTestWithActorSystem> test(new TTestWithActorSystem(0));
         test->Run(new TMyTest(test));
     }

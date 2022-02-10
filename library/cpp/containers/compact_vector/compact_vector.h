@@ -162,14 +162,14 @@ public:
     }
 
     TIterator Insert(TIterator pos, const T& elem) {
-        Y_ASSERT(pos >= Begin());
-        Y_ASSERT(pos <= End());
+        Y_ASSERT(pos >= Begin()); 
+        Y_ASSERT(pos <= End()); 
 
         size_t posn = pos - Begin();
         if (pos == End()) {
             PushBack(elem);
         } else {
-            Y_ASSERT(Size() > 0);
+            Y_ASSERT(Size() > 0); 
 
             Reserve(Size() + 1);
 
@@ -198,12 +198,12 @@ public:
     }
 
     T& operator[](size_t index) {
-        Y_ASSERT(index < Size());
+        Y_ASSERT(index < Size()); 
         return Ptr[index];
     }
 
     const T& operator[](size_t index) const {
-        Y_ASSERT(index < Size());
+        Y_ASSERT(index < Size()); 
         return Ptr[index];
     }
 };

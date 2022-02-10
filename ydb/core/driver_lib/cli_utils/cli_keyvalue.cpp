@@ -42,7 +42,7 @@ int ClientSyncCall(TAutoPtr<NBus::TBusMessage> request, const TCliCmdConfig &cli
 
 
 int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
-    Y_UNUSED(cmdConf);
+    Y_UNUSED(cmdConf); 
 
 #ifdef _win32_
     WSADATA dummy;
@@ -134,11 +134,11 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
         }
 
         if (requestConfig.IsReadToFile) {
-            Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK);
-            Y_VERIFY(response.ReadResultSize() == 1);
-            Y_VERIFY(response.GetReadResult(0).HasStatus());
-            Y_VERIFY(response.GetReadResult(0).GetStatus() == NKikimrProto::OK);
-            Y_VERIFY(response.GetReadResult(0).HasValue());
+            Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK); 
+            Y_VERIFY(response.ReadResultSize() == 1); 
+            Y_VERIFY(response.GetReadResult(0).HasStatus()); 
+            Y_VERIFY(response.GetReadResult(0).GetStatus() == NKikimrProto::OK); 
+            Y_VERIFY(response.GetReadResult(0).HasValue()); 
             TString data = response.GetReadResult(0).GetValue();
             readBuffer += data;
 
@@ -148,7 +148,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
                 last.MutableCmdRead(0)->SetOffset(readBuffer.size());
             }
         } else if (requestConfig.IsWriteFromFile) {
-            Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK);
+            Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK); 
             if (response.WriteResultSize() == 1) {
                 Y_VERIFY(response.GetWriteResult(0).HasStatus());
                 Y_VERIFY(response.GetWriteResult(0).GetStatus() == NKikimrProto::OK);

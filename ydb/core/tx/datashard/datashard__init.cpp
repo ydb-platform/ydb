@@ -44,10 +44,10 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
     } catch (const TNotReadyTabletException &) {
         return false;
     } catch (const TSchemeErrorTabletException &ex) {
-        Y_UNUSED(ex);
-        Y_FAIL();
+        Y_UNUSED(ex); 
+        Y_FAIL(); 
     } catch (...) {
-        Y_FAIL("there must be no leaked exceptions");
+        Y_FAIL("there must be no leaked exceptions"); 
     }
 }
 

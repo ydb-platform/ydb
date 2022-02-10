@@ -7,7 +7,7 @@ namespace NKikimr {
 
     using namespace NSyncLog;
 
-    Y_UNIT_TEST_SUITE(TBlobStorageSyncLogDsk) {
+    Y_UNIT_TEST_SUITE(TBlobStorageSyncLogDsk) { 
 
         struct TFillIn1Context {
             ui64 Lsn;
@@ -102,7 +102,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TESTS BEGIN HERE
         ////////////////////////////////////////////////////////////////////////////
-        Y_UNIT_TEST(AddByOne) {
+        Y_UNIT_TEST(AddByOne) { 
             ui32 chunkSize = 256u << 10u;
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
@@ -146,7 +146,7 @@ namespace NKikimr {
             UNIT_ASSERT(dsk->HowManyChunksAdds(CreateSwapSnapForTest(pageSize, 28, ctx)) == 2);
         }
 
-        Y_UNIT_TEST(AddFive) {
+        Y_UNIT_TEST(AddFive) { 
             ui32 chunkSize = 256u << 10u;
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
@@ -203,7 +203,7 @@ namespace NKikimr {
             UNIT_ASSERT(dsk->LastChunkFreePagesNum() == 6);
         }
 
-        Y_UNIT_TEST(SeveralChunks) {
+        Y_UNIT_TEST(SeveralChunks) { 
             ui32 chunkSize = 64u << 10u;
             ui32 pageSize = 16u << 10u;
             ui32 pagesInChunk = chunkSize / pageSize;
@@ -237,7 +237,7 @@ namespace NKikimr {
             UNIT_ASSERT(dsk->LastChunkFreePagesNum() == 0);
         }
 
-        Y_UNIT_TEST(OverlappingPages_OnePageIndexed) {
+        Y_UNIT_TEST(OverlappingPages_OnePageIndexed) { 
             ui32 chunkSize = 256u << 10u;
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
@@ -303,7 +303,7 @@ namespace NKikimr {
             UNIT_ASSERT(dsk->LastChunkFreePagesNum() == 12);
         }
 
-        Y_UNIT_TEST(OverlappingPages_SeveralPagesIndexed) {
+        Y_UNIT_TEST(OverlappingPages_SeveralPagesIndexed) { 
             ui32 chunkSize = 256u << 10u;
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
@@ -371,7 +371,7 @@ namespace NKikimr {
             UNIT_ASSERT(dsk->LastChunkFreePagesNum() == 11);
         }
 
-        Y_UNIT_TEST(ComplicatedSerializeWithOverlapping) {
+        Y_UNIT_TEST(ComplicatedSerializeWithOverlapping) { 
             ui32 chunkSize = 256u << 10u;
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
@@ -415,7 +415,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(TrimLog) {
+        Y_UNIT_TEST(TrimLog) { 
             ui32 chunkSize = 64u << 10u;
             ui32 pageSize = 16u << 10u;
             ui32 pagesInChunk = chunkSize / pageSize;
@@ -459,7 +459,7 @@ namespace NKikimr {
             UNIT_ASSERT(dsk->ToString() == "Empty");
         }
 
-        Y_UNIT_TEST(DeleteChunks) {
+        Y_UNIT_TEST(DeleteChunks) { 
             ui32 chunkSize = 64u << 10u;
             ui32 pageSize = 16u << 10u;
             ui32 pagesInChunk = chunkSize / pageSize;

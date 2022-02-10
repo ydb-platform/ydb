@@ -344,7 +344,7 @@ class PROTOBUF_EXPORT Message : public MessageLite {
   bool SerializeToArcadiaStream(IOutputStream* output) const;
   bool SerializePartialToArcadiaStream(IOutputStream* output) const;
 
-  virtual void PrintJSON(IOutputStream&) const;
+  virtual void PrintJSON(IOutputStream&) const; 
 
   io::TAsJSON<Message> AsJSON() const {
     return io::TAsJSON<Message>(*this);

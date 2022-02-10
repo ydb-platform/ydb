@@ -163,7 +163,7 @@ public:
     void RestoreFollowerBorrowedInfo(const TLogoBlobID &blobId, const NKikimrExecutorFlat::TBorrowedPart &proto);
 
     // for monitoring
-    void OutputHtml(IOutputStream &out);
+    void OutputHtml(IOutputStream &out); 
     TString DebugCheckBorrowConsistency(THashSet<TLogoBlobID> &knownBundles);
 
     // for cleanup

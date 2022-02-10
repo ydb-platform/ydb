@@ -5,7 +5,7 @@
 #include <util/generic/strbuf.h>
 
 
-class IOutputStream;
+class IOutputStream; 
 
 namespace NYql {
 
@@ -22,14 +22,14 @@ enum class EUnescapeResult
 
 TStringBuf UnescapeResultToString(EUnescapeResult result);
 
-void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out);
+void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out); 
 
 EUnescapeResult UnescapeArbitraryAtom(
-        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes);
+        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes); 
 
-void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out);
+void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out); 
 
 EUnescapeResult UnescapeBinaryAtom(
-        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes);
+        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes); 
 
 } // namspace NYql

@@ -15,7 +15,7 @@ bool TKillActionExecutor::DoExecute(TOrbit&, const TParams&) {
     abort();
 #else
     int r = kill(getpid(), SIGABRT);
-    Y_VERIFY(r == 0, "kill failed");
+    Y_VERIFY(r == 0, "kill failed"); 
     return true;
 #endif
 }

@@ -24,7 +24,7 @@
 #define REGISTER_MODULES(...) \
     extern "C" UDF_API void Register( \
             ::NYql::NUdf::IRegistrator& registrator, ui32 flags) { \
-        Y_UNUSED(flags); \
+        Y_UNUSED(flags); \ 
         ::NYql::NUdf::RegisterHelper<__VA_ARGS__>(registrator); \
     } \
     extern "C" UDF_API ui32 AbiVersion() { \

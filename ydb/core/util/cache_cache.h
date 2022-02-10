@@ -99,7 +99,7 @@ public:
             WarmList.PushFront(xitem);
             return nullptr;
         default:
-            Y_VERIFY_DEBUG(false, "unknown/broken cache generation");
+            Y_VERIFY_DEBUG(false, "unknown/broken cache generation"); 
             return nullptr;
         }
     }
@@ -127,7 +127,7 @@ public:
                 *Config.ReportedWarm = WarmWeight;
             break;
         default:
-            Y_VERIFY_DEBUG(false, "unknown cache generaton");
+            Y_VERIFY_DEBUG(false, "unknown cache generaton"); 
         }
     }
 
@@ -156,7 +156,7 @@ public:
                 *Config.ReportedWarm = WarmWeight;
             break;
         default:
-            Y_VERIFY_DEBUG(false, "unknown cache generaton");
+            Y_VERIFY_DEBUG(false, "unknown cache generaton"); 
         }
     }
 
@@ -171,16 +171,16 @@ private:
         item->Unlink();
 
         const ui64 elementWeight = WeightOp.Get(item);
-        Y_VERIFY_DEBUG(elementWeight <= weight);
+        Y_VERIFY_DEBUG(elementWeight <= weight); 
         weight -= elementWeight;
     }
 
     TItem* AddToFresh(TItem *item) {
         TItem *ret = nullptr;
         while (FreshWeight > Config.FreshLimit) {
-            Y_VERIFY_DEBUG(!FreshList.Empty());
+            Y_VERIFY_DEBUG(!FreshList.Empty()); 
             TItem *x = FreshList.PopBack();
-            Y_VERIFY(GenerationOp.Get(x) == TCacheCacheConfig::CacheGenFresh, "malformed entry in fresh cache. %" PRIu32, (ui32)GenerationOp.Get(x));
+            Y_VERIFY(GenerationOp.Get(x) == TCacheCacheConfig::CacheGenFresh, "malformed entry in fresh cache. %" PRIu32, (ui32)GenerationOp.Get(x)); 
             Unlink(x, FreshWeight);
             ret = AddToStaging(x, ret);
         }
@@ -201,9 +201,9 @@ private:
         TItem *ret = nullptr;
         Unlink(item, StagingWeight);
         while (WarmWeight > Config.WarmLimit) {
-            Y_VERIFY_DEBUG(!WarmList.Empty());
+            Y_VERIFY_DEBUG(!WarmList.Empty()); 
             TItem *x = WarmList.PopBack();
-            Y_VERIFY(GenerationOp.Get(x) == TCacheCacheConfig::CacheGenWarm, "malformed entry in warm cache. %" PRIu32, (ui32)GenerationOp.Get(x));
+            Y_VERIFY(GenerationOp.Get(x) == TCacheCacheConfig::CacheGenWarm, "malformed entry in warm cache. %" PRIu32, (ui32)GenerationOp.Get(x)); 
             Unlink(x, WarmWeight);
             ret = AddToStaging(x, ret);
         }
@@ -221,9 +221,9 @@ private:
 
     TItem* AddToStaging(TItem *item, TItem *ret) {
         while (StagingWeight > Config.StagingLimit) {
-            Y_VERIFY_DEBUG(!StagingList.Empty());
+            Y_VERIFY_DEBUG(!StagingList.Empty()); 
             TItem *evicted = StagingList.PopBack();
-            Y_VERIFY(GenerationOp.Get(evicted) == TCacheCacheConfig::CacheGenStaging, "malformed entry in staging cache %" PRIu32, (ui32)GenerationOp.Get(evicted));
+            Y_VERIFY(GenerationOp.Get(evicted) == TCacheCacheConfig::CacheGenStaging, "malformed entry in staging cache %" PRIu32, (ui32)GenerationOp.Get(evicted)); 
             Unlink(evicted, StagingWeight);
             GenerationOp.Set(evicted, TCacheCacheConfig::CacheGenEvicted);
             if (ret == nullptr)

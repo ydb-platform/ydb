@@ -13,7 +13,7 @@ static inline void Throw2DontMove() {
 #include <util/generic/algorithm.h>
 #include <util/memory/tempbuf.h>
 #include <util/random/mersenne.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/string/subst.h>
 
 #include "yexception_ut.h"
@@ -27,7 +27,7 @@ static void CallbackFun(int i) {
     throw i;
 }
 
-static IOutputStream* OUTS = nullptr;
+static IOutputStream* OUTS = nullptr; 
 
 namespace NOuter::NInner {
     void Compare10And20() {
@@ -49,7 +49,7 @@ class TExceptionTest: public TTestBase {
     UNIT_TEST(TestEnsureWithBackTrace1)
     UNIT_TEST(TestEnsureWithBackTrace2)
     UNIT_TEST(TestRethrowAppend)
-    UNIT_TEST(TestMacroOverload)
+    UNIT_TEST(TestMacroOverload) 
     UNIT_TEST(TestMessageCrop)
     UNIT_TEST(TestTIoSystemErrorSpecialMethods)
     UNIT_TEST(TestCurrentExceptionTypeNameMethod)
@@ -260,26 +260,26 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(i, N);
         }
     }
-
-    void TestMacroOverload() {
-        try {
-            Y_ENSURE(10 > 20);
-        } catch (const yexception& e) {
-            UNIT_ASSERT(e.AsStrBuf().Contains("10 > 20"));
-        }
-
-        try {
-            Y_ENSURE(10 > 20, "exception message to search for");
-        } catch (const yexception& e) {
-            UNIT_ASSERT(e.AsStrBuf().Contains("exception message to search for"));
-        }
+ 
+    void TestMacroOverload() { 
+        try { 
+            Y_ENSURE(10 > 20); 
+        } catch (const yexception& e) { 
+            UNIT_ASSERT(e.AsStrBuf().Contains("10 > 20")); 
+        } 
+ 
+        try { 
+            Y_ENSURE(10 > 20, "exception message to search for"); 
+        } catch (const yexception& e) { 
+            UNIT_ASSERT(e.AsStrBuf().Contains("exception message to search for")); 
+        } 
 
         try {
             NOuter::NInner::Compare10And20();
         } catch (const yexception& e) {
             UNIT_ASSERT(e.AsStrBuf().Contains("10 > 20"));
         }
-    }
+    } 
 
     void TestMessageCrop() {
         TTempBuf tmp;
@@ -293,7 +293,7 @@ private:
             }
             yexception e;
             e << s;
-            UNIT_ASSERT_EQUAL(e.AsStrBuf(), s.substr(0, tmp.Size() - 1));
+            UNIT_ASSERT_EQUAL(e.AsStrBuf(), s.substr(0, tmp.Size() - 1)); 
         }
     }
 

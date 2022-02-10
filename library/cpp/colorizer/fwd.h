@@ -1,11 +1,11 @@
 #pragma once
 
-class IOutputStream;
+class IOutputStream; 
 
 namespace NColorizer {
     class TColors;
 
     TColors& StdErr();
     TColors& StdOut();
-    TColors& AutoColors(IOutputStream&);
+    TColors& AutoColors(IOutputStream&); 
 }

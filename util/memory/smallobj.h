@@ -55,7 +55,7 @@ public:
     }
 
     inline void* Allocate() {
-        if (Y_UNLIKELY(Free_.Empty())) {
+        if (Y_UNLIKELY(Free_.Empty())) { 
             return Pool_.Allocate(AllocSize_, AlignSize_);
         }
 

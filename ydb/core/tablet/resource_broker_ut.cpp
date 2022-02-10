@@ -192,8 +192,8 @@ TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime &runti
     return answer->Get()->ResourceBroker;
 }
 
-Y_UNIT_TEST_SUITE(TResourceBroker) {
-    Y_UNIT_TEST(TestErrors) {
+Y_UNIT_TEST_SUITE(TResourceBroker) { 
+    Y_UNIT_TEST(TestErrors) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 3,  cookie2);
     };
 
-    Y_UNIT_TEST(TestOverusage) {
+    Y_UNIT_TEST(TestOverusage) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 2);
     }
 
-    Y_UNIT_TEST(TestExecutionStat) {
+    Y_UNIT_TEST(TestExecutionStat) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 7);
     }
 
-    Y_UNIT_TEST(TestRealUsage) {
+    Y_UNIT_TEST(TestRealUsage) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 6);
     }
 
-    Y_UNIT_TEST(TestCounters) {
+    Y_UNIT_TEST(TestCounters) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -546,7 +546,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
             FinishTask(runtime, brokerId, sender, i);
     }
 
-    Y_UNIT_TEST(TestQueueWithConfigure) {
+    Y_UNIT_TEST(TestQueueWithConfigure) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         CheckConfigure(runtime, brokerId, sender, config, true);
     }
 
-    Y_UNIT_TEST(TestRandomQueue) {
+    Y_UNIT_TEST(TestRandomQueue) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -640,7 +640,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         CheckCounters(counters, "queue", "total", 0, 0, 1000, 0, 0);
     }
 
-    Y_UNIT_TEST(TestNotifyActorDied) {
+    Y_UNIT_TEST(TestNotifyActorDied) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -679,7 +679,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 3);
     }
 
-    Y_UNIT_TEST(TestAutoTaskId) {
+    Y_UNIT_TEST(TestAutoTaskId) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -716,7 +716,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, id + 1);
     }
 
-    Y_UNIT_TEST(TestChangeTaskType) {
+    Y_UNIT_TEST(TestChangeTaskType) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 3);
     }
 
-    Y_UNIT_TEST(TestResubmitTask) {
+    Y_UNIT_TEST(TestResubmitTask) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);
@@ -799,7 +799,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 3);
     }
 
-    Y_UNIT_TEST(TestUpdateCookie) {
+    Y_UNIT_TEST(TestUpdateCookie) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         SetupLogging(runtime);

@@ -180,7 +180,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TEvStateStorage::TEvReplicaLookup *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup,
+        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup, 
             "tabletId# %" PRIu64 " SSGFTID# %" PRIu64 " SSG# %" PRIu64,
             (ui64)tabletId, (ui64)StateStorageGroupFromTabletID(tabletId), (ui64)Info->StateStorageGroup);
         TTablets::const_iterator it = Tablets.find(msg->Record.GetTabletID());
@@ -210,7 +210,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TEvStateStorage::TEvReplicaUpdate *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup); 
 
         TEntry *x = nullptr;
         auto tabletIt = Tablets.find(tabletId);
@@ -298,7 +298,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TEvStateStorage::TEvReplicaLock *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup); 
         const TActorId &sender = ev->Sender;
 
         if (CheckSignature(msg)) {
@@ -426,7 +426,7 @@ public:
         , Info(info)
         , ReplicaIndex(replicaIndex)
     {
-        Y_UNUSED(ReplicaIndex);
+        Y_UNUSED(ReplicaIndex); 
     }
 
     STATEFN(StateInit) {

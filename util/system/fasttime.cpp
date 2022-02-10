@@ -31,7 +31,7 @@ namespace {
         using TFunc = int (*)(struct timeval*, struct timezone*);
 
         inline TSymbols()
-            : Func(nullptr)
+            : Func(nullptr) 
         {
             // not DEFAULT, cause library/cpp/gettimeofday
             Func = reinterpret_cast<TFunc>(dlsym(RTLD_NEXT, "gettimeofday"));
@@ -52,7 +52,7 @@ namespace {
 
             Zero(tv);
 
-            Func(&tv, nullptr);
+            Func(&tv, nullptr); 
 
             return (((TTime)1000000) * (TTime)tv.tv_sec) + (TTime)tv.tv_usec;
         }
@@ -64,7 +64,7 @@ namespace {
                 "/lib/libc.so.6",
             };
 
-            for (auto& lib : libs) {
+            for (auto& lib : libs) { 
                 try {
                     return MakeHolder<TDynamicLibrary>(lib);
                 } catch (...) {

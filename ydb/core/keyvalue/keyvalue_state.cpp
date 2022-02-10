@@ -386,11 +386,11 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
     TString arbitraryPart;
     TKeyHeader header;
     bool isOk = THelpers::ExtractKeyParts(key, arbitraryPart, header);
-    Y_VERIFY(isOk);
+    Y_VERIFY(isOk); 
 
     switch (header.ItemType) {
         case EIT_UNKNOWN: {
-            Y_VERIFY(false, "Unexpected EIT_UNKNOWN key header.");
+            Y_VERIFY(false, "Unexpected EIT_UNKNOWN key header."); 
             break;
         }
         case EIT_KEYVALUE_1:
@@ -430,7 +430,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             break;
         }
         case EIT_TRASH: {
-            Y_VERIFY(value.size() == 0);
+            Y_VERIFY(value.size() == 0); 
             Y_VERIFY(arbitraryPart.size() == sizeof(TTrashKeyArbitrary));
             const TTrashKeyArbitrary *trashKey = (const TTrashKeyArbitrary *) arbitraryPart.data();
             Trash.insert(trashKey->LogoBlobId);
@@ -438,14 +438,14 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             break;
         }
         case EIT_COLLECT: {
-            Y_VERIFY(arbitraryPart.size() == 0);
-            Y_VERIFY(!CollectOperation.Get());
-            Y_VERIFY(value.size() >= sizeof(TCollectOperationHeader));
+            Y_VERIFY(arbitraryPart.size() == 0); 
+            Y_VERIFY(!CollectOperation.Get()); 
+            Y_VERIFY(value.size() >= sizeof(TCollectOperationHeader)); 
             const TCollectOperationHeader *header = (const TCollectOperationHeader*)value.data();
-            Y_VERIFY(header->DataHeader.ItemType == EIT_COLLECT);
+            Y_VERIFY(header->DataHeader.ItemType == EIT_COLLECT); 
             ui64 totalSize = sizeof(TCollectOperationHeader)
                 + sizeof(TLogoBlobID) * (header->KeepCount + header->DoNotKeepCount);
-            Y_VERIFY(value.size() == totalSize);
+            Y_VERIFY(value.size() == totalSize); 
             TVector<TLogoBlobID> keep;
             TVector<TLogoBlobID> doNotKeep;
             keep.resize(header->KeepCount);
@@ -463,18 +463,18 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             break;
         }
         case EIT_STATE: {
-            Y_VERIFY(!IsStatePresent);
+            Y_VERIFY(!IsStatePresent); 
             IsStatePresent = true;
-            Y_VERIFY(arbitraryPart.size() == 0);
-            Y_VERIFY(value.size() >= sizeof(TKeyValueStoredStateData));
+            Y_VERIFY(arbitraryPart.size() == 0); 
+            Y_VERIFY(value.size() >= sizeof(TKeyValueStoredStateData)); 
             const TKeyValueStoredStateData *data = (const TKeyValueStoredStateData *) value.data();
-            Y_VERIFY(data->CheckChecksum());
-            Y_VERIFY(data->DataHeader.ItemType == EIT_STATE);
+            Y_VERIFY(data->CheckChecksum()); 
+            Y_VERIFY(data->DataHeader.ItemType == EIT_STATE); 
             StoredState = *data;
             break;
         }
         default: {
-            Y_VERIFY(false, "Unexcpected header.ItemType# %" PRIu32, (ui32)header.ItemType);
+            Y_VERIFY(false, "Unexcpected header.ItemType# %" PRIu32, (ui32)header.ItemType); 
             break;
         }
     }
@@ -483,7 +483,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
 void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration,
         ISimpleDb &db, const TActorContext &ctx, const TTabletStorageInfo *info) {
     Y_UNUSED(info);
-    Y_VERIFY(IsEmptyDbStart || IsStatePresent);
+    Y_VERIFY(IsEmptyDbStart || IsStatePresent); 
     TabletId = tabletId;
     KeyValueActorId = keyValueActorId;
     ExecutorGeneration = executorGeneration;
@@ -741,12 +741,12 @@ void TKeyValueState::SendCutHistory(const TActorContext &ctx) {
 }
 
 void TKeyValueState::OnInitQueueEmpty(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
+    Y_UNUSED(ctx); 
     CountOnline();
 }
 
 void TKeyValueState::OnStateWork(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
+    Y_UNUSED(ctx); 
     CountProcessingInitQueue();
 }
 
@@ -760,7 +760,7 @@ void TKeyValueState::Step() {
         NextLogoBlobCookie = 1;
         ++NextLogoBlobStep;
     } else {
-        Y_FAIL("Max step reached!");
+        Y_FAIL("Max step reached!"); 
     }
 }
 
@@ -1702,7 +1702,7 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
 
     if (StoredState.GetChannelGeneration() == generation) {
         auto it = InFlightForStep.find(step);
-        Y_VERIFY(it != InFlightForStep.end(), "Unexpected step# %" PRIu64, (ui64)step);
+        Y_VERIFY(it != InFlightForStep.end(), "Unexpected step# %" PRIu64, (ui64)step); 
         it->second--;
         if (it->second == 0) {
             InFlightForStep.erase(it);
@@ -2977,7 +2977,7 @@ void TKeyValueState::OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const 
 }
 
 void TKeyValueState::OnEvIntermediate(TIntermediate &intermediate, const TActorContext &ctx) {
-    Y_UNUSED(ctx);
+    Y_UNUSED(ctx); 
     CountLatencyBsOps(intermediate.Stat);
     intermediate.Stat.LocalBaseTxCreatedAt = TAppData::TimeProvider->Now();
 }
@@ -3212,7 +3212,7 @@ void TKeyValueState::VerifyEqualIndex(const TKeyValueState& state) const {
     Y_VERIFY(i2 == e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
 }
 
-void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
+void TKeyValueState::RenderHTMLPage(IOutputStream &out) const { 
     HTML(out) {
         H2() {out << "KeyValue Tablet";}
         UL_CLASS("nav nav-tabs") {

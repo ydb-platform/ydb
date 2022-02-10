@@ -884,7 +884,7 @@ IGraphTransformer::TStatus RequireChild(const TExprNode& node, ui32 index) {
 }
 
 template<>
-void Out<NYql::TOperationProgress::EState>(class IOutputStream &o, NYql::TOperationProgress::EState x) {
+void Out<NYql::TOperationProgress::EState>(class IOutputStream &o, NYql::TOperationProgress::EState x) { 
 #define YQL_OPERATION_PROGRESS_STATE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TOperationProgress::EState::name: \
         o << #name; \

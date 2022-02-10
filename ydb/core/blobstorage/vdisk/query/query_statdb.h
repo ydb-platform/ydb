@@ -33,7 +33,7 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        void CalculateStat(IOutputStream &str, bool pretty);
+        void CalculateStat(IOutputStream &str, bool pretty); 
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

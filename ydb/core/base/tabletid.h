@@ -45,19 +45,19 @@ namespace NKikimr {
 
     // 8 + 12 + 44
     inline ui64 MakeTabletID(ui64 stateStorageGroup, ui64 hiveUid, ui64 uniqPart) {
-        Y_VERIFY(stateStorageGroup < (1ull << 8ull) && hiveUid < (1ull << 12ull) && uniqPart < (1ull << 44ull));
+        Y_VERIFY(stateStorageGroup < (1ull << 8ull) && hiveUid < (1ull << 12ull) && uniqPart < (1ull << 44ull)); 
         return (stateStorageGroup << 56ull) | (hiveUid << 44ull) | uniqPart;
     }
 
     // blob storage controller (exactly one per domain in default state storage group)
     inline ui64 MakeBSControllerID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull)); 
         return MakeTabletID(stateStorageGroup, 0, 0x1001);
     }
 
     // one default hive per domain (in default state storage group!)
     inline ui64 MakeDefaultHiveID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull)); 
         return MakeTabletID(stateStorageGroup, 0, 1);
     }
 
@@ -88,7 +88,7 @@ namespace NKikimr {
     // TODO: think about encoding scheme for sibling group hive
 
     inline TActorId MakeStateStorageProxyID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull)); 
         char x[12] = { 's', 't', 's', 'p', 'r', 'o', 'x', 'y' };
         x[8] = (char)stateStorageGroup;
         return TActorId(0, TStringBuf(x, 12));

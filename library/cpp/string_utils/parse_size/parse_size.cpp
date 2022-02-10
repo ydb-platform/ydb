@@ -90,6 +90,6 @@ NSize::TSize FromStringImpl<NSize::TSize>(const char* data, size_t len) {
 }
 
 template <>
-void Out<NSize::TSize>(IOutputStream& os, const NSize::TSize& size) {
+void Out<NSize::TSize>(IOutputStream& os, const NSize::TSize& size) { 
     os << size.GetValue();
 }

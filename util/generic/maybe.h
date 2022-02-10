@@ -6,7 +6,7 @@
 #include "yexception.h"
 
 #include <util/system/align.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/ysaveload.h>
 
 namespace NMaybe {
@@ -386,7 +386,7 @@ public:
         return Defined();
     }
 
-    void Save(IOutputStream* out) const {
+    void Save(IOutputStream* out) const { 
         const bool defined = Defined();
 
         ::Save<bool>(out, defined);
@@ -396,7 +396,7 @@ public:
         }
     }
 
-    void Load(IInputStream* in) {
+    void Load(IInputStream* in) { 
         bool defined;
 
         ::Load(in, defined);
@@ -709,7 +709,7 @@ constexpr bool operator>=(const U& value, const TMaybe<T, TPolicy>& maybe) {
     return !(value < maybe);
 }
 
-class IOutputStream;
+class IOutputStream; 
 
 template <class T, class TPolicy>
 inline IOutputStream& operator<<(IOutputStream& out, const TMaybe<T, TPolicy>& maybe) {

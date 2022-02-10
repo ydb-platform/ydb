@@ -5,7 +5,7 @@
 #include "yexception.h"
 
 #include <util/charset/wide.h>
-#include <util/str_stl.h>
+#include <util/str_stl.h> 
 #include <util/stream/output.h>
 #include <util/string/subst.h>
 
@@ -30,8 +30,8 @@ public:
         const char data[] = "abc\0def\0";
         TString s(data, sizeof(data));
         UNIT_ASSERT(s.size() == sizeof(data));
-        UNIT_ASSERT(s.StartsWith(s));
-        UNIT_ASSERT(s.EndsWith(s));
+        UNIT_ASSERT(s.StartsWith(s)); 
+        UNIT_ASSERT(s.EndsWith(s)); 
         UNIT_ASSERT(s.Contains('\0'));
 
         const char raw_def[] = "def";
@@ -54,7 +54,7 @@ public:
         UNIT_ASSERT(s == copy);
 
         TString prefix(data, 5);
-        UNIT_ASSERT(s.StartsWith(prefix));
+        UNIT_ASSERT(s.StartsWith(prefix)); 
         UNIT_ASSERT(s != prefix);
         UNIT_ASSERT(s > prefix);
         UNIT_ASSERT(s > s.data());
@@ -269,7 +269,7 @@ protected:
         TStringType xx;
 
         // ISO-IEC-14882:1998(E), 21.3.6, paragraph 3
-        UNIT_ASSERT(xx.data() != nullptr);
+        UNIT_ASSERT(xx.data() != nullptr); 
     }
 
     void c_str() {
@@ -537,15 +537,15 @@ protected:
         }
     }
 
-    void cbegin_cend() {
-        const char helloThere[] = "Hello there";
+    void cbegin_cend() { 
+        const char helloThere[] = "Hello there"; 
         TString s = helloThere;
-        size_t index = 0;
-        for (auto it = s.cbegin(); s.cend() != it; ++it, ++index) {
-            UNIT_ASSERT_VALUES_EQUAL(helloThere[index], *it);
-        }
-    }
-
+        size_t index = 0; 
+        for (auto it = s.cbegin(); s.cend() != it; ++it, ++index) { 
+            UNIT_ASSERT_VALUES_EQUAL(helloThere[index], *it); 
+        } 
+    } 
+ 
     void compare() {
         TStringType str1(Data_.abcdef());
         TStringType str2;
@@ -1128,7 +1128,7 @@ public:
     UNIT_TEST(capacity);
     UNIT_TEST(assign);
     UNIT_TEST(copy);
-    UNIT_TEST(cbegin_cend);
+    UNIT_TEST(cbegin_cend); 
     UNIT_TEST(compare);
     UNIT_TEST(find_last_of);
 #if 0
@@ -1164,7 +1164,7 @@ public:
     UNIT_TEST(capacity);
     UNIT_TEST(assign);
     UNIT_TEST(copy);
-    UNIT_TEST(cbegin_cend);
+    UNIT_TEST(cbegin_cend); 
     UNIT_TEST(compare);
     UNIT_TEST(find_last_of);
 #if 0
@@ -1190,19 +1190,19 @@ Y_UNIT_TEST_SUITE(TStringConversionTest) {
         UNIT_ASSERT_VALUES_EQUAL(stdAbra, "cadabra");
     }
 }
-
-Y_UNIT_TEST_SUITE(HashFunctorTests) {
-    Y_UNIT_TEST(TestTransparency) {
-        THash<TString> h;
-        const char* ptr = "a";
-        const TStringBuf strbuf = ptr;
-        const TString str = ptr;
-        const std::string stdStr = ptr;
-        UNIT_ASSERT_VALUES_EQUAL(h(ptr), h(strbuf));
-        UNIT_ASSERT_VALUES_EQUAL(h(ptr), h(str));
-        UNIT_ASSERT_VALUES_EQUAL(h(ptr), h(stdStr));
-    }
-}
+ 
+Y_UNIT_TEST_SUITE(HashFunctorTests) { 
+    Y_UNIT_TEST(TestTransparency) { 
+        THash<TString> h; 
+        const char* ptr = "a"; 
+        const TStringBuf strbuf = ptr; 
+        const TString str = ptr; 
+        const std::string stdStr = ptr; 
+        UNIT_ASSERT_VALUES_EQUAL(h(ptr), h(strbuf)); 
+        UNIT_ASSERT_VALUES_EQUAL(h(ptr), h(str)); 
+        UNIT_ASSERT_VALUES_EQUAL(h(ptr), h(stdStr)); 
+    } 
+} 
 
 #if !defined(TSTRING_IS_STD_STRING)
 Y_UNIT_TEST_SUITE(StdNonConformant) {

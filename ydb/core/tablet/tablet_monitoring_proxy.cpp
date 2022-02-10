@@ -75,7 +75,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
+        Y_UNUSED(ev); 
         Notify(ctx, "Tablet pipe is reset");
         Die(ctx);
     }

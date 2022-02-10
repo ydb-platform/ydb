@@ -1028,7 +1028,7 @@ class TDataShard
 
     void DefaultSignalTabletActive(const TActorContext &ctx) override {
         // This overriden in order to pospone SignalTabletActive until TxInit completes
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
     }
 
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, const TString& value) const;

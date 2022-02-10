@@ -16,7 +16,7 @@ class TLockFreeStack: TNonCopyable {
         template <class U>
         explicit TNode(U&& val)
             : Value(std::forward<U>(val))
-            , Next(nullptr)
+            , Next(nullptr) 
         {
         }
     };
@@ -31,7 +31,7 @@ class TLockFreeStack: TNonCopyable {
             return;
         if (AtomicAdd(DequeueCount, 0) == 1) {
             // node current is in free list, we are the last thread so try to cleanup
-            if (AtomicCas(&FreePtr, (TNode*)nullptr, current))
+            if (AtomicCas(&FreePtr, (TNode*)nullptr, current)) 
                 EraseList(current);
         }
     }
@@ -57,8 +57,8 @@ class TLockFreeStack: TNonCopyable {
 
 public:
     TLockFreeStack()
-        : Head(nullptr)
-        , FreePtr(nullptr)
+        : Head(nullptr) 
+        , FreePtr(nullptr) 
         , DequeueCount(0)
     {
     }
@@ -127,7 +127,7 @@ public:
     void DequeueAll(TCollection* res) {
         AtomicAdd(DequeueCount, 1);
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
-            if (AtomicCas(&Head, (TNode*)nullptr, current)) {
+            if (AtomicCas(&Head, (TNode*)nullptr, current)) { 
                 for (TNode* x = current; x;) {
                     res->push_back(std::move(x->Value));
                     x = x->Next;
@@ -171,7 +171,7 @@ public:
     template <typename TCollection>
     void DequeueAllSingleConsumer(TCollection* res) {
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
-            if (AtomicCas(&Head, (TNode*)nullptr, current)) {
+            if (AtomicCas(&Head, (TNode*)nullptr, current)) { 
                 for (TNode* x = current; x;) {
                     res->push_back(std::move(x->Value));
                     x = x->Next;
@@ -182,7 +182,7 @@ public:
         }
     }
     bool IsEmpty() {
-        AtomicAdd(DequeueCount, 0);        // mem barrier
+        AtomicAdd(DequeueCount, 0);        // mem barrier 
         return AtomicGet(Head) == nullptr; // without lock, so result is approximate
     }
 };

@@ -1,37 +1,37 @@
 #pragma once
 
-#include <util/ysaveload.h>
+#include <util/ysaveload.h> 
 #include <util/generic/vector.h>
 #include <util/system/yassert.h>
 
-//! See more details here http://en.wikipedia.org/wiki/Kahan_summation_algorithm
+//! See more details here http://en.wikipedia.org/wiki/Kahan_summation_algorithm 
 template <typename TAccumulateType>
 class TKahanAccumulator {
 public:
     using TValueType = TAccumulateType;
 
-    template <typename TFloatType>
+    template <typename TFloatType> 
     explicit TKahanAccumulator(const TFloatType x)
-        : Sum_(x)
-        , Compensation_()
-    {
-    }
-
+        : Sum_(x) 
+        , Compensation_() 
+    { 
+    } 
+ 
     TKahanAccumulator()
-        : Sum_()
-        , Compensation_()
+        : Sum_() 
+        , Compensation_() 
     {
     }
 
     template <typename TFloatType>
-    TKahanAccumulator& operator=(const TFloatType& rhs) {
-        Sum_ = TValueType(rhs);
-        Compensation_ = TValueType();
+    TKahanAccumulator& operator=(const TFloatType& rhs) { 
+        Sum_ = TValueType(rhs); 
+        Compensation_ = TValueType(); 
         return *this;
     }
 
     TValueType Get() const {
-        return Sum_ + Compensation_;
+        return Sum_ + Compensation_; 
     }
 
     template <typename TFloatType>
@@ -40,77 +40,77 @@ public:
     }
 
     template <typename TFloatType>
-    inline bool operator<(const TKahanAccumulator<TFloatType>& other) const {
+    inline bool operator<(const TKahanAccumulator<TFloatType>& other) const { 
         return Get() < other.Get();
     }
 
     template <typename TFloatType>
-    inline bool operator<=(const TKahanAccumulator<TFloatType>& other) const {
+    inline bool operator<=(const TKahanAccumulator<TFloatType>& other) const { 
         return !(other < *this);
     }
 
     template <typename TFloatType>
-    inline bool operator>(const TKahanAccumulator<TFloatType>& other) const {
+    inline bool operator>(const TKahanAccumulator<TFloatType>& other) const { 
         return other < *this;
     }
 
     template <typename TFloatType>
-    inline bool operator>=(const TKahanAccumulator<TFloatType>& other) const {
+    inline bool operator>=(const TKahanAccumulator<TFloatType>& other) const { 
         return !(*this < other);
     }
 
     template <typename TFloatType>
-    inline TKahanAccumulator& operator+=(const TFloatType x) {
-        const TValueType y = TValueType(x) - Compensation_;
-        const TValueType t = Sum_ + y;
-        Compensation_ = (t - Sum_) - y;
-        Sum_ = t;
+    inline TKahanAccumulator& operator+=(const TFloatType x) { 
+        const TValueType y = TValueType(x) - Compensation_; 
+        const TValueType t = Sum_ + y; 
+        Compensation_ = (t - Sum_) - y; 
+        Sum_ = t; 
         return *this;
     }
 
     template <typename TFloatType>
-    inline TKahanAccumulator& operator-=(const TFloatType x) {
-        return *this += -TValueType(x);
+    inline TKahanAccumulator& operator-=(const TFloatType x) { 
+        return *this += -TValueType(x); 
     }
 
     template <typename TFloatType>
-    inline TKahanAccumulator& operator*=(const TFloatType x) {
-        return *this = TValueType(*this) * TValueType(x);
+    inline TKahanAccumulator& operator*=(const TFloatType x) { 
+        return *this = TValueType(*this) * TValueType(x); 
     }
 
     template <typename TFloatType>
-    inline TKahanAccumulator& operator/=(const TFloatType x) {
-        return *this = TValueType(*this) / TValueType(x);
+    inline TKahanAccumulator& operator/=(const TFloatType x) { 
+        return *this = TValueType(*this) / TValueType(x); 
     }
-
-    Y_SAVELOAD_DEFINE(Sum_, Compensation_)
-
+ 
+    Y_SAVELOAD_DEFINE(Sum_, Compensation_) 
+ 
 private:
-    TValueType Sum_;
-    TValueType Compensation_;
+    TValueType Sum_; 
+    TValueType Compensation_; 
 };
 
 template <typename TAccumulateType, typename TFloatType>
 inline const TKahanAccumulator<TAccumulateType>
-operator+(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) {
-    return lhs += rhs;
-}
-
+operator+(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) { 
+    return lhs += rhs; 
+} 
+ 
 template <typename TAccumulateType, typename TFloatType>
 inline const TKahanAccumulator<TAccumulateType>
-operator-(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) {
-    return lhs -= rhs;
-}
-
+operator-(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) { 
+    return lhs -= rhs; 
+} 
+ 
 template <typename TAccumulateType, typename TFloatType>
 inline const TKahanAccumulator<TAccumulateType>
-operator*(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) {
+operator*(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) { 
     return lhs *= rhs;
 }
 
 template <typename TAccumulateType, typename TFloatType>
 inline const TKahanAccumulator<TAccumulateType>
-operator/(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) {
+operator/(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) { 
     return lhs /= rhs;
 }
 
@@ -190,7 +190,7 @@ static inline double FastAccumulate(const TVector<T>& sequence) {
 
 template <typename It>
 static inline double FastKahanAccumulate(It begin, It end) {
-    return TypedFastAccumulate<TKahanAccumulator<double>>(begin, end);
+    return TypedFastAccumulate<TKahanAccumulator<double>>(begin, end); 
 }
 
 template <typename T>
@@ -205,17 +205,17 @@ static inline double FastInnerProduct(It1 begin1, It1 end1, It2 begin2) {
 
 template <typename T>
 static inline double FastInnerProduct(const TVector<T>& lhs, const TVector<T>& rhs) {
-    Y_ASSERT(lhs.size() == rhs.size());
+    Y_ASSERT(lhs.size() == rhs.size()); 
     return FastInnerProduct(lhs.begin(), lhs.end(), rhs.begin());
 }
 
 template <typename It1, typename It2>
 static inline double FastKahanInnerProduct(It1 begin1, It1 end1, It2 begin2) {
-    return TypedFastInnerProduct<TKahanAccumulator<double>>(begin1, end1, begin2);
+    return TypedFastInnerProduct<TKahanAccumulator<double>>(begin1, end1, begin2); 
 }
 
 template <typename T>
 static inline double FastKahanInnerProduct(const TVector<T>& lhs, const TVector<T>& rhs) {
-    Y_ASSERT(lhs.size() == rhs.size());
+    Y_ASSERT(lhs.size() == rhs.size()); 
     return FastKahanInnerProduct(lhs.begin(), lhs.end(), rhs.begin());
 }

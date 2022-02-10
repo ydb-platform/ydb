@@ -77,9 +77,9 @@ private:
 
 
 ///
-Y_UNIT_TEST_SUITE(TxOrderInternals) {
+Y_UNIT_TEST_SUITE(TxOrderInternals) { 
 
-Y_UNIT_TEST(OperationOrder) {
+Y_UNIT_TEST(OperationOrder) { 
     using TTester = TDatashardTester;
 
     TActiveTxPtr tx0_100 = TTester::MakeEmptyTx(0, 100);
@@ -126,7 +126,7 @@ static void InitCrossShard_ABC(TFakeMiniKQLProxy& proxy, TVector<ui32> uintVal) 
 }
 
 ///
-Y_UNIT_TEST_SUITE(DataShardTxOrder) {
+Y_UNIT_TEST_SUITE(DataShardTxOrder) { 
 
 static void ZigZag(TFakeMiniKQLProxy& proxy, bool symmetric, ui32 limit = 40) {
     InitCrossShard_ABC(proxy, {0, 0, 0});
@@ -1154,7 +1154,7 @@ Y_UNIT_TEST_WITH_MVCC(RandomPointsAndRanges) {
 }
 
 ///
-Y_UNIT_TEST_SUITE(DataShardScan) {
+Y_UNIT_TEST_SUITE(DataShardScan) { 
 
 Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     TTester::TOptions opts;

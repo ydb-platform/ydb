@@ -75,22 +75,22 @@ void TSystemError::Init() {
     exc << TStringBuf(") ");
 }
 
-NPrivateException::yexception::yexception() {
-    ZeroTerminate();
-}
+NPrivateException::yexception::yexception() { 
+    ZeroTerminate(); 
+} 
 
-TStringBuf NPrivateException::yexception::AsStrBuf() const {
-    if (Buf_.Left()) {
-        return TStringBuf(Buf_.Data(), Buf_.Filled());
-    }
-
-    return TStringBuf(Buf_.Data(), Buf_.Filled() - 1);
-}
-
-void NPrivateException::yexception::ZeroTerminate() noexcept {
-    char* end = (char*)Buf_.Current();
-
-    if (!Buf_.Left()) {
+TStringBuf NPrivateException::yexception::AsStrBuf() const { 
+    if (Buf_.Left()) { 
+        return TStringBuf(Buf_.Data(), Buf_.Filled()); 
+    } 
+ 
+    return TStringBuf(Buf_.Data(), Buf_.Filled() - 1); 
+} 
+ 
+void NPrivateException::yexception::ZeroTerminate() noexcept { 
+    char* end = (char*)Buf_.Current(); 
+ 
+    if (!Buf_.Left()) { 
         --end;
     }
 
@@ -98,11 +98,11 @@ void NPrivateException::yexception::ZeroTerminate() noexcept {
 }
 
 const char* NPrivateException::yexception::what() const noexcept {
-    return Buf_.Data();
+    return Buf_.Data(); 
 }
 
 const TBackTrace* NPrivateException::yexception::BackTrace() const noexcept {
-    return nullptr;
+    return nullptr; 
 }
 
 void fputs(const std::exception& e, FILE* f) {

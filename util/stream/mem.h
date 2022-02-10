@@ -13,7 +13,7 @@
 /**
  * Input stream that reads data from a memory block.
  */
-class TMemoryInput: public IZeroCopyInputFastReadTo {
+class TMemoryInput: public IZeroCopyInputFastReadTo { 
 public:
     TMemoryInput() noexcept;
 
@@ -26,11 +26,11 @@ public:
      * @param len                       Size of the memory block.
      */
     TMemoryInput(const void* buf, size_t len) noexcept;
-    explicit TMemoryInput(const TStringBuf buf) noexcept;
+    explicit TMemoryInput(const TStringBuf buf) noexcept; 
     ~TMemoryInput() override;
 
     TMemoryInput(const TMemoryInput& other) noexcept
-        : IZeroCopyInputFastReadTo()
+        : IZeroCopyInputFastReadTo() 
         , Buf_(other.Buf_)
         , Len_(other.Len_)
     {
@@ -89,10 +89,10 @@ public:
      *
      * @param stream                    Zero copy stream to initialize from.
      */
-    void Fill(IZeroCopyInput* stream) {
+    void Fill(IZeroCopyInput* stream) { 
         Len_ = stream->Next(&Buf_);
         if (!Len_) {
-            Reset(nullptr, 0);
+            Reset(nullptr, 0); 
         }
     }
 
@@ -229,7 +229,7 @@ public:
      *                                  this stream uses.
      */
     void SetPos(char* ptr) {
-        Y_ASSERT(Beg_ <= ptr);
+        Y_ASSERT(Beg_ <= ptr); 
         SetPosImpl(ptr);
     }
 
@@ -244,7 +244,7 @@ public:
 
 protected:
     void SetPosImpl(char* ptr) {
-        Y_ASSERT(End_ >= ptr);
+        Y_ASSERT(End_ >= ptr); 
         Buf_ = ptr;
     }
 

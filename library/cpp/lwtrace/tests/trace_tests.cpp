@@ -698,7 +698,7 @@ namespace NLWTrace {
 }
 
 template <>
-void Out<NLWTrace::NTests::TMeasure>(IOutputStream& os, TTypeTraits<NLWTrace::NTests::TMeasure>::TFuncParam measure) {
+void Out<NLWTrace::NTests::TMeasure>(IOutputStream& os, TTypeTraits<NLWTrace::NTests::TMeasure>::TFuncParam measure) { 
     os << Sprintf("\n\t\t%.6lf +- %.6lf us,\tRPS: %30.3lf (%.1fM)", measure.Average, measure.Sigma, 1000000.0 / measure.Average, 1.0 / measure.Average);
 }
 

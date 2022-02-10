@@ -19,9 +19,9 @@
 #include <cstring>
 
 namespace {
-    class TStringArrayOutput: public IOutputStream {
+    class TStringArrayOutput: public IOutputStream { 
     public:
-        TStringArrayOutput(IOutputStream* slave, size_t stride)
+        TStringArrayOutput(IOutputStream* slave, size_t stride) 
             : Slave(*slave)
             , Stride(stride)
         {
@@ -46,14 +46,14 @@ namespace {
         }
 
     private:
-        IOutputStream& Slave;
+        IOutputStream& Slave; 
         const size_t Stride;
         TString Buf;
     };
 
-    class THexOutput: public IOutputStream {
+    class THexOutput: public IOutputStream { 
     public:
-        inline THexOutput(IOutputStream* slave)
+        inline THexOutput(IOutputStream* slave) 
             : Slave_(slave)
         {
         }
@@ -112,11 +112,11 @@ namespace {
         // width in source chars
         static const size_t Columns = 10;
         ui64 Count_ = 0;
-        IOutputStream* Slave_ = nullptr;
+        IOutputStream* Slave_ = nullptr; 
     };
 
-    struct TYasmOutput: public IOutputStream {
-        inline TYasmOutput(IOutputStream* out, const TString& base)
+    struct TYasmOutput: public IOutputStream { 
+        inline TYasmOutput(IOutputStream* out, const TString& base) 
             : Out_(out)
             , Base_(base)
         {
@@ -157,13 +157,13 @@ namespace {
             }
         }
 
-        IOutputStream* Out_ = nullptr;
+        IOutputStream* Out_ = nullptr; 
         const TString Base_;
         ui64 Count_ = 0;
     };
 
     struct TCOutput: public THexOutput {
-        inline TCOutput(IOutputStream* out, const TString& base)
+        inline TCOutput(IOutputStream* out, const TString& base) 
             : THexOutput(out)
             , B(base)
         {
@@ -180,8 +180,8 @@ namespace {
         const TString B;
     };
 
-    struct TCStringOutput: public IOutputStream {
-        inline TCStringOutput(IOutputStream* out, const TString& base)
+    struct TCStringOutput: public IOutputStream { 
+        inline TCStringOutput(IOutputStream* out, const TString& base) 
             : O(out)
             , B(base)
         {
@@ -200,7 +200,7 @@ namespace {
             *O << ";\nextern const unsigned int " << B << "Size = sizeof(" << B << ") / sizeof(" << B << "[0]) - 1;\n}\n";
         }
 
-        IOutputStream* O = nullptr;
+        IOutputStream* O = nullptr; 
         const TString B;
     };
 
@@ -276,7 +276,7 @@ namespace {
     };
 
     struct TDeduplicationArchiveWriter {
-        TDeduplicationArchiveWriter(const TDuplicatesMap& duplicatesMap, IOutputStream* out, bool compress)
+        TDeduplicationArchiveWriter(const TDuplicatesMap& duplicatesMap, IOutputStream* out, bool compress) 
             : DuplicatesMap(duplicatesMap)
             , Writer(out, compress)
         {}
@@ -290,7 +290,7 @@ namespace {
     };
 }
 
-static inline TAutoPtr<IOutputStream> OpenOutput(const TString& url) {
+static inline TAutoPtr<IOutputStream> OpenOutput(const TString& url) { 
     if (url.empty()) {
         return new TBuffered<TUnbufferedFileOutput>(8192, Duplicate(1));
     } else {
@@ -328,14 +328,14 @@ static inline TString Fix(TString f) {
 
 static bool Quiet = false;
 
-static inline void Append(IOutputStream& w, const TString& fname, const TString& rname) {
+static inline void Append(IOutputStream& w, const TString& fname, const TString& rname) { 
     TMappedFileInput in(fname);
 
     if (!Quiet) {
         Cerr << "--> " << rname << Endl;
     }
 
-    TransferData((IInputStream*)&in, &w);
+    TransferData((IInputStream*)&in, &w); 
 }
 
 static inline void Append(TDuplicatesMap& w, const TString& fname, const TString& rname) {
@@ -447,7 +447,7 @@ static void UnpackArchive(const TString& archive, const TFsPath& dir = TFsPath()
         }
         const TFsPath path(dir / fileName);
         path.Parent().MkDirs();
-        TAutoPtr<IInputStream> in = reader.ObjectByKey(key);
+        TAutoPtr<IInputStream> in = reader.ObjectByKey(key); 
         TFixedBufferFileOutput out(path);
         TransferData(in.Get(), &out);
         out.Finish();
@@ -647,9 +647,9 @@ int main(int argc, char** argv) {
                 UnpackArchive(rec.Path, dir);
             }
         } else {
-            TAutoPtr<IOutputStream> outf(OpenOutput(outputf));
-            IOutputStream* out = outf.Get();
-            THolder<IOutputStream> hexout;
+            TAutoPtr<IOutputStream> outf(OpenOutput(outputf)); 
+            IOutputStream* out = outf.Get(); 
+            THolder<IOutputStream> hexout; 
 
             if (hexdump) {
                 hexout.Reset(new THexOutput(out));

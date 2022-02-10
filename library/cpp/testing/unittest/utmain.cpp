@@ -20,7 +20,7 @@
 #include <util/network/init.h>
 
 #include <util/stream/file.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/string/join.h>
 #include <util/string/util.h>
 
@@ -502,7 +502,7 @@ private:
                 ythrow yexception() << "Forked test finished with unknown status";
             }
             case TShellCommand::SHELL_RUNNING: {
-                Y_VERIFY(false, "This can't happen, we used sync mode, it's a bug!");
+                Y_VERIFY(false, "This can't happen, we used sync mode, it's a bug!"); 
             }
             case TShellCommand::SHELL_INTERNAL_ERROR: {
                 ythrow yexception() << "Forked test failed with internal error: " << cmd.GetInternalError();
@@ -539,7 +539,7 @@ const char* const TColoredProcessor::ForkCorrectExitMsg = "--END--";
 
 class TEnumeratingProcessor: public ITestSuiteProcessor {
 public:
-    TEnumeratingProcessor(bool verbose, IOutputStream& stream) noexcept
+    TEnumeratingProcessor(bool verbose, IOutputStream& stream) noexcept 
         : Verbose_(verbose)
         , Stream_(stream)
     {
@@ -564,7 +564,7 @@ public:
 
 private:
     bool Verbose_;
-    IOutputStream& Stream_;
+    IOutputStream& Stream_; 
 };
 
 #ifdef _win_
@@ -600,7 +600,7 @@ private:
 static const TWinEnvironment Instance;
 #endif // _win_
 
-static int DoList(bool verbose, IOutputStream& stream) {
+static int DoList(bool verbose, IOutputStream& stream) { 
     TEnumeratingProcessor eproc(verbose, stream);
     TTestFactory::Instance().SetProcessor(&eproc);
     TTestFactory::Instance().Execute();
@@ -665,8 +665,8 @@ int NUnitTest::RunMain(int argc, char** argv) {
         Y_DEFER { NPlugin::OnStopMain(argc, argv); };
 
         TColoredProcessor processor(GetExecPath());
-        IOutputStream* listStream = &Cout;
-        THolder<IOutputStream> listFile;
+        IOutputStream* listStream = &Cout; 
+        THolder<IOutputStream> listFile; 
 
         enum EListType {
             DONT_LIST,

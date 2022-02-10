@@ -3,7 +3,7 @@
 #include <util/generic/fwd.h>
 #include <util/system/defaults.h>
 
-class IOutputStream;
+class IOutputStream; 
 
 size_t BackTrace(void** p, size_t len);
 
@@ -14,8 +14,8 @@ struct TResolvedSymbol {
 
 TResolvedSymbol ResolveSymbol(void* sym, char* buf, size_t len);
 
-void FormatBackTrace(IOutputStream* out, void* const* backtrace, size_t backtraceSize);
-void FormatBackTrace(IOutputStream* out);
+void FormatBackTrace(IOutputStream* out, void* const* backtrace, size_t backtraceSize); 
+void FormatBackTrace(IOutputStream* out); 
 void PrintBackTrace();
 
 using TFormatBackTraceFn = void (*)(IOutputStream*, void* const* backtrace, size_t backtraceSize);
@@ -34,7 +34,7 @@ private:
 public:
     TBackTrace();
     void Capture();
-    void PrintTo(IOutputStream&) const;
+    void PrintTo(IOutputStream&) const; 
     TString PrintToString() const;
     size_t size() const;
     const void* const* data() const;

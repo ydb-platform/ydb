@@ -226,7 +226,7 @@ namespace NKikimr {
             return Top;
         }
 
-        void Output(IOutputStream& str) const {
+        void Output(IOutputStream& str) const { 
             const ui32 numBits = static_cast<const TDerived&>(*this).GetNumBits();
             for (ui32 i = 0; i < numBits; ++i) {
                 str << ((Mask >> (numBits - i - 1)) & 1);

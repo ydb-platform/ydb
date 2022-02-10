@@ -119,7 +119,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             Cout << "Open " << ((ev->Get()->Status == NKikimrProto::OK) ? "ok" : "ERROR") << "\n";
             if (ev->Get()->Status == NKikimrProto::OK) {
                 IsOpened = true;
@@ -142,13 +142,13 @@ namespace NKikimr {
         }
 
         void Handle(TEvents::TEvPong::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            Y_UNUSED(ctx);
+            Y_UNUSED(ev); 
+            Y_UNUSED(ctx); 
             Cout << "Got pong\n";
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
 
@@ -164,14 +164,14 @@ namespace NKikimr {
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             Cout << "Producer dead\n";
             NTabletPipe::CloseClient(ctx, ClientId);
             return Die(ctx);
         }
 
         void OnActivateExecutor(const TActorContext &ctx) override {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             Become(&TThis::StateWork);
             Cout << "Producer loaded\n";
         }
@@ -271,32 +271,32 @@ namespace NKikimr {
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            Y_UNUSED(ctx);
+            Y_UNUSED(ev); 
+            Y_UNUSED(ctx); 
             Cout << "Server pipe is opened\n";
             ++ServerPipesOpened;
         }
 
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            Y_UNUSED(ctx);
+            Y_UNUSED(ev); 
+            Y_UNUSED(ctx); 
             Cout << "Pipe reset on server\n";
             ++ServerPipesClosed;
         }
 
         void Handle(TEvTabletPipe::TEvServerDestroyed::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             PipeConnectAcceptor->Erase(ev);
             Cout << "Cleanup of pipe reset on server\n";
         }
 
         void Handle(TEvConsumerTablet::TEvReject::TPtr &ev, const TActorContext &) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             Cout << "Drop & reject all connects\n";
             PipeConnectAcceptor->Detach(SelfId());
             RejectAll = true;
@@ -315,7 +315,7 @@ namespace NKikimr {
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
             Cout << "Consumer dead\n";
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             PipeConnectAcceptor->Detach(SelfId());
             return Die(ctx);
         }
@@ -343,7 +343,7 @@ namespace NKikimr {
 
     private:
         void OnActivateExecutor(const TActorContext& ctx) override {
-            Y_UNUSED(ctx);
+            Y_UNUSED(ctx); 
             Become(&TThis::StateWork);
             Cout << "Consumer loaded\n";
         }
@@ -371,19 +371,19 @@ namespace NKikimr {
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            Y_UNUSED(ctx);
+            Y_UNUSED(ev); 
+            Y_UNUSED(ctx); 
             Cout << "Server pipe is opened\n";
         }
 
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            Y_UNUSED(ctx);
+            Y_UNUSED(ev); 
+            Y_UNUSED(ctx); 
             Cout << "Pipe reset on server\n";
         }
 
@@ -394,13 +394,13 @@ namespace NKikimr {
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
             Cout << "Consumer dead\n";
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             return Die(ctx);
         }
     };
 
-Y_UNIT_TEST_SUITE(TTabletPipeTest) {
-    Y_UNIT_TEST(TestOpen) {
+Y_UNIT_TEST_SUITE(TTabletPipeTest) { 
+    Y_UNIT_TEST(TestOpen) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -440,7 +440,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSendWithoutWaitOpen) {
+    Y_UNIT_TEST(TestSendWithoutWaitOpen) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestKillClientBeforServerIdKnown) {
+    Y_UNIT_TEST(TestKillClientBeforServerIdKnown) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_DEBUG);
@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSendWithoutWaitOpenToWrongTablet) {
+    Y_UNIT_TEST(TestSendWithoutWaitOpenToWrongTablet) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSendAfterOpen) {
+    Y_UNIT_TEST(TestSendAfterOpen) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSendAfterReboot) {
+    Y_UNIT_TEST(TestSendAfterReboot) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestConsumerSidePipeReset) {
+    Y_UNIT_TEST(TestConsumerSidePipeReset) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -655,7 +655,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestConnectReject) {
+    Y_UNIT_TEST(TestConnectReject) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSendAfterOpenUsingTabletWithoutAcceptor) {
+    Y_UNIT_TEST(TestSendAfterOpenUsingTabletWithoutAcceptor) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestRebootUsingTabletWithoutAcceptor) {
+    Y_UNIT_TEST(TestRebootUsingTabletWithoutAcceptor) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -766,7 +766,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestShutdown) {
+    Y_UNIT_TEST(TestShutdown) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestTwoNodes) {
+    Y_UNIT_TEST(TestTwoNodes) { 
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
 
@@ -826,7 +826,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestClientDisconnectAfterPipeOpen) {
+    Y_UNIT_TEST(TestClientDisconnectAfterPipeOpen) { 
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
 
@@ -852,7 +852,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
 
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        Y_VERIFY(proxy);
+        Y_VERIFY(proxy); 
         runtime.Send(new IEventHandle(proxy, sender1, new TEvInterconnect::TEvConnectNode), 0);
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
@@ -874,7 +874,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSendBeforeBootTarget) {
+    Y_UNIT_TEST(TestSendBeforeBootTarget) { 
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
@@ -931,7 +931,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestTwoNodesAndRebootOfProducer) {
+    Y_UNIT_TEST(TestTwoNodesAndRebootOfProducer) { 
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
 
@@ -980,7 +980,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestTwoNodesAndRebootOfConsumer) {
+    Y_UNIT_TEST(TestTwoNodesAndRebootOfConsumer) { 
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);

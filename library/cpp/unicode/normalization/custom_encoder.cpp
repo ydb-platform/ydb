@@ -15,7 +15,7 @@ void TCustomEncoder::addToTable(wchar32 ucode, unsigned char code, const CodePag
     if (Table[plane][pos] == 0) {
         Table[plane][pos] = code;
     } else {
-        Y_ASSERT(target && *target->Names);
+        Y_ASSERT(target && *target->Names); 
         if (static_cast<unsigned char>(Table[plane][pos]) > 127 && code) {
             Cerr << "WARNING: Only lower part of ASCII should have duplicate encodings "
                  << target->Names[0]
@@ -37,7 +37,7 @@ bool isGoodDecomp(wchar32 rune, wchar32 decomp) {
 }
 
 void TCustomEncoder::Create(const CodePage* target, bool extended) {
-    Y_ASSERT(target);
+    Y_ASSERT(target); 
 
     DefaultChar = (const char*)target->DefaultChar;
 
@@ -61,7 +61,7 @@ void TCustomEncoder::Create(const CodePage* target, bool extended) {
             wchar32 dw = w;
             while (IsComposed(dw) && Code(dw) == 0) {
                 const wchar32* decomp_p = NUnicode::Decomposition<true>(dw);
-                Y_ASSERT(decomp_p != nullptr);
+                Y_ASSERT(decomp_p != nullptr); 
 
                 dw = decomp_p[0];
                 if (std::char_traits<wchar32>::length(decomp_p) > 1 && (dw == (wchar32)' ' || dw == (wchar32)'('))

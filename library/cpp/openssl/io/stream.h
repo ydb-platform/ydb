@@ -2,10 +2,10 @@
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/stream/input.h>
-#include <util/stream/output.h>
+#include <util/stream/input.h> 
+#include <util/stream/output.h> 
 
-class TOpenSslClientIO: public IInputStream, public IOutputStream {
+class TOpenSslClientIO: public IInputStream, public IOutputStream { 
 public:
     struct TOptions {
         struct TVerifyCert {
@@ -25,8 +25,8 @@ public:
         // TODO - keys, cyphers, etc
     };
 
-    TOpenSslClientIO(IInputStream* in, IOutputStream* out);
-    TOpenSslClientIO(IInputStream* in, IOutputStream* out, const TOptions& options);
+    TOpenSslClientIO(IInputStream* in, IOutputStream* out); 
+    TOpenSslClientIO(IInputStream* in, IOutputStream* out, const TOptions& options); 
     ~TOpenSslClientIO() override;
 
 private:

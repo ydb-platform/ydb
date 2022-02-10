@@ -894,7 +894,7 @@ TKeyRange::TKeyRange(TExprContext& ctx, const TVector<TColumnRange>& columnRange
     ToTuple = TKeyTuple(Ctx, toValues, false, toInclusive);
 }
 
-void TTableLookup::Print(IOutputStream& output) const {
+void TTableLookup::Print(IOutputStream& output) const { 
     output << Endl << "[" << Endl;
     for (auto& keyRange : KeyRanges) {
         keyRange.Print(output);
@@ -902,7 +902,7 @@ void TTableLookup::Print(IOutputStream& output) const {
     output << "]" << Endl;
 }
 
-void TKeyRange::Print(IOutputStream& output) const {
+void TKeyRange::Print(IOutputStream& output) const { 
     auto printExpr = [ctx = Ctx] (TExprBase node, IOutputStream& output) {
         auto ast = ConvertToAst(node.Ref(), *ctx, TExprAnnotationFlags::None, true);
         ast.Root->PrintTo(output);
@@ -959,7 +959,7 @@ void TKeyRange::Print(IOutputStream& output) const {
     output << Endl << "}" << Endl;
 }
 
-void TKeyTuple::Print(IOutputStream& output) const {
+void TKeyTuple::Print(IOutputStream& output) const { 
     auto printExpr = [] (TExprContext& ctx, TExprBase node, IOutputStream& output) {
         auto ast = ConvertToAst(node.Ref(), ctx, TExprAnnotationFlags::None, true);
         ast.Root->PrintTo(output);

@@ -24,8 +24,8 @@ namespace {
 
 }
 
-Y_UNIT_TEST_SUITE(Levenstein) {
-    Y_UNIT_TEST(Distance) {
+Y_UNIT_TEST_SUITE(Levenstein) { 
+    Y_UNIT_TEST(Distance) { 
         UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("hello"), TStringBuf("hulloah")), 3);
         UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("yeoman"), TStringBuf("yo man")), 2);
     }

@@ -35,7 +35,7 @@ namespace NNames {
     DECLARE_TYPED_TYPE_NAME(DyNumber);
 }
 
-void WriteEscapedValue(IOutputStream &out, const char *data, size_t size) {
+void WriteEscapedValue(IOutputStream &out, const char *data, size_t size) { 
     static const size_t BUFFER_SIZE = 32;
     char buffer[BUFFER_SIZE];
     size_t bufPos = 0;

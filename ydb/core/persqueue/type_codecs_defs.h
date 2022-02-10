@@ -222,7 +222,7 @@ public:
         : ShortSize_(size)
         , IsNull_(0)
     {
-        Y_VERIFY_DEBUG(size <= INTRUSIVE_SIZE);
+        Y_VERIFY_DEBUG(size <= INTRUSIVE_SIZE); 
         if (size) {
             ::memcpy(IntrusiveData_, data, size);
         }
@@ -325,13 +325,13 @@ public:
     template <bool IsNullable>
     const ICodec* GetDefaultCodec() const {
         const ICodec* codec = IsNullable ? DefaultNullable : DefaultNonNullable;
-        Y_VERIFY(codec, "No default codec.");
+        Y_VERIFY(codec, "No default codec."); 
         return codec;
     }
 
     const ICodec* GetCodec(TCodecSig sig) const {
         auto iter = Codecs.find(sig);
-        Y_VERIFY(iter != Codecs.end(), "Unregistered codec (%u).", ui16(sig));
+        Y_VERIFY(iter != Codecs.end(), "Unregistered codec (%u).", ui16(sig)); 
         return iter->second;
     }
 
@@ -343,20 +343,20 @@ public:
     const ICodec* AddCodec() {
         auto codec = Singleton<TCodec>();
         auto inserted = Codecs.insert(std::make_pair(TCodec::Sig(), codec));
-        Y_VERIFY(inserted.second, "Codec signature collision (%u).", ui16(TCodec::Sig()));
+        Y_VERIFY(inserted.second, "Codec signature collision (%u).", ui16(TCodec::Sig())); 
         return codec;
     }
 
     const ICodec* AddAlias(TCodecSig from, TCodecSig to, bool force = false) {
         auto iter = Codecs.find(to);
-        Y_VERIFY(iter != Codecs.end(), "Aliasing an unregistered codec (%u -> %u).", ui16(from), ui16(to));
+        Y_VERIFY(iter != Codecs.end(), "Aliasing an unregistered codec (%u -> %u).", ui16(from), ui16(to)); 
         return AddAlias(from, iter->second, force);
     }
 
     const ICodec* AddAlias(TCodecSig from, const ICodec* to, bool force = false) {
-        Y_VERIFY(to, "Aliasing an unregistered codec (%u -> nullptr).", ui16(from));
+        Y_VERIFY(to, "Aliasing an unregistered codec (%u -> nullptr).", ui16(from)); 
         auto& alias = Codecs[from];
-        Y_VERIFY(force || !alias, "Codec signature collision (%u).", ui16(from));
+        Y_VERIFY(force || !alias, "Codec signature collision (%u).", ui16(from)); 
         alias = to;
 
         // Cache the default codecs.
@@ -380,10 +380,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 inline IChunkDecoder::TPtr IChunkDecoder::ReadChunk(const TDataRef& data, const TTypeCodecs* codecs) {
-    Y_VERIFY_DEBUG(data.Size() >= sizeof(TCodecSig));
+    Y_VERIFY_DEBUG(data.Size() >= sizeof(TCodecSig)); 
     const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data());
     auto codec = codecs->GetCodec(sig);
-    Y_VERIFY(codec, "Unregistered codec (%u).", ui16(sig));
+    Y_VERIFY(codec, "Unregistered codec (%u).", ui16(sig)); 
     return codec->ReadChunk(data);
 }
 

@@ -368,7 +368,7 @@ struct TEvTablet {
             TABLET_DEAD_REASON_MAP(ENUM_VALUE_GEN)
         };
 
-        static void Out(IOutputStream& o, EReason x);
+        static void Out(IOutputStream& o, EReason x); 
         static const char* Str(EReason status);
 
         const ui64 TabletID;
@@ -786,7 +786,7 @@ IActor* CreateTabletReqReset(const TActorId &replyTo, const TIntrusivePtr<TTable
 }
 
 template<>
-inline void Out<NKikimr::TEvTablet::TEvTabletDead::EReason>(IOutputStream& o, NKikimr::TEvTablet::TEvTabletDead::EReason x) {
+inline void Out<NKikimr::TEvTablet::TEvTabletDead::EReason>(IOutputStream& o, NKikimr::TEvTablet::TEvTabletDead::EReason x) { 
     return NKikimr::TEvTablet::TEvTabletDead::Out(o, x);
 }
 

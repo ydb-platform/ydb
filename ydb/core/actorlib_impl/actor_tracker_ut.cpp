@@ -99,9 +99,9 @@ public:
     }
 };
 
-Y_UNIT_TEST_SUITE(TActorTracker) {
+Y_UNIT_TEST_SUITE(TActorTracker) { 
 
-    Y_UNIT_TEST(Basic) {
+    Y_UNIT_TEST(Basic) { 
         {
             TTestBasicRuntime runtime;
             runtime.Initialize(NKikimr::TAppPrepare().Unwrap());

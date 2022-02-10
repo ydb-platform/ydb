@@ -12,7 +12,7 @@ public:
     TImpl() {
 #ifdef _linux_
         int ar = sched_getaffinity(0, sizeof(cpu_set_t), &Mask);
-        Y_VERIFY_DEBUG(ar == 0);
+        Y_VERIFY_DEBUG(ar == 0); 
 #endif
     }
 
@@ -33,7 +33,7 @@ public:
     void Set() const {
 #ifdef _linux_
         int ar = sched_setaffinity(0, sizeof(cpu_set_t), &Mask);
-        Y_VERIFY_DEBUG(ar == 0);
+        Y_VERIFY_DEBUG(ar == 0); 
 #endif
     }
 

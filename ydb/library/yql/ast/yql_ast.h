@@ -36,8 +36,8 @@ struct TAstNode {
 
     static const ui32 SmallListCount = 2;
 
-    void PrintTo(IOutputStream& out) const;
-    void PrettyPrintTo(IOutputStream& out, ui32 prettyFlags) const;
+    void PrintTo(IOutputStream& out) const; 
+    void PrettyPrintTo(IOutputStream& out, ui32 prettyFlags) const; 
 
     inline TString ToString() const {
         TStringStream str;
@@ -268,4 +268,4 @@ TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool = null
 } // namespace NYql
 
 template<>
-void Out<NYql::TAstNode::EType>(class IOutputStream &o, NYql::TAstNode::EType x);
+void Out<NYql::TAstNode::EType>(class IOutputStream &o, NYql::TAstNode::EType x); 

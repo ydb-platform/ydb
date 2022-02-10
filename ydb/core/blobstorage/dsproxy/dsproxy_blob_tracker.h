@@ -23,7 +23,7 @@ namespace NKikimr {
             , FaultyDisks(&info->GetTopology())
         {}
 
-        void Output(IOutputStream& str, const TBlobStorageGroupInfo *info) const {
+        void Output(IOutputStream& str, const TBlobStorageGroupInfo *info) const { 
             str << "{FullId# " << FullId.ToString() << " PresentParts# ";
             PresentParts.Output(str, info->Type);
             str << " FaultyDisks# ";

@@ -19,8 +19,8 @@ static NProtobufJsonUt::TFilterTest GetTestMsg() {
     return msg;
 }
 
-Y_UNIT_TEST_SUITE(TProto2JsonFilterTest){
-    Y_UNIT_TEST(TestFilterPrinter){
+Y_UNIT_TEST_SUITE(TProto2JsonFilterTest){ 
+    Y_UNIT_TEST(TestFilterPrinter){ 
         NProtobufJsonUt::TFilterTest msg = GetTestMsg();
 {
     TString expected = R"({"OptFiltered":"1","NotFiltered":"23","RepFiltered":[45,67],)"
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFilterTest){
 }
 }
 
-Y_UNIT_TEST(NoUnnecessaryCopyFunctor) {
+Y_UNIT_TEST(NoUnnecessaryCopyFunctor) { 
     size_t CopyCount = 0;
     struct TFunctorMock {
         TFunctorMock(size_t* copyCount)

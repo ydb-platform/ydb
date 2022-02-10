@@ -4,7 +4,7 @@ namespace NYql {
 }
 
 template<>
-void Out<NYql::ETypeAnnotationKind>(class IOutputStream &o, NYql::ETypeAnnotationKind x) {
+void Out<NYql::ETypeAnnotationKind>(class IOutputStream &o, NYql::ETypeAnnotationKind x) { 
 #define YQL_TYPE_ANN_KIND_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::ETypeAnnotationKind::name: \
         o << #name; \

@@ -33,7 +33,7 @@ public:
     {}
 
     void Exec(TActorSystem *actorSystem) override {
-        Y_UNUSED(actorSystem);
+        Y_UNUSED(actorSystem); 
         AtomicIncrement(*Counter);
         if (GenerationsToSpawn > 0) {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer->Data(), Buffer->Size());
@@ -46,7 +46,7 @@ public:
     }
 
     void Release(TActorSystem *actorSystem) override {
-        Y_UNUSED(actorSystem);
+        Y_UNUSED(actorSystem); 
         delete this;
     }
 };
@@ -63,7 +63,7 @@ public:
     {}
 
     void Exec(TActorSystem *actorSystem) override {
-        Y_UNUSED(actorSystem);
+        Y_UNUSED(actorSystem); 
         AtomicIncrement(*Counter);
         if (GenerationsToSpawn > 0) {
             Device.FlushAsync(new TFlusher(Device, GenerationsToSpawn - 1, Counter), NPDisk::TReqId(NPDisk::TReqId::Test0, 0));
@@ -73,7 +73,7 @@ public:
     }
 
     void Release(TActorSystem *actorSystem) override {
-        Y_UNUSED(actorSystem);
+        Y_UNUSED(actorSystem); 
         delete this;
     }
 };
@@ -92,7 +92,7 @@ public:
     {}
 
     void Exec(TActorSystem *actorSystem) override {
-        Y_UNUSED(actorSystem);
+        Y_UNUSED(actorSystem); 
         AtomicIncrement(*Counter);
         if (GenerationsToSpawn > 0) {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer->Data(), Buffer->Size());
@@ -106,7 +106,7 @@ public:
     }
 
     void Release(TActorSystem *actorSystem) override {
-        Y_UNUSED(actorSystem);
+        Y_UNUSED(actorSystem); 
         delete this;
     }
 };
@@ -212,7 +212,7 @@ void RunTestDestructionWithMultipleFlushesFromCompletionAction() {
     Ctest << "Done" << Endl;
 }
 
-Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
+Y_UNIT_TEST_SUITE(TBlockDeviceTest) { 
 
     Y_UNIT_TEST(TestMultipleRequestsFromCompletionAction) {
         RunTestMultipleRequestsFromCompletionAction();
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
     }
 
     /*
-    Y_UNIT_TEST(TestRabbitCompletionAction) {
+    Y_UNIT_TEST(TestRabbitCompletionAction) { 
         const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         const ui32 dataSize = 4 << 10;

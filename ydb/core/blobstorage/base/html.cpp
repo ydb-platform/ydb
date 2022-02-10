@@ -15,7 +15,7 @@ namespace NKikimr {
         {"label label-danger", {}},
     };
 
-    void THtmlLightSignalRenderer::Output(IOutputStream &str) const {
+    void THtmlLightSignalRenderer::Output(IOutputStream &str) const { 
         HTML(str) {
             SPAN_CLASS_STYLE (Lights[Light].first, Lights[Light].second) {
                 str << Value;

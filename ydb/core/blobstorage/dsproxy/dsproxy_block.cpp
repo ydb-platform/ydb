@@ -24,9 +24,9 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
     void Handle(TEvBlobStorage::TEvVBlockResult::TPtr &ev) {
         ProcessReplyFromQueue(ev);
         const NKikimrBlobStorage::TEvVBlockResult &record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus());
+        Y_VERIFY(record.HasStatus()); 
         const NKikimrProto::EReplyStatus status = record.GetStatus();
-        Y_VERIFY(record.HasVDiskID());
+        Y_VERIFY(record.HasVDiskID()); 
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(ev->Cookie);
 

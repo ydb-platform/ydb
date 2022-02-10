@@ -512,7 +512,7 @@ namespace NKiwiAggr {
     }
 
     void TFixedBinHistogram::Shrink(double newReferencePoint, double newMaxValue) {
-        Y_VERIFY(newReferencePoint < newMaxValue, "Invalid Shrink()");
+        Y_VERIFY(newReferencePoint < newMaxValue, "Invalid Shrink()"); 
         memset(&(ReserveFreqs[0]), 0, ReserveFreqs.size() * sizeof(double));
 
         double newBinRange = CalcBinRange(newReferencePoint, newMaxValue);

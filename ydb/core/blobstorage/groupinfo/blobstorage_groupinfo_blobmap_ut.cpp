@@ -95,7 +95,7 @@ namespace {
 
 } // anon
 
-Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
+Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) { 
 
     void MakeBelongsToSubgroupBenchmark(TBlobStorageGroupType::EErasureSpecies erasure, ui32 numFailDomains,
             NUnitTest::TTestContext& ut_context) {
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
         }
     }
 
-    Y_UNIT_TEST(BasicChecks) {
+    Y_UNIT_TEST(BasicChecks) { 
         for (auto erasure : {TBlobStorageGroupType::ErasureNone, TBlobStorageGroupType::ErasureMirror3,
                 TBlobStorageGroupType::Erasure3Plus1Block, TBlobStorageGroupType::Erasure3Plus1Stripe,
                 TBlobStorageGroupType::Erasure4Plus2Block, TBlobStorageGroupType::Erasure3Plus2Block,
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
         BasicCheck(groupInfo, orig, id, blobSubgroupSize);
     }
 
-    Y_UNIT_TEST(Mirror3dcMapper) {
+    Y_UNIT_TEST(Mirror3dcMapper) { 
         auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3, 3U, 5U, 4U);
 
         std::unique_ptr<IBlobToDiskMapper> mapper{IBlobToDiskMapper::CreateMirror3dcMapper(&groupInfo->GetTopology())};

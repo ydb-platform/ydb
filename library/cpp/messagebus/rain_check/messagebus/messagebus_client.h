@@ -31,12 +31,12 @@ namespace NRainCheck {
         }
 
         NBus::TBusMessage* GetResponse() const {
-            Y_ASSERT(IsDone());
+            Y_ASSERT(IsDone()); 
             return Response.Get();
         }
 
         NBus::EMessageStatus GetStatus() const {
-            Y_ASSERT(IsDone());
+            Y_ASSERT(IsDone()); 
             return Status;
         }
     };

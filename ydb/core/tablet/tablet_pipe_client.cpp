@@ -40,7 +40,7 @@ namespace NTabletPipe {
             , PayloadQueue(new TPayloadQueue())
             , Leader(true)
         {
-            Y_VERIFY(tabletId != 0);
+            Y_VERIFY(tabletId != 0); 
         }
 
         void Bootstrap(const TActorContext& ctx) {
@@ -143,7 +143,7 @@ namespace NTabletPipe {
 
         void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             BLOG_D("send");
-            Y_VERIFY(!IsShutdown);
+            Y_VERIFY(!IsShutdown); 
             Push(ctx, ev);
         }
 
@@ -324,7 +324,7 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             BLOG_D("pipe event not delivered, drop pipe");
             return NotifyDisconnect(ctx);
         }
@@ -336,7 +336,7 @@ namespace NTabletPipe {
                 return;
             }
 
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId); 
             BLOG_D("peer closed");
             return NotifyDisconnect(ctx);
         }
@@ -352,7 +352,7 @@ namespace NTabletPipe {
 
         void HandleConnect(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
             BLOG_D("poison pill while connecting");
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             if (ServerId)
                 ctx.Send(ServerId, new TEvTabletPipe::TEvPeerClosed(TabletId, ctx.SelfID, ServerId));
 
@@ -360,7 +360,7 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev);
+            Y_UNUSED(ev); 
             BLOG_D("received poison pill");
             ctx.Send(ServerId, new TEvTabletPipe::TEvPeerClosed(TabletId, ctx.SelfID, ServerId));
             return NotifyDisconnect(ctx);

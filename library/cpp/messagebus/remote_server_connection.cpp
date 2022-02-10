@@ -19,7 +19,7 @@ void TRemoteServerConnection::Init(SOCKET socket, TInstant now) {
     WriterData.Status.ConnectTime = now;
     WriterData.Status.Connected = true;
 
-    Y_VERIFY(socket != INVALID_SOCKET, "must be a valid socket");
+    Y_VERIFY(socket != INVALID_SOCKET, "must be a valid socket"); 
 
     TSocket readSocket(socket);
     TSocket writeSocket = readSocket;
@@ -37,8 +37,8 @@ TRemoteServerSession* TRemoteServerConnection::GetSession() {
 }
 
 void TRemoteServerConnection::HandleEvent(SOCKET socket, void* cookie) {
-    Y_UNUSED(socket);
-    Y_ASSERT(cookie == ReadCookie || cookie == WriteCookie);
+    Y_UNUSED(socket); 
+    Y_ASSERT(cookie == ReadCookie || cookie == WriteCookie); 
     if (cookie == ReadCookie) {
         GetSession()->ServerOwnedMessages.Wait();
         ScheduleRead();
@@ -55,9 +55,9 @@ void TRemoteServerConnection::MessageSent(TArrayRef<TBusMessagePtrAndHeader> mes
     TInstant now = TInstant::Now();
 
     GetSession()->ReleaseInWorkResponses(messages);
-    for (auto& message : messages) {
-        TInstant recvTime = message.MessagePtr->RecvTime;
-        GetSession()->ServerHandler->OnSent(message.MessagePtr.Release());
+    for (auto& message : messages) { 
+        TInstant recvTime = message.MessagePtr->RecvTime; 
+        GetSession()->ServerHandler->OnSent(message.MessagePtr.Release()); 
         TDuration d = now - recvTime;
         WriterData.Status.DurationCounter.AddDuration(d);
         WriterData.Status.Incremental.ProcessDurationHistogram.AddTime(d);

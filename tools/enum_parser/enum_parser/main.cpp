@@ -24,7 +24,7 @@
 #include <util/system/fs.h>
 #include <util/folder/path.h>
 
-void WriteHeader(const TString& headerName, IOutputStream& out, IOutputStream* headerOutPtr = nullptr) {
+void WriteHeader(const TString& headerName, IOutputStream& out, IOutputStream* headerOutPtr = nullptr) { 
     out << "// This file was auto-generated. Do not edit!!!\n";
     out << "#include " << headerName << "\n";
     out << "#include <tools/enum_parser/enum_serialization_runtime/enum_runtime.h>\n\n";
@@ -64,7 +64,7 @@ static inline TString JsonQuote(const TString& s) {
 
 /// Simplifed JSON map encoder for generic types
 template<typename T>
-void OutKey(IOutputStream& out, const TString& key, const T& value, bool escape = true) {
+void OutKey(IOutputStream& out, const TString& key, const T& value, bool escape = true) { 
     TString quoted = ToString(value);
     if (escape) {
         quoted = JsonQuote(quoted);
@@ -73,7 +73,7 @@ void OutKey(IOutputStream& out, const TString& key, const T& value, bool escape 
 }
 
 /// Simplifed JSON map encoder for TMaybe
-void OutKey(IOutputStream& out, const TString& key, const TMaybe<TString>& value) {
+void OutKey(IOutputStream& out, const TString& key, const TMaybe<TString>& value) { 
     TString quoted;
     if (value) {
         quoted = JsonQuote(ToString(*value));
@@ -85,14 +85,14 @@ void OutKey(IOutputStream& out, const TString& key, const TMaybe<TString>& value
 
 
 /// Simplifed JSON map encoder for bool values
-void OutKey(IOutputStream& out, const TString& key, const bool& value) {
+void OutKey(IOutputStream& out, const TString& key, const bool& value) { 
     out << "\"" << key << "\": " << (value ? "true" : "false") << ",\n";
 }
 
 
 /// Simplifed JSON map encoder for array items
 template<typename T>
-void OutItem(IOutputStream& out, const T& value, bool escape = true) {
+void OutItem(IOutputStream& out, const T& value, bool escape = true) { 
     TString quoted = ToString(value);
     if (escape) {
         quoted = JsonQuote(quoted);
@@ -134,9 +134,9 @@ static TString WrapStringBuf(const TStringBuf str) {
 
 void GenerateEnum(
     const TEnumParser::TEnum& en,
-    IOutputStream& out,
-    IOutputStream* jsonEnumOut = nullptr,
-    IOutputStream* headerOutPtr = nullptr
+    IOutputStream& out, 
+    IOutputStream* jsonEnumOut = nullptr, 
+    IOutputStream* headerOutPtr = nullptr 
 ) {
     TStringStream jEnum;
     OpenMap(jEnum);
@@ -318,7 +318,7 @@ void GenerateEnum(
 
     // outer Out
     out << "template<>\n";
-    out << "void Out<" << name << ">(IOutputStream& os, TTypeTraits<" << name << ">::TFuncParam n) {\n";
+    out << "void Out<" << name << ">(IOutputStream& os, TTypeTraits<" << name << ">::TFuncParam n) {\n"; 
     out << "    const " << nsName << "::TNameBufs& names = " << nsName << "::TNameBufs::Instance();\n";
     out << "    return names.Out(&os, n);\n";
     out << "}\n\n";
@@ -411,12 +411,12 @@ int main(int argc, char** argv) {
         TVector<TString> freeArgs = res.GetFreeArgs();
         TString inputFileName = freeArgs[0];
 
-        THolder<IOutputStream> hOut;
-        IOutputStream* out = &Cout;
+        THolder<IOutputStream> hOut; 
+        IOutputStream* out = &Cout; 
 
-        THolder<IOutputStream> headerOut;
+        THolder<IOutputStream> headerOut; 
 
-        THolder<IOutputStream> jsonOut;
+        THolder<IOutputStream> jsonOut; 
 
 
         if (outputFileName) {

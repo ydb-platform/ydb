@@ -107,7 +107,7 @@ public:
 
             int err = inflate(&Stream, Z_SYNC_FLUSH);
 
-            //Y_ASSERT(Stream.avail_in == 0);
+            //Y_ASSERT(Stream.avail_in == 0); 
 
             switch (err) {
                 case Z_OK:

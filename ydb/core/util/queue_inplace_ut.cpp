@@ -6,7 +6,7 @@
 
 #include "queue_inplace.h"
 
-Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
+Y_UNIT_TEST_SUITE(TQueueInplaceTests) { 
 
     struct TStruct {
         ui32 X;
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
         }
     };
 
-    Y_UNIT_TEST(TestSimpleInplace) {
+    Y_UNIT_TEST(TestSimpleInplace) { 
         using TQueueType = TQueueInplace<TStruct, 32>; // 3 values per chunk
         TQueueType queue;
 
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
         UNIT_ASSERT(queue.Head() == nullptr);
     }
 
-    Y_UNIT_TEST(CleanInDestructor) {
+    Y_UNIT_TEST(CleanInDestructor) { 
         using TQueueType = TQueueInplace<std::shared_ptr<bool> *, 32>;
 
         std::shared_ptr<bool> p(new bool(true));

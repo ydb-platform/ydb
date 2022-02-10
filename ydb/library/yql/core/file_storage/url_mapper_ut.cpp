@@ -11,8 +11,8 @@ void RemapAndCheck(const TUrlMapper& m, const TString& input, const TString& exp
 }
 }
 
-Y_UNIT_TEST_SUITE(TUrlMapperTests) {
-    Y_UNIT_TEST(All) {
+Y_UNIT_TEST_SUITE(TUrlMapperTests) { 
+    Y_UNIT_TEST(All) { 
         TUrlMapper m;
         m.AddMapping("sbr:(?://)?(\\d+)", "http://proxy.sandbox.yandex-team.ru/$1");
 

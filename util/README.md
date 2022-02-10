@@ -8,11 +8,11 @@ Style guide for the util folder is a stricter version of
  * &, * tied closer to a type, not to variable
  * always use `using` not `typedef`
  * even a single line block must be in braces {}:
-   ```
+   ``` 
    if (A) {
        B();
    }
-   ```
+   ``` 
  * _ at the end of private data member of a class - `First_`, `Second_`
  * every .h file must be accompanied with corresponding .cpp to avoid a leakage and check that it is self contained
  * prohibited to use `printf`-like functions

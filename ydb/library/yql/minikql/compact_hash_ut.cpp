@@ -12,7 +12,7 @@
 using namespace NKikimr;
 using namespace NKikimr::NCHash;
 
-Y_UNIT_TEST_SUITE(TCompactHashTest) {
+Y_UNIT_TEST_SUITE(TCompactHashTest) { 
 
     template <typename TItem>
     void TestListPoolPagesImpl(size_t listSize, ui16 countOfLists, size_t expectedListCapacity, ui32 expectedMark) {
@@ -92,33 +92,33 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         pool.ReturnList(l);
     }
 
-    Y_UNIT_TEST(TestListPoolSmallPagesByte) {
+    Y_UNIT_TEST(TestListPoolSmallPagesByte) { 
         ui16 count = TListPoolBase::GetSmallPageCapacity<ui8>(2);
         TestListPoolPagesImpl<ui8>(2, count, 2, TListPoolBase::SMALL_MARK);
     }
 
-    Y_UNIT_TEST(TestListPoolMediumPagesByte) {
+    Y_UNIT_TEST(TestListPoolMediumPagesByte) { 
         size_t listSize = TListPoolBase::MAX_SMALL_LIST_SIZE + 1;
         ui16 count = TListPoolBase::GetMediumPageCapacity<ui8>(listSize);
         TestListPoolPagesImpl<ui8>(listSize, count, FastClp2(listSize), TListPoolBase::MEDIUM_MARK);
     }
 
-    Y_UNIT_TEST(TestListPoolLargPagesByte) {
+    Y_UNIT_TEST(TestListPoolLargPagesByte) { 
         TestListPoolLargeImpl<ui8>();
     }
 
-    Y_UNIT_TEST(TestListPoolSmallPagesUi64) {
+    Y_UNIT_TEST(TestListPoolSmallPagesUi64) { 
         ui16 count = TListPoolBase::GetSmallPageCapacity<ui64>(2);
         TestListPoolPagesImpl<ui64>(2, count, 2, TListPoolBase::SMALL_MARK);
     }
 
-    Y_UNIT_TEST(TestListPoolMediumPagesUi64) {
+    Y_UNIT_TEST(TestListPoolMediumPagesUi64) { 
         size_t listSize = TListPoolBase::MAX_SMALL_LIST_SIZE + 1;
         ui16 count = TListPoolBase::GetMediumPageCapacity<ui64>(listSize);
         TestListPoolPagesImpl<ui64>(listSize, count, FastClp2(listSize), TListPoolBase::MEDIUM_MARK);
     }
 
-    Y_UNIT_TEST(TestListPoolLargPagesUi64) {
+    Y_UNIT_TEST(TestListPoolLargPagesUi64) { 
         TestListPoolLargeImpl<ui64>();
     }
 
@@ -126,18 +126,18 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         ui8 A[256];
     };
 
-    Y_UNIT_TEST(TestListPoolSmallPagesObj) {
+    Y_UNIT_TEST(TestListPoolSmallPagesObj) { 
         ui16 count = TListPoolBase::GetSmallPageCapacity<TItem>(2);
         TestListPoolPagesImpl<TItem>(2, count, 2, TListPoolBase::SMALL_MARK);
     }
 
-    Y_UNIT_TEST(TestListPoolMediumPagesObj) {
+    Y_UNIT_TEST(TestListPoolMediumPagesObj) { 
         size_t listSize = TListPoolBase::MAX_SMALL_LIST_SIZE + 1;
         ui16 count = TListPoolBase::GetMediumPageCapacity<TItem>(listSize);
         TestListPoolPagesImpl<TItem>(listSize, count, FastClp2(listSize), TListPoolBase::MEDIUM_MARK);
     }
 
-    Y_UNIT_TEST(TestListPoolLargPagesObj) {
+    Y_UNIT_TEST(TestListPoolLargPagesObj) { 
         TestListPoolLargeImpl<TItem>();
     }
 
@@ -335,39 +335,39 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         UNIT_ASSERT_VALUES_EQUAL(sumKeys, sumKeysTarget);
     }
 
-    Y_UNIT_TEST(TestHashByte) {
+    Y_UNIT_TEST(TestHashByte) { 
         TestHashImpl<ui8>();
     }
 
-    Y_UNIT_TEST(TestMultiHashByte) {
+    Y_UNIT_TEST(TestMultiHashByte) { 
         TestMultiHashImpl<ui8>();
     }
 
-    Y_UNIT_TEST(TestSetByte) {
+    Y_UNIT_TEST(TestSetByte) { 
         TestSetImpl<ui8>();
     }
 
-    Y_UNIT_TEST(TestHashUi16) {
+    Y_UNIT_TEST(TestHashUi16) { 
         TestHashImpl<ui16>();
     }
 
-    Y_UNIT_TEST(TestMultiHashUi16) {
+    Y_UNIT_TEST(TestMultiHashUi16) { 
         TestMultiHashImpl<ui16>();
     }
 
-    Y_UNIT_TEST(TestSetUi16) {
+    Y_UNIT_TEST(TestSetUi16) { 
         TestSetImpl<ui16>();
     }
 
-    Y_UNIT_TEST(TestHashUi64) {
+    Y_UNIT_TEST(TestHashUi64) { 
         TestHashImpl<ui64>();
     }
 
-    Y_UNIT_TEST(TestMultiHashUi64) {
+    Y_UNIT_TEST(TestMultiHashUi64) { 
         TestMultiHashImpl<ui64>();
     }
 
-    Y_UNIT_TEST(TestSetUi64) {
+    Y_UNIT_TEST(TestSetUi64) { 
         TestSetImpl<ui64>();
     }
 

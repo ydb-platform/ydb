@@ -313,8 +313,8 @@ void TFsTest::TestEnsureExists() {
     TStringBuilder expected;
     TString got;
     try {
-        NFs::EnsureExists(nonExists);
-        expected << __LOCATION__;
+        NFs::EnsureExists(nonExists); 
+        expected << __LOCATION__; 
     } catch (const TFileError& err) {
         got = err.what();
     }

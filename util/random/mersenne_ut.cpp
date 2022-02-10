@@ -2,11 +2,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 
 #define UI32(x) x##ul
 
-Y_UNIT_TEST_SUITE(TMersenneRndTest) {
+Y_UNIT_TEST_SUITE(TMersenneRndTest) { 
     template <class T>
     inline void Test(const T* res, size_t len) {
         TMersenne<T> m;
@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TMersenneRndTest) {
         }
     }
 
-    Y_UNIT_TEST(Test32) {
+    Y_UNIT_TEST(Test32) { 
         const ui32 res[] = {
             UI32(2325592414),
             UI32(482149846),
@@ -30,10 +30,10 @@ Y_UNIT_TEST_SUITE(TMersenneRndTest) {
             UI32(3882134983),
         };
 
-        Test<ui32>(res, Y_ARRAY_SIZE(res));
+        Test<ui32>(res, Y_ARRAY_SIZE(res)); 
     }
 
-    Y_UNIT_TEST(Test64) {
+    Y_UNIT_TEST(Test64) { 
         const ui64 res[] = {
             ULL(13735441942630277712),
             ULL(10468394322237346228),
@@ -47,10 +47,10 @@ Y_UNIT_TEST_SUITE(TMersenneRndTest) {
             ULL(11231499428520958715),
         };
 
-        Test<ui64>(res, Y_ARRAY_SIZE(res));
+        Test<ui64>(res, Y_ARRAY_SIZE(res)); 
     }
 
-    Y_UNIT_TEST(TestGenRand64) {
+    Y_UNIT_TEST(TestGenRand64) { 
         TMersenne<ui32> rng;
 
         for (size_t i = 0; i < 100; ++i) {
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TMersenneRndTest) {
         }
     }
 
-    Y_UNIT_TEST(TestCopy32) {
+    Y_UNIT_TEST(TestCopy32) { 
         TMersenne<ui32> r1(1);
         TMersenne<ui32> r2(2);
 
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TMersenneRndTest) {
         UNIT_ASSERT_VALUES_EQUAL(r1.GenRand(), r2.GenRand());
     }
 
-    Y_UNIT_TEST(TestCopy64) {
+    Y_UNIT_TEST(TestCopy64) { 
         TMersenne<ui64> r1(1);
         TMersenne<ui64> r2(2);
 

@@ -7,7 +7,7 @@ using namespace NKikimr;
 using namespace NTxProxyUT;
 using namespace NHelpers;
 
-Y_UNIT_TEST_SUITE(TSubDomainTest) {
+Y_UNIT_TEST_SUITE(TSubDomainTest) { 
     NKikimrSchemeOp::TTableDescription GetTableSimpleDescription(const TString &name) {
         NKikimrSchemeOp::TTableDescription tableDescr;
         tableDescr.SetName(name);
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetClient().FlatQuery(query, res);
     }
 
-    Y_UNIT_TEST(Boot) {
+    Y_UNIT_TEST(Boot) { 
         TTestEnv env;
         auto lsroot = env.GetClient().Ls("/");
         Print(lsroot);
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         }
     }
 
-    Y_UNIT_TEST(LsLs) {
+    Y_UNIT_TEST(LsLs) { 
         TTestEnv env;
 
         {
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         }
     }
 
-    Y_UNIT_TEST(CreateTablet) {
+    Y_UNIT_TEST(CreateTablet) { 
         TTestEnv env(3,2);
 
         ui64 owner = THash<TString>()("CreateTablet");
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
              env.GetClient().WaitForTabletAlive(&env.GetRuntime(), result.GetTabletId(), true, WaitTimeOut));
     }
 
-    Y_UNIT_TEST(CreateTabletForUnknownDomain) {
+    Y_UNIT_TEST(CreateTabletForUnknownDomain) { 
         TTestEnv env;
 
         ui64 owner = THash<TString>()("CreateTabletForUnknownDomain");
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             env.GetClient().GetLeaderNode(&env.GetRuntime(), result.GetTabletId()));
     }
 
-    Y_UNIT_TEST(CreateDummyTabletsInDifferentDomains) {
+    Y_UNIT_TEST(CreateDummyTabletsInDifferentDomains) { 
         TTestEnv env(1, 2);
 
         ui64 tablet_in_first_domain = CreateSubDomainAndTabletInside(env, "USER_0", 1);
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         CheckTableRunOnProperTenantNode(env, "/dc-1/USER_1", tablet_in_second_domain);
     }
 
-    Y_UNIT_TEST(StartAndStopTenanNode) {
+    Y_UNIT_TEST(StartAndStopTenanNode) { 
         TTestEnv env(1, 1);
 
         auto subdomain_0 = GetSubDomainDeclareSetting("USER_0", env.GetPools());
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().ForceDeleteSubdomain("/dc-1", "USER_0"));
     }
 
-    Y_UNIT_TEST(StartTenanNodeAndStopAtDestructor) {
+    Y_UNIT_TEST(StartTenanNodeAndStopAtDestructor) { 
         TTestEnv env(1, 1);
 
         auto subdomain_0 = GetSubDomainDeclareSetting("USER_0", env.GetPools());
@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetTenants().Run("/dc-1/USER_0");
     }
 
-    Y_UNIT_TEST(CreateTableInsideSubDomain) {
+    Y_UNIT_TEST(CreateTableInsideSubDomain) { 
         TTestEnv env(1, 1);
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         }
     }
 
-    Y_UNIT_TEST(FailIfAffectedSetNotInterior) {
+    Y_UNIT_TEST(FailIfAffectedSetNotInterior) { 
         TTestEnv env(1, 2);
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
     }
 
 
-    Y_UNIT_TEST(GenericCases) {
+    Y_UNIT_TEST(GenericCases) { 
         TTestEnv env(1, 1);
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         }
     }
 
-    Y_UNIT_TEST(DatashardNotRunAtAllWhenSubDomainNodesIsStopped) {
+    Y_UNIT_TEST(DatashardNotRunAtAllWhenSubDomainNodesIsStopped) { 
         TTestEnv env(1, 1);
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         UNIT_ASSERT(!env.GetClient().WaitForTabletAlive(&env.GetRuntime(), somedatashard, true, WaitTimeOut));
     }
 
-    Y_UNIT_TEST(DatashardRunAtOtherNodeWhenOneNodeIsStopped) {
+    Y_UNIT_TEST(DatashardRunAtOtherNodeWhenOneNodeIsStopped) { 
         TTestEnv env(1, 2);
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());

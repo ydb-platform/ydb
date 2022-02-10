@@ -78,7 +78,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         CountEvent(*ev->Get());
 
         const auto& record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus());
+        Y_VERIFY(record.HasStatus()); 
         NKikimrProto::EReplyStatus status = record.GetStatus();
 
         Y_VERIFY(record.HasVDiskID());

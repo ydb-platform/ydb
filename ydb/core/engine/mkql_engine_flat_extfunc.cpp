@@ -205,7 +205,7 @@ namespace {
         {}
 
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext&) const {
-            Y_FAIL("Failed to build value for dummy node");
+            Y_FAIL("Failed to build value for dummy node"); 
         }
     private:
         void RegisterDependencies() const final {}

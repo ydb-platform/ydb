@@ -1466,7 +1466,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
             ++missingDataPartCount;
             break;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
+            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64 
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
@@ -1478,13 +1478,13 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
             missingDataPartIdxB = i;
             ++missingDataPartCount;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
+            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32 
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
         }
     }
-    Y_VERIFY(missingDataPartCount <= 2);
+    Y_VERIFY(missingDataPartCount <= 2); 
 
     ui64 dataSize = partSet.FullDataSize;
     if (restoreParts) {
@@ -1638,7 +1638,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
     //    the main case :(
     TRACE("case# g" << Endl);
     VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
-    Y_VERIFY(missingDataPartIdxA < p.DataParts && missingDataPartIdxB < p.DataParts);
+    Y_VERIFY(missingDataPartIdxA < p.DataParts && missingDataPartIdxB < p.DataParts); 
     p.EoMainRestoreParts<isStripe, restoreParts, restoreFullData, false, restoreParityParts>(partSet, missingDataPartIdxA,
             missingDataPartIdxB);
     if (restoreParts) {
@@ -1894,13 +1894,13 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
             missingDataPartIdx = i;
             ++missingDataPartCount;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
+            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64 
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
         }
     }
-    Y_VERIFY(missingDataPartCount <= 1);
+    Y_VERIFY(missingDataPartCount <= 1); 
 
     ui64 dataSize = partSet.FullDataSize;
     if (restoreParts && missingDataPartIdx != totalParts) {
@@ -2986,7 +2986,7 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
         ythrow TWithBackTrace<yexception>() << "Incorrect partSet size, received " << partSet.Parts.size()
             << " while expected " << (erasure.DataParts + erasure.ParityParts);
     }
-    Y_VERIFY_DEBUG(restoreFullData || restoreParts);
+    Y_VERIFY_DEBUG(restoreFullData || restoreParts); 
     Y_VERIFY_DEBUG(erasure.Prime <= MAX_LINES_IN_BLOCK);
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:

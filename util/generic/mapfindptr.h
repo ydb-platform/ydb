@@ -14,14 +14,14 @@ template <class Map, class K>
 inline auto MapFindPtr(Map& map, const K& key) {
     auto i = map.find(key);
 
-    return (i == map.end() ? nullptr : &i->second);
+    return (i == map.end() ? nullptr : &i->second); 
 }
 
 template <class Map, class K>
 inline auto MapFindPtr(const Map& map, const K& key) {
     auto i = map.find(key);
 
-    return (i == map.end() ? nullptr : &i->second);
+    return (i == map.end() ? nullptr : &i->second); 
 }
 
 /** helper for THashMap/TMap */

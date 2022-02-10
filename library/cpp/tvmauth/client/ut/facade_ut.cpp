@@ -9,7 +9,7 @@
 
 using namespace NTvmAuth;
 
-Y_UNIT_TEST_SUITE(ClientFacade) {
+Y_UNIT_TEST_SUITE(ClientFacade) { 
     static const TTvmId OK_CLIENT = 100500;
     static const TString SRV_TICKET_123 = "3:serv:CBAQ__________9_IgYIexCUkQY:GioCM49Ob6_f80y6FY0XBVN4hLXuMlFeyMvIMiDuQnZkbkLpRpQOuQo5YjWoBjM0Vf-XqOm8B7xtrvxSYHDD7Q4OatN2l-Iwg7i71lE3scUeD36x47st3nd0OThvtjrFx_D8mw_c0GT5KcniZlqq1SjhLyAk1b_zJsx8viRAhCU";
     static const TString SRV_TICKET_456 = "3:serv:CBAQ__________9_IgcIyAMQlJEG:VrnqRhpoiDnJeAQbySJluJ1moQ5Kemic99iWzOrHLGfuh7iTw_xMT7KewRAmZMUwDKzE6otj7V86Xsnxbv5xZl8746wbvNcyUXu-nGWmbByZjO7xpSIcY07sISqEhP9n9C_yMSvqDP7ho_PRIfpGCDMXxKlFZ_BhBLLp0kHEvw4";
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(ClientFacade) {
         return f;
     }
 
-    Y_UNIT_TEST(Service) {
+    Y_UNIT_TEST(Service) { 
         NTvmApi::TClientSettings s;
         s.SetSelfTvmId(OK_CLIENT);
         s.EnableServiceTicketChecking();
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(ClientFacade) {
         UNIT_ASSERT_EXCEPTION(f.CheckUserTicket(TEST_TICKET), yexception);
     }
 
-    Y_UNIT_TEST(User) {
+    Y_UNIT_TEST(User) { 
         NTvmApi::TClientSettings s;
         s.EnableUserTicketChecking(EBlackboxEnv::Prod);
         s.SetDiskCacheDir(GetCachePath());
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(ClientFacade) {
         UNIT_ASSERT(!f.CheckUserTicket(TEST_TICKET));
     }
 
-    Y_UNIT_TEST(Ctors) {
+    Y_UNIT_TEST(Ctors) { 
         NTvmApi::TClientSettings s;
         s.EnableUserTicketChecking(EBlackboxEnv::Prod);
         s.SetDiskCacheDir(GetCachePath());
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(ClientFacade) {
         v.front() = std::move(*v.begin());
     }
 
-    Y_UNIT_TEST(Tickets) {
+    Y_UNIT_TEST(Tickets) { 
         NTvmApi::TClientSettings s;
         s.SetSelfTvmId(OK_CLIENT);
         s.EnableServiceTicketsFetchOptions("qwerty", {{"blackbox", 19}});

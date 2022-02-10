@@ -161,13 +161,13 @@ namespace NJsonConverters {
             typedef typename T::key_type TKey;
             typedef typename T::mapped_type TMapped;
             if (validate)
-                Y_ENSURE(x.IsDict() || x.IsNull(), "not valid input scheme");
+                Y_ENSURE(x.IsDict() || x.IsNull(), "not valid input scheme"); 
             out.clear();
             if (x.IsDict()) {
                 const NSc::TDict& dict = x.GetDict();
-                for (const auto& it : dict) {
-                    TKey key = NJsonConverters::FromString<TKey>(it.first, validate);
-                    TMapped val = NJsonConverters::FromTValue<TMapped>(it.second, validate);
+                for (const auto& it : dict) { 
+                    TKey key = NJsonConverters::FromString<TKey>(it.first, validate); 
+                    TMapped val = NJsonConverters::FromTValue<TMapped>(it.second, validate); 
                     out.insert(std::pair<TKey, TMapped>(key, val));
                 }
             }
@@ -187,13 +187,13 @@ namespace NJsonConverters {
         void FromTValueSet(const NSc::TValue& x, T& out, const bool validate) {
             typedef typename T::key_type TKey;
             if (validate)
-                Y_ENSURE(x.IsDict() || x.IsNull(), "not valid input scheme");
+                Y_ENSURE(x.IsDict() || x.IsNull(), "not valid input scheme"); 
             out.clear();
             if (x.IsDict()) {
                 const NSc::TDict& dict = x.GetDict();
-                for (const auto& it : dict) {
+                for (const auto& it : dict) { 
                     TKey key;
-                    NJsonConverters::FromString<TKey>(it.first, key, validate);
+                    NJsonConverters::FromString<TKey>(it.first, key, validate); 
                     out.insert(key);
                 }
             }
@@ -215,14 +215,14 @@ namespace NJsonConverters {
     template <typename T, typename A>
     void FromTValue(const NSc::TValue& x, TVector<T, A>& out, const bool validate) {
         if (validate)
-            Y_ENSURE(x.IsArray() || x.IsNull(), "not valid input scheme");
+            Y_ENSURE(x.IsArray() || x.IsNull(), "not valid input scheme"); 
         out.clear();
         if (x.IsArray()) {
             const NSc::TArray& arr = x.GetArray();
             out.reserve(arr.size());
-            for (const auto& it : arr) {
+            for (const auto& it : arr) { 
                 T val;
-                NJsonConverters::FromTValue(it, val, validate);
+                NJsonConverters::FromTValue(it, val, validate); 
                 out.push_back(val);
             }
         }
@@ -289,7 +289,7 @@ namespace NJsonConverters {
     template <class T1, class T2>
     void FromTValue(const NSc::TValue& x, std::pair<T1, T2>& out, const bool validate) {
         if (validate)
-            Y_ENSURE(x.IsArray() || x.IsNull(), "not valid input scheme");
+            Y_ENSURE(x.IsArray() || x.IsNull(), "not valid input scheme"); 
         if (x.IsArray()) {
             const NSc::TArray& arr = x.GetArray();
             if (arr.size() == 2) {

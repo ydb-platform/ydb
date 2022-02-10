@@ -21,7 +21,7 @@ namespace NKikimr {
 
         explicit TLogoBlobID(const TLogoBlobID &source, ui32 partId)
         {
-            Y_VERIFY_DEBUG(partId < 16);
+            Y_VERIFY_DEBUG(partId < 16); 
             Raw.X[0] = source.Raw.X[0];
             Raw.X[1] = source.Raw.X[1];
             Raw.X[2] = (source.Raw.X[2] & 0xFFFFFFFFFFFFFFF0ull) | partId;
@@ -34,7 +34,7 @@ namespace NKikimr {
 
         explicit TLogoBlobID(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId)
         {
-            Y_VERIFY_DEBUG(partId != 0);
+            Y_VERIFY_DEBUG(partId != 0); 
             Set(tabletId, generation, step, channel, blobSize, cookie, partId, 0);
         }
 
@@ -101,7 +101,7 @@ namespace NKikimr {
         const ui64* GetRaw() const { return Raw.X; }
 
         TString ToString() const;
-        void Out(IOutputStream &o) const;
+        void Out(IOutputStream &o) const; 
         static bool Parse(TLogoBlobID &out, const TString &buf, TString &errorExplanation);
         static void Out(IOutputStream &o, const TVector<TLogoBlobID> &vec);
 
@@ -201,10 +201,10 @@ namespace NKikimr {
 
         void Set(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId,
                 ui32 crcMode) {
-            Y_VERIFY_DEBUG(channel <= MaxChannel);
+            Y_VERIFY_DEBUG(channel <= MaxChannel); 
             Y_VERIFY(blobSize <= MaxBlobSize);
-            Y_VERIFY_DEBUG(cookie <= MaxCookie);
-            Y_VERIFY_DEBUG(partId <= MaxPartId);
+            Y_VERIFY_DEBUG(cookie <= MaxCookie); 
+            Y_VERIFY_DEBUG(partId <= MaxPartId); 
             Y_VERIFY(crcMode <= MaxCrcMode);
 
             Raw.N.TabletID = tabletId;
@@ -305,7 +305,7 @@ namespace NKikimr {
 }
 
 template<>
-inline void Out<NKikimr::TLogoBlobID>(IOutputStream& o, const NKikimr::TLogoBlobID &x) {
+inline void Out<NKikimr::TLogoBlobID>(IOutputStream& o, const NKikimr::TLogoBlobID &x) { 
     return x.Out(o);
 }
 

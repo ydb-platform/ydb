@@ -80,7 +80,7 @@ bool TTxCoordinator::RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<
     while (!rowset.EndOfSet()) {
         const TTxId txId = rowset.GetValue<Schema::AffectedSet::TransactionID>();
         auto itTransaction = Transactions.find(txId);
-        Y_VERIFY(itTransaction != Transactions.end());
+        Y_VERIFY(itTransaction != Transactions.end()); 
 
         TStepId step = itTransaction->second.PlanOnStep;
         auto itStep = mediatorSteps.find(step);

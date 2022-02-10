@@ -50,9 +50,9 @@ public:
     }
 };
 
-Y_UNIT_TEST_SUITE(BusJobTest) {
+Y_UNIT_TEST_SUITE(BusJobTest) { 
 #if 0
-    Y_UNIT_TEST(TestPending) {
+    Y_UNIT_TEST(TestPending) { 
         TObjectCountCheck objectCountCheck;
 
         TDupDetectModule module;
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         UNIT_ASSERT_EQUAL(msg, pending[0].Message);
     }
 
-    Y_UNIT_TEST(TestCallReplyHandler) {
+    Y_UNIT_TEST(TestCallReplyHandler) { 
         TObjectCountCheck objectCountCheck;
 
         TDupDetectModule module;
@@ -112,27 +112,27 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             job->Send(new TExampleRequest(&Proto.RequestCount), Source, TReplyHandler(&TParallelOnReplyModule::ReplyHandler), 0, ServerAddr);
             return &TParallelOnReplyModule::HandleReplies;
         }
 
         void ReplyHandler(TBusJob*, EMessageStatus status, TBusMessage* mess, TBusMessage* reply) {
-            Y_UNUSED(mess);
-            Y_UNUSED(reply);
-            Y_VERIFY(status == MESSAGE_OK, "failed to get reply: %s", ToCString(status));
+            Y_UNUSED(mess); 
+            Y_UNUSED(reply); 
+            Y_VERIFY(status == MESSAGE_OK, "failed to get reply: %s", ToCString(status)); 
         }
 
         TJobHandler HandleReplies(TBusJob* job, TBusMessage* mess) {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             RepliesLatch.CountDown();
-            Y_VERIFY(RepliesLatch.Await(TDuration::Seconds(10)), "failed to get answers");
+            Y_VERIFY(RepliesLatch.Await(TDuration::Seconds(10)), "failed to get answers"); 
             job->Cancel(MESSAGE_UNKNOWN);
             return nullptr;
         }
     };
 
-    Y_UNIT_TEST(TestReplyHandlerCalledInParallel) {
+    Y_UNIT_TEST(TestReplyHandlerCalledInParallel) { 
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             TExampleRequest* message = new TExampleRequest(&Proto.RequestCount);
             job->Send(message, Source, TReplyHandler(&TErrorHandlerCheckerModule::ReplyHandler), 0, ServerAddr);
             SentMessage = message;
@@ -179,13 +179,13 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
 
         void ReplyHandler(TBusJob*, EMessageStatus status, TBusMessage* req, TBusMessage* resp) {
             Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "got wrong status: %s", ToString(status).data());
-            Y_VERIFY(req == SentMessage, "checking request");
-            Y_VERIFY(resp == nullptr, "checking response");
+            Y_VERIFY(req == SentMessage, "checking request"); 
+            Y_VERIFY(resp == nullptr, "checking response"); 
             GotReplyLatch.CountDown();
         }
 
         TJobHandler HandleReplies(TBusJob* job, TBusMessage* mess) {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             job->Cancel(MESSAGE_UNKNOWN);
             GotReplyLatch.CountDown();
             return nullptr;
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
     };
 
-    Y_UNIT_TEST(ErrorHandler) {
+    Y_UNIT_TEST(ErrorHandler) { 
         TExampleProtocol proto;
 
         TBusQueueConfig config;
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             for (unsigned i = 0; i < 2; ++i) {
                 job->Send(
                     new TExampleRequest(&Proto.RequestCount),
@@ -277,9 +277,9 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         void ReplyHandler(TBusJob* job, EMessageStatus status, TBusMessage* mess, TBusMessage* reply) {
-            Y_UNUSED(mess);
-            Y_UNUSED(reply);
-            Y_VERIFY(status == MESSAGE_OK, "failed to get reply");
+            Y_UNUSED(mess); 
+            Y_UNUSED(reply); 
+            Y_VERIFY(status == MESSAGE_OK, "failed to get reply"); 
             if (AtomicIncrement(ReplyCount) == 1) {
                 TestSync->WaitForAndIncrement(1);
                 job->SendReply(new TExampleResponse(&Proto.ResponseCount));
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         TJobHandler HandleReplies(TBusJob* job, TBusMessage* mess) {
-            Y_UNUSED(mess);
+            Y_UNUSED(mess); 
             job->Cancel(MESSAGE_UNKNOWN);
             return nullptr;
         }
@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
     };
 
-    Y_UNIT_TEST(SendReplyCalledBeforeAllRepliesReceived) {
+    Y_UNIT_TEST(SendReplyCalledBeforeAllRepliesReceived) { 
         TTestSync testSync;
 
         TSlowReplyServer slowReplyServer(&testSync);
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         void HandleReply(TBusJob*, EMessageStatus status, TBusMessage*, TBusMessage*) {
-            Y_VERIFY(status == MESSAGE_SHUTDOWN, "got %s", ToCString(status));
+            Y_VERIFY(status == MESSAGE_SHUTDOWN, "got %s", ToCString(status)); 
             TestSync.CheckAndIncrement(1);
         }
 
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
     };
 
-    Y_UNIT_TEST(ShutdownCalledBeforeReplyReceived) {
+    Y_UNIT_TEST(ShutdownCalledBeforeReplyReceived) { 
         TExampleServer server;
         server.ForgetRequest = true;
 

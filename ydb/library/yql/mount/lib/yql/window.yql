@@ -111,15 +111,15 @@
 # list_type:type
 # doesn't support optional values
 (let avg_traits_factory_raw (lambda '(list_type) (block '(
-  (let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0))))
-  (let convert_decimal_to_interval (lambda '(value) (Unwrap (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval)))))
-  (let init (lambda '(value) '((MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double))) (Uint64 '1))))
-  (let update (lambda '(value state) '((+ (Nth state '0) (MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double)))) (Inc (Nth state '1)))))
+  (let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0)))) 
+  (let convert_decimal_to_interval (lambda '(value) (Unwrap (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval))))) 
+  (let init (lambda '(value) '((MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double))) (Uint64 '1)))) 
+  (let update (lambda '(value state) '((+ (Nth state '0) (MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double)))) (Inc (Nth state '1))))) 
   (let shift (lambda '(value state) '((- (Nth state '0) value) (Dec (Nth state '1)))))
-  (let current (lambda '(state) (MatchType (ListItemType list_type)
-                                           'Decimal (lambda '() (Cast (Div (Nth state '0) (Nth state '1)) (ListItemType list_type)))
-                                           'Interval (lambda '() (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) )
-                                           (lambda '() (Div (Nth state '0) (Nth state '1))))))
+  (let current (lambda '(state) (MatchType (ListItemType list_type) 
+                                           'Decimal (lambda '() (Cast (Div (Nth state '0) (Nth state '1)) (ListItemType list_type))) 
+                                           'Interval (lambda '() (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) ) 
+                                           (lambda '() (Div (Nth state '0) (Nth state '1)))))) 
   (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
 ))))
 
@@ -310,26 +310,26 @@
 # list_type:type n:double
 # doesn't support optional values
 (let percentile_traits_factory_raw (lambda '(list_type n) (block '(
-    (let convert_into (lambda  '(value) (MatchType (ListItemType list_type)
-                                 'Interval (lambda '() (SafeCast value (DataType 'Double)) ) # TODO:YQL-14129 cast to Decimal
-                                 (lambda '() value)
-                      ))
-    )
-    # Currently for Intervals: converts double value back to interval
-    (let convert_out (lambda '(value) (MatchType (ListItemType list_type)
-                                 'Interval (lambda '() (Unwrap (StrictCast (ToIntegral value (DataType 'Int64)) (DataType 'Interval))) ) # TODO:YQL-14129 cast from Decimal
-                                 (lambda '() value)
-                      ))
-    )
-    # this function get required percentile and converts it to proper type
-    (let get_convert_percentile (lambda '(state n) (Apply convert_out (Apply (Udf 'Stat.TDigest_GetPercentile) state n))))
-    (let init (lambda '(value parent) (NamedApply (Udf 'Stat.TDigest_Create) '((Apply convert_into value)) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(value state parent) (NamedApply (Udf 'Stat.TDigest_AddValue) '(state (Apply convert_into value)) (AsStruct) (DependsOn parent))))
+    (let convert_into (lambda  '(value) (MatchType (ListItemType list_type) 
+                                 'Interval (lambda '() (SafeCast value (DataType 'Double)) ) # TODO:YQL-14129 cast to Decimal 
+                                 (lambda '() value) 
+                      )) 
+    ) 
+    # Currently for Intervals: converts double value back to interval 
+    (let convert_out (lambda '(value) (MatchType (ListItemType list_type) 
+                                 'Interval (lambda '() (Unwrap (StrictCast (ToIntegral value (DataType 'Int64)) (DataType 'Interval))) ) # TODO:YQL-14129 cast from Decimal 
+                                 (lambda '() value) 
+                      )) 
+    ) 
+    # this function get required percentile and converts it to proper type 
+    (let get_convert_percentile (lambda '(state n) (Apply convert_out (Apply (Udf 'Stat.TDigest_GetPercentile) state n)))) 
+    (let init (lambda '(value parent) (NamedApply (Udf 'Stat.TDigest_Create) '((Apply convert_into value)) (AsStruct) (DependsOn parent)))) 
+    (let update (lambda '(value state parent) (NamedApply (Udf 'Stat.TDigest_AddValue) '(state (Apply convert_into value)) (AsStruct) (DependsOn parent)))) 
     (let shift (lambda '(value state) (Void)))
-    (let current (lambda '(state) (MatchType n
-                                             'Tuple (lambda '() (StaticMap n (lambda '(n) (Apply get_convert_percentile state n))))
-                                             (lambda '() (Apply get_convert_percentile state n))
-                                             )))
+    (let current (lambda '(state) (MatchType n 
+                                             'Tuple (lambda '() (StaticMap n (lambda '(n) (Apply get_convert_percentile state n)))) 
+                                             (lambda '() (Apply get_convert_percentile state n)) 
+                                             ))) 
     (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
 ))))
 

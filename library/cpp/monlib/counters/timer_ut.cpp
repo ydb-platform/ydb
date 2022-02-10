@@ -5,17 +5,17 @@
 using namespace NMonitoring;
 using namespace std::literals::chrono_literals;
 
-class TCallback { 
-public: 
+class TCallback {
+public:
     explicit TCallback(int value)
         : Value_(value){};
-    void operator()(std::chrono::high_resolution_clock::duration duration) { 
-        Value_ = duration.count(); 
-    }; 
- 
-    int Value_; 
-}; 
- 
+    void operator()(std::chrono::high_resolution_clock::duration duration) {
+        Value_ = duration.count();
+    };
+
+    int Value_;
+};
+
 Y_UNIT_TEST_SUITE(TTimerTest) {
     Y_UNIT_TEST(RecordValue) {
         TTimerNs timerNs(1ns, 1s);
@@ -62,20 +62,20 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
         UNIT_ASSERT(snapshot.Max > std::chrono::microseconds(10ms).count());
         UNIT_ASSERT_DOUBLES_EQUAL(snapshot.StdDeviation, 0.0, 1e-6);
     }
- 
+
     Y_UNIT_TEST(TimerScopeWithCallback) {
-        TCallback callback(0); 
-        TTimerUs timer(1us, 1000s); 
-        { 
-            TTimerScope<TTimerUs, TCallback> scope(&timer, &callback); 
-            Sleep(TDuration::MilliSeconds(10)); 
-        } 
-        THistogramSnapshot snapshot; 
-        timer.TakeSnapshot(&snapshot); 
- 
-        UNIT_ASSERT(snapshot.Min > std::chrono::microseconds(10ms).count()); 
-        UNIT_ASSERT(snapshot.Max > std::chrono::microseconds(10ms).count()); 
-        UNIT_ASSERT_DOUBLES_EQUAL(snapshot.StdDeviation, 0.0, 1e-6); 
-        UNIT_ASSERT(callback.Value_ > std::chrono::microseconds(10ms).count()); 
-    } 
+        TCallback callback(0);
+        TTimerUs timer(1us, 1000s);
+        {
+            TTimerScope<TTimerUs, TCallback> scope(&timer, &callback);
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        THistogramSnapshot snapshot;
+        timer.TakeSnapshot(&snapshot);
+
+        UNIT_ASSERT(snapshot.Min > std::chrono::microseconds(10ms).count());
+        UNIT_ASSERT(snapshot.Max > std::chrono::microseconds(10ms).count());
+        UNIT_ASSERT_DOUBLES_EQUAL(snapshot.StdDeviation, 0.0, 1e-6);
+        UNIT_ASSERT(callback.Value_ > std::chrono::microseconds(10ms).count());
+    }
 }

@@ -118,12 +118,12 @@ public:
         return *this;
     }
 
-    inline THttpServerOptions& SetMaxRequestsPerConnection(size_t val) noexcept {
-        MaxRequestsPerConnection = val;
-
-        return *this;
-    }
-
+    inline THttpServerOptions& SetMaxRequestsPerConnection(size_t val) noexcept { 
+        MaxRequestsPerConnection = val; 
+ 
+        return *this; 
+    } 
+ 
     /// Use TElasticQueue instead of TThreadPool for request queues
     inline THttpServerOptions& EnableElasticQueues(bool enable) noexcept {
         UseElasticQueues = enable;
@@ -164,7 +164,7 @@ public:
     TDuration ClientTimeout;
     size_t OutputBufferSize = 0;
     ui64 MaxInputContentLength = sizeof(size_t) <= 4 ? 2_GB : 64_GB;
-    size_t MaxRequestsPerConnection = 0;  // If keep-alive is enabled, request limit before connection is closed
+    size_t MaxRequestsPerConnection = 0;  // If keep-alive is enabled, request limit before connection is closed 
     bool UseElasticQueues = false;
 
     TDuration PollTimeout; // timeout of TSocketPoller::WaitT call

@@ -68,7 +68,7 @@ public:
     bool Reject_ = false;
     TInstant LastUsed;
     TInstant AcceptMoment;
-    size_t ReceivedRequests = 0;
+    size_t ReceivedRequests = 0; 
 };
 
 class THttpServer::TImpl {
@@ -597,7 +597,7 @@ void TClientConnection::OnPollEvent(TInstant now) {
 void TClientConnection::Activate(TInstant now) noexcept {
     HttpServ_->Connections->Erase(this, now);
     LastUsed = now;
-    ++ReceivedRequests;
+    ++ReceivedRequests; 
 }
 
 void TClientConnection::DeActivate() {
@@ -690,8 +690,8 @@ void TClientRequest::Process(void* ThreadSpecificResource) {
                 HttpConn_.Reset(new THttpServerConn(Socket()));
             }
 
-            auto maxRequestsPerConnection = HttpServ()->Options().MaxRequestsPerConnection;
-            HttpConn_->Output()->EnableKeepAlive(HttpServ()->Options().KeepAliveEnabled && (!maxRequestsPerConnection || Conn_->ReceivedRequests < maxRequestsPerConnection));
+            auto maxRequestsPerConnection = HttpServ()->Options().MaxRequestsPerConnection; 
+            HttpConn_->Output()->EnableKeepAlive(HttpServ()->Options().KeepAliveEnabled && (!maxRequestsPerConnection || Conn_->ReceivedRequests < maxRequestsPerConnection)); 
             HttpConn_->Output()->EnableCompression(HttpServ()->Options().CompressionEnabled);
         }
 

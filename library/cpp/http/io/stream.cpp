@@ -394,8 +394,8 @@ THttpInput::THttpInput(IInputStream* slave)
 {
 }
 
-THttpInput::THttpInput(THttpInput&& httpInput) = default;
-
+THttpInput::THttpInput(THttpInput&& httpInput) = default; 
+ 
 THttpInput::~THttpInput() {
 }
 

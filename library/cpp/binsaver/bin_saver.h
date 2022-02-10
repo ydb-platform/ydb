@@ -183,7 +183,7 @@ private:
                 Add(2, &pos->second);
         }
     }
-
+ 
     template <class T>
     void DoAnySet(T& data) {
         if (IsReading()) {
@@ -199,13 +199,13 @@ private:
             TStoredSize nSize = data.size();
             CheckOverflow(nSize, data.size());
             Add(2, &nSize);
-            for (const auto& elem : data) {
-                auto member = elem;
+            for (const auto& elem : data) { 
+                auto member = elem; 
                 Add(1, &member);
             }
         }
     }
-
+ 
     // 2D array
     template <class T>
     void Do2DArray(TArray2D<T>& a) {
@@ -361,8 +361,8 @@ public:
     template <class K, class L, class A>
     int Add(const chunk_id, TSet<K, L, A>* pSet) {
         DoAnySet(*pSet);
-        return 0;
-    }
+        return 0; 
+    } 
     template <class T1, class T2, class T3, class T4>
     int Add(const chunk_id, THashSet<T1, T2, T3, T4>* pHash) {
         DoAnySet(*pHash);

@@ -274,7 +274,7 @@ namespace NPackers {
         size_t lenChar = len * sizeof(typename TStringType::char_type);
         size_t start = size - lenChar;
         TIntegralPacker<size_t>().PackLeaf(buf, len, TIntegralPacker<size_t>().MeasureLeaf(len));
-        memcpy(buf + start, str.data(), lenChar);
+        memcpy(buf + start, str.data(), lenChar); 
     }
 
     template <class TStringType>

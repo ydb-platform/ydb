@@ -103,8 +103,8 @@ RECURSE(
     bcrypt
     beautifulsoup4
     behave
-    betamax 
-    betamax-serializers 
+    betamax
+    betamax-serializers
     billiard
     binaryornot
     bincopy
@@ -504,11 +504,11 @@ RECURSE(
     ibm-db
     icalendar
     idna
-    idna-ssl 
+    idna-ssl
     ijson
     imagesize
     IMAPClient
-    imgkit 
+    imgkit
     implicit
     importlib-metadata
     importlib-resources
@@ -535,7 +535,7 @@ RECURSE(
     ipywidgets
     iso3166
     iso8601
-    isodate 
+    isodate
     isort
     itsdangerous
     jaeger-client
@@ -1179,7 +1179,7 @@ RECURSE(
     yoyo-migrations
     yt-dlp
     zake
-    zeep 
+    zeep
     zero-downtime-migrations
     zope.event
     zope.interface

@@ -124,9 +124,9 @@ public:
      * distinct seeds in the range [1,m) will leave the generator in distinct
      * states. If c is not zero, the range is [0,m).
      */
-
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wtautological-overlap-compare"
+ 
+    #pragma clang diagnostic push 
+    #pragma clang diagnostic ignored "-Wtautological-overlap-compare" 
     BOOST_RANDOM_DETAIL_ARITHMETIC_SEED(linear_congruential_engine, IntType, x0_)
     {
         // Work around a msvc 12/14 optimizer bug, which causes
@@ -150,7 +150,7 @@ public:
         BOOST_ASSERT(_x >= (min)());
         BOOST_ASSERT(_x <= (max)());
     }
-    #pragma clang diagnostic pop
+    #pragma clang diagnostic pop 
 
     /**
      * Seeds a @c linear_congruential_engine using values from a SeedSeq.

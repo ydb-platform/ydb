@@ -190,7 +190,7 @@ int TModChooser::Run(const int argc, const char** argv) const {
     }
     if (!SvnRevisionOptionDisabled && modeName == "--svnrevision") {
         NLastGetopt::PrintVersionAndExit(nullptr);
-    }
+    } 
 
     auto modeIter = Modes.find(modeName);
     if (modeIter == Modes.end() && !DefaultMode.empty()) {

@@ -223,38 +223,38 @@ Y_FORCE_INLINE TIntrusivePtr<T> DangerousGetPtr(T* object)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, class U>
-TIntrusivePtr<T> StaticPointerCast(const TIntrusivePtr<U>& ptr)
-{
-    return {static_cast<T*>(ptr.Get())};
-}
-
-template <class T, class U>
-TIntrusivePtr<T> StaticPointerCast(TIntrusivePtr<U>&& ptr)
-{
-    return {static_cast<T*>(ptr.Release()), false};
-}
-
-template <class T, class U>
-TIntrusivePtr<T> ConstPointerCast(const TIntrusivePtr<U>& ptr)
-{
-    return {const_cast<T*>(ptr.Get())};
-}
-
-template <class T, class U>
-TIntrusivePtr<T> ConstPointerCast(TIntrusivePtr<U>&& ptr)
-{
-    return {const_cast<T*>(ptr.Release()), false};
-}
-
-template <class T, class U>
-TIntrusivePtr<T> DynamicPointerCast(const TIntrusivePtr<U>& ptr)
-{
-    return {dynamic_cast<T*>(ptr.Get())};
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
+template <class T, class U> 
+TIntrusivePtr<T> StaticPointerCast(const TIntrusivePtr<U>& ptr) 
+{ 
+    return {static_cast<T*>(ptr.Get())}; 
+} 
+ 
+template <class T, class U> 
+TIntrusivePtr<T> StaticPointerCast(TIntrusivePtr<U>&& ptr) 
+{ 
+    return {static_cast<T*>(ptr.Release()), false}; 
+} 
+ 
+template <class T, class U> 
+TIntrusivePtr<T> ConstPointerCast(const TIntrusivePtr<U>& ptr) 
+{ 
+    return {const_cast<T*>(ptr.Get())}; 
+} 
+ 
+template <class T, class U> 
+TIntrusivePtr<T> ConstPointerCast(TIntrusivePtr<U>&& ptr) 
+{ 
+    return {const_cast<T*>(ptr.Release()), false}; 
+} 
+ 
+template <class T, class U> 
+TIntrusivePtr<T> DynamicPointerCast(const TIntrusivePtr<U>& ptr) 
+{ 
+    return {dynamic_cast<T*>(ptr.Get())}; 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 template <class T>
 bool operator<(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
 {
@@ -321,30 +321,30 @@ bool operator!=(T* lhs, const TIntrusivePtr<U>& rhs)
     return lhs != rhs.Get();
 }
 
-template <class T>
-bool operator==(std::nullptr_t, const TIntrusivePtr<T>& rhs)
-{
-    return nullptr == rhs.Get();
-}
-
-template <class T>
-bool operator!=(std::nullptr_t, const TIntrusivePtr<T>& rhs)
-{
-    return nullptr != rhs.Get();
-}
-
-template <class T>
-bool operator==(const TIntrusivePtr<T>& lhs, std::nullptr_t)
-{
-    return nullptr == lhs.Get();
-}
-
-template <class T>
-bool operator!=(const TIntrusivePtr<T>& lhs, std::nullptr_t)
-{
-    return nullptr != lhs.Get();
-}
-
+template <class T> 
+bool operator==(std::nullptr_t, const TIntrusivePtr<T>& rhs) 
+{ 
+    return nullptr == rhs.Get(); 
+} 
+ 
+template <class T> 
+bool operator!=(std::nullptr_t, const TIntrusivePtr<T>& rhs) 
+{ 
+    return nullptr != rhs.Get(); 
+} 
+ 
+template <class T> 
+bool operator==(const TIntrusivePtr<T>& lhs, std::nullptr_t) 
+{ 
+    return nullptr == lhs.Get(); 
+} 
+ 
+template <class T> 
+bool operator!=(const TIntrusivePtr<T>& lhs, std::nullptr_t) 
+{ 
+    return nullptr != lhs.Get(); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } //namespace NYT

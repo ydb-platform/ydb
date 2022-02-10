@@ -40,8 +40,8 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestEmplace);
     UNIT_TEST(TestEmplaceNoresize);
     UNIT_TEST(TestEmplaceDirect);
-    UNIT_TEST(TestTryEmplace);
-    UNIT_TEST(TestTryEmplaceCopyKey);
+    UNIT_TEST(TestTryEmplace); 
+    UNIT_TEST(TestTryEmplaceCopyKey); 
     UNIT_TEST(TestHMMapEmplace);
     UNIT_TEST(TestHMMapEmplaceNoresize);
     UNIT_TEST(TestHMMapEmplaceDirect);
@@ -91,8 +91,8 @@ protected:
     void TestEmplace();
     void TestEmplaceNoresize();
     void TestEmplaceDirect();
-    void TestTryEmplace();
-    void TestTryEmplaceCopyKey();
+    void TestTryEmplace(); 
+    void TestTryEmplaceCopyKey(); 
     void TestHSetEmplace();
     void TestHSetEmplaceNoresize();
     void TestHSetEmplaceDirect();
@@ -914,39 +914,39 @@ void THashTest::TestEmplaceDirect() {
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
 }
 
-void THashTest::TestTryEmplace() {
-    static unsigned counter = 0u;
-
-    struct TCountConstruct {
+void THashTest::TestTryEmplace() { 
+    static unsigned counter = 0u; 
+ 
+    struct TCountConstruct { 
         explicit TCountConstruct(int v)
             : value(v)
         {
             ++counter;
         }
-        TCountConstruct(const TCountConstruct&) = delete;
-        int value;
-    };
-
-    THashMap<int, TCountConstruct> hash;
-    {
-        // try_emplace does not copy key if key is rvalue
-        auto r = hash.try_emplace(TNonCopyableInt<0>(0), 1);
-        UNIT_ASSERT(r.second);
-        UNIT_ASSERT_VALUES_EQUAL(1, counter);
-        UNIT_ASSERT_VALUES_EQUAL(1, r.first->second.value);
-    }
-    {
-        auto r = hash.try_emplace(0, 2);
-        UNIT_ASSERT(!r.second);
-        UNIT_ASSERT_VALUES_EQUAL(1, counter);
-        UNIT_ASSERT_VALUES_EQUAL(1, r.first->second.value);
-    }
-}
-
-void THashTest::TestTryEmplaceCopyKey() {
-    static unsigned counter = 0u;
-
-    struct TCountCopy {
+        TCountConstruct(const TCountConstruct&) = delete; 
+        int value; 
+    }; 
+ 
+    THashMap<int, TCountConstruct> hash; 
+    { 
+        // try_emplace does not copy key if key is rvalue 
+        auto r = hash.try_emplace(TNonCopyableInt<0>(0), 1); 
+        UNIT_ASSERT(r.second); 
+        UNIT_ASSERT_VALUES_EQUAL(1, counter); 
+        UNIT_ASSERT_VALUES_EQUAL(1, r.first->second.value); 
+    } 
+    { 
+        auto r = hash.try_emplace(0, 2); 
+        UNIT_ASSERT(!r.second); 
+        UNIT_ASSERT_VALUES_EQUAL(1, counter); 
+        UNIT_ASSERT_VALUES_EQUAL(1, r.first->second.value); 
+    } 
+} 
+ 
+void THashTest::TestTryEmplaceCopyKey() { 
+    static unsigned counter = 0u; 
+ 
+    struct TCountCopy { 
         explicit TCountCopy(int i)
             : Value(i)
         {
@@ -956,30 +956,30 @@ void THashTest::TestTryEmplaceCopyKey() {
         {
             ++counter;
         }
-
-        operator int() const {
-            return Value;
-        }
-
-        int Value;
-    };
-
-    THashMap<TCountCopy, TNonCopyableInt<0>> hash;
-    TCountCopy key(1);
-    {
-        // try_emplace copy key if key is lvalue
-        auto r = hash.try_emplace(key, 1);
-        UNIT_ASSERT(r.second);
-        UNIT_ASSERT_VALUES_EQUAL(1, counter);
-    }
-    {
-        // no insert - no copy
-        auto r = hash.try_emplace(key, 2);
-        UNIT_ASSERT(!r.second);
-        UNIT_ASSERT_VALUES_EQUAL(1, counter);
-    }
-}
-
+ 
+        operator int() const { 
+            return Value; 
+        } 
+ 
+        int Value; 
+    }; 
+ 
+    THashMap<TCountCopy, TNonCopyableInt<0>> hash; 
+    TCountCopy key(1); 
+    { 
+        // try_emplace copy key if key is lvalue 
+        auto r = hash.try_emplace(key, 1); 
+        UNIT_ASSERT(r.second); 
+        UNIT_ASSERT_VALUES_EQUAL(1, counter); 
+    } 
+    { 
+        // no insert - no copy 
+        auto r = hash.try_emplace(key, 2); 
+        UNIT_ASSERT(!r.second); 
+        UNIT_ASSERT_VALUES_EQUAL(1, counter); 
+    } 
+} 
+ 
 void THashTest::TestHMMapEmplace() {
     using hash_t = THashMultiMap<int, TNonCopyableInt<0>>;
     hash_t hash;

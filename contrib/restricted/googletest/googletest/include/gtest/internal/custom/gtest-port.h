@@ -27,56 +27,56 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Injection point for custom user configurations. See README for details
+// Injection point for custom user configurations. See README for details 
 //
 // ** Custom implementation starts here **
 
 #ifndef GTEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PORT_H_
 #define GTEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PORT_H_
 
-#include <re2/re2.h>
-
-// this macro disables built-in implementation of class RE
-#define GTEST_USES_PCRE 1
-
-namespace testing::internal {
-    // custom implementation of class RE based on re2
-
-    class RE {
-    public:
-        RE(const char* regex) : re2_(regex) {}
-        RE(const std::string& regex) : re2_(regex) {}
-
-        RE(const RE& other) : RE(other.pattern()) {}
-
-        // Returns the string representation of the regex.
-        const char* pattern() const {
-            return re2_.pattern().c_str();
-        }
-
-        // FullMatch(str, re) returns true if and only if regular expression re
-        // matches the entire str.
-        static bool FullMatch(const ::std::string& str, const RE& re) {
-            return FullMatch(str.c_str(), re);
-        }
-
-        // PartialMatch(str, re) returns true if and only if regular expression re
-        // matches a substring of str (including str itself).
-        static bool PartialMatch(const ::std::string& str, const RE& re) {
-            return PartialMatch(str.c_str(), re);
-        }
-
-        static bool FullMatch(const char* str, const RE& re) {
-            return re2::RE2::FullMatchN(str, re.re2_, nullptr, 0);
-        }
-
-        static bool PartialMatch(const char* str, const RE& re) {
-            return re2::RE2::PartialMatchN(str, re.re2_, nullptr, 0);
-        }
-
-    private:
-        re2::RE2 re2_;
-    };
-}
-
+#include <re2/re2.h> 
+ 
+// this macro disables built-in implementation of class RE 
+#define GTEST_USES_PCRE 1 
+ 
+namespace testing::internal { 
+    // custom implementation of class RE based on re2 
+ 
+    class RE { 
+    public: 
+        RE(const char* regex) : re2_(regex) {} 
+        RE(const std::string& regex) : re2_(regex) {} 
+ 
+        RE(const RE& other) : RE(other.pattern()) {} 
+ 
+        // Returns the string representation of the regex. 
+        const char* pattern() const { 
+            return re2_.pattern().c_str(); 
+        } 
+ 
+        // FullMatch(str, re) returns true if and only if regular expression re 
+        // matches the entire str. 
+        static bool FullMatch(const ::std::string& str, const RE& re) { 
+            return FullMatch(str.c_str(), re); 
+        } 
+ 
+        // PartialMatch(str, re) returns true if and only if regular expression re 
+        // matches a substring of str (including str itself). 
+        static bool PartialMatch(const ::std::string& str, const RE& re) { 
+            return PartialMatch(str.c_str(), re); 
+        } 
+ 
+        static bool FullMatch(const char* str, const RE& re) { 
+            return re2::RE2::FullMatchN(str, re.re2_, nullptr, 0); 
+        } 
+ 
+        static bool PartialMatch(const char* str, const RE& re) { 
+            return re2::RE2::PartialMatchN(str, re.re2_, nullptr, 0); 
+        } 
+ 
+    private: 
+        re2::RE2 re2_; 
+    }; 
+} 
+ 
 #endif  // GTEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PORT_H_

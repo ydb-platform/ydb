@@ -7,13 +7,13 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/testing/common/env.h>
-#include <library/cpp/testing/hook/hook.h>
+#include <library/cpp/testing/hook/hook.h> 
 
 #include <util/datetime/base.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/scope.h>
+#include <util/generic/scope.h> 
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
@@ -647,7 +647,7 @@ int NUnitTest::RunMain(int argc, char** argv) {
         Y_VERIFY(!sigaction(SIGUSR2, &sa, nullptr));
     }
 #endif
-    NTesting::THook::CallBeforeInit();
+    NTesting::THook::CallBeforeInit(); 
     InitNetworkSubSystem();
 
     try {
@@ -658,11 +658,11 @@ int NUnitTest::RunMain(int argc, char** argv) {
 #ifndef UT_SKIP_EXCEPTIONS
     try {
 #endif
-        NTesting::THook::CallBeforeRun();
-        Y_DEFER { NTesting::THook::CallAfterRun(); };
-
+        NTesting::THook::CallBeforeRun(); 
+        Y_DEFER { NTesting::THook::CallAfterRun(); }; 
+ 
         NPlugin::OnStartMain(argc, argv);
-        Y_DEFER { NPlugin::OnStopMain(argc, argv); };
+        Y_DEFER { NPlugin::OnStopMain(argc, argv); }; 
 
         TColoredProcessor processor(GetExecPath());
         IOutputStream* listStream = &Cout;
@@ -749,18 +749,18 @@ int NUnitTest::RunMain(int argc, char** argv) {
 
         TTestFactory::Instance().SetProcessor(&processor);
 
-        unsigned ret;
+        unsigned ret; 
         for (;;) {
-            ret = TTestFactory::Instance().Execute();
+            ret = TTestFactory::Instance().Execute(); 
             if (!processor.GetIsForked() && ret && processor.GetPrintSummary()) {
                 Cerr << "SOME TESTS FAILED!!!!" << Endl;
             }
 
-            if (0 != ret || !processor.IsLoop()) {
-                break;
+            if (0 != ret || !processor.IsLoop()) { 
+                break; 
             }
         }
-        return ret;
+        return ret; 
 #ifndef UT_SKIP_EXCEPTIONS
     } catch (...) {
         Cerr << "caught exception in test suite(" << CurrentExceptionMessage() << ")" << Endl;

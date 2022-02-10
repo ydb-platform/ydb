@@ -2,8 +2,8 @@
 
 #include <util/generic/string.h>
 
-#include <gtest/gtest.h>
-#include <gmock/gmock.h>
+#include <gtest/gtest.h> 
+#include <gmock/gmock.h> 
 
 namespace testing {
     /**
@@ -19,11 +19,11 @@ namespace testing {
             : internal::MatcherBase<const TBasicStringBuf<T, TT>&>(impl) {
         }
 
-        template <typename M, typename = typename std::remove_reference<M>::type::is_gtest_matcher>
-        Matcher(M&& m)
-            : internal::MatcherBase<const TBasicStringBuf<T, TT>&>(std::forward<M>(m)) {
-        }
-
+        template <typename M, typename = typename std::remove_reference<M>::type::is_gtest_matcher> 
+        Matcher(M&& m) 
+            : internal::MatcherBase<const TBasicStringBuf<T, TT>&>(std::forward<M>(m)) { 
+        } 
+ 
         Matcher(const TBasicString<T, TT>& s) {
             *this = Eq(TBasicStringBuf<T, TT>(s));
         }
@@ -54,11 +54,11 @@ namespace testing {
             : internal::MatcherBase<TBasicStringBuf<T, TT>>(impl) {
         }
 
-        template <typename M, typename = typename std::remove_reference<M>::type::is_gtest_matcher>
-        Matcher(M&& m)
-            : internal::MatcherBase<TBasicStringBuf<T, TT>>(std::forward<M>(m)) {
-        }
-
+        template <typename M, typename = typename std::remove_reference<M>::type::is_gtest_matcher> 
+        Matcher(M&& m) 
+            : internal::MatcherBase<TBasicStringBuf<T, TT>>(std::forward<M>(m)) { 
+        } 
+ 
         Matcher(const TBasicString<T, TT>& s) {
             *this = Eq(TBasicString<T, TT>(s));
         }
@@ -89,11 +89,11 @@ namespace testing {
             *this = Eq(s);
         }
 
-        template <typename M, typename = typename std::remove_reference<M>::type::is_gtest_matcher>
-        Matcher(M&& m)
-            : internal::MatcherBase<const TBasicString<T, TT>&>(std::forward<M>(m)) {
-        }
-
+        template <typename M, typename = typename std::remove_reference<M>::type::is_gtest_matcher> 
+        Matcher(M&& m) 
+            : internal::MatcherBase<const TBasicString<T, TT>&>(std::forward<M>(m)) { 
+        } 
+ 
         Matcher(const T* s) {
             *this = Eq(TBasicString<T, TT>(s));
         }
@@ -116,11 +116,11 @@ namespace testing {
             : internal::MatcherBase<TBasicString<T, TT>>(impl) {
         }
 
-        template <typename M, typename = typename std::remove_reference<M>::type::is_gtest_matcher>
-        Matcher(M&& m)
-            : internal::MatcherBase<TBasicString<T, TT>>(std::forward<M>(m)) {
-        }
-
+        template <typename M, typename = typename std::remove_reference<M>::type::is_gtest_matcher> 
+        Matcher(M&& m) 
+            : internal::MatcherBase<TBasicString<T, TT>>(std::forward<M>(m)) { 
+        } 
+ 
         Matcher(const TBasicString<T, TT>& s) {
             *this = Eq(s);
         }

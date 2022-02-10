@@ -578,7 +578,7 @@ const struct ares_socket_functions VirtualizeIO::default_functions = {
 #endif
   },
   [](ares_socket_t s, const struct iovec * vec, int len, void *) {
-#ifndef HAVE_WRITEV
+#ifndef HAVE_WRITEV 
     return ares_writev(s, vec, len);
 #else
     return :: writev(s, vec, len);

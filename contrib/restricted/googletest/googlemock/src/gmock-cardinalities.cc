@@ -27,7 +27,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
+ 
 // Google Mock - a framework for writing C++ mock classes.
 //
 // This file implements cardinalities.
@@ -70,18 +70,18 @@ class BetweenCardinalityImpl : public CardinalityInterface {
 
   // Conservative estimate on the lower/upper bound of the number of
   // calls allowed.
-  int ConservativeLowerBound() const override { return min_; }
-  int ConservativeUpperBound() const override { return max_; }
+  int ConservativeLowerBound() const override { return min_; } 
+  int ConservativeUpperBound() const override { return max_; } 
 
-  bool IsSatisfiedByCallCount(int call_count) const override {
+  bool IsSatisfiedByCallCount(int call_count) const override { 
     return min_ <= call_count && call_count <= max_;
   }
 
-  bool IsSaturatedByCallCount(int call_count) const override {
+  bool IsSaturatedByCallCount(int call_count) const override { 
     return call_count >= max_;
   }
 
-  void DescribeTo(::std::ostream* os) const override;
+  void DescribeTo(::std::ostream* os) const override; 
 
  private:
   const int min_;
@@ -91,7 +91,7 @@ class BetweenCardinalityImpl : public CardinalityInterface {
 };
 
 // Formats "n times" in a human-friendly way.
-inline std::string FormatTimes(int n) {
+inline std::string FormatTimes(int n) { 
   if (n == 1) {
     return "once";
   } else if (n == 2) {

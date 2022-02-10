@@ -44,7 +44,7 @@
 #include <util/generic/hash_set.h>
 
 #include <stddef.h>
-#include <sys/uio.h>
+#include <sys/uio.h> 
 
 using namespace NAddr;
 
@@ -539,7 +539,7 @@ ESocketReadStatus HasSocketDataToRead(SOCKET s) {
 
 #if defined(_win_)
 static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) {
-    return writev(sock, iov, iovcnt);
+    return writev(sock, iov, iovcnt); 
 }
 #else
 static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) {

@@ -12,8 +12,8 @@ PEERDIR(
     contrib/libs/grpc/src/proto/grpc/testing/duplicate
     contrib/libs/grpc/test/cpp/util
     contrib/libs/grpc
-    contrib/restricted/googletest/googlemock
-    contrib/restricted/googletest/googletest
+    contrib/restricted/googletest/googlemock 
+    contrib/restricted/googletest/googletest 
 )
 
 ADDINCL(

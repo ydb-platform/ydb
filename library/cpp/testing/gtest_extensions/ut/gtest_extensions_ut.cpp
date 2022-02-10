@@ -52,7 +52,7 @@ std::pair<bool, std::string> Match(T&& t, M&& m) {
 }
 
 TEST(Matchers, Throws) {
-    auto matcher = testing::Throws<std::runtime_error>();
+    auto matcher = testing::Throws<std::runtime_error>(); 
 
     {
         std::stringstream ss;
@@ -78,7 +78,7 @@ TEST(Matchers, Throws) {
     {
         auto [matched, explanation] = Match([]() { throw 10; }, matcher);
         EXPECT_FALSE(matched);
-        EXPECT_THAT(explanation, testing::HasSubstr("throws an exception of an unknown type"));
+        EXPECT_THAT(explanation, testing::HasSubstr("throws an exception of an unknown type")); 
     }
 
     {
@@ -89,7 +89,7 @@ TEST(Matchers, Throws) {
 }
 
 TEST(Matchers, ThrowsMessage) {
-    auto matcher = testing::ThrowsMessage<std::runtime_error>(testing::HasSubstr("error message"));
+    auto matcher = testing::ThrowsMessage<std::runtime_error>(testing::HasSubstr("error message")); 
 
     {
         std::stringstream ss;
@@ -122,7 +122,7 @@ TEST(Matchers, ThrowsMessage) {
     {
         auto [matched, explanation] = Match([]() { throw 10; }, matcher);
         EXPECT_FALSE(matched);
-        EXPECT_THAT(explanation, testing::HasSubstr("throws an exception of an unknown type"));
+        EXPECT_THAT(explanation, testing::HasSubstr("throws an exception of an unknown type")); 
     }
 
     {
@@ -133,7 +133,7 @@ TEST(Matchers, ThrowsMessage) {
 }
 
 TEST(Matchers, ThrowsMessageHasSubstr) {
-    auto matcher = testing::ThrowsMessage<std::runtime_error>(testing::HasSubstr("error message"));
+    auto matcher = testing::ThrowsMessage<std::runtime_error>(testing::HasSubstr("error message")); 
 
     {
         std::stringstream ss;
@@ -166,7 +166,7 @@ TEST(Matchers, ThrowsMessageHasSubstr) {
     {
         auto [matched, explanation] = Match([]() { throw 10; }, matcher);
         EXPECT_FALSE(matched);
-        EXPECT_THAT(explanation, testing::HasSubstr("throws an exception of an unknown type"));
+        EXPECT_THAT(explanation, testing::HasSubstr("throws an exception of an unknown type")); 
     }
 
     {
@@ -177,7 +177,7 @@ TEST(Matchers, ThrowsMessageHasSubstr) {
 }
 
 TEST(Matchers, ThrowsCondition) {
-    auto matcher = testing::Throws<std::runtime_error>(
+    auto matcher = testing::Throws<std::runtime_error>( 
         testing::Property(&std::exception::what, testing::HasSubstr("error message")));
 
     {
@@ -212,7 +212,7 @@ TEST(Matchers, ThrowsCondition) {
     {
         auto [matched, explanation] = Match([]() { throw 10; }, matcher);
         EXPECT_FALSE(matched);
-        EXPECT_THAT(explanation, testing::HasSubstr("throws an exception of an unknown type"));
+        EXPECT_THAT(explanation, testing::HasSubstr("throws an exception of an unknown type")); 
     }
 
     {

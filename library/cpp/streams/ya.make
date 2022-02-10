@@ -21,6 +21,6 @@ RECURSE(
     special/ut
     xz
     zc_memory_input
-    zstd
-    zstd/ut
+    zstd 
+    zstd/ut 
 )

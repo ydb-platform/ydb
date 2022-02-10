@@ -27,9 +27,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
+ 
 #include "gtest/gtest-typed-test.h"
-
+ 
 #include "gtest/gtest.h"
 
 namespace testing {
@@ -46,7 +46,7 @@ static const char* SkipSpaces(const char* str) {
 static std::vector<std::string> SplitIntoTestNames(const char* src) {
   std::vector<std::string> name_vec;
   src = SkipSpaces(src);
-  for (; src != nullptr; src = SkipComma(src)) {
+  for (; src != nullptr; src = SkipComma(src)) { 
     name_vec.push_back(StripTrailingSpaces(GetPrefixUntilComma(src)));
   }
   return name_vec;
@@ -55,11 +55,11 @@ static std::vector<std::string> SplitIntoTestNames(const char* src) {
 // Verifies that registered_tests match the test names in
 // registered_tests_; returns registered_tests if successful, or
 // aborts the program otherwise.
-const char* TypedTestSuitePState::VerifyRegisteredTestNames(
-    const char* test_suite_name, const char* file, int line,
-    const char* registered_tests) {
-  RegisterTypeParameterizedTestSuite(test_suite_name, CodeLocation(file, line));
-
+const char* TypedTestSuitePState::VerifyRegisteredTestNames( 
+    const char* test_suite_name, const char* file, int line, 
+    const char* registered_tests) { 
+  RegisterTypeParameterizedTestSuite(test_suite_name, CodeLocation(file, line)); 
+ 
   typedef RegisteredTestsMap::const_iterator RegisteredTestIter;
   registered_ = true;
 
@@ -76,11 +76,11 @@ const char* TypedTestSuitePState::VerifyRegisteredTestNames(
       continue;
     }
 
-    if (registered_tests_.count(name) != 0) {
+    if (registered_tests_.count(name) != 0) { 
       tests.insert(name);
     } else {
       errors << "No test named " << name
-             << " can be found in this test suite.\n";
+             << " can be found in this test suite.\n"; 
     }
   }
 

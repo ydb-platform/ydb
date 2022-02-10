@@ -26,21 +26,21 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+ 
 //
 // Utilities for testing Google Test itself and code that uses Google Test
 // (e.g. frameworks built on top of Google Test).
 
-// GOOGLETEST_CM0004 DO NOT DELETE
-
-#ifndef GOOGLETEST_INCLUDE_GTEST_GTEST_SPI_H_
-#define GOOGLETEST_INCLUDE_GTEST_GTEST_SPI_H_
+// GOOGLETEST_CM0004 DO NOT DELETE 
+ 
+#ifndef GOOGLETEST_INCLUDE_GTEST_GTEST_SPI_H_ 
+#define GOOGLETEST_INCLUDE_GTEST_GTEST_SPI_H_ 
 
 #include "gtest/gtest.h"
 
-GTEST_DISABLE_MSC_WARNINGS_PUSH_(4251 \
-/* class A needs to have dll-interface to be used by clients of class B */)
-
+GTEST_DISABLE_MSC_WARNINGS_PUSH_(4251 \ 
+/* class A needs to have dll-interface to be used by clients of class B */) 
+ 
 namespace testing {
 
 // This helper class can be used to mock out Google Test failure reporting
@@ -72,15 +72,15 @@ class GTEST_API_ ScopedFakeTestPartResultReporter
                                    TestPartResultArray* result);
 
   // The d'tor restores the previous test part result reporter.
-  ~ScopedFakeTestPartResultReporter() override;
+  ~ScopedFakeTestPartResultReporter() override; 
 
   // Appends the TestPartResult object to the TestPartResultArray
   // received in the constructor.
   //
   // This method is from the TestPartResultReporterInterface
   // interface.
-  void ReportTestPartResult(const TestPartResult& result) override;
-
+  void ReportTestPartResult(const TestPartResult& result) override; 
+ 
  private:
   void Init();
 
@@ -102,12 +102,12 @@ class GTEST_API_ SingleFailureChecker {
  public:
   // The constructor remembers the arguments.
   SingleFailureChecker(const TestPartResultArray* results,
-                       TestPartResult::Type type, const std::string& substr);
+                       TestPartResult::Type type, const std::string& substr); 
   ~SingleFailureChecker();
  private:
   const TestPartResultArray* const results_;
   const TestPartResult::Type type_;
-  const std::string substr_;
+  const std::string substr_; 
 
   GTEST_DISALLOW_COPY_AND_ASSIGN_(SingleFailureChecker);
 };
@@ -116,8 +116,8 @@ class GTEST_API_ SingleFailureChecker {
 
 }  // namespace testing
 
-GTEST_DISABLE_MSC_WARNINGS_POP_()  //  4251
-
+GTEST_DISABLE_MSC_WARNINGS_POP_()  //  4251 
+ 
 // A set of macros for testing Google Test assertions or code that's expected
 // to generate Google Test fatal failures.  It verifies that the given
 // statement will cause exactly one fatal Google Test failure with 'substr'
@@ -235,4 +235,4 @@ GTEST_DISABLE_MSC_WARNINGS_POP_()  //  4251
     }\
   } while (::testing::internal::AlwaysFalse())
 
-#endif  // GOOGLETEST_INCLUDE_GTEST_GTEST_SPI_H_
+#endif  // GOOGLETEST_INCLUDE_GTEST_GTEST_SPI_H_ 

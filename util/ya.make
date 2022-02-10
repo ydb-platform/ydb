@@ -15,10 +15,10 @@ PEERDIR(
     contrib/libs/double-conversion
 )
 
-PEERDIR(
-    contrib/libs/libc_compat
-)
-
+PEERDIR( 
+    contrib/libs/libc_compat 
+) 
+ 
 # datetime
 JOIN_SRCS(
     all_datetime.cpp

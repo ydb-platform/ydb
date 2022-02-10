@@ -12,16 +12,16 @@ LICENSE(BSD-3-Clause)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/restricted/googletest/googlemock
-    contrib/restricted/googletest/googletest
+    contrib/restricted/googletest/googlemock 
+    contrib/restricted/googletest/googletest 
 )
 
-ADDINCL(
-    GLOBAL contrib/restricted/googletest/googlemock/include
-    GLOBAL contrib/restricted/googletest/googletest/include
-    contrib/restricted/googletest/googlemock
-    contrib/restricted/googletest/googletest
-)
+ADDINCL( 
+    GLOBAL contrib/restricted/googletest/googlemock/include 
+    GLOBAL contrib/restricted/googletest/googletest/include 
+    contrib/restricted/googletest/googlemock 
+    contrib/restricted/googletest/googletest 
+) 
 
 NO_COMPILER_WARNINGS()
 
@@ -33,7 +33,7 @@ CFLAGS(
     GLOBAL -DGTEST_HAS_STD_WSTRING=1
 )
 
-SRCDIR(contrib/restricted/googletest/googlemock/src)
+SRCDIR(contrib/restricted/googletest/googlemock/src) 
 
 SRCS(
     GLOBAL gmock_main.cc

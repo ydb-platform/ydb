@@ -1,5 +1,5 @@
 RECURSE(
-    common
+    common 
     benchmark
     benchmark/examples
     benchmark/examples/metrics
@@ -7,16 +7,16 @@ RECURSE(
     boost_test
     boost_test_main
     dump_clang_coverage
-    gbenchmark_main
+    gbenchmark_main 
     gmock
     gmock_in_unittest
     gmock_in_unittest/example_ut
     gtest
-    gtest_boost_extensions
+    gtest_boost_extensions 
     gtest_extensions
     gtest_main
-    gtest_protobuf
-    hook
+    gtest_protobuf 
+    hook 
     mock_server
     unittest
     unittest_main

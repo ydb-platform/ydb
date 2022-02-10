@@ -143,7 +143,7 @@ struct TRefCountedHelper
         return reinterpret_cast<const TRefCounter*>(obj) - 1;
     }
 
-    Y_FORCE_INLINE static void Destroy(const T* obj)
+    Y_FORCE_INLINE static void Destroy(const T* obj) 
     {
         auto* refCounter = GetRefCounter(obj);
 
@@ -163,7 +163,7 @@ struct TRefCountedHelper
         }
     }
 
-    Y_FORCE_INLINE static void Deallocate(const T* obj)
+    Y_FORCE_INLINE static void Deallocate(const T* obj) 
     {
         char* ptr = reinterpret_cast<char*>(const_cast<TRefCounter*>(GetRefCounter(obj)));
         TMemoryReleaser<T>::Do(ptr - RefCounterOffset, RefCounterSpace);
@@ -196,19 +196,19 @@ struct TRefCountedHelper<T, true>
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-Y_FORCE_INLINE const TRefCounter* GetRefCounter(const T* obj)
+Y_FORCE_INLINE const TRefCounter* GetRefCounter(const T* obj) 
 {
     return TRefCountedHelper<T>::GetRefCounter(obj);
 }
 
 template <class T>
-Y_FORCE_INLINE void DestroyRefCounted(const T* obj)
+Y_FORCE_INLINE void DestroyRefCounted(const T* obj) 
 {
     TRefCountedHelper<T>::Destroy(obj);
 }
 
 template <class T>
-Y_FORCE_INLINE void DeallocateRefCounted(const T* obj)
+Y_FORCE_INLINE void DeallocateRefCounted(const T* obj) 
 {
     TRefCountedHelper<T>::Deallocate(obj);
 }

@@ -1,5 +1,5 @@
-#include "env.h"
-
+#include "env.h" 
+ 
 #include <build/scripts/c_templates/svnversion.h>
 
 #include <util/folder/dirut.h>
@@ -32,14 +32,14 @@ TString BuildRoot() {
     }
 }
 
-TString ArcadiaFromCurrentLocation(TStringBuf where, TStringBuf path) {
-    return (TFsPath(ArcadiaSourceRoot()) / TFsPath(where).Parent() / path).Fix();
-}
-
-TString BinaryPath(TStringBuf path) {
-    return (TFsPath(BuildRoot()) / path).Fix();
-}
-
+TString ArcadiaFromCurrentLocation(TStringBuf where, TStringBuf path) { 
+    return (TFsPath(ArcadiaSourceRoot()) / TFsPath(where).Parent() / path).Fix(); 
+} 
+ 
+TString BinaryPath(TStringBuf path) { 
+    return (TFsPath(BuildRoot()) / path).Fix(); 
+} 
+ 
 TString GetArcadiaTestsData() {
     TString atdRoot = NPrivate::GetTestEnv().ArcadiaTestsDataDir;
     if (atdRoot) {
@@ -47,21 +47,21 @@ TString GetArcadiaTestsData() {
     }
 
     TString path = NPrivate::GetCwd();
-    const char pathsep = GetDirectorySeparator();
+    const char pathsep = GetDirectorySeparator(); 
     while (!path.empty()) {
         TString dataDir = path + "/arcadia_tests_data";
-        if (IsDir(dataDir)) {
+        if (IsDir(dataDir)) { 
             return dataDir;
-        }
+        } 
 
-        size_t pos = path.find_last_of(pathsep);
-        if (pos == TString::npos) {
+        size_t pos = path.find_last_of(pathsep); 
+        if (pos == TString::npos) { 
             pos = 0;
-        }
+        } 
         path.erase(pos);
     }
 
-    return {};
+    return {}; 
 }
 
 TString GetWorkPath() {
@@ -143,7 +143,7 @@ void StopProcessCoreWatching(int pid) {
     }
 }
 
-bool FromYaTest() {
+bool FromYaTest() { 
     return NPrivate::GetTestEnv().IsRunningFromTest;
 }
 

@@ -32,11 +32,11 @@
 // It will be included from gtest-printers.h and the overrides in this file
 // will be visible to everyone.
 //
-// Injection point for custom user configurations. See README for details
-//
+// Injection point for custom user configurations. See README for details 
+// 
 // ** Custom implementation starts here **
 
-#ifndef GOOGLETEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PRINTERS_H_
-#define GOOGLETEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PRINTERS_H_
+#ifndef GOOGLETEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PRINTERS_H_ 
+#define GOOGLETEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PRINTERS_H_ 
 
-#endif  // GOOGLETEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PRINTERS_H_
+#endif  // GOOGLETEST_INCLUDE_GTEST_INTERNAL_CUSTOM_GTEST_PRINTERS_H_ 

@@ -2,8 +2,8 @@
 
 #include <util/generic/string.h>
 
-#include <gtest/gtest.h>
-#include <gmock/gmock.h>
+#include <gtest/gtest.h> 
+#include <gmock/gmock.h> 
 
 /**
  * Check that the given statement throws an exception of the given type,

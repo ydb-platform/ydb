@@ -16,10 +16,10 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-CFLAGS(
-    -DHAVE_CONFIG_H
-)
-
+CFLAGS( 
+    -DHAVE_CONFIG_H 
+) 
+ 
 SRCDIR(contrib/libs/c-ares)
 
 IF (NOT DLL_FOR)

@@ -282,7 +282,7 @@ struct TIsSpecializationOf<T, T<Ts...>>: std::true_type {};
  */
 template <typename... T>
 constexpr bool TDependentFalse = false;
-
+ 
 // FIXME: neither nvcc10 nor nvcc11 support using auto in this context
 #if defined(__NVCC__)
 template <size_t Value>
@@ -292,14 +292,14 @@ template <auto... Values>
 constexpr bool TValueDependentFalse = false;
 #endif
 
-/*
- * shortcut for std::enable_if_t<...> which checks that T is std::tuple or std::pair
- */
-template <class T, class R = void>
-using TEnableIfTuple = std::enable_if_t<::TDisjunction<::TIsSpecializationOf<std::tuple, std::decay_t<T>>,
+/* 
+ * shortcut for std::enable_if_t<...> which checks that T is std::tuple or std::pair 
+ */ 
+template <class T, class R = void> 
+using TEnableIfTuple = std::enable_if_t<::TDisjunction<::TIsSpecializationOf<std::tuple, std::decay_t<T>>, 
                                                        ::TIsSpecializationOf<std::pair, std::decay_t<T>>>::value,
                                         R>;
-
+ 
 namespace NPrivate {
     // To allow ADL with custom begin/end
     using std::begin;

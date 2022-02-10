@@ -26,9 +26,9 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+ 
 //
-// The Google C++ Testing and Mocking Framework (Google Test)
+// The Google C++ Testing and Mocking Framework (Google Test) 
 //
 // This header file defines the Message class.
 //
@@ -42,20 +42,20 @@
 // to CHANGE WITHOUT NOTICE.  Therefore DO NOT DEPEND ON IT in a user
 // program!
 
-// GOOGLETEST_CM0001 DO NOT DELETE
-
-#ifndef GOOGLETEST_INCLUDE_GTEST_GTEST_MESSAGE_H_
-#define GOOGLETEST_INCLUDE_GTEST_GTEST_MESSAGE_H_
+// GOOGLETEST_CM0001 DO NOT DELETE 
+ 
+#ifndef GOOGLETEST_INCLUDE_GTEST_GTEST_MESSAGE_H_ 
+#define GOOGLETEST_INCLUDE_GTEST_GTEST_MESSAGE_H_ 
 
 #include <limits>
-#include <memory>
-#include <sstream>
+#include <memory> 
+#include <sstream> 
 
 #include "gtest/internal/gtest-port.h"
 
-GTEST_DISABLE_MSC_WARNINGS_PUSH_(4251 \
-/* class A needs to have dll-interface to be used by clients of class B */)
-
+GTEST_DISABLE_MSC_WARNINGS_PUSH_(4251 \ 
+/* class A needs to have dll-interface to be used by clients of class B */) 
+ 
 // Ensures that there is at least one operator<< in the global namespace.
 // See Message& operator<<(...) below for why.
 void operator<<(const testing::internal::Secret&, int);
@@ -145,7 +145,7 @@ class GTEST_API_ Message {
   // as "(null)".
   template <typename T>
   inline Message& operator <<(T* const& pointer) {  // NOLINT
-    if (pointer == nullptr) {
+    if (pointer == nullptr) { 
       *ss_ << "(null)";
     } else {
       *ss_ << pointer;
@@ -188,7 +188,7 @@ class GTEST_API_ Message {
 
  private:
   // We'll hold the text streamed to this object here.
-  const std::unique_ptr< ::std::stringstream> ss_;
+  const std::unique_ptr< ::std::stringstream> ss_; 
 
   // We declare (but don't implement) this to prevent the compiler
   // from implementing the assignment operator.
@@ -214,6 +214,6 @@ std::string StreamableToString(const T& streamable) {
 }  // namespace internal
 }  // namespace testing
 
-GTEST_DISABLE_MSC_WARNINGS_POP_()  //  4251
-
-#endif  // GOOGLETEST_INCLUDE_GTEST_GTEST_MESSAGE_H_
+GTEST_DISABLE_MSC_WARNINGS_POP_()  //  4251 
+ 
+#endif  // GOOGLETEST_INCLUDE_GTEST_GTEST_MESSAGE_H_ 

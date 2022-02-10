@@ -10,8 +10,8 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString DecodeEnumValue(TStringBuf value); 
-TString EncodeEnumValue(TStringBuf value); 
+TString DecodeEnumValue(TStringBuf value);
+TString EncodeEnumValue(TStringBuf value);
 
 template <class T>
 T ParseEnum(TStringBuf value);

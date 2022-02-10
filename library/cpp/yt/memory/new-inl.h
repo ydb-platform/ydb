@@ -1,7 +1,7 @@
 #ifndef NEW_INL_H_
 #error "Direct inclusion of this file is not allowed, include new.h"
-// For the sake of sane code completion. 
-#include "new.h" 
+// For the sake of sane code completion.
+#include "new.h"
 #endif
 
 #include <library/cpp/ytalloc/api/ytalloc.h>
@@ -108,20 +108,20 @@ Y_FORCE_INLINE void CustomInitialize(Args... args)
 {
     Y_UNUSED(args...);
 }
- 
-template <class T> 
-Y_FORCE_INLINE auto CustomInitialize(T* ptr) -> decltype(&T::InitializeRefCounted, void()) 
-{ 
-    ptr->InitializeRefCounted(); 
-} 
- 
+
+template <class T>
+Y_FORCE_INLINE auto CustomInitialize(T* ptr) -> decltype(&T::InitializeRefCounted, void())
+{
+    ptr->InitializeRefCounted();
+}
+
 template <class T, class... As>
 Y_FORCE_INLINE T* NewEpilogue(void* ptr, As&& ... args)
 {
     try {
         auto* instance = static_cast<T*>(ptr);
         new (instance) T(std::forward<As>(args)...);
-        CustomInitialize(instance); 
+        CustomInitialize(instance);
         return instance;
     } catch (const std::exception& ex) {
         // Do not forget to free the memory.

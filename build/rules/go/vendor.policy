@@ -214,9 +214,9 @@ ALLOW .* -> vendor/github.com/gofrs/uuid
 # websocket protocol
 ALLOW .* -> vendor/github.com/gorilla/websocket
 
-# http sessions with cookie and filesystem session storage 
-ALLOW .* -> vendor/github.com/gorilla/sessions 
- 
+# http sessions with cookie and filesystem session storage
+ALLOW .* -> vendor/github.com/gorilla/sessions
+
 # Package gorilla/schema fills a struct with form values
 ALLOW .* -> vendor/github.com/gorilla/schema
 

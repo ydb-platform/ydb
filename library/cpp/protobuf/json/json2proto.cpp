@@ -139,31 +139,31 @@ JsonEnum2Field(const NJson::TJsonValue& json,
     const EnumValueDescriptor* enumFieldValue = nullptr;
 
     if (json.IsInteger()) {
-        const auto value = json.GetInteger();
-        enumFieldValue = enumField->FindValueByNumber(value);
-        if (!enumFieldValue) {
-            ythrow yexception() << "Invalid integer value of JSON enum field: " << value << ".";
-        }
+        const auto value = json.GetInteger(); 
+        enumFieldValue = enumField->FindValueByNumber(value); 
+        if (!enumFieldValue) { 
+            ythrow yexception() << "Invalid integer value of JSON enum field: " << value << "."; 
+        } 
     } else if (json.IsString()) {
-        const auto& value = json.GetString();
+        const auto& value = json.GetString(); 
         if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive) {
-            enumFieldValue = FindEnumValue(enumField, value, AsciiEqualsIgnoreCase);
+            enumFieldValue = FindEnumValue(enumField, value, AsciiEqualsIgnoreCase); 
         } else if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumSnakeCaseInsensitive) {
-            enumFieldValue = FindEnumValue(enumField, value, NProtobufJson::EqualsIgnoringCaseAndUnderscores);
+            enumFieldValue = FindEnumValue(enumField, value, NProtobufJson::EqualsIgnoringCaseAndUnderscores); 
         } else {
-            enumFieldValue = enumField->FindValueByName(value);
+            enumFieldValue = enumField->FindValueByName(value); 
         }
-        if (!enumFieldValue) {
-            ythrow yexception() << "Invalid string value of JSON enum field: " << TStringBuf(value).Head(100) << ".";
-        }
+        if (!enumFieldValue) { 
+            ythrow yexception() << "Invalid string value of JSON enum field: " << TStringBuf(value).Head(100) << "."; 
+        } 
     } else {
         ythrow yexception() << "Invalid type of JSON enum field: not an integer/string.";
     }
 
-    if (field.is_repeated()) {
-        reflection->AddEnum(&proto, &field, enumFieldValue);
+    if (field.is_repeated()) { 
+        reflection->AddEnum(&proto, &field, enumFieldValue); 
     } else {
-        reflection->SetEnum(&proto, &field, enumFieldValue);
+        reflection->SetEnum(&proto, &field, enumFieldValue); 
     }
 }
 

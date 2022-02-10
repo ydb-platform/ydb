@@ -284,9 +284,9 @@
         "crypta": {
             "description": "Run Crypta client"
         },
-        "apphost": { 
-            "description": "Run local apphost instance" 
-        }, 
+        "apphost": {
+            "description": "Run local apphost instance"
+        },
         "renderer": {
             "description": "Run local renderer instance"
         },
@@ -4690,28 +4690,28 @@
                 }
             ]
         },
-        "apphost": { 
-            "tools": { 
-                "apphost": { 
-                    "bottle": "apphost", 
-                    "executable": "app_host_launcher" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "apphost": {
+            "tools": {
+                "apphost": {
+                    "bottle": "apphost",
+                    "executable": "app_host_launcher"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "renderer": {
             "tools": {
                 "renderer": {
@@ -7326,17 +7326,17 @@
                 ]
             }
         },
-        "apphost": { 
-            "formula": { 
+        "apphost": {
+            "formula": {
                 "sandbox_id": 1210601039,
-                "match": "app_host_launcher" 
-            }, 
-            "executable": { 
-                "app_host_launcher": [ 
-                    "app_host_launcher" 
-                ] 
-            } 
-        }, 
+                "match": "app_host_launcher"
+            },
+            "executable": {
+                "app_host_launcher": [
+                    "app_host_launcher"
+                ]
+            }
+        },
         "renderer": {
             "formula": {
                 "sandbox_id": [

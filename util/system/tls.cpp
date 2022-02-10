@@ -11,9 +11,9 @@
 #if defined(_unix_)
     #include <pthread.h>
 #endif
-
+ 
 using namespace NTls;
-
+ 
 namespace {
     static inline TAtomicBase AcquireKey() {
         static TAtomic cur;
@@ -59,7 +59,7 @@ namespace {
                 inline void* Get() const noexcept {
                     return Data_;
                 }
-
+ 
             private:
                 void* Data_;
                 TDtor Dtor_;

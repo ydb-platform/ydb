@@ -67,7 +67,7 @@ struct TMemoryMapCommon {
     static TString UnknownFileName();
 };
 Y_DECLARE_OPERATORS_FOR_FLAGS(TMemoryMapCommon::EOpenMode)
-
+ 
 class TMemoryMap: public TMemoryMapCommon {
 public:
     explicit TMemoryMap(const TString& name);
@@ -161,7 +161,7 @@ public:
     inline size_t MappedSize() const noexcept {
         return Region_.MappedSize();
     }
-
+ 
     TFile GetFile() const noexcept {
         return Map_.GetFile();
     }

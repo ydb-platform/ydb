@@ -125,7 +125,7 @@
 #define Y_THREAD(T) ::NTls::TValue<T>
 #define Y_STATIC_THREAD(T) static Y_THREAD(T)
 
-// gcc and msvc support automatic tls for POD types
+// gcc and msvc support automatic tls for POD types 
 #if defined(Y_DISABLE_THRKEY_OPTIMIZATION)
 // nothing to do
 #elif defined(__clang__)
@@ -139,13 +139,13 @@
     #define Y_POD_THREAD(T) __declspec(thread) T
     #define Y_POD_STATIC_THREAD(T) __declspec(thread) static T
 #endif
-
+ 
 #if !defined(Y_POD_THREAD) || !defined(Y_POD_STATIC_THREAD)
     #define Y_POD_THREAD(T) Y_THREAD(T)
     #define Y_POD_STATIC_THREAD(T) Y_STATIC_THREAD(T)
 #else
     #define Y_HAVE_FAST_POD_TLS
-#endif
+#endif 
 
 namespace NPrivate {
     void FillWithTrash(void* ptr, size_t len);
@@ -162,10 +162,10 @@ namespace NTls {
 
         void* Get() const;
         void Set(void* ptr) const;
-
+ 
         static void Cleanup() noexcept;
-
-    private:
+ 
+    private: 
         class TImpl;
         THolder<TImpl> Impl_;
     };
@@ -174,8 +174,8 @@ namespace NTls {
         inline ~TCleaner() {
             TKey::Cleanup();
         }
-    };
-
+    }; 
+ 
     template <class T>
     class TValue: public TMoveOnly {
         class TConstructor {
@@ -215,7 +215,7 @@ namespace NTls {
             T1 Value;
         };
 
-    public:
+    public: 
         inline TValue()
             : Constructor_(new TDefaultConstructor())
             , Key_(Dtor)
@@ -231,7 +231,7 @@ namespace NTls {
 
         template <class T1>
         inline T& operator=(const T1& val) {
-            return Get() = val;
+            return Get() = val; 
         }
 
         inline operator const T&() const {
@@ -243,8 +243,8 @@ namespace NTls {
         }
 
         inline const T& operator->() const {
-            return Get();
-        }
+            return Get(); 
+        } 
 
         inline T& operator->() {
             return Get();
@@ -265,31 +265,31 @@ namespace NTls {
         inline T* GetPtr() const {
             T* val = static_cast<T*>(Key_.Get());
 
-            if (!val) {
+            if (!val) { 
                 THolder<void> mem(::operator new(sizeof(T)));
                 THolder<T> newval(Constructor_->Construct(mem.Get()));
 
                 Y_UNUSED(mem.Release());
                 Key_.Set((void*)newval.Get());
                 val = newval.Release();
-            }
+            } 
 
             return val;
         }
 
     private:
-        static void Dtor(void* ptr) {
+        static void Dtor(void* ptr) { 
             THolder<void> mem(ptr);
 
             ((T*)ptr)->~T();
             ::NPrivate::FillWithTrash(ptr, sizeof(T));
         }
 
-    private:
+    private: 
         THolder<TConstructor> Constructor_;
         TKey Key_;
     };
-}
+} 
 
 template <class T>
 static inline T& TlsRef(NTls::TValue<T>& v) noexcept {

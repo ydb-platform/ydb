@@ -105,7 +105,7 @@ namespace {
         inline void Detach() {
             ::CloseHandle(Handle);
         }
-
+ 
         static ui32 __stdcall Proxy(void* ptr) {
             NTls::TCleaner cleaner;
 

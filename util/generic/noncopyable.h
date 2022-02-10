@@ -1,8 +1,8 @@
 #pragma once
-
+ 
 /**
  * @class TNonCopyable
- *
+ * 
  * Inherit your class from `TNonCopyable` if you want to make it noncopyable.
  *
  * Example usage:
@@ -11,8 +11,8 @@
  *     // ...
  * };
  * @endcode
- */
-
+ */ 
+ 
 namespace NNonCopyable { // protection from unintended ADL
     struct TNonCopyable {
         TNonCopyable(const TNonCopyable&) = delete;
@@ -20,7 +20,7 @@ namespace NNonCopyable { // protection from unintended ADL
 
         TNonCopyable() = default;
         ~TNonCopyable() = default;
-    };
+    }; 
 
     struct TMoveOnly {
         TMoveOnly(TMoveOnly&&) noexcept = default;
@@ -32,7 +32,7 @@ namespace NNonCopyable { // protection from unintended ADL
         TMoveOnly() = default;
         ~TMoveOnly() = default;
     };
-}
-
+} 
+ 
 using TNonCopyable = NNonCopyable::TNonCopyable;
 using TMoveOnly = NNonCopyable::TMoveOnly;

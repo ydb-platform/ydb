@@ -379,7 +379,7 @@ namespace NActors {
         void HandlePoisonSession();
 
         void HandleSessionBufferSizeRequest(TEvSessionBufferSizeRequest::TPtr& ev);
- 
+
         bool CleanupEventQueueScheduled = false;
         void ScheduleCleanupEventQueue();
         void HandleCleanupEventQueue();

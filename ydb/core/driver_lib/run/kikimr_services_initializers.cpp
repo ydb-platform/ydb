@@ -609,18 +609,18 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
             for (const auto& channel : icConfig.GetChannel()) {
                 const auto index = channel.GetIndex();
-                ui32 weight = 0; 
-                Y_VERIFY(!(channel.HasQuota() && channel.HasWeight()), "Only one field should be set: Weight or Quota, Weight is preffered"); 
-                if (channel.HasWeight()) { 
-                    weight = channel.GetWeight(); 
-                } else if (channel.HasQuota()) { 
-                    weight = channel.GetQuota(); 
-                } 
+                ui32 weight = 0;
+                Y_VERIFY(!(channel.HasQuota() && channel.HasWeight()), "Only one field should be set: Weight or Quota, Weight is preffered");
+                if (channel.HasWeight()) {
+                    weight = channel.GetWeight();
+                } else if (channel.HasQuota()) {
+                    weight = channel.GetQuota();
+                }
 
-                Y_VERIFY(index < 1U << IEventHandle::ChannelBits, "Channel index is too large: got %" PRIu32 ", should be less than %" PRIu32, index, 1U << IEventHandle::ChannelBits); 
-                Y_VERIFY(weight > 0U && weight <= std::numeric_limits<ui16>::max(), "Channel weight is out of allowed range: got %" PRIu32 ", should be > 0 and < %" PRIu32, weight, std::numeric_limits<ui16>::max()); 
- 
-                channels.insert({ui16(index), TChannelSettings{ui16(weight)}}); 
+                Y_VERIFY(index < 1U << IEventHandle::ChannelBits, "Channel index is too large: got %" PRIu32 ", should be less than %" PRIu32, index, 1U << IEventHandle::ChannelBits);
+                Y_VERIFY(weight > 0U && weight <= std::numeric_limits<ui16>::max(), "Channel weight is out of allowed range: got %" PRIu32 ", should be > 0 and < %" PRIu32, weight, std::numeric_limits<ui16>::max());
+
+                channels.insert({ui16(index), TChannelSettings{ui16(weight)}});
             }
 
             // create poller actor (whether platform supports it)

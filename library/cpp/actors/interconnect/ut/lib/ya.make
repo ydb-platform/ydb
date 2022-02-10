@@ -1,12 +1,12 @@
-LIBRARY() 
- 
-OWNER(vkanaev) 
- 
-SRCS( 
-    node.h 
-    test_events.h 
-    test_actors.h 
-    ic_test_cluster.h 
-) 
- 
-END() 
+LIBRARY()
+
+OWNER(vkanaev)
+
+SRCS(
+    node.h
+    test_events.h
+    test_actors.h
+    ic_test_cluster.h
+)
+
+END()

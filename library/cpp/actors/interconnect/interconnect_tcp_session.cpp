@@ -102,7 +102,7 @@ namespace NActors {
         Proxy->Metrics->SubInflightDataAmount(InflightDataAmount);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session destroyed", Proxy->PeerNodeId);
- 
+
         if (!Subscribers.empty()) {
             Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         }
@@ -182,8 +182,8 @@ namespace NActors {
             LWPROBE(StartBatching, Proxy->PeerNodeId, batchPeriod.MillisecondsFloat());
             LOG_DEBUG_IC_SESSION("ICS17", "batching started");
         }
-    } 
- 
+    }
+
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
         const auto [it, inserted] = Subscribers.emplace(ev->Sender, ev->Cookie);
@@ -452,7 +452,7 @@ namespace NActors {
         LOG_INFO_IC_SESSION("ICS15", "start handshake");
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartResumeHandshake, ReceiveContext->LockLastProcessedPacketSerial());
     }
- 
+
     void TInterconnectSessionTCP::ReestablishConnectionWithHandshake(TDisconnectReason reason) {
         ReestablishConnection({}, true, std::move(reason));
     }

@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
 
@@ -48,21 +48,21 @@
 #define LOG_NOTICE_NET(NODE_ID, FMT, ...) LOG_LOG_NET(::NActors::NLog::PRI_NOTICE, NODE_ID, FMT, __VA_ARGS__)
 #define LOG_DEBUG_NET(NODE_ID, FMT, ...) LOG_LOG_NET(::NActors::NLog::PRI_DEBUG, NODE_ID, FMT, __VA_ARGS__)
 
-namespace NActors { 
-    class TInterconnectLoggingBase { 
-    protected: 
-        const TString LogPrefix; 
- 
-    public: 
+namespace NActors {
+    class TInterconnectLoggingBase {
+    protected:
+        const TString LogPrefix;
+
+    public:
         TInterconnectLoggingBase() = default;
 
         TInterconnectLoggingBase(const TString& prefix)
-            : LogPrefix(prefix) 
+            : LogPrefix(prefix)
         {
         }
 
         void SetPrefix(TString logPrefix) const {
             logPrefix.swap(const_cast<TString&>(LogPrefix));
-        } 
-    }; 
-} 
+        }
+    };
+}

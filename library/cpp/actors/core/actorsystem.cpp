@@ -184,12 +184,12 @@ namespace NActors {
 
     ui32 TActorSystem::BroadcastToProxies(const std::function<IEventHandle*(const TActorId&)>& eventFabric) {
         // TODO: get rid of this method
-        for (ui32 i = 0; i < InterconnectCount; ++i) { 
-            Send(eventFabric(Interconnect[i])); 
-        } 
-        return InterconnectCount; 
-    } 
- 
+        for (ui32 i = 0; i < InterconnectCount; ++i) {
+            Send(eventFabric(Interconnect[i]));
+        }
+        return InterconnectCount;
+    }
+
     TActorId TActorSystem::LookupLocalService(const TActorId& x) const {
         return ServiceMap->LookupLocal(x);
     }

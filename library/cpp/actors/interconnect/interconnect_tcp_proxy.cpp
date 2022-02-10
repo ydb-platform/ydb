@@ -419,7 +419,7 @@ namespace NActors {
         if (Metrics) {
             Metrics->IncHandshakeFails();
         }
- 
+
         if (IncomingHandshakeActor || OutgoingHandshakeActor) {
             // one of handshakes is still going on
             LOG_DEBUG_IC("ICP28", "other handshake is still going on");
@@ -875,7 +875,7 @@ namespace NActors {
         }
 
         Send(ev->Sender, new TEvSessionBufferSizeResponse(SessionID, bufSize));
-    } 
+    }
 
     void TInterconnectProxyTCP::Handle(TEvQueryStats::TPtr& ev) {
         ICPROXY_PROFILED;

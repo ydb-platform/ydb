@@ -599,49 +599,49 @@ public:
         s = Data._0123456xyz();
         s.prepend(TStringType(Data.abc()));
         UNIT_ASSERT(s == Data.abc0123456xyz());
-
+ 
         s.prepend(TStringType(Data.ABC()), 1, 2);
         UNIT_ASSERT(s == Data.BCabc0123456xyz());
-
+ 
         s.prepend(Data.qwe());
         UNIT_ASSERT(s == Data.qweBCabc0123456xyz());
-
+ 
         s.prepend(*Data._1());
         UNIT_ASSERT(s == Data._1qweBCabc0123456xyz());
-
+ 
         // substr
         s = Data.abc0123456xyz();
         s = s.substr(3, 7);
         UNIT_ASSERT(s == Data._0123456());
-
+ 
         // insert family
         s.insert(2, Data.abc());
         UNIT_ASSERT(s == Data._01abc23456());
-
+ 
         s.insert(2, TStringType(Data.ABC()));
         UNIT_ASSERT(s == Data._01ABCabc23456());
-
+ 
         s.insert(0, TStringType(Data.QWE()), 1, 1);
         UNIT_ASSERT(s == Data.W01ABCabc23456());
-
+ 
         // replace family
         s = Data._01abc23456();
         s.replace(0, 7, Data.abcd());
         UNIT_ASSERT(s == Data.abcd456());
-
+ 
         s.replace(4, 3, TStringType(Data.ABCD()));
         UNIT_ASSERT(s == Data.abcdABCD());
-
+ 
         s.replace(7, 10, TStringType(Data._01234()), 1, 3);
         UNIT_ASSERT(s == Data.abcdABC123());
         UNIT_ASSERT(Data.abcdABC123() == s);
-
+ 
         // remove, erase
         s.remove(4);
         UNIT_ASSERT(s == Data.abcd());
         s.erase(3);
         UNIT_ASSERT(s == Data.abc());
-
+ 
         // Read access
         s = Data._012345();
         UNIT_ASSERT(s.at(1) == *Data._1());
@@ -659,7 +659,7 @@ public:
             // un-protect
             using TStr::RefCount;
         };
-
+ 
         TestStroka s1(Data.orig());
         UNIT_ASSERT_EQUAL(s1.RefCount() == 1, true);
         TestStroka s2(s1);
@@ -673,7 +673,7 @@ public:
         UNIT_ASSERT_EQUAL(s1.c_str() == s2.c_str(), false);
     }
 #endif
-
+ 
     //  Find family
 
     void TestFind() {
@@ -747,51 +747,51 @@ public:
         // operator +=
         s += TStringType(Data.x());
         UNIT_ASSERT(s == Data._0123456x());
-
+ 
         s += Data.y();
         UNIT_ASSERT(s == Data._0123456xy());
-
+ 
         s += *Data.z();
         UNIT_ASSERT(s == Data._0123456xyz());
-
+ 
         // operator +
         s = Data._0123456();
         s = s + TStringType(Data.x());
         UNIT_ASSERT(s == Data._0123456x());
-
+ 
         s = s + Data.y();
         UNIT_ASSERT(s == Data._0123456xy());
-
+ 
         s = s + *Data.z();
         UNIT_ASSERT(s == Data._0123456xyz());
-
+ 
         // operator !=
         s = Data._012345();
         UNIT_ASSERT(s != TStringType(Data.xyz()));
         UNIT_ASSERT(s != Data.xyz());
         UNIT_ASSERT(Data.xyz() != s);
-
+ 
         // operator <
         UNIT_ASSERT_EQUAL(s < TStringType(Data.xyz()), true);
         UNIT_ASSERT_EQUAL(s < Data.xyz(), true);
         UNIT_ASSERT_EQUAL(Data.xyz() < s, false);
-
+ 
         // operator <=
         UNIT_ASSERT_EQUAL(s <= TStringType(Data.xyz()), true);
         UNIT_ASSERT_EQUAL(s <= Data.xyz(), true);
         UNIT_ASSERT_EQUAL(Data.xyz() <= s, false);
-
+ 
         // operator >
         UNIT_ASSERT_EQUAL(s > TStringType(Data.xyz()), false);
         UNIT_ASSERT_EQUAL(s > Data.xyz(), false);
         UNIT_ASSERT_EQUAL(Data.xyz() > s, true);
-
+ 
         // operator >=
         UNIT_ASSERT_EQUAL(s >= TStringType(Data.xyz()), false);
         UNIT_ASSERT_EQUAL(s >= Data.xyz(), false);
         UNIT_ASSERT_EQUAL(Data.xyz() >= s, true);
     }
-
+ 
     void TestOperatorsCI() {
         TStringType s(Data.ABCD());
         UNIT_ASSERT(s > Data.abc0123456xyz());
@@ -815,30 +815,30 @@ public:
             UNIT_ASSERT_EQUAL(s, TStringType(Data._00()));
         }
     }
-
+ 
     // Test any other functions
 
     void TestFuncs() {
         TStringType s(Data._0123456());
         UNIT_ASSERT(s.c_str() == s.data());
-
+ 
         // length()
         UNIT_ASSERT(s.length() == s.size());
         UNIT_ASSERT(s.length() == traits_type::length(s.data()));
-
+ 
         // is_null()
         TStringType s1(Data.Empty());
         UNIT_ASSERT(s1.is_null() == true);
         UNIT_ASSERT(s1.is_null() == s1.empty());
         UNIT_ASSERT(s1.is_null() == !s1);
-
+ 
         TStringType s2(s);
         UNIT_ASSERT(s2 == s);
-
+ 
         // reverse()
         ReverseInPlace(s2);
         UNIT_ASSERT(s2 == Data._6543210());
-
+ 
         // to_upper()
         s2 = Data.asdf1234qwer();
         s2.to_upper();
@@ -847,16 +847,16 @@ public:
         // to_lower()
         s2.to_lower();
         UNIT_ASSERT(s2 == Data.asdf1234qwer());
-
+ 
         // to_title()
         s2 = Data.asDF1234qWEr();
         s2.to_title();
         UNIT_ASSERT(s2 == Data.Asdf1234qwer());
-
+ 
         s2 = Data.AsDF1234qWEr();
         s2.to_title();
         UNIT_ASSERT(s2 == Data.Asdf1234qwer());
-
+ 
         // Friend functions
         s2 = Data.asdf1234qwer();
         TStringType s3 = to_upper(s2);
@@ -866,34 +866,34 @@ public:
         s3 = to_title(s2);
         UNIT_ASSERT(s3 == Data.Asdf1234qwer());
         s2 = s3;
-
+ 
         // resize family
         s2.resize(s2.size()); // without length change
         UNIT_ASSERT(s2 == Data.Asdf1234qwer());
-
+ 
         s2.resize(s2.size() + 4, *Data.W());
         UNIT_ASSERT(s2 == Data.Asdf1234qwerWWWW());
-
+ 
         s2.resize(4);
         UNIT_ASSERT(s2 == Data.Asdf());
-
+ 
         // assign family
         s2 = Data.asdf1234qwer();
         s2.assign(s, 1, 3);
         UNIT_ASSERT(s2 == Data._123());
-
+ 
         s2.assign(Data._0123456(), 4);
         UNIT_ASSERT(s2 == Data._0123());
-
+ 
         s2.assign('1');
         UNIT_ASSERT(s2 == Data._1());
 
         s2.assign(Data._0123456());
         UNIT_ASSERT(s2 == Data._0123456());
-
+ 
         // hash()
         TStringType sS = s2; // type 'TStringType' is used as is
-
+ 
         ComputeHash(sS); /*size_t hash_val = sS.hash();
 
         try {
@@ -902,17 +902,17 @@ public:
             Cerr << hash_val << Endl;
             throw;
         }*/
-
+ 
         s2.assign(Data._0123456(), 2, 2);
         UNIT_ASSERT(s2 == Data._23());
-
+ 
         //s2.reserve();
 
         TStringType s5(Data.abcde());
         s5.clear();
         UNIT_ASSERT(s5 == Data.Empty());
     }
-
+ 
     void TestUtils() {
         TStringType s;
         s = Data._01230123();
@@ -922,7 +922,7 @@ public:
         SubstGlobal(s, from, to);
         UNIT_ASSERT(s == Data.z123z123());
     }
-
+ 
     void TestEmpty() {
         TStringType s;
         s = Data._2();
@@ -944,7 +944,7 @@ public:
     void TestCopy() {
         TStringType s(Data.abcd());
         TStringType c = s.copy();
-
+ 
         UNIT_ASSERT_EQUAL(s, c);
         UNIT_ASSERT(s.end() != c.end());
     }
@@ -955,7 +955,7 @@ public:
             char_type data[5];
 
             data[4] = 1;
-
+ 
             s.strcpy(data, 4);
 
             UNIT_ASSERT_EQUAL(data[0], *Data.a());

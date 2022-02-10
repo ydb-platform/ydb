@@ -13,12 +13,12 @@ inline void* y_allocate(size_t n) {
     }
 
     return r;
-}
-
+} 
+ 
 inline void y_deallocate(void* p) {
     free(p);
-}
-
+} 
+ 
 /**
  * Behavior of realloc from C++99 to C++11 changed (http://www.cplusplus.com/reference/cstdlib/realloc/).
  *
@@ -40,4 +40,4 @@ inline void* y_reallocate(void* p, size_t new_sz) {
     }
 
     return r;
-}
+} 

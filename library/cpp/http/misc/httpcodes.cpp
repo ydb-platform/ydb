@@ -107,7 +107,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("431 Request Header Fields Too Large");
         case HTTP_UNAVAILABLE_FOR_LEGAL_REASONS:
             return TStringBuf("451 Unavailable For Legal Reason");
-
+ 
         case HTTP_INTERNAL_SERVER_ERROR:
             return TStringBuf("500 Internal server error");
         case HTTP_NOT_IMPLEMENTED:
@@ -138,4 +138,4 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
         default:
             return TStringBuf("000 Unknown HTTP code");
     }
-}
+} 

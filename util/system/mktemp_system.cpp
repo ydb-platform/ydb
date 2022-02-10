@@ -161,15 +161,15 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
     }
     /*NOTREACHED*/
 }
-
+ 
 extern "C" int mkstemps(char* path, int slen) {
     int fd;
-
+ 
     return (GetTemp(path, &fd, 0, slen) ? fd : -1);
-}
-
+} 
+ 
 #if defined(_win_)
 char* mkdtemp(char* path) {
     return (GetTemp(path, (int*)nullptr, 1, 0) ? path : (char*)nullptr);
-}
+} 
 #endif

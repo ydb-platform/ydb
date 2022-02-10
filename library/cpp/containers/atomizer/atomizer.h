@@ -144,7 +144,7 @@ public:
         std::pair<iterator, bool> ins = insert_copy(key, ui32(size() + 1));
         if (ins.second) {                  // new?
             if (pool.Begin() != old_begin) // repoint?
-                for (typename TOrder::iterator ptr = order.begin(); ptr != order.end(); ++ptr)
+                for (typename TOrder::iterator ptr = order.begin(); ptr != order.end(); ++ptr) 
                     if (old_begin <= (*ptr).first && (*ptr).first < old_end) // from old pool?
                         (*ptr).first += pool.Begin() - old_begin;
             order.push_back(std::pair<const char*, T>((*ins.first).first, atom_data ? *atom_data : T()));

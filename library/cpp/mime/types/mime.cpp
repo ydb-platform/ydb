@@ -8,10 +8,10 @@
 
 #include <cctype>
 
-/*
+/* 
  * MIME types
- */
-
+ */ 
+ 
 class TMimeTypes {
     // Constructor
 public:
@@ -165,29 +165,29 @@ const char* TMimeTypes::StrByMime(MimeTypes mime) const {
 }
 
 const char* mimetypeByExt(const char* fname, const char* check_ext) {
-    const char* ext_p;
+    const char* ext_p; 
     if (fname == nullptr || *fname == 0 ||
         (ext_p = strrchr(fname, '.')) == nullptr || strlen(ext_p) - 1 > TMimeTypes::MAX_EXT_LEN) {
         return nullptr;
-    }
-
+    } 
+ 
     char ext[TMimeTypes::MAX_EXT_LEN + 1];
-    size_t i;
-    ext_p++;
+    size_t i; 
+    ext_p++; 
     for (i = 0; i < TMimeTypes::MAX_EXT_LEN && ext_p[i]; i++)
         ext[i] = (char)tolower(ext_p[i]);
-    ext[i] = 0;
-
+    ext[i] = 0; 
+ 
     if (check_ext != nullptr) {
-        if (strcmp(ext, check_ext) == 0)
-            return check_ext;
-        else
+        if (strcmp(ext, check_ext) == 0) 
+            return check_ext; 
+        else 
             return nullptr;
-    }
-
+    } 
+ 
     return Singleton<TMimeTypes>()->StrByExt(ext);
-}
-
+} 
+ 
 MimeTypes mimeByStr(const char* mimeStr) {
     return Singleton<TMimeTypes>()->MimeByStr(mimeStr);
 }

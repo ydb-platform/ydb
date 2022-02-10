@@ -213,20 +213,20 @@ void TRegExBase::Compile(const TString& re, int cflags) {
 }
 
 int TRegExBase::Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches) const {
-    if (!Impl)
-        ythrow yexception() << "!Regular expression is not compiled";
+    if (!Impl) 
+        ythrow yexception() << "!Regular expression is not compiled"; 
     return Impl->Exec(str, pmatch, eflags, nmatches);
 }
 
 int TRegExBase::GetCompileOptions() const {
-    if (!Impl)
-        ythrow yexception() << "!Regular expression is not compiled";
+    if (!Impl) 
+        ythrow yexception() << "!Regular expression is not compiled"; 
     return Impl->CompileOptions;
 }
 
 TString TRegExBase::GetRegExpr() const {
-    if (!Impl)
-        ythrow yexception() << "!Regular expression is not compiled";
+    if (!Impl) 
+        ythrow yexception() << "!Regular expression is not compiled"; 
     return Impl->RegExpr;
 }
 

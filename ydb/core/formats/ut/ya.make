@@ -30,11 +30,11 @@ CFLAGS(
 
 SRCS(
     ut_arrow.cpp
-    ut_arithmetic.cpp 
-    ut_math.cpp 
-    ut_round.cpp 
-    ut_program_step.cpp 
-    custom_registry.cpp 
+    ut_arithmetic.cpp
+    ut_math.cpp
+    ut_round.cpp
+    ut_program_step.cpp
+    custom_registry.cpp
 )
 
 END()

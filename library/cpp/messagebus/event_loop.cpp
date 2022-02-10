@@ -3,7 +3,7 @@
 #include "network.h"
 #include "thread_extra.h"
 
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/network/pair.h>
 #include <util/network/poller.h>
 #include <util/system/event.h>

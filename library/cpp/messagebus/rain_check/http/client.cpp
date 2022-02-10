@@ -10,8 +10,8 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
-#include <util/network/socket.h> 
-#include <util/stream/str.h> 
+#include <util/network/socket.h>
+#include <util/stream/str.h>
 
 namespace NRainCheck {
     class THttpCallback: public NNeh::IOnRecv {
@@ -66,11 +66,11 @@ namespace NRainCheck {
 
     void THttpClientService::SendPost(TString addr, const TString& data, const THttpHeaders& headers, THttpFuture* future) {
         Y_VERIFY(!!future, "future is NULL.");
- 
+
         TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
         future->SetRunning(current);
         future->Task = current;
- 
+
         THolder<THttpCallback> callback(new THttpCallback(future));
         NNeh::TServiceStatRef stat;
         try {
@@ -93,7 +93,7 @@ namespace NRainCheck {
         TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
         future->SetRunning(current);
         future->Task = current;
- 
+
         THolder<THttpCallback> callback(new THttpCallback(future));
         NNeh::TServiceStatRef stat;
         try {
@@ -107,11 +107,11 @@ namespace NRainCheck {
             future->SetFail(THttpFuture::OtherError, err.AsStrBuf());
         }
     }
- 
+
     bool THttpFuture::HasHttpCode() const {
         return !!HttpCode;
-    } 
- 
+    }
+
     bool THttpFuture::HasResponseBody() const {
         return !!Response;
     }
@@ -121,7 +121,7 @@ namespace NRainCheck {
         Y_ASSERT(HasHttpCode());
 
         return static_cast<ui32>(*HttpCode);
-    } 
+    }
 
     TString THttpFuture::GetResponseBody() const {
         Y_ASSERT(IsDone());
@@ -149,6 +149,6 @@ namespace NRainCheck {
         ErrorDescription = errorDescription;
         Response.Destroy();
         SetDone();
-    } 
+    }
 
-} 
+}

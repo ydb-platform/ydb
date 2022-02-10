@@ -27,8 +27,8 @@ namespace NBus {
                 return AF_INET6;
         }
         Y_FAIL();
-    } 
- 
+    }
+
     class TNetworkAddressRef: private TNetworkAddress, public TAddrInfo {
     public:
         TNetworkAddressRef(const TNetworkAddress& na, const TAddrInfo& ai)

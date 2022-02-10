@@ -43,7 +43,7 @@ namespace {
     TString BuildServiceLocation(ui32 port) {
         return Sprintf("http://*:%" PRIu32 "/%s", port, TEST_SERVICE.data());
     }
- 
+
     TString BuildPostServiceLocation(ui32 port) {
         return Sprintf("post://*:%" PRIu32 "/%s", port + 1, TEST_SERVICE.data());
     }
@@ -64,7 +64,7 @@ namespace {
             req->SendReply(response);
         }
     };
- 
+
     NNeh::IServicesRef RunServer(ui32 port, TSimpleServer& server) {
         NNeh::IServicesRef runner = NNeh::CreateLoop();
         runner->Add(BuildServiceLocation(port), server);
@@ -75,7 +75,7 @@ namespace {
             runner->ForkLoop(THR_POOL_SIZE);
         } catch (...) {
             Y_FAIL("Can't run server: %s", CurrentExceptionMessage().data());
-        } 
+        }
 
         return runner;
     }
@@ -94,7 +94,7 @@ namespace {
             , ReqType(param.second)
         {
         }
- 
+
         TContinueFunc Start() override {
             switch (ReqType) {
                 case RT_HTTP_GET: {
@@ -104,7 +104,7 @@ namespace {
                         Env->HttpClientService.Send(getRequest, Requests[i].Get());
                     }
                     break;
-                } 
+                }
                 case RT_HTTP_POST: {
                     TString servicePath = BuildPostServiceLocation(ServerPort);
                     TStringInput headersText(TEST_POST_HEADERS);
@@ -114,8 +114,8 @@ namespace {
                         Env->HttpClientService.SendPost(servicePath, TEST_POST_PARAMS, headers, Requests[i].Get());
                     }
                     break;
-                } 
-            } 
+                }
+            }
 
             return &THttpClientTask::GotReplies;
         }
@@ -154,25 +154,25 @@ Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
         NNeh::IServicesRef runner = RunServer(SERVER_PORT, server);
 
         THttpClientEnv env;
-        TIntrusivePtr<TSimpleTaskRunner> task = env.SpawnTask<THttpClientTask>(TTaskParam(SERVER_PORT, RT_HTTP_GET)); 
+        TIntrusivePtr<TSimpleTaskRunner> task = env.SpawnTask<THttpClientTask>(TTaskParam(SERVER_PORT, RT_HTTP_GET));
 
         env.TestSync.WaitForAndIncrement(1);
     }
- 
+
     Y_UNIT_TEST(SimplePost) {
-        // TODO: randomize port 
-        if (!IsFixedPortTestAllowed()) { 
-            return; 
-        } 
- 
-        TSimpleServer server; 
-        NNeh::IServicesRef runner = RunServer(SERVER_PORT, server); 
- 
-        THttpClientEnv env; 
-        TIntrusivePtr<TSimpleTaskRunner> task = env.SpawnTask<THttpClientTask>(TTaskParam(SERVER_PORT, RT_HTTP_POST)); 
- 
-        env.TestSync.WaitForAndIncrement(1); 
-    } 
+        // TODO: randomize port
+        if (!IsFixedPortTestAllowed()) {
+            return;
+        }
+
+        TSimpleServer server;
+        NNeh::IServicesRef runner = RunServer(SERVER_PORT, server);
+
+        THttpClientEnv env;
+        TIntrusivePtr<TSimpleTaskRunner> task = env.SpawnTask<THttpClientTask>(TTaskParam(SERVER_PORT, RT_HTTP_POST));
+
+        env.TestSync.WaitForAndIncrement(1);
+    }
 
     Y_UNIT_TEST(HttpCodeExtraction) {
     // Find "request failed(" string, then copy len("HTTP/1.X NNN") chars and try to convert NNN to HTTP code.

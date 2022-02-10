@@ -6,7 +6,7 @@
 
 #include <util/generic/ptr.h>
 
-#include <functional> 
+#include <functional>
 
 namespace NMonitoring {
     enum class EUnknownGroupPolicy {
@@ -15,14 +15,14 @@ namespace NMonitoring {
     };
 
     struct TDynamicCountersPage: public TPreMonPage {
-    public: 
-        using TOutputCallback = std::function<void()>; 
- 
+    public:
+        using TOutputCallback = std::function<void()>;
+
     private:
         const TIntrusivePtr<TDynamicCounters> Counters;
-        TOutputCallback OutputCallback; 
+        TOutputCallback OutputCallback;
         EUnknownGroupPolicy UnknownGroupPolicy {EUnknownGroupPolicy::Error};
- 
+
     private:
         void HandleAbsentSubgroup(IMonHttpRequest& request);
 
@@ -30,10 +30,10 @@ namespace NMonitoring {
         TDynamicCountersPage(const TString& path,
                              const TString& title,
                              TIntrusivePtr<TDynamicCounters> counters,
-                             TOutputCallback outputCallback = nullptr) 
+                             TOutputCallback outputCallback = nullptr)
             : TPreMonPage(path, title)
             , Counters(counters)
-            , OutputCallback(outputCallback) 
+            , OutputCallback(outputCallback)
         {
         }
 

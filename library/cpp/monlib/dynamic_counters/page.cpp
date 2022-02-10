@@ -27,10 +27,10 @@ TMaybe<EFormat> ParseFormat(TStringBuf str) {
 }
 
 void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
-    if (OutputCallback) { 
-        OutputCallback(); 
-    } 
- 
+    if (OutputCallback) {
+        OutputCallback();
+    }
+
     TCountableBase::EVisibility visibility{
         TCountableBase::EVisibility::Public
     };

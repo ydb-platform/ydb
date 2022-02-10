@@ -223,7 +223,7 @@ namespace {
     #endif
 
     #if defined(_glibc_) || defined(_cygwin_)
-    // glibc does not have fgetln
+    // glibc does not have fgetln 
     using TGetLine = TGetLineBase;
     #else
     struct TGetLine: public TGetLineBase {

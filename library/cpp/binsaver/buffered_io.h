@@ -1,10 +1,10 @@
-#pragma once 
+#pragma once
 
 #include <util/system/yassert.h>
 #include <util/generic/utility.h>
 #include <util/generic/ylimits.h>
 #include <string.h>
- 
+
 struct IBinaryStream {
     virtual ~IBinaryStream() = default;
     ;
@@ -25,7 +25,7 @@ struct IBinaryStream {
         }
     }
 
-    virtual bool IsValid() const = 0; 
+    virtual bool IsValid() const = 0;
     virtual bool IsFailed() const = 0;
 
 private:
@@ -34,15 +34,15 @@ private:
 
     i64 LongRead(void* userBuffer, i64 size);
     i64 LongWrite(const void* userBuffer, i64 size);
-}; 
- 
+};
+
 template <int N_SIZE = 16384>
 class TBufferedStream {
-    char Buf[N_SIZE]; 
+    char Buf[N_SIZE];
     i64 Pos, BufSize;
     IBinaryStream& Stream;
     bool bIsReading, bIsEof, bFailed;
- 
+
     void ReadComplex(void* userBuffer, i64 size) {
         if (bIsEof) {
             memset(userBuffer, 0, size);
@@ -82,7 +82,7 @@ class TBufferedStream {
     void operator=(const TBufferedStream&) {
     }
 
-public: 
+public:
     TBufferedStream(bool bRead, IBinaryStream& stream)
         : Pos(0)
         , BufSize(0)
@@ -92,10 +92,10 @@ public:
         , bFailed(false)
     {
     }
-    ~TBufferedStream() { 
-        if (!bIsReading) 
+    ~TBufferedStream() {
+        if (!bIsReading)
             Flush();
-    } 
+    }
     void Flush() {
         Y_ASSERT(!bIsReading);
         if (bIsReading)
@@ -109,26 +109,26 @@ public:
     }
     inline void Read(void* userBuffer, i64 size) {
         Y_ASSERT(bIsReading);
-        if (!bIsEof && size + Pos <= BufSize) { 
-            memcpy(userBuffer, Buf + Pos, size); 
-            Pos += size; 
-            return; 
-        } 
-        ReadComplex(userBuffer, size); 
-    } 
+        if (!bIsEof && size + Pos <= BufSize) {
+            memcpy(userBuffer, Buf + Pos, size);
+            Pos += size;
+            return;
+        }
+        ReadComplex(userBuffer, size);
+    }
     inline void Write(const void* userBuffer, i64 size) {
         Y_ASSERT(!bIsReading);
-        if (Pos + size < N_SIZE) { 
-            memcpy(Buf + Pos, userBuffer, size); 
-            Pos += size; 
-            return; 
-        } 
-        WriteComplex(userBuffer, size); 
-    } 
+        if (Pos + size < N_SIZE) {
+            memcpy(Buf + Pos, userBuffer, size);
+            Pos += size;
+            return;
+        }
+        WriteComplex(userBuffer, size);
+    }
     bool IsValid() const {
         return Stream.IsValid();
     }
     bool IsFailed() const {
         return bFailed;
     }
-}; 
+};

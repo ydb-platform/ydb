@@ -1,20 +1,20 @@
 #include "bin_saver.h"
- 
+
 TClassFactory<IObjectBase>* pSaverClasses;
-void StartRegisterSaveload() { 
+void StartRegisterSaveload() {
     if (!pSaverClasses)
         pSaverClasses = new TClassFactory<IObjectBase>;
-} 
-struct SBasicChunkInit { 
+}
+struct SBasicChunkInit {
     ~SBasicChunkInit() {
         if (pSaverClasses)
             delete pSaverClasses;
     }
-} initSaver; 
- 
-////////////////////////////////////////////////////////////////////////// 
+} initSaver;
+
+//////////////////////////////////////////////////////////////////////////
 void IBinSaver::StoreObject(IObjectBase* pObject) {
-    if (pObject) { 
+    if (pObject) {
         Y_ASSERT(pSaverClasses->GetObjectTypeID(pObject) != -1 && "trying to save unregistered object");
     }
 
@@ -39,17 +39,17 @@ void IBinSaver::StoreObject(IObjectBase* pObject) {
     if (!Objects.Get())
         Objects.Reset(new CObjectsHash);
     if (ptrId != 0 && Objects->find(ptrId) == Objects->end()) {
-        ObjectQueue.push_back(pObject); 
+        ObjectQueue.push_back(pObject);
         (*Objects)[ptrId];
-        int typeId = pSaverClasses->GetObjectTypeID(pObject); 
+        int typeId = pSaverClasses->GetObjectTypeID(pObject);
         if (typeId == -1) {
             fprintf(stderr, "IBinSaver: trying to save unregistered object\n");
             abort();
         }
-        DataChunk(&typeId, sizeof(typeId)); 
-    } 
-} 
- 
+        DataChunk(&typeId, sizeof(typeId));
+    }
+}
+
 IObjectBase* IBinSaver::LoadObject() {
     ui64 ptrId = 0;
     DataChunk(&ptrId, sizeof(ptrId));
@@ -58,9 +58,9 @@ IObjectBase* IBinSaver::LoadObject() {
             Objects.Reset(new CObjectsHash);
         CObjectsHash::iterator pFound = Objects->find(ptrId);
         if (pFound != Objects->end())
-            return pFound->second; 
-        int typeId; 
-        DataChunk(&typeId, sizeof(typeId)); 
+            return pFound->second;
+        int typeId;
+        DataChunk(&typeId, sizeof(typeId));
         IObjectBase* pObj = pSaverClasses->CreateObject(typeId);
         Y_ASSERT(pObj != nullptr);
         if (pObj == nullptr) {
@@ -68,14 +68,14 @@ IObjectBase* IBinSaver::LoadObject() {
             abort();
         }
         (*Objects)[ptrId] = pObj;
-        ObjectQueue.push_back(pObj); 
-        return pObj; 
-    } 
+        ObjectQueue.push_back(pObj);
+        return pObj;
+    }
     return nullptr;
-} 
- 
-IBinSaver::~IBinSaver() { 
+}
+
+IBinSaver::~IBinSaver() {
     for (size_t i = 0; i < ObjectQueue.size(); ++i) {
-        AddPolymorphicBase(1, ObjectQueue[i]); 
-    } 
-} 
+        AddPolymorphicBase(1, ObjectQueue[i]);
+    }
+}

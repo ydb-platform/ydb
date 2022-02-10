@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "bin_saver.h"
 
 namespace NMemIoInternals {
@@ -22,7 +22,7 @@ namespace NMemIoInternals {
         bool IsFailed() const override {
             return false;
         }
- 
+
     private:
         int WriteImpl(const void* userBuffer, int size) override {
             if (size == 0)
@@ -63,8 +63,8 @@ namespace NMemIoInternals {
                 *reinterpret_cast<T*>(&(*data)[0]) = c;
             }
         }
-    } 
- 
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     class THugeMemoryStream: public IBinaryStream {
         TVector<TVector<char>>& Data;

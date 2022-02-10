@@ -21,7 +21,7 @@ RECURSE(
     leveldb
     lld
     lldb
-    mp4viewer
+    mp4viewer 
     open-vcdiff
     open-vcdiff/bin
     plantuml

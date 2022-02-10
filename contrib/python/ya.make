@@ -390,7 +390,7 @@ RECURSE(
     Flask-Caching
     flask-cors
     flask_graphql
-    Flask-Humanize 
+    Flask-Humanize
     Flask-Log-Request-ID
     Flask-Login
     Flask-Mail

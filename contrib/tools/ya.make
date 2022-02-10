@@ -17,7 +17,7 @@ RECURSE(
     gprof2dot
     grpc_cli
     kyotocabinet
-    langid 
+    langid
     leveldb
     lld
     lldb

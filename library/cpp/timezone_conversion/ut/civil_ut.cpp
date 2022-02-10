@@ -22,12 +22,12 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::Calc<NDatetime::TCivilDay>(s, -2), NDatetime::TCivilDay(2017, 1, 30));
     }
     Y_UNIT_TEST(Adds) {
-        NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9); 
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddDays(s, 2), NDatetime::TCivilSecond(2017, 2, 3, 10, 12, 9)); 
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddMonths(s, -2), NDatetime::TCivilSecond(2016, 12, 1, 10, 12, 9)); 
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddYears(s, -55), NDatetime::TCivilSecond(1962, 2, 1, 10, 12, 9)); 
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddHours(s, 40), NDatetime::TCivilSecond(2017, 2, 3, 2, 12, 9)); 
-    } 
+        NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9);
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddDays(s, 2), NDatetime::TCivilSecond(2017, 2, 3, 10, 12, 9));
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddMonths(s, -2), NDatetime::TCivilSecond(2016, 12, 1, 10, 12, 9));
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddYears(s, -55), NDatetime::TCivilSecond(1962, 2, 1, 10, 12, 9));
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddHours(s, 40), NDatetime::TCivilSecond(2017, 2, 3, 2, 12, 9));
+    }
     Y_UNIT_TEST(Convert) {
         TInstant absTime = TInstant::Seconds(1500299239);
         NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles");

@@ -346,29 +346,29 @@ class StructType(AbstractTypeBuilder):
 
     def __str__(self):
         return "Struct<%s>" % ",".join(self.__members_repr)
-
-
-class BulkUpsertColumns(AbstractTypeBuilder):
+ 
+ 
+class BulkUpsertColumns(AbstractTypeBuilder): 
     __slots__ = ("__columns_repr", "__proto")
-
-    def __init__(self):
-        self.__columns_repr = []
-        self.__proto = _apis.ydb_value.Type(struct_type=_apis.ydb_value.StructType())
-
-    def add_column(self, name, column_type):
-        """
-        :param name: A column name
-        :param column_type: A column type
-        """
-        self.__columns_repr.append("%s:%s" % (name, column_type))
-        column = self.__proto.struct_type.members.add()
-        column.name = name
-        column.type.MergeFrom(column_type.proto)
-        return self
-
-    @property
-    def proto(self):
-        return self.__proto
-
-    def __str__(self):
-        return "BulkUpsertColumns<%s>" % ",".join(self.__columns_repr)
+ 
+    def __init__(self): 
+        self.__columns_repr = [] 
+        self.__proto = _apis.ydb_value.Type(struct_type=_apis.ydb_value.StructType()) 
+ 
+    def add_column(self, name, column_type): 
+        """ 
+        :param name: A column name 
+        :param column_type: A column type 
+        """ 
+        self.__columns_repr.append("%s:%s" % (name, column_type)) 
+        column = self.__proto.struct_type.members.add() 
+        column.name = name 
+        column.type.MergeFrom(column_type.proto) 
+        return self 
+ 
+    @property 
+    def proto(self): 
+        return self.__proto 
+ 
+    def __str__(self): 
+        return "BulkUpsertColumns<%s>" % ",".join(self.__columns_repr) 

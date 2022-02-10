@@ -211,15 +211,15 @@ class CompactionPolicy(object):
         return self._pb
 
 
-class SplitPoint(object):
-    def __init__(self, *args):
-        self._value = tuple(args)
-
-    @property
-    def value(self):
-        return self._value
-
-
+class SplitPoint(object): 
+    def __init__(self, *args): 
+        self._value = tuple(args) 
+ 
+    @property 
+    def value(self): 
+        return self._value 
+ 
+ 
 class ExplicitPartitions(object):
     def __init__(self, split_points):
         self.split_points = split_points
@@ -1306,19 +1306,19 @@ class TableClient(BaseTableClient):
             lambda resp: _wrap_scan_query_response(resp, self._table_client_settings),
         )
 
-    @_utilities.wrap_async_call_exceptions
-    def async_bulk_upsert(self, table_path, rows, column_types, settings=None):
+    @_utilities.wrap_async_call_exceptions 
+    def async_bulk_upsert(self, table_path, rows, column_types, settings=None): 
         # type: (str, list, ydb.AbstractTypeBuilder | ydb.PrimitiveType, ydb.BaseRequestSettings) -> None
-        return self._driver.future(
-            _session_impl.bulk_upsert_request_factory(table_path, rows, column_types),
-            _apis.TableService.Stub,
-            _apis.TableService.BulkUpsert,
-            _session_impl.wrap_operation_bulk_upsert,
-            settings,
-            (),
-        )
+        return self._driver.future( 
+            _session_impl.bulk_upsert_request_factory(table_path, rows, column_types), 
+            _apis.TableService.Stub, 
+            _apis.TableService.BulkUpsert, 
+            _session_impl.wrap_operation_bulk_upsert, 
+            settings, 
+            (), 
+        ) 
 
-
+ 
 def _make_index_description(index):
     result = TableIndex(index.name).with_index_columns(
         *tuple(col for col in index.index_columns)

@@ -3,9 +3,9 @@
 #include "log_settings_configurator.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <util/system/file.h>
-#include <util/system/fs.h>
-#include <util/stream/file.h>
+#include <util/system/file.h> 
+#include <util/system/fs.h> 
+#include <util/stream/file.h> 
 #include <google/protobuf/text_format.h>
 
 namespace NKikimr {
@@ -19,11 +19,11 @@ public:
     }
 
     TLogSettingsConfigurator();
-    TLogSettingsConfigurator(const TString &pathToConfigCacheFile);
+    TLogSettingsConfigurator(const TString &pathToConfigCacheFile); 
 
-    void SaveLogSettingsConfigToCache(const NKikimrConfig::TLogConfig &logConfig,
-                                      const TActorContext &ctx);
-
+    void SaveLogSettingsConfigToCache(const NKikimrConfig::TLogConfig &logConfig, 
+                                      const TActorContext &ctx); 
+ 
     void Bootstrap(const TActorContext &ctx);
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
@@ -48,19 +48,19 @@ public:
             break;
         }
     }
-private:
-    TString PathToConfigCacheFile;
+private: 
+    TString PathToConfigCacheFile; 
 };
 
 TLogSettingsConfigurator::TLogSettingsConfigurator()
 {
 }
 
-TLogSettingsConfigurator::TLogSettingsConfigurator(const TString &pathToConfigCacheFile) 
-{
-    PathToConfigCacheFile = pathToConfigCacheFile;
-}
-
+TLogSettingsConfigurator::TLogSettingsConfigurator(const TString &pathToConfigCacheFile)  
+{ 
+    PathToConfigCacheFile = pathToConfigCacheFile; 
+} 
+ 
 void TLogSettingsConfigurator::Bootstrap(const TActorContext &ctx)
 {
     LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -85,14 +85,14 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
                "TLogSettingsConfigurator: got new config: "
                << rec.GetConfig().ShortDebugString());
 
-    const auto& logConfig = rec.GetConfig().GetLogConfig();
+    const auto& logConfig = rec.GetConfig().GetLogConfig(); 
 
-    ApplyLogConfig(logConfig, ctx);
-
-    // Save config to cache file
-    if (PathToConfigCacheFile)
-        SaveLogSettingsConfigToCache(logConfig, ctx);
-
+    ApplyLogConfig(logConfig, ctx); 
+ 
+    // Save config to cache file 
+    if (PathToConfigCacheFile) 
+        SaveLogSettingsConfigToCache(logConfig, ctx); 
+ 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -102,36 +102,36 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
-void TLogSettingsConfigurator::SaveLogSettingsConfigToCache(const NKikimrConfig::TLogConfig &logConfig,
-                                  const TActorContext &ctx) {
-    try {
-        NKikimrConfig::TAppConfig appConfig;
-        TFileInput cacheFile(PathToConfigCacheFile);
-
-        if (!google::protobuf::TextFormat::ParseFromString(cacheFile.ReadAll(), &appConfig))
-            ythrow yexception() << "Failed to parse config from cache file " << LastSystemError() << " " << LastSystemErrorText();
-        
-        appConfig.MutableLogConfig()->CopyFrom(logConfig);
-
-        TString proto;
-        const TString pathToTempFile = PathToConfigCacheFile + ".tmp";
-
-        if (!google::protobuf::TextFormat::PrintToString(appConfig, &proto))
-            ythrow yexception() << "Failed to print app config to string " << LastSystemError() << " " << LastSystemErrorText();
-
-        TFileOutput tempFile(pathToTempFile);
-        tempFile << proto;
-
-        if (!NFs::Rename(pathToTempFile, PathToConfigCacheFile))
-            ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
-
-    } catch (const yexception& ex) {
-        LOG_ERROR_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TLogSettingsConfigurator: failed to save log settings config to cache file '"
-                    << ex.what() << "'");
-    }
-}
-
+void TLogSettingsConfigurator::SaveLogSettingsConfigToCache(const NKikimrConfig::TLogConfig &logConfig, 
+                                  const TActorContext &ctx) { 
+    try { 
+        NKikimrConfig::TAppConfig appConfig; 
+        TFileInput cacheFile(PathToConfigCacheFile); 
+ 
+        if (!google::protobuf::TextFormat::ParseFromString(cacheFile.ReadAll(), &appConfig)) 
+            ythrow yexception() << "Failed to parse config from cache file " << LastSystemError() << " " << LastSystemErrorText(); 
+         
+        appConfig.MutableLogConfig()->CopyFrom(logConfig); 
+ 
+        TString proto; 
+        const TString pathToTempFile = PathToConfigCacheFile + ".tmp"; 
+ 
+        if (!google::protobuf::TextFormat::PrintToString(appConfig, &proto)) 
+            ythrow yexception() << "Failed to print app config to string " << LastSystemError() << " " << LastSystemErrorText(); 
+ 
+        TFileOutput tempFile(pathToTempFile); 
+        tempFile << proto; 
+ 
+        if (!NFs::Rename(pathToTempFile, PathToConfigCacheFile)) 
+            ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText(); 
+ 
+    } catch (const yexception& ex) { 
+        LOG_ERROR_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TLogSettingsConfigurator: failed to save log settings config to cache file '" 
+                    << ex.what() << "'"); 
+    } 
+} 
+ 
 void TLogSettingsConfigurator::ApplyLogConfig(const NKikimrConfig::TLogConfig &config,
                                               const TActorContext &ctx)
 {
@@ -212,10 +212,10 @@ IActor *CreateLogSettingsConfigurator()
     return new TLogSettingsConfigurator();
 }
 
-IActor *CreateLogSettingsConfigurator(const TString &pathToConfigCacheFile)
-{
-    return new TLogSettingsConfigurator(pathToConfigCacheFile);
-}
-
+IActor *CreateLogSettingsConfigurator(const TString &pathToConfigCacheFile) 
+{ 
+    return new TLogSettingsConfigurator(pathToConfigCacheFile); 
+} 
+ 
 } // namespace NConsole
 } // namespace NKikimr

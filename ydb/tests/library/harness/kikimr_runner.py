@@ -70,12 +70,12 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__role = role
         self.__node_broker_port = node_broker_port
         self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
-        self.__cms_config_cache_file = tempfile.NamedTemporaryFile(
+        self.__cms_config_cache_file = tempfile.NamedTemporaryFile( 
             dir=self.cwd,
-            prefix="cms_config_cache_",
-            delete=False
-        )
-        self.__cms_config_cache_file_name = self.__cms_config_cache_file.name
+            prefix="cms_config_cache_", 
+            delete=False 
+        ) 
+        self.__cms_config_cache_file_name = self.__cms_config_cache_file.name 
         daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240)
 
     @property
@@ -95,10 +95,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return self.__cwd
 
     @property
-    def cms_config_cache_file_name(self):
-        return self.__cms_config_cache_file_name
-
-    @property
+    def cms_config_cache_file_name(self): 
+        return self.__cms_config_cache_file_name 
+ 
+    @property 
     def command(self):
         return self.__make_run_command()
 
@@ -160,7 +160,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if self.sqs_port is not None:
             command.extend(["--sqs-port=%d" % self.sqs_port])
-
+ 
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command

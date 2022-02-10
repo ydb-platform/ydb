@@ -467,59 +467,59 @@ SELECT * FROM $InputSource;
             )
         )
 
-    def test_bulk_upsert(self):
-        session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
-
-        session.execute_scheme(
+    def test_bulk_upsert(self): 
+        session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create()) 
+ 
+        session.execute_scheme( 
             ' create table `test_bulk_upsert` '
-            ' (k Uint64, a Utf8, b Utf8, primary key(k)); '
-        )
-
-        class Rec(object):
-            __slots__ = ('k', 'a', 'b')
-
-            def __init__(self, k, a, b=None):
-                self.k = k
-                self.a = a
-                self.b = b
-
-        table_client = self.driver.table_client
-        table_path = os.path.join(self.database_name, 'test_bulk_upsert')
-        rows = [Rec(i, str(i), 'b') for i in range(10)]
-        column_types = ydb.BulkUpsertColumns()\
-            .add_column('k', ydb.PrimitiveType.Uint64)\
-            .add_column('a', ydb.PrimitiveType.Utf8)\
-            .add_column('b', ydb.PrimitiveType.Utf8)
-        table_client.bulk_upsert(table_path, rows, column_types)
-
-        result_sets = session.transaction().execute(
+            ' (k Uint64, a Utf8, b Utf8, primary key(k)); ' 
+        ) 
+ 
+        class Rec(object): 
+            __slots__ = ('k', 'a', 'b') 
+ 
+            def __init__(self, k, a, b=None): 
+                self.k = k 
+                self.a = a 
+                self.b = b 
+ 
+        table_client = self.driver.table_client 
+        table_path = os.path.join(self.database_name, 'test_bulk_upsert') 
+        rows = [Rec(i, str(i), 'b') for i in range(10)] 
+        column_types = ydb.BulkUpsertColumns()\ 
+            .add_column('k', ydb.PrimitiveType.Uint64)\ 
+            .add_column('a', ydb.PrimitiveType.Utf8)\ 
+            .add_column('b', ydb.PrimitiveType.Utf8) 
+        table_client.bulk_upsert(table_path, rows, column_types) 
+ 
+        result_sets = session.transaction().execute( 
             'SELECT COUNT(*) as cnt FROM test_bulk_upsert;', commit_tx=True
-        )
-
-        assert_that(
-            result_sets[0].rows[0].cnt, is_(
-                10
-            )
-        )
-
-        # performing bulk upsert on 2 out of 3 columns
-        column_types = ydb.BulkUpsertColumns()\
-            .add_column('k', ydb.PrimitiveType.Uint64)\
-            .add_column('a', ydb.PrimitiveType.Utf8)
-        rows = [Rec(i, str(i)) for i in range(10)]
-        table_client.bulk_upsert(table_path, rows, column_types)
-
-        result_sets = session.transaction().execute(
+        ) 
+ 
+        assert_that( 
+            result_sets[0].rows[0].cnt, is_( 
+                10 
+            ) 
+        ) 
+ 
+        # performing bulk upsert on 2 out of 3 columns 
+        column_types = ydb.BulkUpsertColumns()\ 
+            .add_column('k', ydb.PrimitiveType.Uint64)\ 
+            .add_column('a', ydb.PrimitiveType.Utf8) 
+        rows = [Rec(i, str(i)) for i in range(10)] 
+        table_client.bulk_upsert(table_path, rows, column_types) 
+ 
+        result_sets = session.transaction().execute( 
             'SELECT * FROM test_bulk_upsert LIMIT 1;', commit_tx=True
-        )
-
-        # check that column b wasn't updated
-        assert_that(
-            result_sets[0].rows[0].b, is_(
-                'b'
-            )
-        )
-
+        ) 
+ 
+        # check that column b wasn't updated 
+        assert_that( 
+            result_sets[0].rows[0].b, is_( 
+                'b' 
+            ) 
+        ) 
+ 
     def test_all_enums_are_presented_as_exceptions(self):
         status_ids = ydb_status_codes_pb2.StatusIds
         for name, value in status_ids.StatusCode.items():

@@ -98,11 +98,11 @@ def get_episodes_data():
         Episode(1, 4, 4, "Italian For Beginners", "2010-07-16"),
         Episode(1, 4, 5, "Bad Boys", "2010-07-23"),
         Episode(1, 4, 6, "Reynholm vs Reynholm", "2010-07-30"),
-    ]
-
-
-def get_episodes_data_for_bulk_upsert():
-    return [
+    ] 
+ 
+ 
+def get_episodes_data_for_bulk_upsert(): 
+    return [ 
         Episode(2, 1, 1, "Minimum Viable Product", "2014-04-06"),
         Episode(2, 1, 2, "The Cap Table", "2014-04-13"),
         Episode(2, 1, 3, "Articles of Incorporation", "2014-04-20"),

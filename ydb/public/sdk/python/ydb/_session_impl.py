@@ -246,10 +246,10 @@ def wrap_operation(rpc_state, response_pb, session_state, driver=None):
     return operation.Operation(rpc_state, response_pb, driver)
 
 
-def wrap_operation_bulk_upsert(rpc_state, response_pb, driver=None):
-    return operation.Operation(rpc_state, response_pb, driver)
-
-
+def wrap_operation_bulk_upsert(rpc_state, response_pb, driver=None): 
+    return operation.Operation(rpc_state, response_pb, driver) 
+ 
+ 
 @bad_session_handler
 def wrap_keep_alive_response(rpc_state, response_pb, session_state, session):
     issues._process_response(response_pb.operation)
@@ -396,15 +396,15 @@ def read_table_request_factory(
     return session_state.attach_request(request)
 
 
-def bulk_upsert_request_factory(table, rows, column_types):
-    request = _apis.ydb_table.BulkUpsertRequest()
-    request.table = table
+def bulk_upsert_request_factory(table, rows, column_types): 
+    request = _apis.ydb_table.BulkUpsertRequest() 
+    request.table = table 
     request.rows.MergeFrom(
         convert.to_typed_value_from_native(types.ListType(column_types).proto, rows)
     )
-    return request
-
-
+    return request 
+ 
+ 
 def wrap_read_table_response(response):
     issues._process_response(response)
     return convert.ResultSet.from_message(response.result.result_set)

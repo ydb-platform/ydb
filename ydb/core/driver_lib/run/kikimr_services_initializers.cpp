@@ -1021,7 +1021,7 @@ TLoggerInitializer::TLoggerInitializer(const TKikimrRunConfig& runConfig,
     : IKikimrServicesInitializer(runConfig)
     , LogSettings(logSettings)
     , LogBackend(logBackend)
-    , PathToConfigCacheFile(runConfig.PathToConfigCacheFile)
+    , PathToConfigCacheFile(runConfig.PathToConfigCacheFile) 
 {
 }
 
@@ -1036,13 +1036,13 @@ void TLoggerInitializer::InitializeServices(
     std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(LogSettings->LoggerActorId, loggerActorCmd);
     setup->LocalServices.push_back(loggerActorPair);
 
-    IActor *configurator;
+    IActor *configurator; 
     if (PathToConfigCacheFile && !appData->FeatureFlags.GetEnableConfigurationCache()) {
-        configurator = NConsole::CreateLogSettingsConfigurator(PathToConfigCacheFile);
-    } else {
-        configurator = NConsole::CreateLogSettingsConfigurator();
-    }
-
+        configurator = NConsole::CreateLogSettingsConfigurator(PathToConfigCacheFile); 
+    } else { 
+        configurator = NConsole::CreateLogSettingsConfigurator(); 
+    } 
+ 
     setup->LocalServices.emplace_back(TActorId(),
                                       TActorSetupCmd(configurator, TMailboxType::HTSwap, appData->UserPoolId));
 }

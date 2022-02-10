@@ -89,8 +89,8 @@ struct TKikimrRunConfig {
     ui32                       NodeId;
     TKikimrScopeId             ScopeId;
 
-    TString                    PathToConfigCacheFile;
-
+    TString                    PathToConfigCacheFile; 
+ 
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});
 };

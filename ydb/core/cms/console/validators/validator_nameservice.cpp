@@ -67,8 +67,8 @@ bool TNameserviceConfigValidator::CheckConfig(const NKikimrConfig::TAppConfig &o
         }
 
         auto addrPort = std::make_pair(addr, port);
-        // do not validate for duplicates if addr is empty
-        if (addr && addrMap.contains(addrPort)) {
+        // do not validate for duplicates if addr is empty 
+        if (addr && addrMap.contains(addrPort)) { 
             AddError(issues,
                      TStringBuilder() << "duplicating " << addr << ":" << port
                      << " for nodes " << addrMap.at(addrPort) << " and " << id);

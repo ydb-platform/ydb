@@ -266,8 +266,8 @@ def describe_table(pool, path, name):
     return pool.retry_operation_sync(callee)
 
 
-def bulk_upsert(table_client, path):
-    print("\n> bulk upsert: episodes")
+def bulk_upsert(table_client, path): 
+    print("\n> bulk upsert: episodes") 
     column_types = (
         ydb.BulkUpsertColumns()
         .add_column("series_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
@@ -276,10 +276,10 @@ def bulk_upsert(table_client, path):
         .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("air_date", ydb.OptionalType(ydb.PrimitiveType.Uint64))
     )
-    rows = basic_example_data.get_episodes_data_for_bulk_upsert()
-    table_client.bulk_upsert(os.path.join(path, "episodes"), rows, column_types)
-
-
+    rows = basic_example_data.get_episodes_data_for_bulk_upsert() 
+    table_client.bulk_upsert(os.path.join(path, "episodes"), rows, column_types) 
+ 
+ 
 def is_directory_exists(driver, path):
     try:
         return driver.scheme_client.describe_path(path).is_directory()
@@ -321,7 +321,7 @@ def run(endpoint, database, path):
             select_simple(pool, full_path)
 
             upsert_simple(pool, full_path)
-
+ 
             bulk_upsert(driver.table_client, full_path)
 
             select_prepared(pool, full_path, 2, 3, 7)

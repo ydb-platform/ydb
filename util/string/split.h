@@ -396,12 +396,12 @@ struct TSimplePusher {
 };
 
 template <class T>
-static inline void Split(char* buf, char ch, T* res) { 
+static inline void Split(char* buf, char ch, T* res) {
     res->resize(0);
     if (*buf == 0)
         return;
 
-    TCharDelimiter<char> delim(ch); 
+    TCharDelimiter<char> delim(ch);
     TSimplePusher<T> pusher = {res};
 
     SplitString(buf, delim, pusher);

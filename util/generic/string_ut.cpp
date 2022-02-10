@@ -19,7 +19,7 @@ static_assert(sizeof(TString) == sizeof(std::string), "expect sizeof(TString) ==
 #else
 static_assert(sizeof(TString) == sizeof(const char*), "expect sizeof(TString) == sizeof(const char*)");
 #endif
- 
+
 class TStringTestZero: public TTestBase {
     UNIT_TEST_SUITE(TStringTestZero);
     UNIT_TEST(TestZero);

@@ -1,5 +1,5 @@
 #include "ysafeptr.h"
- 
+
 #ifdef CHECK_YPTR2
 Y_POD_THREAD(bool)
 IObjectBase::DisableThreadCheck;

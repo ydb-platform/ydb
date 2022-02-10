@@ -25,11 +25,11 @@ SRCS(
     writeable_node.cpp
 )
 
-PEERDIR( 
+PEERDIR(
     library/cpp/packers
     library/cpp/containers/compact_vector
     library/cpp/on_disk/chunks
     util/draft
-) 
- 
+)
+
 END()

@@ -17,7 +17,7 @@
 class TMappedFile {
 private:
     TFileMap* Map_;
- 
+
 private:
     TMappedFile(TFileMap* map, const char* dbgName);
 
@@ -34,19 +34,19 @@ public:
         Map_ = nullptr;
         init(name, TFileMap::oRdOnly);
     }
- 
+
     TMappedFile(const TFile& file, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown");
 
     void init(const TString& name);
- 
+
     void init(const TString& name, TFileMap::EOpenMode om);
 
     void init(const TString& name, size_t length, TFileMap::EOpenMode om);
- 
+
     void init(const TFile&, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown");
 
-    void flush(); 
- 
+    void flush();
+
     void term() {
         if (Map_) {
             Map_->Unmap();
@@ -57,12 +57,12 @@ public:
 
     size_t getSize() const {
         return (Map_ ? Map_->MappedSize() : 0);
-    } 
+    }
 
     void* getData(size_t pos = 0) const {
         Y_ASSERT(!Map_ || (pos <= getSize()));
         return (Map_ ? (void*)((unsigned char*)Map_->Ptr() + pos) : nullptr);
-    } 
+    }
 
     void precharge(size_t pos = 0, size_t size = (size_t)-1) const;
 

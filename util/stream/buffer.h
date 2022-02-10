@@ -53,8 +53,8 @@ private:
 
 private:
     THolder<TImpl> Impl_;
-}; 
- 
+};
+
 /**
  * Input stream that reads from an external `TBuffer`.
  */

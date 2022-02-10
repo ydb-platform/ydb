@@ -41,8 +41,8 @@ public:
 private:
     TBuffer& Data_;
     static constexpr size_t MinBufferGrowSize = 16;
-}; 
- 
+};
+
 namespace {
     using TImpl = TBufferOutput::TImpl;
 
@@ -58,14 +58,14 @@ namespace {
 
 TBufferOutput::TBufferOutput(size_t buflen)
     : Impl_(new TOwnedImpl(buflen))
-{ 
-} 
- 
+{
+}
+
 TBufferOutput::TBufferOutput(TBuffer& buffer)
     : Impl_(new TImpl(buffer))
 {
-} 
- 
+}
+
 TBufferOutput::TBufferOutput(TBufferOutput&&) noexcept = default;
 TBufferOutput& TBufferOutput::operator=(TBufferOutput&&) noexcept = default;
 
@@ -85,8 +85,8 @@ void TBufferOutput::DoUndo(size_t len) {
 
 void TBufferOutput::DoWrite(const void* buf, size_t len) {
     Impl_->DoWrite(buf, len);
-} 
- 
+}
+
 void TBufferOutput::DoWriteC(char c) {
     Impl_->DoWriteC(c);
 }
@@ -95,8 +95,8 @@ TBufferInput::TBufferInput(const TBuffer& buffer)
     : Buf_(buffer)
     , Readed_(0)
 {
-} 
- 
+}
+
 TBufferInput::~TBufferInput() = default;
 
 const TBuffer& TBufferInput::Buffer() const noexcept {

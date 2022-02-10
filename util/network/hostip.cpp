@@ -4,7 +4,7 @@
 #include <util/system/defaults.h>
 #include <util/system/byteorder.h>
 
-#if defined(_unix_) || defined(_cygwin_) 
+#if defined(_unix_) || defined(_cygwin_)
     #include <netdb.h>
 #endif
 

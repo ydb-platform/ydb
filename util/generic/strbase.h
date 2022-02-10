@@ -226,7 +226,7 @@ public:
         TCharType null{0};
         return TStringViewWithTraits(p ? p : &null).compare(s2.AsStringView());
     }
- 
+
     static int compare(const TSelf& s1, const TCharType* p) noexcept {
         TCharType null{0};
         return s1.AsStringView().compare(p ? p : &null);

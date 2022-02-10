@@ -49,13 +49,13 @@ struct TMemoryMapCommon {
     };
 
     enum EOpenModeFlag {
-        oRdOnly = 1, 
-        oRdWr = 2, 
+        oRdOnly = 1,
+        oRdWr = 2,
         oCopyOnWr = 4,
 
         oAccessMask = 7,
-        oNotGreedy = 8, 
-        oPrecharge = 16, 
+        oNotGreedy = 8,
+        oPrecharge = 16,
         oPopulate = 32, // Populate page table entries (see mmap's MAP_POPULATE)
     };
     Y_DECLARE_FLAGS(EOpenMode, EOpenModeFlag)
@@ -115,7 +115,7 @@ public:
     TFileMap(FILE* f, EOpenMode om = oRdOnly, TString dbgName = UnknownFileName());
     TFileMap(const TFile& file, EOpenMode om = oRdOnly, TString dbgName = UnknownFileName());
     TFileMap(const TFileMap& fm) noexcept;
- 
+
     ~TFileMap();
 
     TMapResult Map(i64 offset, size_t size);
@@ -145,7 +145,7 @@ public:
     inline bool IsOpen() const noexcept {
         return Map_.IsOpen();
     }
- 
+
     inline bool IsWritable() const noexcept {
         return Map_.IsWritable();
     }
@@ -157,7 +157,7 @@ public:
     inline void* Ptr() const noexcept {
         return Region_.MappedData();
     }
- 
+
     inline size_t MappedSize() const noexcept {
         return Region_.MappedSize();
     }
@@ -232,7 +232,7 @@ public:
     size_t Size() const {
         return Size_;
     }
-    const T& GetAt(size_t pos) const { 
+    const T& GetAt(size_t pos) const {
         if (pos < Size_)
             return Ptr_[pos];
         return Dummy();
@@ -258,7 +258,7 @@ public:
 
     Y_PURE_FUNCTION bool Empty() const noexcept {
         return 0 == Size_;
-    } 
+    }
     /// for STL compatibility only, Begin() usage is recommended
     const T* begin() const noexcept {
         return Begin();

@@ -141,10 +141,10 @@ struct THash<std::tuple<TArgs...>> {
     }
 };
 
-template <class T> 
+template <class T>
 struct THash: public ::hash<T> {
-}; 
- 
+};
+
 namespace NHashPrivate {
     template <class TFirst, class TSecond, bool IsEmpty = std::is_empty<THash<TFirst>>::value&& std::is_empty<THash<TSecond>>::value>
     struct TPairHash {

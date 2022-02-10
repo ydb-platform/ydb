@@ -54,14 +54,14 @@ extern "C" {
     #define pclose _pclose
 #endif
 
-#ifdef _win_ 
+#ifdef _win_
     #define NAME_MAX FILENAME_MAX
 #endif
 #ifdef _sun_
     #define NAME_MAX PATH_MAX
 #endif
 
-#ifdef _win_ 
+#ifdef _win_
 
     #ifdef sleep // may be defined by perl
         #undef sleep
@@ -72,11 +72,11 @@ void usleep(i64 len);
 
 #endif
 
-#ifdef _win_ 
+#ifdef _win_
 int ftruncate(int fd, i64 length);
 int truncate(const char* name, i64 length);
-#endif 
- 
+#endif
+
 #if defined(GNUC)
     #ifndef va_copy
         #define va_copy __va_copy

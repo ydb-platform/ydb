@@ -2,7 +2,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/strbuf.h>
- 
+
 namespace NUrl {
 
     /**

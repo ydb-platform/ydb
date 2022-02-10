@@ -10,7 +10,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
 #include <util/generic/ylimits.h>
- 
+
 #include <util/folder/dirut.h>
 
 #include <util/random/random.h>
@@ -23,11 +23,11 @@
 #include <iterator>
 
 class TPackersTest: public TTestBase {
-private: 
+private:
     UNIT_TEST_SUITE(TPackersTest);
     UNIT_TEST(TestPackers);
-    UNIT_TEST_SUITE_END(); 
- 
+    UNIT_TEST_SUITE_END();
+
     template <class TData, class TPacker>
     void TestPacker(const TData& data);
 
@@ -36,10 +36,10 @@ private:
 
 public:
     void TestPackers();
-}; 
- 
+};
+
 UNIT_TEST_SUITE_REGISTRATION(TPackersTest);
- 
+
 template <class TData, class TPacker>
 void TPackersTest::TestPacker(const TData& data) {
     size_t len = TPacker().MeasureLeaf(data);

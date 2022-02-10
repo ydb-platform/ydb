@@ -56,9 +56,9 @@ void SlashFolderLocal(TString& folder);
 bool correctpath(TString& filename);
 bool resolvepath(TString& folder, const TString& home);
 
-char GetDirectorySeparator(); 
-const char* GetDirectorySeparatorS(); 
- 
+char GetDirectorySeparator();
+const char* GetDirectorySeparatorS();
+
 void RemoveDirWithContents(TString dirName);
 
 const char* GetFileNameComponent(const char* f);
@@ -84,36 +84,36 @@ TString ResolveDir(const char* path);
 bool SafeResolveDir(const char* path, TString& result);
 
 TString GetDirName(const TString& path);
- 
+
 TString GetBaseName(const TString& path);
 
 TString StripFileComponent(const TString& fileName);
 
-class TExistenceChecker { 
-public: 
-    TExistenceChecker(bool strict = false) 
-        : Strict(strict) 
-    { 
-    } 
- 
-    void SetStrict(bool strict) { 
-        Strict = strict; 
-    } 
- 
-    bool IsStrict() const { 
-        return Strict; 
-    } 
- 
-    const char* Check(const char* fname) const { 
-        if (!fname || !*fname) 
+class TExistenceChecker {
+public:
+    TExistenceChecker(bool strict = false)
+        : Strict(strict)
+    {
+    }
+
+    void SetStrict(bool strict) {
+        Strict = strict;
+    }
+
+    bool IsStrict() const {
+        return Strict;
+    }
+
+    const char* Check(const char* fname) const {
+        if (!fname || !*fname)
             return nullptr;
-        if (Strict) { 
+        if (Strict) {
             NFs::EnsureExists(fname);
         } else if (!NFs::Exists(fname))
             fname = nullptr;
-        return fname; 
-    } 
- 
-private: 
-    bool Strict; 
-}; 
+        return fname;
+    }
+
+private:
+    bool Strict;
+};

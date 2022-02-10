@@ -16,14 +16,14 @@
     #include <unistd.h>
 #endif
 
-void ClearLastSystemError() { 
-#if defined(_win_) 
-    SetLastError(0); 
+void ClearLastSystemError() {
+#if defined(_win_)
+    SetLastError(0);
 #else
     errno = 0;
-#endif 
-} 
- 
+#endif
+}
+
 int LastSystemError() {
 #if defined(_win_)
     int ret = GetLastError();

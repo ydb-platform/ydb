@@ -1,7 +1,7 @@
 #include "writeable_node.h"
 #include "node.h"
 #include "comptrie_impl.h"
- 
+
 namespace NCompactTrie {
     TWriteableNode::TWriteableNode()
         : LeafPos(nullptr)

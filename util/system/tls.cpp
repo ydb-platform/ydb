@@ -111,7 +111,7 @@ namespace {
             return MyStorageSlow();
 #endif
         }
- 
+
         virtual TPerThreadStorage* MyStorageSlow() = 0;
 
         virtual ~TGenericTlsBase() = default;

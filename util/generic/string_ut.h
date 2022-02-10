@@ -3,7 +3,7 @@
 #include "string.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/string/reverse.h>
 
 template <typename CharT, size_t N>
@@ -38,7 +38,7 @@ struct TCharBuffer<char, 0> {
 #define DECLARE_AND_RETURN_BUFFER(s)             \
     static TCharBuffer<CharT, sizeof(s)> buf(s); \
     return buf.GetData();
- 
+
 //! @attention this class can process characters less than 0x7F only (the low half of ASCII table)
 template <typename CharT>
 struct TTestData {
@@ -679,7 +679,7 @@ public:
     void TestFind() {
         const TStringType s(Data._0123456_12345());
         const TStringType s2(Data._0123());
- 
+
         UNIT_ASSERT(s.find(Data._345()) == 3);
         UNIT_ASSERT(s.find(Data._345(), 5) == 10);
 
@@ -843,7 +843,7 @@ public:
         s2 = Data.asdf1234qwer();
         s2.to_upper();
         UNIT_ASSERT(s2 == Data.ASDF1234QWER());
- 
+
         // to_lower()
         s2.to_lower();
         UNIT_ASSERT(s2 == Data.asdf1234qwer());
@@ -957,14 +957,14 @@ public:
             data[4] = 1;
 
             s.strcpy(data, 4);
- 
+
             UNIT_ASSERT_EQUAL(data[0], *Data.a());
             UNIT_ASSERT_EQUAL(data[1], *Data.b());
             UNIT_ASSERT_EQUAL(data[2], *Data.c());
             UNIT_ASSERT_EQUAL(data[3], 0);
             UNIT_ASSERT_EQUAL(data[4], 1);
         }
- 
+
         {
             TStringType s(Data.abcd());
             char_type data[5];

@@ -139,7 +139,7 @@ namespace NBitIO {
 
             bool retCode = ReadWordsImpl<bits>(r64);
             result = r64;
- 
+
             return retCode;
         }
 

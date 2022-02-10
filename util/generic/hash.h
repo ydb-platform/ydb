@@ -606,7 +606,7 @@ public:
     THashTable& operator=(THashTable&& ht) noexcept {
         basic_clear();
         swap(ht);
- 
+
         return *this;
     }
 
@@ -945,8 +945,8 @@ private:
     void delete_node(node* n) {
         n->val.~Value();
         //n->next = (node*) 0xDeadBeeful;
-        put_node(n); 
-    } 
+        put_node(n);
+    }
 
     void erase_bucket(const size_type n, node* first, node* last);
     void erase_bucket(const size_type n, node* last);

@@ -11,8 +11,8 @@
 
 #if defined(_win_)
     #include <WinSock2.h>
-#endif 
- 
+#endif
+
 #include "defaults.h"
 #include "yassert.h"
 #include "hostname.h"

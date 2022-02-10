@@ -1,13 +1,13 @@
         [bits 64]
 
-        %define MJB_RBX    0 
-        %define MJB_RBP    1 
-        %define MJB_R12    2 
-        %define MJB_R13    3 
-        %define MJB_R14    4 
-        %define MJB_R15    5 
-        %define MJB_RSP    6 
-        %define MJB_PC     7 
+        %define MJB_RBX    0
+        %define MJB_RBP    1
+        %define MJB_R12    2
+        %define MJB_R13    3
+        %define MJB_R14    4
+        %define MJB_R15    5
+        %define MJB_RSP    6
+        %define MJB_PC     7
         %define MJB_SIZE (8*8)
 
 EXPORT __mylongjmp

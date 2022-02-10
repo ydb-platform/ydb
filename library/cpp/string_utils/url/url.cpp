@@ -51,7 +51,7 @@ namespace {
         if (!ignorehttps && urlSize.Has(8) && Compare1Case2(url, httpsPrefix, 8) == 0)
             return 8;
         return 0;
-    } 
+    }
 
     template <typename T>
     inline T CutHttpPrefixImpl(const T& url, bool ignorehttps) {
@@ -255,14 +255,14 @@ TStringBuf GetDomain(const TStringBuf host) noexcept {
         if (*c == '.') {
             if (wasPoint) {
                 ++c;
-                break; 
+                break;
             }
-            wasPoint = true; 
-        } 
-    } 
+            wasPoint = true;
+        }
+    }
     return TStringBuf(c, host.end());
-} 
- 
+}
+
 TStringBuf GetParentDomain(const TStringBuf host, size_t level) noexcept {
     size_t pos = host.size();
     for (size_t i = 0; i < level; ++i) {
@@ -275,8 +275,8 @@ TStringBuf GetParentDomain(const TStringBuf host, size_t level) noexcept {
 
 TStringBuf GetZone(const TStringBuf host) noexcept {
     return GetParentDomain(host, 1);
-} 
- 
+}
+
 TStringBuf CutWWWPrefix(const TStringBuf url) noexcept {
     if (url.size() >= 4 && url[3] == '.' && !strnicmp(url.data(), "www", 3))
         return url.substr(4);
@@ -342,8 +342,8 @@ static inline int x2c(unsigned char* x) {
     return X(x[0]) * 16 + X(x[1]);
 }
 
-#undef X 
- 
+#undef X
+
 static inline int Unescape(char* str) {
     char *to, *from;
     int dlen = 0;

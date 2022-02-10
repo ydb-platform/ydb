@@ -83,7 +83,7 @@ namespace NBitOps {
                 value >>= 1;
                 ++result;
             }
- 
+
             return result;
         }
 #endif

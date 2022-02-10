@@ -81,7 +81,7 @@
     #define EDQUOT WSAEDQUOT
 #endif
 
-void ClearLastSystemError(); 
+void ClearLastSystemError();
 int LastSystemError();
 void LastSystemErrorText(char* str, size_t size, int code);
 const char* LastSystemErrorText(int code);

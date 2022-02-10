@@ -69,7 +69,7 @@ void TUnbufferedFileOutput::DoFlush() {
         File_.Flush();
     }
 }
- 
+
 class TMappedFileInput::TImpl: public TBlob {
 public:
     inline TImpl(TFile file)

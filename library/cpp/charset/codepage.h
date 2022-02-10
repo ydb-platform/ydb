@@ -166,13 +166,13 @@ inline const char* NameByCharset(ECharset e) {
     return ::NCodepagePrivate::TCodepagesMap::Instance().NameByCharset(e);
 }
 
-inline const char* NameByCharsetSafe(ECharset e) { 
-    if (CODES_UNKNOWN < e && e < CODES_MAX) 
+inline const char* NameByCharsetSafe(ECharset e) {
+    if (CODES_UNKNOWN < e && e < CODES_MAX)
         return ::NCodepagePrivate::TCodepagesMap::Instance().NameByCharset(e);
-    else 
+    else
         ythrow yexception() << "unknown encoding: " << (int)e;
-} 
- 
+}
+
 inline const char* NameByCodePage(const CodePage* CP) {
     return CP->Names[0];
 }

@@ -504,9 +504,9 @@ namespace NBus {
         Finished.push_back(Pending[i]);
         Pending.erase(Pending.begin() + i);
 
-        return 0;
-    }
-
+        return 0; 
+    } 
+ 
     ///////////////////////////////////////////////////////////////
     /// send message to any other session or application
     void TBusJob::Send(TBusMessageAutoPtr mess, TBusClientSession* session, TReplyHandler rhandler, size_t maxRetries) {

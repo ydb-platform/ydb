@@ -331,7 +331,7 @@ RECURSE(
     ecdsa
     edera
     editdistance
-    elasticsearch
+    elasticsearch 
     elasticsearch-dsl
     email-validator
     emoji

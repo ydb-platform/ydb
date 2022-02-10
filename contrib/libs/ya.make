@@ -91,7 +91,7 @@ RECURSE(
     glslang
     google-compute-engine-oslogin
     googleapis-common-protos
-    gost-engine
+    gost-engine 
     gpsd
     grpc
     grpc/python

@@ -96,7 +96,7 @@ namespace NMonitoring {
         }
 
         void RemoveMetric(const ILabels& labels) noexcept override;
- 
+
     private:
         TGauge* Gauge(ILabelsPtr labels) override;
         TLazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) override;

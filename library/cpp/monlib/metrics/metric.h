@@ -152,14 +152,14 @@ namespace NMonitoring {
         double Add(double n) noexcept override {
             double newValue;
             double oldValue = Get();
- 
-            do { 
+
+            do {
                 newValue = oldValue + n;
             } while (!Value_.compare_exchange_weak(oldValue, newValue, std::memory_order_release, std::memory_order_consume));
- 
+
             return newValue;
-        } 
- 
+        }
+
         void Set(double n) noexcept override {
             Value_.store(n, std::memory_order_relaxed);
         }
@@ -209,8 +209,8 @@ namespace NMonitoring {
 
         i64 Add(i64 n) noexcept override {
             return Value_.fetch_add(n, std::memory_order_relaxed) + n;
-        } 
- 
+        }
+
         void Set(i64 value) noexcept override {
             Value_.store(value, std::memory_order_relaxed);
         }

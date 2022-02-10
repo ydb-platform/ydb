@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/rwlock.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 
 #if defined(_linux_)
 /* TLightRWLock is optimized for read lock and very fast lock/unlock switching.
@@ -48,10 +48,10 @@ namespace NS_LightRWLock {
             : "+m"(item), "=rm"(ret)
             : "r"(bit)
             : "cc");
- 
-        // msan doesn't treat ret as initialized 
-        NSan::Unpoison(&ret, sizeof(ret)); 
- 
+
+        // msan doesn't treat ret as initialized
+        NSan::Unpoison(&ret, sizeof(ret));
+
         return ret;
     }
 
@@ -63,10 +63,10 @@ namespace NS_LightRWLock {
             : "+m"(item), "=rm"(ret)
             : "r"(bit)
             : "cc");
- 
-        // msan doesn't treat ret as initialized 
-        NSan::Unpoison(&ret, sizeof(ret)); 
- 
+
+        // msan doesn't treat ret as initialized
+        NSan::Unpoison(&ret, sizeof(ret));
+
         return ret;
     }
 

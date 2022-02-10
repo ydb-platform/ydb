@@ -3,7 +3,7 @@
 
 namespace NMonitoring {
     void TMetricTimeSeries::SortByTs() {
-        SortPointsByTs(ValueType_, Points_); 
+        SortPointsByTs(ValueType_, Points_);
     }
 
     void TMetricTimeSeries::Clear() noexcept {

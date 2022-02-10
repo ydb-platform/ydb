@@ -67,5 +67,5 @@ namespace NMonitoring {
 
     using TLogHistogramSnapshotPtr = TIntrusivePtr<TLogHistogramSnapshot>;
 }
- 
-std::ostream& operator<<(std::ostream& os, const NMonitoring::TLogHistogramSnapshot& hist); 
+
+std::ostream& operator<<(std::ostream& os, const NMonitoring::TLogHistogramSnapshot& hist);

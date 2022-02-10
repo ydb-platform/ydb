@@ -158,26 +158,26 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
 
         queue.Stop();
     }
- 
-    Y_UNIT_TEST(TestInfoGetters) { 
+
+    Y_UNIT_TEST(TestInfoGetters) {
         TThreadPool queue;
- 
-        queue.Start(2, 7); 
- 
-        UNIT_ASSERT_EQUAL(queue.GetThreadCountExpected(), 2); 
-        UNIT_ASSERT_EQUAL(queue.GetThreadCountReal(), 2); 
-        UNIT_ASSERT_EQUAL(queue.GetMaxQueueSize(), 7); 
- 
-        queue.Stop(); 
- 
-        queue.Start(4, 1); 
- 
-        UNIT_ASSERT_EQUAL(queue.GetThreadCountExpected(), 4); 
-        UNIT_ASSERT_EQUAL(queue.GetThreadCountReal(), 4); 
-        UNIT_ASSERT_EQUAL(queue.GetMaxQueueSize(), 1); 
- 
-        queue.Stop(); 
-    } 
+
+        queue.Start(2, 7);
+
+        UNIT_ASSERT_EQUAL(queue.GetThreadCountExpected(), 2);
+        UNIT_ASSERT_EQUAL(queue.GetThreadCountReal(), 2);
+        UNIT_ASSERT_EQUAL(queue.GetMaxQueueSize(), 7);
+
+        queue.Stop();
+
+        queue.Start(4, 1);
+
+        UNIT_ASSERT_EQUAL(queue.GetThreadCountExpected(), 4);
+        UNIT_ASSERT_EQUAL(queue.GetThreadCountReal(), 4);
+        UNIT_ASSERT_EQUAL(queue.GetMaxQueueSize(), 1);
+
+        queue.Stop();
+    }
 
     void TestFixedThreadName(IThreadPool& pool, const TString& expectedName) {
         pool.Start(1);

@@ -16,13 +16,13 @@ namespace NMonitoring {
             : Values_(bucketsCount)
             , Base_(base)
             , Scale_(scale)
-            , MinValue_(scale) 
-            , MaxValue_(scale * std::pow(base, bucketsCount - 2)) 
+            , MinValue_(scale)
+            , MaxValue_(scale * std::pow(base, bucketsCount - 2))
             , LogOfBase_(std::log(base))
         {
         }
 
-        void Collect(double value, ui32 count) override { 
+        void Collect(double value, ui32 count) override {
             ui32 index = Max<ui32>();
             if (value <= MinValue_) {
                 index = 0;
@@ -47,8 +47,8 @@ namespace NMonitoring {
         TAtomicsArray Values_;
         double Base_;
         double Scale_;
-        TBucketBound MinValue_; 
-        TBucketBound MaxValue_; 
+        TBucketBound MinValue_;
+        TBucketBound MaxValue_;
         double LogOfBase_;
     };
 
@@ -57,8 +57,8 @@ namespace NMonitoring {
     {
         Y_ENSURE(bucketsCount >= 2,
                  "exponential histogram must contain at least two buckets");
-        Y_ENSURE(bucketsCount <= HISTOGRAM_MAX_BUCKETS_COUNT, 
-                 "buckets count must be <=" << HISTOGRAM_MAX_BUCKETS_COUNT 
+        Y_ENSURE(bucketsCount <= HISTOGRAM_MAX_BUCKETS_COUNT,
+                 "buckets count must be <=" << HISTOGRAM_MAX_BUCKETS_COUNT
                                             << ", but got: " << bucketsCount);
         Y_ENSURE(base > 1.0, "base must be > 1.0, got: " << base);
         Y_ENSURE(scale >= 1.0, "scale must be >= 1.0, got: " << scale);

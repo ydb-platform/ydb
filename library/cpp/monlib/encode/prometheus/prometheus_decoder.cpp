@@ -135,12 +135,12 @@ namespace NMonitoring {
                 Time_ = TInstant::Zero();
                 PrevBucket_ = ZERO_BUCKET;
                 Labels_.Clear();
-                auto snapshot = ExplicitHistogramSnapshot(Bounds_, Values_); 
- 
-                Bounds_.clear(); 
-                Values_.clear(); 
- 
-                return snapshot; 
+                auto snapshot = ExplicitHistogramSnapshot(Bounds_, Values_);
+
+                Bounds_.clear();
+                Values_.clear();
+
+                return snapshot;
             }
 
         private:

@@ -68,5 +68,5 @@ namespace NMonitoring {
     };
 
 }
- 
-std::ostream& operator<<(std::ostream& os, const NMonitoring::ISummaryDoubleSnapshot& s); 
+
+std::ostream& operator<<(std::ostream& os, const NMonitoring::ISummaryDoubleSnapshot& s);

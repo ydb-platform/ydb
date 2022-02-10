@@ -45,16 +45,16 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 0.0, 1E-6);
         g->Set(12.34);
         UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 12.34, 1E-6);
- 
-        double val; 
- 
-        val = g->Add(1.2); 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 13.54, 1E-6); 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6); 
- 
-        val = g->Add(-3.47); 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 10.07, 1E-6); 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6); 
+
+        double val;
+
+        val = g->Add(1.2);
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 13.54, 1E-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6);
+
+        val = g->Add(-3.47);
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 10.07, 1E-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6);
     }
 
     Y_UNIT_TEST(LazyGauge) {
@@ -75,35 +75,35 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6);
     }
 
-    Y_UNIT_TEST(IntGauge) { 
+    Y_UNIT_TEST(IntGauge) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
-        TIntGauge* g = registry.IntGauge({{"my", "gauge"}}); 
- 
+        TIntGauge* g = registry.IntGauge({{"my", "gauge"}});
+
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0);
- 
-        i64 val; 
- 
-        val = g->Inc(); 
+
+        i64 val;
+
+        val = g->Inc();
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), 1);
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
- 
-        val = g->Dec(); 
+
+        val = g->Dec();
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0);
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
- 
-        val = g->Add(1); 
+
+        val = g->Add(1);
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), 1);
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
- 
-        val = g->Add(2); 
+
+        val = g->Add(2);
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), 3);
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
- 
-        val = g->Add(-5); 
+
+        val = g->Add(-5);
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), -2);
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
-    } 
- 
+    }
+
     Y_UNIT_TEST(LazyIntGauge) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         i64 val = 0;

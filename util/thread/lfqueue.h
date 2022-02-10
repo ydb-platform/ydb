@@ -64,7 +64,7 @@ class TLockFreeQueue: public TNonCopyable {
 
     static void EraseList(TListNode* n) {
         while (n) {
-            TListNode* keepNext = AtomicGet(n->Next); 
+            TListNode* keepNext = AtomicGet(n->Next);
             delete n;
             n = keepNext;
         }
@@ -151,7 +151,7 @@ class TLockFreeQueue: public TNonCopyable {
             while (ptr) {
                 if (ptr == PrevFirst) {
                     // short cut, we have copied this part already
-                    AtomicSet(Tail->Next, newCopy); 
+                    AtomicSet(Tail->Next, newCopy);
                     newCopy = Copy;
                     Copy = nullptr; // do not destroy prev try
                     if (!newTail)
@@ -160,7 +160,7 @@ class TLockFreeQueue: public TNonCopyable {
                 }
                 TListNode* newElem = new TListNode(ptr->Data, newCopy);
                 newCopy = newElem;
-                ptr = AtomicGet(ptr->Next); 
+                ptr = AtomicGet(ptr->Next);
                 if (!newTail)
                     newTail = newElem;
             }
@@ -177,11 +177,11 @@ class TLockFreeQueue: public TNonCopyable {
         AtomicSet(newRoot->PushQueue, head);
         for (;;) {
             TRootNode* curRoot = AtomicGet(JobQueue);
-            AtomicSet(tail->Next, AtomicGet(curRoot->PushQueue)); 
+            AtomicSet(tail->Next, AtomicGet(curRoot->PushQueue));
             AtomicSet(newRoot->PopQueue, AtomicGet(curRoot->PopQueue));
             newRoot->CopyCounter(curRoot);
 
-            for (TListNode* node = head;; node = AtomicGet(node->Next)) { 
+            for (TListNode* node = head;; node = AtomicGet(node->Next)) {
                 newRoot->IncCount(node->Data);
                 if (node == tail)
                     break;
@@ -194,36 +194,36 @@ class TLockFreeQueue: public TNonCopyable {
         }
     }
 
-    template <typename TCollection> 
-    static void FillCollection(TListNode* lst, TCollection* res) { 
-        while (lst) { 
-            res->emplace_back(std::move(lst->Data)); 
-            lst = AtomicGet(lst->Next); 
-        } 
-    } 
- 
-    /** Traverses a given list simultaneously creating its inversed version. 
-     *  After that, fills a collection with a reversed version and returns the last visited lst's node. 
-     */ 
-    template <typename TCollection> 
-    static TListNode* FillCollectionReverse(TListNode* lst, TCollection* res) { 
-        if (!lst) { 
-            return nullptr; 
-        } 
- 
-        TListNode* newCopy = nullptr; 
-        do { 
-            TListNode* newElem = new TListNode(std::move(lst->Data), newCopy); 
-            newCopy = newElem; 
-            lst = AtomicGet(lst->Next); 
-        } while (lst); 
- 
-        FillCollection(newCopy, res); 
-        EraseList(newCopy); 
- 
-        return lst; 
-    } 
- 
+    template <typename TCollection>
+    static void FillCollection(TListNode* lst, TCollection* res) {
+        while (lst) {
+            res->emplace_back(std::move(lst->Data));
+            lst = AtomicGet(lst->Next);
+        }
+    }
+
+    /** Traverses a given list simultaneously creating its inversed version.
+     *  After that, fills a collection with a reversed version and returns the last visited lst's node.
+     */
+    template <typename TCollection>
+    static TListNode* FillCollectionReverse(TListNode* lst, TCollection* res) {
+        if (!lst) {
+            return nullptr;
+        }
+
+        TListNode* newCopy = nullptr;
+        do {
+            TListNode* newElem = new TListNode(std::move(lst->Data), newCopy);
+            newCopy = newElem;
+            lst = AtomicGet(lst->Next);
+        } while (lst);
+
+        FillCollection(newCopy, res);
+        EraseList(newCopy);
+
+        return lst;
+    }
+
 public:
     TLockFreeQueue()
         : JobQueue(new TRootNode)
@@ -284,13 +284,13 @@ public:
                     newRoot = new TRootNode;
 
                 AtomicSet(newRoot->PushQueue, AtomicGet(curRoot->PushQueue));
-                AtomicSet(newRoot->PopQueue, AtomicGet(tail->Next)); 
+                AtomicSet(newRoot->PopQueue, AtomicGet(tail->Next));
                 newRoot->CopyCounter(curRoot);
                 newRoot->DecCount(tail->Data);
                 Y_ASSERT(AtomicGet(curRoot->PopQueue) == tail);
                 if (AtomicCas(&JobQueue, newRoot, curRoot)) {
                     *data = std::move(tail->Data);
-                    AtomicSet(tail->Next, nullptr); 
+                    AtomicSet(tail->Next, nullptr);
                     AsyncUnref(curRoot, tail);
                     return true;
                 }
@@ -318,31 +318,31 @@ public:
             }
         }
     }
-    template <typename TCollection> 
-    void DequeueAll(TCollection* res) { 
-        AsyncRef(); 
- 
-        TRootNode* newRoot = new TRootNode; 
-        TRootNode* curRoot; 
-        do { 
-            curRoot = AtomicGet(JobQueue); 
-        } while (!AtomicCas(&JobQueue, newRoot, curRoot)); 
- 
-        FillCollection(curRoot->PopQueue, res); 
- 
-        TListNode* toDeleteHead = curRoot->PushQueue; 
-        TListNode* toDeleteTail = FillCollectionReverse(curRoot->PushQueue, res); 
-        AtomicSet(curRoot->PushQueue, nullptr); 
- 
-        if (toDeleteTail) { 
-            toDeleteTail->Next = curRoot->PopQueue; 
-        } else { 
-            toDeleteTail = curRoot->PopQueue; 
-        } 
-        AtomicSet(curRoot->PopQueue, nullptr); 
- 
-        AsyncUnref(curRoot, toDeleteHead); 
-    } 
+    template <typename TCollection>
+    void DequeueAll(TCollection* res) {
+        AsyncRef();
+
+        TRootNode* newRoot = new TRootNode;
+        TRootNode* curRoot;
+        do {
+            curRoot = AtomicGet(JobQueue);
+        } while (!AtomicCas(&JobQueue, newRoot, curRoot));
+
+        FillCollection(curRoot->PopQueue, res);
+
+        TListNode* toDeleteHead = curRoot->PushQueue;
+        TListNode* toDeleteTail = FillCollectionReverse(curRoot->PushQueue, res);
+        AtomicSet(curRoot->PushQueue, nullptr);
+
+        if (toDeleteTail) {
+            toDeleteTail->Next = curRoot->PopQueue;
+        } else {
+            toDeleteTail = curRoot->PopQueue;
+        }
+        AtomicSet(curRoot->PopQueue, nullptr);
+
+        AsyncUnref(curRoot, toDeleteHead);
+    }
     bool IsEmpty() {
         AsyncRef();
         TRootNode* curRoot = AtomicGet(JobQueue);

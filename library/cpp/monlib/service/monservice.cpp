@@ -5,7 +5,7 @@
 #include <library/cpp/svnversion/svnversion.h>
 
 #include <util/generic/map.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/system/hostname.h>
 
 #include <google/protobuf/text_format.h>
@@ -29,16 +29,16 @@ TMonService2::TMonService2(const THttpServerOptions& options, const TString& tit
 }
 
 TMonService2::TMonService2(const THttpServerOptions& options, TSimpleSharedPtr<IThreadPool> pool, const TString& title, THolder<IAuthProvider> auth)
-    : NMonitoring::TMtHttpServer(options, std::bind(&TMonService2::ServeRequest, this, std::placeholders::_1, std::placeholders::_2), std::move(pool)) 
-    , Title(title) 
-    , IndexMonPage(new TIndexMonPage("", Title)) 
+    : NMonitoring::TMtHttpServer(options, std::bind(&TMonService2::ServeRequest, this, std::placeholders::_1, std::placeholders::_2), std::move(pool))
+    , Title(title)
+    , IndexMonPage(new TIndexMonPage("", Title))
     , AuthProvider_{std::move(auth)}
-{ 
-    Y_VERIFY(!!title); 
-    time_t t = time(nullptr); 
-    ctime_r(&t, StartTime); 
-} 
- 
+{
+    Y_VERIFY(!!title);
+    time_t t = time(nullptr);
+    ctime_r(&t, StartTime);
+}
+
 TMonService2::TMonService2(ui16 port, ui32 threads, const TString& title, THolder<IAuthProvider> auth)
     : TMonService2(port, TString(), threads, title, std::move(auth))
 {
@@ -109,7 +109,7 @@ void TMonService2::Register(IMonPage* page) {
 }
 
 void TMonService2::Register(TMonPagePtr page) {
-    IndexMonPage->Register(std::move(page)); 
+    IndexMonPage->Register(std::move(page));
 }
 
 TIndexMonPage* TMonService2::RegisterIndexPage(const TString& path, const TString& title) {

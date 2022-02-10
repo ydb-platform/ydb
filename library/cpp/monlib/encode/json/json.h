@@ -3,14 +3,14 @@
 #include <library/cpp/monlib/encode/encoder.h>
 #include <library/cpp/monlib/encode/format.h>
 
- 
+
 class IOutputStream;
 
 namespace NMonitoring {
- 
-    class TJsonDecodeError: public yexception { 
-    }; 
- 
+
+    class TJsonDecodeError: public yexception {
+    };
+
     IMetricEncoderPtr EncoderJson(IOutputStream* out, int indentation = 0);
 
     /// Buffered encoder will merge series with same labels into one.

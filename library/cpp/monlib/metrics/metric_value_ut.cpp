@@ -7,14 +7,14 @@ using namespace NMonitoring;
 Y_UNIT_TEST_SUITE(TMetricValueTest) {
 
     class TTestHistogram: public IHistogramSnapshot {
-    public: 
-        TTestHistogram(ui32 count = 1) 
-            : Count_{count} 
-        {} 
- 
-    private: 
+    public:
+        TTestHistogram(ui32 count = 1)
+            : Count_{count}
+        {}
+
+    private:
         ui32 Count() const override {
-            return Count_; 
+            return Count_;
         }
 
         TBucketBound UpperBound(ui32 /*index*/) const override {
@@ -24,14 +24,14 @@ Y_UNIT_TEST_SUITE(TMetricValueTest) {
         TBucketValue Value(ui32 /*index*/) const override {
             return 42;
         }
- 
-        ui32 Count_{0}; 
+
+        ui32 Count_{0};
     };
 
-    IHistogramSnapshotPtr MakeHistogramSnapshot() { 
-        return MakeIntrusive<TTestHistogram>(); 
-    } 
- 
+    IHistogramSnapshotPtr MakeHistogramSnapshot() {
+        return MakeIntrusive<TTestHistogram>();
+    }
+
     ISummaryDoubleSnapshotPtr MakeSummarySnapshot(ui64 count = 0u) {
         return MakeIntrusive<TSummaryDoubleSnapshot>(0.0, 0.0, 0.0, 0.0, count);
     }
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TMetricValueTest) {
         UNIT_ASSERT_EQUAL(timeSeries.Size(), 2);
 
         UNIT_ASSERT_EQUAL(ts1, timeSeries[0].GetTime());
-        UNIT_ASSERT_DOUBLES_EQUAL(6.28318, timeSeries[0].GetValue().AsDouble(), Min<double>()); 
+        UNIT_ASSERT_DOUBLES_EQUAL(6.28318, timeSeries[0].GetValue().AsDouble(), Min<double>());
 
         UNIT_ASSERT_EQUAL(ts2, timeSeries[1].GetTime());
         UNIT_ASSERT_DOUBLES_EQUAL(2.71828, timeSeries[1].GetValue().AsDouble(), Min<double>());
@@ -269,35 +269,35 @@ Y_UNIT_TEST_SUITE(TMetricValueTest) {
         auto ts4 = ts3 + TDuration::Seconds(1);
         auto ts5 = ts4 + TDuration::Seconds(1);
 
-        auto h1 = MakeIntrusive<TTestHistogram>(1u); 
-        auto h2 = MakeIntrusive<TTestHistogram>(2u); 
-        auto h3 = MakeIntrusive<TTestHistogram>(3u); 
-        auto h4 = MakeIntrusive<TTestHistogram>(4u); 
-        auto h5 = MakeIntrusive<TTestHistogram>(5u); 
-        auto h6 = MakeIntrusive<TTestHistogram>(6u); 
-        auto h7 = MakeIntrusive<TTestHistogram>(7u); 
+        auto h1 = MakeIntrusive<TTestHistogram>(1u);
+        auto h2 = MakeIntrusive<TTestHistogram>(2u);
+        auto h3 = MakeIntrusive<TTestHistogram>(3u);
+        auto h4 = MakeIntrusive<TTestHistogram>(4u);
+        auto h5 = MakeIntrusive<TTestHistogram>(5u);
+        auto h6 = MakeIntrusive<TTestHistogram>(6u);
+        auto h7 = MakeIntrusive<TTestHistogram>(7u);
 
         {
             TMetricTimeSeries timeSeries;
             timeSeries.Add(ts1, h1.Get());
             timeSeries.Add(ts1, h2.Get());
- 
-            timeSeries.Add(ts2, h3.Get()); 
- 
-            timeSeries.Add(ts3, h4.Get()); 
+
+            timeSeries.Add(ts2, h3.Get());
+
+            timeSeries.Add(ts3, h4.Get());
             timeSeries.Add(ts3, h5.Get());
- 
+
             timeSeries.Add(ts4, h6.Get());
             timeSeries.Add(ts5, h7.Get());
 
             timeSeries.SortByTs();
 
             UNIT_ASSERT_EQUAL(timeSeries.Size(), 5);
-            UNIT_ASSERT_EQUAL(timeSeries[0].GetValue().AsHistogram()->Count(), 2); 
-            UNIT_ASSERT_EQUAL(timeSeries[1].GetValue().AsHistogram()->Count(), 3); 
-            UNIT_ASSERT_EQUAL(timeSeries[2].GetValue().AsHistogram()->Count(), 5); 
-            UNIT_ASSERT_EQUAL(timeSeries[3].GetValue().AsHistogram()->Count(), 6); 
-            UNIT_ASSERT_EQUAL(timeSeries[4].GetValue().AsHistogram()->Count(), 7); 
+            UNIT_ASSERT_EQUAL(timeSeries[0].GetValue().AsHistogram()->Count(), 2);
+            UNIT_ASSERT_EQUAL(timeSeries[1].GetValue().AsHistogram()->Count(), 3);
+            UNIT_ASSERT_EQUAL(timeSeries[2].GetValue().AsHistogram()->Count(), 5);
+            UNIT_ASSERT_EQUAL(timeSeries[3].GetValue().AsHistogram()->Count(), 6);
+            UNIT_ASSERT_EQUAL(timeSeries[4].GetValue().AsHistogram()->Count(), 7);
         }
     }
 
@@ -378,130 +378,130 @@ Y_UNIT_TEST_SUITE(TMetricValueTest) {
             UNIT_ASSERT_EQUAL(timeSeries[4].GetValue().AsSummaryDouble()->GetCount(), 7);
         }
     }
- 
+
     Y_UNIT_TEST(TMetricValueWithType) {
-        // correct usage 
-        { 
-            double value = 1.23; 
+        // correct usage
+        {
+            double value = 1.23;
             TMetricValueWithType v{value};
- 
+
             UNIT_ASSERT_VALUES_EQUAL(v.GetType(), EMetricValueType::DOUBLE);
-            UNIT_ASSERT_VALUES_EQUAL(v.AsDouble(), value); 
-        } 
-        { 
-            ui64 value = 12; 
+            UNIT_ASSERT_VALUES_EQUAL(v.AsDouble(), value);
+        }
+        {
+            ui64 value = 12;
             TMetricValueWithType v{value};
- 
+
             UNIT_ASSERT_VALUES_EQUAL(v.GetType(), EMetricValueType::UINT64);
-            UNIT_ASSERT_VALUES_EQUAL(v.AsUint64(), value); 
-        } 
-        { 
-            i64 value = i64(-12); 
+            UNIT_ASSERT_VALUES_EQUAL(v.AsUint64(), value);
+        }
+        {
+            i64 value = i64(-12);
             TMetricValueWithType v{value};
- 
+
             UNIT_ASSERT_VALUES_EQUAL(v.GetType(), EMetricValueType::INT64);
-            UNIT_ASSERT_VALUES_EQUAL(v.AsInt64(), value); 
-        } 
-        { 
-            auto h = MakeHistogramSnapshot(); 
-            UNIT_ASSERT_VALUES_EQUAL(h.RefCount(), 1); 
- 
-            { 
-                auto value = h.Get(); 
+            UNIT_ASSERT_VALUES_EQUAL(v.AsInt64(), value);
+        }
+        {
+            auto h = MakeHistogramSnapshot();
+            UNIT_ASSERT_VALUES_EQUAL(h.RefCount(), 1);
+
+            {
+                auto value = h.Get();
                 TMetricValueWithType v{value};
- 
-                UNIT_ASSERT_VALUES_EQUAL(h.RefCount(), 2); 
- 
+
+                UNIT_ASSERT_VALUES_EQUAL(h.RefCount(), 2);
+
                 UNIT_ASSERT_VALUES_EQUAL(v.GetType(), EMetricValueType::HISTOGRAM);
-                UNIT_ASSERT_VALUES_EQUAL(v.AsHistogram(), value); 
-            } 
- 
-            UNIT_ASSERT_VALUES_EQUAL(h.RefCount(), 1); 
-        } 
-        { 
-            auto s = MakeSummarySnapshot(); 
-            auto value = s.Get(); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1); 
- 
-            { 
+                UNIT_ASSERT_VALUES_EQUAL(v.AsHistogram(), value);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(h.RefCount(), 1);
+        }
+        {
+            auto s = MakeSummarySnapshot();
+            auto value = s.Get();
+
+            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1);
+
+            {
                 TMetricValueWithType v{value};
- 
-                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2); 
- 
+
+                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2);
+
                 UNIT_ASSERT_VALUES_EQUAL(v.GetType(), EMetricValueType::SUMMARY);
-                UNIT_ASSERT_VALUES_EQUAL(v.AsSummaryDouble(), value); 
-            } 
- 
-            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1); 
-        } 
-        { 
-            auto s = MakeSummarySnapshot(); 
-            auto value = s.Get(); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1); 
- 
-            { 
+                UNIT_ASSERT_VALUES_EQUAL(v.AsSummaryDouble(), value);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1);
+        }
+        {
+            auto s = MakeSummarySnapshot();
+            auto value = s.Get();
+
+            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1);
+
+            {
                 TMetricValueWithType v{value};
- 
-                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2); 
- 
-                v.Clear(); 
-                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1); 
-            } 
- 
-            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1); 
-        } 
-        { 
-            auto s = MakeSummarySnapshot(); 
-            auto value = s.Get(); 
- 
-            { 
+
+                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2);
+
+                v.Clear();
+                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1);
+        }
+        {
+            auto s = MakeSummarySnapshot();
+            auto value = s.Get();
+
+            {
                 TMetricValueWithType v1{ui64{1}};
- 
-                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1); 
- 
-                { 
+
+                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1);
+
+                {
                     TMetricValueWithType v2{value};
-                    UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2); 
- 
-                    v1 = std::move(v2); 
-                    UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2); 
-                    UNIT_ASSERT_VALUES_EQUAL(v1.AsSummaryDouble(), value); 
+                    UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2);
+
+                    v1 = std::move(v2);
+                    UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(v1.AsSummaryDouble(), value);
                     UNIT_ASSERT_VALUES_EQUAL(v1.GetType(), EMetricValueType::SUMMARY);
                     UNIT_ASSERT_VALUES_EQUAL(v2.GetType(), EMetricValueType::UNKNOWN);
-                } 
- 
-                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2); 
-            } 
- 
-            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1); 
-        } 
- 
-        // incorrect usage 
-        { 
+                }
+
+                UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 2);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(s.RefCount(), 1);
+        }
+
+        // incorrect usage
+        {
             TMetricValueWithType v{1.23};
- 
-            UNIT_ASSERT_EXCEPTION(v.AsHistogram(), yexception); 
-            UNIT_ASSERT_EXCEPTION(v.AsSummaryDouble(), yexception); 
-        } 
-        { 
-            auto h = MakeHistogramSnapshot(); 
+
+            UNIT_ASSERT_EXCEPTION(v.AsHistogram(), yexception);
+            UNIT_ASSERT_EXCEPTION(v.AsSummaryDouble(), yexception);
+        }
+        {
+            auto h = MakeHistogramSnapshot();
             TMetricValueWithType v{h.Get()};
- 
-            UNIT_ASSERT_EXCEPTION(v.AsUint64(), yexception); 
-            UNIT_ASSERT_EXCEPTION(v.AsInt64(), yexception); 
-            UNIT_ASSERT_EXCEPTION(v.AsDouble(), yexception); 
-            UNIT_ASSERT_EXCEPTION(v.AsSummaryDouble(), yexception); 
-        } 
-        { 
-            auto s = MakeSummarySnapshot(); 
+
+            UNIT_ASSERT_EXCEPTION(v.AsUint64(), yexception);
+            UNIT_ASSERT_EXCEPTION(v.AsInt64(), yexception);
+            UNIT_ASSERT_EXCEPTION(v.AsDouble(), yexception);
+            UNIT_ASSERT_EXCEPTION(v.AsSummaryDouble(), yexception);
+        }
+        {
+            auto s = MakeSummarySnapshot();
             TMetricValueWithType v{s.Get()};
- 
-            UNIT_ASSERT_EXCEPTION(v.AsUint64(), yexception); 
-            UNIT_ASSERT_EXCEPTION(v.AsInt64(), yexception); 
-            UNIT_ASSERT_EXCEPTION(v.AsDouble(), yexception); 
-            UNIT_ASSERT_EXCEPTION(v.AsHistogram(), yexception); 
-        } 
-    } 
+
+            UNIT_ASSERT_EXCEPTION(v.AsUint64(), yexception);
+            UNIT_ASSERT_EXCEPTION(v.AsInt64(), yexception);
+            UNIT_ASSERT_EXCEPTION(v.AsDouble(), yexception);
+            UNIT_ASSERT_EXCEPTION(v.AsHistogram(), yexception);
+        }
+    }
 }

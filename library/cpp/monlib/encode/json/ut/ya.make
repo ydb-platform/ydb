@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    json_decoder_ut.cpp 
+    json_decoder_ut.cpp
     json_ut.cpp
 )
 
@@ -21,12 +21,12 @@ RESOURCE(
     merged.json /merged.json
     histogram_timeseries.json /histogram_timeseries.json
     histogram_value.json /histogram_value.json
-    histogram_value_inf_before_bounds.json /histogram_value_inf_before_bounds.json 
+    histogram_value_inf_before_bounds.json /histogram_value_inf_before_bounds.json
     int_gauge.json /int_gauge.json
     sensors.json /sensors.json
     metrics.json /metrics.json
     named_metrics.json /named_metrics.json
-    test_decode_to_encode.json /test_decode_to_encode.json 
+    test_decode_to_encode.json /test_decode_to_encode.json
     crash.json /crash.json
     hist_crash.json /hist_crash.json
     summary_value.json /summary_value.json
@@ -38,7 +38,7 @@ RESOURCE(
 
 PEERDIR(
     library/cpp/json
-    library/cpp/monlib/consumers 
+    library/cpp/monlib/consumers
     library/cpp/monlib/encode/protobuf
     library/cpp/resource
 )

@@ -9,7 +9,7 @@
 
 #include <library/cpp/json/writer/json.h>
 
-#include <util/charset/utf8.h> 
+#include <util/charset/utf8.h>
 #include <util/generic/algorithm.h>
 
 namespace NMonitoring {
@@ -245,12 +245,12 @@ namespace NMonitoring {
 
         private:
             void OnStreamBegin() override {
-                State_.Expect(TEncoderState::EState::ROOT); 
+                State_.Expect(TEncoderState::EState::ROOT);
                 Buf_.BeginObject();
             }
 
             void OnStreamEnd() override {
-                State_.Expect(TEncoderState::EState::ROOT); 
+                State_.Expect(TEncoderState::EState::ROOT);
                 if (!Buf_.KeyExpected()) {
                     // not closed metrics array
                     Buf_.EndList();
@@ -259,7 +259,7 @@ namespace NMonitoring {
             }
 
             void OnCommonTime(TInstant time) override {
-                State_.Expect(TEncoderState::EState::ROOT); 
+                State_.Expect(TEncoderState::EState::ROOT);
                 WriteTime(time);
             }
 
@@ -298,8 +298,8 @@ namespace NMonitoring {
                     // not closed metrics or timeseries array if labels go after values
                     Buf_.EndList();
                 }
-                if (State_ == TEncoderState::EState::ROOT) { 
-                    State_ = TEncoderState::EState::COMMON_LABELS; 
+                if (State_ == TEncoderState::EState::ROOT) {
+                    State_ = TEncoderState::EState::COMMON_LABELS;
                     Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "commonLabels" : "labels"));
                 } else if (State_ == TEncoderState::EState::METRIC) {
                     State_ = TEncoderState::EState::METRIC_LABELS;
@@ -315,8 +315,8 @@ namespace NMonitoring {
             void OnLabelsEnd() override {
                 if (State_ == TEncoderState::EState::METRIC_LABELS) {
                     State_ = TEncoderState::EState::METRIC;
-                } else if (State_ == TEncoderState::EState::COMMON_LABELS) { 
-                    State_ = TEncoderState::EState::ROOT; 
+                } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
+                    State_ = TEncoderState::EState::ROOT;
                 } else {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
                 }
@@ -430,16 +430,16 @@ namespace NMonitoring {
                 Close();
             }
 
-            void OnLabelsBegin() override { 
-                TBufferedEncoderBase::OnLabelsBegin(); 
-                EmptyLabels_ = true; 
-            } 
- 
+            void OnLabelsBegin() override {
+                TBufferedEncoderBase::OnLabelsBegin();
+                EmptyLabels_ = true;
+            }
+
             void OnLabel(TStringBuf name, TStringBuf value) override {
-                TBufferedEncoderBase::OnLabel(name, value); 
-                EmptyLabels_ = false; 
-            } 
- 
+                TBufferedEncoderBase::OnLabel(name, value);
+                EmptyLabels_ = false;
+            }
+
             void OnLabel(ui32 name, ui32 value) override {
                 TBufferedEncoderBase::OnLabel(name, value);
                 EmptyLabels_ = false;
@@ -447,10 +447,10 @@ namespace NMonitoring {
 
             void OnLabelsEnd() override {
                 TBufferedEncoderBase::OnLabelsEnd();
-                Y_ENSURE(!EmptyLabels_, "Labels cannot be empty"); 
+                Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");
             }
 
-            void Close() final { 
+            void Close() final {
                 if (Closed_) {
                     return;
                 }
@@ -534,7 +534,7 @@ namespace NMonitoring {
 
         private:
             bool Closed_{false};
-            bool EmptyLabels_ = false; 
+            bool EmptyLabels_ = false;
         };
     }
 

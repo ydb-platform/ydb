@@ -4,7 +4,7 @@ OWNER(
 )
 
 RECURSE(
-    consumers 
+    consumers
     counters
     counters/ut
     deprecated
@@ -32,7 +32,7 @@ RECURSE(
     encode/unistat/ut
     encode/ut
     example
-    exception 
+    exception
     libtimestats/ut
     metrics
     metrics/ut

@@ -13,9 +13,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/encode/buffered 
-    library/cpp/monlib/exception 
- 
+    library/cpp/monlib/encode/buffered
+    library/cpp/monlib/exception
+
     contrib/libs/lz4
     contrib/libs/xxhash
     contrib/libs/zlib

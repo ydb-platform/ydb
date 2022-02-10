@@ -14,15 +14,15 @@ namespace NMonitoring {
     class TExplicitHistogramCollector: public IHistogramCollector {
     public:
         TExplicitHistogramCollector(TBucketBounds bounds)
-            : Values_(bounds.size() + 1) 
-            , Bounds_(std::move(bounds)) 
+            : Values_(bounds.size() + 1)
+            , Bounds_(std::move(bounds))
         {
             // add one bucket as +INF
             Bounds_.push_back(Max<TBucketBound>());
         }
 
-        void Collect(double value, ui32 count) override { 
-            auto it = LowerBound(Bounds_.begin(), Bounds_.end(), value); 
+        void Collect(double value, ui32 count) override {
+            auto it = LowerBound(Bounds_.begin(), Bounds_.end(), value);
             auto index = std::distance(Bounds_.begin(), it);
             Values_.Add(index, count);
         }
@@ -37,15 +37,15 @@ namespace NMonitoring {
         }
 
     private:
-        TAtomicsArray Values_; 
+        TAtomicsArray Values_;
         TBucketBounds Bounds_;
     };
 
     IHistogramCollectorPtr ExplicitHistogram(TBucketBounds bounds) {
         Y_ENSURE(bounds.size() >= 1,
                  "explicit histogram must contain at least one bucket");
-        Y_ENSURE(bounds.size() <= HISTOGRAM_MAX_BUCKETS_COUNT, 
-                 "buckets count must be <=" << HISTOGRAM_MAX_BUCKETS_COUNT 
+        Y_ENSURE(bounds.size() <= HISTOGRAM_MAX_BUCKETS_COUNT,
+                 "buckets count must be <=" << HISTOGRAM_MAX_BUCKETS_COUNT
                                             << ", but got: " << bounds.size());
         Y_ENSURE(IsSorted(bounds.begin(), bounds.end()),
                  "bounds for explicit histogram must be sorted");
